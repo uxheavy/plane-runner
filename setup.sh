@@ -28,9 +28,12 @@ copy_env_file() {
         return 1
     fi
 
-    cp "$source" "$destination"
+    if [ -f "$destination" ]; then
+        echo -e "${YELLOW}•${NC} Preserved existing $destination"
+        return 0
+    fi
 
-    if [ $? -eq 0 ]; then
+    if cp "$source" "$destination"; then
         echo -e "${GREEN}✓${NC} Copied $destination"
     else
         echo -e "${RED}✗${NC} Failed to copy $destination"
@@ -59,28 +62,45 @@ for service in "${services[@]}"; do
     copy_env_file "${prefix}.env.example" "${prefix}.env" || success=false
 done
 
-# Generate SECRET_KEY for Django
+# Generate SECRET_KEY for Django when it is not already configured
 if [ -f "./apps/api/.env" ]; then
-    echo -e "\n${YELLOW}Generating Django SECRET_KEY...${NC}"
-    SECRET_KEY=$(tr -dc 'a-z0-9' < /dev/urandom | head -c50)
-
-    if [ -z "$SECRET_KEY" ]; then
-        echo -e "${RED}Error: Failed to generate SECRET_KEY.${NC}"
-        echo -e "${RED}Ensure 'tr' and 'head' commands are available on your system.${NC}"
-        success=false
+    if grep -q '^SECRET_KEY=' ./apps/api/.env; then
+        echo -e "${YELLOW}•${NC} Preserved existing apps/api/.env SECRET_KEY"
     else
-        echo -e "SECRET_KEY=\"$SECRET_KEY\"" >> ./apps/api/.env
-        echo -e "${GREEN}✓${NC} Added SECRET_KEY to apps/api/.env"
+        echo -e "\n${YELLOW}Generating Django SECRET_KEY...${NC}"
+        SECRET_KEY=$(tr -dc 'a-z0-9' < /dev/urandom | head -c50)
+
+        if [ -z "$SECRET_KEY" ]; then
+            echo -e "${RED}Error: Failed to generate SECRET_KEY.${NC}"
+            echo -e "${RED}Ensure 'tr' and 'head' commands are available on your system.${NC}"
+            success=false
+        else
+            echo -e "SECRET_KEY=\"$SECRET_KEY\"" >> ./apps/api/.env
+            echo -e "${GREEN}✓${NC} Added SECRET_KEY to apps/api/.env"
+        fi
     fi
 else
     echo -e "${RED}✗${NC} apps/api/.env not found. SECRET_KEY not added."
     success=false
 fi
 
-# Activate pnpm (version set in package.json)
-corepack enable pnpm || success=false
-# Install Node dependencies
-pnpm install || success=false
+# Verify that local env examples, Docker networking, and proxy routes agree.
+./tools/check-local-dev.sh || success=false
+
+# Use an existing pnpm installation, or activate the packageManager version through Corepack.
+if ! command -v pnpm >/dev/null 2>&1; then
+    if command -v corepack >/dev/null 2>&1; then
+        corepack enable pnpm || success=false
+    else
+        echo -e "${RED}✗${NC} pnpm is not installed and Corepack is unavailable."
+        success=false
+    fi
+fi
+
+# Install Node dependencies when pnpm is available.
+if command -v pnpm >/dev/null 2>&1; then
+    pnpm install || success=false
+fi
 
 # Summary
 echo -e "\n${YELLOW}Setup status:${NC}"
@@ -89,6 +109,7 @@ if [ "$success" = true ]; then
     echo -e "${BOLD}Next steps:${NC}"
     echo -e "1. Review the .env files in each folder if needed"
     echo -e "2. Start the services with: ${BOLD}docker compose -f docker-compose-local.yml up -d${NC}"
+    echo -e "3. Start all development apps with: ${BOLD}pnpm dev${NC}"
     echo -e "\n${GREEN}Happy coding! 🚀${NC}"
 else
     echo -e "${RED}✗${NC} Some issues occurred during setup. Please check the errors above.\n"

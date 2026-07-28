@@ -140,6 +140,24 @@ services:
       - plane-db
       - plane-redis
 
+  proxy:
+    image: caddy:2.11.3-alpine
+    restart: unless-stopped
+    networks:
+      - dev_env
+    env_file:
+      - .env
+    environment:
+      BUCKET_NAME: ${AWS_S3_BUCKET_NAME:-uploads}
+      SITE_ADDRESS: ":80"
+    volumes:
+      - ./apps/proxy/Caddyfile.ce:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - api
+      - plane-minio
+    ports:
+      - "8080:80"
+
 volumes:
   redisdata:
   uploads:

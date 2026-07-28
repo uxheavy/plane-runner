@@ -17,6 +17,8 @@
     "check:lint": "turbo run check:lint",
     "check:format": "turbo run check:format",
     "check:types": "turbo run check:types",
+    "check:local-dev": "./tools/check-local-dev.sh",
+    "check:local-dev:runtime": "./tools/check-local-dev.sh --runtime",
     "prepare": "husky",
     "doctor": "npx react-doctor@latest"
   },
