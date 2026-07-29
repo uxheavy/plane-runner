@@ -105,3 +105,24 @@ Resolve the eager native tools and supported operation boundary required by the 
 ### Next action
 
 Obtain user approval of the proposed interface boundary before freezing the corresponding manifest rows.
+
+## 2026-07-29 — Compatibility and verifier design
+
+### Proposed external MCP disposition
+
+- Route 171 ordinary pinned MCP tools through gateway-backed compatibility adapters.
+- Retain `get_pql_reference` as versioned local read-only behavior.
+- Route five attachment tools through a hardened attachment adapter with explicit SSRF, transfer, redaction, and cleanup policy.
+- Deprecate or omit none of the 177 pinned v0.2.11 tools.
+
+### Verifier strengthening
+
+- Added verifier ownership and independence requirements.
+- Mapped every goal area to required verification checks.
+- Defined the immutable 50-trial evaluation ledger.
+- Defined expected-failure semantics for all four negative controls.
+- Defined the clean-checkout verifier execution contract and proposed final command.
+
+### Next action
+
+Independently review the proposed compatibility and verification documents, then resolve the remaining numeric and runtime manifest rows.

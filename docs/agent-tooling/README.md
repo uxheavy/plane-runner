@@ -28,6 +28,7 @@ Plane-native Hermes agents can safely perform useful Plane work through native s
 | [Verification manifest](./VERIFICATION-MANIFEST.md)               | Independent checks, oracles, negative controls, and evidence  |
 | [Source inventory](./SOURCE-INVENTORY.md)                         | Observed Plane API, MCP, and Hermes facts                     |
 | [Interface design](./INTERFACE-DESIGN.md)                         | Four alternatives and the proposed v1 gateway seam            |
+| [MCP compatibility](./MCP-COMPATIBILITY.md)                       | Complete external-tool disposition and conformance plan       |
 | [Durable goal](./GOAL.md)                                         | Finish line, constraints, verifiers, and approval gates       |
 | [Worklog](./WORKLOG.md)                                           | Attempts, evidence, current state, and next action            |
 | [Result](./RESULT.md)                                             | Completion evidence and remaining risks                       |

@@ -26,6 +26,17 @@ Every check records:
 
 A summary without underlying immutable logs is insufficient.
 
+## Verifier ownership and independence
+
+| Responsibility                 | Qualification                                                    | Independence rule                                                       | Status             |
+| ------------------------------ | ---------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------ |
+| Verifier implementation        | Quality lane with access to both pinned repositories             | May not approve its own oracle changes                                  | Pending assignment |
+| Security qualification         | Reviewer who did not implement the isolate or authorization path | Must review VM-004, VM-006, VM-009, VM-010, and their negative controls | Pending assignment |
+| Final clean-checkout execution | Executor using fresh checkouts and release artifacts             | Must not use an implementation worktree or unpublished local patch      | Pending assignment |
+| Product acceptance             | User controlling this Codex task                                 | Approves frozen manifests, exceptions, and rollout promotions           | Named              |
+
+The primary implementation agent may create tests and fix failures. It cannot solely qualify negative controls, approve verifier changes, approve exceptions, or supply the final independent execution result.
+
 ## Check inventory
 
 | ID     | Check                                    | Oracle                                                                                                                                                                   | Environment                                     | Mocks                                | Required evidence                              |
@@ -52,6 +63,21 @@ A summary without underlying immutable logs is insufficient.
 | VM-020 | Model fallback negative control          | Deliberate fallback or wrong model makes live verifier fail                                                                                                              | Isolated harness configuration                  | Controlled misconfiguration required | Expected failing log                           |
 | VM-021 | Audit negative control                   | Suppressed audit outcome makes VM-006 fail                                                                                                                               | Isolated failure fixture                        | Controlled fault required            | Expected failing log                           |
 
+## Completion-criterion coverage
+
+| Goal area                             | Required checks                                           |
+| ------------------------------------- | --------------------------------------------------------- |
+| Product and contract                  | VM-001, VM-002, VM-003, VM-012                            |
+| Plane Operation Gateway               | VM-003, VM-004, VM-005, VM-006, VM-007, VM-008            |
+| Hermes and TypeScript Code Mode       | VM-003, VM-005, VM-008, VM-009, VM-010, VM-013            |
+| Reliability and safety                | VM-004 through VM-012                                     |
+| Mandatory live Hermes acceptance      | VM-013                                                    |
+| Extensive evaluation                  | VM-014                                                    |
+| Operations and rollout                | VM-011, VM-015, VM-016, VM-017                            |
+| Verifier sensitivity and independence | VM-018 through VM-021 plus final clean-checkout execution |
+
+The version-controlled verifier specification must expand this table to a requirement-level matrix. Every normative bullet in `GOAL.md` and every row in the approved release manifest must map to at least one check, one observable oracle, and one immutable evidence record. The documentation validator fails when any requirement has zero checks.
+
 ## Mandatory live-project oracle
 
 - Use one frozen initial prompt and no human steering except an authenticated approval response.
@@ -72,8 +98,51 @@ A summary without underlying immutable logs is insufficient.
 - Revoke or rotate the test credential after the exercise and verify the old credential fails.
 - Execute and verify cleanup, or explicitly preserve tagged fixtures through an approved retention record.
 
+## Extensive live-evaluation ledger
+
+Every authenticated trial, including setup failures and model failures after dispatch, receives an immutable ledger row. No row may be deleted or reclassified out of the denominator.
+
+Each row records:
+
+- scenario and fixture IDs;
+- fresh-seed digest;
+- trial and stable invocation IDs;
+- Plane and Hermes release commits and artifact digests;
+- provider, model, endpoint adapter, model metadata, prompt, tool-schema, runtime, isolate, and configuration digests;
+- UTC timestamps and wall-clock duration;
+- approval decisions and actor identities;
+- complete workflow verdict;
+- authorization, approval, credential, isolation, duplicate-mutation, and audit violation counters;
+- Plane object and audit readback references;
+- transcript, generated TypeScript, trace, screenshot, and log digests;
+- failure class and reviewed disposition.
+
+The aggregate verifier recomputes all release metrics from ledger rows and raw evidence. A manually entered aggregate is insufficient.
+
+## Negative-control qualification
+
+- VM-018 removes one required manifest field in an isolated copy and must make VM-001 fail for the expected reason.
+- VM-019 changes one authorization expectation in an isolated fixture and must make VM-004 fail for the expected principal/object pair.
+- VM-020 resolves either the wrong provider or wrong model in an isolated run and must make the live verifier fail before the trial can count.
+- VM-021 suppresses one required audit outcome in an isolated failure-injection stack and must make VM-006 fail for the expected invocation.
+- The verifier itself passes only when each negative control produces its expected failure and the unmodified positive fixture passes.
+- A negative control that fails for an unrelated setup error does not qualify the verifier.
+
+## Clean-checkout execution contract
+
+The final entry point must:
+
+1. Verify clean Plane and Hermes checkouts at the exact integration-lock commits.
+2. Resolve release artifacts by immutable digest rather than rebuilding an unpinned candidate.
+3. Validate release, verification, catalog, adapter, prompt, fixture, runtime, model-metadata, and configuration digests before tests run.
+4. Execute VM-018 through VM-021 and qualify their expected failures.
+5. Execute VM-001 through VM-017 with no skips or xpasses.
+6. Recompute live metrics from all retained trial rows.
+7. Emit a signed or content-addressed result index linking every raw evidence object.
+8. Exit non-zero for missing evidence, digest mismatch, unapproved exception, wrong provider/model, check failure, skip, xpass, or negative-control sensitivity failure.
+
 ## Primary entry point
 
-The final command is pending implementation. It must be version-controlled, run from clean pinned checkouts, invoke every required check, and fail non-zero for any failure, skip, xpass, wrong digest, wrong provider, wrong model, missing evidence, or unapproved exception.
+The proposed final command is `./scripts/agent-tooling/verify-release --integration-lock <approved-lock> --evidence <immutable-evidence-index>`. Its path and arguments are frozen by manifest approval even though the executable is pending implementation.
 
 The final verifier must be executed independently from clean Plane and Hermes checkouts. It must prove its own sensitivity by passing VM-018 through VM-021 as expected failures before its positive result is accepted.

@@ -54,7 +54,9 @@ The contract IDs below are proposed semantic v1 identifiers. The public operatio
 
 The five domain tools above plus `plane_docs`, `plane_search`, and `plane_execute` form the proposed eight-tool eager Hermes surface.
 
-No implementation may silently omit a proposed capability after approval. The external MCP baseline is official server commit `96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1`, package `0.2.11`, with 177 unique tools. Its machine-readable inventory is `inventories/plane-mcp-v0.2.11.json`, SHA-256 `2778ef9d6f5426c6fc65894829ec04bf853c18c4ab09d796474896ba01826ad1`. Every tool must be gateway-mapped, intentionally retained with rationale, or explicitly deprecated through an approved compatibility plan.
+No implementation may silently omit a proposed capability after approval. The external MCP baseline is official server commit `96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1`, package `0.2.11`, with 177 unique tools. Its machine-readable inventory is `inventories/plane-mcp-v0.2.11.json`, SHA-256 `2778ef9d6f5426c6fc65894829ec04bf853c18c4ab09d796474896ba01826ad1`.
+
+The proposed complete disposition is defined in `MCP-COMPATIBILITY.md`: 171 ordinary tools use gateway-backed compatibility adapters, `get_pql_reference` retains versioned local read-only behavior, and five attachment tools use a hardened attachment adapter. No pinned tool is omitted or deprecated.
 
 ## Runtime pins
 
