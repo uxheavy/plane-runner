@@ -72,7 +72,7 @@ The proposed complete disposition is defined in `MCP-COMPATIBILITY.md`: 171 ordi
 | Tool schemas                          | Catalog and native adapter digests                              | Pending implementation         |
 | Sampling and reasoning parameters     | Exact versioned configuration                                   | Pending implementation         |
 | Context and output limits             | Exact versioned configuration                                   | Pending implementation         |
-| TypeScript runtime and isolate        | Image/runtime digest                                            | Pending decision               |
+| TypeScript runtime and isolate        | Pinned Deno supervisor/Worker inside disposable run container   | Proposed; exact digest pending |
 | Plane server                          | Commit, build, migration, and configuration digest              | Pending implementation         |
 | Seeded data                           | Versioned fixture manifest and digest                           | Pending implementation         |
 

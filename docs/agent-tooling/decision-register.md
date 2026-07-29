@@ -115,3 +115,12 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ATO-016 | Define audit retention and redaction periods.         | \_/10      |
 | ATO-017 | Define which operation groups benefit from preflight. | \_/10      |
 | ATO-018 | Define the exact TypeScript isolate technology.       | \_/10      |
+
+## Proposed
+
+| ID      | Proposed decision                                                                                                        | Importance |
+| ------- | ------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| ATP-001 | Use a request-bound deep gateway seam, separate read-only catalog, and internal lifecycle state machine.                 | \_/10      |
+| ATP-002 | Expose five eager semantic domain tools plus `plane_docs`, `plane_search`, and `plane_execute`.                          | \_/10      |
+| ATP-003 | Omit a general workflow-graph DSL from v1.                                                                               | \_/10      |
+| ATP-004 | Run TypeScript in a pinned Deno supervisor/Worker with explicit deny permissions inside the disposable Hermes container. | \_/10      |
