@@ -31,6 +31,7 @@ Plane-native Hermes agents can safely perform useful Plane work through native s
 | [MCP compatibility](./MCP-COMPATIBILITY.md)                       | Complete external-tool disposition and conformance plan       |
 | [Runtime design](./RUNTIME-DESIGN.md)                             | TypeScript isolate options and proposed Deno boundary         |
 | [Gateway wire](./GATEWAY-WIRE.md)                                 | Accepted JSON HTTP adapter and proposed v1 envelope           |
+| [Pilot contracts](./PILOT-CONTRACTS.md)                           | Proposed normalized schemas for the nine pilot operations     |
 | [Durable goal](./GOAL.md)                                         | Finish line, constraints, verifiers, and approval gates       |
 | [Worklog](./WORKLOG.md)                                           | Attempts, evidence, current state, and next action            |
 | [Result](./RESULT.md)                                             | Completion evidence and remaining risks                       |

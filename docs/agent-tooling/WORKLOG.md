@@ -262,3 +262,34 @@ The wire reserves `approval_required`, but the approver authority, decision tran
 ### Next action
 
 Specify the pilot semantic operation schemas and approval protocol.
+
+## 2026-07-29 — Pilot operation contracts proposed
+
+### Contract boundary
+
+- Defined nine callable pilot operations plus host-bound workspace context.
+- Replaced raw serializer passthrough with narrow canonical project, cycle, work-item, comment, and page projections.
+- Reserved credentials, actor identity, workspace identity, idempotency, approval, and audit fields for trusted host context.
+- Required non-leaking reference resolution and independent authorization of related objects.
+- Added cycle removal to the observed public-operation mapping for work-item placement updates.
+
+### Source-driven differences
+
+- Project-name resolution is excluded because project names are not unique.
+- Current-cycle results remain plural because Plane can return zero or multiple current cycles.
+- Agent comment writes use the same member-or-admin role as work-item writes, closing the weaker public comment-permission mismatch.
+- Gateway idempotency replaces public external-ID check-then-create behavior as the concurrency guarantee.
+- The release-plan operation requires one transaction and commit-safe activity delivery to guarantee exact counts and replay.
+
+### Verification
+
+- A fresh independent source review confirmed the serializer constraints, permission mappings, cycle-placement behavior, comment sanitization gap, and release-plan atomicity requirements.
+- The repository formatter initially rejected both changed documents; they were formatted before commit verification.
+
+### Still open
+
+The contracts remain proposed until approval authority, effect labels, generated schema digest, executable fixtures, and manifest approval are resolved.
+
+### Next action
+
+Resolve the approval decision authority and resume protocol, one product decision at a time.
