@@ -1,0 +1,468 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://plane.so/schemas/agent-tooling/trial-result-v1.schema.json",
+  "title": "Plane Safety Live Trial Raw Evidence Result v1",
+  "description": "Raw, authenticated trial evidence without qualification authority. The independent verifier must enforce semantic uniqueness of all ID-keyed arrays, referential closure of every evidence/event/exchange/correlation reference, and equality of every evidence record trial_id/run_id/evidence_nonce to the top-level bindings; JSON Schema uniqueItems only rejects byte-identical duplicate objects.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "trial_id",
+    "fixture_id",
+    "scenario_id",
+    "evidence_nonce",
+    "started_at",
+    "completed_at",
+    "identities",
+    "approved_manifests",
+    "artifact_digests",
+    "evidence_index",
+    "ordered_harness_events",
+    "observation_snapshots",
+    "gateway_exchanges",
+    "audit_readbacks",
+    "trace_evidence",
+    "structural_inventories",
+    "artifact_evidence",
+    "correlation_index"
+  ],
+  "properties": {
+    "schema": { "const": "plane.agent.safety-trial-result/v1" },
+    "schema_version": { "const": 1 },
+    "trial_id": { "$ref": "#/$defs/uuid" },
+    "fixture_id": { "type": "string", "pattern": "^FX-SAFE-0(1[1-9]|2[0-9]|30)$" },
+    "scenario_id": { "type": "string", "pattern": "^EV-0(1[1-9]|2[0-9]|30)$" },
+    "evidence_nonce": { "$ref": "#/$defs/uuid" },
+    "started_at": { "$ref": "#/$defs/dateTime" },
+    "completed_at": { "$ref": "#/$defs/dateTime" },
+    "identities": { "$ref": "#/$defs/identities" },
+    "approved_manifests": { "$ref": "#/$defs/approvedManifests" },
+    "artifact_digests": { "$ref": "#/$defs/artifactDigests" },
+    "evidence_index": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4096,
+      "uniqueItems": true,
+      "items": { "$ref": "./evidence-record-v1.schema.json" }
+    },
+    "ordered_harness_events": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16384,
+      "items": { "$ref": "#/$defs/harnessEvent" }
+    },
+    "observation_snapshots": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/observationSnapshot" }
+    },
+    "gateway_exchanges": {
+      "type": "array",
+      "maxItems": 16384,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/gatewayExchange" }
+    },
+    "audit_readbacks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16384,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/auditReadback" }
+    },
+    "trace_evidence": {
+      "type": "array",
+      "maxItems": 4096,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/traceEvidence" }
+    },
+    "structural_inventories": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/structuralInventory" }
+    },
+    "artifact_evidence": { "$ref": "#/$defs/artifactEvidence" },
+    "correlation_index": { "$ref": "#/$defs/correlationIndex" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "required": ["scenario_id"],
+        "properties": {
+          "scenario_id": { "enum": ["EV-021", "EV-022", "EV-023", "EV-024", "EV-025", "EV-026", "EV-027", "EV-028"] }
+        }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "artifact_digests": { "type": "object", "properties": { "probe_program": { "$ref": "#/$defs/sha256" } } }
+        }
+      },
+      "else": {
+        "type": "object",
+        "properties": {
+          "artifact_digests": { "type": "object", "properties": { "probe_program": { "type": "null" } } }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": ["scenario_id"],
+        "properties": { "scenario_id": { "enum": ["EV-029", "EV-030"] } }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "trace_evidence": {
+            "type": "array",
+            "allOf": [
+              {
+                "contains": {
+                  "type": "object",
+                  "required": ["kind"],
+                  "properties": { "kind": { "const": "activity" } }
+                },
+                "minContains": 1
+              },
+              {
+                "contains": {
+                  "type": "object",
+                  "required": ["kind"],
+                  "properties": { "kind": { "const": "broker_publication" } }
+                },
+                "minContains": 1
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "uuid": { "type": "string", "format": "uuid", "minLength": 36, "maxLength": 36 },
+    "dateTime": { "type": "string", "format": "date-time", "minLength": 20, "maxLength": 35 },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "boundedIdentity": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$"
+    },
+    "boundedRole": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 96,
+      "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$"
+    },
+    "uuidArray": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16384,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/uuid" }
+    },
+    "optionalUuidArray": {
+      "type": "array",
+      "maxItems": 16384,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/uuid" }
+    },
+    "identities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_id",
+        "project_ids",
+        "hermes_process_ids",
+        "run_id",
+        "turn_ids",
+        "outer_call_ids",
+        "inner_call_ids",
+        "plane_attempt_ids",
+        "invocation_ids",
+        "provider_id",
+        "model_id",
+        "agent_principal_id",
+        "verifier_principal_ids"
+      ],
+      "properties": {
+        "workspace_id": { "$ref": "#/$defs/uuid" },
+        "project_ids": { "$ref": "#/$defs/uuidArray" },
+        "hermes_process_ids": { "$ref": "#/$defs/uuidArray" },
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "turn_ids": { "$ref": "#/$defs/uuidArray" },
+        "outer_call_ids": { "$ref": "#/$defs/uuidArray" },
+        "inner_call_ids": { "$ref": "#/$defs/uuidArray" },
+        "plane_attempt_ids": { "$ref": "#/$defs/optionalUuidArray" },
+        "invocation_ids": { "$ref": "#/$defs/optionalUuidArray" },
+        "provider_id": { "$ref": "#/$defs/boundedIdentity" },
+        "model_id": { "$ref": "#/$defs/boundedIdentity" },
+        "agent_principal_id": { "$ref": "#/$defs/boundedIdentity" },
+        "verifier_principal_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/boundedIdentity" }
+        }
+      }
+    },
+    "manifestBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "sha256"],
+      "properties": {
+        "version": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "approvedManifests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["release", "verification"],
+      "properties": {
+        "release": { "$ref": "#/$defs/manifestBinding" },
+        "verification": { "$ref": "#/$defs/manifestBinding" }
+      }
+    },
+    "artifactDigests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "prompt",
+        "probe_program",
+        "fixture",
+        "predicate_bundle",
+        "operator_bundle",
+        "plane",
+        "hermes",
+        "mcp",
+        "sdk",
+        "catalog",
+        "adapter",
+        "gateway",
+        "configuration",
+        "execution_limits",
+        "deno",
+        "isolate",
+        "container",
+        "qualification_build"
+      ],
+      "properties": {
+        "prompt": { "$ref": "#/$defs/sha256" },
+        "probe_program": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "fixture": { "$ref": "#/$defs/sha256" },
+        "predicate_bundle": { "$ref": "#/$defs/sha256" },
+        "operator_bundle": { "$ref": "#/$defs/sha256" },
+        "plane": { "$ref": "#/$defs/sha256" },
+        "hermes": { "$ref": "#/$defs/sha256" },
+        "mcp": { "$ref": "#/$defs/sha256" },
+        "sdk": { "$ref": "#/$defs/sha256" },
+        "catalog": { "$ref": "#/$defs/sha256" },
+        "adapter": { "$ref": "#/$defs/sha256" },
+        "gateway": { "$ref": "#/$defs/sha256" },
+        "configuration": { "$ref": "#/$defs/sha256" },
+        "execution_limits": { "$ref": "#/$defs/sha256" },
+        "deno": { "$ref": "#/$defs/sha256" },
+        "isolate": { "$ref": "#/$defs/sha256" },
+        "container": { "$ref": "#/$defs/sha256" },
+        "qualification_build": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "eventCorrelation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "turn_id", "outer_call_id", "inner_call_id"],
+      "properties": {
+        "run_id": { "$ref": "#/$defs/uuid" },
+        "turn_id": { "$ref": "#/$defs/uuid" },
+        "outer_call_id": { "$ref": "#/$defs/uuid" },
+        "inner_call_id": { "$ref": "#/$defs/uuid" },
+        "plane_attempt_id": { "$ref": "#/$defs/uuid" },
+        "invocation_id": { "$ref": "#/$defs/uuid" },
+        "infrastructure_attempt_ref": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[ -~]+$" },
+        "edge_attempt_ref": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[ -~]+$" },
+        "host_security_attempt_ref": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[ -~]+$" }
+      }
+    },
+    "harnessEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_id",
+        "sequence",
+        "event_type",
+        "wall_time_utc",
+        "monotonic_ns",
+        "producer_class",
+        "evidence_id",
+        "correlation"
+      ],
+      "properties": {
+        "event_id": { "$ref": "#/$defs/uuid" },
+        "sequence": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+        "event_type": { "$ref": "#/$defs/boundedRole" },
+        "wall_time_utc": { "$ref": "#/$defs/dateTime" },
+        "monotonic_ns": { "type": "integer", "minimum": 0 },
+        "producer_class": {
+          "enum": [
+            "independent_verifier",
+            "fault_harness",
+            "canary_service",
+            "container_supervisor",
+            "hermes",
+            "plane_gateway",
+            "trusted_host",
+            "transport_harness"
+          ]
+        },
+        "evidence_id": { "$ref": "#/$defs/uuid" },
+        "correlation": { "$ref": "#/$defs/eventCorrelation" }
+      }
+    },
+    "observationSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "complete_authorized_projection",
+        "before_evidence_id",
+        "after_evidence_id",
+        "canonical_delta_evidence_id"
+      ],
+      "properties": {
+        "scope": { "$ref": "#/$defs/boundedRole" },
+        "complete_authorized_projection": { "const": true },
+        "before_evidence_id": { "$ref": "#/$defs/uuid" },
+        "after_evidence_id": { "$ref": "#/$defs/uuid" },
+        "canonical_delta_evidence_id": { "$ref": "#/$defs/uuid" }
+      }
+    },
+    "httpMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "route_template",
+        "status_code",
+        "request_headers_evidence_id",
+        "response_headers_evidence_id"
+      ],
+      "properties": {
+        "method": { "enum": ["GET", "POST"] },
+        "route_template": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^/api/v1/" },
+        "status_code": { "type": "integer", "minimum": 100, "maximum": 599 },
+        "request_headers_evidence_id": { "$ref": "#/$defs/uuid" },
+        "response_headers_evidence_id": { "$ref": "#/$defs/uuid" }
+      }
+    },
+    "gatewayExchange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "exchange_id",
+        "request_envelope_evidence_id",
+        "response_envelope_evidence_id",
+        "http",
+        "correlation"
+      ],
+      "properties": {
+        "exchange_id": { "$ref": "#/$defs/uuid" },
+        "request_envelope_evidence_id": { "$ref": "#/$defs/uuid" },
+        "response_envelope_evidence_id": { "$ref": "#/$defs/uuid" },
+        "http": { "$ref": "#/$defs/httpMetadata" },
+        "correlation": { "$ref": "#/$defs/eventCorrelation" }
+      }
+    },
+    "auditReadback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["class", "records_evidence_id", "reader_principal_id"],
+      "properties": {
+        "class": {
+          "enum": ["gateway_attempt", "edge_authentication_attempt", "host_security_attempt", "infrastructure_attempt"]
+        },
+        "records_evidence_id": { "$ref": "#/$defs/uuid" },
+        "reader_principal_id": { "$ref": "#/$defs/boundedIdentity" }
+      }
+    },
+    "traceEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "evidence_id"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "callback",
+            "isolate",
+            "fault",
+            "listener",
+            "process",
+            "supervisor",
+            "transport",
+            "invocation",
+            "activity",
+            "broker_publication"
+          ]
+        },
+        "evidence_id": { "$ref": "#/$defs/uuid" }
+      }
+    },
+    "structuralInventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "clean_checkout", "evidence_id"],
+      "properties": {
+        "kind": {
+          "enum": ["route", "dependency", "event", "model", "migration_schema", "configuration", "persistence"]
+        },
+        "clean_checkout": { "const": true },
+        "evidence_id": { "$ref": "#/$defs/uuid" }
+      }
+    },
+    "artifactEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transcript",
+        "tool_call_trace",
+        "generated_typescript",
+        "final_response",
+        "cleanup",
+        "retained_attempt_ledger"
+      ],
+      "properties": {
+        "transcript": { "$ref": "#/$defs/uuid" },
+        "tool_call_trace": { "$ref": "#/$defs/uuid" },
+        "generated_typescript": { "oneOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }] },
+        "final_response": { "$ref": "#/$defs/uuid" },
+        "cleanup": { "$ref": "#/$defs/uuid" },
+        "retained_attempt_ledger": { "$ref": "#/$defs/uuid" }
+      }
+    },
+    "correlationIndexEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inner_call_id", "event_ids", "evidence_ids", "plane_attempt_ids", "invocation_ids"],
+      "properties": {
+        "inner_call_id": { "$ref": "#/$defs/uuid" },
+        "event_ids": { "$ref": "#/$defs/uuidArray" },
+        "evidence_ids": { "$ref": "#/$defs/uuidArray" },
+        "plane_attempt_ids": { "$ref": "#/$defs/optionalUuidArray" },
+        "invocation_ids": { "$ref": "#/$defs/optionalUuidArray" }
+      }
+    },
+    "correlationIndex": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16384,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/correlationIndexEntry" }
+    }
+  }
+}

@@ -1,0 +1,294 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://plane.so/schemas/agent-tooling/evidence-record-v1.schema.json",
+  "title": "Plane Safety Trial Authenticated Evidence Record v1",
+  "description": "An immutable evidence index entry with authenticated acquisition and trial/run/nonce correlation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "trial_id",
+    "run_id",
+    "evidence_nonce",
+    "role",
+    "sha256",
+    "byte_length",
+    "media_type",
+    "immutable_location",
+    "source_channel",
+    "producer_attestation",
+    "acquisition_receipt",
+    "created_at"
+  ],
+  "properties": {
+    "id": { "$ref": "#/$defs/uuid" },
+    "trial_id": { "$ref": "#/$defs/uuid" },
+    "run_id": { "$ref": "#/$defs/uuid" },
+    "evidence_nonce": { "$ref": "#/$defs/uuid" },
+    "role": { "$ref": "#/$defs/role" },
+    "sha256": { "$ref": "#/$defs/sha256" },
+    "byte_length": { "type": "integer", "minimum": 0, "maximum": 1073741824 },
+    "media_type": { "$ref": "#/$defs/mediaType" },
+    "immutable_location": { "$ref": "#/$defs/immutableLocation" },
+    "source_channel": { "$ref": "#/$defs/sourceChannel" },
+    "producer_attestation": { "$ref": "#/$defs/producerAttestation" },
+    "acquisition_receipt": { "$ref": "#/$defs/acquisitionReceipt" },
+    "created_at": { "$ref": "#/$defs/dateTime" }
+  },
+  "$defs": {
+    "uuid": { "type": "string", "format": "uuid", "minLength": 36, "maxLength": 36 },
+    "dateTime": { "type": "string", "format": "date-time", "minLength": 20, "maxLength": 35 },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "signature": {
+      "type": "string",
+      "minLength": 86,
+      "maxLength": 86,
+      "pattern": "^[A-Za-z0-9_-]{86}$"
+    },
+    "boundedIdentity": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$"
+    },
+    "role": {
+      "enum": [
+        "plane_object_snapshot",
+        "plane_invocation_snapshot",
+        "plane_activity_snapshot",
+        "broker_publication_snapshot",
+        "plane_audit_readback",
+        "edge_authentication_readback",
+        "host_security_readback",
+        "gateway_envelope",
+        "http_metadata",
+        "infrastructure_attempt_readback",
+        "fault_barrier_acknowledgement",
+        "fault_injection_trace",
+        "transport_trace",
+        "canary_reachability",
+        "canary_hit_counts",
+        "listener_trace",
+        "container_death",
+        "isolate_exit",
+        "supervisor_heartbeat",
+        "process_trace",
+        "isolate_trace",
+        "callback_trace",
+        "transcript",
+        "tool_call_trace",
+        "generated_typescript",
+        "final_response",
+        "structural_inventory",
+        "cleanup",
+        "retained_attempt_ledger",
+        "predicate_recomputation"
+      ]
+    },
+    "sourceChannel": {
+      "enum": [
+        "verifier_authenticated_readback",
+        "fault_harness_authenticated_channel",
+        "canary_service_authenticated_channel",
+        "supervisor_signed_channel",
+        "hermes_authenticated_channel",
+        "trusted_host_authenticated_channel",
+        "transport_harness_authenticated_channel"
+      ]
+    },
+    "mediaType": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 127,
+      "pattern": "^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+(?:;[ -~]{1,64})?$"
+    },
+    "immutableLocation": {
+      "type": "string",
+      "minLength": 77,
+      "maxLength": 77,
+      "pattern": "^cas\\+sha256://[0-9a-f]{64}$"
+    },
+    "producerAttestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["principal", "process_identity", "producer_class", "key_id", "algorithm", "signature"],
+      "properties": {
+        "principal": { "$ref": "#/$defs/boundedIdentity" },
+        "process_identity": { "$ref": "#/$defs/boundedIdentity" },
+        "producer_class": {
+          "enum": [
+            "independent_verifier",
+            "fault_harness",
+            "canary_service",
+            "container_supervisor",
+            "hermes",
+            "trusted_host",
+            "transport_harness"
+          ]
+        },
+        "key_id": { "$ref": "#/$defs/boundedIdentity" },
+        "algorithm": { "const": "Ed25519" },
+        "signature": { "$ref": "#/$defs/signature" }
+      }
+    },
+    "acquisitionReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verifier_key_id",
+        "peer_identity",
+        "channel_binding_sha256",
+        "algorithm",
+        "acquired_at",
+        "signature"
+      ],
+      "properties": {
+        "verifier_key_id": { "$ref": "#/$defs/boundedIdentity" },
+        "peer_identity": { "$ref": "#/$defs/boundedIdentity" },
+        "channel_binding_sha256": { "$ref": "#/$defs/sha256" },
+        "algorithm": { "const": "Ed25519" },
+        "acquired_at": { "$ref": "#/$defs/dateTime" },
+        "signature": { "$ref": "#/$defs/signature" }
+      }
+    },
+    "verifierProducedRole": {
+      "enum": [
+        "plane_object_snapshot",
+        "plane_invocation_snapshot",
+        "plane_activity_snapshot",
+        "broker_publication_snapshot",
+        "plane_audit_readback",
+        "edge_authentication_readback",
+        "host_security_readback",
+        "infrastructure_attempt_readback",
+        "structural_inventory",
+        "cleanup",
+        "retained_attempt_ledger",
+        "predicate_recomputation"
+      ]
+    },
+    "faultHarnessProducedRole": { "enum": ["fault_barrier_acknowledgement", "fault_injection_trace"] },
+    "canaryProducedRole": { "enum": ["canary_reachability", "canary_hit_counts", "listener_trace"] },
+    "supervisorProducedRole": {
+      "enum": ["container_death", "isolate_exit", "supervisor_heartbeat", "process_trace", "isolate_trace"]
+    },
+    "hermesProducedRole": { "enum": ["transcript", "tool_call_trace", "generated_typescript", "final_response"] },
+    "trustedHostProducedRole": { "const": "callback_trace" },
+    "transportHarnessProducedRole": { "enum": ["gateway_envelope", "http_metadata", "transport_trace"] }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "required": ["role"],
+        "properties": { "role": { "$ref": "#/$defs/verifierProducedRole" } }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "producer_attestation": {
+            "type": "object",
+            "properties": { "producer_class": { "const": "independent_verifier" } }
+          },
+          "source_channel": { "const": "verifier_authenticated_readback" }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": ["role"],
+        "properties": { "role": { "$ref": "#/$defs/faultHarnessProducedRole" } }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "producer_attestation": {
+            "type": "object",
+            "properties": { "producer_class": { "const": "fault_harness" } }
+          },
+          "source_channel": { "const": "fault_harness_authenticated_channel" }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": ["role"],
+        "properties": { "role": { "$ref": "#/$defs/canaryProducedRole" } }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "producer_attestation": {
+            "type": "object",
+            "properties": { "producer_class": { "const": "canary_service" } }
+          },
+          "source_channel": { "const": "canary_service_authenticated_channel" }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": ["role"],
+        "properties": { "role": { "$ref": "#/$defs/supervisorProducedRole" } }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "producer_attestation": {
+            "type": "object",
+            "properties": { "producer_class": { "const": "container_supervisor" } }
+          },
+          "source_channel": { "const": "supervisor_signed_channel" }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": ["role"],
+        "properties": { "role": { "$ref": "#/$defs/hermesProducedRole" } }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "producer_attestation": { "type": "object", "properties": { "producer_class": { "const": "hermes" } } },
+          "source_channel": { "const": "hermes_authenticated_channel" }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": ["role"],
+        "properties": { "role": { "$ref": "#/$defs/trustedHostProducedRole" } }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "producer_attestation": { "type": "object", "properties": { "producer_class": { "const": "trusted_host" } } },
+          "source_channel": { "const": "trusted_host_authenticated_channel" }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "required": ["role"],
+        "properties": { "role": { "$ref": "#/$defs/transportHarnessProducedRole" } }
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "producer_attestation": {
+            "type": "object",
+            "properties": { "producer_class": { "const": "transport_harness" } }
+          },
+          "source_channel": { "const": "transport_harness_authenticated_channel" }
+        }
+      }
+    }
+  ]
+}

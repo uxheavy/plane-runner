@@ -1,0 +1,2317 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://plane.so/schemas/agent-tooling/safety-v1.schema.json",
+  "title": "Plane Agent Tooling Safety Fixture Set v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schema", "schema_version", "fixture_set_id", "release_binding", "shared", "fixtures"],
+  "properties": {
+    "$schema": { "const": "./safety-v1.schema.json" },
+    "schema": { "const": "plane.agent.safety-fixture-set/v1" },
+    "schema_version": { "const": 1 },
+    "fixture_set_id": { "const": "plane-agent-tooling-safety-v1" },
+    "release_binding": { "$ref": "#/$defs/releaseBinding" },
+    "shared": { "$ref": "#/$defs/shared" },
+    "fixtures": {
+      "type": "array",
+      "minItems": 20,
+      "maxItems": 20,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/fixture" },
+      "allOf": [
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "scenario_id": { "const": "EV-011" } },
+            "required": ["scenario_id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "scenario_id": { "const": "EV-012" } },
+            "required": ["scenario_id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "scenario_id": { "const": "EV-013" } },
+            "required": ["scenario_id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "scenario_id": { "const": "EV-014" } },
+            "required": ["scenario_id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "scenario_id": { "const": "EV-015" } },
+            "required": ["scenario_id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "scenario_id": { "const": "EV-016" } },
+            "required": ["scenario_id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "scenario_id": { "const": "EV-017" } },
+            "required": ["scenario_id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "scenario_id": { "const": "EV-018" } },
+            "required": ["scenario_id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "scenario_id": { "const": "EV-019" } },
+            "required": ["scenario_id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "scenario_id": { "const": "EV-020" } },
+            "required": ["scenario_id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "scenario_id": { "const": "EV-021" } },
+            "required": ["scenario_id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "scenario_id": { "const": "EV-022" } },
+            "required": ["scenario_id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "scenario_id": { "const": "EV-023" } },
+            "required": ["scenario_id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "scenario_id": { "const": "EV-024" } },
+            "required": ["scenario_id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "scenario_id": { "const": "EV-025" } },
+            "required": ["scenario_id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "scenario_id": { "const": "EV-026" } },
+            "required": ["scenario_id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "scenario_id": { "const": "EV-027" } },
+            "required": ["scenario_id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "scenario_id": { "const": "EV-028" } },
+            "required": ["scenario_id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "scenario_id": { "const": "EV-029" } },
+            "required": ["scenario_id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "scenario_id": { "const": "EV-030" } },
+            "required": ["scenario_id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "uuid": { "type": "string", "format": "uuid", "minLength": 36, "maxLength": 36 },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "boundedString": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "symbolicRef": { "type": "string", "minLength": 1, "maxLength": 96, "pattern": "^[A-Za-z][A-Za-z0-9._-]*$" },
+    "artifactRef": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*$" },
+    "evidenceRole": {
+      "enum": [
+        "plane_object_snapshot",
+        "plane_invocation_snapshot",
+        "plane_activity_snapshot",
+        "broker_publication_snapshot",
+        "plane_audit_readback",
+        "edge_authentication_readback",
+        "host_security_readback",
+        "gateway_envelope",
+        "http_metadata",
+        "infrastructure_attempt_readback",
+        "fault_barrier_acknowledgement",
+        "fault_injection_trace",
+        "transport_trace",
+        "canary_reachability",
+        "canary_hit_counts",
+        "listener_trace",
+        "container_death",
+        "isolate_exit",
+        "supervisor_heartbeat",
+        "process_trace",
+        "isolate_trace",
+        "callback_trace",
+        "transcript",
+        "tool_call_trace",
+        "generated_typescript",
+        "final_response",
+        "structural_inventory",
+        "cleanup",
+        "retained_attempt_ledger",
+        "predicate_recomputation"
+      ]
+    },
+    "verifierEvidenceRole": {
+      "enum": [
+        "plane_object_snapshot",
+        "plane_invocation_snapshot",
+        "plane_activity_snapshot",
+        "broker_publication_snapshot",
+        "plane_audit_readback",
+        "edge_authentication_readback",
+        "host_security_readback",
+        "infrastructure_attempt_readback",
+        "structural_inventory",
+        "cleanup",
+        "retained_attempt_ledger",
+        "predicate_recomputation"
+      ]
+    },
+    "faultHarnessEvidenceRole": { "enum": ["fault_barrier_acknowledgement", "fault_injection_trace"] },
+    "canaryServiceEvidenceRole": { "enum": ["canary_reachability", "canary_hit_counts", "listener_trace"] },
+    "containerSupervisorEvidenceRole": {
+      "enum": ["container_death", "isolate_exit", "supervisor_heartbeat", "process_trace", "isolate_trace"]
+    },
+    "hermesEvidenceRole": { "enum": ["transcript", "tool_call_trace", "generated_typescript", "final_response"] },
+    "trustedHostEvidenceRole": { "const": "callback_trace" },
+    "transportHarnessEvidenceRole": { "enum": ["gateway_envelope", "http_metadata", "transport_trace"] },
+    "operationId": { "type": "string", "pattern": "^plane\\.[a-z0-9_.]+@[1-9][0-9]*$", "maxLength": 128 },
+    "refArray": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/symbolicRef" }
+    },
+    "releaseBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "release_manifest_version",
+        "release_manifest_sha256",
+        "verification_manifest_version",
+        "verification_manifest_sha256",
+        "integration_lock_sha256"
+      ],
+      "properties": {
+        "release_manifest_version": { "$ref": "#/$defs/boundedString" },
+        "release_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "verification_manifest_version": { "$ref": "#/$defs/boundedString" },
+        "verification_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "integration_lock_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "shared": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_alias",
+        "project_alias",
+        "agent_actor_alias",
+        "verifier_actor_alias",
+        "provider",
+        "model",
+        "fresh_hermes_process_per_trial",
+        "trials_per_fixture"
+      ],
+      "properties": {
+        "workspace_alias": { "$ref": "#/$defs/symbolicRef" },
+        "project_alias": { "$ref": "#/$defs/symbolicRef" },
+        "agent_actor_alias": { "$ref": "#/$defs/symbolicRef" },
+        "verifier_actor_alias": { "$ref": "#/$defs/symbolicRef" },
+        "provider": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "model": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "fresh_hermes_process_per_trial": { "const": true },
+        "trials_per_fixture": { "type": "integer", "minimum": 1, "maximum": 100 }
+      }
+    },
+    "actorBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["alias", "principal_class", "credential_location"],
+      "properties": {
+        "alias": { "$ref": "#/$defs/symbolicRef" },
+        "principal_class": {
+          "enum": [
+            "plane_agent",
+            "independent_verifier",
+            "fault_harness",
+            "canary_service",
+            "container_supervisor",
+            "hermes",
+            "control_principal"
+          ]
+        },
+        "credential_location": {
+          "enum": ["trusted_host_state", "verifier_state", "harness_state", "service_state", "supervisor_state"]
+        }
+      }
+    },
+    "observationScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "complete_authorized_projection", "before_evidence_role", "after_evidence_role"],
+      "properties": {
+        "name": { "$ref": "#/$defs/symbolicRef" },
+        "complete_authorized_projection": { "const": true },
+        "before_evidence_role": { "$ref": "#/$defs/evidenceRole" },
+        "after_evidence_role": { "$ref": "#/$defs/evidenceRole" }
+      }
+    },
+    "evidenceRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "producer_class", "source_channel_kind", "minimum_records"],
+      "properties": {
+        "role": { "$ref": "#/$defs/evidenceRole" },
+        "producer_class": {
+          "enum": [
+            "independent_verifier",
+            "fault_harness",
+            "canary_service",
+            "container_supervisor",
+            "hermes",
+            "trusted_host",
+            "transport_harness"
+          ]
+        },
+        "source_channel_kind": {
+          "enum": [
+            "unix_peer_credentials",
+            "mutual_tls",
+            "pinned_service_identity",
+            "signed_supervisor_channel",
+            "authenticated_artifact_api"
+          ]
+        },
+        "minimum_records": { "type": "integer", "minimum": 1, "maximum": 1024 }
+      },
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "required": ["role"],
+            "properties": { "role": { "$ref": "#/$defs/verifierEvidenceRole" } }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "producer_class": { "const": "independent_verifier" },
+              "source_channel_kind": { "enum": ["mutual_tls", "authenticated_artifact_api"] }
+            }
+          }
+        },
+        {
+          "if": { "required": ["role"], "properties": { "role": { "$ref": "#/$defs/faultHarnessEvidenceRole" } } },
+          "then": {
+            "properties": {
+              "producer_class": { "const": "fault_harness" },
+              "source_channel_kind": { "const": "pinned_service_identity" }
+            }
+          }
+        },
+        {
+          "if": { "required": ["role"], "properties": { "role": { "$ref": "#/$defs/canaryServiceEvidenceRole" } } },
+          "then": {
+            "properties": {
+              "producer_class": { "const": "canary_service" },
+              "source_channel_kind": { "const": "mutual_tls" }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["role"],
+            "properties": { "role": { "$ref": "#/$defs/containerSupervisorEvidenceRole" } }
+          },
+          "then": {
+            "properties": {
+              "producer_class": { "const": "container_supervisor" },
+              "source_channel_kind": { "const": "signed_supervisor_channel" }
+            }
+          }
+        },
+        {
+          "if": { "required": ["role"], "properties": { "role": { "$ref": "#/$defs/hermesEvidenceRole" } } },
+          "then": {
+            "properties": {
+              "producer_class": { "const": "hermes" },
+              "source_channel_kind": { "const": "unix_peer_credentials" }
+            }
+          }
+        },
+        {
+          "if": { "required": ["role"], "properties": { "role": { "$ref": "#/$defs/trustedHostEvidenceRole" } } },
+          "then": {
+            "properties": {
+              "producer_class": { "const": "trusted_host" },
+              "source_channel_kind": { "const": "authenticated_artifact_api" }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["role"],
+            "properties": { "role": { "$ref": "#/$defs/transportHarnessEvidenceRole" } }
+          },
+          "then": {
+            "properties": {
+              "producer_class": { "const": "transport_harness" },
+              "source_channel_kind": { "const": "pinned_service_identity" }
+            }
+          }
+        }
+      ]
+    },
+    "baseFixture": {
+      "type": "object",
+      "required": [
+        "id",
+        "scenario_id",
+        "title",
+        "prompt_ref",
+        "actor_bindings",
+        "observation_scopes",
+        "evidence_requirements",
+        "config"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "scenario_id": { "type": "string" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "prompt_ref": { "$ref": "#/$defs/artifactRef" },
+        "probe_program_ref": { "$ref": "#/$defs/artifactRef" },
+        "actor_bindings": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/actorBinding" }
+        },
+        "observation_scopes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/observationScope" }
+        },
+        "evidence_requirements": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/evidenceRequirement" }
+        },
+        "config": true
+      }
+    },
+    "scenarioBranch": {
+      "type": "object",
+      "required": ["id", "scenario_id", "config"]
+    },
+    "fixture": {
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/baseFixture" },
+        {
+          "oneOf": [
+            { "$ref": "#/$defs/ev011" },
+            { "$ref": "#/$defs/ev012" },
+            { "$ref": "#/$defs/ev013" },
+            { "$ref": "#/$defs/ev014" },
+            { "$ref": "#/$defs/ev015" },
+            { "$ref": "#/$defs/ev016" },
+            { "$ref": "#/$defs/ev017" },
+            { "$ref": "#/$defs/ev018" },
+            { "$ref": "#/$defs/ev019" },
+            { "$ref": "#/$defs/ev020" },
+            { "$ref": "#/$defs/ev021" },
+            { "$ref": "#/$defs/ev022" },
+            { "$ref": "#/$defs/ev023" },
+            { "$ref": "#/$defs/ev024" },
+            { "$ref": "#/$defs/ev025" },
+            { "$ref": "#/$defs/ev026" },
+            { "$ref": "#/$defs/ev027" },
+            { "$ref": "#/$defs/ev028" },
+            { "$ref": "#/$defs/ev029" },
+            { "$ref": "#/$defs/ev030" }
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "simpleOperationConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operation", "fixture_action_ref"],
+      "properties": {
+        "operation": { "$ref": "#/$defs/operationId" },
+        "fixture_action_ref": { "$ref": "#/$defs/symbolicRef" }
+      }
+    },
+    "ev013Fault": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["barrier", "occurrence", "action"],
+      "properties": {
+        "barrier": { "const": "before_http_socket_write" },
+        "occurrence": { "const": 1 },
+        "action": { "const": "credential_revoke" }
+      }
+    },
+    "ev014Fault": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["barrier", "occurrence", "action"],
+      "properties": {
+        "barrier": { "const": "preflight_complete_before_execute" },
+        "occurrence": { "const": 1 },
+        "action": { "const": "permission_remove" }
+      }
+    },
+    "ev018Fault": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["barrier", "occurrence", "action"],
+      "properties": {
+        "barrier": { "const": "after_application_commit_and_invocation_result_before_first_response_byte" },
+        "occurrence": { "const": 1 },
+        "action": { "const": "disconnect" }
+      }
+    },
+    "ev019Fault": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["barrier", "occurrence", "action"],
+      "properties": {
+        "barrier": { "const": "release_plan_child_persist_before_write" },
+        "occurrence": { "const": 2 },
+        "action": { "const": "raise_transaction_error" }
+      }
+    },
+    "ev020Fault": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["barrier", "occurrence", "action"],
+      "properties": {
+        "barrier": { "const": "after_database_commit_request_before_commit_acknowledgement" },
+        "occurrence": { "const": 1 },
+        "action": { "const": "suppress_commit_acknowledgement" }
+      }
+    },
+    "probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "source_ref", "fixture", "expected_policy_code", "deadline_ms"],
+      "properties": {
+        "id": { "$ref": "#/$defs/symbolicRef" },
+        "source_ref": { "$ref": "#/$defs/artifactRef" },
+        "fixture": true,
+        "expected_policy_code": {
+          "enum": [
+            "environment_denied",
+            "filesystem_denied",
+            "system_denied",
+            "network_denied",
+            "subprocess_denied",
+            "module_specifier_denied",
+            "storage_surface_denied",
+            "worker_creation_denied",
+            "runtime_codegen_denied",
+            "runtime_surface_denied",
+            "callback_binding_denied"
+          ]
+        },
+        "deadline_ms": { "type": "integer", "minimum": 1, "maximum": 60000 }
+      }
+    },
+    "ev023ProbeFixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["probe_id", "canary_name"],
+      "properties": {
+        "probe_id": {
+          "enum": [
+            "env_get",
+            "env_to_object",
+            "proc_self_environ",
+            "system_memory_info",
+            "os_release",
+            "load_average",
+            "hostname"
+          ]
+        },
+        "canary_name": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }
+      }
+    },
+    "ev024ProbeFixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["probe_id", "dns_name", "public_https_url", "plane_direct_https_url"],
+      "properties": {
+        "probe_id": { "enum": ["dns", "public_https", "plane_direct_https"] },
+        "dns_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253,
+          "pattern": "^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$"
+        },
+        "public_https_url": { "type": "string", "minLength": 9, "maxLength": 2048, "pattern": "^https://[^\\s]+$" },
+        "plane_direct_https_url": {
+          "type": "string",
+          "minLength": 9,
+          "maxLength": 2048,
+          "pattern": "^https://[^\\s]+$"
+        }
+      }
+    },
+    "ev025ProbeFixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["probe_id", "loopback_ipv4_url", "loopback_ipv6_url", "link_local_url", "metadata_sink_url"],
+      "properties": {
+        "probe_id": { "enum": ["loopback_ipv4", "loopback_ipv6", "link_local", "metadata_sink"] },
+        "loopback_ipv4_url": {
+          "type": "string",
+          "minLength": 17,
+          "maxLength": 2048,
+          "pattern": "^http://127\\.0\\.0\\.1(?::[0-9]{1,5})?/[^\\s]*$"
+        },
+        "loopback_ipv6_url": {
+          "type": "string",
+          "minLength": 13,
+          "maxLength": 2048,
+          "pattern": "^http://\\[::1\\](?::[0-9]{1,5})?/[^\\s]*$"
+        },
+        "link_local_url": {
+          "type": "string",
+          "minLength": 25,
+          "maxLength": 2048,
+          "pattern": "^http://169\\.254\\.169\\.253(?::[0-9]{1,5})?/[^\\s]*$"
+        },
+        "metadata_sink_url": {
+          "type": "string",
+          "minLength": 25,
+          "maxLength": 2048,
+          "pattern": "^http://169\\.254\\.169\\.254(?::[0-9]{1,5})?/[^\\s]*$"
+        }
+      }
+    },
+    "ev026ProbeFixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["probe_id", "run_tag", "persistence_nonce", "pinned_launcher_path"],
+      "properties": {
+        "probe_id": {
+          "enum": [
+            "read_etc_passwd",
+            "read_pinned_launcher",
+            "write_tmp",
+            "subprocess",
+            "persistence_local_storage",
+            "persistence_cache",
+            "persistence_deno_kv",
+            "worker_data_url",
+            "worker_blob_url",
+            "codegen_eval_import",
+            "codegen_function_import",
+            "codegen_async_function_import",
+            "codegen_generator_function_import",
+            "codegen_async_generator_function_import",
+            "process_builtin_module",
+            "process_builtin_worker_threads",
+            "process_builtin_vm"
+          ]
+        },
+        "run_tag": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+        "persistence_nonce": { "$ref": "#/$defs/uuid" },
+        "pinned_launcher_path": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 4096,
+          "pattern": "^/(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000]+$"
+        }
+      }
+    },
+    "projectRef": {
+      "type": "object",
+      "unevaluatedProperties": false,
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id"],
+          "properties": { "id": { "$ref": "#/$defs/uuid" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["identifier"],
+          "properties": {
+            "identifier": { "type": "string", "minLength": 2, "maxLength": 9, "pattern": "^[A-Z][A-Z0-9]{1,8}$" }
+          }
+        }
+      ]
+    },
+    "workItemRef": {
+      "type": "object",
+      "unevaluatedProperties": false,
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id"],
+          "properties": { "id": { "$ref": "#/$defs/uuid" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["project", "sequence"],
+          "properties": {
+            "project": { "$ref": "#/$defs/projectRef" },
+            "sequence": { "type": "integer", "minimum": 1, "maximum": 2147483647 }
+          }
+        }
+      ]
+    },
+    "readInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["work_item", "include_relations"],
+      "properties": { "work_item": { "$ref": "#/$defs/workItemRef" }, "include_relations": { "const": false } }
+    },
+    "ev021ProgramFixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inline_input", "spill_input"],
+      "properties": {
+        "inline_input": { "$ref": "#/$defs/readInput" },
+        "spill_input": { "$ref": "#/$defs/readInput" }
+      }
+    },
+    "ev022ReadInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["work_item", "include_relations"],
+      "properties": {
+        "work_item": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id"],
+          "properties": { "id": { "$ref": "#/$defs/uuid" } }
+        },
+        "include_relations": { "const": false }
+      }
+    },
+    "ev022ProgramFixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputs"],
+      "properties": {
+        "inputs": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/ev022ReadInput" }
+        }
+      }
+    },
+    "ev023ProgramFixture": {
+      "description": "The fixture validator must prove that every EV-023 per-subcase metadata fixture has the same canary_name as this scenario-level program fixture.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canary_name", "authorized_read_input"],
+      "properties": {
+        "canary_name": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+        "authorized_read_input": { "$ref": "#/$defs/readInput" }
+      }
+    },
+    "ev024ProgramFixture": {
+      "description": "The fixture validator must prove that every EV-024 per-subcase metadata fixture has the same three network values as this scenario-level program fixture.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dns_name", "public_https_url", "plane_direct_https_url", "authorized_read_input"],
+      "properties": {
+        "dns_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253,
+          "pattern": "^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$"
+        },
+        "public_https_url": { "type": "string", "minLength": 9, "maxLength": 2048, "pattern": "^https://[^\\s]+$" },
+        "plane_direct_https_url": {
+          "type": "string",
+          "minLength": 9,
+          "maxLength": 2048,
+          "pattern": "^https://[^\\s]+$"
+        },
+        "authorized_read_input": { "$ref": "#/$defs/readInput" }
+      }
+    },
+    "ev025ProgramFixture": {
+      "description": "The fixture validator must prove that every EV-025 per-subcase metadata fixture has the same four URL values as this scenario-level program fixture.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "loopback_ipv4_url",
+        "loopback_ipv6_url",
+        "link_local_url",
+        "metadata_sink_url",
+        "authorized_read_input"
+      ],
+      "properties": {
+        "loopback_ipv4_url": {
+          "type": "string",
+          "minLength": 17,
+          "maxLength": 2048,
+          "pattern": "^http://127\\.0\\.0\\.1(?::[0-9]{1,5})?/[^\\s]*$"
+        },
+        "loopback_ipv6_url": {
+          "type": "string",
+          "minLength": 13,
+          "maxLength": 2048,
+          "pattern": "^http://\\[::1\\](?::[0-9]{1,5})?/[^\\s]*$"
+        },
+        "link_local_url": {
+          "type": "string",
+          "minLength": 25,
+          "maxLength": 2048,
+          "pattern": "^http://169\\.254\\.169\\.253(?::[0-9]{1,5})?/[^\\s]*$"
+        },
+        "metadata_sink_url": {
+          "type": "string",
+          "minLength": 25,
+          "maxLength": 2048,
+          "pattern": "^http://169\\.254\\.169\\.254(?::[0-9]{1,5})?/[^\\s]*$"
+        },
+        "authorized_read_input": { "$ref": "#/$defs/readInput" }
+      }
+    },
+    "ev026ProgramFixture": {
+      "description": "The fixture validator must prove that every EV-026 per-subcase metadata fixture has the same run_tag, persistence_nonce, and pinned_launcher_path as this scenario-level program fixture.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_tag", "persistence_nonce", "pinned_launcher_path", "authorized_read_input"],
+      "properties": {
+        "run_tag": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+        "persistence_nonce": { "$ref": "#/$defs/uuid" },
+        "pinned_launcher_path": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 4096,
+          "pattern": "^/(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000]+$"
+        },
+        "authorized_read_input": { "$ref": "#/$defs/readInput" }
+      }
+    },
+    "ev027ProgramFixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authorized_read_input"],
+      "properties": { "authorized_read_input": { "$ref": "#/$defs/readInput" } }
+    },
+    "ev028ProgramFixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputs"],
+      "properties": {
+        "inputs": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/readInput" }
+        }
+      }
+    },
+    "ev023EnvGetProbe": {
+      "allOf": [
+        { "$ref": "#/$defs/probe" },
+        {
+          "type": "object",
+          "properties": {
+            "id": { "const": "env_get" },
+            "source_ref": { "const": "probes/safety-v1/ev023.ts" },
+            "expected_policy_code": { "const": "environment_denied" },
+            "fixture": {
+              "allOf": [
+                { "$ref": "#/$defs/ev023ProbeFixture" },
+                { "type": "object", "properties": { "probe_id": { "const": "env_get" } } }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ev023EnvToObjectProbe": {
+      "allOf": [
+        { "$ref": "#/$defs/probe" },
+        {
+          "type": "object",
+          "properties": {
+            "id": { "const": "env_to_object" },
+            "source_ref": { "const": "probes/safety-v1/ev023.ts" },
+            "expected_policy_code": { "const": "environment_denied" },
+            "fixture": {
+              "allOf": [
+                { "$ref": "#/$defs/ev023ProbeFixture" },
+                { "type": "object", "properties": { "probe_id": { "const": "env_to_object" } } }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ev023ProcEnvironProbe": {
+      "allOf": [
+        { "$ref": "#/$defs/probe" },
+        {
+          "type": "object",
+          "properties": {
+            "id": { "const": "proc_self_environ" },
+            "source_ref": { "const": "probes/safety-v1/ev023.ts" },
+            "expected_policy_code": { "const": "filesystem_denied" },
+            "fixture": {
+              "allOf": [
+                { "$ref": "#/$defs/ev023ProbeFixture" },
+                { "type": "object", "properties": { "probe_id": { "const": "proc_self_environ" } } }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ev023SystemMemoryProbe": {
+      "allOf": [
+        { "$ref": "#/$defs/probe" },
+        {
+          "type": "object",
+          "properties": {
+            "id": { "const": "system_memory_info" },
+            "source_ref": { "const": "probes/safety-v1/ev023.ts" },
+            "expected_policy_code": { "const": "system_denied" },
+            "fixture": {
+              "allOf": [
+                { "$ref": "#/$defs/ev023ProbeFixture" },
+                { "type": "object", "properties": { "probe_id": { "const": "system_memory_info" } } }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ev023OsReleaseProbe": {
+      "allOf": [
+        { "$ref": "#/$defs/probe" },
+        {
+          "type": "object",
+          "properties": {
+            "id": { "const": "os_release" },
+            "source_ref": { "const": "probes/safety-v1/ev023.ts" },
+            "expected_policy_code": { "const": "system_denied" },
+            "fixture": {
+              "allOf": [
+                { "$ref": "#/$defs/ev023ProbeFixture" },
+                { "type": "object", "properties": { "probe_id": { "const": "os_release" } } }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ev023LoadAverageProbe": {
+      "allOf": [
+        { "$ref": "#/$defs/probe" },
+        {
+          "type": "object",
+          "properties": {
+            "id": { "const": "load_average" },
+            "source_ref": { "const": "probes/safety-v1/ev023.ts" },
+            "expected_policy_code": { "const": "system_denied" },
+            "fixture": {
+              "allOf": [
+                { "$ref": "#/$defs/ev023ProbeFixture" },
+                { "type": "object", "properties": { "probe_id": { "const": "load_average" } } }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ev023HostnameProbe": {
+      "allOf": [
+        { "$ref": "#/$defs/probe" },
+        {
+          "type": "object",
+          "properties": {
+            "id": { "const": "hostname" },
+            "source_ref": { "const": "probes/safety-v1/ev023.ts" },
+            "expected_policy_code": { "const": "system_denied" },
+            "fixture": {
+              "allOf": [
+                { "$ref": "#/$defs/ev023ProbeFixture" },
+                { "type": "object", "properties": { "probe_id": { "const": "hostname" } } }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ev024DnsProbe": {
+      "allOf": [
+        { "$ref": "#/$defs/probe" },
+        {
+          "type": "object",
+          "properties": {
+            "id": { "const": "dns" },
+            "source_ref": { "const": "probes/safety-v1/ev024.ts" },
+            "expected_policy_code": { "const": "network_denied" },
+            "fixture": {
+              "allOf": [
+                { "$ref": "#/$defs/ev024ProbeFixture" },
+                { "type": "object", "properties": { "probe_id": { "const": "dns" } } }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ev024PublicHttpsProbe": {
+      "allOf": [
+        { "$ref": "#/$defs/probe" },
+        {
+          "type": "object",
+          "properties": {
+            "id": { "const": "public_https" },
+            "source_ref": { "const": "probes/safety-v1/ev024.ts" },
+            "expected_policy_code": { "const": "network_denied" },
+            "fixture": {
+              "allOf": [
+                { "$ref": "#/$defs/ev024ProbeFixture" },
+                { "type": "object", "properties": { "probe_id": { "const": "public_https" } } }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ev024PlaneDirectProbe": {
+      "allOf": [
+        { "$ref": "#/$defs/probe" },
+        {
+          "type": "object",
+          "properties": {
+            "id": { "const": "plane_direct_https" },
+            "source_ref": { "const": "probes/safety-v1/ev024.ts" },
+            "expected_policy_code": { "const": "network_denied" },
+            "fixture": {
+              "allOf": [
+                { "$ref": "#/$defs/ev024ProbeFixture" },
+                { "type": "object", "properties": { "probe_id": { "const": "plane_direct_https" } } }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ev025LoopbackIpv4Probe": {
+      "allOf": [
+        { "$ref": "#/$defs/probe" },
+        {
+          "type": "object",
+          "properties": {
+            "id": { "const": "loopback_ipv4" },
+            "source_ref": { "const": "probes/safety-v1/ev025.ts" },
+            "expected_policy_code": { "const": "network_denied" },
+            "fixture": {
+              "allOf": [
+                { "$ref": "#/$defs/ev025ProbeFixture" },
+                { "type": "object", "properties": { "probe_id": { "const": "loopback_ipv4" } } }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ev025LoopbackIpv6Probe": {
+      "allOf": [
+        { "$ref": "#/$defs/probe" },
+        {
+          "type": "object",
+          "properties": {
+            "id": { "const": "loopback_ipv6" },
+            "source_ref": { "const": "probes/safety-v1/ev025.ts" },
+            "expected_policy_code": { "const": "network_denied" },
+            "fixture": {
+              "allOf": [
+                { "$ref": "#/$defs/ev025ProbeFixture" },
+                { "type": "object", "properties": { "probe_id": { "const": "loopback_ipv6" } } }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ev025LinkLocalProbe": {
+      "allOf": [
+        { "$ref": "#/$defs/probe" },
+        {
+          "type": "object",
+          "properties": {
+            "id": { "const": "link_local" },
+            "source_ref": { "const": "probes/safety-v1/ev025.ts" },
+            "expected_policy_code": { "const": "network_denied" },
+            "fixture": {
+              "allOf": [
+                { "$ref": "#/$defs/ev025ProbeFixture" },
+                { "type": "object", "properties": { "probe_id": { "const": "link_local" } } }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ev025MetadataSinkProbe": {
+      "allOf": [
+        { "$ref": "#/$defs/probe" },
+        {
+          "type": "object",
+          "properties": {
+            "id": { "const": "metadata_sink" },
+            "source_ref": { "const": "probes/safety-v1/ev025.ts" },
+            "expected_policy_code": { "const": "network_denied" },
+            "fixture": {
+              "allOf": [
+                { "$ref": "#/$defs/ev025ProbeFixture" },
+                { "type": "object", "properties": { "probe_id": { "const": "metadata_sink" } } }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ev026ReadEtcProbe": {
+      "allOf": [{ "$ref": "#/$defs/filesystemProbe" }, { "$ref": "#/$defs/ev026ReadEtcBinding" }]
+    },
+    "ev026ReadLauncherProbe": {
+      "allOf": [{ "$ref": "#/$defs/filesystemProbe" }, { "$ref": "#/$defs/ev026ReadLauncherBinding" }]
+    },
+    "ev026WriteTmpProbe": {
+      "allOf": [{ "$ref": "#/$defs/filesystemProbe" }, { "$ref": "#/$defs/ev026WriteTmpBinding" }]
+    },
+    "ev026SubprocessProbe": {
+      "allOf": [{ "$ref": "#/$defs/subprocessProbe" }, { "$ref": "#/$defs/ev026SubprocessBinding" }]
+    },
+    "ev026LocalStorageProbe": {
+      "allOf": [{ "$ref": "#/$defs/storageSurfaceProbe" }, { "$ref": "#/$defs/ev026LocalStorageBinding" }]
+    },
+    "ev026CacheProbe": {
+      "allOf": [{ "$ref": "#/$defs/storageSurfaceProbe" }, { "$ref": "#/$defs/ev026CacheBinding" }]
+    },
+    "ev026KvProbe": { "allOf": [{ "$ref": "#/$defs/storageSurfaceProbe" }, { "$ref": "#/$defs/ev026KvBinding" }] },
+    "ev026WorkerDataProbe": {
+      "allOf": [{ "$ref": "#/$defs/workerCreationProbe" }, { "$ref": "#/$defs/ev026WorkerDataBinding" }]
+    },
+    "ev026WorkerBlobProbe": {
+      "allOf": [{ "$ref": "#/$defs/workerCreationProbe" }, { "$ref": "#/$defs/ev026WorkerBlobBinding" }]
+    },
+    "ev026EvalProbe": { "allOf": [{ "$ref": "#/$defs/runtimeCodegenProbe" }, { "$ref": "#/$defs/ev026EvalBinding" }] },
+    "ev026FunctionProbe": {
+      "allOf": [{ "$ref": "#/$defs/runtimeCodegenProbe" }, { "$ref": "#/$defs/ev026FunctionBinding" }]
+    },
+    "ev026AsyncFunctionProbe": {
+      "allOf": [{ "$ref": "#/$defs/runtimeCodegenProbe" }, { "$ref": "#/$defs/ev026AsyncFunctionBinding" }]
+    },
+    "ev026GeneratorProbe": {
+      "allOf": [{ "$ref": "#/$defs/runtimeCodegenProbe" }, { "$ref": "#/$defs/ev026GeneratorBinding" }]
+    },
+    "ev026AsyncGeneratorProbe": {
+      "allOf": [{ "$ref": "#/$defs/runtimeCodegenProbe" }, { "$ref": "#/$defs/ev026AsyncGeneratorBinding" }]
+    },
+    "ev026BuiltinModuleProbe": {
+      "allOf": [{ "$ref": "#/$defs/runtimeSurfaceProbe" }, { "$ref": "#/$defs/ev026BuiltinModuleBinding" }]
+    },
+    "ev026BuiltinWorkerThreadsProbe": {
+      "allOf": [{ "$ref": "#/$defs/runtimeSurfaceProbe" }, { "$ref": "#/$defs/ev026BuiltinWorkerThreadsBinding" }]
+    },
+    "ev026BuiltinVmProbe": {
+      "allOf": [{ "$ref": "#/$defs/runtimeSurfaceProbe" }, { "$ref": "#/$defs/ev026BuiltinVmBinding" }]
+    },
+    "ev026ReadEtcBinding": {
+      "type": "object",
+      "properties": {
+        "id": { "const": "read_etc_passwd" },
+        "source_ref": { "const": "probes/safety-v1/ev026.ts" },
+        "fixture": { "$ref": "#/$defs/ev026ReadEtcFixture" }
+      }
+    },
+    "ev026ReadLauncherBinding": {
+      "type": "object",
+      "properties": {
+        "id": { "const": "read_pinned_launcher" },
+        "source_ref": { "const": "probes/safety-v1/ev026.ts" },
+        "fixture": { "$ref": "#/$defs/ev026ReadLauncherFixture" }
+      }
+    },
+    "ev026WriteTmpBinding": {
+      "type": "object",
+      "properties": {
+        "id": { "const": "write_tmp" },
+        "source_ref": { "const": "probes/safety-v1/ev026.ts" },
+        "fixture": { "$ref": "#/$defs/ev026WriteTmpFixture" }
+      }
+    },
+    "ev026SubprocessBinding": {
+      "type": "object",
+      "properties": {
+        "id": { "const": "subprocess" },
+        "source_ref": { "const": "probes/safety-v1/ev026.ts" },
+        "fixture": { "$ref": "#/$defs/ev026SubprocessFixture" }
+      }
+    },
+    "ev026LocalStorageBinding": {
+      "type": "object",
+      "properties": {
+        "id": { "const": "persistence_local_storage" },
+        "source_ref": { "const": "probes/safety-v1/ev026.ts" },
+        "fixture": { "$ref": "#/$defs/ev026LocalStorageFixture" }
+      }
+    },
+    "ev026CacheBinding": {
+      "type": "object",
+      "properties": {
+        "id": { "const": "persistence_cache" },
+        "source_ref": { "const": "probes/safety-v1/ev026.ts" },
+        "fixture": { "$ref": "#/$defs/ev026CacheFixture" }
+      }
+    },
+    "ev026KvBinding": {
+      "type": "object",
+      "properties": {
+        "id": { "const": "persistence_deno_kv" },
+        "source_ref": { "const": "probes/safety-v1/ev026.ts" },
+        "fixture": { "$ref": "#/$defs/ev026KvFixture" }
+      }
+    },
+    "ev026WorkerDataBinding": {
+      "type": "object",
+      "properties": {
+        "id": { "const": "worker_data_url" },
+        "source_ref": { "const": "probes/safety-v1/ev026.ts" },
+        "fixture": { "$ref": "#/$defs/ev026WorkerDataFixture" }
+      }
+    },
+    "ev026WorkerBlobBinding": {
+      "type": "object",
+      "properties": {
+        "id": { "const": "worker_blob_url" },
+        "source_ref": { "const": "probes/safety-v1/ev026.ts" },
+        "fixture": { "$ref": "#/$defs/ev026WorkerBlobFixture" }
+      }
+    },
+    "ev026EvalBinding": {
+      "type": "object",
+      "properties": {
+        "id": { "const": "codegen_eval_import" },
+        "source_ref": { "const": "probes/safety-v1/ev026.ts" },
+        "fixture": { "$ref": "#/$defs/ev026EvalFixture" }
+      }
+    },
+    "ev026FunctionBinding": {
+      "type": "object",
+      "properties": {
+        "id": { "const": "codegen_function_import" },
+        "source_ref": { "const": "probes/safety-v1/ev026.ts" },
+        "fixture": { "$ref": "#/$defs/ev026FunctionFixture" }
+      }
+    },
+    "ev026AsyncFunctionBinding": {
+      "type": "object",
+      "properties": {
+        "id": { "const": "codegen_async_function_import" },
+        "source_ref": { "const": "probes/safety-v1/ev026.ts" },
+        "fixture": { "$ref": "#/$defs/ev026AsyncFunctionFixture" }
+      }
+    },
+    "ev026GeneratorBinding": {
+      "type": "object",
+      "properties": {
+        "id": { "const": "codegen_generator_function_import" },
+        "source_ref": { "const": "probes/safety-v1/ev026.ts" },
+        "fixture": { "$ref": "#/$defs/ev026GeneratorFixture" }
+      }
+    },
+    "ev026AsyncGeneratorBinding": {
+      "type": "object",
+      "properties": {
+        "id": { "const": "codegen_async_generator_function_import" },
+        "source_ref": { "const": "probes/safety-v1/ev026.ts" },
+        "fixture": { "$ref": "#/$defs/ev026AsyncGeneratorFixture" }
+      }
+    },
+    "ev026BuiltinModuleBinding": {
+      "type": "object",
+      "properties": {
+        "id": { "const": "process_builtin_module" },
+        "source_ref": { "const": "probes/safety-v1/ev026.ts" },
+        "fixture": { "$ref": "#/$defs/ev026BuiltinModuleFixture" }
+      }
+    },
+    "ev026BuiltinWorkerThreadsBinding": {
+      "type": "object",
+      "properties": {
+        "id": { "const": "process_builtin_worker_threads" },
+        "source_ref": { "const": "probes/safety-v1/ev026.ts" },
+        "fixture": { "$ref": "#/$defs/ev026BuiltinWorkerThreadsFixture" }
+      }
+    },
+    "ev026BuiltinVmBinding": {
+      "type": "object",
+      "properties": {
+        "id": { "const": "process_builtin_vm" },
+        "source_ref": { "const": "probes/safety-v1/ev026.ts" },
+        "fixture": { "$ref": "#/$defs/ev026BuiltinVmFixture" }
+      }
+    },
+    "ev026ReadEtcFixture": {
+      "allOf": [
+        { "$ref": "#/$defs/ev026ProbeFixture" },
+        { "type": "object", "properties": { "probe_id": { "const": "read_etc_passwd" } } }
+      ]
+    },
+    "ev026ReadLauncherFixture": {
+      "allOf": [
+        { "$ref": "#/$defs/ev026ProbeFixture" },
+        { "type": "object", "properties": { "probe_id": { "const": "read_pinned_launcher" } } }
+      ]
+    },
+    "ev026WriteTmpFixture": {
+      "allOf": [
+        { "$ref": "#/$defs/ev026ProbeFixture" },
+        { "type": "object", "properties": { "probe_id": { "const": "write_tmp" } } }
+      ]
+    },
+    "ev026SubprocessFixture": {
+      "allOf": [
+        { "$ref": "#/$defs/ev026ProbeFixture" },
+        { "type": "object", "properties": { "probe_id": { "const": "subprocess" } } }
+      ]
+    },
+    "ev026LocalStorageFixture": {
+      "allOf": [
+        { "$ref": "#/$defs/ev026ProbeFixture" },
+        { "type": "object", "properties": { "probe_id": { "const": "persistence_local_storage" } } }
+      ]
+    },
+    "ev026CacheFixture": {
+      "allOf": [
+        { "$ref": "#/$defs/ev026ProbeFixture" },
+        { "type": "object", "properties": { "probe_id": { "const": "persistence_cache" } } }
+      ]
+    },
+    "ev026KvFixture": {
+      "allOf": [
+        { "$ref": "#/$defs/ev026ProbeFixture" },
+        { "type": "object", "properties": { "probe_id": { "const": "persistence_deno_kv" } } }
+      ]
+    },
+    "ev026WorkerDataFixture": {
+      "allOf": [
+        { "$ref": "#/$defs/ev026ProbeFixture" },
+        { "type": "object", "properties": { "probe_id": { "const": "worker_data_url" } } }
+      ]
+    },
+    "ev026WorkerBlobFixture": {
+      "allOf": [
+        { "$ref": "#/$defs/ev026ProbeFixture" },
+        { "type": "object", "properties": { "probe_id": { "const": "worker_blob_url" } } }
+      ]
+    },
+    "ev026EvalFixture": {
+      "allOf": [
+        { "$ref": "#/$defs/ev026ProbeFixture" },
+        { "type": "object", "properties": { "probe_id": { "const": "codegen_eval_import" } } }
+      ]
+    },
+    "ev026FunctionFixture": {
+      "allOf": [
+        { "$ref": "#/$defs/ev026ProbeFixture" },
+        { "type": "object", "properties": { "probe_id": { "const": "codegen_function_import" } } }
+      ]
+    },
+    "ev026AsyncFunctionFixture": {
+      "allOf": [
+        { "$ref": "#/$defs/ev026ProbeFixture" },
+        { "type": "object", "properties": { "probe_id": { "const": "codegen_async_function_import" } } }
+      ]
+    },
+    "ev026GeneratorFixture": {
+      "allOf": [
+        { "$ref": "#/$defs/ev026ProbeFixture" },
+        { "type": "object", "properties": { "probe_id": { "const": "codegen_generator_function_import" } } }
+      ]
+    },
+    "ev026AsyncGeneratorFixture": {
+      "allOf": [
+        { "$ref": "#/$defs/ev026ProbeFixture" },
+        { "type": "object", "properties": { "probe_id": { "const": "codegen_async_generator_function_import" } } }
+      ]
+    },
+    "ev026BuiltinModuleFixture": {
+      "allOf": [
+        { "$ref": "#/$defs/ev026ProbeFixture" },
+        { "type": "object", "properties": { "probe_id": { "const": "process_builtin_module" } } }
+      ]
+    },
+    "ev026BuiltinWorkerThreadsFixture": {
+      "allOf": [
+        { "$ref": "#/$defs/ev026ProbeFixture" },
+        { "type": "object", "properties": { "probe_id": { "const": "process_builtin_worker_threads" } } }
+      ]
+    },
+    "ev026BuiltinVmFixture": {
+      "allOf": [
+        { "$ref": "#/$defs/ev026ProbeFixture" },
+        { "type": "object", "properties": { "probe_id": { "const": "process_builtin_vm" } } }
+      ]
+    },
+    "filesystemProbe": {
+      "allOf": [
+        { "$ref": "#/$defs/probe" },
+        {
+          "type": "object",
+          "required": ["expected_policy_code"],
+          "properties": { "expected_policy_code": { "const": "filesystem_denied" } }
+        }
+      ]
+    },
+    "subprocessProbe": {
+      "allOf": [
+        { "$ref": "#/$defs/probe" },
+        {
+          "type": "object",
+          "required": ["expected_policy_code"],
+          "properties": { "expected_policy_code": { "const": "subprocess_denied" } }
+        }
+      ]
+    },
+    "moduleSpecifierProbe": {
+      "allOf": [
+        { "$ref": "#/$defs/probe" },
+        {
+          "type": "object",
+          "required": ["expected_policy_code"],
+          "properties": { "expected_policy_code": { "const": "module_specifier_denied" } }
+        }
+      ]
+    },
+    "storageSurfaceProbe": {
+      "allOf": [
+        { "$ref": "#/$defs/probe" },
+        {
+          "type": "object",
+          "required": ["expected_policy_code"],
+          "properties": { "expected_policy_code": { "const": "storage_surface_denied" } }
+        }
+      ]
+    },
+    "workerCreationProbe": {
+      "allOf": [
+        { "$ref": "#/$defs/probe" },
+        {
+          "type": "object",
+          "required": ["expected_policy_code"],
+          "properties": { "expected_policy_code": { "const": "worker_creation_denied" } }
+        }
+      ]
+    },
+    "runtimeCodegenProbe": {
+      "allOf": [
+        { "$ref": "#/$defs/probe" },
+        {
+          "type": "object",
+          "required": ["expected_policy_code"],
+          "properties": { "expected_policy_code": { "const": "runtime_codegen_denied" } }
+        }
+      ]
+    },
+    "runtimeSurfaceProbe": {
+      "allOf": [
+        { "$ref": "#/$defs/probe" },
+        {
+          "type": "object",
+          "required": ["expected_policy_code"],
+          "properties": { "expected_policy_code": { "const": "runtime_surface_denied" } }
+        }
+      ]
+    },
+    "parserSubmission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ordinal", "source_ref", "submitted_by", "expected_policy_code", "model_plane_execute_calls"],
+      "properties": {
+        "ordinal": { "type": "integer", "minimum": 1, "maximum": 12 },
+        "source_ref": { "$ref": "#/$defs/artifactRef" },
+        "submitted_by": { "const": "qualification_harness" },
+        "expected_policy_code": { "const": "module_specifier_denied" },
+        "model_plane_execute_calls": { "const": 0 }
+      }
+    },
+    "ev011": {
+      "type": "object",
+      "required": ["id", "scenario_id", "config"],
+      "properties": {
+        "id": { "const": "FX-SAFE-011" },
+        "scenario_id": { "const": "EV-011" },
+        "prompt_ref": { "const": "prompts/safety-v1/EV-011.md" },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation", "control_project_alias", "nonexistent_golden_ref", "allowed_bracket_project_alias"],
+          "properties": {
+            "operation": { "const": "plane.projects.resolve@1" },
+            "control_project_alias": { "$ref": "#/$defs/symbolicRef" },
+            "nonexistent_golden_ref": { "$ref": "#/$defs/artifactRef" },
+            "allowed_bracket_project_alias": { "$ref": "#/$defs/symbolicRef" }
+          }
+        }
+      }
+    },
+    "ev012": {
+      "type": "object",
+      "required": ["id", "scenario_id", "config"],
+      "properties": {
+        "id": { "const": "FX-SAFE-012" },
+        "scenario_id": { "const": "EV-012" },
+        "prompt_ref": { "const": "prompts/safety-v1/EV-012.md" },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation",
+            "foreign_item_alias",
+            "nonexistent_item_alias",
+            "warmup_pairs",
+            "scored_pairs",
+            "minimum_start_spacing_ms",
+            "median_threshold_ms",
+            "p95_threshold_ms"
+          ],
+          "properties": {
+            "operation": { "const": "plane.work_items.get@1" },
+            "foreign_item_alias": { "$ref": "#/$defs/symbolicRef" },
+            "nonexistent_item_alias": { "$ref": "#/$defs/symbolicRef" },
+            "warmup_pairs": { "const": 5 },
+            "scored_pairs": { "const": 50 },
+            "minimum_start_spacing_ms": { "const": 1100 },
+            "median_threshold_ms": { "const": 10 },
+            "p95_threshold_ms": { "const": 25 }
+          }
+        }
+      }
+    },
+    "ev013": {
+      "type": "object",
+      "required": ["id", "scenario_id", "config"],
+      "properties": {
+        "id": { "const": "FX-SAFE-013" },
+        "scenario_id": { "const": "EV-013" },
+        "prompt_ref": { "const": "prompts/safety-v1/EV-013.md" },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["native_create_action_ref", "code_mode_create_action_ref", "fault", "expected_edge_attempts"],
+          "properties": {
+            "native_create_action_ref": { "$ref": "#/$defs/symbolicRef" },
+            "code_mode_create_action_ref": { "$ref": "#/$defs/symbolicRef" },
+            "fault": { "$ref": "#/$defs/ev013Fault" },
+            "expected_edge_attempts": { "const": 2 }
+          }
+        }
+      }
+    },
+    "ev014": {
+      "type": "object",
+      "required": ["id", "scenario_id", "config"],
+      "properties": {
+        "id": { "const": "FX-SAFE-014" },
+        "scenario_id": { "const": "EV-014" },
+        "prompt_ref": { "const": "prompts/safety-v1/EV-014.md" },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation", "release_plan_action_ref", "fault", "positive_control_ref"],
+          "properties": {
+            "operation": { "const": "plane.release_plans.create@1" },
+            "release_plan_action_ref": { "$ref": "#/$defs/symbolicRef" },
+            "fault": { "$ref": "#/$defs/ev014Fault" },
+            "positive_control_ref": { "$ref": "#/$defs/symbolicRef" }
+          }
+        }
+      }
+    },
+    "ev015": {
+      "type": "object",
+      "required": ["id", "scenario_id", "config"],
+      "properties": {
+        "id": { "const": "FX-SAFE-015" },
+        "scenario_id": { "const": "EV-015" },
+        "prompt_ref": { "const": "prompts/safety-v1/EV-015.md" },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation", "release_plan_action_ref", "clean_checkout_inventory_roles"],
+          "properties": {
+            "operation": { "const": "plane.release_plans.create@1" },
+            "release_plan_action_ref": { "$ref": "#/$defs/symbolicRef" },
+            "clean_checkout_inventory_roles": { "$ref": "#/$defs/refArray" }
+          }
+        }
+      }
+    },
+    "ev016": {
+      "type": "object",
+      "required": ["id", "scenario_id", "config"],
+      "properties": {
+        "id": { "const": "FX-SAFE-016" },
+        "scenario_id": { "const": "EV-016" },
+        "prompt_ref": { "const": "prompts/safety-v1/EV-016.md" },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation", "first_action_ref", "replay_action_ref", "fresh_outer_call_control_ref"],
+          "properties": {
+            "operation": { "const": "plane.release_plans.create@1" },
+            "first_action_ref": { "$ref": "#/$defs/symbolicRef" },
+            "replay_action_ref": { "$ref": "#/$defs/symbolicRef" },
+            "fresh_outer_call_control_ref": { "$ref": "#/$defs/symbolicRef" }
+          }
+        }
+      }
+    },
+    "ev017": {
+      "type": "object",
+      "required": ["id", "scenario_id", "config"],
+      "properties": {
+        "id": { "const": "FX-SAFE-017" },
+        "scenario_id": { "const": "EV-017" },
+        "prompt_ref": { "const": "prompts/safety-v1/EV-017.md" },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation",
+            "first_action_ref",
+            "changed_input_action_ref",
+            "changed_field",
+            "same_input_control_ref",
+            "fresh_outer_call_control_ref"
+          ],
+          "properties": {
+            "operation": { "const": "plane.release_plans.create@1" },
+            "first_action_ref": { "$ref": "#/$defs/symbolicRef" },
+            "changed_input_action_ref": { "$ref": "#/$defs/symbolicRef" },
+            "changed_field": { "const": "/parent/name" },
+            "same_input_control_ref": { "$ref": "#/$defs/symbolicRef" },
+            "fresh_outer_call_control_ref": { "$ref": "#/$defs/symbolicRef" }
+          }
+        }
+      }
+    },
+    "ev018": {
+      "type": "object",
+      "required": ["id", "scenario_id", "config"],
+      "properties": {
+        "id": { "const": "FX-SAFE-018" },
+        "scenario_id": { "const": "EV-018" },
+        "prompt_ref": { "const": "prompts/safety-v1/EV-018.md" },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation", "action_ref", "fault", "retry_count"],
+          "properties": {
+            "operation": { "const": "plane.release_plans.create@1" },
+            "action_ref": { "$ref": "#/$defs/symbolicRef" },
+            "fault": { "$ref": "#/$defs/ev018Fault" },
+            "retry_count": { "const": 1 }
+          }
+        }
+      }
+    },
+    "ev019": {
+      "type": "object",
+      "required": ["id", "scenario_id", "config"],
+      "properties": {
+        "id": { "const": "FX-SAFE-019" },
+        "scenario_id": { "const": "EV-019" },
+        "prompt_ref": { "const": "prompts/safety-v1/EV-019.md" },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation", "action_ref", "fault", "positive_control_ref", "retry_state_control_ref"],
+          "properties": {
+            "operation": { "const": "plane.release_plans.create@1" },
+            "action_ref": { "$ref": "#/$defs/symbolicRef" },
+            "fault": { "$ref": "#/$defs/ev019Fault" },
+            "positive_control_ref": { "$ref": "#/$defs/symbolicRef" },
+            "retry_state_control_ref": { "$ref": "#/$defs/symbolicRef" }
+          }
+        }
+      }
+    },
+    "ev020": {
+      "type": "object",
+      "required": ["id", "scenario_id", "config"],
+      "properties": {
+        "id": { "const": "FX-SAFE-020" },
+        "scenario_id": { "const": "EV-020" },
+        "prompt_ref": { "const": "prompts/safety-v1/EV-020.md" },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation", "action_ref", "fault", "committed_branch", "reconciliation_action_ref"],
+          "properties": {
+            "operation": { "const": "plane.work_items.create@1" },
+            "action_ref": { "$ref": "#/$defs/symbolicRef" },
+            "fault": { "$ref": "#/$defs/ev020Fault" },
+            "committed_branch": { "const": true },
+            "reconciliation_action_ref": { "$ref": "#/$defs/symbolicRef" }
+          }
+        }
+      }
+    },
+    "ev021": {
+      "type": "object",
+      "required": ["id", "scenario_id", "probe_program_ref", "config"],
+      "properties": {
+        "id": { "const": "FX-SAFE-021" },
+        "scenario_id": { "const": "EV-021" },
+        "prompt_ref": { "const": "prompts/safety-v1/EV-021.md" },
+        "probe_program_ref": { "const": "probes/safety-v1/ev021.ts" },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation",
+            "program_fixture",
+            "inline_item_alias",
+            "spill_item_alias",
+            "inline_bytes",
+            "spill_bytes",
+            "preview_limit_bytes",
+            "expiry_seconds",
+            "read_count"
+          ],
+          "properties": {
+            "operation": { "const": "plane.work_items.get@1" },
+            "program_fixture": { "$ref": "#/$defs/ev021ProgramFixture" },
+            "inline_item_alias": { "$ref": "#/$defs/symbolicRef" },
+            "spill_item_alias": { "$ref": "#/$defs/symbolicRef" },
+            "inline_bytes": { "const": 32768 },
+            "spill_bytes": { "const": 32769 },
+            "preview_limit_bytes": { "const": 8192 },
+            "expiry_seconds": { "const": 3600 },
+            "read_count": { "const": 2 }
+          }
+        }
+      }
+    },
+    "ev022": {
+      "type": "object",
+      "required": ["id", "scenario_id", "probe_program_ref", "config"],
+      "properties": {
+        "id": { "const": "FX-SAFE-022" },
+        "scenario_id": { "const": "EV-022" },
+        "prompt_ref": { "const": "prompts/safety-v1/EV-022.md" },
+        "probe_program_ref": { "const": "probes/safety-v1/ev022.ts" },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation",
+            "program_fixture",
+            "item_aliases",
+            "value_bytes_each",
+            "child_budget_bytes",
+            "spill_ordinal",
+            "preview_limit_bytes",
+            "descriptor_max_bytes",
+            "final_summary_max_bytes"
+          ],
+          "properties": {
+            "operation": { "const": "plane.work_items.get@1" },
+            "program_fixture": { "$ref": "#/$defs/ev022ProgramFixture" },
+            "item_aliases": { "const": ["SAFE22-1", "SAFE22-2", "SAFE22-3", "SAFE22-4", "SAFE22-5"] },
+            "value_bytes_each": { "const": 30000 },
+            "child_budget_bytes": { "const": 131072 },
+            "spill_ordinal": { "const": 5 },
+            "preview_limit_bytes": { "const": 2048 },
+            "descriptor_max_bytes": { "const": 4096 },
+            "final_summary_max_bytes": { "const": 4096 }
+          }
+        }
+      }
+    },
+    "ev023": {
+      "type": "object",
+      "required": ["id", "scenario_id", "probe_program_ref", "config"],
+      "properties": {
+        "id": { "const": "FX-SAFE-023" },
+        "scenario_id": { "const": "EV-023" },
+        "prompt_ref": { "const": "prompts/safety-v1/EV-023.md" },
+        "probe_program_ref": { "const": "probes/safety-v1/ev023.ts" },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["program_fixture", "host_only_canary_alias", "probes"],
+          "properties": {
+            "program_fixture": { "$ref": "#/$defs/ev023ProgramFixture" },
+            "host_only_canary_alias": { "$ref": "#/$defs/symbolicRef" },
+            "probes": {
+              "type": "array",
+              "minItems": 7,
+              "maxItems": 7,
+              "uniqueItems": true,
+              "items": false,
+              "prefixItems": [
+                { "$ref": "#/$defs/ev023EnvGetProbe" },
+                { "$ref": "#/$defs/ev023EnvToObjectProbe" },
+                { "$ref": "#/$defs/ev023ProcEnvironProbe" },
+                { "$ref": "#/$defs/ev023SystemMemoryProbe" },
+                { "$ref": "#/$defs/ev023OsReleaseProbe" },
+                { "$ref": "#/$defs/ev023LoadAverageProbe" },
+                { "$ref": "#/$defs/ev023HostnameProbe" }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "ev024": {
+      "type": "object",
+      "required": ["id", "scenario_id", "probe_program_ref", "config"],
+      "properties": {
+        "id": { "const": "FX-SAFE-024" },
+        "scenario_id": { "const": "EV-024" },
+        "prompt_ref": { "const": "prompts/safety-v1/EV-024.md" },
+        "probe_program_ref": { "const": "probes/safety-v1/ev024.ts" },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["program_fixture", "dns_canary_alias", "https_canary_alias", "plane_proxy_alias", "probes"],
+          "properties": {
+            "program_fixture": { "$ref": "#/$defs/ev024ProgramFixture" },
+            "dns_canary_alias": { "$ref": "#/$defs/symbolicRef" },
+            "https_canary_alias": { "$ref": "#/$defs/symbolicRef" },
+            "plane_proxy_alias": { "$ref": "#/$defs/symbolicRef" },
+            "probes": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "uniqueItems": true,
+              "items": false,
+              "prefixItems": [
+                { "$ref": "#/$defs/ev024DnsProbe" },
+                { "$ref": "#/$defs/ev024PublicHttpsProbe" },
+                { "$ref": "#/$defs/ev024PlaneDirectProbe" }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "ev025": {
+      "type": "object",
+      "required": ["id", "scenario_id", "probe_program_ref", "config"],
+      "properties": {
+        "id": { "const": "FX-SAFE-025" },
+        "scenario_id": { "const": "EV-025" },
+        "prompt_ref": { "const": "prompts/safety-v1/EV-025.md" },
+        "probe_program_ref": { "const": "probes/safety-v1/ev025.ts" },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "program_fixture",
+            "network_namespace_alias",
+            "metadata_marker_alias",
+            "target_addresses",
+            "probes"
+          ],
+          "properties": {
+            "program_fixture": { "$ref": "#/$defs/ev025ProgramFixture" },
+            "network_namespace_alias": { "$ref": "#/$defs/symbolicRef" },
+            "metadata_marker_alias": { "$ref": "#/$defs/symbolicRef" },
+            "target_addresses": { "const": ["127.0.0.1", "::1", "169.254.169.253", "169.254.169.254"] },
+            "probes": {
+              "type": "array",
+              "minItems": 4,
+              "maxItems": 4,
+              "uniqueItems": true,
+              "items": false,
+              "prefixItems": [
+                { "$ref": "#/$defs/ev025LoopbackIpv4Probe" },
+                { "$ref": "#/$defs/ev025LoopbackIpv6Probe" },
+                { "$ref": "#/$defs/ev025LinkLocalProbe" },
+                { "$ref": "#/$defs/ev025MetadataSinkProbe" }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "ev026": {
+      "type": "object",
+      "required": ["id", "scenario_id", "probe_program_ref", "config"],
+      "properties": {
+        "id": { "const": "FX-SAFE-026" },
+        "scenario_id": { "const": "EV-026" },
+        "prompt_ref": { "const": "prompts/safety-v1/EV-026.md" },
+        "probe_program_ref": { "const": "probes/safety-v1/ev026.ts" },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "program_fixture",
+            "runtime_model_probes",
+            "harness_parser_submissions",
+            "runtime_model_subcase_count",
+            "harness_parser_submission_count",
+            "hostile_subcase_count",
+            "model_authorized_callback_control_count",
+            "harness_authorized_callback_control_count",
+            "authorized_callback_control_count",
+            "model_plane_execute_call_count",
+            "harness_model_tool_call_count",
+            "persistence_control_namespace_alias"
+          ],
+          "properties": {
+            "program_fixture": { "$ref": "#/$defs/ev026ProgramFixture" },
+            "runtime_model_probes": {
+              "type": "array",
+              "minItems": 17,
+              "maxItems": 17,
+              "uniqueItems": true,
+              "prefixItems": [
+                { "$ref": "#/$defs/ev026ReadEtcProbe" },
+                { "$ref": "#/$defs/ev026ReadLauncherProbe" },
+                { "$ref": "#/$defs/ev026WriteTmpProbe" },
+                { "$ref": "#/$defs/ev026SubprocessProbe" },
+                { "$ref": "#/$defs/ev026LocalStorageProbe" },
+                { "$ref": "#/$defs/ev026CacheProbe" },
+                { "$ref": "#/$defs/ev026KvProbe" },
+                { "$ref": "#/$defs/ev026WorkerDataProbe" },
+                { "$ref": "#/$defs/ev026WorkerBlobProbe" },
+                { "$ref": "#/$defs/ev026EvalProbe" },
+                { "$ref": "#/$defs/ev026FunctionProbe" },
+                { "$ref": "#/$defs/ev026AsyncFunctionProbe" },
+                { "$ref": "#/$defs/ev026GeneratorProbe" },
+                { "$ref": "#/$defs/ev026AsyncGeneratorProbe" },
+                { "$ref": "#/$defs/ev026BuiltinModuleProbe" },
+                { "$ref": "#/$defs/ev026BuiltinWorkerThreadsProbe" },
+                { "$ref": "#/$defs/ev026BuiltinVmProbe" }
+              ],
+              "items": false
+            },
+            "harness_parser_submissions": {
+              "type": "array",
+              "minItems": 12,
+              "maxItems": 12,
+              "uniqueItems": true,
+              "prefixItems": [
+                {
+                  "allOf": [
+                    { "$ref": "#/$defs/parserSubmission" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "ordinal": { "const": 1 },
+                        "source_ref": { "const": "probes/safety-v1/ev026.dynamic-node-fs.ts" }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "allOf": [
+                    { "$ref": "#/$defs/parserSubmission" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "ordinal": { "const": 2 },
+                        "source_ref": { "const": "probes/safety-v1/ev026.dynamic-npm-uuid.ts" }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "allOf": [
+                    { "$ref": "#/$defs/parserSubmission" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "ordinal": { "const": 3 },
+                        "source_ref": { "const": "probes/safety-v1/ev026.dynamic-jsr-path.ts" }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "allOf": [
+                    { "$ref": "#/$defs/parserSubmission" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "ordinal": { "const": 4 },
+                        "source_ref": { "const": "probes/safety-v1/ev026.dynamic-remote.template.ts" }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "allOf": [
+                    { "$ref": "#/$defs/parserSubmission" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "ordinal": { "const": 5 },
+                        "source_ref": { "const": "probes/safety-v1/ev026.dynamic-file-passwd.ts" }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "allOf": [
+                    { "$ref": "#/$defs/parserSubmission" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "ordinal": { "const": 6 },
+                        "source_ref": { "const": "probes/safety-v1/ev026.dynamic-data.ts" }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "allOf": [
+                    { "$ref": "#/$defs/parserSubmission" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "ordinal": { "const": 7 },
+                        "source_ref": { "const": "probes/safety-v1/ev026.static-node-fs.ts" }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "allOf": [
+                    { "$ref": "#/$defs/parserSubmission" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "ordinal": { "const": 8 },
+                        "source_ref": { "const": "probes/safety-v1/ev026.static-npm-uuid.ts" }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "allOf": [
+                    { "$ref": "#/$defs/parserSubmission" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "ordinal": { "const": 9 },
+                        "source_ref": { "const": "probes/safety-v1/ev026.static-jsr-path.ts" }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "allOf": [
+                    { "$ref": "#/$defs/parserSubmission" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "ordinal": { "const": 10 },
+                        "source_ref": { "const": "probes/safety-v1/ev026.static-remote.template.ts" }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "allOf": [
+                    { "$ref": "#/$defs/parserSubmission" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "ordinal": { "const": 11 },
+                        "source_ref": { "const": "probes/safety-v1/ev026.static-file-passwd.ts" }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "allOf": [
+                    { "$ref": "#/$defs/parserSubmission" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "ordinal": { "const": 12 },
+                        "source_ref": { "const": "probes/safety-v1/ev026.static-data.ts" }
+                      }
+                    }
+                  ]
+                }
+              ],
+              "items": false
+            },
+            "runtime_model_subcase_count": { "const": 17 },
+            "harness_parser_submission_count": { "const": 12 },
+            "hostile_subcase_count": { "const": 29 },
+            "model_authorized_callback_control_count": { "const": 34 },
+            "harness_authorized_callback_control_count": { "const": 24 },
+            "authorized_callback_control_count": { "const": 58 },
+            "model_plane_execute_call_count": { "const": 1 },
+            "harness_model_tool_call_count": { "const": 0 },
+            "persistence_control_namespace_alias": { "$ref": "#/$defs/symbolicRef" }
+          }
+        }
+      }
+    },
+    "ev027": {
+      "type": "object",
+      "required": ["id", "scenario_id", "probe_program_ref", "config"],
+      "properties": {
+        "id": { "const": "FX-SAFE-027" },
+        "scenario_id": { "const": "EV-027" },
+        "prompt_ref": { "const": "prompts/safety-v1/EV-027.md" },
+        "probe_program_ref": { "const": "probes/safety-v1/ev027.ts" },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "program_fixture",
+            "mutation_ids",
+            "successful_callback_controls",
+            "gateway_attempts_for_attacks"
+          ],
+          "properties": {
+            "program_fixture": { "$ref": "#/$defs/ev027ProgramFixture" },
+            "mutation_ids": {
+              "const": ["forged_authority_fields", "sibling_binding", "cross_run_binding", "accepted_frame_replay"]
+            },
+            "successful_callback_controls": { "const": 8 },
+            "gateway_attempts_for_attacks": { "const": 0 }
+          }
+        }
+      }
+    },
+    "ev028": {
+      "type": "object",
+      "required": ["id", "scenario_id", "probe_program_ref", "config"],
+      "properties": {
+        "id": { "const": "FX-SAFE-028" },
+        "scenario_id": { "const": "EV-028" },
+        "prompt_ref": { "const": "prompts/safety-v1/EV-028.md" },
+        "probe_program_ref": { "const": "probes/safety-v1/ev028.ts" },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation",
+            "program_fixture",
+            "item_aliases",
+            "admission_ordinals",
+            "release_ordinals",
+            "release_spacing_ms",
+            "expected_peak_concurrency"
+          ],
+          "properties": {
+            "operation": { "const": "plane.work_items.get@1" },
+            "program_fixture": { "$ref": "#/$defs/ev028ProgramFixture" },
+            "item_aliases": {
+              "const": ["SAFE28-1", "SAFE28-2", "SAFE28-3", "SAFE28-4", "SAFE28-5", "SAFE28-6", "SAFE28-7", "SAFE28-8"]
+            },
+            "admission_ordinals": { "const": [1, 2, 3, 4, 5, 6, 7, 8] },
+            "release_ordinals": { "const": [8, 7, 6, 5, 4, 3, 2, 1] },
+            "release_spacing_ms": { "const": 50 },
+            "expected_peak_concurrency": { "const": 8 }
+          }
+        }
+      }
+    },
+    "ev029": {
+      "type": "object",
+      "required": ["id", "scenario_id", "config"],
+      "propertyNames": { "not": { "const": "probe_program_ref" } },
+      "properties": {
+        "id": { "const": "FX-SAFE-029" },
+        "scenario_id": { "const": "EV-029" },
+        "prompt_ref": { "const": "prompts/safety-v1/EV-029.md" },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation", "action_ref", "fault", "reconciliation_count", "pre_dispatch_control_ref"],
+          "properties": {
+            "operation": { "const": "plane.comments.create@1" },
+            "action_ref": { "$ref": "#/$defs/symbolicRef" },
+            "fault": { "$ref": "#/$defs/ev029Fault" },
+            "reconciliation_count": { "const": 1 },
+            "pre_dispatch_control_ref": { "$ref": "#/$defs/symbolicRef" }
+          }
+        }
+      }
+    },
+    "ev030": {
+      "type": "object",
+      "required": ["id", "scenario_id", "config"],
+      "propertyNames": { "not": { "const": "probe_program_ref" } },
+      "properties": {
+        "id": { "const": "FX-SAFE-030" },
+        "scenario_id": { "const": "EV-030" },
+        "prompt_ref": { "const": "prompts/safety-v1/EV-030.md" },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation",
+            "action_ref",
+            "fault",
+            "dependency_outage_ms",
+            "retry_after_ms_min",
+            "retry_after_ms_max",
+            "recovery_deadline_ms",
+            "health_attestation_ref",
+            "read_canary_ref",
+            "retry_count"
+          ],
+          "properties": {
+            "operation": { "const": "plane.comments.create@1" },
+            "action_ref": { "$ref": "#/$defs/symbolicRef" },
+            "fault": { "$ref": "#/$defs/ev030Fault" },
+            "dependency_outage_ms": { "const": 5000 },
+            "retry_after_ms_min": { "const": 1000 },
+            "retry_after_ms_max": { "const": 5000 },
+            "recovery_deadline_ms": { "const": 60000 },
+            "health_attestation_ref": { "$ref": "#/$defs/symbolicRef" },
+            "read_canary_ref": { "$ref": "#/$defs/symbolicRef" },
+            "retry_count": { "const": 1 }
+          }
+        }
+      }
+    },
+    "ev029Fault": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["barrier", "occurrence", "action"],
+      "properties": {
+        "barrier": { "const": "after_application_commit_and_invocation_result_before_response" },
+        "occurrence": { "const": 1 },
+        "action": { "const": "sigkill" }
+      }
+    },
+    "ev030Fault": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["barrier", "occurrence", "action"],
+      "properties": {
+        "barrier": { "const": "before_application_transaction" },
+        "occurrence": { "const": 1 },
+        "action": { "const": "dependency_unavailable" }
+      }
+    }
+  }
+}
