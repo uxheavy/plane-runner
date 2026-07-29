@@ -1,0 +1,1424 @@
+{
+  "repository": "https://github.com/makeplane/plane-mcp-server",
+  "commit": "96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1",
+  "version": "0.2.11",
+  "tool_count": 177,
+  "tools": [
+    {
+      "name": "list_customers",
+      "category": "customers.base",
+      "source_file": "plane_mcp/tools/customers/base.py",
+      "line": 20,
+      "signature": "query: str | None=None, cursor: str | None=None, per_page: int | None=None",
+      "return_annotation": "PaginatedCustomerResponse"
+    },
+    {
+      "name": "create_customer",
+      "category": "customers.base",
+      "source_file": "plane_mcp/tools/customers/base.py",
+      "line": 41,
+      "signature": "name: str, description_html: str | None=None, email: str | None=None, website_url: str | None=None, domain: str | None=None, employees: int | None=None, stage: str | None=None, contract_status: str | None=None, revenue: str | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "Customer"
+    },
+    {
+      "name": "retrieve_customer",
+      "category": "customers.base",
+      "source_file": "plane_mcp/tools/customers/base.py",
+      "line": 100,
+      "signature": "customer_id: str",
+      "return_annotation": "Customer"
+    },
+    {
+      "name": "update_customer",
+      "category": "customers.base",
+      "source_file": "plane_mcp/tools/customers/base.py",
+      "line": 114,
+      "signature": "customer_id: str, name: str | None=None, description_html: str | None=None, email: str | None=None, website_url: str | None=None, domain: str | None=None, employees: int | None=None, stage: str | None=None, contract_status: str | None=None, revenue: str | None=None, logo_props: dict | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "Customer"
+    },
+    {
+      "name": "delete_customer",
+      "category": "customers.base",
+      "source_file": "plane_mcp/tools/customers/base.py",
+      "line": 172,
+      "signature": "customer_id: str | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "None"
+    },
+    {
+      "name": "list_customer_properties",
+      "category": "customers.properties",
+      "source_file": "plane_mcp/tools/customers/properties.py",
+      "line": 20,
+      "signature": "cursor: str | None=None, per_page: int | None=None",
+      "return_annotation": "PaginatedCustomerPropertyResponse"
+    },
+    {
+      "name": "create_customer_property",
+      "category": "customers.properties",
+      "source_file": "plane_mcp/tools/customers/properties.py",
+      "line": 43,
+      "signature": "name: str, display_name: str, property_type: str, relation_type: str | None=None, description: str | None=None, is_required: bool | None=None, default_value: list[str] | None=None, settings: dict | None=None, is_active: bool | None=None, is_multi: bool | None=None, options: list[dict] | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "CustomerProperty"
+    },
+    {
+      "name": "retrieve_customer_property",
+      "category": "customers.properties",
+      "source_file": "plane_mcp/tools/customers/properties.py",
+      "line": 105,
+      "signature": "property_id: str",
+      "return_annotation": "CustomerProperty"
+    },
+    {
+      "name": "update_customer_property",
+      "category": "customers.properties",
+      "source_file": "plane_mcp/tools/customers/properties.py",
+      "line": 119,
+      "signature": "property_id: str, display_name: str | None=None, relation_type: str | None=None, description: str | None=None, is_required: bool | None=None, default_value: list[str] | None=None, is_active: bool | None=None, options: list[dict] | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "CustomerProperty"
+    },
+    {
+      "name": "delete_customer_property",
+      "category": "customers.properties",
+      "source_file": "plane_mcp/tools/customers/properties.py",
+      "line": 169,
+      "signature": "property_id: str",
+      "return_annotation": "None"
+    },
+    {
+      "name": "get_customer_property_values",
+      "category": "customers.property_values",
+      "source_file": "plane_mcp/tools/customers/property_values.py",
+      "line": 13,
+      "signature": "customer_id: str, property_id: str | None=None",
+      "return_annotation": "dict[str, list[str]]"
+    },
+    {
+      "name": "set_customer_property_values",
+      "category": "customers.property_values",
+      "source_file": "plane_mcp/tools/customers/property_values.py",
+      "line": 35,
+      "signature": "customer_id: str, values: dict[str, list[str]]",
+      "return_annotation": "None"
+    },
+    {
+      "name": "list_customer_requests",
+      "category": "customers.requests",
+      "source_file": "plane_mcp/tools/customers/requests.py",
+      "line": 19,
+      "signature": "customer_id: str, query: str | None=None, cursor: str | None=None, per_page: int | None=None",
+      "return_annotation": "PaginatedCustomerRequestResponse"
+    },
+    {
+      "name": "create_customer_request",
+      "category": "customers.requests",
+      "source_file": "plane_mcp/tools/customers/requests.py",
+      "line": 49,
+      "signature": "customer_id: str, name: str, description_html: str | None=None, link: str | None=None, work_item_ids: list[str] | None=None",
+      "return_annotation": "CustomerRequest"
+    },
+    {
+      "name": "retrieve_customer_request",
+      "category": "customers.requests",
+      "source_file": "plane_mcp/tools/customers/requests.py",
+      "line": 82,
+      "signature": "customer_id: str, request_id: str",
+      "return_annotation": "CustomerRequest"
+    },
+    {
+      "name": "update_customer_request",
+      "category": "customers.requests",
+      "source_file": "plane_mcp/tools/customers/requests.py",
+      "line": 99,
+      "signature": "customer_id: str, request_id: str, name: str | None=None, description_html: str | None=None, link: str | None=None",
+      "return_annotation": "CustomerRequest"
+    },
+    {
+      "name": "delete_customer_request",
+      "category": "customers.requests",
+      "source_file": "plane_mcp/tools/customers/requests.py",
+      "line": 132,
+      "signature": "customer_id: str, request_id: str",
+      "return_annotation": "None"
+    },
+    {
+      "name": "list_customer_work_items",
+      "category": "customers.work_items",
+      "source_file": "plane_mcp/tools/customers/work_items.py",
+      "line": 16,
+      "signature": "customer_id: str, customer_request_id: str | None=None, search: str | None=None",
+      "return_annotation": "list[CustomerWorkItem]"
+    },
+    {
+      "name": "manage_customer_work_items",
+      "category": "customers.work_items",
+      "source_file": "plane_mcp/tools/customers/work_items.py",
+      "line": 41,
+      "signature": "customer_id: str, action: Literal['link', 'unlink'], work_item_ids: list[str], customer_request_id: str | None=None",
+      "return_annotation": "list[CustomerWorkItem]"
+    },
+    {
+      "name": "list_cycles",
+      "category": "cycles",
+      "source_file": "plane_mcp/tools/cycles.py",
+      "line": 32,
+      "signature": "project_id: str, archived: bool=False, status: CycleStatusEnum | None=None, cursor: str | None=None, per_page: int | None=None, order_by: str | None=None",
+      "return_annotation": "PaginatedCycleLiteResponse | PaginatedArchivedCycleResponse"
+    },
+    {
+      "name": "create_cycle",
+      "category": "cycles",
+      "source_file": "plane_mcp/tools/cycles.py",
+      "line": 70,
+      "signature": "project_id: str, name: str, owned_by: str, description: str | None=None, start_date: str | None=None, end_date: str | None=None, external_source: str | None=None, external_id: str | None=None, timezone: str | None=None",
+      "return_annotation": "Cycle"
+    },
+    {
+      "name": "retrieve_cycle",
+      "category": "cycles",
+      "source_file": "plane_mcp/tools/cycles.py",
+      "line": 116,
+      "signature": "project_id: str, cycle_id: str",
+      "return_annotation": "Cycle"
+    },
+    {
+      "name": "update_cycle",
+      "category": "cycles",
+      "source_file": "plane_mcp/tools/cycles.py",
+      "line": 132,
+      "signature": "project_id: str, cycle_id: str, name: str | None=None, description: str | None=None, start_date: str | None=None, end_date: str | None=None, owned_by: str | None=None, external_source: str | None=None, external_id: str | None=None, timezone: str | None=None",
+      "return_annotation": "Cycle"
+    },
+    {
+      "name": "delete_cycle",
+      "category": "cycles",
+      "source_file": "plane_mcp/tools/cycles.py",
+      "line": 179,
+      "signature": "project_id: str, cycle_id: str",
+      "return_annotation": "None"
+    },
+    {
+      "name": "manage_cycle_work_items",
+      "category": "cycles",
+      "source_file": "plane_mcp/tools/cycles.py",
+      "line": 192,
+      "signature": "project_id: str, cycle_id: str, add_ids: list[str] | None=None, remove_ids: list[str] | None=None",
+      "return_annotation": "None"
+    },
+    {
+      "name": "list_cycle_work_items",
+      "category": "cycles",
+      "source_file": "plane_mcp/tools/cycles.py",
+      "line": 229,
+      "signature": "project_id: str, cycle_id: str, pql: Annotated[str | None, Field(description=PQL_FIELD_HINT)]=None, order_by: str | None=None, per_page: int | None=None, cursor: str | None=None, expand: str | None=None, fields: str | None=None",
+      "return_annotation": "dict[str, Any]"
+    },
+    {
+      "name": "transfer_cycle_work_items",
+      "category": "cycles",
+      "source_file": "plane_mcp/tools/cycles.py",
+      "line": 295,
+      "signature": "project_id: str, cycle_id: str, new_cycle_id: str",
+      "return_annotation": "None"
+    },
+    {
+      "name": "manage_cycle_archive",
+      "category": "cycles",
+      "source_file": "plane_mcp/tools/cycles.py",
+      "line": 321,
+      "signature": "project_id: str, cycle_id: str, archive: bool",
+      "return_annotation": "bool"
+    },
+    {
+      "name": "complete_cycle",
+      "category": "cycles",
+      "source_file": "plane_mcp/tools/cycles.py",
+      "line": 356,
+      "signature": "project_id: str, cycle_id: str",
+      "return_annotation": "Cycle"
+    },
+    {
+      "name": "list_initiatives",
+      "category": "initiatives",
+      "source_file": "plane_mcp/tools/initiatives.py",
+      "line": 39,
+      "signature": "params: dict[str, Any] | None=None",
+      "return_annotation": "list[Initiative]"
+    },
+    {
+      "name": "create_initiative",
+      "category": "initiatives",
+      "source_file": "plane_mcp/tools/initiatives.py",
+      "line": 68,
+      "signature": "name: str, description_html: str | None=None, start_date: str | None=None, end_date: str | None=None, logo_props: dict | None=None, state: InitiativeState | str | None=None, lead: str | None=None",
+      "return_annotation": "Initiative"
+    },
+    {
+      "name": "retrieve_initiative",
+      "category": "initiatives",
+      "source_file": "plane_mcp/tools/initiatives.py",
+      "line": 122,
+      "signature": "initiative_id: str",
+      "return_annotation": "Initiative"
+    },
+    {
+      "name": "update_initiative",
+      "category": "initiatives",
+      "source_file": "plane_mcp/tools/initiatives.py",
+      "line": 146,
+      "signature": "initiative_id: str, name: str | None=None, description_html: str | None=None, start_date: str | None=None, end_date: str | None=None, logo_props: dict | None=None, state: InitiativeState | str | None=None, lead: str | None=None",
+      "return_annotation": "Initiative"
+    },
+    {
+      "name": "delete_initiative",
+      "category": "initiatives",
+      "source_file": "plane_mcp/tools/initiatives.py",
+      "line": 197,
+      "signature": "initiative_id: str",
+      "return_annotation": "None"
+    },
+    {
+      "name": "list_initiative_projects",
+      "category": "initiatives",
+      "source_file": "plane_mcp/tools/initiatives.py",
+      "line": 218,
+      "signature": "initiative_id: str, params: dict[str, Any] | None=None",
+      "return_annotation": "list[Project]"
+    },
+    {
+      "name": "manage_initiative_projects",
+      "category": "initiatives",
+      "source_file": "plane_mcp/tools/initiatives.py",
+      "line": 240,
+      "signature": "initiative_id: str, action: Literal['add', 'remove'], project_ids: list[str]",
+      "return_annotation": "list[Project]"
+    },
+    {
+      "name": "list_intake_work_items",
+      "category": "intake",
+      "source_file": "plane_mcp/tools/intake.py",
+      "line": 21,
+      "signature": "project_id: str, params: dict[str, Any] | None=None",
+      "return_annotation": "list[IntakeWorkItem]"
+    },
+    {
+      "name": "create_intake_work_item",
+      "category": "intake",
+      "source_file": "plane_mcp/tools/intake.py",
+      "line": 48,
+      "signature": "project_id: str, data: dict[str, Any]",
+      "return_annotation": "IntakeWorkItem"
+    },
+    {
+      "name": "retrieve_intake_work_item",
+      "category": "intake",
+      "source_file": "plane_mcp/tools/intake.py",
+      "line": 70,
+      "signature": "project_id: str, work_item_id: str, params: dict[str, Any] | None=None",
+      "return_annotation": "IntakeWorkItem"
+    },
+    {
+      "name": "update_intake_work_item",
+      "category": "intake",
+      "source_file": "plane_mcp/tools/intake.py",
+      "line": 102,
+      "signature": "project_id: str, work_item_id: str, status: int | None=None, snoozed_till: str | None=None, duplicate_to: str | None=None, source: str | None=None, source_email: str | None=None",
+      "return_annotation": "IntakeWorkItem"
+    },
+    {
+      "name": "delete_intake_work_item",
+      "category": "intake",
+      "source_file": "plane_mcp/tools/intake.py",
+      "line": 162,
+      "signature": "project_id: str, work_item_id: str",
+      "return_annotation": "None"
+    },
+    {
+      "name": "list_labels",
+      "category": "labels",
+      "source_file": "plane_mcp/tools/labels.py",
+      "line": 20,
+      "signature": "project_id: str, params: dict[str, Any] | None=None",
+      "return_annotation": "list[Label]"
+    },
+    {
+      "name": "create_label",
+      "category": "labels",
+      "source_file": "plane_mcp/tools/labels.py",
+      "line": 41,
+      "signature": "project_id: str, name: str, color: str | None=None, description: str | None=None, parent: str | None=None, sort_order: float | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "Label"
+    },
+    {
+      "name": "retrieve_label",
+      "category": "labels",
+      "source_file": "plane_mcp/tools/labels.py",
+      "line": 82,
+      "signature": "project_id: str, label_id: str",
+      "return_annotation": "Label"
+    },
+    {
+      "name": "update_label",
+      "category": "labels",
+      "source_file": "plane_mcp/tools/labels.py",
+      "line": 97,
+      "signature": "project_id: str, label_id: str, name: str | None=None, color: str | None=None, description: str | None=None, parent: str | None=None, sort_order: float | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "Label"
+    },
+    {
+      "name": "delete_label",
+      "category": "labels",
+      "source_file": "plane_mcp/tools/labels.py",
+      "line": 145,
+      "signature": "project_id: str, label_id: str",
+      "return_annotation": "None"
+    },
+    {
+      "name": "list_milestones",
+      "category": "milestones",
+      "source_file": "plane_mcp/tools/milestones.py",
+      "line": 22,
+      "signature": "project_id: str, params: dict[str, Any] | None=None",
+      "return_annotation": "list[Milestone]"
+    },
+    {
+      "name": "create_milestone",
+      "category": "milestones",
+      "source_file": "plane_mcp/tools/milestones.py",
+      "line": 43,
+      "signature": "project_id: str, title: str, target_date: str | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "Milestone"
+    },
+    {
+      "name": "retrieve_milestone",
+      "category": "milestones",
+      "source_file": "plane_mcp/tools/milestones.py",
+      "line": 75,
+      "signature": "project_id: str, milestone_id: str",
+      "return_annotation": "Milestone"
+    },
+    {
+      "name": "update_milestone",
+      "category": "milestones",
+      "source_file": "plane_mcp/tools/milestones.py",
+      "line": 92,
+      "signature": "project_id: str, milestone_id: str, title: str | None=None, target_date: str | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "Milestone"
+    },
+    {
+      "name": "delete_milestone",
+      "category": "milestones",
+      "source_file": "plane_mcp/tools/milestones.py",
+      "line": 131,
+      "signature": "project_id: str, milestone_id: str",
+      "return_annotation": "None"
+    },
+    {
+      "name": "manage_milestone_work_items",
+      "category": "milestones",
+      "source_file": "plane_mcp/tools/milestones.py",
+      "line": 143,
+      "signature": "project_id: str, milestone_id: str, add_ids: list[str] | None=None, remove_ids: list[str] | None=None",
+      "return_annotation": "None"
+    },
+    {
+      "name": "list_milestone_work_items",
+      "category": "milestones",
+      "source_file": "plane_mcp/tools/milestones.py",
+      "line": 179,
+      "signature": "project_id: str, milestone_id: str, params: dict[str, Any] | None=None",
+      "return_annotation": "list[MilestoneWorkItem]"
+    },
+    {
+      "name": "list_modules",
+      "category": "modules",
+      "source_file": "plane_mcp/tools/modules.py",
+      "line": 30,
+      "signature": "project_id: str, archived: bool=False, cursor: str | None=None, per_page: int | None=None, order_by: str | None=None",
+      "return_annotation": "PaginatedModuleLiteResponse | PaginatedArchivedModuleResponse"
+    },
+    {
+      "name": "create_module",
+      "category": "modules",
+      "source_file": "plane_mcp/tools/modules.py",
+      "line": 65,
+      "signature": "project_id: str, name: str, description: str | None=None, start_date: str | None=None, target_date: str | None=None, status: str | None=None, lead: str | None=None, members: list[str] | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "Module"
+    },
+    {
+      "name": "retrieve_module",
+      "category": "modules",
+      "source_file": "plane_mcp/tools/modules.py",
+      "line": 118,
+      "signature": "project_id: str, module_id: str",
+      "return_annotation": "Module"
+    },
+    {
+      "name": "update_module",
+      "category": "modules",
+      "source_file": "plane_mcp/tools/modules.py",
+      "line": 134,
+      "signature": "project_id: str, module_id: str, name: str | None=None, description: str | None=None, start_date: str | None=None, target_date: str | None=None, status: str | None=None, lead: str | None=None, members: list[str] | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "Module"
+    },
+    {
+      "name": "delete_module",
+      "category": "modules",
+      "source_file": "plane_mcp/tools/modules.py",
+      "line": 191,
+      "signature": "project_id: str, module_id: str",
+      "return_annotation": "None"
+    },
+    {
+      "name": "manage_module_work_items",
+      "category": "modules",
+      "source_file": "plane_mcp/tools/modules.py",
+      "line": 204,
+      "signature": "project_id: str, module_id: str, add_ids: list[str] | None=None, remove_ids: list[str] | None=None",
+      "return_annotation": "None"
+    },
+    {
+      "name": "list_module_work_items",
+      "category": "modules",
+      "source_file": "plane_mcp/tools/modules.py",
+      "line": 241,
+      "signature": "project_id: str, module_id: str, pql: Annotated[str | None, Field(description=PQL_FIELD_HINT)]=None, order_by: str | None=None, per_page: int | None=None, cursor: str | None=None, expand: str | None=None, fields: str | None=None",
+      "return_annotation": "dict[str, Any]"
+    },
+    {
+      "name": "manage_module_archive",
+      "category": "modules",
+      "source_file": "plane_mcp/tools/modules.py",
+      "line": 307,
+      "signature": "project_id: str, module_id: str, archive: bool",
+      "return_annotation": "None"
+    },
+    {
+      "name": "list_pages",
+      "category": "pages",
+      "source_file": "plane_mcp/tools/pages.py",
+      "line": 16,
+      "signature": "project_id: str | None=None, params: dict[str, Any] | None=None",
+      "return_annotation": "list[Page]"
+    },
+    {
+      "name": "attach_page_to_work_item",
+      "category": "pages",
+      "source_file": "plane_mcp/tools/pages.py",
+      "line": 42,
+      "signature": "project_id: str, work_item_id: str, page_id: str",
+      "return_annotation": "WorkItemPage"
+    },
+    {
+      "name": "list_work_item_pages",
+      "category": "pages",
+      "source_file": "plane_mcp/tools/pages.py",
+      "line": 67,
+      "signature": "project_id: str, work_item_id: str",
+      "return_annotation": "list[WorkItemPage]"
+    },
+    {
+      "name": "detach_page_from_work_item",
+      "category": "pages",
+      "source_file": "plane_mcp/tools/pages.py",
+      "line": 90,
+      "signature": "project_id: str, work_item_id: str, work_item_page_id: str",
+      "return_annotation": "None"
+    },
+    {
+      "name": "retrieve_page",
+      "category": "pages",
+      "source_file": "plane_mcp/tools/pages.py",
+      "line": 112,
+      "signature": "page_id: str, project_id: str | None=None",
+      "return_annotation": "Page"
+    },
+    {
+      "name": "create_page",
+      "category": "pages",
+      "source_file": "plane_mcp/tools/pages.py",
+      "line": 142,
+      "signature": "name: str, description_html: str, project_id: str | None=None, access: int | None=None, color: str | None=None, is_locked: bool | None=None, archived_at: str | None=None, view_props: dict[str, Any] | None=None, logo_props: dict[str, Any] | None=None, external_id: str | None=None, external_source: str | None=None",
+      "return_annotation": "Page"
+    },
+    {
+      "name": "get_pql_reference",
+      "category": "pql",
+      "source_file": "plane_mcp/tools/pql.py",
+      "line": 14,
+      "signature": "detail: Literal['brief', 'full']='full'",
+      "return_annotation": "dict"
+    },
+    {
+      "name": "list_projects",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "line": 34,
+      "signature": "cursor: str | None=None, per_page: int | None=None, order_by: str | None=None",
+      "return_annotation": "PaginatedProjectLiteResponse"
+    },
+    {
+      "name": "create_project",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "line": 63,
+      "signature": "name: str, identifier: str, description: str | None=None, project_lead: str | None=None, default_assignee: str | None=None, emoji: str | None=None, cover_image: str | None=None, module_view: bool | None=None, cycle_view: bool | None=None, issue_views_view: bool | None=None, page_view: bool | None=None, intake_view: bool | None=None, guest_view_all_features: bool | None=None, archive_in: int | None=None, close_in: int | None=None, timezone: str | None=None, external_source: str | None=None, external_id: str | None=None, is_issue_type_enabled: bool | None=None",
+      "return_annotation": "Project"
+    },
+    {
+      "name": "retrieve_project",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "line": 144,
+      "signature": "project_id: str",
+      "return_annotation": "Project"
+    },
+    {
+      "name": "update_project",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "line": 159,
+      "signature": "project_id: str, name: str | None=None, description: str | None=None, project_lead: str | None=None, default_assignee: str | None=None, identifier: str | None=None, emoji: str | None=None, cover_image: str | None=None, network: int | None=None, module_view: bool | None=None, cycle_view: bool | None=None, issue_views_view: bool | None=None, page_view: bool | None=None, intake_view: bool | None=None, guest_view_all_features: bool | None=None, archive_in: int | None=None, close_in: int | None=None, timezone: str | None=None, external_source: str | None=None, external_id: str | None=None, is_issue_type_enabled: bool | None=None, is_time_tracking_enabled: bool | None=None, default_state: str | None=None, estimate: str | None=None",
+      "return_annotation": "Project"
+    },
+    {
+      "name": "delete_project",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "line": 257,
+      "signature": "project_id: str",
+      "return_annotation": "None"
+    },
+    {
+      "name": "manage_project_archive",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "line": 269,
+      "signature": "project_id: str, archive: bool",
+      "return_annotation": "None"
+    },
+    {
+      "name": "get_project_worklog_summary",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "line": 287,
+      "signature": "project_id: str",
+      "return_annotation": "list[ProjectWorklogSummary]"
+    },
+    {
+      "name": "get_project_members",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "line": 302,
+      "signature": "project_id: str, first_name: str | None=None, last_name: str | None=None, email: str | None=None, display_name: str | None=None, role_slug: str | None=None, is_active: bool | None=None, is_bot: bool | None=None, cursor: str | None=None, per_page: int | None=100, order_by: str | None=None",
+      "return_annotation": "PaginatedProjectMemberResponse"
+    },
+    {
+      "name": "update_project_features",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "line": 349,
+      "signature": "project_id: str, modules: bool | None=None, cycles: bool | None=None, views: bool | None=None, pages: bool | None=None, intakes: bool | None=None, work_item_types: bool | None=None",
+      "return_annotation": "ProjectFeature"
+    },
+    {
+      "name": "get_project_estimate",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "line": 388,
+      "signature": "project_id: str",
+      "return_annotation": "Estimate"
+    },
+    {
+      "name": "list_project_estimate_points",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "line": 405,
+      "signature": "project_id: str, estimate_id: str",
+      "return_annotation": "list[EstimatePoint]"
+    },
+    {
+      "name": "create_project_estimate",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "line": 435,
+      "signature": "project_id: str, name: str, type: str | None=None, description: str | None=None, last_used: bool=True, external_id: str | None=None, external_source: str | None=None",
+      "return_annotation": "Estimate"
+    },
+    {
+      "name": "update_project_estimate",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "line": 471,
+      "signature": "project_id: str, name: str | None=None, description: str | None=None, external_id: str | None=None, external_source: str | None=None",
+      "return_annotation": "Estimate"
+    },
+    {
+      "name": "delete_project_estimate",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "line": 501,
+      "signature": "project_id: str",
+      "return_annotation": "None"
+    },
+    {
+      "name": "link_estimate_to_project",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "line": 512,
+      "signature": "project_id: str, estimate_id: str",
+      "return_annotation": "Project"
+    },
+    {
+      "name": "create_project_estimate_points",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "line": 531,
+      "signature": "project_id: str, estimate_id: str, points: list[dict]",
+      "return_annotation": "list[EstimatePoint]"
+    },
+    {
+      "name": "update_project_estimate_point",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "line": 569,
+      "signature": "project_id: str, estimate_id: str, estimate_point_id: str, value: str | None=None, key: int | None=None, description: str | None=None, external_id: str | None=None, external_source: str | None=None",
+      "return_annotation": "EstimatePoint"
+    },
+    {
+      "name": "delete_project_estimate_point",
+      "category": "projects",
+      "source_file": "plane_mcp/tools/projects.py",
+      "line": 612,
+      "signature": "project_id: str, estimate_id: str, estimate_point_id: str",
+      "return_annotation": "None"
+    },
+    {
+      "name": "list_releases",
+      "category": "releases.base",
+      "source_file": "plane_mcp/tools/releases/base.py",
+      "line": 23,
+      "signature": "cursor: str | None=None, per_page: int | None=None",
+      "return_annotation": "PaginatedReleaseResponse"
+    },
+    {
+      "name": "create_release",
+      "category": "releases.base",
+      "source_file": "plane_mcp/tools/releases/base.py",
+      "line": 42,
+      "signature": "name: str, description_html: str | None=None, status: _STATUS | None=None, target_date: str | None=None, release_date: str | None=None, tag_id: str | None=None, lead_id: str | None=None, is_prerelease: bool | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "Release"
+    },
+    {
+      "name": "retrieve_release",
+      "category": "releases.base",
+      "source_file": "plane_mcp/tools/releases/base.py",
+      "line": 90,
+      "signature": "release_id: str",
+      "return_annotation": "Release"
+    },
+    {
+      "name": "update_release",
+      "category": "releases.base",
+      "source_file": "plane_mcp/tools/releases/base.py",
+      "line": 104,
+      "signature": "release_id: str, name: str | None=None, description_html: str | None=None, status: _STATUS | None=None, target_date: str | None=None, release_date: str | None=None, tag_id: str | None=None, lead_id: str | None=None, is_prerelease: bool | None=None",
+      "return_annotation": "Release"
+    },
+    {
+      "name": "delete_release",
+      "category": "releases.base",
+      "source_file": "plane_mcp/tools/releases/base.py",
+      "line": 148,
+      "signature": "release_id: str",
+      "return_annotation": "None"
+    },
+    {
+      "name": "get_release_changelog",
+      "category": "releases.changelog",
+      "source_file": "plane_mcp/tools/releases/changelog.py",
+      "line": 16,
+      "signature": "release_id: str",
+      "return_annotation": "ReleaseChangelog"
+    },
+    {
+      "name": "update_release_changelog",
+      "category": "releases.changelog",
+      "source_file": "plane_mcp/tools/releases/changelog.py",
+      "line": 31,
+      "signature": "release_id: str, description_html: str | None=None, description_stripped: str | None=None, description_json: Any | None=None",
+      "return_annotation": "ReleaseChangelog"
+    },
+    {
+      "name": "list_release_labels",
+      "category": "releases.labels",
+      "source_file": "plane_mcp/tools/releases/labels.py",
+      "line": 28,
+      "signature": "release_id: str | None=None, cursor: str | None=None, per_page: int | None=None",
+      "return_annotation": "PaginatedReleaseLabelResponse"
+    },
+    {
+      "name": "create_release_label",
+      "category": "releases.labels",
+      "source_file": "plane_mcp/tools/releases/labels.py",
+      "line": 55,
+      "signature": "name: str, color: str | None=None, sort_order: int | None=None",
+      "return_annotation": "ReleaseLabel"
+    },
+    {
+      "name": "update_release_label",
+      "category": "releases.labels",
+      "source_file": "plane_mcp/tools/releases/labels.py",
+      "line": 78,
+      "signature": "label_id: str, name: str | None=None, color: str | None=None, sort_order: int | None=None",
+      "return_annotation": "ReleaseLabel"
+    },
+    {
+      "name": "delete_release_label",
+      "category": "releases.labels",
+      "source_file": "plane_mcp/tools/releases/labels.py",
+      "line": 101,
+      "signature": "label_id: str",
+      "return_annotation": "None"
+    },
+    {
+      "name": "manage_release_labels",
+      "category": "releases.labels",
+      "source_file": "plane_mcp/tools/releases/labels.py",
+      "line": 115,
+      "signature": "release_id: str, action: Literal['attach', 'detach'], label_ids: list[str]",
+      "return_annotation": "list[ReleaseLabel]"
+    },
+    {
+      "name": "list_release_tags",
+      "category": "releases.tags",
+      "source_file": "plane_mcp/tools/releases/tags.py",
+      "line": 19,
+      "signature": "cursor: str | None=None, per_page: int | None=None",
+      "return_annotation": "PaginatedReleaseTagResponse"
+    },
+    {
+      "name": "create_release_tag",
+      "category": "releases.tags",
+      "source_file": "plane_mcp/tools/releases/tags.py",
+      "line": 41,
+      "signature": "version: str, description: str | None=None, commit_hash: str | None=None, git_tag: str | None=None",
+      "return_annotation": "ReleaseTag"
+    },
+    {
+      "name": "retrieve_release_tag",
+      "category": "releases.tags",
+      "source_file": "plane_mcp/tools/releases/tags.py",
+      "line": 64,
+      "signature": "tag_id: str",
+      "return_annotation": "ReleaseTag"
+    },
+    {
+      "name": "update_release_tag",
+      "category": "releases.tags",
+      "source_file": "plane_mcp/tools/releases/tags.py",
+      "line": 78,
+      "signature": "tag_id: str, version: str | None=None, description: str | None=None, commit_hash: str | None=None, git_tag: str | None=None",
+      "return_annotation": "ReleaseTag"
+    },
+    {
+      "name": "delete_release_tag",
+      "category": "releases.tags",
+      "source_file": "plane_mcp/tools/releases/tags.py",
+      "line": 103,
+      "signature": "tag_id: str",
+      "return_annotation": "None"
+    },
+    {
+      "name": "list_release_work_items",
+      "category": "releases.work_items",
+      "source_file": "plane_mcp/tools/releases/work_items.py",
+      "line": 22,
+      "signature": "release_id: str, cursor: str | None=None, per_page: int | None=None",
+      "return_annotation": "PaginatedReleaseWorkItemResponse"
+    },
+    {
+      "name": "manage_release_work_items",
+      "category": "releases.work_items",
+      "source_file": "plane_mcp/tools/releases/work_items.py",
+      "line": 45,
+      "signature": "release_id: str, action: Literal['add', 'remove'], work_item_ids: list[str]",
+      "return_annotation": "list[ReleaseWorkItem]"
+    },
+    {
+      "name": "list_roles",
+      "category": "roles",
+      "source_file": "plane_mcp/tools/roles.py",
+      "line": 15,
+      "signature": "namespace: Literal['workspace', 'project'] | None=None, per_page: int | None=None, cursor: str | None=None",
+      "return_annotation": "PaginatedRoleResponse"
+    },
+    {
+      "name": "retrieve_role",
+      "category": "roles",
+      "source_file": "plane_mcp/tools/roles.py",
+      "line": 45,
+      "signature": "role_id: str",
+      "return_annotation": "Role"
+    },
+    {
+      "name": "list_states",
+      "category": "states",
+      "source_file": "plane_mcp/tools/states.py",
+      "line": 21,
+      "signature": "project_id: str, params: dict[str, Any] | None=None",
+      "return_annotation": "list[State]"
+    },
+    {
+      "name": "create_state",
+      "category": "states",
+      "source_file": "plane_mcp/tools/states.py",
+      "line": 42,
+      "signature": "project_id: str, name: str, color: str, description: str | None=None, sequence: float | None=None, group: str | None=None, is_triage: bool | None=None, default: bool | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "State"
+    },
+    {
+      "name": "retrieve_state",
+      "category": "states",
+      "source_file": "plane_mcp/tools/states.py",
+      "line": 94,
+      "signature": "project_id: str, state_id: str",
+      "return_annotation": "State"
+    },
+    {
+      "name": "update_state",
+      "category": "states",
+      "source_file": "plane_mcp/tools/states.py",
+      "line": 109,
+      "signature": "project_id: str, state_id: str, name: str | None=None, color: str | None=None, description: str | None=None, sequence: float | None=None, group: str | None=None, is_triage: bool | None=None, default: bool | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "State"
+    },
+    {
+      "name": "delete_state",
+      "category": "states",
+      "source_file": "plane_mcp/tools/states.py",
+      "line": 168,
+      "signature": "project_id: str, state_id: str",
+      "return_annotation": "None"
+    },
+    {
+      "name": "get_me",
+      "category": "users",
+      "source_file": "plane_mcp/tools/users.py",
+      "line": 13,
+      "signature": "",
+      "return_annotation": "UserLite"
+    },
+    {
+      "name": "list_work_item_activities",
+      "category": "work_item_activities",
+      "source_file": "plane_mcp/tools/work_item_activities.py",
+      "line": 18,
+      "signature": "project_id: str, work_item_id: str, params: dict[str, Any] | None=None",
+      "return_annotation": "list[WorkItemActivity]"
+    },
+    {
+      "name": "retrieve_work_item_activity",
+      "category": "work_item_activities",
+      "source_file": "plane_mcp/tools/work_item_activities.py",
+      "line": 44,
+      "signature": "project_id: str, work_item_id: str, activity_id: str",
+      "return_annotation": "WorkItemActivity"
+    },
+    {
+      "name": "list_work_item_attachments",
+      "category": "work_item_attachments",
+      "source_file": "plane_mcp/tools/work_item_attachments.py",
+      "line": 88,
+      "signature": "project_id: str, work_item_id: str",
+      "return_annotation": "list[dict[str, Any]]"
+    },
+    {
+      "name": "get_work_item_attachment_download_url",
+      "category": "work_item_attachments",
+      "source_file": "plane_mcp/tools/work_item_attachments.py",
+      "line": 117,
+      "signature": "project_id: str, work_item_id: str, attachment_id: str",
+      "return_annotation": "dict[str, Any]"
+    },
+    {
+      "name": "upload_work_item_attachment_from_url",
+      "category": "work_item_attachments",
+      "source_file": "plane_mcp/tools/work_item_attachments.py",
+      "line": 174,
+      "signature": "project_id: str, work_item_id: str, url: str, name: str | None=None",
+      "return_annotation": "dict[str, Any]"
+    },
+    {
+      "name": "delete_work_item_attachment",
+      "category": "work_item_attachments",
+      "source_file": "plane_mcp/tools/work_item_attachments.py",
+      "line": 248,
+      "signature": "project_id: str, work_item_id: str, attachment_id: str",
+      "return_annotation": "None"
+    },
+    {
+      "name": "read_work_item_attachment",
+      "category": "work_item_attachments",
+      "source_file": "plane_mcp/tools/work_item_attachments.py",
+      "line": 274,
+      "signature": "project_id: str, work_item_id: str, attachment_id: str",
+      "return_annotation": "Image | str"
+    },
+    {
+      "name": "list_work_item_comments",
+      "category": "work_item_comments",
+      "source_file": "plane_mcp/tools/work_item_comments.py",
+      "line": 21,
+      "signature": "project_id: str, work_item_id: str, params: dict[str, Any] | None=None",
+      "return_annotation": "list[WorkItemComment]"
+    },
+    {
+      "name": "retrieve_work_item_comment",
+      "category": "work_item_comments",
+      "source_file": "plane_mcp/tools/work_item_comments.py",
+      "line": 47,
+      "signature": "project_id: str, work_item_id: str, comment_id: str",
+      "return_annotation": "WorkItemComment"
+    },
+    {
+      "name": "create_work_item_comment",
+      "category": "work_item_comments",
+      "source_file": "plane_mcp/tools/work_item_comments.py",
+      "line": 72,
+      "signature": "project_id: str, work_item_id: str, comment_html: str | None=None, comment_json: dict[str, Any] | None=None, access: str | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "WorkItemComment"
+    },
+    {
+      "name": "update_work_item_comment",
+      "category": "work_item_comments",
+      "source_file": "plane_mcp/tools/work_item_comments.py",
+      "line": 119,
+      "signature": "project_id: str, work_item_id: str, comment_id: str, comment_html: str | None=None, comment_json: dict[str, Any] | None=None, access: str | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "WorkItemComment"
+    },
+    {
+      "name": "delete_work_item_comment",
+      "category": "work_item_comments",
+      "source_file": "plane_mcp/tools/work_item_comments.py",
+      "line": 169,
+      "signature": "project_id: str, work_item_id: str, comment_id: str",
+      "return_annotation": "None"
+    },
+    {
+      "name": "list_work_item_links",
+      "category": "work_item_links",
+      "source_file": "plane_mcp/tools/work_item_links.py",
+      "line": 20,
+      "signature": "project_id: str, work_item_id: str, params: dict[str, Any] | None=None",
+      "return_annotation": "list[WorkItemLink]"
+    },
+    {
+      "name": "retrieve_work_item_link",
+      "category": "work_item_links",
+      "source_file": "plane_mcp/tools/work_item_links.py",
+      "line": 46,
+      "signature": "project_id: str, work_item_id: str, link_id: str",
+      "return_annotation": "WorkItemLink"
+    },
+    {
+      "name": "create_work_item_link",
+      "category": "work_item_links",
+      "source_file": "plane_mcp/tools/work_item_links.py",
+      "line": 71,
+      "signature": "project_id: str, work_item_id: str, url: str",
+      "return_annotation": "WorkItemLink"
+    },
+    {
+      "name": "update_work_item_link",
+      "category": "work_item_links",
+      "source_file": "plane_mcp/tools/work_item_links.py",
+      "line": 99,
+      "signature": "project_id: str, work_item_id: str, link_id: str, url: str | None=None",
+      "return_annotation": "WorkItemLink"
+    },
+    {
+      "name": "delete_work_item_link",
+      "category": "work_item_links",
+      "source_file": "plane_mcp/tools/work_item_links.py",
+      "line": 130,
+      "signature": "project_id: str, work_item_id: str, link_id: str",
+      "return_annotation": "None"
+    },
+    {
+      "name": "list_work_item_properties",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "line": 30,
+      "signature": "work_item_type_id: str | None=None, project_id: str | None=None, params: dict[str, Any] | None=None",
+      "return_annotation": "list[WorkItemProperty]"
+    },
+    {
+      "name": "create_work_item_property",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "line": 123,
+      "signature": "display_name: str, property_type: str, project_id: str | None=None, work_item_type_id: str | None=None, relation_type: str | None=None, description: str | None=None, is_required: bool | None=None, default_value: list[str] | None=None, settings: dict | None=None, is_active: bool | None=None, is_multi: bool | None=None, validation_rules: dict | None=None, external_source: str | None=None, external_id: str | None=None, options: list[dict] | None=None",
+      "return_annotation": "WorkItemProperty"
+    },
+    {
+      "name": "retrieve_work_item_property",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "line": 221,
+      "signature": "work_item_property_id: str, project_id: str | None=None, work_item_type_id: str | None=None",
+      "return_annotation": "WorkItemProperty"
+    },
+    {
+      "name": "update_work_item_property",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "line": 257,
+      "signature": "work_item_property_id: str, project_id: str | None=None, work_item_type_id: str | None=None, display_name: str | None=None, property_type: str | None=None, relation_type: str | None=None, description: str | None=None, is_required: bool | None=None, default_value: list[str] | None=None, settings: dict | None=None, is_active: bool | None=None, is_multi: bool | None=None, validation_rules: dict | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "WorkItemProperty"
+    },
+    {
+      "name": "delete_work_item_property",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "line": 353,
+      "signature": "work_item_property_id: str, project_id: str | None=None, work_item_type_id: str | None=None",
+      "return_annotation": "None"
+    },
+    {
+      "name": "manage_work_item_type_properties",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "line": 387,
+      "signature": "project_id: str, work_item_type_id: str, attach_ids: list[str] | None=None, detach_ids: list[str] | None=None",
+      "return_annotation": "list[str] | None"
+    },
+    {
+      "name": "list_work_item_property_options",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "line": 428,
+      "signature": "property_id: str, project_id: str | None=None, params: dict[str, Any] | None=None",
+      "return_annotation": "list[WorkItemPropertyOption]"
+    },
+    {
+      "name": "retrieve_work_item_property_option",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "line": 458,
+      "signature": "property_id: str, option_id: str, project_id: str | None=None",
+      "return_annotation": "WorkItemPropertyOption"
+    },
+    {
+      "name": "create_work_item_property_option",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "line": 489,
+      "signature": "property_id: str, name: str, project_id: str | None=None, description: str | None=None, color: str | None=None, is_default: bool | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "WorkItemPropertyOption"
+    },
+    {
+      "name": "update_work_item_property_option",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "line": 538,
+      "signature": "property_id: str, option_id: str, project_id: str | None=None, name: str | None=None, description: str | None=None, color: str | None=None, is_default: bool | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "WorkItemPropertyOption"
+    },
+    {
+      "name": "delete_work_item_property_option",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "line": 591,
+      "signature": "property_id: str, option_id: str, project_id: str | None=None",
+      "return_annotation": "None"
+    },
+    {
+      "name": "get_work_item_property_value",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "line": 620,
+      "signature": "project_id: str, work_item_id: str, property_id: str",
+      "return_annotation": "WorkItemPropertyValueDetail | list[WorkItemPropertyValueDetail]"
+    },
+    {
+      "name": "set_work_item_property_value",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "line": 649,
+      "signature": "project_id: str, work_item_id: str, property_id: str, value: str | bool | int | float | list[str], external_id: str | None=None, external_source: str | None=None",
+      "return_annotation": "WorkItemPropertyValueDetail | list[WorkItemPropertyValueDetail]"
+    },
+    {
+      "name": "delete_work_item_property_value",
+      "category": "work_item_properties",
+      "source_file": "plane_mcp/tools/work_item_properties.py",
+      "line": 699,
+      "signature": "project_id: str, work_item_id: str, property_id: str",
+      "return_annotation": "None"
+    },
+    {
+      "name": "list_work_item_relation_definitions",
+      "category": "work_item_relation_definitions",
+      "source_file": "plane_mcp/tools/work_item_relation_definitions.py",
+      "line": 21,
+      "signature": "is_default: bool | None=None, is_active: bool | None=None",
+      "return_annotation": "dict[str, Any]"
+    },
+    {
+      "name": "create_work_item_relation_definition",
+      "category": "work_item_relation_definitions",
+      "source_file": "plane_mcp/tools/work_item_relation_definitions.py",
+      "line": 62,
+      "signature": "name: str, outward: str | None=None, inward: str | None=None, is_active: bool | None=None, color: str | None=None",
+      "return_annotation": "WorkItemRelationDefinition"
+    },
+    {
+      "name": "update_work_item_relation_definition",
+      "category": "work_item_relation_definitions",
+      "source_file": "plane_mcp/tools/work_item_relation_definitions.py",
+      "line": 99,
+      "signature": "definition_id: str, name: str | None=None, outward: str | None=None, inward: str | None=None, is_active: bool | None=None, color: str | None=None",
+      "return_annotation": "WorkItemRelationDefinition"
+    },
+    {
+      "name": "delete_work_item_relation_definition",
+      "category": "work_item_relation_definitions",
+      "source_file": "plane_mcp/tools/work_item_relation_definitions.py",
+      "line": 135,
+      "signature": "definition_id: str",
+      "return_annotation": "None"
+    },
+    {
+      "name": "list_work_item_relations",
+      "category": "work_item_relations",
+      "source_file": "plane_mcp/tools/work_item_relations.py",
+      "line": 37,
+      "signature": "project_id: str, work_item_id: str",
+      "return_annotation": "dict[str, Any]"
+    },
+    {
+      "name": "create_work_item_relation",
+      "category": "work_item_relations",
+      "source_file": "plane_mcp/tools/work_item_relations.py",
+      "line": 68,
+      "signature": "project_id: str, work_item_id: str, work_item_ids: list[str], relation_type: str | None=None, relation_definition_id: str | None=None, relation_definition_label: str | None=None",
+      "return_annotation": "list[WorkItemWithRelationType]"
+    },
+    {
+      "name": "remove_work_item_relation",
+      "category": "work_item_relations",
+      "source_file": "plane_mcp/tools/work_item_relations.py",
+      "line": 130,
+      "signature": "project_id: str, work_item_id: str, related_work_item_id: str, is_dependency: bool",
+      "return_annotation": "None"
+    },
+    {
+      "name": "list_work_item_types",
+      "category": "work_item_types",
+      "source_file": "plane_mcp/tools/work_item_types.py",
+      "line": 20,
+      "signature": "project_id: str | None=None, params: dict[str, Any] | None=None",
+      "return_annotation": "list[WorkItemType]"
+    },
+    {
+      "name": "create_work_item_type",
+      "category": "work_item_types",
+      "source_file": "plane_mcp/tools/work_item_types.py",
+      "line": 38,
+      "signature": "name: str, project_id: str | None=None, description: str | None=None, project_ids: list[str] | None=None, is_active: bool | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "WorkItemType"
+    },
+    {
+      "name": "import_work_item_types_to_project",
+      "category": "work_item_types",
+      "source_file": "plane_mcp/tools/work_item_types.py",
+      "line": 83,
+      "signature": "project_id: str, work_item_type_ids: list[str]",
+      "return_annotation": "None"
+    },
+    {
+      "name": "resolve_work_item_type",
+      "category": "work_item_types",
+      "source_file": "plane_mcp/tools/work_item_types.py",
+      "line": 106,
+      "signature": "project_id: str, name: str",
+      "return_annotation": "WorkItemType"
+    },
+    {
+      "name": "retrieve_work_item_type",
+      "category": "work_item_types",
+      "source_file": "plane_mcp/tools/work_item_types.py",
+      "line": 189,
+      "signature": "work_item_type_id: str, project_id: str | None=None",
+      "return_annotation": "WorkItemType"
+    },
+    {
+      "name": "update_work_item_type",
+      "category": "work_item_types",
+      "source_file": "plane_mcp/tools/work_item_types.py",
+      "line": 216,
+      "signature": "work_item_type_id: str, project_id: str | None=None, name: str | None=None, description: str | None=None, project_ids: list[str] | None=None, is_active: bool | None=None, external_source: str | None=None, external_id: str | None=None",
+      "return_annotation": "WorkItemType"
+    },
+    {
+      "name": "delete_work_item_type",
+      "category": "work_item_types",
+      "source_file": "plane_mcp/tools/work_item_types.py",
+      "line": 267,
+      "signature": "work_item_type_id: str, project_id: str | None=None",
+      "return_annotation": "None"
+    },
+    {
+      "name": "list_work_items",
+      "category": "work_items",
+      "source_file": "plane_mcp/tools/work_items.py",
+      "line": 71,
+      "signature": "project_id: str | None=None, pql: Annotated[str | None, Field(description=PQL_FIELD_HINT)]=None, order_by: str | None=None, per_page: int | None=None, cursor: str | None=None, expand: str | None=None, fields: str | None=None, external_id: str | None=None, external_source: str | None=None",
+      "return_annotation": "dict[str, Any]"
+    },
+    {
+      "name": "count_work_items",
+      "category": "work_items",
+      "source_file": "plane_mcp/tools/work_items.py",
+      "line": 160,
+      "signature": "pql: Annotated[str | None, Field(description=PQL_FIELD_HINT)]=None, group_by: str | None=None, sub_group_by: str | None=None",
+      "return_annotation": "dict[str, Any]"
+    },
+    {
+      "name": "create_work_item",
+      "category": "work_items",
+      "source_file": "plane_mcp/tools/work_items.py",
+      "line": 209,
+      "signature": "project_id: str, name: str, assignees: list[str] | None=None, labels: list[str] | None=None, type_id: str | None=None, point: int | None=None, description_html: str | None=None, description_stripped: str | None=None, priority: str | None=None, start_date: str | None=None, target_date: str | None=None, sort_order: float | None=None, is_draft: bool | None=None, external_source: str | None=None, external_id: str | None=None, parent: str | None=None, state: str | None=None, estimate_point: str | None=None, type: str | None=None",
+      "return_annotation": "WorkItem"
+    },
+    {
+      "name": "retrieve_work_item",
+      "category": "work_items",
+      "source_file": "plane_mcp/tools/work_items.py",
+      "line": 288,
+      "signature": "project_id: str, work_item_id: str, expand: str | None=None, fields: str | None=None, external_id: str | None=None, external_source: str | None=None, order_by: str | None=None",
+      "return_annotation": "WorkItemDetail"
+    },
+    {
+      "name": "retrieve_work_item_by_identifier",
+      "category": "work_items",
+      "source_file": "plane_mcp/tools/work_items.py",
+      "line": 330,
+      "signature": "work_item_identifier: str, expand: str | None=None, fields: str | None=None, external_id: str | None=None, external_source: str | None=None, order_by: str | None=None",
+      "return_annotation": "WorkItemDetail"
+    },
+    {
+      "name": "update_work_item",
+      "category": "work_items",
+      "source_file": "plane_mcp/tools/work_items.py",
+      "line": 390,
+      "signature": "project_id: str, work_item_id: str, name: str | None=None, assignees: list[str] | None=None, labels: list[str] | None=None, type_id: str | None=None, point: int | None=None, description_html: str | None=None, description_stripped: str | None=None, priority: str | None=None, start_date: str | None=None, target_date: str | None=None, sort_order: float | None=None, is_draft: bool | None=None, external_source: str | None=None, external_id: str | None=None, parent: str | None=None, state: str | None=None, estimate_point: str | None=None, type: str | None=None",
+      "return_annotation": "WorkItem"
+    },
+    {
+      "name": "delete_work_item",
+      "category": "work_items",
+      "source_file": "plane_mcp/tools/work_items.py",
+      "line": 476,
+      "signature": "project_id: str, work_item_id: str",
+      "return_annotation": "None"
+    },
+    {
+      "name": "manage_work_item_assignee",
+      "category": "work_items",
+      "source_file": "plane_mcp/tools/work_items.py",
+      "line": 488,
+      "signature": "project_id: str, work_item_id: str, add_user_id: str | None=None, remove_user_id: str | None=None",
+      "return_annotation": "WorkItem"
+    },
+    {
+      "name": "manage_work_item_label",
+      "category": "work_items",
+      "source_file": "plane_mcp/tools/work_items.py",
+      "line": 527,
+      "signature": "project_id: str, work_item_id: str, add_label_id: str | None=None, remove_label_id: str | None=None",
+      "return_annotation": "WorkItem"
+    },
+    {
+      "name": "list_archived_work_items",
+      "category": "work_items",
+      "source_file": "plane_mcp/tools/work_items.py",
+      "line": 566,
+      "signature": "project_id: str, pql: Annotated[str | None, Field(description=PQL_FIELD_HINT)]=None, order_by: str | None=None, per_page: int | None=None, cursor: str | None=None, expand: str | None=None, fields: str | None=None",
+      "return_annotation": "dict[str, Any]"
+    },
+    {
+      "name": "manage_work_item_archive",
+      "category": "work_items",
+      "source_file": "plane_mcp/tools/work_items.py",
+      "line": 627,
+      "signature": "project_id: str, work_item_id: str, archive: bool",
+      "return_annotation": "None"
+    },
+    {
+      "name": "search_work_items",
+      "category": "work_items",
+      "source_file": "plane_mcp/tools/work_items.py",
+      "line": 654,
+      "signature": "query: str, expand: str | None=None, fields: str | None=None, external_id: str | None=None, external_source: str | None=None, order_by: str | None=None",
+      "return_annotation": "WorkItemSearch"
+    },
+    {
+      "name": "list_work_logs",
+      "category": "work_logs",
+      "source_file": "plane_mcp/tools/work_logs.py",
+      "line": 15,
+      "signature": "project_id: str, work_item_id: str, params: dict[str, Any] | None=None",
+      "return_annotation": "list[WorkItemWorkLog]"
+    },
+    {
+      "name": "create_work_log",
+      "category": "work_logs",
+      "source_file": "plane_mcp/tools/work_logs.py",
+      "line": 40,
+      "signature": "project_id: str, work_item_id: str, duration: int | None=None, description: str | None=None",
+      "return_annotation": "WorkItemWorkLog"
+    },
+    {
+      "name": "update_work_log",
+      "category": "work_logs",
+      "source_file": "plane_mcp/tools/work_logs.py",
+      "line": 74,
+      "signature": "project_id: str, work_item_id: str, work_log_id: str, duration: int | None=None, description: str | None=None",
+      "return_annotation": "WorkItemWorkLog"
+    },
+    {
+      "name": "delete_work_log",
+      "category": "work_logs",
+      "source_file": "plane_mcp/tools/work_logs.py",
+      "line": 111,
+      "signature": "project_id: str, work_item_id: str, work_log_id: str",
+      "return_annotation": "None"
+    },
+    {
+      "name": "get_workspace_members",
+      "category": "workspaces",
+      "source_file": "plane_mcp/tools/workspaces.py",
+      "line": 15,
+      "signature": "first_name: str | None=None, last_name: str | None=None, email: str | None=None, display_name: str | None=None, role_slug: str | None=None, is_active: bool | None=None, is_bot: bool | None=None, cursor: str | None=None, per_page: int | None=100, order_by: str | None=None",
+      "return_annotation": "PaginatedWorkspaceMemberResponse"
+    },
+    {
+      "name": "get_features",
+      "category": "workspaces",
+      "source_file": "plane_mcp/tools/workspaces.py",
+      "line": 58,
+      "signature": "project_id: str | None=None",
+      "return_annotation": "WorkspaceFeature | ProjectFeature"
+    },
+    {
+      "name": "update_workspace_features",
+      "category": "workspaces",
+      "source_file": "plane_mcp/tools/workspaces.py",
+      "line": 77,
+      "signature": "project_grouping: bool | None=None, initiatives: bool | None=None, teams: bool | None=None, customers: bool | None=None, wiki: bool | None=None, pi: bool | None=None",
+      "return_annotation": "WorkspaceFeature"
+    }
+  ]
+}
