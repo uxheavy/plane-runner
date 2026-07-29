@@ -20,4 +20,7 @@ pnpm --filter @plane/chat-context verify:bundle
 docker compose -f docker-compose-test.yml run --rm --build api-tests \
   pytest \
   plane/tests/contract/api/test_semantic_context_hydration.py \
+  plane/tests/contract/api/test_semantic_context_hydration_maya_dogfood.py \
+  plane/tests/contract/api/test_semantic_context_hydration_quinn_dogfood.py \
+  plane/tests/contract/api/test_semantic_context_hydration_ravi_dogfood.py \
   plane/tests/contract/app/test_page_version_project_scope_app.py

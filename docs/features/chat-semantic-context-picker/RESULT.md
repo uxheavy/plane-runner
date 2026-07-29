@@ -33,8 +33,8 @@ POST /api/workspaces/{workspaceSlug}/chat-context/hydrate/
 
 ## Verification evidence
 
-Fresh verification completed on `2026-07-29 18:58 +07` for the simplified
-lesson change set.
+Fresh verification completed on `2026-07-29 23:26 +07` after the API dogfood
+and QUI-001 repair.
 
 The release verifier also checks the implementation fingerprint in `LESSONS.md`,
 so feature implementation and its durable documentation cannot drift silently.
@@ -49,13 +49,13 @@ pnpm verify:chat-context
 TypeScript: passed
 OxLint: 0 warnings, 0 errors
 Oxfmt: passed
-Documentation contract: passed; 36 implementation files and 12 required documents
+Documentation contract: passed; 39 implementation files and 17 required documents
 Test Files  8 passed (8)
 Tests       40 passed (40)
 Declarations/build: passed
 Core bundle: 20,803 gzip bytes <= 30,000; forbidden markers: none
 Renderer bundle: 66,955 gzip bytes <= 100,000; html2canvas marker present
-Django/PostgreSQL: 16 passed in 4.89s
+Django/PostgreSQL: 57 passed in 15.78s
 Docker test containers and network: removed
 ```
 
@@ -77,6 +77,15 @@ Cached: 60 cached, 63 total
 
 - Flaky checks: none; the three-pass rule was not triggered.
 
+### API dogfood
+
+- Three persistent personas completed two routed API waves.
+- Wave 1: Maya 3 passed, Ravi 7 passed, Quinn 25 passed and 6 exposed QUI-001.
+- QUI-001 fixed malformed top-level payloads returning 500 instead of 400.
+- Wave 2: all 41 persona cases passed with no permission or privacy regression.
+- The persona suites are now part of `pnpm verify:chat-context`, not disposable
+  test artifacts.
+
 ## Privacy and permission evidence
 
 | Requirement             | Proof                                                                                            |
@@ -95,6 +104,7 @@ Cached: 60 cached, 63 total
 | --------------------- | ---------------------------------------------------------------------- |
 | P0/P1 findings        | None unresolved                                                        |
 | Missing direct proofs | Five public failure branches found and added before the final verifier |
+| API dogfood findings  | QUI-001 closed; no blocker or high-severity friction remains           |
 
 ## Known limitations
 

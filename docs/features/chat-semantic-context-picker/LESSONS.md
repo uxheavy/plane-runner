@@ -2,7 +2,7 @@
 
 ## Structural completion gate
 
-Implementation fingerprint: `sha256:5311723fc36dd3bbc26d2534afb1b8921ccac9ad87bc9298389128195fe7fd26`
+Implementation fingerprint: `sha256:6a651a998a1f762bfc4c794c9bbaea967a53fe1e1f8d846229867b5c2090e2e5`
 
 `pnpm verify:chat-context` recomputes this fingerprint from the feature contracts,
 implementation, API wiring, tests, and release scripts. A mismatch blocks release
@@ -25,18 +25,19 @@ until the relevant feature documentation and this ledger are reviewed together.
 
 ## Failed checks and unexpected outcomes
 
-| Lesson                                                                                                   | Disposition   | Durable mechanism                                                                                                                                  |
-| -------------------------------------------------------------------------------------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Point capture initially widened a field selection to its parent entity.                                  | Encoded       | Browser contract tests require the fresh top field only and reject silent parent fallback.                                                         |
-| Test fixtures initially reused usernames and failed to authenticate an owner client.                     | Encoded       | Django contract fixtures create distinct users and exercise authenticated owner, member, guest, revoked, and denied cases.                         |
-| Broad failure types and mutating sort logic failed package checks.                                       | Encoded       | Strict TypeScript, zero-warning package lint, format, and build gates run in `verify-release.sh`.                                                  |
-| A simulated renderer test did not prove that the selected screenshot stack produced pixels.              | Encoded       | `html2canvas-pro-visual-renderer.browser.test.ts` decodes and checks an exact modern-CSS PNG crop.                                                 |
-| Five public failure variants lacked direct proof during the first completion audit.                      | Encoded       | Composer and visual contract suites exercise every exported failure code and lifecycle branch.                                                     |
-| Permission checks at the HTTP serializer alone could be bypassed by direct service use.                  | Encoded       | The hydration service revalidates references; a direct-service Django regression test enforces it.                                                 |
-| The first documentation verifier serialized file reads and failed the repository pre-commit lint policy. | Encoded       | File discovery, hashing, and existence checks use `Promise.all`; the zero-warning pre-commit lint gate enforces the pattern.                       |
-| Verification created a local `.pnpm-store/` and dirtied the worktree.                                    | Encoded       | Root `.gitignore` excludes the generated store.                                                                                                    |
-| Registry signature and Markdown tool downloads failed without network access.                            | Judgment-only | This is an execution-environment permission condition; exact commands are retried with approved network access rather than weakening verification. |
-| The commit hook reformatted Markdown after the first documentation check.                                | Encoded       | The pre-commit formatter normalizes staged Markdown; the completion workflow reruns Markdown validation against committed content.                 |
+| Lesson                                                                                                                  | Disposition   | Durable mechanism                                                                                                                                  |
+| ----------------------------------------------------------------------------------------------------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Point capture initially widened a field selection to its parent entity.                                                 | Encoded       | Browser contract tests require the fresh top field only and reject silent parent fallback.                                                         |
+| Test fixtures initially reused usernames and failed to authenticate an owner client.                                    | Encoded       | Django contract fixtures create distinct users and exercise authenticated owner, member, guest, revoked, and denied cases.                         |
+| Broad failure types and mutating sort logic failed package checks.                                                      | Encoded       | Strict TypeScript, zero-warning package lint, format, and build gates run in `verify-release.sh`.                                                  |
+| A simulated renderer test did not prove that the selected screenshot stack produced pixels.                             | Encoded       | `html2canvas-pro-visual-renderer.browser.test.ts` decodes and checks an exact modern-CSS PNG crop.                                                 |
+| Five public failure variants lacked direct proof during the first completion audit.                                     | Encoded       | Composer and visual contract suites exercise every exported failure code and lifecycle branch.                                                     |
+| Permission checks at the HTTP serializer alone could be bypassed by direct service use.                                 | Encoded       | The hydration service revalidates references; a direct-service Django regression test enforces it.                                                 |
+| The first documentation verifier serialized file reads and failed the repository pre-commit lint policy.                | Encoded       | File discovery, hashing, and existence checks use `Promise.all`; the zero-warning pre-commit lint gate enforces the pattern.                       |
+| Verification created a local `.pnpm-store/` and dirtied the worktree.                                                   | Encoded       | Root `.gitignore` excludes the generated store.                                                                                                    |
+| Registry signature and Markdown tool downloads failed without network access.                                           | Judgment-only | This is an execution-environment permission condition; exact commands are retried with approved network access rather than weakening verification. |
+| The commit hook reformatted Markdown after the first documentation check.                                               | Encoded       | The pre-commit formatter normalizes staged Markdown; the completion workflow reruns Markdown validation against committed content.                 |
+| Top-level strict-key validation raised list-shaped serializer errors and converted ordinary bad payloads into HTTP 500. | Encoded       | Three persistent API personas, routed dogfood regressions, non-field error normalization, and the release documentation gate preserve the fix.     |
 
 ## Architectural decisions
 

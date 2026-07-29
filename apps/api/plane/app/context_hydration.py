@@ -10,6 +10,7 @@ from uuid import UUID
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework import serializers
+from rest_framework.settings import api_settings
 
 from plane.db.models import (
     Cycle,
@@ -60,7 +61,7 @@ def _strict_keys(value, required, optional=frozenset()):
     if missing:
         _validation_error(f"Missing fields: {', '.join(sorted(missing))}")
     if unknown:
-        _validation_error(f"Unknown fields: {', '.join(sorted(unknown))}")
+        _validation_error("Unknown fields are not allowed")
 
 
 def _string(value, name, maximum=255):
@@ -175,7 +176,10 @@ class SemanticContextHydrationSerializer(serializers.Serializer):
     items = serializers.ListField(child=serializers.JSONField(), min_length=1, max_length=MAX_HYDRATION_ITEMS)
 
     def to_internal_value(self, data):
-        _strict_keys(data, {"schemaVersion", "items"})
+        try:
+            _strict_keys(data, {"schemaVersion", "items"})
+        except serializers.ValidationError as exc:
+            raise serializers.ValidationError({api_settings.NON_FIELD_ERRORS_KEY: exc.detail}) from exc
         return super().to_internal_value(data)
 
     def validate_schemaVersion(self, value):

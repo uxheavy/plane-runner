@@ -33,6 +33,9 @@ const implementationFiles = [
   "apps/api/plane/app/views/__init__.py",
   "apps/api/plane/app/views/context_hydration.py",
   "apps/api/plane/tests/contract/api/test_semantic_context_hydration.py",
+  "apps/api/plane/tests/contract/api/test_semantic_context_hydration_maya_dogfood.py",
+  "apps/api/plane/tests/contract/api/test_semantic_context_hydration_quinn_dogfood.py",
+  "apps/api/plane/tests/contract/api/test_semantic_context_hydration_ravi_dogfood.py",
   "apps/api/plane/tests/contract/app/test_page_version_project_scope_app.py",
 ];
 
@@ -49,6 +52,11 @@ const requiredDocuments = [
   "decisions/0004-server-hydration-boundary.md",
   "decisions/0005-composer-integration-interface.md",
   "decisions/0006-visual-fallback-boundary.md",
+  "user-testing/issue-ledger.md",
+  "user-testing/personas-api.md",
+  "user-testing/report.md",
+  "user-testing/route-map.md",
+  "user-testing/wave-log.md",
 ];
 
 async function collectFiles(relativeDirectory, extension) {

@@ -1,0 +1,6 @@
+*.json
+*.log
+*.png
+*.webm
+*.mp4
+!.gitignore
