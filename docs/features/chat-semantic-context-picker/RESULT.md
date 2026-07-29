@@ -33,6 +33,9 @@ POST /api/workspaces/{workspaceSlug}/chat-context/hydrate/
 
 ## Verification evidence
 
+Fresh verification completed on `2026-07-29 18:38 +07` from commit
+`70860fd441`.
+
 ### Primary cross-stack verifier
 
 ```bash
@@ -48,7 +51,7 @@ Tests       40 passed (40)
 Declarations/build: passed
 Core bundle: 20,803 gzip bytes <= 30,000; forbidden markers: none
 Renderer bundle: 66,955 gzip bytes <= 100,000; html2canvas marker present
-Django/PostgreSQL: 16 passed in 4.28s
+Django/PostgreSQL: 16 passed in 4.91s
 Docker test containers and network: removed
 ```
 
@@ -65,7 +68,7 @@ pnpm check
 
 ```text
 Tasks: 63 successful, 63 total
-Cached: 60 cached, 63 total
+Cached: 63 cached, 63 total
 ```
 
 - Flaky checks: none; the three-pass rule was not triggered.
