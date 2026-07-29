@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed. This document compares four deliberately different interfaces and recommends a v1 shape. It does not authorize implementation.
+The core deep-hybrid boundary was accepted by the user on 2026-07-29. Exact eager tools, operation scope, preflight groups, limits, and compatibility rows remain subject to release-manifest approval. This decision does not authorize implementation.
 
 ## Design constraints
 
@@ -77,7 +77,7 @@ This supports progressive discovery, explicit concurrency, and group preflight. 
 
 Design A has the best interface depth and the fewest seams, but needs a discovery companion. Design B gives Hermes the best common-case ergonomics, but should be an adapter rather than the core module interface. Design C provides the right internal execution semantics, but leaks too much lifecycle protocol if exposed. Design D is powerful, but brings workflow-engine complexity before evidence shows that v1 needs it.
 
-## Recommended v1
+## Accepted v1 core boundary
 
 Use a hybrid in which each layer has one job:
 
@@ -112,6 +112,6 @@ Each catalog entry should contain one idea per field:
 
 OpenAPI supplies transport facts where it is accurate. The curated semantic overlay owns behavioral facts that OpenAPI cannot express, including approval effect, authorization mapping, idempotency, bounded-result policy, and semantic compositions.
 
-## Decision requested
+## North Star
 
-Approve the recommended hybrid as the v1 interface boundary, including the eight eager Hermes tools and omission of a general workflow graph DSL.
+Choose the least custom code that satisfies the approved production and security gates. Reuse Plane and Hermes behavior at their natural seams, generate schemas and adapters from one catalog, and add a new protocol only when a verified requirement cannot be met by the simpler boundary.

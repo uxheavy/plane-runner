@@ -161,3 +161,24 @@ Reject manifest freeze at Plane commit `805f12ddbf`.
 ### Next action
 
 Obtain the immediate gateway-interface decision, then close the remaining technical pre-freeze blockers before requesting whole-manifest approval.
+
+## 2026-07-29 — Core gateway interface accepted
+
+### Decision
+
+- The user accepted the deep-hybrid core gateway boundary.
+- The gateway exposes one request-bound operation-execution seam.
+- Read-only catalog discovery remains a separate interface.
+- Approval, idempotency, reconciliation, result control, and audit lifecycle remain internal.
+- Friendly native Hermes tools remain thin adapters rather than a second enforcement implementation.
+
+### North Star
+
+Use the least custom code that satisfies the approved production and security gates. Prefer reuse and generation over additional interfaces or protocols.
+
+### Still open
+
+- Exact eager tools and supported operation boundary.
+- Explicit preflight groups and omission or inclusion of a graph DSL.
+- Wire transport and external approval behavior.
+- All remaining independent-review blockers before manifest freeze.
