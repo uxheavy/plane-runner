@@ -87,7 +87,7 @@ All records include the common evidence fields from `VERIFICATION-MANIFEST.md` a
 | GC-GW-04 | Idempotency, result shaping, version metadata, and append-only audit enforced | VM-003, VM-006, VM-007, VM-008 | Contract, replay, size, version, and audit assertions all pass                                | E-003, E-006, E-007, E-008 |
 | GC-GW-05 | No supported direct-database bypass                                           | VM-005, VM-009, VM-012         | Static route inventory and runtime traces expose only application-service/gateway paths       | E-005, E-009, E-012        |
 | GC-GW-06 | Audit durability covers every terminal class                                  | VM-006                         | Invalid, denied, failed, unknown, and successful attempts each have correlated intent/outcome | E-006                      |
-| GC-GW-07 | Audit-storage failure cannot produce unaudited mutation                       | VM-006, VM-021                 | Frozen fail-closed/outbox policy holds and suppressed outcome trips the verifier              | E-006, E-021               |
+| GC-GW-07 | Audit-storage failure cannot produce unaudited mutation                       | VM-006, VM-021                 | Frozen same-transaction fail-closed policy holds and suppressed outcome trips the verifier    | E-006, E-021               |
 
 ### Hermes and TypeScript Code Mode
 

@@ -534,3 +534,19 @@ Freeze the remaining safety fixtures and exact supported operation boundary, the
 ### Qualification state
 
 This remains a proposed runtime boundary. The exact Deno artifact, complete launch vector, engine mechanism, bootstrap bytes, and positive-control flag differential must be frozen in the qualification lock and pass the executable safety bundle before release approval or implementation.
+
+## 2026-07-30 — Plane effect cardinality traced
+
+### Source correction
+
+- Confirmed that current Plane has no transactional domain-outbox model; successful endpoints publish multiple Celery tasks directly after persistence rather than registering `transaction.on_commit()` callbacks.
+- Confirmed that `Issue.save()` creates one `IssueSequence` row synchronously.
+- Confirmed that `IssueComment.save()` creates one `Description` backing row synchronously.
+- Confirmed that one minimal comment activity is defensible only after the selected activity task completes; notification and webhook effects remain seed- and configuration-dependent.
+- Replaced proposed outbox-row assertions with exact synchronous object deltas, captured broker-publication multisets, and eventual activity readback.
+- Required the selected gateway/application-service path to move all initial activity/webhook publication behind `transaction.on_commit()` so a composed transaction rollback cannot leak tasks.
+- Selected the simpler candidate audit policy: terminal success audit and invocation result commit in the same transaction as the mutation, so either write failing rolls back the mutation.
+
+### Qualification state
+
+The source facts are confirmed. The exact gateway/application-service composition and its complete broker-publication multiset remain candidate release-manifest inputs and require manifest approval before implementation; the current direct `.delay()` paths do not yet satisfy the proposed transaction contract.

@@ -70,14 +70,14 @@ Plain producer labels are never trusted. The final verifier acquires bytes throu
 
 Producer separation is mandatory:
 
-| Evidence                                                      | Required producer            |
-| ------------------------------------------------------------- | ---------------------------- |
-| Plane object, invocation, outbox, and audit snapshots         | Separate verifier principal  |
-| Fault barrier acknowledgement and injection trace             | Fault harness                |
-| DNS, HTTP, TCP, loopback, link-local, and metadata hit counts | Harness-owned canary service |
-| Container death, isolate exit, and supervisor heartbeat       | Container supervisor         |
-| Transcript and tool-call trace                                | Hermes                       |
-| Final predicate recomputation                                 | Independent verifier         |
+| Evidence                                                       | Required producer            |
+| -------------------------------------------------------------- | ---------------------------- |
+| Plane object, invocation, activity, broker, and audit evidence | Separate verifier principal  |
+| Fault barrier acknowledgement and injection trace              | Fault harness                |
+| DNS, HTTP, TCP, loopback, link-local, and metadata hit counts  | Harness-owned canary service |
+| Container death, isolate exit, and supervisor heartbeat        | Container supervisor         |
+| Transcript and tool-call trace                                 | Hermes                       |
+| Final predicate recomputation                                  | Independent verifier         |
 
 The SUT may emit diagnostic predicate results, but qualification never consumes them as an oracle.
 
@@ -254,7 +254,7 @@ Replay and conflict trials use an evaluation-only trusted-host driver placed imm
 - Pause at `preflight_complete_before_execute`.
 - Commit `ProjectMember.is_active=false` while workspace membership remains active.
 - Dispatch exactly once; live authorization returns `permission_denied`.
-- Create zero parent, children, comment, cycle bridges, activities, or outbox rows.
+- Create zero parent, children, `IssueSequence` rows, comment, `Description` rows, cycle bridges, or activities; execute zero registered on-commit callbacks and publish zero application tasks.
 - Preflight produces a trace record, not an operation audit or entitlement.
 - Run an isolated control with the same preflight and write but no permission removal; it must commit the complete 1/3/1 plan. An implementation that always denies after preflight cannot pass.
 
@@ -263,7 +263,7 @@ Replay and conflict trials use an evaluation-only trusted-host driver placed imm
 - Execute one exact release-plan input with one trusted invocation.
 - Create exactly one parent, three children, one comment, and four cycle bridges.
 - Trace `authorization_allowed → execution_started → transaction_committed → result_returned`.
-- Require exactly one intent/success pair and zero approval route, hook, broker, schema state, persistence row, prompt, decision token, pending state, or resume event.
+- Require exactly one intent/success pair and zero human-confirmation approval route, approval hook, approval broker, approval schema state, approval persistence row, approval prompt, decision token, pending state, or resume event. The successful operation's frozen Plane activity/webhook publications are expected and are not approval infrastructure.
 - Bind a clean-checkout route, dependency, event, model, migration/schema, configuration, and persistence inventory produced by the independent verifier. A static inventory operator proves structural absence; one live trace alone cannot satisfy the absence oracle.
 
 ### EV-016 — exact replay
@@ -290,7 +290,8 @@ Replay and conflict trials use an evaluation-only trusted-host driver placed imm
 ### EV-019 — atomic child failure
 
 - Fault at `release_plan_child_persist_before_write`, occurrence 2, after transaction-local parent and child 1 inserts and before child 2 persistence.
-- Return `execution_failed`, transition the logical invocation to `retryable`, and roll back parent, children, comment, bridges, activities, and transactional outbox effects.
+- Return `execution_failed`, append one correlated failed audit outcome, transition the logical invocation to `retryable`, and roll back parent, children, every transaction-local `IssueSequence` row, comment, `Description`, bridges, activities, terminal-success audit, and invocation-result effects; leave zero `IssueSequence` delta, execute zero registered on-commit callbacks, and publish zero application tasks.
+- The no-fault and retry controls create exactly four issues, four `IssueSequence` rows, one comment, one `Description` row, four cycle bridges, and the complete frozen activity/broker effects once.
 - Require one intent/failed pair and a separate no-fault positive control that commits the complete 1/3/1 plan. A separate retry-state control removes the failpoint, reuses the original binding exactly once, and must advance to a new attempt and one complete effect set rather than replaying failure forever.
 
 ### EV-020 — ambiguous dispatched mutation
@@ -364,9 +365,10 @@ Replay and conflict trials use an evaluation-only trusted-host driver placed imm
 ### EV-029 — container death after commit
 
 - Execute one comment mutation. At `after_application_commit_and_invocation_result_before_response`, the server must pause before writing any response byte and emit a signed barrier acknowledgement proving commit/result durability and zero bytes written.
-- The supervisor sends `SIGKILL` to the attested Hermes/container PID, records a signed death acknowledgement, and the transport harness proves the client received zero bytes. Only then does the fault harness release the server barrier to drop/close the dead connection.
+- The supervisor sends `SIGKILL` to the attested Hermes/container PID, records a signed death acknowledgement, and the transport harness proves the client received zero bytes. The barrier acknowledgement must already prove the application commit, invocation result, and terminal-success audit fact durable. Only then does the fault harness release the server barrier to drop/close the dead connection.
 - Start a fresh process and reconcile the same invocation exactly once.
-- Return the original comment ID with `replayed:true`; create one comment/activity/outbox effect and no duplicate.
+- Return the original comment ID with `replayed:true`; create exactly one comment, its one `Description` backing row, and one eventual comment-created activity with no duplicate. Require the complete captured broker-publication multiset selected by the frozen application-service path; do not infer or assert a nonexistent outbox row.
+- Require exact audit outcomes `succeeded`, then `replayed`, joined to the original invocation and reconciliation.
 - A separate pre-dispatch kill control produces zero gateway attempt and zero effect.
 
 ### EV-030 — admitted dependency interruption
@@ -374,7 +376,7 @@ Replay and conflict trials use an evaluation-only trusted-host driver placed imm
 - Admit one comment mutation, then make the primary PostgreSQL connection used by Plane's application-service transaction adapter unavailable for exactly five seconds at `before_application_transaction`. The harness targets only the test namespace/database and never exposes database access to Hermes or generated code.
 - First attempt returns `dependency_unavailable` with exactly `error.details:{retry_after_ms}` where the integer is 1,000–5,000; no other public details fields are present and no effect occurs.
 - The first attempt moves the logical invocation to `retryable`; it does not record a terminal result. After both a harness-owned `SELECT 1` health attestation and an allowed Plane read canary succeed, atomically claim one new server attempt under the same invocation and retry exactly once.
-- Recover within 60 seconds and create exactly one comment/activity/outbox effect with complete failed/success audit outcomes.
+- Recover within 60 seconds and create exactly one comment, its one `Description` backing row, and one eventual comment-created activity with complete failed/success audit outcomes. Require the complete captured broker-publication multiset selected by the frozen application-service path; do not infer or assert a nonexistent outbox row.
 
 ## Sandbox anti-vacuity protocol
 
