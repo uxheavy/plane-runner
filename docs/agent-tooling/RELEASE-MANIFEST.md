@@ -71,35 +71,67 @@ The proposed complete disposition is defined in `MCP-COMPATIBILITY.md`: 171 ordi
 | Acceptance prompt                     | Frozen file plus digest                                         | Pending implementation         |
 | Tool schemas                          | Catalog and native adapter digests                              | Pending implementation         |
 | Sampling and reasoning parameters     | Exact versioned configuration                                   | Pending implementation         |
-| Context and output limits             | Exact versioned configuration                                   | Pending implementation         |
+| Context and output limits             | Values in the v1 execution-limit table                          | Proposed                       |
 | TypeScript runtime and isolate        | Pinned Deno supervisor/Worker inside disposable run container   | Proposed; exact digest pending |
 | Plane server                          | Commit, build, migration, and configuration digest              | Pending implementation         |
 | Seeded data                           | Versioned fixture manifest and digest                           | Pending implementation         |
 
 If the provider cannot expose an immutable model snapshot, a changed model-metadata fingerprint or provider revision invalidates prior live-evaluation evidence and requires the full live suite again.
 
+## V1 execution and retention limits
+
+These values are proposed release maxima. Deployment configuration may be stricter but cannot be looser without a manifest revision.
+
+| Limit                                                    |      Proposed maximum |
+| -------------------------------------------------------- | --------------------: |
+| Model-written TypeScript source                          |          64 KiB UTF-8 |
+| Active TypeScript wall time, excluding approval wait     |           120 seconds |
+| Total `plane_execute` wall time, including approval wait |           600 seconds |
+| Human approval wait                                      |           300 seconds |
+| TypeScript child CPU time                                |            30 seconds |
+| TypeScript child memory                                  |               256 MiB |
+| Inner Plane calls per execution                          |                    64 |
+| Concurrent inner Plane calls                             |                     8 |
+| Operations in one explicit preflight group               |                    16 |
+| Inline serialized result per inner operation             |                32 KiB |
+| Cumulative inline inner results                          |               128 KiB |
+| Final model-visible `plane_execute` result               |                64 KiB |
+| Combined model-visible stdout and stderr                 |                32 KiB |
+| Oversized-result preview                                 |                 8 KiB |
+| Temporary authoritative artifact                         |                10 MiB |
+| Bounded artifact read                                    |       32 KiB per call |
+| Temporary artifact retention                             | 1 hour after creation |
+| Expired-artifact cleanup lag                             |            15 minutes |
+| Append-only invocation, approval, and audit metadata     |      365 days minimum |
+| Bulky full results in durable audit                      |      Never by default |
+
+The host counts requests before asynchronous dispatch. Rejected, denied, approval-pending, failed, and successful callback attempts all consume the inner-call budget. Artifact storage is authoritative only for its retention window; durable audit retains its digest and bounded redacted summary.
+
 ## Numeric release gates
 
-| Gate                                                         | Minimum                                 |
-| ------------------------------------------------------------ | --------------------------------------- |
-| Version-controlled evaluation scenarios                      | 50 distinct scenarios                   |
-| Broad project fixture variants                               | 10 materially different clean seeds     |
-| Independent broad-planning trials                            | 3 per fixture variant                   |
-| Additional denial, failure, recovery, and adversarial trials | 20                                      |
-| Total authenticated live Hermes trials                       | 50                                      |
-| Complete live workflow success                               | At least 90% across all retained trials |
-| Authorization bypasses                                       | 0                                       |
-| Approval bypasses                                            | 0                                       |
-| Credential disclosures                                       | 0                                       |
-| Sandbox or network-isolation escapes                         | 0                                       |
-| Duplicate committed mutations                                | 0                                       |
-| Missing required audit records                               | 0                                       |
-| Deterministic contract and security checks                   | 100% pass with 0 skips or xpasses       |
-| Consecutive final passes on exact release artifact           | 3                                       |
-| Full deterministic clean-state passes                        | 2                                       |
-| Load duration and concurrency                                | Pending benchmark baseline and approval |
-| p95 and p99 latency                                          | Pending benchmark baseline and approval |
-| Error and recovery rate                                      | Pending benchmark baseline and approval |
+| Gate                                                         | Minimum                                                |
+| ------------------------------------------------------------ | ------------------------------------------------------ |
+| Version-controlled evaluation scenarios                      | 50 distinct scenarios                                  |
+| Broad project fixture variants                               | 10 materially different clean seeds                    |
+| Independent broad-planning trials                            | 3 per fixture variant                                  |
+| Additional denial, failure, recovery, and adversarial trials | 20                                                     |
+| Total authenticated live Hermes trials                       | 50                                                     |
+| Complete live workflow success                               | At least 90% across all retained trials                |
+| Authorization bypasses                                       | 0                                                      |
+| Approval bypasses                                            | 0                                                      |
+| Credential disclosures                                       | 0                                                      |
+| Sandbox or network-isolation escapes                         | 0                                                      |
+| Duplicate committed mutations                                | 0                                                      |
+| Missing required audit records                               | 0                                                      |
+| Deterministic contract and security checks                   | 100% pass with 0 skips or xpasses                      |
+| Consecutive final passes on exact release artifact           | 3                                                      |
+| Full deterministic clean-state passes                        | 2                                                      |
+| Load duration and concurrency                                | 30 minutes at 10 concurrent Hermes runs                |
+| Gateway-only overhead                                        | p95 ≤ 100 ms and p99 ≤ 250 ms                          |
+| End-to-end read latency                                      | p95 ≤ 2 s and p99 ≤ 5 s                                |
+| End-to-end mutation latency, excluding approval wait         | p95 ≤ 3 s and p99 ≤ 8 s                                |
+| Unexpected admitted-operation error rate                     | < 1% during the retained load window                   |
+| Recovery after injected dependency interruption              | Healthy within 60 s with no lost or duplicate mutation |
 
 Every live attempt is retained in the denominator. Hidden retries, discarded failures, replayed model responses, and fallback provider or model runs do not count as passes.
 
@@ -109,12 +141,14 @@ All stages are required for goal completion:
 
 | Stage                | Cohort                         | Entry metrics                                                | Observation duration | Exit metrics                           | Approver | Status  |
 | -------------------- | ------------------------------ | ------------------------------------------------------------ | -------------------- | -------------------------------------- | -------- | ------- |
-| Development          | Internal test agents           | Verification manifest qualified                              | Pending              | All development gates pass             | User     | Pending |
-| Allowlisted pilot    | One approved workspace         | Development pass and rollback ready                          | Pending              | Approved pilot targets pass            | User     | Pending |
-| Expanded pilot       | Approved additional workspaces | Pilot review complete                                        | Pending              | Approved expanded targets pass         | User     | Pending |
-| General availability | Approved production cohort     | Security, operations, compatibility, and rollback gates pass | Pending              | Production canary and observation pass | User     | Pending |
+| Development          | Internal test agents           | Verification manifest qualified                              | 24 hours             | All development gates pass             | User     | Pending |
+| Allowlisted pilot    | One approved workspace         | Development pass and rollback ready                          | 72 hours             | Approved pilot targets pass            | User     | Pending |
+| Expanded pilot       | Approved additional workspaces | Pilot review complete                                        | 72 hours             | Approved expanded targets pass         | User     | Pending |
+| General availability | Approved production cohort     | Security, operations, compatibility, and rollback gates pass | 24 hours             | Production canary and observation pass | User     | Pending |
 
 Each promotion requires the deployed artifact ID, enabled configuration version, metrics window, rollback threshold, last-known-good target, immutable evidence reference, approver identity, and UTC approval timestamp.
+
+Any authorization, approval, credential, isolate, duplicate-mutation, or missing-audit violation triggers immediate disablement and rollback. A rolling 20-run complete-workflow success rate below 90%, an unexpected admitted-operation error rate at or above 2% for 15 minutes, or p99 latency above twice the release gate for 15 minutes also triggers rollback review and blocks promotion.
 
 ## Exceptions
 

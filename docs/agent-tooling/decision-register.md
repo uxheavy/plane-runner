@@ -124,3 +124,6 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ATP-002 | Expose five eager semantic domain tools plus `plane_docs`, `plane_search`, and `plane_execute`.                          | \_/10      |
 | ATP-003 | Omit a general workflow-graph DSL from v1.                                                                               | \_/10      |
 | ATP-004 | Run TypeScript in a pinned Deno supervisor/Worker with explicit deny permissions inside the disposable Hermes container. | \_/10      |
+| ATP-005 | Use the v1 execution, result, artifact, approval, and audit-retention limits proposed in the release manifest.           | \_/10      |
+| ATP-006 | Use the proposed 30-minute ten-run load gate and explicit latency, error, and recovery thresholds.                       | \_/10      |
+| ATP-007 | Require 24-hour development, 72-hour allowlisted, 72-hour expanded, and 24-hour GA observation windows.                  | \_/10      |

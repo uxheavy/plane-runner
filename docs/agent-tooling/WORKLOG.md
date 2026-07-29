@@ -126,3 +126,38 @@ Obtain user approval of the proposed interface boundary before freezing the corr
 ### Next action
 
 Independently review the proposed compatibility and verification documents, then resolve the remaining numeric and runtime manifest rows.
+
+## 2026-07-29 — Independent pre-freeze review
+
+### Verdict
+
+Reject manifest freeze at Plane commit `805f12ddbf`.
+
+### Confirmed evidence
+
+- The 177-tool inventory count and digest are correct.
+- The 171 + 1 + 5 compatibility partition is syntactically complete.
+- The proposed hybrid gateway is a reasonable conceptual seam.
+
+### Freeze blockers to close
+
+- Replace category-only MCP disposition with a 177-row behavioral and gateway mapping.
+- Capture runtime `tools/list` schemas and behavioral fixtures rather than treating AST signatures as the compatibility oracle.
+- Freeze 50 distinct scenario specifications and correct scenario/trial arithmetic.
+- Expand verifier coverage from goal areas to every normative requirement and release row.
+- Define the gateway wire transport, authenticated binding, version negotiation, approval transition, and retry protocol.
+- Define pilot schemas, errors, authorization, approval, idempotency, result, and semantic-composition contracts.
+- Define approval classes, approver authorization, group preflight, freshness, dependency substitution, partial failure, and external MCP behavior.
+- Add negative controls for approval, isolate, callback identity, duplicate mutation, result limits, MCP omission, provenance, and rollback.
+- Define evidence storage, signing, trust, retention, and replacement rules.
+- Resolve immutable-model limitations, evaluator authentication, exact client versions, rollout cohorts, and durable authorities.
+- Resolve the full 177-tool release commitment versus narrow vertical-slice sequencing.
+
+### Progress after reviewed commit
+
+- Proposed explicit Deno supervisor/Worker isolate architecture at commit `1bdb3b4a14`.
+- Proposed exact execution, result, retention, performance, recovery, and observation thresholds for later approval.
+
+### Next action
+
+Obtain the immediate gateway-interface decision, then close the remaining technical pre-freeze blockers before requesting whole-manifest approval.
