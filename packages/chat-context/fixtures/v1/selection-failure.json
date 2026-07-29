@@ -1,0 +1,9 @@
+{
+  "ok": false,
+  "failure": {
+    "schemaVersion": 1,
+    "code": "NO_TARGET",
+    "message": "No semantic Plane target is available here",
+    "retryable": false
+  }
+}

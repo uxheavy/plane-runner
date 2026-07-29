@@ -5,6 +5,7 @@
  */
 
 export * from "./contracts";
+export * from "./composer-integration";
 export * from "./plane-entity-context-source";
 export * from "./plane-editor-context-source";
 export * from "./react-grab-selection-adapter";

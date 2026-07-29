@@ -247,6 +247,12 @@ The composer implementation is not present in this checkout. The core branch the
 - Fixtures demonstrating entity, field, editor, region, and failure results.
 - Contract tests that a future composer adapter can reuse.
 
+The exported `SemanticContextComposerAdapter` composes two caller-owned ports:
+authenticated hydration and verified attachment consumption. It validates
+unknown server JSON, requires exact ordered reference echoes, strips denied
+observations, and preserves canonical/client values separately. See
+[ADR 0005](./decisions/0005-composer-integration-interface.md).
+
 The missing composer does not block core implementation. It blocks final end-to-end verification only.
 
 See [Interface design](./interface-design.md) and

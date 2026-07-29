@@ -10,9 +10,9 @@
 | M3  | Plane entity adapters             | Work items, projects, cycles, modules, pages, views, fields         | Codex          | Complete | Live getter Adapter and 15-test browser regression pass |
 | M4  | Editor adapter                    | Page blocks, issue descriptions, ranges, embeds, client-live values | Codex          | Complete | Real Tiptap/Yjs tests and privacy allowlist pass        |
 | M5  | Server hydration                  | Permission-safe canonical resolution and stale/deleted handling     | Codex          | Complete | 11 hydration and five page-scope Django tests pass      |
-| M6  | Composer integration kit          | Versioned adapter, fixtures, contract tests, integration guide      | Codex          | Next     | Dummy consumer passes contract suite                    |
+| M6  | Composer integration kit          | Versioned adapter, fixtures, contract tests, integration guide      | Codex          | Complete | Dummy consumer and 23-test browser regression pass      |
 | M7  | UI integration                    | Activation, overlay, context chips, preview, composer wiring        | User UI branch | External | End-to-end workflow passes                              |
-| M8  | Region and visual fallback        | Drag regions, deduplication, snapshot evaluation                    | Shared         | Pending  | Region and privacy acceptance tests                     |
+| M8  | Region and visual fallback        | Drag regions, deduplication, snapshot evaluation                    | Shared         | Next     | Region and privacy acceptance tests                     |
 | M9  | Release verification              | Full single-user workflow and regression pass                       | Shared         | Pending  | Acceptance checklist complete                           |
 
 The active durable goal covers M1-M6, the non-UI portion of M8, and core release
@@ -81,6 +81,17 @@ verification. M7 and composer end-to-end wiring remain external to this branch.
 - [x] Return authorization-only success for live editor references.
 - [x] Exclude soft-deleted objects and relationship rows.
 - [x] Pass the focused hydration and existing page-scope regressions.
+
+## M6 checklist
+
+- [x] Export versioned hydration request, response, and attachment types.
+- [x] Provide hydration and composer consumer ports without UI dependencies.
+- [x] Parse unknown hydration responses and verify ordered reference identity.
+- [x] Remove denied observations before the composer consumer runs.
+- [x] Preserve client observations, canonical values, staleness, and warnings.
+- [x] Reject empty, oversized, and mixed-workspace bundles structurally.
+- [x] Ship JSON fixtures for entity, field, editor, region, hydration, and failure.
+- [x] Pass the dummy consumer contract and full package gates.
 
 ## Cross-branch contract
 
