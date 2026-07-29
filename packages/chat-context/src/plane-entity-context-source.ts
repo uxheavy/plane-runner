@@ -422,6 +422,7 @@ export const createPlaneEntityContextSource = ({
       case "field":
         return fieldLabel(reference.fieldKey);
       case "editor_block":
+      case "editor_range":
         return "Editor block";
       default: {
         const exhaustive: never = reference;
@@ -437,6 +438,7 @@ export const createPlaneEntityContextSource = ({
       case "field":
         return Promise.resolve(captureWorkItemField(access, reference, observedAt));
       case "editor_block":
+      case "editor_range":
         return Promise.resolve(unsupported("Editor content is resolved by the M4 live editor Adapter"));
       default: {
         const exhaustive: never = reference;

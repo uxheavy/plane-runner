@@ -4,9 +4,9 @@
 
 | Item                    | Value                                                                |
 | ----------------------- | -------------------------------------------------------------------- |
-| Active phase            | M4: editor Adapter                                                   |
-| Last completed evidence | M3 entity, field, freshness, privacy, and CoreRootStore binding      |
-| Next action             | Map Tiptap/Yjs live block and range identity in Plane editor sources |
+| Active phase            | M5: server hydration                                                 |
+| Last completed evidence | M4 live blocks, ranges, Yjs freshness, and embed privacy             |
+| Next action             | Map Django entity permission paths and define the hydration contract |
 | Blocking condition      | None                                                                 |
 
 ## Evidence log
@@ -24,6 +24,9 @@
 | 2026-07-29 | M3 map    | Mapped entities and related fields to current `CoreRootStore` owners                   | `packages/chat-context/tests/M3_EVIDENCE.md`                               | Write resolver tests            |
 | 2026-07-29 | M3 RED    | Resolver and CoreRootStore binding tests failed on their absent exports                | `plane-entity-context-source.browser.test.ts`                              | Implement live getter Adapter   |
 | 2026-07-29 | M3 GREEN  | Five M3 tests and the 15-test browser regression suite passed                          | `m3-plane-entity-adapter.md`                                               | Start M4 editor source mapping  |
+| 2026-07-29 | M4 map    | Chose existing Plane block IDs and block-relative ProseMirror offsets                  | `decisions/0003-live-editor-identity.md`                                   | Write live editor tests         |
+| 2026-07-29 | M4 RED    | Real Tiptap/Yjs suite failed because the editor source export was absent               | `packages/chat-context/tests/M4_EVIDENCE.md`                               | Implement editor Adapter        |
+| 2026-07-29 | M4 GREEN  | Four editor tests and the 19-test browser regression suite passed                      | `m4-live-editor-adapter.md`                                                | Start M5 permission mapping     |
 
 ## Recording rules
 

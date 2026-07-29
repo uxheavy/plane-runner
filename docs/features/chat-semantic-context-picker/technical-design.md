@@ -2,14 +2,14 @@
 
 ## Stack decisions
 
-| Layer | Technology | Reason |
-| --- | --- | --- |
-| Selection engine | TypeScript DOM module | Matches Plane and can remain independent of React presentation. |
-| Framework adapter | React | Matches `apps/web` and the future composer UI. |
-| Entity values | Existing MobX stores | Provides current normalized Plane state. |
-| Editor context | Existing Tiptap and Yjs interfaces | Preserves stable block IDs and client-live collaborative content. |
-| Server resolution | Existing Django/Python API | Reuses Plane permission and entity-query behavior. |
-| Tests | Existing TypeScript and Django test tooling | Avoids parallel infrastructure. |
+| Layer             | Technology                                  | Reason                                                            |
+| ----------------- | ------------------------------------------- | ----------------------------------------------------------------- |
+| Selection engine  | TypeScript DOM module                       | Matches Plane and can remain independent of React presentation.   |
+| Framework adapter | React                                       | Matches `apps/web` and the future composer UI.                    |
+| Entity values     | Existing MobX stores                        | Provides current normalized Plane state.                          |
+| Editor context    | Existing Tiptap and Yjs interfaces          | Preserves stable block IDs and client-live collaborative content. |
+| Server resolution | Existing Django/Python API                  | Reuses Plane permission and entity-query behavior.                |
+| Tests             | Existing TypeScript and Django test tooling | Avoids parallel infrastructure.                                   |
 
 ## Public core module
 
@@ -21,12 +21,12 @@ interface SemanticContextPicker {
 }
 ```
 
-| Operation | Responsibility | Excludes |
-| --- | --- | --- |
-| `register` | Associate a mounted element with typed Plane identity | Values, records, permissions, and DOM metadata |
-| `select: preview` | Locate and rank candidates | MobX/editor value reads |
+| Operation         | Responsibility                                           | Excludes                                        |
+| ----------------- | -------------------------------------------------------- | ----------------------------------------------- |
+| `register`        | Associate a mounted element with typed Plane identity    | Values, records, permissions, and DOM metadata  |
+| `select: preview` | Locate and rank candidates                               | MobX/editor value reads                         |
 | `select: capture` | Resolve current allowlisted values and serialize context | Treating client data as authorized or canonical |
-| `dispose` | Cancel work and release browser resources | UI state ownership |
+| `dispose`         | Cancel work and release browser resources                | UI state ownership                              |
 
 React convenience hooks and an overlay session controller are thin Adapters. The
 registry, React Grab integration, resolvers, serializer, and lifecycle state remain
@@ -67,23 +67,25 @@ type SemanticReferenceV1 =
       kind: "editor_block";
       document: EntityReferenceV1 & { entityType: "page" | "work_item" };
       blockId: string;
+    }
+  | {
+      kind: "editor_range";
+      document: EntityReferenceV1 & { entityType: "page" | "work_item" };
+      start: { blockId: string; offset: number };
+      end: { blockId: string; offset: number };
     };
 ```
 
 Field keys are explicit allowlists grouped by entity type, never arbitrary property
-paths. Other entity field unions are added with their adapters. Editor ranges are
-added when M4 proves their stable Tiptap/Yjs identity.
+paths. Other entity field unions are added with their adapters. Editor blocks use
+Plane's existing `UniqueID` values. Ranges use start/end block IDs plus ProseMirror
+offsets relative to each block's content. See
+[ADR 0003](./decisions/0003-live-editor-identity.md).
 
 ## Selection contract
 
 ```ts
-type JsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | JsonValue[]
-  | { [key: string]: JsonValue };
+type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
 type SemanticTarget = {
   reference: SemanticReferenceV1;
@@ -177,39 +179,33 @@ is deferred to M8 so privacy and storage decisions do not leak into M2.
 ```ts
 type SelectionFailureV1 = {
   schemaVersion: 1;
-  code:
-    | "NO_TARGET"
-    | "TARGET_GONE"
-    | "UNSUPPORTED"
-    | "VALUE_UNAVAILABLE"
-    | "ABORTED"
-    | "TOO_MANY_TARGETS";
+  code: "NO_TARGET" | "TARGET_GONE" | "UNSUPPORTED" | "VALUE_UNAVAILABLE" | "ABORTED" | "TOO_MANY_TARGETS";
   message: string;
   reference?: SemanticReferenceV1;
   retryable: boolean;
 };
 ```
 
-| Code | Meaning | Retryable |
-| --- | --- | --- |
-| `NO_TARGET` | Nothing semantic matched the selection | No |
-| `TARGET_GONE` | The registered target detached before capture | Yes |
-| `UNSUPPORTED` | The target has no approved resolver | No |
-| `VALUE_UNAVAILABLE` | Identity is known but its value cannot be read | Yes |
-| `ABORTED` | Navigation, cancellation, or a newer selection ended the operation | Yes |
-| `TOO_MANY_TARGETS` | A region exceeded its bounded result limit | No |
+| Code                | Meaning                                                            | Retryable |
+| ------------------- | ------------------------------------------------------------------ | --------- |
+| `NO_TARGET`         | Nothing semantic matched the selection                             | No        |
+| `TARGET_GONE`       | The registered target detached before capture                      | Yes       |
+| `UNSUPPORTED`       | The target has no approved resolver                                | No        |
+| `VALUE_UNAVAILABLE` | Identity is known but its value cannot be read                     | Yes       |
+| `ABORTED`           | Navigation, cancellation, or a newer selection ended the operation | Yes       |
+| `TOO_MANY_TARGETS`  | A region exceeded its bounded result limit                         | No        |
 
 Permission, missing, and stale failures from server hydration use the same
 structured result convention but remain a separate server output type.
 
 ## Freshness rules
 
-| Source | Treatment |
-| --- | --- |
-| MobX entity | Capture the immediate observed value and entity `updated_at` when available. |
-| Django entity | Re-fetch under the acting user when the message is submitted or used. |
+| Source               | Treatment                                                                               |
+| -------------------- | --------------------------------------------------------------------------------------- |
+| MobX entity          | Capture the immediate observed value and entity `updated_at` when available.            |
+| Django entity        | Re-fetch under the acting user when the message is submitted or used.                   |
 | Collaborative editor | Capture selected content from the live Tiptap/Yjs state and identify it as client-live. |
-| Conflict | Preserve the observed value and canonical value with separate timestamps. |
+| Conflict             | Preserve the observed value and canonical value with separate timestamps.               |
 
 ## Permission and privacy rules
 
@@ -238,12 +234,12 @@ the stable contract decision.
 
 ## Open-source references
 
-| Project | Use | License | Decision |
-| --- | --- | --- | --- |
-| [React Grab](https://github.com/aidenybai/react-grab) | Hit-testing, ignored subtrees, page-freezing, and picker lifecycle primitives | MIT | Primary foundation behind a Plane-owned adapter |
-| [React Dev Inspector](https://github.com/zthxxx/react-dev-inspector) | Inspector activation, hover, click, and cleanup reference | MIT | Secondary reference |
-| [stagewise](https://github.com/stagewise-io/stagewise) | Selected-browser-context-to-agent product model | AGPL-3.0 | Product reference; do not import the full toolbar |
-| [html2canvas](https://github.com/niklasvh/html2canvas) | Possible later visual fallback | MIT | Evaluate separately; not foundational |
+| Project                                                              | Use                                                                           | License  | Decision                                          |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------------- | -------- | ------------------------------------------------- |
+| [React Grab](https://github.com/aidenybai/react-grab)                | Hit-testing, ignored subtrees, page-freezing, and picker lifecycle primitives | MIT      | Primary foundation behind a Plane-owned adapter   |
+| [React Dev Inspector](https://github.com/zthxxx/react-dev-inspector) | Inspector activation, hover, click, and cleanup reference                     | MIT      | Secondary reference                               |
+| [stagewise](https://github.com/stagewise-io/stagewise)               | Selected-browser-context-to-agent product model                               | AGPL-3.0 | Product reference; do not import the full toolbar |
+| [html2canvas](https://github.com/niklasvh/html2canvas)               | Possible later visual fallback                                                | MIT      | Evaluate separately; not foundational             |
 
 ## Dependency rule
 

@@ -29,6 +29,26 @@ export type WorkItemContextField =
   | "cycle"
   | "module";
 
+export type EditorDocumentReferenceV1 = EntityReferenceV1 & { readonly entityType: "page" | "work_item" };
+
+export type EditorRangePointV1 = {
+  readonly blockId: string;
+  readonly offset: number;
+};
+
+export type EditorBlockReferenceV1 = {
+  readonly kind: "editor_block";
+  readonly document: EditorDocumentReferenceV1;
+  readonly blockId: string;
+};
+
+export type EditorRangeReferenceV1 = {
+  readonly kind: "editor_range";
+  readonly document: EditorDocumentReferenceV1;
+  readonly start: EditorRangePointV1;
+  readonly end: EditorRangePointV1;
+};
+
 export type SemanticReferenceV1 =
   | EntityReferenceV1
   | {
@@ -36,11 +56,8 @@ export type SemanticReferenceV1 =
       readonly entity: EntityReferenceV1 & { readonly entityType: "work_item"; readonly projectId: string };
       readonly fieldKey: WorkItemContextField;
     }
-  | {
-      readonly kind: "editor_block";
-      readonly document: EntityReferenceV1 & { readonly entityType: "page" | "work_item" };
-      readonly blockId: string;
-    };
+  | EditorBlockReferenceV1
+  | EditorRangeReferenceV1;
 
 export type SemanticTarget = {
   readonly reference: SemanticReferenceV1;

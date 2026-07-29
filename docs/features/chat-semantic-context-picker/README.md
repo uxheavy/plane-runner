@@ -4,13 +4,13 @@
 
 | Item               | Value                                                          |
 | ------------------ | -------------------------------------------------------------- |
-| Phase              | M4 editor Adapter                                              |
+| Phase              | M5 server hydration                                            |
 | Branch             | `chat-semantic-context-picker-core`                            |
 | Owner              | Codex: product and technical lead                              |
 | UI ownership       | Separate user-managed branch                                   |
 | Product validation | Complete through prior use of Cursor and Codex inspector modes |
 | Release audience   | Single user; no staged rollout required                        |
-| Next milestone     | Resolve live Tiptap/Yjs blocks, ranges, and embeds             |
+| Next milestone     | Resolve references canonically with server permissions         |
 
 ## Product outcome
 
@@ -31,9 +31,11 @@ Structured Plane references and current values are preferred. Visual context is 
 | [M1 evidence](./m1-selection-foundation.md)           | Pinned dependency, browser proof, bundle proof, and boundary correction |
 | [M2 evidence](./m2-core-contracts.md)                 | Versioned contract, registry, lifecycle, browser, and build proof       |
 | [M3 evidence](./m3-plane-entity-adapter.md)           | Plane store mapping, field allowlist, freshness, and privacy proof      |
+| [M4 evidence](./m4-live-editor-adapter.md)            | Live Tiptap/Yjs blocks, ranges, embeds, and privacy proof               |
 | [Delivery plan](./delivery-plan.md)                   | Milestones, ownership, status, and completion evidence                  |
 | [ADR 0001](./decisions/0001-selection-foundation.md)  | Selection foundation and dependency decision                            |
 | [ADR 0002](./decisions/0002-picker-core-interface.md) | Minimal domain-typed picker interface decision                          |
+| [ADR 0003](./decisions/0003-live-editor-identity.md)  | Editor block and range identity decision                                |
 
 ## Working rules
 
@@ -45,7 +47,7 @@ Structured Plane references and current values are preferred. Visual context is 
 
 ## Immediate next actions
 
-1. Map Plane's current Tiptap/Yjs ownership and stable block identifiers.
-2. Define the M4 editor evidence contract before implementation.
-3. Resolve blocks, supported ranges, and embeds from live editor state.
-4. Keep cached HTML and visual snapshots outside the semantic editor path.
+1. Map current Django entity retrieval and permission paths.
+2. Define the versioned hydration request and result contract.
+3. Reauthorize every reference and return canonical current values.
+4. Verify workspace roles, private projects and pages, deletion, and mismatch cases.

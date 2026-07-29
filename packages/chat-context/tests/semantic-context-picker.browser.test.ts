@@ -40,6 +40,8 @@ const referenceKey = (reference: SemanticReferenceV1): string => {
       return `${reference.entity.entityType}:${reference.entity.entityId}:${reference.fieldKey}`;
     case "editor_block":
       return `${reference.document.entityType}:${reference.document.entityId}:${reference.blockId}`;
+    case "editor_range":
+      return `${reference.document.entityType}:${reference.document.entityId}:${reference.start.blockId}:${reference.start.offset}:${reference.end.blockId}:${reference.end.offset}`;
     default: {
       const exhaustive: never = reference;
       return exhaustive;

@@ -8,8 +8,8 @@
 | M1  | Selection-foundation spike        | Pin and validate React Grab primitives in Plane                     | Codex          | Complete | Real Chrome tests and production bundle verifier pass     |
 | M2  | Core contracts and registry       | Types, registry, point/region result model                          | Codex          | Complete | Ten browser contract tests and package gates pass         |
 | M3  | Plane entity adapters             | Work items, projects, cycles, modules, pages, views, fields         | Codex          | Complete | Live getter Adapter and 15-test browser regression pass   |
-| M4  | Editor adapter                    | Page blocks, issue descriptions, ranges, embeds, client-live values | Codex          | Next     | Tiptap/Yjs adapter tests                                  |
-| M5  | Server hydration                  | Permission-safe canonical resolution and stale/deleted handling     | Codex          | Pending  | Django tests for roles, projects, private pages, failures |
+| M4  | Editor adapter                    | Page blocks, issue descriptions, ranges, embeds, client-live values | Codex          | Complete | Real Tiptap/Yjs tests and privacy allowlist pass          |
+| M5  | Server hydration                  | Permission-safe canonical resolution and stale/deleted handling     | Codex          | Next     | Django tests for roles, projects, private pages, failures |
 | M6  | Composer integration kit          | Versioned adapter, fixtures, contract tests, integration guide      | Codex          | Pending  | Dummy consumer passes contract suite                      |
 | M7  | UI integration                    | Activation, overlay, context chips, preview, composer wiring        | User UI branch | External | End-to-end workflow passes                                |
 | M8  | Region and visual fallback        | Drag regions, deduplication, snapshot evaluation                    | Shared         | Pending  | Region and privacy acceptance tests                       |
@@ -59,6 +59,17 @@ verification. M7 and composer end-to-end wiring remain external to this branch.
 - [x] Exclude whole records, member email, view queries, and editor bodies.
 - [x] Return typed missing, mismatched, and editor-handoff failures.
 - [x] Pass the full M1-M3 browser regression suite and package gates.
+
+## M4 checklist
+
+- [x] Reuse Plane's existing `UniqueID` block identity.
+- [x] Add block-relative editor range references without changing prior variants.
+- [x] Resolve blocks and ranges from live Tiptap state.
+- [x] Observe remote updates through a shared Yjs document.
+- [x] Project work-item and image embeds through explicit privacy allowlists.
+- [x] Fail closed for missing, duplicate, stale, and destroyed editor state.
+- [x] Keep Tiptap and Yjs out of production runtime dependencies.
+- [x] Pass the full 19-test browser regression suite and package gates.
 
 ## Cross-branch contract
 

@@ -53,6 +53,8 @@ const referenceKey = (reference: SemanticReferenceV1): string => {
       return `${referenceKey(reference.entity)}:${reference.fieldKey}`;
     case "editor_block":
       return `${referenceKey(reference.document)}:${reference.blockId}`;
+    case "editor_range":
+      return `${referenceKey(reference.document)}:${reference.start.blockId}:${reference.start.offset}:${reference.end.blockId}:${reference.end.offset}`;
     default: {
       const exhaustive: never = reference;
       return exhaustive;
@@ -68,6 +70,13 @@ const cloneReference = (reference: SemanticReferenceV1): SemanticReferenceV1 => 
       return { kind: "field", entity: { ...reference.entity }, fieldKey: reference.fieldKey };
     case "editor_block":
       return { kind: "editor_block", document: { ...reference.document }, blockId: reference.blockId };
+    case "editor_range":
+      return {
+        kind: "editor_range",
+        document: { ...reference.document },
+        start: { ...reference.start },
+        end: { ...reference.end },
+      };
     default: {
       const exhaustive: never = reference;
       return exhaustive;
