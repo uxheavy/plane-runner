@@ -2,31 +2,33 @@
 
 ## Milestone status
 
-| ID | Milestone | Scope | Owner | Status | Completion evidence |
-| --- | --- | --- | --- | --- | --- |
-| M0 | Product and architecture baseline | Scope, boundaries, ADR, branch, tracking | Codex | Complete | Feature dossier merged on feature branch |
-| M1 | Selection-foundation spike | Pin and validate React Grab primitives in Plane | Codex | Next | Tests or harness prove hit-test, ignore, cleanup, portals |
-| M2 | Core contracts and registry | Types, registry, point/region result model | Codex | Designed | ADR 0002 accepted; implementation and tests pending |
-| M3 | Plane entity adapters | Work items, projects, cycles, modules, pages, views, fields | Codex | Pending | Adapter tests with current store values |
-| M4 | Editor adapter | Page blocks, issue descriptions, ranges, embeds, client-live values | Codex | Pending | Tiptap/Yjs adapter tests |
-| M5 | Server hydration | Permission-safe canonical resolution and stale/deleted handling | Codex | Pending | Django tests for roles, projects, private pages, failures |
-| M6 | Composer integration kit | Versioned adapter, fixtures, contract tests, integration guide | Codex | Pending | Dummy consumer passes contract suite |
-| M7 | UI integration | Activation, overlay, context chips, preview, composer wiring | User UI branch | External | End-to-end workflow passes |
-| M8 | Region and visual fallback | Drag regions, deduplication, snapshot evaluation | Shared | Pending | Region and privacy acceptance tests |
-| M9 | Release verification | Full single-user workflow and regression pass | Shared | Pending | Acceptance checklist complete |
+| ID  | Milestone                         | Scope                                                               | Owner          | Status   | Completion evidence                                       |
+| --- | --------------------------------- | ------------------------------------------------------------------- | -------------- | -------- | --------------------------------------------------------- |
+| M0  | Product and architecture baseline | Scope, boundaries, ADR, branch, tracking                            | Codex          | Complete | Feature dossier merged on feature branch                  |
+| M1  | Selection-foundation spike        | Pin and validate React Grab primitives in Plane                     | Codex          | Complete | Real Chrome tests and production bundle verifier pass     |
+| M2  | Core contracts and registry       | Types, registry, point/region result model                          | Codex          | Next     | ADR 0002 accepted; implementation and tests pending       |
+| M3  | Plane entity adapters             | Work items, projects, cycles, modules, pages, views, fields         | Codex          | Pending  | Adapter tests with current store values                   |
+| M4  | Editor adapter                    | Page blocks, issue descriptions, ranges, embeds, client-live values | Codex          | Pending  | Tiptap/Yjs adapter tests                                  |
+| M5  | Server hydration                  | Permission-safe canonical resolution and stale/deleted handling     | Codex          | Pending  | Django tests for roles, projects, private pages, failures |
+| M6  | Composer integration kit          | Versioned adapter, fixtures, contract tests, integration guide      | Codex          | Pending  | Dummy consumer passes contract suite                      |
+| M7  | UI integration                    | Activation, overlay, context chips, preview, composer wiring        | User UI branch | External | End-to-end workflow passes                                |
+| M8  | Region and visual fallback        | Drag regions, deduplication, snapshot evaluation                    | Shared         | Pending  | Region and privacy acceptance tests                       |
+| M9  | Release verification              | Full single-user workflow and regression pass                       | Shared         | Pending  | Acceptance checklist complete                             |
 
 The active durable goal covers M1-M6, the non-UI portion of M8, and core release
 verification. M7 and composer end-to-end wiring remain external to this branch.
 
 ## M1 checklist
 
-- [ ] Select and pin a React Grab version.
-- [ ] Review package exports, bundle impact, and transitive dependencies.
-- [ ] Verify point hit-testing inside the Plane app container.
-- [ ] Verify ignored picker/composer subtrees.
-- [ ] Verify cleanup after Escape, selection, navigation, and unmount.
-- [ ] Verify portals and nested interactive elements.
-- [ ] Record findings and update ADR 0001 if the dependency boundary changes.
+- [x] Select and pin React Grab 0.1.50.
+- [x] Review package exports, bundle impact, and transitive dependencies.
+- [x] Verify production point hit-testing without source instrumentation.
+- [x] Verify Plane and React Grab ignored subtrees.
+- [x] Verify the stateless adapter retains no detached target or global pointer state.
+- [x] Verify portals, open shadow roots, and nested interactive elements.
+- [x] Move Escape, confirmation, navigation ownership, and disposal to M2 because
+      the accepted adapter installs no listeners and does not freeze the page.
+- [x] Record findings and narrow ADR 0001 to stateless acquisition primitives.
 
 ## M2 accepted boundary
 
@@ -39,25 +41,25 @@ verification. M7 and composer end-to-end wiring remain external to this branch.
 
 ## Cross-branch contract
 
-| Core branch provides | UI branch provides |
-| --- | --- |
-| Selection engine lifecycle | Composer activation control |
-| Target registration and resolution | Hover and selection overlays |
-| Context and failure result types | Context chips and previews |
-| Editor/entity/server adapters | User-facing errors and removal controls |
-| Composer adapter contract and fixtures | Actual composer transport wiring |
-| Core and permission tests | End-to-end interaction tests |
+| Core branch provides                   | UI branch provides                      |
+| -------------------------------------- | --------------------------------------- |
+| Selection engine lifecycle             | Composer activation control             |
+| Target registration and resolution     | Hover and selection overlays            |
+| Context and failure result types       | Context chips and previews              |
+| Editor/entity/server adapters          | User-facing errors and removal controls |
+| Composer adapter contract and fixtures | Actual composer transport wiring        |
+| Core and permission tests              | End-to-end interaction tests            |
 
 ## Risks and responses
 
-| Risk | Response | Status |
-| --- | --- | --- |
-| React Grab primitives assume development source metadata | Use hit-testing primitives only and prove production behavior in M1. | Open |
-| Generic Plane UI loses owning entity/field identity | Register context at entity-aware call sites or shared semantic wrappers. | Open |
-| Client values differ from server state | Preserve observed and canonical values separately. | Designed |
-| Private or cross-project data leaks | Reauthorize on the server and allowlist fields. | Designed |
-| Composer contract differs when its code appears | Keep a versioned adapter and contract fixtures. | Open |
-| Visual capture leaks unrelated content | Require preview, denied surfaces, and explicit visual-only labeling. | Deferred to M8 |
+| Risk                                                     | Response                                                                 | Status         |
+| -------------------------------------------------------- | ------------------------------------------------------------------------ | -------------- |
+| React Grab primitives assume development source metadata | Use hit-testing primitives only and prove production behavior in M1.     | Mitigated      |
+| Generic Plane UI loses owning entity/field identity      | Register context at entity-aware call sites or shared semantic wrappers. | Open           |
+| Client values differ from server state                   | Preserve observed and canonical values separately.                       | Designed       |
+| Private or cross-project data leaks                      | Reauthorize on the server and allowlist fields.                          | Designed       |
+| Composer contract differs when its code appears          | Keep a versioned adapter and contract fixtures.                          | Open           |
+| Visual capture leaks unrelated content                   | Require preview, denied surfaces, and explicit visual-only labeling.     | Deferred to M8 |
 
 ## Definition of done
 

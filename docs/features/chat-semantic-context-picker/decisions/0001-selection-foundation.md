@@ -12,8 +12,11 @@ The semantic context picker needs proven browser inspection behavior without cre
 
 Use [React Grab](https://github.com/aidenybai/react-grab) as the primary open-source foundation for browser selection.
 
-- Adopt its reusable primitives for hit-testing, ignored subtrees, page-freezing, and picker lifecycle where they pass the M1 spike.
-- Pin the selected version.
+- Pin `react-grab@0.1.50` exactly.
+- Adopt only `getElementsAtPoint` and `isElementGrabbable` from
+  `react-grab/primitives` for stateless acquisition and ignored-subtree behavior.
+- Do not adopt page freezing, source context, clipboard, editor opening, the full
+  renderer, or React Grab's lifecycle listeners.
 - Access it only through a Plane-owned selection adapter.
 - Keep Plane target registration, context resolution, permission handling, freshness, and serialization independent of React Grab.
 - Use React Dev Inspector and stagewise as secondary implementation and product references.
@@ -21,12 +24,13 @@ Use [React Grab](https://github.com/aidenybai/react-grab) as the primary open-so
 
 ## Consequences
 
-| Positive | Cost |
-| --- | --- |
-| Reuses a maintained MIT-licensed inspector engine | Requires a dependency validation spike |
-| Matches Plane's TypeScript and React environment | Needs an adapter because React Grab targets source context |
-| Avoids a fully custom hit-testing lifecycle | Package changes must be absorbed behind the adapter |
-| Leaves Plane semantics and permissions under Plane control | Semantic registration remains Plane-specific work |
+| Positive                                                   | Cost                                                       |
+| ---------------------------------------------------------- | ---------------------------------------------------------- |
+| Reuses a maintained MIT-licensed inspector engine          | Requires a dependency validation spike                     |
+| Matches Plane's TypeScript and React environment           | Needs an adapter because React Grab targets source context |
+| Avoids a fully custom hit-testing lifecycle                | Package changes must be absorbed behind the adapter        |
+| Leaves Plane semantics and permissions under Plane control | Semantic registration remains Plane-specific work          |
+| Real Chrome and bundle verifiers guard the dependency seam | The package installs an unused CLI transitively            |
 
 ## Reconsider when
 
@@ -34,3 +38,9 @@ Use [React Grab](https://github.com/aidenybai/react-grab) as the primary open-so
 - Bundle or runtime cost is disproportionate to the primitive surface used.
 - Portal, iframe, or cleanup behavior cannot satisfy acceptance criteria.
 - A smaller stable primitive package already present in Plane covers the same behavior.
+
+## M1 evidence
+
+See [M1 selection-foundation evidence](../m1-selection-foundation.md). The adapter
+is intentionally stateless; Plane owns Escape, confirmation, navigation, unmount,
+and disposal behavior in M2.

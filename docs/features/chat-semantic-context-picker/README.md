@@ -2,15 +2,15 @@
 
 ## Current status
 
-| Item | Value |
-| --- | --- |
-| Phase | Foundation and dependency validation |
-| Branch | `chat-semantic-context-picker-core` |
-| Owner | Codex: product and technical lead |
-| UI ownership | Separate user-managed branch |
+| Item               | Value                                                          |
+| ------------------ | -------------------------------------------------------------- |
+| Phase              | M2 core contracts and registry                                 |
+| Branch             | `chat-semantic-context-picker-core`                            |
+| Owner              | Codex: product and technical lead                              |
+| UI ownership       | Separate user-managed branch                                   |
 | Product validation | Complete through prior use of Cursor and Codex inspector modes |
-| Release audience | Single user; no staged rollout required |
-| Next milestone | Validate and isolate React Grab primitives |
+| Release audience   | Single user; no staged rollout required                        |
+| Next milestone     | Implement the accepted picker contract and registry            |
 
 ## Product outcome
 
@@ -20,17 +20,18 @@ Structured Plane references and current values are preferred. Visual context is 
 
 ## Documents
 
-| Document | Purpose |
-| --- | --- |
-| [Product specification](./product-spec.md) | Scope, behavior, boundaries, and acceptance criteria |
-| [Active goal](./GOAL.md) | Non-UI finish line, verifier, constraints, and approval gates |
-| [Worklog](./WORKLOG.md) | Attempts, evidence, current state, and next action |
-| [Final result](./RESULT.md) | Completion proof and UI-branch handoff |
-| [Technical design](./technical-design.md) | Core modules, contracts, freshness, and permissions |
-| [Interface design](./interface-design.md) | Alternatives, comparison, and chosen public seam |
-| [Delivery plan](./delivery-plan.md) | Milestones, ownership, status, and completion evidence |
-| [ADR 0001](./decisions/0001-selection-foundation.md) | Selection foundation and dependency decision |
-| [ADR 0002](./decisions/0002-picker-core-interface.md) | Minimal domain-typed picker interface decision |
+| Document                                              | Purpose                                                                 |
+| ----------------------------------------------------- | ----------------------------------------------------------------------- |
+| [Product specification](./product-spec.md)            | Scope, behavior, boundaries, and acceptance criteria                    |
+| [Active goal](./GOAL.md)                              | Non-UI finish line, verifier, constraints, and approval gates           |
+| [Worklog](./WORKLOG.md)                               | Attempts, evidence, current state, and next action                      |
+| [Final result](./RESULT.md)                           | Completion proof and UI-branch handoff                                  |
+| [Technical design](./technical-design.md)             | Core modules, contracts, freshness, and permissions                     |
+| [Interface design](./interface-design.md)             | Alternatives, comparison, and chosen public seam                        |
+| [M1 evidence](./m1-selection-foundation.md)           | Pinned dependency, browser proof, bundle proof, and boundary correction |
+| [Delivery plan](./delivery-plan.md)                   | Milestones, ownership, status, and completion evidence                  |
+| [ADR 0001](./decisions/0001-selection-foundation.md)  | Selection foundation and dependency decision                            |
+| [ADR 0002](./decisions/0002-picker-core-interface.md) | Minimal domain-typed picker interface decision                          |
 
 ## Working rules
 
@@ -42,7 +43,7 @@ Structured Plane references and current values are preferred. Visual context is 
 
 ## Immediate next actions
 
-1. Inspect the pinned React Grab primitives and their transitive dependencies.
-2. Prove point hit-testing, ignored subtrees, cleanup, and portal behavior in Plane.
-3. Validate the accepted core contract against the spike evidence.
-4. Implement the registry and resolver interfaces with tests.
+1. Implement the versioned request, result, reference, and failure contracts.
+2. Implement semantic registration, point ranking, cancellation, and disposal.
+3. Reuse the M1 browser harness for production and fake acquisition contract tests.
+4. Add region candidate collection without visual fallback capture.
