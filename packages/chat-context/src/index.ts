@@ -4,4 +4,6 @@
  * See the LICENSE file for details.
  */
 
+export * from "./contracts";
 export * from "./react-grab-selection-adapter";
+export * from "./semantic-context-picker";

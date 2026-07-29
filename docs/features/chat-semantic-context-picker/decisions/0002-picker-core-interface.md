@@ -44,22 +44,29 @@ interface SemanticContextPicker {
 
 ## Consequences
 
-| Positive | Cost |
-| --- | --- |
-| Three operations are the stable test and integration surface | Internal orchestration remains substantial |
-| Plane identity is explicit and auditable | New entity kinds require deliberate union and resolver changes |
-| React Grab and UI lifecycle can change locally | React call sites still need semantic registration |
-| Preview avoids MobX/editor reads | Capture is asynchronous |
-| Future composer consumes only a versioned bundle | Final transport validation waits for composer access |
+| Positive                                                     | Cost                                                           |
+| ------------------------------------------------------------ | -------------------------------------------------------------- |
+| Three operations are the stable test and integration surface | Internal orchestration remains substantial                     |
+| Plane identity is explicit and auditable                     | New entity kinds require deliberate union and resolver changes |
+| React Grab and UI lifecycle can change locally               | React call sites still need semantic registration              |
+| Preview avoids MobX/editor reads                             | Capture is asynchronous                                        |
+| Future composer consumes only a versioned bundle             | Final transport validation waits for composer access           |
+
+## Implementation evidence
+
+M2 implements the Interface in `@plane/chat-context`. Browser contract tests prove
+nested preview, fresh point capture, partial region capture, replacement-safe
+registration, and disposal during pending work. See
+[M2 evidence](../m2-core-contracts.md).
 
 ## Rejected alternatives
 
-| Alternative | Reason |
-| --- | --- |
-| React hooks as the core | Couples the engine and tests to presentation. |
+| Alternative              | Reason                                                             |
+| ------------------------ | ------------------------------------------------------------------ |
+| React hooks as the core  | Couples the engine and tests to presentation.                      |
 | Public plugin registries | Creates extension contracts before multiple implementations exist. |
-| Public state machine | Exposes overlay lifecycle to entity and composer consumers. |
-| DOM inference only | Cannot recover reliable Plane object and field identity. |
+| Public state machine     | Exposes overlay lifecycle to entity and composer consumers.        |
+| DOM inference only       | Cannot recover reliable Plane object and field identity.           |
 
 ## Reconsider when
 

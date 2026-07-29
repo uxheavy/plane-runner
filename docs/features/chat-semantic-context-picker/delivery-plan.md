@@ -6,8 +6,8 @@
 | --- | --------------------------------- | ------------------------------------------------------------------- | -------------- | -------- | --------------------------------------------------------- |
 | M0  | Product and architecture baseline | Scope, boundaries, ADR, branch, tracking                            | Codex          | Complete | Feature dossier merged on feature branch                  |
 | M1  | Selection-foundation spike        | Pin and validate React Grab primitives in Plane                     | Codex          | Complete | Real Chrome tests and production bundle verifier pass     |
-| M2  | Core contracts and registry       | Types, registry, point/region result model                          | Codex          | Next     | ADR 0002 accepted; implementation and tests pending       |
-| M3  | Plane entity adapters             | Work items, projects, cycles, modules, pages, views, fields         | Codex          | Pending  | Adapter tests with current store values                   |
+| M2  | Core contracts and registry       | Types, registry, point/region result model                          | Codex          | Complete | Ten browser contract tests and package gates pass         |
+| M3  | Plane entity adapters             | Work items, projects, cycles, modules, pages, views, fields         | Codex          | Next     | Adapter tests with current store values                   |
 | M4  | Editor adapter                    | Page blocks, issue descriptions, ranges, embeds, client-live values | Codex          | Pending  | Tiptap/Yjs adapter tests                                  |
 | M5  | Server hydration                  | Permission-safe canonical resolution and stale/deleted handling     | Codex          | Pending  | Django tests for roles, projects, private pages, failures |
 | M6  | Composer integration kit          | Versioned adapter, fixtures, contract tests, integration guide      | Codex          | Pending  | Dummy consumer passes contract suite                      |
@@ -38,6 +38,17 @@ verification. M7 and composer end-to-end wiring remain external to this branch.
 - React Grab, registry, state machine, resolvers, and serialization stay private.
 - A fake acquisition Adapter and production React Grab Adapter share contract tests.
 - Server hydration and composer transport remain separate Adapters.
+
+## M2 checklist
+
+- [x] Export versioned reference, request, context, and failure contracts.
+- [x] Register copied semantic identities without storing values in the DOM.
+- [x] Preview nested point candidates without resolving values.
+- [x] Capture the fresh top point target without silently falling back.
+- [x] Capture deterministic, bounded, deduplicated regions with partial warnings.
+- [x] Abort superseded, externally cancelled, and disposed operations.
+- [x] Verify lifecycle behavior in stable Google Chrome.
+- [x] Pass strict types, lint, format, build, and production bundle gates.
 
 ## Cross-branch contract
 

@@ -15,6 +15,7 @@ export type ViewportPoint = {
 
 export interface ReactGrabSelectionAdapter {
   getElementsAtPoint(point: ViewportPoint): readonly Element[];
+  isElementEligible(element: Element): boolean;
 }
 
 const getComposedParent = (element: Element): Element | null => {
@@ -59,4 +60,5 @@ export const createReactGrabSelectionAdapter = (): ReactGrabSelectionAdapter => 
       filter: (candidate) => isElementGrabbable(candidate) && !isInsidePlaneIgnoredSurface(candidate),
     });
   },
+  isElementEligible: (element) => isElementGrabbable(element) && !isInsidePlaneIgnoredSurface(element),
 });
