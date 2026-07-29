@@ -15,6 +15,9 @@
 | M8 | Region and visual fallback | Drag regions, deduplication, snapshot evaluation | Shared | Pending | Region and privacy acceptance tests |
 | M9 | Release verification | Full single-user workflow and regression pass | Shared | Pending | Acceptance checklist complete |
 
+The active durable goal covers M1-M6, the non-UI portion of M8, and core release
+verification. M7 and composer end-to-end wiring remain external to this branch.
+
 ## M1 checklist
 
 - [ ] Select and pin a React Grab version.

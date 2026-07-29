@@ -23,6 +23,9 @@ Structured Plane references and current values are preferred. Visual context is 
 | Document | Purpose |
 | --- | --- |
 | [Product specification](./product-spec.md) | Scope, behavior, boundaries, and acceptance criteria |
+| [Active goal](./GOAL.md) | Non-UI finish line, verifier, constraints, and approval gates |
+| [Worklog](./WORKLOG.md) | Attempts, evidence, current state, and next action |
+| [Final result](./RESULT.md) | Completion proof and UI-branch handoff |
 | [Technical design](./technical-design.md) | Core modules, contracts, freshness, and permissions |
 | [Interface design](./interface-design.md) | Alternatives, comparison, and chosen public seam |
 | [Delivery plan](./delivery-plan.md) | Milestones, ownership, status, and completion evidence |
