@@ -7,12 +7,11 @@ The core deep-hybrid boundary was accepted by the user on 2026-07-29. Exact eage
 ## Design constraints
 
 - Plane authorization remains the permission oracle for every operation.
-- Approval policy is a separate decision and cannot grant missing Plane permission.
 - Credentials, workspace identity, agent identity, and run identity are trusted host context.
 - Generated TypeScript receives none of those credentials.
 - Native Hermes tools, TypeScript Code Mode, and external MCP compatibility converge on one gateway module.
 - The v1 interface should keep common calls obvious without projecting 177 MCP tools into every model prompt.
-- Approval, idempotency, bounded results, and audit evidence apply uniformly below all adapters.
+- Idempotency, bounded results, and audit evidence apply uniformly below all adapters.
 
 ## Design A: one deep operation seam
 
@@ -24,9 +23,9 @@ interface PlaneOperationGateway {
 }
 ```
 
-The caller receives a request-bound gateway instance. It cannot supply credentials, workspace identity, agent identity, or audit identity. `OperationRef` resolves against a versioned catalog. Expected denial, approval, conflict, bounded-result, and indeterminate-outcome states are typed values rather than transport exceptions.
+The caller receives a request-bound gateway instance. It cannot supply credentials, workspace identity, agent identity, or audit identity. `OperationRef` resolves against a versioned catalog. Expected denial, conflict, bounded-result, and indeterminate-outcome states are typed values rather than transport exceptions.
 
-This is the smallest and deepest design. Authorization, approval, idempotency, result control, and audit behavior stay local to one module. Native Hermes, Code Mode, and MCP are adapters at the seam. Its weakness is discoverability: callers need a separate way to find operations and learn schemas.
+This is the smallest and deepest design. Authorization, idempotency, result control, and audit behavior stay local to one module. Native Hermes, Code Mode, and MCP are adapters at the seam. Its weakness is discoverability: callers need a separate way to find operations and learn schemas.
 
 ## Design B: common-case semantic facade
 
@@ -46,7 +45,7 @@ Natural Plane references and semantic inputs make the common path easy for model
 
 ## Design C: durable command state machine
 
-The gateway exposes begin, resume, and reconcile commands with durable attempt, approval, and evidence identifiers:
+The gateway exposes begin and reconcile commands with durable attempt and evidence identifiers:
 
 ```ts
 interface PlaneCommandMachine {
@@ -54,7 +53,7 @@ interface PlaneCommandMachine {
 }
 ```
 
-This makes approval interruption, mutation reconciliation, audit receipts, and restart behavior explicit. It is strongest for correctness and operations. It is also too much protocol for normal callers: every native tool and generated program would need to understand gateway lifecycle states that should remain implementation details.
+This makes mutation reconciliation, audit receipts, and restart behavior explicit. It is strongest for correctness and operations. It is also too much protocol for normal callers: every native tool and generated program would need to understand gateway lifecycle states that should remain implementation details.
 
 ## Design D: catalog, batch, and plan facade
 
@@ -67,11 +66,11 @@ interface PlaneProgramGateway {
   call(operation: OperationRef, input: unknown): Promise<OperationResult>;
   batch(group: OperationGroup): Promise<GroupResult>;
   preflight(plan: OperationPlan): Promise<PreflightResult>;
-  execute(plan: ApprovedOperationPlan): Promise<PlanResult>;
+  execute(plan: ValidatedOperationPlan): Promise<PlanResult>;
 }
 ```
 
-This supports progressive discovery, explicit concurrency, and group preflight. It is the most flexible design and the closest to a workflow engine. It creates the largest v1 surface, duplicates responsibilities already present in Hermes, and makes approval-plan freshness and partial failure much harder to specify.
+This supports progressive discovery, explicit concurrency, and group preflight. It is the most flexible design and the closest to a workflow engine. It creates the largest v1 surface, duplicates responsibilities already present in Hermes, and makes plan freshness and partial failure much harder to specify.
 
 ## Comparison
 
@@ -83,7 +82,7 @@ Use a hybrid in which each layer has one job:
 
 1. The core Plane Operation Gateway module has a deep request-bound `execute` interface.
 2. A separate read-only catalog module exposes `search` and `describe` because discovery is a distinct interface with different caching and testing needs.
-3. The gateway internally implements a durable command state machine for authorization, approval interception, idempotency, reconciliation, bounded results, and append-only audit evidence.
+3. The gateway internally implements a durable command state machine for authorization, idempotency, reconciliation, bounded results, and append-only audit evidence.
 4. Hermes exposes five named eager domain tools as thin common-case adapters: `plane_search_work_items`, `plane_get_work_item`, `plane_create_work_item`, `plane_update_work_item`, and `plane_add_comment`.
 5. Hermes also exposes `plane_docs`, `plane_search`, and `plane_execute`, producing an eight-tool eager surface.
 6. Generated TypeScript receives a credential-free `plane.call(operation, input)` callback plus catalog types. It does not receive the internal lifecycle protocol.
@@ -101,7 +100,6 @@ Each catalog entry should contain one idea per field:
 - purpose and model-facing description;
 - input and output schemas;
 - read or mutation classification;
-- approval effect class;
 - idempotency and reconciliation policy;
 - authorization mapping to current Plane behavior;
 - result and artifact limits;
@@ -110,7 +108,7 @@ Each catalog entry should contain one idea per field:
 - native-tool and external-MCP adapter mappings;
 - compatibility status and lifecycle metadata.
 
-OpenAPI supplies transport facts where it is accurate. The curated semantic overlay owns behavioral facts that OpenAPI cannot express, including approval effect, authorization mapping, idempotency, bounded-result policy, and semantic compositions.
+OpenAPI supplies transport facts where it is accurate. The curated semantic overlay owns behavioral facts that OpenAPI cannot express, including authorization mapping, idempotency, bounded-result policy, and semantic compositions.
 
 ## North Star
 

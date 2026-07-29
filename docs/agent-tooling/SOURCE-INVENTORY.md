@@ -97,6 +97,7 @@ This document records observed source facts used to freeze the v1 release. It di
 - Truly eager tools must be registered and included in `_HERMES_CORE_TOOLS`.
 - Non-core native, plugin, and MCP tools can be deferred behind Hermes Tool Search.
 - Deferred calls are unwrapped before middleware, approval hooks, guardrails, and dispatch.
+- Plane v1 does not invoke Hermes approval hooks to confirm Plane operations; the observation above describes existing Hermes behavior only.
 - Hermes's current `execute_code` runtime is Python-only.
 - The Python runtime already demonstrates credential scrubbing and authenticated local host RPC.
 - Plane TypeScript Code Mode needs a separate restricted runner rather than adding Plane access to generic Python Code Mode.

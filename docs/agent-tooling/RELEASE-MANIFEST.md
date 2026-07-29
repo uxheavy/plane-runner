@@ -32,20 +32,19 @@ Merge, CI, credential, staging, production, and deployment authorities must be n
 
 ## Required workflows
 
-| ID        | Workflow                          | Required result                                                                                                                                               | Status                                       |
-| --------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| RM-WF-001 | Broad project-planning acceptance | Real Luna-powered Hermes run autonomously creates exactly one parent release plan, three child work items, and one source-linked comment under default policy | Accepted scope                               |
-| RM-WF-002 | Denied control project            | Structured denial with zero control-project object leakage                                                                                                    | Accepted scope                               |
-| RM-WF-003 | Mutation retry                    | Same invocation keys leave planning-artifact counts unchanged                                                                                                 | Accepted scope                               |
-| RM-WF-004 | Generated-code isolation          | Harmless canary and controlled egress probes prove credential, filesystem, subprocess, package, and network restrictions                                      | Accepted scope                               |
-| RM-WF-005 | External MCP compatibility        | Every current Python MCP operation receives an approved disposition and selected real clients pass live compatibility                                         | Pinned inventory captured; dispositions open |
-| RM-WF-006 | Operator lifecycle                | Provision, permission, credential issue/store/rotate/revoke, approval configuration, audit lookup, kill switch, recovery, and rollback exercises pass         | Required                                     |
-| RM-WF-007 | Production canary                 | Real Hermes permitted and denied workflows pass against the deployed artifact with audit and feature-control readback                                         | Required                                     |
-| RM-WF-008 | Optional approval policy          | An administrator enables one effect prompt; real Hermes approve-once, denial, and timeout runs produce the exact admitted or withheld outcomes                | Accepted scope                               |
+| ID        | Workflow                          | Required result                                                                                                                                                      | Status                                       |
+| --------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| RM-WF-001 | Broad project-planning acceptance | Real Luna-powered Hermes run autonomously creates exactly one parent release plan, three child work items, and one source-linked comment within its authorized scope | Accepted scope                               |
+| RM-WF-002 | Denied control project            | Structured denial with zero control-project object leakage                                                                                                           | Accepted scope                               |
+| RM-WF-003 | Mutation retry                    | Same invocation keys leave planning-artifact counts unchanged                                                                                                        | Accepted scope                               |
+| RM-WF-004 | Generated-code isolation          | Harmless canary and controlled egress probes prove credential, filesystem, subprocess, package, and network restrictions                                             | Accepted scope                               |
+| RM-WF-005 | External MCP compatibility        | Every current Python MCP operation receives an approved disposition and selected real clients pass live compatibility                                                | Pinned inventory captured; dispositions open |
+| RM-WF-006 | Operator lifecycle                | Provision, permission, credential issue/store/rotate/revoke, audit lookup, kill switch, recovery, and rollback exercises pass                                        | Required                                     |
+| RM-WF-007 | Production canary                 | Real Hermes permitted and denied workflows pass against the deployed artifact with audit and feature-control readback                                                | Required                                     |
 
 ## Pilot operation inventory
 
-The contract IDs below are proposed semantic v1 identifiers. The public operation column is observed source evidence. Approval freezes the semantic names and eager status.
+The contract IDs below are proposed semantic v1 identifiers. The public operation column is observed source evidence. Manifest approval freezes the semantic names and eager status.
 
 | Capability                             | Proposed contract operation    | Underlying public operation IDs                                                 | Eager native tool         | Code Mode     | Status         |
 | -------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------- | ------------------------- | ------------- | -------------- |
@@ -62,7 +61,7 @@ The contract IDs below are proposed semantic v1 identifiers. The public operatio
 
 The five domain tools above plus `plane_docs`, `plane_search`, and `plane_execute` form the proposed eight-tool eager Hermes surface.
 
-`plane.release_plans.create@1` accepts the complete parent, three-child, and source-comment intent as one semantic operation. The gateway validates and authorizes the full request, evaluates approval policy once, claims one stable invocation, and executes through Plane application services. Default policy is autonomous. If an administrator configures the `release_plan.write` effect to prompt, the whole semantic operation produces at most one approval decision. V1 does not add a general workflow-graph DSL for this workflow.
+`plane.release_plans.create@1` accepts the complete parent, three-child, and source-comment intent as one semantic operation. The gateway validates and authorizes the full request, claims one stable invocation, and executes autonomously through Plane application services. V1 does not add a general workflow-graph DSL for this workflow.
 
 No implementation may silently omit a proposed capability after approval. The external MCP baseline is official server commit `96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1`, package `0.2.11`, with 177 unique tools. Its machine-readable inventory is `inventories/plane-mcp-v0.2.11.json`, SHA-256 `2778ef9d6f5426c6fc65894829ec04bf853c18c4ab09d796474896ba01826ad1`.
 
@@ -97,30 +96,30 @@ If the provider cannot expose an immutable model snapshot, a changed model-metad
 
 These values are proposed release maxima. Deployment configuration may be stricter but cannot be looser without a manifest revision.
 
-| Limit                                                    |      Proposed maximum |
-| -------------------------------------------------------- | --------------------: |
-| Model-written TypeScript source                          |          64 KiB UTF-8 |
-| Active TypeScript wall time, excluding approval wait     |           120 seconds |
-| Total `plane_execute` wall time, including approval wait |           600 seconds |
-| Human approval wait                                      |           300 seconds |
-| TypeScript child CPU time                                |            30 seconds |
-| TypeScript child memory                                  |               256 MiB |
-| Inner Plane calls per execution                          |                    64 |
-| Concurrent inner Plane calls                             |                     8 |
-| Operations in one explicit preflight group               |                    16 |
-| Inline serialized result per inner operation             |                32 KiB |
-| Cumulative inline inner results                          |               128 KiB |
-| Final model-visible `plane_execute` result               |                64 KiB |
-| Combined model-visible stdout and stderr                 |                32 KiB |
-| Oversized-result preview                                 |                 8 KiB |
-| Temporary authoritative artifact                         |                10 MiB |
-| Bounded artifact read                                    |       32 KiB per call |
-| Temporary artifact retention                             | 1 hour after creation |
-| Expired-artifact cleanup lag                             |            15 minutes |
-| Append-only invocation, approval, and audit metadata     |      365 days minimum |
-| Bulky full results in durable audit                      |      Never by default |
+| Limit                                        |      Proposed maximum |
+| -------------------------------------------- | --------------------: |
+| Model-written TypeScript source              |          64 KiB UTF-8 |
+| Total `plane_execute` wall time              |           120 seconds |
+| TypeScript child CPU time                    |            30 seconds |
+| TypeScript child memory                      |               256 MiB |
+| Inner Plane calls per execution              |                    64 |
+| Concurrent inner Plane calls                 |                     8 |
+| Operations in one explicit preflight group   |                    16 |
+| Inline serialized result per inner operation |                32 KiB |
+| Cumulative inline inner results              |               128 KiB |
+| Final model-visible `plane_execute` result   |                64 KiB |
+| Combined model-visible stdout and stderr     |                32 KiB |
+| Oversized-result preview                     |                 8 KiB |
+| Temporary authoritative artifact             |                10 MiB |
+| Bounded artifact read                        |       32 KiB per call |
+| Temporary artifact retention                 | 1 hour after creation |
+| Expired-artifact cleanup lag                 |            15 minutes |
+| Append-only invocation and audit metadata    |      365 days minimum |
+| Bulky full results in durable audit          |      Never by default |
 
-The host counts requests before asynchronous dispatch. Rejected, denied, approval-pending, failed, and successful callback attempts all consume the inner-call budget. Artifact storage is authoritative only for its retention window; durable audit retains its digest and bounded redacted summary.
+The host counts requests before asynchronous dispatch. Rejected, denied, failed, and successful callback attempts all consume the inner-call budget. Artifact storage is authoritative only for its retention window; durable audit retains its digest and bounded redacted summary.
+
+Explicit group preflight validates schemas, references, live authorization, budgets, and concurrency bounds only. It never emits a prompt, pending state, decision token, or resume requirement.
 
 ## Numeric release gates
 
@@ -133,7 +132,7 @@ The host counts requests before asynchronous dispatch. Rejected, denied, approva
 | Total authenticated live Hermes trials                       | 50                                                     |
 | Complete live workflow success                               | At least 90% across all retained trials                |
 | Authorization bypasses                                       | 0                                                      |
-| Approval bypasses                                            | 0                                                      |
+| Runtime human-confirmation states                            | 0                                                      |
 | Credential disclosures                                       | 0                                                      |
 | Sandbox or network-isolation escapes                         | 0                                                      |
 | Duplicate committed mutations                                | 0                                                      |
@@ -144,9 +143,11 @@ The host counts requests before asynchronous dispatch. Rejected, denied, approva
 | Load duration and concurrency                                | 30 minutes at 10 concurrent Hermes runs                |
 | Gateway-only overhead                                        | p95 ≤ 100 ms and p99 ≤ 250 ms                          |
 | End-to-end read latency                                      | p95 ≤ 2 s and p99 ≤ 5 s                                |
-| End-to-end mutation latency, excluding approval wait         | p95 ≤ 3 s and p99 ≤ 8 s                                |
+| End-to-end mutation latency                                  | p95 ≤ 3 s and p99 ≤ 8 s                                |
 | Unexpected admitted-operation error rate                     | < 1% during the retained load window                   |
 | Recovery after injected dependency interruption              | Healthy within 60 s with no lost or duplicate mutation |
+
+The 50 version-controlled scenarios are distinct behavioral cases. The 50 authenticated live trials are executions: the 30 broad-planning trials repeat ten scenario and fixture variants three times each, while the 20 additional trials each execute a distinct denial, failure, recovery, or adversarial scenario. Repeated trials do not increase the distinct-scenario count.
 
 Every live attempt is retained in the denominator. Hidden retries, discarded failures, replayed model responses, and fallback provider or model runs do not count as passes.
 
@@ -163,7 +164,7 @@ All stages are required for goal completion:
 
 Each promotion requires the deployed artifact ID, enabled configuration version, metrics window, rollback threshold, last-known-good target, immutable evidence reference, approver identity, and UTC approval timestamp.
 
-Any authorization, approval, credential, isolate, duplicate-mutation, or missing-audit violation triggers immediate disablement and rollback. A rolling 20-run complete-workflow success rate below 90%, an unexpected admitted-operation error rate at or above 2% for 15 minutes, or p99 latency above twice the release gate for 15 minutes also triggers rollback review and blocks promotion.
+Any authorization, credential, isolate, duplicate-mutation, or missing-audit violation triggers immediate disablement and rollback. A rolling 20-run complete-workflow success rate below 90%, an unexpected admitted-operation error rate at or above 2% for 15 minutes, or p99 latency above twice the release gate for 15 minutes also triggers rollback review and blocks promotion.
 
 ## Exceptions
 

@@ -7,7 +7,7 @@ Deliver Plane's agent-tooling architecture as a production-ready, independently 
 - Plane-native Hermes agents use native semantic Plane tools.
 - Plane-native Hermes agents use self-hosted TypeScript Code Mode with `docs`, `search`, and `execute`.
 - Native tools, Code Mode callbacks, and the supported external MCP compatibility path share the Plane Operation Gateway.
-- Plane identity, live authorization, approval policy, mutation safety, bounded results, versioning, and append-only auditing hold for every operation.
+- Plane identity, live authorization, mutation safety, bounded results, versioning, and append-only auditing hold for every operation.
 - Generated code receives neither Plane credentials nor direct database access.
 - Operators have rollout controls, observability, credential procedures, incident runbooks, and rollback evidence.
 - The approved production rollout is completed and verified.
@@ -29,7 +29,7 @@ Observed on 2026-07-29:
 
 - Plane branch `codex/agent-tooling-architecture` contains the product, architecture, delivery, decision, and ADR baseline.
 - Plane agent-tooling implementation has not started.
-- Hermes already provides native tool registration, Tool Search, concurrent tool execution, live run-scoped approval queues, same-turn approval continuation, session persistence, and oversized-result spill.
+- Hermes already provides native tool registration, Tool Search, concurrent tool execution, session persistence, and oversized-result spill.
 - Hermes Code Mode currently executes Python rather than the required TypeScript surface.
 - Hermes keeps downstream credentials host-side and scrubs generated-code environments.
 - Hermes API caller authentication is currently a shared long-lived bearer credential.
@@ -44,7 +44,7 @@ Observed on 2026-07-29:
 - Use one revocable Plane credential per dedicated agent identity initially.
 - Do not add direct database access for agents.
 - Do not expose Plane credentials to generated TypeScript.
-- Do not require pending approvals to survive Hermes or container restart.
+- Do not add runtime human-confirmation prompts for otherwise-authorized agent operations.
 - Preserve external Python MCP compatibility during migration.
 - Keep observable contracts additive unless an approved compatibility plan says otherwise.
 - Preserve unrelated user changes in every repository.
@@ -82,10 +82,9 @@ Observed on 2026-07-29:
 - All supported native, Code Mode, and migrated MCP operations cross the gateway.
 - The gateway derives the acting agent from its credential.
 - Live Plane authorization runs for every operation.
-- Approval policy runs separately from authorization.
 - Idempotency, result shaping, version metadata, and append-only audit are enforced.
 - No supported operation bypasses Plane application services through direct database access.
-- Audit intent and outcome durability covers invalid, unauthorized, approval-denied, approval-timed-out, execution-failed, unknown, and successful attempts.
+- Audit intent and outcome durability covers invalid, unauthorized, execution-failed, unknown, and successful attempts.
 - Injected audit-storage failures follow an approved fail-closed or durable-outbox policy without unaudited successful mutation.
 
 ### Hermes and TypeScript Code Mode
@@ -95,7 +94,7 @@ Observed on 2026-07-29:
 - `docs`, `search`, and `execute` are implemented for TypeScript.
 - Generated code runs in the disposable Hermes run container inside the approved restricted child isolate.
 - Generated code has no ambient Plane credentials, arbitrary network, package installation, subprocess, or unrelated filesystem access.
-- Credential-free host callbacks retain Hermes tool IDs, middleware, approvals, concurrency, and Plane audit correlation.
+- Credential-free host callbacks retain Hermes tool IDs, middleware, concurrency, and Plane audit correlation.
 - The local callback channel is bound host-side to the exact run, agent, tenant, operation budgets, and correlation identifiers.
 - Generated code cannot supply authoritative identity or correlation fields.
 - Sibling-process, cross-run replay, and forged-callback attempts fail.
@@ -106,7 +105,7 @@ Observed on 2026-07-29:
 - Unknown non-idempotent outcomes are never retried blindly.
 - Model-visible per-result and cumulative output are bounded.
 - Oversized results use temporary bounded-read artifacts with verified cleanup.
-- Authorization, approval, sandbox, concurrency, interruption, timeout, retry, and container-death test matrices pass.
+- Authorization, sandbox, concurrency, interruption, timeout, retry, and container-death test matrices pass.
 - External MCP compatibility tests pass for approved clients and operations.
 
 ### Mandatory live Hermes acceptance
@@ -125,18 +124,16 @@ Observed on 2026-07-29:
 - Hermes uses TypeScript Code Mode to discover, filter, and compose the broader project analysis.
 - Independent reads execute concurrently where safe.
 - Hermes proposes one parent release-plan work item and three coordinated child work items for the highest-impact actions.
-- The broad write executes autonomously under default policy after authorization.
-- A separate live control enables an administrator-configured effect prompt and requires a real approve-once decision.
-- Approval resumes the same Hermes turn.
+- The broad write executes autonomously after authorization.
 - Plane creates exactly one parent work item, exactly three child work items, and exactly one source-linked planning comment.
 - Retrying the same stable invocations creates no duplicate planning artifacts.
 - Hermes returns links to every created Plane object.
 - Plane UI or API readback verifies content, hierarchy, project placement, and source references.
-- Plane audit readback correlates agent identity, Hermes run, turn, tool calls, invocations, approval, operations, and affected object IDs.
+- Plane audit readback correlates agent identity, Hermes run, turn, tool calls, invocations, operations, and affected object IDs.
 - A real attempt to access the control project returns a structured denial without object-data leakage.
 - A generated-TypeScript probe confirms Plane credentials are unavailable.
 - A generated-TypeScript probe confirms Plane cannot be reached except through the host callback.
-- The complete prompts, run IDs, approval evidence, created object IDs, readbacks, audit references, and cleanup procedure are recorded in `RESULT.md`.
+- The complete prompts, run IDs, created object IDs, readbacks, audit references, and cleanup procedure are recorded in `RESULT.md`.
 
 ### Operations and rollout
 
@@ -150,16 +147,16 @@ Observed on 2026-07-29:
 ### Extensive testing and evaluation
 
 - A version-controlled evaluation manifest covers at least 50 distinct scenarios.
-- The manifest covers functional, authorization, approval, mutation, concurrency, sandbox, result, compatibility, observability, rollback, and operator-recovery behavior.
+- The manifest covers functional, authorization, mutation, concurrency, sandbox, result, compatibility, observability, rollback, and operator-recovery behavior.
 - The mandatory project-planning workflow runs live through Hermes on at least ten materially different seeded project shapes.
 - Each seeded project shape passes at least three independent `gpt-5.6-luna` runs.
-- At least 20 additional live Luna runs cover denials, approval denial and timeout, partial failure, idempotent retry, ambiguous outcome, large results, and hostile generated code.
+- At least 20 additional live Luna runs cover denials, partial failure, idempotent retry, ambiguous outcome, large results, and hostile generated code.
 - Live evaluation therefore includes at least 50 authenticated Hermes runs before production approval.
 - Complete workflow success is at least 90% across all retained live attempts.
-- Security-critical expectations tolerate zero authorization bypasses, approval bypasses, credential disclosures, sandbox escapes, duplicate committed mutations, or missing admitted-operation audit records.
+- Security-critical expectations tolerate zero authorization bypasses, credential disclosures, sandbox escapes, duplicate committed mutations, or missing required audit records for any attempted operation.
 - Deterministic test matrices cover every supported pilot operation and every relevant Plane role or permission boundary.
 - Property or fuzz tests cover schema validation, pagination, idempotency keys, result limits, and untrusted operation results.
-- Concurrency tests cover simultaneous runs, concurrent inner calls, approval waits, result ordering, retry races, and rate limiting.
+- Concurrency tests cover simultaneous runs, concurrent inner calls, result ordering, retry races, and rate limiting.
 - Compatibility tests cover the approved Python MCP client matrix and schema-version transitions.
 - A sustained load or soak run executes at the approved production concurrency and duration.
 - Deterministic contract and security matrices pass at 100% with zero skips or xpasses.
@@ -171,11 +168,11 @@ Observed on 2026-07-29:
 
 ## Primary verifier
 
-Before completion, the repositories must expose one documented, version-controlled production-verification entry point callable from a clean checkout. It must fail non-zero when any required Plane contract, backend, Hermes integration, authorization, approval, sandbox, mutation-safety, MCP compatibility, or end-to-end check fails.
+Before completion, the repositories must expose one documented, version-controlled production-verification entry point callable from a clean checkout. It must fail non-zero when any required Plane contract, backend, Hermes integration, authorization, sandbox, mutation-safety, MCP compatibility, or end-to-end check fails.
 
 The final command and its environment prerequisites must be recorded in `RESULT.md`. Production deployment also requires an authenticated post-deployment readback proving the enabled version, a permitted workflow, a denied workflow, audit correlation, and rollback readiness.
 
-The primary verifier must invoke or require the mandatory live Hermes acceptance scenarios. A mocked agent loop, mocked gateway, synthetic optional-policy approval, or database-only fixture assertion cannot satisfy this requirement.
+The primary verifier must invoke or require the mandatory live Hermes acceptance scenario. A mocked agent loop, mocked gateway, or database-only fixture assertion cannot satisfy this requirement.
 
 The verifier must assert the resolved Hermes provider is `openai-codex` and the resolved model is `gpt-5.6-luna`. Model availability, authentication failure, or fallback must fail non-zero rather than skip live evaluation.
 
@@ -189,7 +186,7 @@ Final verification is executed independently from clean checkouts. It records fu
 - Hermes formatting, lint, unit, integration, and gateway checks.
 - Deterministic catalog generation and schema compatibility checks.
 - Permission-matrix and revoked-agent tests.
-- Approval denial, timeout, concurrent sibling, and restart-failure tests.
+- Autonomous admission, denial-without-effects, concurrent sibling, interruption, and restart-failure tests.
 - Credential-exfiltration and sandbox-escape tests.
 - Idempotency, ambiguous outcome, and duplicate-delivery tests.
 - Result-budget and artifact-expiry tests.
@@ -215,7 +212,7 @@ Final verification is executed independently from clean checkouts. It records fu
 ## Anti-cheating rules
 
 - Do not weaken, skip, delete, or narrow a verifier to obtain a pass.
-- Do not replace real authorization, approval, sandbox, or gateway behavior with mocks in the production end-to-end proof.
+- Do not replace real authorization, sandbox, or gateway behavior with mocks in the production end-to-end proof.
 - Do not silently shrink supported workflows or operations.
 - Do not count documentation, generated fixtures, or model claims as implemented behavior.
 - Do not hide skipped checks, flaky failures, warnings, or unavailable dependencies.
@@ -225,7 +222,9 @@ Final verification is executed independently from clean checkouts. It records fu
 - Do not reuse one recorded model output as evidence for multiple independent runs.
 - Do not omit failed live runs from the evaluation denominator.
 
-## Approval gates
+## Delivery and release approval gates
+
+These gates govern Codex delivery actions, manifest freeze, rollout promotion, and deployment. They do not add a human-confirmation step to deployed Plane agent operations.
 
 Separate user approval is required before:
 

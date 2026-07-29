@@ -40,7 +40,7 @@ Run a pinned Deno process inside the same disposable Hermes run container:
 4. The supervisor loads only the submitted TypeScript source and a versioned generated Plane declaration/client from trusted in-memory input or its pinned entry point.
 5. Generated code runs in a separate Deno Worker with no permissions.
 6. A dedicated inherited descriptor carries framed supervisor-to-host RPC. Generated code receives no descriptor, endpoint, token, or authoritative context fields.
-7. The supervisor converts allowed Worker messages into `plane.call(operation, input)` requests. The host supplies workspace, agent, run, turn, outer tool call, budgets, catalog digest, approval binding, and audit correlation.
+7. The supervisor converts allowed Worker messages into `plane.call(operation, input)` requests. The host supplies workspace, agent, run, turn, outer tool call, budgets, catalog digest, and audit correlation.
 8. Arbitrary stdout and stderr are treated only as bounded logs, never as authenticated RPC.
 9. The host enforces wall time, CPU, memory, process count, inner-call count, concurrency, and cumulative result limits and terminates the child on violation.
 10. The outer disposable run container supplies the kernel, mount, process, and cleanup boundary. Generated code receives no direct database or Plane network route.
@@ -50,7 +50,7 @@ Run a pinned Deno process inside the same disposable Hermes run container:
 - `plane_execute` is the Hermes adapter that accepts model-written TypeScript.
 - The TypeScript runner module owns compilation/loading, isolate lifecycle, limits, and log/result framing.
 - The credential-free callback is the only seam from the runner to Plane operations.
-- The Plane Operation Gateway remains the sole module that owns authorization, approval policy, mutation safety, result shaping, and audit evidence.
+- The Plane Operation Gateway remains the sole module that owns authorization, mutation safety, result shaping, and audit evidence.
 - Deno's permission system is a sandbox adapter, not a substitute for gateway policy.
 
 ## Package and import policy
@@ -61,9 +61,9 @@ Run a pinned Deno process inside the same disposable Hermes run container:
 - No install command or package cache is model-accessible.
 - Any future library must be bundled into the reviewed runtime artifact and added through a manifest revision.
 
-## Approval interception
+## Host callback authorization
 
-The outer `plane_execute` call does not pre-authorize its inner operations. Each `plane.call` crosses the host callback and gateway independently. Authorized calls execute autonomously under the default policy. If an administrator configures an effect to prompt, an approval-required transition pauses only that logical inner call. The existing Hermes approval lifecycle resumes the exact call in the same turn. Sibling calls that were already authorized and admitted may continue.
+The outer `plane_execute` call does not pre-authorize its inner operations. Each `plane.call` crosses the host callback and gateway independently. Authorized calls execute autonomously; unauthorized calls fail without affecting independently admitted siblings.
 
 ## Required security qualification
 

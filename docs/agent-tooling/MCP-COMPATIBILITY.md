@@ -15,7 +15,7 @@ Compatibility is evaluated per MCP tool contract, not per REST endpoint. An MCP 
 - Existing handlers become shallow gateway adapters incrementally.
 - The project does not create a second 177-tool MCP server.
 - Internal Hermes agents bypass the MCP transport and use native tools or TypeScript Code Mode through the same gateway.
-- Business rules, authorization, approval, mutation safety, result control, and audit behavior converge below both paths.
+- Business rules, authorization, mutation safety, result control, and audit behavior converge below both paths.
 
 ## Accepted migration seam
 
@@ -23,7 +23,7 @@ The official MCP server continues calling its existing `PlaneClient` resource me
 
 This preserves existing MCP handlers, Pydantic inputs and outputs, descriptions, validation, and local normalizers. It avoids creating a second tool implementation or editing ordinary handlers one by one.
 
-The transport converts each SDK HTTP intent into a versioned gateway operation call and converts the structured gateway outcome back into the SDK's existing success or `HttpError` behavior. A host context supplies outer MCP call correlation and stable invocation data; tool arguments cannot supply authoritative identity, workspace binding, approval decisions, or audit fields.
+The transport converts each SDK HTTP intent into a versioned gateway operation call and converts the structured gateway outcome back into the SDK's existing success or `HttpError` behavior. A host context supplies outer MCP call correlation and stable invocation data; tool arguments cannot supply authoritative identity, workspace binding, or audit fields.
 
 The migration exceptions remain explicit:
 
@@ -37,11 +37,11 @@ The pinned source inventory contains 177 unique tool names. Tool name, input sem
 
 The following mutually exclusive rules cover every pinned tool. The inventory checker must fail if a tool matches zero or more than one rule.
 
-| Rule      | Match                                                         | Count | Disposition                                | Rationale                                                                                                                                    |
-| --------- | ------------------------------------------------------------- | ----: | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| MCP-D-001 | `category != "pql"` and `category != "work_item_attachments"` |   171 | Existing handler over shared SDK transport | Preserve the Python MCP contract while routing authorization, approval, mutation safety, result limits, and audit through shared operations. |
-| MCP-D-002 | `name == "get_pql_reference"`                                 |     1 | Retain local read-only behavior            | The tool returns static query-language reference material and does not call Plane. Its content is versioned and tested.                      |
-| MCP-D-003 | `category == "work_item_attachments"`                         |     5 | Hardened attachment compatibility adapter  | Preserve attachment behavior while separating Plane authorization from controlled source/presigned URL transfer and SSRF policy.             |
+| Rule      | Match                                                         | Count | Disposition                                | Rationale                                                                                                                          |
+| --------- | ------------------------------------------------------------- | ----: | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| MCP-D-001 | `category != "pql"` and `category != "work_item_attachments"` |   171 | Existing handler over shared SDK transport | Preserve the Python MCP contract while routing authorization, mutation safety, result limits, and audit through shared operations. |
+| MCP-D-002 | `name == "get_pql_reference"`                                 |     1 | Retain local read-only behavior            | The tool returns static query-language reference material and does not call Plane. Its content is versioned and tested.            |
+| MCP-D-003 | `category == "work_item_attachments"`                         |     5 | Hardened attachment compatibility adapter  | Preserve attachment behavior while separating Plane authorization from controlled source/presigned URL transfer and SSRF policy.   |
 
 No pinned v0.2.11 tool is deprecated or omitted in v1.
 
@@ -75,7 +75,7 @@ The v1 compatibility suite covers:
 - hosted Streamable HTTP PAT at `/http/api-key/mcp` with its workspace header;
 - legacy SSE at `/sse` for the duration of the approved compatibility window.
 
-The suite must include initialization, capability negotiation, tool listing, representative reads and writes under the autonomous default, structured denial, optional administrator-configured approval interruption where supported by the client, pagination, oversized results, mutation retry, and transport reconnect.
+The suite must include initialization, capability negotiation, tool listing, representative autonomous reads and writes, structured denial, pagination, oversized results, mutation retry, and transport reconnect.
 
 ## Conformance tiers
 
@@ -100,5 +100,5 @@ The suite must include initialization, capability negotiation, tool listing, rep
 - Shadow-comparison report with reviewed normalizers.
 - Real-client versions, configurations, and transcripts.
 - Transport/authentication matrix.
-- Failure, retry, approval, pagination, and result-bound evidence.
+- Failure, retry, pagination, and result-bound evidence.
 - Rollback proof that restores the pinned legacy handler without contract or data loss.

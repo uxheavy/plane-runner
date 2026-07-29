@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted; runtime operation-approval portions superseded by ADR-0002
 
 ## Date
 

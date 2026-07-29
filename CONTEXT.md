@@ -58,7 +58,7 @@ Replace each `_/10` placeholder with a score:
 | A2  | Several agents may share visible ownership of work, with a designated coordinator responsible for delegation, reconciliation, and escalation.                   | \_/10      |
 | A3  | A coordinator may design any needed agent team. A human previews the complete team manifest and explicitly deploys it.                                          | \_/10      |
 | A4  | Coordinator-created agents persist after the slice and hibernate automatically when idle, preserving identity and learning without consuming runtime resources. | \_/10      |
-| A5  | Agent autonomy is graduated by project and capability: observe, suggest, act with approval, or act automatically.                                               | \_/10      |
+| A5  | Agent autonomy is graduated by project and capability: observe, suggest, or act automatically within configured scope.                                          | \_/10      |
 | A6  | The coordinator may declare agent execution complete, but submits the outcome to a human for formal acceptance.                                                 | \_/10      |
 | A7  | Agents use dedicated scoped identities and credentials where supported. Delegated human credentials are explicit and temporary.                                 | \_/10      |
 | A8  | Admins govern templates, allowed models, tools, policies, and providers.                                                                                        | \_/10      |
@@ -76,24 +76,24 @@ Replace each `_/10` placeholder with a score:
 
 ## Data, Audit, and Runtime Architecture
 
-| ID  | Confirmed decision                                                                                                                                                                                                       | Importance |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
-| T1  | Plane/Postgres remains authoritative. Buzz-style collaboration is implemented as native Plane domain data and events.                                                                                                    | \_/10      |
-| T2  | Messages, agent actions, approvals, and tool receipts are append-only. Authorized redaction hides content while retaining the redaction event.                                                                           | \_/10      |
-| T3  | Each run retains a reproducible audit envelope: instructions, context references, model and skill versions, tool inputs and outputs, approvals, artifacts, costs, and concise decision summaries, with secrets redacted. | \_/10      |
-| T4  | Agent execution runs in a separate service co-located with Plane on the same VPS or local deployment.                                                                                                                    | \_/10      |
-| T5  | Tool execution uses a disposable container per run with explicit mounts, network policy, secrets, limits, and cleanup.                                                                                                   | \_/10      |
-| T6  | The initial non-Plane tool foundation is browser, files, sandboxed terminal, web research, and MCP connectors.                                                                                                           | \_/10      |
+| ID  | Confirmed decision                                                                                                                                                                                            | Importance |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| T1  | Plane/Postgres remains authoritative. Buzz-style collaboration is implemented as native Plane domain data and events.                                                                                         | \_/10      |
+| T2  | Messages, agent actions, team-deployment decisions, outcome-acceptance decisions, and tool receipts are append-only. Authorized redaction hides content while retaining the redaction event.                  | \_/10      |
+| T3  | Each run retains a reproducible audit envelope: instructions, context references, model and skill versions, tool inputs and outputs, artifacts, costs, and concise decision summaries, with secrets redacted. | \_/10      |
+| T4  | Agent execution runs in a separate service co-located with Plane on the same VPS or local deployment.                                                                                                         | \_/10      |
+| T5  | Tool execution uses a disposable container per run with explicit mounts, network policy, secrets, limits, and cleanup.                                                                                        | \_/10      |
+| T6  | The initial non-Plane tool foundation is browser, files, sandboxed terminal, web research, and MCP connectors.                                                                                                | \_/10      |
 
 ## Plane MCP and Code Mode
 
-| ID  | Confirmed decision                                                                                                                  | Importance |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| X1  | Agents access Plane through an MCP server, never through direct database access.                                                    | \_/10      |
-| X2  | The MCP catalog exposes semantic Plane operations plus searchable resources rather than mirroring every REST endpoint.              | \_/10      |
-| X3  | Adopt Cloudflare's Code Mode `search` and `execute` pattern while keeping execution self-hosted.                                    | \_/10      |
-| X4  | Model-written TypeScript executes inside the local disposable run container.                                                        | \_/10      |
-| X5  | Authentication remains in host callbacks. Every operation passes through Plane authorization, approval policy, and audit recording. | \_/10      |
+| ID  | Confirmed decision                                                                                                     | Importance |
+| --- | ---------------------------------------------------------------------------------------------------------------------- | ---------- |
+| X1  | Agents access Plane through an MCP server, never through direct database access.                                       | \_/10      |
+| X2  | The MCP catalog exposes semantic Plane operations plus searchable resources rather than mirroring every REST endpoint. | \_/10      |
+| X3  | Adopt Cloudflare's Code Mode `search` and `execute` pattern while keeping execution self-hosted.                       | \_/10      |
+| X4  | Model-written TypeScript executes inside the local disposable run container.                                           | \_/10      |
+| X5  | Authentication remains in host callbacks. Every operation passes through Plane authorization and audit recording.      | \_/10      |
 
 ## Decisions Deliberately Deferred
 
@@ -103,7 +103,7 @@ Replace each `_/10` placeholder with a score:
 | D2  | Consume Hermes as a pinned upstream core behind an adapter or maintain a Plane-specific fork.          | Decide from a technical evaluation, not preference.                                                                                                                                                                                                                                                  | \_/10      |
 | D3  | Define per-slice model, time, compute, tool, and concurrency budgets.                                  | Reuse Hermes/Buzz low-level limits first; product policy is premature.                                                                                                                                                                                                                               | \_/10      |
 | D4  | Define the exact Plane conversation/event schema and migration mechanics.                              | Must preserve existing comments and additive upgrades.                                                                                                                                                                                                                                               | \_/10      |
-| D5  | Define the detailed Code Mode catalog, sandbox API, approval interception, and replay semantics.       | TypeScript, local execution, semantic MCP, and host-side authorization are fixed.                                                                                                                                                                                                                    | \_/10      |
+| D5  | Define the detailed Code Mode catalog, sandbox API, idempotency, and replay semantics.                 | TypeScript, local execution, semantic MCP, and host-side authorization are fixed.                                                                                                                                                                                                                    | \_/10      |
 | D6  | Define the final north-star metric.                                                                    | Desired outcome is inspectable, self-coordinated agent work that a human accepts as done.                                                                                                                                                                                                            | \_/10      |
 | D7  | Decide the canonical representation and synchronization rules for content shared by people and agents. | Plane currently stores structured rich text; agents work naturally with files. Preserve Plane-specific structure and a lossless raw source where needed, while exposing deterministic Markdown file projections to agents. Do not assume that every Plane object must become a canonical `.md` file. | \_/10      |
 | D8  | Resolve the conversation sidecar's layout relationship with existing work-item surfaces.               | Work-item detail already has a right-side properties rail; comments appear in the mixed Activity feed; side-peek is a 50%-width overlay containing details, widgets, properties, and Activity sequentially. Do not add a second permanent right rail without redesigning these relationships.        | \_/10      |
@@ -123,7 +123,7 @@ Replace each `_/10` placeholder with a score:
 
 | Constraint           | Value                                                                                             |
 | -------------------- | ------------------------------------------------------------------------------------------------- |
-| Current Plane branch | `add-agents`                                                                                      |
+| Current Plane branch | `codex/agent-tooling-architecture`                                                                |
 | Implementation state | No implementation authorized by this interview                                                    |
 | Decision process     | Resolve architecture interactively; ask one material decision at a time                           |
 | Reuse preference     | Reuse engines, algorithms, components, and tests where boundaries fit; avoid unnecessary rewrites |
@@ -165,52 +165,40 @@ This ledger supersedes conflicting assumptions in the earlier `Plane MCP and Cod
 | PX27 | External MCP operations cross the Plane Operation Gateway.                                            | \_/10      |
 | PX28 | Agents never access Plane's database directly.                                                        | \_/10      |
 | PX29 | Plane authorization is evaluated for every operation.                                                 | \_/10      |
-| PX30 | Approval policy is evaluated separately from authorization.                                           | \_/10      |
-| PX31 | Approval is evaluated for each inner Code Mode operation.                                             | \_/10      |
-| PX32 | Approval never grants permissions that the acting Plane identity lacks.                               | \_/10      |
+| PX30 | Plane authorization is the final runtime allow-or-deny decision for agent operations.                 | \_/10      |
+| PX31 | Each inner Code Mode operation is independently authorized.                                           | \_/10      |
+| PX32 | Authorized agent operations execute without a human-confirmation state.                               | \_/10      |
 | PX33 | Every operation produces append-only audit evidence.                                                  | \_/10      |
 | PX34 | Code Mode execution is self-hosted.                                                                   | \_/10      |
 | PX35 | Model-written TypeScript runs inside the disposable container assigned to its agent run.              | \_/10      |
 | PX36 | The existing Python MCP tool contracts inform the native direct-tool design.                          | \_/10      |
 | PX37 | Existing Python MCP tool names may be preserved when they improve compatibility.                      | \_/10      |
 | PX38 | External MCP clients retain OAuth or personal-access-token authentication.                            | \_/10      |
-| PX39 | Plane agents execute authorized operations autonomously by default.                                   | \_/10      |
-| PX40 | No Plane operation requires a human prompt unless an administrator explicitly configures it.          | \_/10      |
-| PX41 | Administrator-configured prompts reuse Hermes and allow only approve-once or deny.                    | \_/10      |
+| PX39 | Plane agents execute authorized operations autonomously.                                              | \_/10      |
+| PX40 | V1 has no runtime human-confirmation prompts for Plane agent operations.                              | \_/10      |
+| PX41 | V1 has no approval-broker credential or pending operation-approval state.                             | \_/10      |
 
 ### Open Decisions
 
-| ID    | Open decision                                                                                      | Importance |
-| ----- | -------------------------------------------------------------------------------------------------- | ---------- |
-| PXD1  | Decide whether the Plane Operation Gateway initially lives inside the Plane application service.   | \_/10      |
-| PXD2  | Decide whether the Plane Operation Gateway requires a separately deployed service.                 | \_/10      |
-| PXD3  | Define the private interface between Hermes and the Plane Operation Gateway.                       | \_/10      |
-| PXD4  | Define the exact boundary of the supported agent-facing Plane API.                                 | \_/10      |
-| PXD5  | Define the authoritative source for the operation catalog.                                         | \_/10      |
-| PXD6  | Define the metadata layered over generated API schemas.                                            | \_/10      |
-| PXD7  | Select the initial direct semantic tools.                                                          | \_/10      |
-| PXD8  | Define how direct tools are promoted from observed agent workflows.                                | \_/10      |
-| PXD9  | Define how direct tools are retired from the eager surface.                                        | \_/10      |
-| PXD10 | Define the isolation boundary around model-written TypeScript inside the run container.            | \_/10      |
-| PXD11 | Define the capabilities available to model-written TypeScript.                                     | \_/10      |
-| PXD12 | Define the short-lived assertion used by native Hermes tools.                                      | \_/10      |
-| PXD13 | Define the durable owner of Code Mode execution state.                                             | \_/10      |
-| PXD14 | Define how an execution pauses for approval.                                                       | \_/10      |
-| PXD15 | Define how an approved execution resumes.                                                          | \_/10      |
-| PXD16 | Define replay behavior after a container restart.                                                  | \_/10      |
-| PXD17 | Define stable invocation identifiers for retries.                                                  | \_/10      |
-| PXD18 | Define idempotency requirements for Plane mutations.                                               | \_/10      |
-| PXD19 | Define behavior for mutation outcomes that cannot be determined.                                   | \_/10      |
-| PXD20 | Decide whether inner Plane operations must execute sequentially.                                   | \_/10      |
-| PXD21 | Define per-operation result limits.                                                                | \_/10      |
-| PXD22 | Define cumulative execution result limits.                                                         | \_/10      |
-| PXD23 | Define storage for authoritative results that exceed model-facing limits.                          | \_/10      |
-| PXD24 | Define operation-catalog versioning.                                                               | \_/10      |
-| PXD25 | Define native Plane tool versioning.                                                               | \_/10      |
-| PXD26 | Define external MCP compatibility versioning.                                                      | \_/10      |
-| PXD27 | Define TypeScript runtime versioning.                                                              | \_/10      |
-| PXD28 | Define how Hermes resumes a run after an approval decision.                                        | \_/10      |
-| PXD29 | Define the migration path from existing Python MCP handlers to the shared Plane Operation Gateway. | \_/10      |
+| ID    | Open decision                                                                           | Importance |
+| ----- | --------------------------------------------------------------------------------------- | ---------- |
+| PXD4  | Define the exact boundary of the supported agent-facing Plane API.                      | \_/10      |
+| PXD6  | Define the metadata layered over generated API schemas.                                 | \_/10      |
+| PXD7  | Select the initial direct semantic tools.                                               | \_/10      |
+| PXD8  | Define how direct tools are promoted from observed agent workflows.                     | \_/10      |
+| PXD9  | Define how direct tools are retired from the eager surface.                             | \_/10      |
+| PXD10 | Define the isolation boundary around model-written TypeScript inside the run container. | \_/10      |
+| PXD11 | Define the capabilities available to model-written TypeScript.                          | \_/10      |
+| PXD16 | Define replay behavior after a container restart.                                       | \_/10      |
+| PXD17 | Define stable invocation identifiers for retries.                                       | \_/10      |
+| PXD18 | Define idempotency requirements for Plane mutations.                                    | \_/10      |
+| PXD19 | Define behavior for mutation outcomes that cannot be determined.                        | \_/10      |
+| PXD21 | Define per-operation result limits.                                                     | \_/10      |
+| PXD22 | Define cumulative execution result limits.                                              | \_/10      |
+| PXD23 | Define storage for authoritative results that exceed model-facing limits.               | \_/10      |
+| PXD25 | Define native Plane tool versioning.                                                    | \_/10      |
+| PXD26 | Define external MCP compatibility versioning.                                           | \_/10      |
+| PXD27 | Define TypeScript runtime versioning.                                                   | \_/10      |
 
 ## Conversation UX Interview Ledger
 

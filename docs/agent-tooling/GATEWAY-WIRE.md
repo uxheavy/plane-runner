@@ -19,7 +19,7 @@ GET /api/v1/agent-operations/catalog/
 GET /api/v1/agent-operations/catalog/{operation_id}/
 ```
 
-The list endpoint supports bounded text search, tags, effect, cursor, and limit. The detail endpoint returns one exact major-version contract. Responses carry a catalog digest and HTTP `ETag`.
+The list endpoint supports bounded text search, tags, read-or-mutation classification, cursor, and limit. The detail endpoint returns one exact major-version contract. Responses carry a catalog digest and HTTP `ETag`.
 
 Catalog visibility is identical across authenticated Plane identities. Visibility does not imply execution permission.
 
@@ -80,20 +80,6 @@ type GatewayWireResult =
         | { kind: "artifact"; preview: unknown; artifact_ref: string; expires_at: string };
     }
   | {
-      state: "approval_required";
-      operation: string;
-      catalog_digest: string;
-      attempt_id: string;
-      audit_ref: string;
-      approval: {
-        approval_id: string;
-        effect: string;
-        summary: string;
-        input_digest: string;
-        expires_at: string;
-      };
-    }
-  | {
       state: "rejected" | "failed" | "outcome_unknown";
       operation: string;
       catalog_digest: string;
@@ -108,12 +94,9 @@ type GatewayWireResult =
     };
 ```
 
-The approval ID is opaque correlation, not a capability. `APPROVAL-PROTOCOL.md` defines the accepted Hermes-broker decision path and the exact same-turn retry; approver eligibility and credential mechanics remain pre-freeze decisions.
-
 ## HTTP behavior
 
 - `200` returns a success, replay, deterministic rejection, or reconciled result.
-- `202` means an administrator-configured approval decision is required and no side effect has run; the autonomous default path does not return `202`.
 - `400` means malformed wire input.
 - `401` means invalid or revoked authentication.
 - `403` means a non-leaking authorization denial.
@@ -139,9 +122,9 @@ For Hermes, the host derives keys from the trusted tool-call identity or stable 
 
 - Operation IDs include their contract major version, such as `plane.work_items.get@1`.
 - Additive compatible schema and documentation changes preserve the major version.
-- Incompatible input, output, error, authorization-effect, or idempotency changes require a new major operation ID.
+- Incompatible input, output, error, authorization, or idempotency changes require a new major operation ID.
 - Every request pins the exact catalog digest used by its adapter.
-- A stale incompatible digest fails before authorization, approval, or execution.
+- A stale incompatible digest fails before authorization or execution.
 - Native, Code Mode, SDK, and MCP adapter digests are pinned together in the integration lock.
 
 ## Official Python SDK adapter
@@ -168,6 +151,6 @@ The Deno supervisor does not call this HTTP endpoint. Generated TypeScript sends
 - Every result-envelope state and HTTP mapping.
 - Same-key replay, changed-input conflict, lost response, and `outcome_unknown` reconciliation.
 - Result spill, bounded artifact read, expiry, and cleanup.
-- Forged client context, workspace, catalog, attempt, approval, and idempotency fields.
+- Forged client context, workspace, catalog, attempt, and idempotency fields.
 - Native, Code Mode, SDK, and MCP adapters against shared semantic fixtures.
 - SDK direct-REST default behavior remains backward compatible.

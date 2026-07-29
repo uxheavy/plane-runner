@@ -4,14 +4,14 @@ This file records durable progress for the Plane Agent Tooling goal. Append entr
 
 ## Current state
 
-| Field                      | Value                                                                          |
-| -------------------------- | ------------------------------------------------------------------------------ |
-| Phase                      | Program definition                                                             |
-| Active gate                | Freeze and approve release and verification manifests                          |
-| Plane branch               | `codex/agent-tooling-architecture`                                             |
-| Hermes branch              | Not created from baseline `5e88745f125c0d332c1d16ea0363860d447657f5`           |
-| Last verified Plane commit | `f70ec0466a`                                                                   |
-| Next action                | Approve the proposed v1 gateway interface, eager tools, and operation boundary |
+| Field                      | Value                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------- |
+| Phase                      | Program definition                                                              |
+| Active gate                | Freeze and approve release and verification manifests                           |
+| Plane branch               | `codex/agent-tooling-architecture`                                              |
+| Hermes branch              | Not created from baseline `5e88745f125c0d332c1d16ea0363860d447657f5`            |
+| Last verified Plane commit | `c91a27b122`                                                                    |
+| Next action                | Freeze the proposed eager tools, operation boundary, runtime, and numeric gates |
 
 ## 2026-07-29 — Goal grounding
 
@@ -335,3 +335,25 @@ The Hermes broker protocol remains an optional policy path rather than the norma
 ### Next action
 
 Define the smallest administrator policy-matching rule and approver eligibility for the optional prompt path.
+
+## 2026-07-29 — Runtime operation approvals removed
+
+### Final correction
+
+- Plane agent operations never pause for a human confirmation.
+- Plane's live authorization is the final runtime allow-or-deny decision.
+- Authorized operations execute autonomously.
+- Unauthorized operations return a non-leaking denial.
+- V1 has no operation-approval policy, prompt state, broker credential, decision endpoint, wait limit, or resume protocol.
+
+### Superseded work
+
+The previously recorded mandatory and optional Hermes approval-broker designs are retained only as historical worklog entries. They are removed from the current architecture, contracts, release manifest, verification manifest, and implementation scope.
+
+### Consequence
+
+Release-manifest approval, verifier qualification, rollout promotion, and deployment approval remain human-controlled delivery gates. They are distinct from agent runtime behavior.
+
+### Next action
+
+Freeze the remaining operation, result, runtime, compatibility, evaluation, and rollout decisions without designing runtime approvals.

@@ -36,14 +36,6 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ATD-028 | A curated overlay enriches generated operation schemas.                                             | \_/10      |
 | ATD-029 | Explicit agent-native operations may supplement the public API.                                     | \_/10      |
 | ATD-030 | Private UI and session routes are not automatically agent-facing.                                   | \_/10      |
-| ATD-031 | Approval policy is evaluated separately from authorization.                                         | \_/10      |
-| ATD-032 | Approval is evaluated for each inner Code Mode operation.                                           | \_/10      |
-| ATD-033 | Approval never grants absent Plane permission.                                                      | \_/10      |
-| ATD-034 | Hermes's existing live approval lifecycle is reused.                                                | \_/10      |
-| ATD-035 | Approval resumes the exact tool call in the same logical turn.                                      | \_/10      |
-| ATD-036 | A pending approval does not survive Hermes or container restart.                                    | \_/10      |
-| ATD-037 | Restart while awaiting approval fails the run.                                                      | \_/10      |
-| ATD-038 | Concurrent admitted sibling operations may continue while one waits for approval.                   | \_/10      |
 | ATD-039 | Explicitly declared groups may be preflighted before concurrent dispatch.                           | \_/10      |
 | ATD-040 | Concurrent groups return per-operation outcomes.                                                    | \_/10      |
 | ATD-041 | Concurrent groups are not represented as database transactions.                                     | \_/10      |
@@ -88,7 +80,7 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ATD-080 | The Code Mode callback channel is host-bound against cross-run and identity spoofing.               | \_/10      |
 | ATD-081 | The core gateway exposes one request-bound operation-execution seam.                                | \_/10      |
 | ATD-082 | Read-only catalog search and description use a separate discovery interface.                        | \_/10      |
-| ATD-083 | Approval, idempotency, reconciliation, result, and audit lifecycle remain internal to the gateway.  | \_/10      |
+| ATD-083 | Idempotency, reconciliation, result, and audit lifecycle remain internal to the gateway.            | \_/10      |
 | ATD-084 | The architecture chooses the least custom code that still satisfies approved production gates.      | \_/10      |
 | ATD-085 | Plane's official Python MCP server remains the external adapter host.                               | \_/10      |
 | ATD-086 | Existing MCP handlers migrate incrementally to the shared gateway rather than being recreated.      | \_/10      |
@@ -96,19 +88,22 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ATD-088 | V1 does not add a general workflow-graph DSL.                                                       | \_/10      |
 | ATD-089 | The official MCP server reaches the gateway through one optional shared Plane Python SDK transport. | \_/10      |
 | ATD-090 | Cross-process gateway calls use one versioned JSON HTTP adapter in Plane's existing API service.    | \_/10      |
-| ATD-091 | Hermes submits Plane approval decisions through a separate trusted broker credential.               | \_/10      |
-| ATD-092 | Agent execution credentials cannot submit Plane approval decisions.                                 | \_/10      |
-| ATD-093 | Plane operation approval choices are limited to approve once or deny in v1.                         | \_/10      |
 | ATD-094 | Plane agents execute authorized operations autonomously by default.                                 | \_/10      |
-| ATD-095 | Administrators may configure selected semantic effects to require a human prompt.                   | \_/10      |
-| ATD-096 | No semantic effect requires a human prompt until an administrator explicitly enables it.            | \_/10      |
+| ATD-097 | V1 has no runtime human-confirmation prompts for agent operations.                                  | \_/10      |
 
 ## Superseded
 
-| ID      | Superseded decision                                                                  | Replacement                                                     | Importance |
-| ------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------- | ---------- |
-| ATS-001 | Pause Code Mode by releasing the container and replaying prior calls after approval. | ATD-034 and ATD-035 reuse Hermes's live same-turn approval.     | \_/10      |
-| ATS-002 | Mint a short-lived assertion for every Hermes run.                                   | ATD-017 uses one revocable credential per Plane agent identity. | \_/10      |
+| ID      | Superseded decision                                                                  | Replacement                                                              | Importance |
+| ------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ---------- |
+| ATS-001 | Pause Code Mode by releasing the container and replaying prior calls after approval. | ATD-097 removes runtime operation approvals.                             | \_/10      |
+| ATS-002 | Mint a short-lived assertion for every Hermes run.                                   | ATD-017 uses one revocable credential per Plane agent identity.          | \_/10      |
+| ATS-003 | Evaluate a separate runtime approval policy for agent operations.                    | ATD-094 and ATD-097 use autonomous execution within Plane authorization. | \_/10      |
+| ATS-004 | Reuse Hermes's live approval lifecycle for Plane operations.                         | ATD-097 removes runtime human-confirmation prompts.                      | \_/10      |
+| ATS-005 | Persist or resume pending Plane operation approvals.                                 | ATD-097 removes pending runtime approvals.                               | \_/10      |
+| ATS-006 | Continue admitted siblings while one Plane operation waits for approval.             | ATD-097 removes approval waits; ATD-039 retains group preflight.         | \_/10      |
+| ATS-007 | Submit decisions through a separate Hermes broker credential.                        | ATD-097 removes the approval decision path and credential.               | \_/10      |
+| ATS-008 | Allow administrators to configure optional operation prompts.                        | ATD-097 removes all runtime operation prompts.                           | \_/10      |
+| ATS-009 | Resume the exact Hermes tool call after a Plane approval decision.                   | ATD-097 removes runtime approval decisions and resume behavior.          | \_/10      |
 
 ## Open
 
@@ -138,6 +133,6 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | ---------- |
 | ATP-002 | Expose five eager semantic domain tools plus `plane_docs`, `plane_search`, and `plane_execute`.                          | \_/10      |
 | ATP-004 | Run TypeScript in a pinned Deno supervisor/Worker with explicit deny permissions inside the disposable Hermes container. | \_/10      |
-| ATP-005 | Use the v1 execution, result, artifact, approval, and audit-retention limits proposed in the release manifest.           | \_/10      |
+| ATP-005 | Use the v1 execution, result, artifact, and audit-retention limits proposed in the release manifest.                     | \_/10      |
 | ATP-006 | Use the proposed 30-minute ten-run load gate and explicit latency, error, and recovery thresholds.                       | \_/10      |
 | ATP-007 | Require 24-hour development, 72-hour allowlisted, 72-hour expanded, and 24-hour GA observation windows.                  | \_/10      |

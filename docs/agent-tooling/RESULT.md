@@ -10,10 +10,12 @@ Not yet complete.
 
 ## Repository state
 
-| Repository | Branch                             | Final commit | Clean   |
-| ---------- | ---------------------------------- | ------------ | ------- |
-| Plane      | `codex/agent-tooling-architecture` | Pending      | Pending |
-| Hermes     | Pending                            | Pending      | Pending |
+| Repository          | Branch                             | Final commit | Clean   |
+| ------------------- | ---------------------------------- | ------------ | ------- |
+| Plane               | `codex/agent-tooling-architecture` | Pending      | Pending |
+| Hermes              | Pending                            | Pending      | Pending |
+| Official MCP server | `uxheavy:codex/agent-tooling-v1`   | Pending      | Pending |
+| Plane Python SDK    | `uxheavy:codex/agent-tooling-v1`   | Pending      | Pending |
 
 ## Primary verifier
 
@@ -21,7 +23,7 @@ Pending implementation and clean-checkout execution.
 
 ## Mandatory live Hermes acceptance
 
-Pending execution against the authenticated Plane development server. Final evidence must include prompts, run IDs, approval evidence, created object IDs, Plane readbacks, correlated audit references, isolation probes, and cleanup.
+Pending execution against the authenticated Plane development server. Final evidence must include prompts, run IDs, created object IDs, Plane readbacks, correlated audit references, isolation probes, and cleanup.
 
 ## Focused verification
 
@@ -45,7 +47,7 @@ Pending user-visible Plane and Hermes UI screenshots and readbacks.
 
 ## Rollout and production readback
 
-Pending explicit approval and execution.
+Pending explicit deployment approval and execution.
 
 ## Release and verifier manifests
 

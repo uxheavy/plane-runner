@@ -37,7 +37,7 @@ Deliverables:
 - Gateway boundary inside the Plane API service.
 - Dedicated agent identity authentication.
 - Live Plane authorization on every operation.
-- Approval-policy interception point.
+- Autonomous admission after live Plane authorization.
 - Idempotency and invocation records.
 - Append-only audit events.
 - Result shaping and structured errors.
@@ -51,7 +51,7 @@ Deliverables:
 - Thin native tool adapters for the initial eager tools.
 - Progressive Tool Search registration for deferred operations.
 - Correlated run, turn, tool-call, and invocation IDs.
-- Hermes approval and concurrent-execution integration.
+- Hermes concurrent-execution integration.
 
 Exit gate: named pilot workflows succeed without Code Mode and cannot bypass Plane policy.
 
@@ -64,9 +64,9 @@ Deliverables:
 - Restricted child isolate in the run container.
 - Credential-free host RPC.
 - Resource, call-count, stdout, result, and cumulative limits.
-- Nested approval and audit propagation.
+- Nested authorization and audit propagation.
 
-Exit gate: sandbox, credential-exfiltration, nested approval, timeout, and oversized-result tests pass.
+Exit gate: sandbox, credential-exfiltration, nested authorization, timeout, and oversized-result tests pass.
 
 ### 5. Mutation reliability
 
@@ -110,7 +110,7 @@ Stages:
 3. Additional workspaces under feature flag.
 4. General availability for the approved catalog.
 
-Each stage requires review of task success, denials, approvals, unknown outcomes, audit gaps, sandbox failures, and operator incidents.
+Each stage requires review of task success, denials, unknown outcomes, audit gaps, sandbox failures, and operator incidents.
 
 ### 8. External MCP convergence
 
@@ -134,8 +134,7 @@ Selected contents:
 - One parent release-plan work item.
 - Three coordinated child work items.
 - One source-linked planning comment.
-- Semantic release-plan policy evaluation under the autonomous default.
-- A separate administrator-configured real approval control.
+- Autonomous semantic release-plan execution after authorization.
 - Stable invocation idempotency and duplicate prevention.
 - Structured denied-access proof.
 - Credential and network-isolation probes.
@@ -148,9 +147,10 @@ Selected contents:
 - [ ] Shared operation contracts versioned and tested.
 - [ ] Dedicated agent credential issuance, storage, rotation, and revocation documented.
 - [ ] Authorization matrix passes for all pilot operations.
-- [ ] Approval cannot bypass Plane authorization.
+- [ ] Authorized operations never enter a human-confirmation state.
+- [ ] Unauthorized operations create no side effect.
 - [ ] Generated TypeScript cannot access credentials or arbitrary network resources.
-- [ ] Every admitted operation produces audit evidence.
+- [ ] Every invalid, unauthorized, failed, unknown, replayed, and successful attempt produces required audit evidence.
 - [ ] Mutation retry and unknown-outcome behavior tested.
 - [ ] Model-visible and cumulative results remain bounded.
 - [ ] Temporary artifact retention and cleanup verified.
@@ -169,7 +169,7 @@ Selected contents:
 | ---------------------- | ------------------------------------------------------------------- |
 | Product/technical lead | Scope, sequencing, decision closure, production gates               |
 | Plane backend owner    | Operation contract, gateway, authorization, audit, idempotency      |
-| Hermes owner           | Native tools, Tool Search, Code Mode runtime, approval integration  |
+| Hermes owner           | Native tools, Tool Search, Code Mode runtime, host callbacks        |
 | Security owner         | Threat model, credential boundary, sandbox and authorization review |
 | Infrastructure owner   | Containers, limits, observability, retention, incident controls     |
 | Quality owner          | Contract tests, permission matrix, failure tests, agent evaluations |

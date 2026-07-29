@@ -2,19 +2,19 @@
 
 ## Status
 
-Proposed for release-manifest approval. The operation set and the coordinated release-plan scope are accepted; the exact schemas, limits, and approval effect labels in this document are not yet frozen. This document does not authorize implementation.
+Proposed for release-manifest approval. The operation set and the coordinated release-plan scope are accepted; the exact schemas and limits in this document are not yet frozen. This document does not authorize implementation.
 
 ## Contract rules
 
 - Every operation runs against the authenticated, request-bound workspace. Workspace identity is never an input field.
 - Project and work-item references accept natural Plane identifiers, but the gateway resolves them once to immutable IDs before authorization or execution.
-- The caller cannot provide credentials, actor IDs, audit IDs, attempt IDs, approval decisions, external integration IDs, timestamps, or mutation idempotency keys.
+- The caller cannot provide credentials, actor IDs, audit IDs, attempt IDs, external integration IDs, timestamps, or mutation idempotency keys.
 - Unknown input fields are rejected. Mutation inputs are normalized before their digest is calculated.
 - UUIDs are lowercase canonical UUID strings. Dates use `YYYY-MM-DD`. Timestamps use UTC RFC 3339.
 - HTML is sanitized by Plane's existing validator. Agent-visible HTML fields are limited to 64 KiB before sanitization.
 - List limits apply before dispatch. Truncation is explicit and always returns a continuation cursor when more data is available.
 - A read requires active membership in every referenced Plane object. A mutation additionally requires Plane's current member-or-admin mutation role for every affected project.
-- Approval is evaluated only after authentication, reference resolution, input validation, and Plane authorization succeed. Approval never grants Plane permission.
+- Plane authorization is the final runtime decision. Authorized operations continue immediately; unauthorized operations return a non-leaking denial with no side effect.
 - All expected outcomes use the gateway result envelope in `GATEWAY-WIRE.md`; operation-specific errors appear in its structured `error` object.
 
 ## Shared value shapes
@@ -103,7 +103,7 @@ type Input = { id: string } | { identifier: string };
 type Output = { project: Project };
 ```
 
-Identifier matching is case-insensitive and exact. V1 deliberately excludes project-name resolution because names are not unique. Approval effect: `read`.
+Identifier matching is case-insensitive and exact. V1 deliberately excludes project-name resolution because names are not unique.
 
 ### `plane.cycles.list_current@1`
 
@@ -114,7 +114,7 @@ type Input = { project: ProjectRef };
 type Output = { cycles: Cycle[] }; // 0..10, ordered by start date then ID
 ```
 
-This normalizes the current public endpoint's bare array response. More than one current cycle is preserved rather than guessed away. Approval effect: `read`.
+This normalizes the current public endpoint's bare array response. More than one current cycle is preserved rather than guessed away.
 
 ### `plane.work_items.search@1`
 
@@ -135,7 +135,7 @@ type Output = PageResult<
 >;
 ```
 
-Without `project`, results cover only projects in the bound workspace where the actor is an active member. Search does not expose raw PQL in v1. Approval effect: `read`.
+Without `project`, results cover only projects in the bound workspace where the actor is an active member. Search does not expose raw PQL in v1.
 
 ### `plane.work_items.get@1`
 
@@ -157,7 +157,7 @@ type Output = {
 };
 ```
 
-Relations are limited to 50 and include only related work items independently visible to the actor. Approval effect: `read`.
+Relations are limited to 50 and include only related work items independently visible to the actor.
 
 ### `plane.project_members.list@1`
 
@@ -172,7 +172,7 @@ type Output = PageResult<{
 }>;
 ```
 
-Email addresses and other profile data are excluded because the pilot does not need them. Approval effect: `read`.
+Email addresses and other profile data are excluded because the pilot does not need them.
 
 ## Mutation operations
 
@@ -198,7 +198,7 @@ type Input = {
 type Output = { work_item: WorkItem };
 ```
 
-The parent, cycle, state, assignees, and labels must belong to the resolved project and pass current Plane authorization. `start_date` cannot follow `target_date`. The gateway claims idempotency before creation; public `external_source` and `external_id` are not exposed as a substitute. Proposed approval effect: `work_item.write`.
+The parent, cycle, state, assignees, and labels must belong to the resolved project and pass current Plane authorization. `start_date` cannot follow `target_date`. The gateway claims idempotency before creation; public `external_source` and `external_id` are not exposed as a substitute.
 
 ### `plane.work_items.update@1`
 
@@ -224,7 +224,7 @@ type Input = {
 type Output = { work_item: WorkItem; changed_fields: string[] };
 ```
 
-`patch` must contain at least one field. Arrays replace their corresponding complete set. `cycle: null` removes current cycle placement. Plane validates every changed reference and the final date range. Proposed approval effect: `work_item.write`.
+`patch` must contain at least one field. Arrays replace their corresponding complete set. `cycle: null` removes current cycle placement. Plane validates every changed reference and the final date range.
 
 ### `plane.comments.create@1`
 
@@ -243,7 +243,7 @@ type Input = {
 type Output = { comment: Comment };
 ```
 
-When `source` is supplied, Plane appends one canonical sanitized link block to the comment. The operation requires the same member-or-admin mutation role as work-item mutation even though the current public comment endpoint permits any active project member; v1 intentionally closes that mismatch. Proposed approval effect: `comment.write`.
+When `source` is supplied, Plane appends one canonical sanitized link block to the comment. The operation requires the same member-or-admin mutation role as work-item mutation even though the current public comment endpoint permits any active project member; v1 intentionally closes that mismatch.
 
 ### `plane.release_plans.create@1`
 
@@ -281,7 +281,7 @@ type Output = {
 };
 ```
 
-The gateway resolves and validates all references, checks authorization for the complete write set, evaluates approval policy once, and claims one durable idempotency record before any side effect. The autonomous default continues immediately; an administrator-configured `release_plan.write` prompt produces at most one decision for the whole composition. Database changes commit in one transaction; activity and webhook delivery use post-commit/outbox behavior. A failed transaction creates none of the five requested objects. A lost response is reconciled from the invocation record and returns the original five object IDs. Proposed approval effect: `release_plan.write`.
+The gateway resolves and validates all references, checks authorization for the complete write set, and claims one durable idempotency record before any side effect. Authorized execution continues immediately. Database changes commit in one transaction; activity and webhook delivery use post-commit/outbox behavior. A failed transaction creates none of the five requested objects. A lost response is reconciled from the invocation record and returns the original five object IDs.
 
 ## Error codes
 
@@ -291,9 +291,6 @@ The gateway resolves and validates all references, checks authorization for the 
 | `not_found`            | No authorized matching object exists                                | `never` until context changes     |
 | `ambiguous_reference`  | A natural reference matched multiple authorized objects             | `never` until input becomes exact |
 | `permission_denied`    | Plane authorization rejected the bound actor without object leakage | `never` until permission changes  |
-| `approval_required`    | No side effect ran and a decision is required                       | resume the same invocation only   |
-| `approval_rejected`    | A trusted decision rejected the exact input digest                  | `never` for that invocation       |
-| `approval_expired`     | The pending decision expired before execution                       | `new_invocation`                  |
 | `idempotency_conflict` | The invocation key was reused with different normalized input       | `never`                           |
 | `catalog_stale`        | The caller's catalog digest is incompatible                         | `new_invocation` after refresh    |
 | `conflict`             | Current Plane state prevents the requested change                   | depends on refreshed state        |
@@ -315,9 +312,7 @@ Validation errors may include bounded field paths and safe corrective hints. Aut
 
 Before these contracts can be approved and frozen:
 
-1. Resolve who is authorized to answer optional administrator-configured prompts and how the same invocation resumes.
-2. Confirm or revise the proposed approval effect labels and administrator matching rules.
-3. Generate machine-readable JSON Schemas from the frozen catalog and pin their digest.
-4. Add positive, denial, ambiguity, stale-reference, idempotency, lost-response, and size-bound fixtures for every operation.
-5. Verify each authorization mapping against executable Plane permission tests.
-6. Record every official MCP tool that maps to a pilot operation without changing its public MCP schema or behavior.
+1. Generate machine-readable JSON Schemas from the frozen catalog and pin their digest.
+2. Add positive, denial, ambiguity, stale-reference, idempotency, lost-response, and size-bound fixtures for every operation.
+3. Verify each authorization mapping against executable Plane permission tests.
+4. Record every official MCP tool that maps to a pilot operation without changing its public MCP schema or behavior.
