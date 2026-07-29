@@ -479,3 +479,23 @@ This is a digest-bound candidate, not user approval, verifier qualification, imp
 ### Next action
 
 Obtain independent source-alignment and false-pass reviews, close findings, rerun all checks, and commit the verified fixture-freeze increment. The exact eager native tool set remains the next unanswered architecture decision.
+
+## 2026-07-30 — Safety evaluation evidence design proposed
+
+### Source-grounded trial design
+
+- Separated EV-011 through EV-030 into a sibling `safety-v1` bundle rather than adding conditional complexity to `planning-v1`.
+- Distinguished static fixture validation from live-trial qualification and prohibited producer-supplied Boolean verdicts as qualification oracles.
+- Required immutable evidence indexing and producer separation between verifier, fault harness, canary services, supervisor, Hermes, and the independent final verifier.
+- Froze RFC 8785 canonical result bytes, exact inline/spill boundaries, bounded authenticated artifact reads, and cumulative-result spill behavior.
+- Distinguished gateway audit, pre-actor edge-authentication evidence, and pre-gateway host-security evidence.
+- Selected exact result, idempotency, unknown-outcome, dependency, sandbox, callback, concurrency, and restart branches for EV-011 through EV-030.
+- Required verifier-owned mutation controls for effect, audit, correlation, fault-boundary, evidence-producer, byte/digest, and skipped-probe false passes.
+
+### Qualification state
+
+This design resolves candidate seams only. It is not the executable `safety-v1` bundle, manifest approval, implementation authorization, or trial evidence.
+
+### Next action
+
+Generate the strict safety fixtures, per-scenario prompts and TypeScript probes, trial-result schema, independent live verifier, operator mutation suite, and transitive digest contract. Record the already granted exact eager native tool approval in the next logical documentation increment.

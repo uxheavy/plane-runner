@@ -98,26 +98,26 @@ If the provider cannot expose an immutable model snapshot, a changed model-metad
 
 These values are proposed release maxima. Deployment configuration may be stricter but cannot be looser without a manifest revision.
 
-| Limit                                        |      Proposed maximum |
-| -------------------------------------------- | --------------------: |
-| Model-written TypeScript source              |          64 KiB UTF-8 |
-| Total `plane_execute` wall time              |           120 seconds |
-| TypeScript child CPU time                    |            30 seconds |
-| TypeScript child memory                      |               256 MiB |
-| Inner Plane calls per execution              |                    64 |
-| Concurrent inner Plane calls                 |                     8 |
-| Operations in one explicit preflight group   |                    16 |
-| Inline serialized result per inner operation |                32 KiB |
-| Cumulative inline inner results              |               128 KiB |
-| Final model-visible `plane_execute` result   |                64 KiB |
-| Combined model-visible stdout and stderr     |                32 KiB |
-| Oversized-result preview                     |                 8 KiB |
-| Temporary authoritative artifact             |                10 MiB |
-| Bounded artifact read                        |       32 KiB per call |
-| Temporary artifact retention                 | 1 hour after creation |
-| Expired-artifact cleanup lag                 |            15 minutes |
-| Append-only invocation and audit metadata    |      365 days minimum |
-| Bulky full results in durable audit          |      Never by default |
+| Limit                                        |                               Proposed maximum |
+| -------------------------------------------- | ---------------------------------------------: |
+| Model-written TypeScript source              |                                   64 KiB UTF-8 |
+| Total `plane_execute` wall time              |                                    120 seconds |
+| TypeScript child CPU time                    |                                     30 seconds |
+| TypeScript child memory                      |                                        256 MiB |
+| Inner Plane calls per execution              |                                             64 |
+| Concurrent inner Plane calls                 |                                              8 |
+| Operations in one explicit preflight group   |                                             16 |
+| Inline serialized result per inner operation |                                         32 KiB |
+| Cumulative inline inner results              |                                        128 KiB |
+| Final model-visible `plane_execute` result   |                                         64 KiB |
+| Combined model-visible stdout and stderr     |                                         32 KiB |
+| Oversized-result preview                     |                                          8 KiB |
+| Temporary authoritative artifact             |                                         10 MiB |
+| Bounded artifact read response               | 32 KiB canonical; at most 23,000 decoded bytes |
+| Temporary artifact retention                 |                          1 hour after creation |
+| Expired-artifact cleanup lag                 |                                     15 minutes |
+| Append-only invocation and audit metadata    |                               365 days minimum |
+| Bulky full results in durable audit          |                               Never by default |
 
 The host counts requests before asynchronous dispatch. Rejected, denied, failed, and successful callback attempts all consume the inner-call budget. Artifact storage is authoritative only for its retention window; durable audit retains its digest and bounded redacted summary.
 

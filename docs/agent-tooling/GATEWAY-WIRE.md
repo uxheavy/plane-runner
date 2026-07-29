@@ -52,6 +52,44 @@ Proposed request:
 
 `client_context` is correlation metadata, not identity or permission. Plane binds it to the authenticated actor, workspace, server-generated attempt ID, and audit record. Generated code cannot set or override the object.
 
+### Temporary artifact reads
+
+```text
+GET /api/v1/workspaces/{workspace_slug}/agent-artifacts/{artifact_ref}/?cursor={cursor}&limit={limit}
+```
+
+The reference and cursor are opaque authenticated ASCII values. `artifact_ref` and `infrastructure_attempt_ref` are each at most 256 bytes, and each cursor is at most 512 bytes. `limit` counts decoded authoritative bytes, defaults to 23,000, and is restricted to 1 through 23,000. A success returns artifact reference, byte offset, Base64 bytes, decoded byte length, chunk SHA-256, infrastructure attempt reference, and an opaque next cursor or terminal `null`. Decoded chunks are at most 23,000 bytes, and the complete canonical response, including Base64 expansion and envelope fields, is at most 32 KiB; the server shortens a chunk below the requested limit if necessary to preserve that bound. The cursor is bound to artifact, actor, workspace, run, expiry, and prior offset.
+
+The exact read result is:
+
+```ts
+type ArtifactReadResult = {
+  artifact_ref: string;
+  offset: number;
+  byte_length: number;
+  bytes_base64: string;
+  chunk_sha256: string;
+  next_cursor: string | null;
+  infrastructure_attempt_ref: string;
+};
+
+type ArtifactReadFailure =
+  | {
+      error: { code: "artifact_not_found"; message: "The requested artifact was not found."; retry: "never" };
+      infrastructure_attempt_ref: string;
+    }
+  | {
+      error: { code: "invalid_artifact_cursor"; message: "The artifact cursor is invalid."; retry: "never" };
+      infrastructure_attempt_ref: string;
+    }
+  | {
+      error: { code: "artifact_expired"; message: "The artifact has expired."; retry: "never" };
+      infrastructure_attempt_ref: string;
+    };
+```
+
+Binding failure returns `403 artifact_not_found`; stale or mismatched cursor returns `409 invalid_artifact_cursor`; expiry returns `410 artifact_expired`. The response schema rejects unknown fields. All three failures expose no artifact bytes, digest, size, actor, workspace, run, cursor payload, or expiry timestamp. Reads consume callback call and output budgets and produce exactly one infrastructure intent/outcome pair joined by `infrastructure_attempt_ref`. Generated TypeScript can reach this endpoint only through the credential-free host method `plane.readArtifact`; it receives no URL, workspace slug, credential, or cursor signing material.
+
 ## Authentication and binding
 
 - The wire reuses Plane's current `X-Api-Key` and OAuth bearer authentication.
@@ -64,35 +102,55 @@ Proposed request:
 
 ## Result envelope
 
-Every response contains the exact operation, catalog digest, server attempt ID, audit reference, and one state.
+Every authenticated actor-bound gateway result contains the exact operation, catalog digest, server attempt ID, audit reference, and one state. The edge-authentication exception below is not a `GatewayWireResult`.
 
 ```ts
-type GatewayWireResult =
+type GatewayWireResult = {
+  [O in CatalogOperationId]: GatewayWireResultFor<O>;
+}[CatalogOperationId];
+
+type GatewayWireResultFor<O extends CatalogOperationId> =
   | {
       state: "succeeded";
-      operation: string;
+      operation: O;
       catalog_digest: string;
       attempt_id: string;
       audit_ref: string;
       replayed: boolean;
-      output:
-        | { kind: "inline"; value: unknown }
-        | { kind: "artifact"; preview: unknown; artifact_ref: string; expires_at: string };
+      output: { kind: "inline"; value: CatalogOperationOutputs[O] } | ({ kind: "artifact" } & ArtifactDescriptor);
     }
-  | {
-      state: "rejected" | "failed" | "outcome_unknown";
-      operation: string;
+  | ({
+      operation: O;
       catalog_digest: string;
       attempt_id: string;
       audit_ref: string;
-      error: {
-        code: string;
-        message: string;
-        retry: "never" | "same_invocation" | "new_invocation" | "reconcile";
-        details?: unknown;
-      };
-    };
+      replayed: boolean;
+    } & CatalogOperationFailureVariants[O]);
+
+type ArtifactDescriptor = {
+  preview: {
+    encoding: "utf-8-prefix";
+    byte_length: number;
+    value: string;
+  };
+  preview_limit_bytes: 8192 | 2048;
+  artifact_ref: string;
+  authoritative_byte_length: number;
+  authoritative_sha256: string;
+  expires_at: string;
+};
+
+type DependencyUnavailableError = {
+  code: "dependency_unavailable";
+  message: "A required Plane dependency is unavailable.";
+  retry: "same_invocation";
+  details: { retry_after_ms: number };
+};
 ```
+
+`CatalogOperationOutputs` maps each exact operation ID to its strict successful inline projection. `CatalogOperationFailureVariants` maps each operation ID to a union of complete `{state,error}` variants, so both the permitted error codes and their fixed state remain correlated with the operation; it has no open-string or independently selectable state fallback. Unknown fields, states, and codes are rejected. `DependencyUnavailableError` shows the exact safety-v1 dependency detail shape. Other operation-specific errors may expose only bounded shapes frozen by their approved versioned contracts, such as authorized ambiguity candidates or validation field paths and safe corrective hints; there is no generic `details` object.
+
+`replayed` is present on every authenticated gateway result. It is `true` only when returning a previously recorded terminal compatible success or deterministic rejection; it is always `false` for a newly executed result, `failed`, or `outcome_unknown`.
 
 ## HTTP behavior
 
@@ -107,13 +165,17 @@ type GatewayWireResult =
 
 Callers never infer mutation retry safety from HTTP status alone.
 
+Authentication rejection happens before an actor-bound gateway result exists. HTTP 401 returns only `{error:{code:"authentication_failed",message:"Authentication failed.",retry:"never"},edge_attempt_ref}`. It does not contain gateway state, Plane attempt ID, operation audit reference, actor, output, details, or object data. The trusted host may normalize that body to its own rejected-result shape while preserving `source:"edge_authentication"`.
+
 ## Idempotency
 
 Mutation identity is scoped by authenticated actor, workspace, operation major version, and `Idempotency-Key`.
 
-- Same key and same normalized input digest returns the recorded result with `replayed: true`.
+- Same key and same normalized input digest returns the recorded result with `replayed: true` when the logical invocation has a terminal compatible result.
+- A known pre-commit failure may leave the invocation `retryable` without a terminal result. After its contract's backoff or health gate, one caller may atomically claim the next server attempt under the same logical invocation; concurrent retry claimers cannot both execute.
 - Same key and different input returns `idempotency_conflict` without execution.
 - A mutation that may have committed but cannot be reconciled returns `outcome_unknown` and `retry: "reconcile"`.
+- `outcome_unknown` returns HTTP 200 and allows explicit reconciliation only through the original trusted host/operator context bound to the authenticated actor and invocation.
 - Reads do not accept mutation idempotency keys and may use ordinary transport retry policy.
 
 For Hermes, the host derives keys from the trusted tool-call identity or stable Code Mode label. For MCP, middleware binds the outer MCP request ID and inner SDK-call ordinal into host context; tool arguments cannot forge them.

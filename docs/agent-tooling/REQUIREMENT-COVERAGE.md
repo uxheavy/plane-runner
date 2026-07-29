@@ -25,7 +25,7 @@ An ID suffix is the one-based ordinal in its source block: for example, `GC-LA-1
 | `RM-WF-*`         | Required workflow table data rows                            |    7 | `11b62218f612ade9919b25d792aa12ccf2f73f293159b24e5da1d7da7d4b6bba` |
 | `RC-OP-01..10`    | Pilot operation table data rows                              |   10 | `748e2d9f52f9d9272e70caed1f621885b626ea8a8714fb54942a81705115a4f8` |
 | `RC-PIN-01..14`   | Runtime-pin table data rows                                  |   14 | `1c2618f9ebdbf4f4b0ffaf479c1c596e4a994bb09c219da88b90b3a0a0f5f6ac` |
-| `RC-LIM-01..18`   | Execution/retention limit table data rows                    |   18 | `ae9993b0e1d4e4ba1dd15719a77cfdcca4ea904956712194b6b3bd31258b6e82` |
+| `RC-LIM-01..18`   | Execution/retention limit table data rows                    |   18 | `7b82b6f2d8143a00918d4a061aabadd655fbbcff5c5dbe2c1821f5fd94d8ed26` |
 | `RC-GATE-01..21`  | Numeric release-gate table data rows                         |   21 | `3ab47e5b8430a9f1df8863fc87ea20f7821b12905edeedb86b0ff634d7dfcbaa` |
 | `RC-ROLL-01..04`  | Rollout table data rows                                      |    4 | `958d5b42068176bc62cea8ab86cd5d9cf05e48b732d53192ee39fd2fecacdfa6` |
 | Release prose IDs | Exact 17 material prose lines mapped below, in source order  |   17 | `398cee54cc6957481a07b47c3e1dac0ce16076d0f3cd5a566bfee71347af9cce` |
@@ -314,7 +314,7 @@ All records include the common evidence fields from `VERIFICATION-MANIFEST.md` a
 | RC-LIM-11 | 32 KiB combined stdout/stderr                                                  | VM-008, VM-009         | Combined output is explicitly bounded and child remains healthy                     | E-008, E-009        |
 | RC-LIM-12 | 8 KiB oversized-result preview                                                 | VM-008                 | Preview is bounded and carries authoritative digest/reference                       | E-008               |
 | RC-LIM-13 | 10 MiB temporary artifact                                                      | VM-008                 | At-cap object succeeds and over-cap input follows frozen rejection policy           | E-008               |
-| RC-LIM-14 | 32 KiB bounded artifact read                                                   | VM-008                 | Read limit/cursor boundary returns exact bytes without overrun                      | E-008               |
+| RC-LIM-14 | 32 KiB canonical artifact-read response with at most 23,000 decoded bytes      | VM-008                 | Read limit/cursor boundary returns exact bytes without serialized-response overrun  | E-008               |
 | RC-LIM-15 | One-hour artifact retention                                                    | VM-008                 | Artifact is readable before expiry and denied after                                 | E-008               |
 | RC-LIM-16 | Fifteen-minute cleanup lag                                                     | VM-008                 | Artifact bytes are absent by expiry plus 15 minutes                                 | E-008               |
 | RC-LIM-17 | Audit metadata retained at least 365 days                                      | VM-006, VM-015         | Configuration/readback proves minimum and early deletion is blocked                 | E-006, E-015        |
