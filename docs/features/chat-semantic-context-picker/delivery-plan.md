@@ -7,8 +7,8 @@
 | M0  | Product and architecture baseline | Scope, boundaries, ADR, branch, tracking                            | Codex          | Complete | Feature dossier merged on feature branch                  |
 | M1  | Selection-foundation spike        | Pin and validate React Grab primitives in Plane                     | Codex          | Complete | Real Chrome tests and production bundle verifier pass     |
 | M2  | Core contracts and registry       | Types, registry, point/region result model                          | Codex          | Complete | Ten browser contract tests and package gates pass         |
-| M3  | Plane entity adapters             | Work items, projects, cycles, modules, pages, views, fields         | Codex          | Next     | Adapter tests with current store values                   |
-| M4  | Editor adapter                    | Page blocks, issue descriptions, ranges, embeds, client-live values | Codex          | Pending  | Tiptap/Yjs adapter tests                                  |
+| M3  | Plane entity adapters             | Work items, projects, cycles, modules, pages, views, fields         | Codex          | Complete | Live getter Adapter and 15-test browser regression pass   |
+| M4  | Editor adapter                    | Page blocks, issue descriptions, ranges, embeds, client-live values | Codex          | Next     | Tiptap/Yjs adapter tests                                  |
 | M5  | Server hydration                  | Permission-safe canonical resolution and stale/deleted handling     | Codex          | Pending  | Django tests for roles, projects, private pages, failures |
 | M6  | Composer integration kit          | Versioned adapter, fixtures, contract tests, integration guide      | Codex          | Pending  | Dummy consumer passes contract suite                      |
 | M7  | UI integration                    | Activation, overlay, context chips, preview, composer wiring        | User UI branch | External | End-to-end workflow passes                                |
@@ -49,6 +49,16 @@ verification. M7 and composer end-to-end wiring remain external to this branch.
 - [x] Abort superseded, externally cancelled, and disposed operations.
 - [x] Verify lifecycle behavior in stable Google Chrome.
 - [x] Pass strict types, lint, format, build, and production bundle gates.
+
+## M3 checklist
+
+- [x] Map the current `CoreRootStore` entity and related-value owners.
+- [x] Bind store paths through live getters without importing MobX.
+- [x] Resolve all six accepted entity types into curated JSON snapshots.
+- [x] Resolve every allowlisted work-item field at capture time.
+- [x] Exclude whole records, member email, view queries, and editor bodies.
+- [x] Return typed missing, mismatched, and editor-handoff failures.
+- [x] Pass the full M1-M3 browser regression suite and package gates.
 
 ## Cross-branch contract
 

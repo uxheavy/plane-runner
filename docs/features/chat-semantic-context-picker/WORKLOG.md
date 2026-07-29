@@ -2,12 +2,12 @@
 
 ## Current state
 
-| Item                    | Value                                                               |
-| ----------------------- | ------------------------------------------------------------------- |
-| Active phase            | M3: Plane entity adapters                                           |
-| Last completed evidence | M2 real-browser contract, lifecycle, build, and bundle verification |
-| Next action             | Map supported Plane stores and write resolver evidence contracts    |
-| Blocking condition      | None                                                                |
+| Item                    | Value                                                                |
+| ----------------------- | -------------------------------------------------------------------- |
+| Active phase            | M4: editor Adapter                                                   |
+| Last completed evidence | M3 entity, field, freshness, privacy, and CoreRootStore binding      |
+| Next action             | Map Tiptap/Yjs live block and range identity in Plane editor sources |
+| Blocking condition      | None                                                                 |
 
 ## Evidence log
 
@@ -21,6 +21,9 @@
 | 2026-07-29 | M2 RED    | Public contract suite failed because the core picker export was absent                 | `packages/chat-context/tests/semantic-context-picker.browser.test.ts`      | Implement the accepted Module   |
 | 2026-07-29 | M2 fix    | First pass captured a point field and its parent instead of the top target only        | Browser assertion diff                                                     | Narrow point capture            |
 | 2026-07-29 | M2 GREEN  | Ten browser tests plus strict types, lint, format, build, and bundle guard passed      | `m2-core-contracts.md`                                                     | Start M3 store mapping          |
+| 2026-07-29 | M3 map    | Mapped entities and related fields to current `CoreRootStore` owners                   | `packages/chat-context/tests/M3_EVIDENCE.md`                               | Write resolver tests            |
+| 2026-07-29 | M3 RED    | Resolver and CoreRootStore binding tests failed on their absent exports                | `plane-entity-context-source.browser.test.ts`                              | Implement live getter Adapter   |
+| 2026-07-29 | M3 GREEN  | Five M3 tests and the 15-test browser regression suite passed                          | `m3-plane-entity-adapter.md`                                               | Start M4 editor source mapping  |
 
 ## Recording rules
 
