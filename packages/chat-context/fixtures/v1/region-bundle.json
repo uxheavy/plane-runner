@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "selectionKind": "region",
+  "items": [
+    {
+      "reference": {
+        "kind": "entity",
+        "workspaceSlug": "acme",
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "entityType": "work_item",
+        "entityId": "22222222-2222-4222-8222-222222222222"
+      },
+      "observed": {
+        "source": "client_store",
+        "value": { "name": "Observed name", "priority": "high" },
+        "observedAt": "2026-07-29T08:00:00.000Z",
+        "entityVersion": "2026-07-29T07:59:00.000Z"
+      },
+      "location": {
+        "url": "/acme/projects/11111111-1111-4111-8111-111111111111/issues/22222222-2222-4222-8222-222222222222"
+      }
+    },
+    {
+      "reference": {
+        "kind": "field",
+        "entity": {
+          "kind": "entity",
+          "workspaceSlug": "acme",
+          "projectId": "11111111-1111-4111-8111-111111111111",
+          "entityType": "work_item",
+          "entityId": "22222222-2222-4222-8222-222222222222"
+        },
+        "fieldKey": "priority"
+      },
+      "observed": {
+        "source": "client_store",
+        "value": "high",
+        "observedAt": "2026-07-29T08:00:00.000Z",
+        "entityVersion": "2026-07-29T07:59:00.000Z"
+      },
+      "location": {
+        "url": "/acme/projects/11111111-1111-4111-8111-111111111111/issues/22222222-2222-4222-8222-222222222222"
+      }
+    },
+    {
+      "reference": {
+        "kind": "editor_block",
+        "document": {
+          "kind": "entity",
+          "workspaceSlug": "acme",
+          "projectId": "11111111-1111-4111-8111-111111111111",
+          "entityType": "page",
+          "entityId": "33333333-3333-4333-8333-333333333333"
+        },
+        "blockId": "block-1"
+      },
+      "observed": {
+        "source": "client_live",
+        "value": {
+          "kind": "block",
+          "blockId": "block-1",
+          "nodeType": "paragraph",
+          "text": "Live text",
+          "metadata": {}
+        },
+        "observedAt": "2026-07-29T08:00:01.000Z"
+      },
+      "location": {
+        "url": "/acme/projects/11111111-1111-4111-8111-111111111111/pages/33333333-3333-4333-8333-333333333333"
+      }
+    }
+  ],
+  "warnings": [
+    {
+      "schemaVersion": 1,
+      "code": "VALUE_UNAVAILABLE",
+      "message": "One visible target had no current value",
+      "retryable": true
+    }
+  ]
+}

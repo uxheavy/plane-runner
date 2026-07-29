@@ -33,6 +33,7 @@ from .user.base import (
 
 
 from .base import BaseAPIView, BaseViewSet
+from .context_hydration import SemanticContextHydrationEndpoint
 
 from .workspace.base import (
     WorkSpaceViewSet,
