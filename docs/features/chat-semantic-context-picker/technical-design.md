@@ -171,8 +171,13 @@ output types are separate even when their fields overlap.
 ```
 
 Editor captures use `source: "client_live"`. Region captures contain multiple
-items and may succeed with structured warnings. The snapshot attachment contract
-is deferred to M8 so privacy and storage decisions do not leak into M2.
+items and may succeed with structured warnings.
+
+Visual fallback is a separate in-memory contract. It produces an exact PNG crop
+with `semantic: false`, known Plane references, and `pending_review` status. Only
+a live preview confirmed exactly once becomes a visual attachment. It never
+serializes the semantic observations into visual metadata and performs no upload
+or persistent storage. See [ADR 0006](./decisions/0006-visual-fallback-boundary.md).
 
 ## Failure contract
 
@@ -266,8 +271,12 @@ the stable contract decision.
 | [React Grab](https://github.com/aidenybai/react-grab)                | Hit-testing, ignored subtrees, page-freezing, and picker lifecycle primitives | MIT      | Primary foundation behind a Plane-owned adapter   |
 | [React Dev Inspector](https://github.com/zthxxx/react-dev-inspector) | Inspector activation, hover, click, and cleanup reference                     | MIT      | Secondary reference                               |
 | [stagewise](https://github.com/stagewise-io/stagewise)               | Selected-browser-context-to-agent product model                               | AGPL-3.0 | Product reference; do not import the full toolbar |
-| [html2canvas](https://github.com/niklasvh/html2canvas)               | Possible later visual fallback                                                | MIT      | Evaluate separately; not foundational             |
+| [html2canvas](https://github.com/niklasvh/html2canvas)               | Established DOM-rendering model                                               | MIT      | Reference only; latest release is stale           |
+| [html2canvas-pro](https://github.com/yorickshan/html2canvas-pro)     | Maintained renderer compatible with modern CSS colors                         | MIT      | Recommended behind the exported renderer port     |
 
 ## Dependency rule
 
-React Grab is isolated behind the selection adapter. Plane-specific references, values, permissions, and serialization remain Plane-owned because external inspector tools resolve source-code context rather than Plane domain objects.
+React Grab and visual rendering are isolated behind Plane-owned Adapters.
+Plane-specific references, values, permissions, privacy policy, and serialization
+remain Plane-owned because external inspector tools resolve pixels or source-code
+context rather than Plane domain objects.

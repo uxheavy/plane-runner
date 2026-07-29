@@ -12,8 +12,8 @@
 | M5  | Server hydration                  | Permission-safe canonical resolution and stale/deleted handling     | Codex          | Complete | 11 hydration and five page-scope Django tests pass      |
 | M6  | Composer integration kit          | Versioned adapter, fixtures, contract tests, integration guide      | Codex          | Complete | Dummy consumer and 23-test browser regression pass      |
 | M7  | UI integration                    | Activation, overlay, context chips, preview, composer wiring        | User UI branch | External | End-to-end workflow passes                              |
-| M8  | Region and visual fallback        | Drag regions, deduplication, snapshot evaluation                    | Shared         | Next     | Region and privacy acceptance tests                     |
-| M9  | Release verification              | Full single-user workflow and regression pass                       | Shared         | Pending  | Acceptance checklist complete                           |
+| M8  | Region and visual fallback        | Drag regions, deduplication, snapshot evaluation                    | Codex          | Complete | 34 browser tests and privacy gate pass                  |
+| M9  | Release verification              | Full single-user workflow and regression pass                       | Codex          | Active   | Acceptance checklist complete                           |
 
 The active durable goal covers M1-M6, the non-UI portion of M8, and core release
 verification. M7 and composer end-to-end wiring remain external to this branch.
@@ -93,6 +93,18 @@ verification. M7 and composer end-to-end wiring remain external to this branch.
 - [x] Ship JSON fixtures for entity, field, editor, region, hydration, and failure.
 - [x] Pass the dummy consumer contract and full package gates.
 
+## M8 checklist
+
+- [x] Preserve deterministic semantic region deduplication and partial warnings.
+- [x] Normalize and bound visual crops to the visible viewport.
+- [x] Deny passwords, authentication fields, iframes, and marked sensitive surfaces.
+- [x] Exclude ignored and late-sensitive nodes inside the renderer.
+- [x] Keep pixels in memory and label them as non-semantic.
+- [x] Keep known Plane references separate and deduplicated.
+- [x] Require explicit, one-time preview confirmation before attachment.
+- [x] Provide an html2canvas-compatible Adapter without coupling the core package.
+- [x] Pass the 34-test browser suite and package gates.
+
 ## Cross-branch contract
 
 | Core branch provides                   | UI branch provides                      |
@@ -106,14 +118,14 @@ verification. M7 and composer end-to-end wiring remain external to this branch.
 
 ## Risks and responses
 
-| Risk                                                     | Response                                                                 | Status         |
-| -------------------------------------------------------- | ------------------------------------------------------------------------ | -------------- |
-| React Grab primitives assume development source metadata | Use hit-testing primitives only and prove production behavior in M1.     | Mitigated      |
-| Generic Plane UI loses owning entity/field identity      | Register context at entity-aware call sites or shared semantic wrappers. | Open           |
-| Client values differ from server state                   | Preserve observed and canonical values separately.                       | Designed       |
-| Private or cross-project data leaks                      | Reauthorize on the server and allowlist fields.                          | Designed       |
-| Composer contract differs when its code appears          | Keep a versioned adapter and contract fixtures.                          | Open           |
-| Visual capture leaks unrelated content                   | Require preview, denied surfaces, and explicit visual-only labeling.     | Deferred to M8 |
+| Risk                                                     | Response                                                                 | Status    |
+| -------------------------------------------------------- | ------------------------------------------------------------------------ | --------- |
+| React Grab primitives assume development source metadata | Use hit-testing primitives only and prove production behavior in M1.     | Mitigated |
+| Generic Plane UI loses owning entity/field identity      | Register context at entity-aware call sites or shared semantic wrappers. | Open      |
+| Client values differ from server state                   | Preserve observed and canonical values separately.                       | Designed  |
+| Private or cross-project data leaks                      | Reauthorize on the server and allowlist fields.                          | Designed  |
+| Composer contract differs when its code appears          | Keep a versioned adapter and contract fixtures.                          | Open      |
+| Visual capture leaks unrelated content                   | Require preview, denied surfaces, and explicit visual-only labeling.     | Mitigated |
 
 ## Definition of done
 

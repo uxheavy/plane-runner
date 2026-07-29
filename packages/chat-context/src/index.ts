@@ -10,3 +10,4 @@ export * from "./plane-entity-context-source";
 export * from "./plane-editor-context-source";
 export * from "./react-grab-selection-adapter";
 export * from "./semantic-context-picker";
+export * from "./visual-context";
