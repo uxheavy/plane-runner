@@ -36,13 +36,13 @@ Run a pinned Deno process inside the same disposable Hermes run container:
 
 1. Hermes starts a trusted, versioned supervisor entry point under a dedicated unprivileged child identity.
 2. The child receives a minimal fixed environment with no Plane, model-provider, subscription, MCP, storage, or host credentials.
-3. Deno starts with `--no-prompt`, `--no-config`, `--no-npm`, `--no-remote`, and explicit deny policy for read, write, network, environment, subprocess, system, FFI, and import access.
-4. The supervisor loads only the submitted TypeScript source and a versioned generated Plane declaration/client from trusted in-memory input or its pinned entry point.
-5. Generated code runs in a separate Deno Worker with no permissions.
+3. Deno starts with `--no-prompt`, `--no-config`, `--no-npm`, `--no-remote`, no unstable feature flags, and explicit deny policy for read, write, network, environment, subprocess, system, FFI, and import access. The trusted launcher itself is the pinned entry module and needs no granted read path. The qualification lock freezes the complete argument and environment vector; production specifically omits `--unstable-kv` and `--unstable-worker-options`.
+4. The trusted supervisor parses and transpiles submitted TypeScript before starting Deno, rejects every static or dynamic import in model source, and sends the compiled source plus digest through a bounded one-shot stdin frame. This is required because Deno loads a statically analyzable module graph without ordinary read permission.
+5. A fixed trusted launcher consumes and closes the source frame, verifies its digest, and starts an explicitly separate Worker from a verified `data:` bootstrap embedded in the pinned launcher. Because the parent has no permissions, the Worker inherits none without unstable Worker options. The launcher transfers the bounded model source bytes once, then discards them. Inside the model Worker, the bootstrap captures its private RPC closure; installs an immutable narrowly typed `plane` facade backed only by that closure; replaces `process` with a frozen denial facade whose only capability is deterministic `runtime_surface_denied`; and removes or freezes `require`, `createRequire`, loader hooks, Node worker/thread and VM access, raw messaging, model-created Workers, and persistent storage surfaces. Only after lockdown does it construct a bounded `data:` module from the verified model bytes and dynamically import it. Deno's engine-level string-code-generation denial is active from process startup, so trusted module compilation remains available while indirect `eval`, all function-constructor families, and constructed imports do not. No bootstrap handle, raw port, source buffer, privileged constructor, or raw RPC method is placed in the model module's globals.
 6. A dedicated inherited descriptor carries framed supervisor-to-host RPC. Generated code receives no descriptor, endpoint, token, or authoritative context fields.
 7. The supervisor converts allowed Worker messages into `plane.call(operation, input)` requests. The host supplies workspace, agent, run, turn, outer tool call, budgets, catalog digest, and audit correlation.
 8. Arbitrary stdout and stderr are treated only as bounded logs, never as authenticated RPC.
-9. The host enforces wall time, CPU, memory, process count, inner-call count, concurrency, and cumulative result limits and terminates the child on violation.
+9. The host enforces wall time, CPU, memory, process count, inner-call count, concurrency, cumulative result, and ephemeral-disk limits and terminates the child on violation. The child storage namespace is unique per execution and destroyed with the disposable run container.
 10. The outer disposable run container supplies the kernel, mount, process, and cleanup boundary. Generated code receives no direct database or Plane network route.
 
 ## Module and seam placement
@@ -71,6 +71,8 @@ The outer `plane_execute` call does not pre-authorize its inner operations. Each
 - DNS, HTTP, TCP, UDP, loopback, link-local, metadata, and Unix-socket probes.
 - Environment, command execution, worker escalation, FFI, WASI, native addon, inspector, and signal probes.
 - Static, dynamic, `npm:`, `jsr:`, URL, and local import probes.
+- Persistent `localStorage`, Cache API, and Deno KV write/readback probes, including absence from a later clean isolate and zero backing-store delta.
+- `data:` and `blob:` nested-Worker probes and indirect string-code-generation/import probes.
 - RPC-frame injection through stdout/stderr.
 - Direct inherited-descriptor discovery and use.
 - Cross-run, sibling-process, stale-handle, identity, workspace, catalog, budget, and correlation forgery.
@@ -84,4 +86,6 @@ Failure of a security invariant blocks release. It does not silently widen a Den
 - Deno permissions reference: <https://docs.deno.com/runtime/reference/permissions/>
 - Deno security model: <https://docs.deno.com/runtime/fundamentals/security/>
 - Deno run reference: <https://docs.deno.com/runtime/reference/cli/run/>
+- Deno module loading reference: <https://docs.deno.com/runtime/fundamentals/modules/>
+- Deno unstable feature flags: <https://docs.deno.com/runtime/reference/cli/unstable_flags/>
 - Node.js permission model and documented constraints: <https://nodejs.org/api/permissions.html>

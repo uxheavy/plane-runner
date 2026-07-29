@@ -518,3 +518,19 @@ The user approved the exact set at `2026-07-29T20:15:13Z`. This approves tool vi
 ### Next action
 
 Freeze the remaining safety fixtures and exact supported operation boundary, then present the complete release and verification manifests for their required approvals before implementation.
+
+## 2026-07-30 — Deno boundary corrected from current primary sources
+
+### Source correction
+
+- Confirmed that current Deno supports the proposed `--no-npm` and `--no-remote` flags.
+- Confirmed that statically analyzable imports can load without ordinary read permission.
+- Confirmed that `localStorage`, Cache API, and Deno KV can consume disk without read/write permission.
+- Confirmed that Deno KV remains gated by `--unstable-kv` in the selected current runtime line.
+- Replaced permission-only assumptions with a production parser/transpiler boundary, engine-level string-code-generation denial, model-created Worker denial, immutable storage denial stubs, and per-execution disk isolation.
+- Selected an outer trusted launcher plus an explicitly separate locked-down model Worker as the executable seam. The launcher embeds the verified `data:` bootstrap so neither process needs read permission; the bootstrap exposes only a narrow immutable Plane RPC facade and removes native Node, raw messaging, storage, and Worker surfaces before importing one bounded verified model module.
+- Expanded EV-026 from 18 to 29 exact hostile subcases and from 36 to 58 authorized-callback controls, adding fresh-realm, recoverable function-constructor/import, `process.getBuiltinModule`, and inherited-launcher-read escapes.
+
+### Qualification state
+
+This remains a proposed runtime boundary. The exact Deno artifact, complete launch vector, engine mechanism, bootstrap bytes, and positive-control flag differential must be frozen in the qualification lock and pass the executable safety bundle before release approval or implementation.
