@@ -63,7 +63,7 @@ Run a pinned Deno process inside the same disposable Hermes run container:
 
 ## Approval interception
 
-The outer `plane_execute` call does not approve its inner operations. Each `plane.call` crosses the host callback and gateway independently. An approval-required transition pauses only that logical inner call. The existing Hermes approval lifecycle resumes the exact call in the same turn. Sibling calls that were already authorized and admitted may continue.
+The outer `plane_execute` call does not pre-authorize its inner operations. Each `plane.call` crosses the host callback and gateway independently. Authorized calls execute autonomously under the default policy. If an administrator configures an effect to prompt, an approval-required transition pauses only that logical inner call. The existing Hermes approval lifecycle resumes the exact call in the same turn. Sibling calls that were already authorized and admitted may continue.
 
 ## Required security qualification
 

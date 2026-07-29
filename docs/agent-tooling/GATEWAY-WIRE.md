@@ -113,7 +113,7 @@ The approval ID is opaque correlation, not a capability. `APPROVAL-PROTOCOL.md` 
 ## HTTP behavior
 
 - `200` returns a success, replay, deterministic rejection, or reconciled result.
-- `202` means an approval decision is required and no side effect has run.
+- `202` means an administrator-configured approval decision is required and no side effect has run; the autonomous default path does not return `202`.
 - `400` means malformed wire input.
 - `401` means invalid or revoked authentication.
 - `403` means a non-leaking authorization denial.

@@ -174,6 +174,9 @@ This ledger supersedes conflicting assumptions in the earlier `Plane MCP and Cod
 | PX36 | The existing Python MCP tool contracts inform the native direct-tool design.                          | \_/10      |
 | PX37 | Existing Python MCP tool names may be preserved when they improve compatibility.                      | \_/10      |
 | PX38 | External MCP clients retain OAuth or personal-access-token authentication.                            | \_/10      |
+| PX39 | Plane agents execute authorized operations autonomously by default.                                   | \_/10      |
+| PX40 | No Plane operation requires a human prompt unless an administrator explicitly configures it.          | \_/10      |
+| PX41 | Administrator-configured prompts reuse Hermes and allow only approve-once or deny.                    | \_/10      |
 
 ### Open Decisions
 

@@ -317,3 +317,21 @@ Hermes's existing queue, prompt routing, blocking wait, timeout, and same-turn c
 ### Next action
 
 Choose the exact Plane human eligibility rule for approving one pending operation.
+
+## 2026-07-29 — Autonomous default clarified
+
+### Correction
+
+- Plane agents do not ask for permission by default.
+- The dedicated agent identity and its configured Plane scope decide whether an operation is allowed.
+- Authorized operations execute immediately.
+- Unauthorized operations return a non-leaking denial.
+- Administrators may optionally configure selected semantic effects to require a human prompt.
+
+### Consequence
+
+The Hermes broker protocol remains an optional policy path rather than the normal mutation path. The mandatory broad planning run proves autonomous execution; separate live controls prove configured approve-once, denial, and timeout behavior.
+
+### Next action
+
+Define the smallest administrator policy-matching rule and approver eligibility for the optional prompt path.

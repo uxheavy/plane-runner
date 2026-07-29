@@ -32,15 +32,16 @@ Merge, CI, credential, staging, production, and deployment authorities must be n
 
 ## Required workflows
 
-| ID        | Workflow                          | Required result                                                                                                                                       | Status                                       |
-| --------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| RM-WF-001 | Broad project-planning acceptance | Real Luna-powered Hermes run creates exactly one parent release plan, three child work items, and one source-linked comment after approval            | Accepted scope                               |
-| RM-WF-002 | Denied control project            | Structured denial with zero control-project object leakage                                                                                            | Accepted scope                               |
-| RM-WF-003 | Mutation retry                    | Same invocation keys leave planning-artifact counts unchanged                                                                                         | Accepted scope                               |
-| RM-WF-004 | Generated-code isolation          | Harmless canary and controlled egress probes prove credential, filesystem, subprocess, package, and network restrictions                              | Accepted scope                               |
-| RM-WF-005 | External MCP compatibility        | Every current Python MCP operation receives an approved disposition and selected real clients pass live compatibility                                 | Pinned inventory captured; dispositions open |
-| RM-WF-006 | Operator lifecycle                | Provision, permission, credential issue/store/rotate/revoke, approval configuration, audit lookup, kill switch, recovery, and rollback exercises pass | Required                                     |
-| RM-WF-007 | Production canary                 | Real Hermes permitted and denied workflows pass against the deployed artifact with audit and feature-control readback                                 | Required                                     |
+| ID        | Workflow                          | Required result                                                                                                                                               | Status                                       |
+| --------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| RM-WF-001 | Broad project-planning acceptance | Real Luna-powered Hermes run autonomously creates exactly one parent release plan, three child work items, and one source-linked comment under default policy | Accepted scope                               |
+| RM-WF-002 | Denied control project            | Structured denial with zero control-project object leakage                                                                                                    | Accepted scope                               |
+| RM-WF-003 | Mutation retry                    | Same invocation keys leave planning-artifact counts unchanged                                                                                                 | Accepted scope                               |
+| RM-WF-004 | Generated-code isolation          | Harmless canary and controlled egress probes prove credential, filesystem, subprocess, package, and network restrictions                                      | Accepted scope                               |
+| RM-WF-005 | External MCP compatibility        | Every current Python MCP operation receives an approved disposition and selected real clients pass live compatibility                                         | Pinned inventory captured; dispositions open |
+| RM-WF-006 | Operator lifecycle                | Provision, permission, credential issue/store/rotate/revoke, approval configuration, audit lookup, kill switch, recovery, and rollback exercises pass         | Required                                     |
+| RM-WF-007 | Production canary                 | Real Hermes permitted and denied workflows pass against the deployed artifact with audit and feature-control readback                                         | Required                                     |
+| RM-WF-008 | Optional approval policy          | An administrator enables one effect prompt; real Hermes approve-once, denial, and timeout runs produce the exact admitted or withheld outcomes                | Accepted scope                               |
 
 ## Pilot operation inventory
 
@@ -61,7 +62,7 @@ The contract IDs below are proposed semantic v1 identifiers. The public operatio
 
 The five domain tools above plus `plane_docs`, `plane_search`, and `plane_execute` form the proposed eight-tool eager Hermes surface.
 
-`plane.release_plans.create@1` accepts the complete parent, three-child, and source-comment intent as one semantic operation. The gateway validates and authorizes the full request, preflights one approval decision, claims one stable invocation, and executes through Plane application services. V1 does not add a general workflow-graph DSL for this workflow.
+`plane.release_plans.create@1` accepts the complete parent, three-child, and source-comment intent as one semantic operation. The gateway validates and authorizes the full request, evaluates approval policy once, claims one stable invocation, and executes through Plane application services. Default policy is autonomous. If an administrator configures the `release_plan.write` effect to prompt, the whole semantic operation produces at most one approval decision. V1 does not add a general workflow-graph DSL for this workflow.
 
 No implementation may silently omit a proposed capability after approval. The external MCP baseline is official server commit `96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1`, package `0.2.11`, with 177 unique tools. Its machine-readable inventory is `inventories/plane-mcp-v0.2.11.json`, SHA-256 `2778ef9d6f5426c6fc65894829ec04bf853c18c4ab09d796474896ba01826ad1`.
 

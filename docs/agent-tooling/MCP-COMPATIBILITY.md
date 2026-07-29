@@ -75,7 +75,7 @@ The v1 compatibility suite covers:
 - hosted Streamable HTTP PAT at `/http/api-key/mcp` with its workspace header;
 - legacy SSE at `/sse` for the duration of the approved compatibility window.
 
-The suite must include initialization, capability negotiation, tool listing, representative reads and writes, structured denial, approval interruption where supported by the client, pagination, oversized results, mutation retry, and transport reconnect.
+The suite must include initialization, capability negotiation, tool listing, representative reads and writes under the autonomous default, structured denial, optional administrator-configured approval interruption where supported by the client, pagination, oversized results, mutation retry, and transport reconnect.
 
 ## Conformance tiers
 

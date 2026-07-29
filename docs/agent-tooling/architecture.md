@@ -90,7 +90,9 @@ Every inner callback traverses Hermes's normal tool middleware and the Plane Ope
 
 ## Approval and concurrency
 
-Hermes's existing approval lifecycle is reused:
+Agents execute autonomously by default. Plane evaluates approval policy after authorization for every operation, but the default result is `not_required`; an authorized operation proceeds without a human prompt. Administrators may opt selected semantic effects into interactive approval.
+
+When current workspace policy requires a prompt, Hermes's existing approval lifecycle is reused:
 
 - The run emits `approval.request`.
 - The affected worker waits.
@@ -103,7 +105,7 @@ Hermes's existing approval lifecycle is reused:
 
 Approval does not grant authorization the agent lacks.
 
-If the Hermes process or run container dies while waiting, the run fails. Pending approval does not survive restart in the initial architecture. A later retry follows normal mutation-safety rules.
+If the Hermes process or run container dies while an optional prompt is waiting, the run fails. Pending approval does not survive restart in the initial architecture. A later retry follows normal mutation-safety rules.
 
 An explicitly declared operation group may be preflighted as a group before concurrent dispatch. Group execution uses per-operation outcomes rather than pretending to be transactional.
 

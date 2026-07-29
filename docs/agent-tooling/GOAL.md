@@ -125,7 +125,8 @@ Observed on 2026-07-29:
 - Hermes uses TypeScript Code Mode to discover, filter, and compose the broader project analysis.
 - Independent reads execute concurrently where safe.
 - Hermes proposes one parent release-plan work item and three coordinated child work items for the highest-impact actions.
-- The write group is preflighted and requires real approval.
+- The broad write executes autonomously under default policy after authorization.
+- A separate live control enables an administrator-configured effect prompt and requires a real approve-once decision.
 - Approval resumes the same Hermes turn.
 - Plane creates exactly one parent work item, exactly three child work items, and exactly one source-linked planning comment.
 - Retrying the same stable invocations creates no duplicate planning artifacts.
@@ -174,7 +175,7 @@ Before completion, the repositories must expose one documented, version-controll
 
 The final command and its environment prerequisites must be recorded in `RESULT.md`. Production deployment also requires an authenticated post-deployment readback proving the enabled version, a permitted workflow, a denied workflow, audit correlation, and rollback readiness.
 
-The primary verifier must invoke or require the mandatory live Hermes acceptance scenario. A mocked agent loop, mocked gateway, synthetic approval, or database-only fixture assertion cannot satisfy this requirement.
+The primary verifier must invoke or require the mandatory live Hermes acceptance scenarios. A mocked agent loop, mocked gateway, synthetic optional-policy approval, or database-only fixture assertion cannot satisfy this requirement.
 
 The verifier must assert the resolved Hermes provider is `openai-codex` and the resolved model is `gpt-5.6-luna`. Model availability, authentication failure, or fallback must fail non-zero rather than skip live evaluation.
 

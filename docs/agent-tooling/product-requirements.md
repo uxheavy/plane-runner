@@ -65,7 +65,7 @@ People who approve controlled actions and investigate what an agent attempted, w
 | Read-only first    | Lowest initial operational risk                                                            | Does not validate approval, idempotency, or unknown outcomes |
 | Broad catalog beta | Reaches more workflows immediately                                                         | Multiplies contract, testing, and incident surface           |
 
-Selected: a broader end-to-end project-planning workflow. A real Hermes run analyzes a seeded project's release readiness, composes a parent plan and coordinated child work items, obtains approval, writes the plan to Plane, proves idempotency and audit correlation, and demonstrates denial against an inaccessible control project.
+Selected: a broader end-to-end project-planning workflow. A real Hermes run analyzes a seeded project's release readiness, composes a parent plan and coordinated child work items, autonomously writes the plan under default policy, proves idempotency and audit correlation, and demonstrates denial against an inaccessible control project. Separate real runs enable an administrator prompt and prove approve-once, denial, and timeout behavior.
 
 ## Success measures
 

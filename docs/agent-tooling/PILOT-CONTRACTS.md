@@ -281,7 +281,7 @@ type Output = {
 };
 ```
 
-The gateway resolves and validates all references, checks authorization for the complete write set, obtains at most one approval decision, and claims one durable idempotency record before any side effect. Database changes commit in one transaction; activity and webhook delivery use post-commit/outbox behavior. A failed transaction creates none of the five requested objects. A lost response is reconciled from the invocation record and returns the original five object IDs. Proposed approval effect: `release_plan.write`.
+The gateway resolves and validates all references, checks authorization for the complete write set, evaluates approval policy once, and claims one durable idempotency record before any side effect. The autonomous default continues immediately; an administrator-configured `release_plan.write` prompt produces at most one decision for the whole composition. Database changes commit in one transaction; activity and webhook delivery use post-commit/outbox behavior. A failed transaction creates none of the five requested objects. A lost response is reconciled from the invocation record and returns the original five object IDs. Proposed approval effect: `release_plan.write`.
 
 ## Error codes
 
@@ -315,8 +315,8 @@ Validation errors may include bounded field paths and safe corrective hints. Aut
 
 Before these contracts can be approved and frozen:
 
-1. Resolve who is authorized to submit approval decisions and how the same invocation resumes.
-2. Confirm or revise the proposed approval effect labels.
+1. Resolve who is authorized to answer optional administrator-configured prompts and how the same invocation resumes.
+2. Confirm or revise the proposed approval effect labels and administrator matching rules.
 3. Generate machine-readable JSON Schemas from the frozen catalog and pin their digest.
 4. Add positive, denial, ambiguity, stale-reference, idempotency, lost-response, and size-bound fixtures for every operation.
 5. Verify each authorization mapping against executable Plane permission tests.

@@ -134,7 +134,8 @@ Selected contents:
 - One parent release-plan work item.
 - Three coordinated child work items.
 - One source-linked planning comment.
-- Semantic release-plan preflight and real approval.
+- Semantic release-plan policy evaluation under the autonomous default.
+- A separate administrator-configured real approval control.
 - Stable invocation idempotency and duplicate prevention.
 - Structured denied-access proof.
 - Credential and network-isolation probes.

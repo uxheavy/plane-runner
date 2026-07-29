@@ -2,7 +2,20 @@
 
 ## Status
 
-The user accepted Hermes as the approval UX and trusted decision broker on 2026-07-29. Exact approver eligibility, effect-policy defaults, and credential issuance remain proposed and must be frozen in the release manifest before implementation.
+The user accepted autonomous execution by default with optional administrator-configured human prompts on 2026-07-29. When a prompt is configured, Hermes is the approval UX and trusted decision broker. Exact approver eligibility, policy configuration shape, and credential issuance remain proposed and must be frozen in the release manifest before implementation.
+
+## Autonomous default
+
+Plane authorization and the agent identity's configured scope are decisive by default.
+
+- An authorized operation executes without a human prompt.
+- An unauthorized operation returns a non-leaking denial.
+- Every operation still evaluates approval policy, but the default result is `not_required`.
+- Administrators may configure selected semantic effects to return `approval_required`.
+- Enabling a prompt does not change the agent's Plane permissions.
+- V1 ships with no effect configured to prompt unless an administrator explicitly opts in.
+
+The broker protocol below is dormant on the default path. It applies only when the current workspace policy requires a prompt for the exact operation effect.
 
 ## Boundary
 
@@ -77,7 +90,7 @@ An explicit denial may use `"decision": "deny"` and include a bounded human reas
 
 ## Pending approval state
 
-Plane creates the pending record only after successful authentication, schema validation, reference resolution, Plane authorization, idempotency claim, and approval-policy evaluation.
+Plane creates the pending record only when successful authentication, schema validation, reference resolution, Plane authorization, idempotency claim, and approval-policy evaluation produce `approval_required`. The ordinary `not_required` path creates no pending approval and continues immediately.
 
 The durable record binds:
 
@@ -163,6 +176,6 @@ Every negative control must prove zero unauthorized mutation and complete audit 
 
 ## Open freeze decisions
 
-1. Define exactly which Plane humans are eligible to approve an agent operation.
-2. Define which approval effects prompt by default and which policy overrides administrators may configure.
+1. Define exactly which Plane humans are eligible to approve an administrator-configured prompt.
+2. Define the administrator policy configuration and effect matching rules while preserving the no-prompt default.
 3. Define issuance, storage, rotation, revocation, and connector binding for broker credentials.

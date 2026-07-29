@@ -45,7 +45,7 @@ The primary implementation agent may create tests and fix failures. It cannot so
 | VM-002 | Deterministic catalog generation         | Repeated generation produces identical catalog digest                                                                                                                    | Clean Plane checkout                            | No                                   | Digests and diff                               |
 | VM-003 | Contract and schema matrix               | Every approved operation validates success and structured failures                                                                                                       | Plane test stack                                | Unit-layer only                      | Full matrix log                                |
 | VM-004 | Authorization matrix                     | Every relevant role, membership, object, revoked-agent, and cross-workspace boundary matches Plane policy                                                                | Plane test stack                                | No policy mocks in integration proof | Matrix and audit readback                      |
-| VM-005 | Approval matrix                          | Allow, deny, timeout, concurrent sibling, group preflight, and restart failure behave as specified                                                                       | Plane plus real Hermes                          | No in final layer                    | Events, state, and audit                       |
+| VM-005 | Optional approval-policy matrix          | Default `not_required`, configured approve-once, deny, timeout, concurrent sibling, semantic preflight, and restart failure behave as specified                          | Plane plus real Hermes                          | No in final layer                    | Events, state, and audit                       |
 | VM-006 | Audit durability                         | Intent and outcome exist for invalid, denied, pending, approved, failed, unknown, and successful attempts; injected audit failure follows approved fail semantics        | Plane test stack                                | Failure injection allowed            | Database/API readback and logs                 |
 | VM-007 | Mutation safety                          | Retry, lost response, duplicate delivery, race, and ambiguous result create no unapproved duplicate side effects                                                         | Plane plus Hermes                               | Network fault injection allowed      | Object counts and invocation records           |
 | VM-008 | Result and artifact limits               | Per-result and cumulative limits, bounded reads, expiry, cleanup, hashes, and summaries hold                                                                             | Plane plus Hermes                               | Generated payloads allowed           | Size and cleanup evidence                      |
@@ -53,7 +53,7 @@ The primary implementation agent may create tests and fix failures. It cannot so
 | VM-010 | Confused-deputy protection               | Callback is bound host-side to exact run, agent, tenant, operation budgets, and correlation; sibling and replay attacks fail                                             | Release isolate plus gateway                    | No                                   | Negative-test log                              |
 | VM-011 | Concurrency and load                     | Ordering, approval waits, retry races, rate limits, approved concurrency, duration, p95/p99, and recovery targets pass                                                   | Release-like stack                              | No                                   | Metrics and traces                             |
 | VM-012 | External MCP inventory and compatibility | Every current Python MCP operation has approved disposition and pinned real clients pass                                                                                 | Real MCP clients plus gateway                   | No                                   | Inventory, client versions, transcripts        |
-| VM-013 | Mandatory live project planning          | Frozen prompt through real Luna Hermes produces exact tagged artifacts after separate approval and no control-project leak                                               | Authenticated Plane dev server plus real Hermes | None                                 | Transcript, traces, UI/API and audit readbacks |
+| VM-013 | Mandatory live project planning          | Frozen prompt through real Luna Hermes autonomously produces exact tagged artifacts under default policy and leaks no control-project data                               | Authenticated Plane dev server plus real Hermes | None                                 | Transcript, traces, UI/API and audit readbacks |
 | VM-014 | Extensive live evaluation                | All 50 retained authenticated trials meet release gates without fallback                                                                                                 | Authenticated Plane dev server plus real Hermes | None                                 | Trial ledger and aggregate report              |
 | VM-015 | Operator lifecycle                       | Provision, permissions, credential issue/store/rotate/revoke, old-credential denial, approval configuration, audit lookup, kill switches, recovery, and rollback succeed | Release-like stack                              | No                                   | Exercise logs and readbacks                    |
 | VM-016 | Production provenance                    | Reviewed commits map to build artifacts, deployment IDs, migrations, catalogs, runtime, and enabled configuration                                                        | CI and deployment systems                       | No                                   | Signed or immutable provenance records         |
@@ -78,25 +78,26 @@ The primary implementation agent may create tests and fix failures. It cannot so
 
 The version-controlled verifier specification must expand this table to a requirement-level matrix. Every normative bullet in `GOAL.md` and every row in the approved release manifest must map to at least one check, one observable oracle, and one immutable evidence record. The documentation validator fails when any requirement has zero checks.
 
-## Mandatory live-project oracle
+## Mandatory live-project oracles
 
-- Use one frozen initial prompt and no human steering except an authenticated approval response.
-- Use a separately authorized human approver rather than the test agent.
+- Use one frozen initial prompt and no human steering for the autonomous default-policy run.
 - Use a separate verifier principal for Plane API and UI readback.
 - Add a unique non-authoritative run tag to expected artifacts.
-- Prove zero planning writes before approval.
+- Prove the default policy returns `not_required` and creates no pending approval.
 - Trace actual native tool calls.
 - Trace actual `docs`, `search`, and `execute` calls.
 - Preserve generated TypeScript and its digest.
 - Trace concurrent safe reads and every inner gateway call.
-- Verify exactly one tagged parent, three tagged children, and one tagged source comment after approval.
+- Verify exactly one tagged parent, three tagged children, and one tagged source comment after autonomous execution.
 - Replay the same stable invocation keys and verify counts remain unchanged.
-- Verify audit for pending approval, approval, success, retry, denial, and any failure.
+- Verify audit for policy evaluation, success, retry, denial, and any failure.
 - Verify no inaccessible control-project object data appears in model-visible output, logs, artifacts, or audit summaries.
 - Probe credential isolation using a harmless host-only canary rather than the real credential.
 - Probe controlled DNS/HTTP destinations, loopback, metadata endpoints, filesystem, subprocess, and package access.
 - Revoke or rotate the test credential after the exercise and verify the old credential fails.
 - Execute and verify cleanup, or explicitly preserve tagged fixtures through an approved retention record.
+
+The separate optional-policy live oracle enables one semantic effect prompt with an administrator credential, then uses a separately authorized human approver. Real Hermes runs prove zero writes before the decision, approve-once success, denial with zero writes, timeout with zero writes, same-turn continuation, exact digest binding, and pending/decision audit evidence. This control cannot replace or steer the autonomous default-policy run.
 
 ## Extensive live-evaluation ledger
 

@@ -99,6 +99,9 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ATD-091 | Hermes submits Plane approval decisions through a separate trusted broker credential.               | \_/10      |
 | ATD-092 | Agent execution credentials cannot submit Plane approval decisions.                                 | \_/10      |
 | ATD-093 | Plane operation approval choices are limited to approve once or deny in v1.                         | \_/10      |
+| ATD-094 | Plane agents execute authorized operations autonomously by default.                                 | \_/10      |
+| ATD-095 | Administrators may configure selected semantic effects to require a human prompt.                   | \_/10      |
+| ATD-096 | No semantic effect requires a human prompt until an administrator explicitly enables it.            | \_/10      |
 
 ## Superseded
 
