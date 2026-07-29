@@ -1,3 +1,9 @@
+/**
+ * Copyright (c) 2023-present Plane Software, Inc. and contributors
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * See the LICENSE file for details.
+ */
+
 import { afterEach, describe, expect, test } from "vitest";
 import { PLANE_CONTEXT_IGNORE_ATTRIBUTE, createVisualContextCapture } from "../src";
 import { createHtml2CanvasProVisualRenderer } from "../src/html2canvas-pro";
