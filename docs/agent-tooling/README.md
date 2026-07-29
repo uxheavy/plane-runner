@@ -4,13 +4,13 @@ This folder is the durable source of truth for taking Plane's agent-facing tooli
 
 ## Status
 
-| Field                 | Value                                                |
-| --------------------- | ---------------------------------------------------- |
-| Program status        | Architecture definition                              |
-| Current branch        | `codex/agent-tooling-architecture`                   |
-| Implementation status | Not started                                          |
-| Current gate          | Approve the first pilot scope and operation contract |
-| Last updated          | 2026-07-29                                           |
+| Field                 | Value                                         |
+| --------------------- | --------------------------------------------- |
+| Program status        | Goal-backed delivery                          |
+| Current branch        | `codex/agent-tooling-architecture`            |
+| Implementation status | Not started                                   |
+| Current gate          | Freeze the release and verification manifests |
+| Last updated          | 2026-07-29                                    |
 
 ## Outcome
 
@@ -24,6 +24,11 @@ Plane-native Hermes agents can safely perform useful Plane work through native s
 | [Architecture](./architecture.md)                                 | Components, trust boundaries, contracts, and runtime behavior |
 | [Delivery plan](./delivery-plan.md)                               | Workstreams, dependencies, gates, rollout, and ownership      |
 | [Decision register](./decision-register.md)                       | Accepted, superseded, and open decisions                      |
+| [Release manifest](./RELEASE-MANIFEST.md)                         | Frozen scope, versions, rollout cohort, and numeric gates     |
+| [Verification manifest](./VERIFICATION-MANIFEST.md)               | Independent checks, oracles, negative controls, and evidence  |
+| [Durable goal](./GOAL.md)                                         | Finish line, constraints, verifiers, and approval gates       |
+| [Worklog](./WORKLOG.md)                                           | Attempts, evidence, current state, and next action            |
+| [Result](./RESULT.md)                                             | Completion evidence and remaining risks                       |
 | [ADR-0001](../decisions/0001-plane-agent-tooling-architecture.md) | Durable rationale for the overall architecture                |
 
 ## Source-of-truth rules
@@ -37,7 +42,7 @@ Plane-native Hermes agents can safely perform useful Plane work through native s
 
 ## Current next decisions
 
-1. Select the first pilot scope.
-2. Select the initial eager native tools.
-3. Approve the first supported operation boundary.
-4. Define measurable production targets.
+1. Select the initial eager native tools.
+2. Approve the exact operation and external MCP inventory.
+3. Complete and approve the release manifest.
+4. Complete and approve the verification manifest.

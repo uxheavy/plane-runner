@@ -89,6 +89,15 @@ Deliverables:
 - Load, concurrency, and latency benchmarks.
 - Dashboards, alerts, runbooks, kill switches, and credential rotation.
 - Data retention and redaction review.
+- Version-controlled manifest with at least 50 scenarios.
+- At least 50 authenticated live Hermes evaluation runs.
+- Ten materially different seeded project shapes.
+- Three independent project-planning runs per seeded shape.
+- Provider and model assertions for `openai-codex` and `gpt-5.6-luna`.
+- Property or fuzz coverage for boundary-sensitive inputs.
+- Two consecutive clean-state deterministic-suite passes.
+- Three consecutive final passes on the exact release artifact.
+- Computer Use screenshots and readbacks for user-visible acceptance.
 
 Exit gate: production scorecard targets are met and rollback is rehearsed.
 
@@ -116,17 +125,21 @@ Exit gate: external behavior remains compatible or follows an approved deprecati
 
 ## First vertical slice
 
-Recommended contents:
+Selected contents:
 
-- Workspace and project context reads.
-- Work-item search and retrieval.
-- Work-item creation or update as a controlled reversible mutation.
-- Comment creation as a controlled mutation.
-- Native eager tools for these workflows.
-- Catalog discovery and TypeScript composition for the same operations.
-- Approval, audit, idempotency, result bounds, and temporary artifacts.
-
-The exact pilot scope remains unapproved.
+- Seeded allowed and inaccessible control projects.
+- Current-cycle, work-item, blocker, dependency, priority, and ownership analysis.
+- Native eager tools for common project context.
+- Catalog discovery and TypeScript composition for broader analysis.
+- One parent release-plan work item.
+- Three coordinated child work items.
+- One source-linked planning comment.
+- Group preflight and real approval.
+- Stable invocation idempotency and duplicate prevention.
+- Structured denied-access proof.
+- Credential and network-isolation probes.
+- Plane state and correlated audit readback.
+- A real Hermes process against the authenticated Plane development server.
 
 ## Production readiness checklist
 
@@ -143,6 +156,11 @@ The exact pilot scope remains unapproved.
 - [ ] Metrics, alerts, kill switches, and runbooks operational.
 - [ ] Rollback rehearsed before each rollout expansion.
 - [ ] External MCP compatibility verified before handler migration.
+- [ ] Mandatory live Hermes project-planning acceptance passes without a mocked gateway.
+- [ ] Every counted live run resolves `openai-codex` and `gpt-5.6-luna` without fallback.
+- [ ] Extensive evaluation coverage and repetition requirements pass.
+- [ ] Approved release and verification manifests are fully satisfied or carry explicit approved exceptions.
+- [ ] Independent verifier passes qualified negative controls and final clean-checkout execution.
 
 ## Ownership model
 
