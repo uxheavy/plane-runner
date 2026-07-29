@@ -65,6 +65,8 @@ The five domain tools above plus `plane_docs`, `plane_search`, and `plane_execut
 
 No implementation may silently omit a proposed capability after approval. The external MCP baseline is official server commit `96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1`, package `0.2.11`, with 177 unique tools. Its machine-readable inventory is `inventories/plane-mcp-v0.2.11.json`, SHA-256 `2778ef9d6f5426c6fc65894829ec04bf853c18c4ab09d796474896ba01826ad1`.
 
+`inventories/plane-mcp-v0.2.11-dispositions.md` is the normative 177-row compatibility disposition frozen with this manifest.
+
 The proposed complete disposition is defined in `MCP-COMPATIBILITY.md`: 171 ordinary tools use gateway-backed compatibility adapters, `get_pql_reference` retains versioned local read-only behavior, and five attachment tools use a hardened attachment adapter. No pinned tool is omitted or deprecated.
 
 The official Python MCP server remains the deployed external adapter host. V1 evolves its existing handlers incrementally; it does not recreate the server or its 177-tool surface in a new implementation.
@@ -147,7 +149,9 @@ Explicit group preflight validates schemas, references, live authorization, budg
 | Unexpected admitted-operation error rate                     | < 1% during the retained load window                   |
 | Recovery after injected dependency interruption              | Healthy within 60 s with no lost or duplicate mutation |
 
-The 50 version-controlled scenarios are distinct behavioral cases. The 50 authenticated live trials are executions: the 30 broad-planning trials repeat ten scenario and fixture variants three times each, while the 20 additional trials each execute a distinct denial, failure, recovery, or adversarial scenario. Repeated trials do not increase the distinct-scenario count.
+Once qualified, the 71 version-controlled scenarios are distinct behavioral cases. The 50 authenticated live trials are executions: the 30 broad-planning trials repeat ten scenario and fixture variants three times each, while the 20 additional trials each execute a distinct denial, failure, recovery, or adversarial scenario. Repeated trials do not increase the distinct-scenario count.
+
+`EVALUATION-SCENARIOS.md` is the proposed 71-row inventory and exact 50-live-trial allocation. No row counts toward the minimum until its fixture and executable predicate contract is frozen with this manifest.
 
 Every live attempt is retained in the denominator. Hidden retries, discarded failures, replayed model responses, and fallback provider or model runs do not count as passes.
 

@@ -18,25 +18,27 @@ Plane-native Hermes agents can safely perform useful Plane work through native s
 
 ## Documents
 
-| Document                                                          | Purpose                                                         |
-| ----------------------------------------------------------------- | --------------------------------------------------------------- |
-| [Product requirements](./product-requirements.md)                 | Users, outcomes, boundaries, and success measures               |
-| [Architecture](./architecture.md)                                 | Components, trust boundaries, contracts, and runtime behavior   |
-| [Delivery plan](./delivery-plan.md)                               | Workstreams, dependencies, gates, rollout, and ownership        |
-| [Decision register](./decision-register.md)                       | Accepted, superseded, and open decisions                        |
-| [Release manifest](./RELEASE-MANIFEST.md)                         | Frozen scope, versions, rollout cohort, and numeric gates       |
-| [Verification manifest](./VERIFICATION-MANIFEST.md)               | Independent checks, oracles, negative controls, and evidence    |
-| [Source inventory](./SOURCE-INVENTORY.md)                         | Observed Plane API, MCP, and Hermes facts                       |
-| [Interface design](./INTERFACE-DESIGN.md)                         | Four alternatives and the proposed v1 gateway seam              |
-| [MCP compatibility](./MCP-COMPATIBILITY.md)                       | Complete external-tool disposition and conformance plan         |
-| [Runtime design](./RUNTIME-DESIGN.md)                             | TypeScript isolate options and proposed Deno boundary           |
-| [Gateway wire](./GATEWAY-WIRE.md)                                 | Accepted JSON HTTP adapter and proposed v1 envelope             |
-| [Pilot contracts](./PILOT-CONTRACTS.md)                           | Proposed normalized schemas for the nine pilot operations       |
-| [Durable goal](./GOAL.md)                                         | Finish line, constraints, verifiers, and approval gates         |
-| [Worklog](./WORKLOG.md)                                           | Attempts, evidence, current state, and next action              |
-| [Result](./RESULT.md)                                             | Completion evidence and remaining risks                         |
-| [ADR-0001](../decisions/0001-plane-agent-tooling-architecture.md) | Durable rationale for the overall architecture                  |
-| [ADR-0002](../decisions/0002-autonomous-agent-operations.md)      | Supersedes runtime operation approval with autonomous execution |
+| Document                                                            | Purpose                                                         |
+| ------------------------------------------------------------------- | --------------------------------------------------------------- |
+| [Product requirements](./product-requirements.md)                   | Users, outcomes, boundaries, and success measures               |
+| [Architecture](./architecture.md)                                   | Components, trust boundaries, contracts, and runtime behavior   |
+| [Delivery plan](./delivery-plan.md)                                 | Workstreams, dependencies, gates, rollout, and ownership        |
+| [Decision register](./decision-register.md)                         | Accepted, superseded, and open decisions                        |
+| [Release manifest](./RELEASE-MANIFEST.md)                           | Frozen scope, versions, rollout cohort, and numeric gates       |
+| [Verification manifest](./VERIFICATION-MANIFEST.md)                 | Independent checks, oracles, negative controls, and evidence    |
+| [Evaluation scenarios](./EVALUATION-SCENARIOS.md)                   | Seventy-one behavioral contracts and live-trial allocation      |
+| [Source inventory](./SOURCE-INVENTORY.md)                           | Observed Plane API, MCP, and Hermes facts                       |
+| [Interface design](./INTERFACE-DESIGN.md)                           | Four alternatives and the proposed v1 gateway seam              |
+| [MCP compatibility](./MCP-COMPATIBILITY.md)                         | Complete external-tool disposition and conformance plan         |
+| [MCP dispositions](./inventories/plane-mcp-v0.2.11-dispositions.md) | Disposition strategy for all 177 pinned external tools          |
+| [Runtime design](./RUNTIME-DESIGN.md)                               | TypeScript isolate options and proposed Deno boundary           |
+| [Gateway wire](./GATEWAY-WIRE.md)                                   | Accepted JSON HTTP adapter and proposed v1 envelope             |
+| [Pilot contracts](./PILOT-CONTRACTS.md)                             | Proposed normalized schemas for the nine pilot operations       |
+| [Durable goal](./GOAL.md)                                           | Finish line, constraints, verifiers, and approval gates         |
+| [Worklog](./WORKLOG.md)                                             | Attempts, evidence, current state, and next action              |
+| [Result](./RESULT.md)                                               | Completion evidence and remaining risks                         |
+| [ADR-0001](../decisions/0001-plane-agent-tooling-architecture.md)   | Durable rationale for the overall architecture                  |
+| [ADR-0002](../decisions/0002-autonomous-agent-operations.md)        | Supersedes runtime operation approval with autonomous execution |
 
 ## Source-of-truth rules
 

@@ -357,3 +357,52 @@ Release-manifest approval, verifier qualification, rollout promotion, and deploy
 ### Next action
 
 Freeze the remaining operation, result, runtime, compatibility, evaluation, and rollout decisions without designing runtime approvals.
+
+## 2026-07-30 — Evaluation and MCP disposition inventories proposed
+
+### Evaluation contracts
+
+- Added 71 distinct candidate behavioral scenarios.
+- Allocated exactly 30 broad-planning Luna trials across ten fixtures and 20 additional authenticated Hermes/Luna safety trials.
+- Added shared product-evidence contracts for actor, setup, steps, artifacts, comparison, and approval.
+- Added Plane-specific prevention cases for comment sanitization, cursor search, relation privacy, referenced objects, parent/date/cycle invariants, member privacy, atomic failure stages, per-mutation idempotency, and curated projections.
+- Added paired sandbox liveness and authorized-callback controls so a dead or unexecuted probe cannot pass.
+- Explicitly marked all rows non-qualifying until exact fixtures, predicates, schemas, prompts, configuration, commands, and digests are frozen.
+
+### External MCP compatibility
+
+- Expanded the pinned 177-tool inventory into 177 unique disposition rows.
+- Verified exact source-name equality and the 171 shared-SDK, one local-PQL, and five hardened-attachment split.
+- Clarified that disposition and mapping strategy do not replace the pending generated MCP-handler-to-SDK-call and SDK method/path-to-versioned-operation maps.
+
+### Contract corrections from Plane source review
+
+- Required semantic comment sanitization independently of the weaker public comment-create serializer.
+- Required stable cursor search and hydrated curated projections through a Plane-owned query module.
+- Required independent visibility checks for related work items.
+- Prohibited silent filtering of invalid assignee and label references.
+- Prohibited self-parent and descendant hierarchy cycles.
+- Required date validation after merging a patch with stored dates.
+- Defined current-cycle timestamps, inclusivity, stable ordering, and pagination.
+
+### Verification
+
+- Initial formatting, patch-integrity, count, and exact source-name checks passed before independent review.
+- Structural checks proved 71 unique scenario IDs, ten `Live ×3` rows, twenty `Live ×1` rows, 177 unique disposition names, and exact name-set equality with the pinned JSON inventory.
+- Independent Plane-source review found 11 of its 14 original semantic gaps resolved and identified four remaining specification ambiguities.
+- Independent goal red-team review found no remaining P0 and confirmed the live allocation, sandbox controls, negative controls, qualification language, and MCP strategy wording.
+- Closed the four Plane-semantic ambiguities by freezing a Plane-owned current-cycle page seam, member/admin-only assignee choices, idempotent repeated cycle removal with canonical `changed_fields`, and optional comment source links.
+- Made the requirement-level matrix an explicit pre-approval gate and clarified the distinction between 71 candidate scenarios and 50 live executions.
+- Fresh post-review verification is required immediately before commit; the earlier passing checks are not reused as completion evidence.
+
+### Still open
+
+- Exact eager native tool approval.
+- Requirement-level completion-criterion coverage matrix.
+- Frozen scenario fixtures and executable predicates.
+- Generated MCP handler/SDK route-to-operation maps and digests.
+- TypeScript isolate, numeric limits, audit storage policy, load gates, and rollout windows.
+
+### Next action
+
+Close independent-review findings, commit this verified inventory increment, then add the requirement-level verification matrix before requesting manifest approval.

@@ -45,6 +45,8 @@ The following mutually exclusive rules cover every pinned tool. The inventory ch
 
 No pinned v0.2.11 tool is deprecated or omitted in v1.
 
+The per-tool disposition expansion is `inventories/plane-mcp-v0.2.11-dispositions.md`. It freezes the compatibility adapter class and gateway mapping strategy for all 177 tools, but it does not replace the generated handler-call and SDK method/path-to-versioned-operation tables required before manifest approval.
+
 ## Gateway-backed adapter contract
 
 - The adapter derives workspace and identity from its authenticated MCP session.
@@ -96,6 +98,8 @@ The suite must include initialization, capability negotiation, tool listing, rep
 
 - Pinned inventory digest and generated coverage report.
 - Per-tool disposition and gateway-operation mapping.
+- Generated MCP-handler-to-SDK-call mapping covering every reachable handler branch.
+- Generated SDK method/path-template-to-versioned-operation mapping with a pinned digest.
 - Schema-diff report.
 - Shadow-comparison report with reviewed normalizers.
 - Real-client versions, configurations, and transcripts.

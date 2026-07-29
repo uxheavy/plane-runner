@@ -11,7 +11,7 @@ Proposed for release-manifest approval. The operation set and the coordinated re
 - The caller cannot provide credentials, actor IDs, audit IDs, attempt IDs, external integration IDs, timestamps, or mutation idempotency keys.
 - Unknown input fields are rejected. Mutation inputs are normalized before their digest is calculated.
 - UUIDs are lowercase canonical UUID strings. Dates use `YYYY-MM-DD`. Timestamps use UTC RFC 3339.
-- HTML is sanitized by Plane's existing validator. Agent-visible HTML fields are limited to 64 KiB before sanitization.
+- HTML is parsed and sanitized at the semantic operation boundary with Plane's canonical rich-text validator. Agent-visible HTML fields are limited to 64 KiB before sanitization. Handlers may not rely on a public serializer path that omits that validator.
 - List limits apply before dispatch. Truncation is explicit and always returns a continuation cursor when more data is available.
 - A read requires active membership in every referenced Plane object. A mutation additionally requires Plane's current member-or-admin mutation role for every affected project.
 - Plane authorization is the final runtime decision. Authorized operations continue immediately; unauthorized operations return a non-leaking denial with no side effect.
@@ -53,8 +53,8 @@ type Cycle = {
   id: string;
   project_id: string;
   name: string;
-  start_date: string | null;
-  end_date: string | null;
+  start_date: string | null; // UTC RFC 3339 timestamp
+  end_date: string | null; // UTC RFC 3339 timestamp
 };
 
 type WorkItem = {
@@ -110,11 +110,11 @@ Identifier matching is case-insensitive and exact. V1 deliberately excludes proj
 Purpose: return cycles whose start and end contain Plane's current server time.
 
 ```ts
-type Input = { project: ProjectRef };
-type Output = { cycles: Cycle[] }; // 0..10, ordered by start date then ID
+type Input = { project: ProjectRef; page?: Page };
+type Output = PageResult<Cycle>; // ordered by start timestamp then ID
 ```
 
-This normalizes the current public endpoint's bare array response. More than one current cycle is preserved rather than guessed away.
+This normalizes the current public endpoint's bare array response. A cycle is current when `start_date <= now <= end_date` using Plane's UTC server instant. More than one current cycle is preserved rather than guessed away. The gateway uses a Plane-owned paginated query module that applies the shared page default and bounds before materializing results, orders by start timestamp then ID, and returns opaque cursor continuation with explicit truncation. It does not fetch the public endpoint's complete array and then page it in memory.
 
 ### `plane.work_items.search@1`
 
@@ -136,6 +136,8 @@ type Output = PageResult<
 ```
 
 Without `project`, results cover only projects in the bound workspace where the actor is an active member. Search does not expose raw PQL in v1.
+
+The current public search view's unordered limit-only response cannot satisfy this contract. The gateway uses a Plane-owned query module with stable sort keys, opaque cursor continuation, explicit truncation, and hydration of every curated output field. It does not expose direct database access to callers.
 
 ### `plane.work_items.get@1`
 
@@ -159,20 +161,22 @@ type Output = {
 
 Relations are limited to 50 and include only related work items independently visible to the actor.
 
+Authorization and hydration run independently for the base work item and every related work item. Omitted inaccessible relations reveal no related ID, project, name, count, or candidate data.
+
 ### `plane.project_members.list@1`
 
-Purpose: return bounded active project members for assignment and ownership choices.
+Purpose: return bounded active project members eligible for work-item assignment.
 
 ```ts
 type Input = { project: ProjectRef; page?: Page };
 type Output = PageResult<{
   user_id: string;
   display_name: string;
-  role: "guest" | "member" | "admin";
+  role: "member" | "admin";
 }>;
 ```
 
-Email addresses and other profile data are excluded because the pilot does not need them.
+Guests, inactive members, bots, email addresses, and other profile data are excluded because they are not valid assignee choices for the pilot.
 
 ## Mutation operations
 
@@ -198,7 +202,7 @@ type Input = {
 type Output = { work_item: WorkItem };
 ```
 
-The parent, cycle, state, assignees, and labels must belong to the resolved project and pass current Plane authorization. `start_date` cannot follow `target_date`. The gateway claims idempotency before creation; public `external_source` and `external_id` are not exposed as a substitute.
+The parent, cycle, state, assignees, and labels must belong to the resolved project and pass current Plane authorization. Invalid mixed arrays reject the complete request rather than silently filtering elements. A parent cannot be the item itself or any descendant. `start_date` cannot follow `target_date`. The gateway claims idempotency before creation; public `external_source` and `external_id` are not exposed as a substitute.
 
 ### `plane.work_items.update@1`
 
@@ -224,11 +228,13 @@ type Input = {
 type Output = { work_item: WorkItem; changed_fields: string[] };
 ```
 
-`patch` must contain at least one field. Arrays replace their corresponding complete set. `cycle: null` removes current cycle placement. Plane validates every changed reference and the final date range.
+`patch` must contain at least one field. Arrays replace their corresponding complete set. Invalid mixed arrays reject the complete patch rather than silently filtering elements. A parent cannot be the item itself or any descendant. `cycle: null` removes current cycle placement. Plane validates every changed reference and the final date range after merging the patch with stored dates.
+
+Removing an already-unplaced work item is a successful idempotent no-op. `changed_fields` contains only fields whose stored semantic value changed, uses the canonical order `name`, `description_html`, `priority`, `state_id`, `parent`, `cycle`, `assignee_ids`, `label_ids`, `start_date`, `target_date`, and is empty for a no-op. Reordering an input set without changing its members is not a change.
 
 ### `plane.comments.create@1`
 
-Purpose: create one source-linked comment on a work item.
+Purpose: create one comment on a work item, optionally with a canonical source link.
 
 ```ts
 type Input = {
@@ -243,7 +249,7 @@ type Input = {
 type Output = { comment: Comment };
 ```
 
-When `source` is supplied, Plane appends one canonical sanitized link block to the comment. The operation requires the same member-or-admin mutation role as work-item mutation even though the current public comment endpoint permits any active project member; v1 intentionally closes that mismatch.
+Omitting `source` creates the sanitized comment without a source block. When `source` is supplied, Plane escapes its label and appends exactly one canonical sanitized HTTPS link block after sanitizing the comment. The operation requires the same member-or-admin mutation role as work-item mutation even though the current public comment endpoint permits any active project member; v1 intentionally closes that mismatch.
 
 ### `plane.release_plans.create@1`
 
@@ -301,12 +307,13 @@ Validation errors may include bounded field paths and safe corrective hints. Aut
 
 ## Source alignment and intentional differences
 
-- `IssueSerializer` currently validates project-local states, parents, assignees, labels, dates, and HTML. The semantic contracts preserve those checks while excluding server-owned fields.
+- `IssueSerializer` currently validates several project-local references and rich text, but it silently filters invalid assignee/label rows and only compares dates supplied together. The semantic contracts deliberately reject the complete mutation on any invalid reference and validate the merged final date range.
+- The public comment-create serializer does not invoke the richer comment HTML validator. The semantic comment operation invokes canonical sanitization at its own boundary and does not inherit that omission.
 - The public current-cycle endpoint returns an unpaginated array; the semantic operation returns a named, bounded `cycles` field.
 - The public issue and comment create endpoints use check-then-create external IDs. The gateway instead owns durable idempotency and reconciliation because check-then-create is not a concurrency guarantee.
 - The public comment endpoint uses `ProjectLitePermission`, while work-item mutation uses `ProjectEntityPermission`. The semantic comment mutation adopts the stricter work-item mutation role for a consistent agent policy.
 - The public API represents cycle placement through separate add and delete cycle-work-item endpoints. The semantic create, update, and release-plan operations make placement part of one contract and one invocation lifecycle.
-- The public search endpoint returns a small ad hoc projection. The semantic search result uses the same canonical identifiers and bounded pagination as other pilot reads.
+- The public search endpoint returns an unordered limit-only ad hoc projection. The semantic query module owns deterministic cursor pagination and hydration of the curated search fields.
 
 ## Freeze requirements
 
