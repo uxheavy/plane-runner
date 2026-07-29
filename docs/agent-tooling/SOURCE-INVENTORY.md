@@ -4,12 +4,13 @@ This document records observed source facts used to freeze the v1 release. It di
 
 ## Pinned sources
 
-| Source                    | Revision                                                     | Evidence                     |
-| ------------------------- | ------------------------------------------------------------ | ---------------------------- |
-| Plane                     | `d4679197ba` on `codex/agent-tooling-architecture`           | Local authoritative worktree |
-| Hermes                    | `5e88745f125c0d332c1d16ea0363860d447657f5` on `main`         | Local authoritative worktree |
-| Official Python MCP       | `96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1`, package `0.2.11` | `makeplane/plane-mcp-server` |
-| Python MCP SDK dependency | `plane-sdk==0.2.20`                                          | MCP `pyproject.toml`         |
+| Source                    | Revision                                                         | Evidence                     |
+| ------------------------- | ---------------------------------------------------------------- | ---------------------------- |
+| Plane                     | `d4679197ba` on `codex/agent-tooling-architecture`               | Local authoritative worktree |
+| Hermes                    | `5e88745f125c0d332c1d16ea0363860d447657f5` on `main`             | Local authoritative worktree |
+| Official Python MCP       | `96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1`, package `0.2.11`     | `makeplane/plane-mcp-server` |
+| Python MCP SDK dependency | `plane-sdk==0.2.20`                                              | MCP `pyproject.toml`         |
+| Plane Python SDK          | tag `v0.2.20`, commit `78702e9224bd9c5e8fffdabfbfdd582ac1fa9426` | `makeplane/plane-python-sdk` |
 
 ## Plane public interface
 
@@ -72,6 +73,15 @@ This document records observed source facts used to freeze the v1 release. It di
 - `get_pql_reference` is local-only behavior.
 - Attachment tools may call public source or presigned object-storage URLs in addition to Plane.
 - Compatibility must therefore map each MCP tool contract to one or more gateway operations or explicitly retained local behavior.
+
+### Shared SDK transport seam
+
+- Every ordinary MCP handler obtains `PlaneClient` through `get_plane_client_context()`.
+- `PlaneClient` constructs resource objects over a shared `Configuration` type.
+- Every SDK resource inherits `BaseResource`.
+- `BaseResource` owns the common `requests.Session`, URL construction, authentication headers, retries, and HTTP response normalization.
+- SDK v0.2.20 does not currently accept a custom transport.
+- Adding one optional transport at `BaseResource` is the smallest common seam for preserving existing MCP handlers while routing their SDK calls through the gateway.
 
 ### Authentication and transports
 

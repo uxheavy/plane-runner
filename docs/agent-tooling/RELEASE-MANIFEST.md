@@ -16,10 +16,16 @@ After approval, any scope, target, exclusion, version, or exception change requi
 | Product and technical delivery owner | Primary Codex agent                        |
 | Plane baseline                       | `a1954f991db12d637483bbc4ed9656151b524e53` |
 | Hermes baseline                      | `5e88745f125c0d332c1d16ea0363860d447657f5` |
+| Official MCP baseline                | `96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1` |
+| Plane Python SDK baseline            | `78702e9224bd9c5e8fffdabfbfdd582ac1fa9426` |
 | Plane delivery branch                | `codex/agent-tooling-architecture`         |
 | Hermes delivery branch               | Not created                                |
+| Official MCP delivery branch         | `uxheavy:codex/agent-tooling-v1`           |
+| Plane Python SDK delivery branch     | `uxheavy:codex/agent-tooling-v1`           |
 | Final Plane commit                   | Pending                                    |
 | Final Hermes commit                  | Pending                                    |
+| Final official MCP commit            | Pending                                    |
+| Final Plane Python SDK commit        | Pending                                    |
 | Integration-lock digest              | Pending                                    |
 
 Merge, CI, credential, staging, production, and deployment authorities must be named before their respective gates.
@@ -62,6 +68,8 @@ No implementation may silently omit a proposed capability after approval. The ex
 The proposed complete disposition is defined in `MCP-COMPATIBILITY.md`: 171 ordinary tools use gateway-backed compatibility adapters, `get_pql_reference` retains versioned local read-only behavior, and five attachment tools use a hardened attachment adapter. No pinned tool is omitted or deprecated.
 
 The official Python MCP server remains the deployed external adapter host. V1 evolves its existing handlers incrementally; it does not recreate the server or its 177-tool surface in a new implementation.
+
+The accepted convergence seam is an optional gateway transport in Plane Python SDK `BaseResource`. The official MCP client factory selects it; ordinary existing tool handlers remain in place. The integration lock pins Plane, Hermes, official MCP, Python SDK, catalog, adapter, and runtime revisions together.
 
 ## Runtime pins
 

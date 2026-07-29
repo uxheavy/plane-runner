@@ -205,3 +205,34 @@ These choices reuse existing code and avoid both a duplicate MCP implementation 
 ### Next action
 
 Freeze the exact semantic operation contract and the gateway wire adapter.
+
+## 2026-07-29 — Official MCP gateway seam and forks
+
+### Decision
+
+- Add one optional gateway transport at the official Plane Python SDK `BaseResource` seam.
+- Keep existing official MCP handlers and their tool-level contracts in place.
+- Select gateway mode in the MCP client factory.
+- Preserve explicit local PQL and specialized attachment exceptions.
+
+### External repositories
+
+- Forked `makeplane/plane-mcp-server` to `uxheavy/plane-mcp-server`.
+- Created `uxheavy/plane-mcp-server` branch `codex/agent-tooling-v1` at `96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1`.
+- Forked `makeplane/plane-python-sdk` to `uxheavy/plane-python-sdk`.
+- Created `uxheavy/plane-python-sdk` branch `codex/agent-tooling-v1` at `78702e9224bd9c5e8fffdabfbfdd582ac1fa9426`.
+- Added both forks as pinned submodules under `external/` at Plane commit `f4d2dd3119`.
+
+### Evidence
+
+- The pinned official MCP server centralizes `PlaneClient` creation in `get_plane_client_context()`.
+- Plane Python SDK v0.2.20 routes every ordinary resource request through `BaseResource`.
+- `BaseResource` owns the shared HTTP session, URL, authentication, retry, and response-normalization seam.
+
+### Consequence
+
+The release integration lock and clean-checkout verifier cover four repositories: Plane, Hermes, the official MCP server, and the Plane Python SDK.
+
+### Next action
+
+Specify the versioned gateway wire contract used by native Hermes, Code Mode callbacks, and the SDK transport.

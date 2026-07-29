@@ -11,7 +11,7 @@ After freeze, changes require both recorded user approval and an independent rev
 Every check records:
 
 - Check ID and manifest version.
-- Plane and Hermes commit IDs.
+- Plane, Hermes, official MCP, and Plane Python SDK commit IDs.
 - Integration-lock, catalog, adapter, prompt, fixture, runtime, container, and configuration digests.
 - Resolved provider and model.
 - UTC start and end timestamps.
@@ -132,7 +132,7 @@ The aggregate verifier recomputes all release metrics from ledger rows and raw e
 
 The final entry point must:
 
-1. Verify clean Plane and Hermes checkouts at the exact integration-lock commits.
+1. Verify clean Plane, Hermes, official MCP, and Plane Python SDK checkouts at the exact integration-lock commits.
 2. Resolve release artifacts by immutable digest rather than rebuilding an unpinned candidate.
 3. Validate release, verification, catalog, adapter, prompt, fixture, runtime, model-metadata, and configuration digests before tests run.
 4. Execute VM-018 through VM-021 and qualify their expected failures.

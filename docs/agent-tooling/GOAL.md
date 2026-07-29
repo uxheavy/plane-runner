@@ -20,6 +20,8 @@ Deliver Plane's agent-tooling architecture as a production-ready, independently 
 - Canonical program state lives in `/Users/nqh/Desktop/CODES/plane/docs/agent-tooling/`.
 - Plane implementation lives in `/Users/nqh/Desktop/CODES/plane`.
 - Hermes integration lives in `/Users/nqh/Desktop/CODES/hermes-agent`.
+- External MCP compatibility lives in the `external/plane-mcp-server` submodule sourced from `uxheavy/plane-mcp-server`.
+- Shared Python gateway transport lives in the `external/plane-python-sdk` submodule sourced from `uxheavy/plane-python-sdk`.
 
 ## Baseline
 
@@ -53,7 +55,7 @@ Observed on 2026-07-29:
 - Freeze and obtain user approval for `RELEASE-MANIFEST.md` before implementation begins.
 - Freeze and obtain user plus independent-review approval for `VERIFICATION-MANIFEST.md` before implementation begins.
 - Require every approved release-manifest row to pass or carry an explicitly approved exception.
-- Pin compatible Plane and Hermes commits plus generated-contract digests in a cross-repository integration lock.
+- Pin compatible Plane, Hermes, official MCP, and Plane Python SDK commits plus generated-contract digests in a cross-repository integration lock.
 
 ## Non-goals
 
@@ -176,7 +178,7 @@ The primary verifier must invoke or require the mandatory live Hermes acceptance
 
 The verifier must assert the resolved Hermes provider is `openai-codex` and the resolved model is `gpt-5.6-luna`. Model availability, authentication failure, or fallback must fail non-zero rather than skip live evaluation.
 
-The frozen system prompt, acceptance prompt, tool schemas, sampling parameters, context limits, seeded-data manifest, Plane and Hermes commits, catalog and adapter digests, Plane configuration, and TypeScript runtime digest must accompany live evidence. A changed provider model fingerprint invalidates prior live evidence and triggers the full live suite again.
+The frozen system prompt, acceptance prompt, tool schemas, sampling parameters, context limits, seeded-data manifest, Plane, Hermes, official MCP, and Plane Python SDK commits, catalog and adapter digests, Plane configuration, and TypeScript runtime digest must accompany live evidence. A changed provider model fingerprint invalidates prior live evidence and triggers the full live suite again.
 
 Final verification is executed independently from clean checkouts. It records full immutable logs, UTC timestamps, exit codes, dependency and container digests, skip and xpass counts, and reviewer identity. The verifier must first demonstrate failure against approved negative controls.
 
@@ -260,7 +262,7 @@ Mark the durable goal blocked only when the same external condition prevents mea
 
 `RESULT.md` must contain:
 
-- Final Plane and Hermes commit IDs and clean status.
+- Final Plane, Hermes, official MCP, and Plane Python SDK commit IDs and clean status.
 - The production-verification command and complete passing output summary.
 - Required focused test commands and results.
 - Catalog and public compatibility evidence.
