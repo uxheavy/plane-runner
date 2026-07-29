@@ -2,7 +2,7 @@
 
 ## Structural completion gate
 
-Implementation fingerprint: `sha256:899cea747d4e2bd7b32ee24955b1945abec95299dbde93e8eb6bc1ec43923b9f`
+Implementation fingerprint: `sha256:5311723fc36dd3bbc26d2534afb1b8921ccac9ad87bc9298389128195fe7fd26`
 
 `pnpm verify:chat-context` recomputes this fingerprint from the feature contracts,
 implementation, API wiring, tests, and release scripts. A mismatch blocks release

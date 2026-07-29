@@ -33,7 +33,7 @@ POST /api/workspaces/{workspaceSlug}/chat-context/hydrate/
 
 ## Verification evidence
 
-Fresh verification completed on `2026-07-29 18:53 +07` for the structural
+Fresh verification completed on `2026-07-29 18:58 +07` for the simplified
 lesson change set.
 
 The release verifier also checks the implementation fingerprint in `LESSONS.md`,
@@ -55,7 +55,7 @@ Tests       40 passed (40)
 Declarations/build: passed
 Core bundle: 20,803 gzip bytes <= 30,000; forbidden markers: none
 Renderer bundle: 66,955 gzip bytes <= 100,000; html2canvas marker present
-Django/PostgreSQL: 16 passed in 4.87s
+Django/PostgreSQL: 16 passed in 4.89s
 Docker test containers and network: removed
 ```
 

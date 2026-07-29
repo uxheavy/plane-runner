@@ -5,7 +5,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { readdir, readFile } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -14,10 +14,10 @@ const documentationRoot = path.join(repositoryRoot, "docs/features/chat-semantic
 const lessonLedger = path.join(documentationRoot, "LESSONS.md");
 
 const implementationDirectories = [
-  ["packages/chat-context/src", new Set([".ts"])],
-  ["packages/chat-context/tests", new Set([".ts"])],
-  ["packages/chat-context/fixtures", new Set([".json"])],
-  ["packages/chat-context/scripts", new Set([".mjs"])],
+  { relativeDirectory: "packages/chat-context/src", extension: ".ts" },
+  { relativeDirectory: "packages/chat-context/tests", extension: ".ts" },
+  { relativeDirectory: "packages/chat-context/fixtures", extension: ".json" },
+  { relativeDirectory: "packages/chat-context/scripts", extension: ".mjs" },
 ];
 
 const implementationFiles = [
@@ -51,43 +51,47 @@ const requiredDocuments = [
   "decisions/0006-visual-fallback-boundary.md",
 ];
 
-const collectFiles = async (relativeDirectory, extensions) => {
+async function collectFiles(relativeDirectory, extension) {
   const directory = path.join(repositoryRoot, relativeDirectory);
   const entries = await readdir(directory, { withFileTypes: true });
   const nestedFiles = await Promise.all(
     entries
       .filter((entry) => entry.isDirectory())
-      .map((entry) => collectFiles(path.posix.join(relativeDirectory, entry.name), extensions))
+      .map((entry) => collectFiles(path.posix.join(relativeDirectory, entry.name), extension))
   );
   const localFiles = entries
-    .filter((entry) => entry.isFile() && extensions.has(path.extname(entry.name)))
+    .filter((entry) => entry.isFile() && path.extname(entry.name) === extension)
     .map((entry) => path.posix.join(relativeDirectory, entry.name));
 
   return [...localFiles, ...nestedFiles.flat()];
-};
+}
+
+async function createFingerprint(relativePaths) {
+  const files = await Promise.all(
+    relativePaths.map(async (relativePath) => ({
+      contents: await readFile(path.join(repositoryRoot, relativePath)),
+      relativePath,
+    }))
+  );
+  const hash = createHash("sha256");
+
+  for (const { contents, relativePath } of files) {
+    hash.update(relativePath);
+    hash.update("\0");
+    hash.update(contents);
+    hash.update("\0");
+  }
+
+  return `sha256:${hash.digest("hex")}`;
+}
 
 const discoveredFiles = (
   await Promise.all(
-    implementationDirectories.map(([relativeDirectory, extensions]) => collectFiles(relativeDirectory, extensions))
+    implementationDirectories.map(({ extension, relativeDirectory }) => collectFiles(relativeDirectory, extension))
   )
 ).flat();
 const trackedFiles = [...new Set([...implementationFiles, ...discoveredFiles])].toSorted();
-const hash = createHash("sha256");
-const trackedContents = await Promise.all(
-  trackedFiles.map(async (relativePath) => ({
-    contents: await readFile(path.join(repositoryRoot, relativePath)),
-    relativePath,
-  }))
-);
-
-for (const { contents, relativePath } of trackedContents) {
-  hash.update(relativePath);
-  hash.update("\0");
-  hash.update(contents);
-  hash.update("\0");
-}
-
-const actualFingerprint = `sha256:${hash.digest("hex")}`;
+const actualFingerprint = await createFingerprint(trackedFiles);
 const ledgerContents = await readFile(lessonLedger, "utf8");
 const recordedFingerprint = ledgerContents.match(/Implementation fingerprint: `(?<fingerprint>sha256:[a-f0-9]{64})`/)
   ?.groups?.fingerprint;
@@ -96,17 +100,10 @@ const workspaceCatalog = await readFile(path.join(repositoryRoot, "pnpm-workspac
 const packageManifest = JSON.parse(
   await readFile(path.join(repositoryRoot, "packages/chat-context/package.json"), "utf8")
 );
-const documentChecks = await Promise.all(
-  requiredDocuments.map(async (relativePath) => {
-    try {
-      await readFile(path.join(documentationRoot, relativePath));
-      return undefined;
-    } catch {
-      return relativePath;
-    }
-  })
+const documentChecks = await Promise.allSettled(
+  requiredDocuments.map((relativePath) => access(path.join(documentationRoot, relativePath)))
 );
-const missingDocuments = documentChecks.filter((relativePath) => relativePath !== undefined);
+const missingDocuments = requiredDocuments.filter((_, index) => documentChecks[index].status === "rejected");
 
 const violations = [];
 if (recordedFingerprint !== actualFingerprint) {
