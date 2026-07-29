@@ -2,7 +2,7 @@
 
 ## Structural completion gate
 
-Implementation fingerprint: `sha256:6a651a998a1f762bfc4c794c9bbaea967a53fe1e1f8d846229867b5c2090e2e5`
+Implementation fingerprint: `sha256:7dd3783db65c7a5c9480aea99c06254675b3a1564ef15a3a2960a105773214cd`
 
 `pnpm verify:chat-context` recomputes this fingerprint from the feature contracts,
 implementation, API wiring, tests, and release scripts. A mismatch blocks release
@@ -38,6 +38,7 @@ until the relevant feature documentation and this ledger are reviewed together.
 | Registry signature and Markdown tool downloads failed without network access.                                           | Judgment-only | This is an execution-environment permission condition; exact commands are retried with approved network access rather than weakening verification. |
 | The commit hook reformatted Markdown after the first documentation check.                                               | Encoded       | The pre-commit formatter normalizes staged Markdown; the completion workflow reruns Markdown validation against committed content.                 |
 | Top-level strict-key validation raised list-shaped serializer errors and converted ordinary bad payloads into HTTP 500. | Encoded       | Three persistent API personas, routed dogfood regressions, non-field error normalization, and the release documentation gate preserve the fix.     |
+| Review found broader guest hydration and unchecked region/location capture.                                             | Encoded       | API ownership, reverse-region, and navigation-during-capture regressions enforce the authorization and attribution boundaries.                     |
 
 ## Architectural decisions
 

@@ -255,6 +255,9 @@ def _entity_access(user, reference):
 
     if entity is None:
         return None, project, "NOT_FOUND"
+    if entity_type == "work_item" and role == 5 and not project.guest_view_all_features:
+        if entity.created_by_id != user.id:
+            return None, project, "FORBIDDEN"
     is_private = (entity_type == "page" and entity.access == Page.PRIVATE_ACCESS) or (
         entity_type == "view" and entity.access == 0
     )

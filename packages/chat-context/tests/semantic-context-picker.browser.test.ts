@@ -239,6 +239,62 @@ describe("semantic context picker", () => {
     expect(source.captures).toEqual([priorityReference, stateReference]);
   });
 
+  test("captures a region dragged from bottom-right to top-left", async () => {
+    const acquisition = new FakeAcquisitionAdapter();
+    const source = new FakeContextSource();
+    const priority = mountElement({ left: "30px", top: "30px", width: "80px", height: "40px" });
+    source.values.set(referenceKey(priorityReference), "high");
+    const picker = createSemanticContextPicker({ acquisition, contextSource: source, getLocation: () => "/" });
+    picker.register(priority, { reference: priorityReference });
+
+    await expect(
+      picker.select({
+        operation: "capture",
+        area: { kind: "region", left: 200, top: 120, right: 0, bottom: 0 },
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      context: { items: [{ reference: priorityReference, observed: { value: "high" } }] },
+    });
+  });
+
+  test("keeps the selection location when navigation occurs during capture", async () => {
+    const acquisition = new FakeAcquisitionAdapter();
+    const element = mountElement();
+    acquisition.elements = [element];
+    let currentLocation = "/original";
+    let completeCapture: ((result: ContextSourceCaptureResult) => void) | undefined;
+    const source: ContextSource = {
+      getLabel: () => "Priority",
+      capture: () =>
+        new Promise((resolve) => {
+          completeCapture = resolve;
+        }),
+    };
+    const picker = createSemanticContextPicker({
+      acquisition,
+      contextSource: source,
+      getLocation: () => currentLocation,
+    });
+    picker.register(element, { reference: priorityReference });
+
+    const pending = picker.select({
+      operation: "capture",
+      area: { kind: "point", clientX: 10, clientY: 10 },
+    });
+    await Promise.resolve();
+    currentLocation = "/after-navigation";
+    completeCapture?.({
+      ok: true,
+      observed: { source: "client_store", value: "high", observedAt: "2026-07-29T09:00:00.000Z" },
+    });
+
+    await expect(pending).resolves.toMatchObject({
+      ok: true,
+      context: { items: [{ location: { url: "/original" } }] },
+    });
+  });
+
   test("keeps replacement registration safe from a stale disposer", async () => {
     const acquisition = new FakeAcquisitionAdapter();
     const source = new FakeContextSource();

@@ -52,6 +52,7 @@
 | 2026-07-29 | API fix       | Normalized top-level strict-key errors and stopped reflecting unknown client key names                       | Quinn 31 passed; existing hydration contracts 11 passed                       | Complete the inter-wave delay and retest |
 | 2026-07-29 | API Wave 2    | The same personas reran all normal, restricted, and skeptical integration lanes                              | 41 of 41 routed persona cases passed                                          | Run final combined release verification  |
 | 2026-07-29 | API GREEN     | Added persona regressions to the structural verifier and ran the exact formatted tree                        | 40 browser tests, 57 Django tests, Ruff clean, and 63 repository tasks passed | Resume the M7 UI handoff                 |
+| 2026-07-30 | Review GREEN  | Fixed guest hydration, reverse drags, and URL attribution                                                    | 42 browser; 11 API; focused gates passed                                      | Resume the M7 UI handoff                 |
 
 ## Recording rules
 

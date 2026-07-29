@@ -106,6 +106,16 @@ const intersects = (bounds: DOMRect, region: Extract<SelectionArea, { kind: "reg
   bounds.bottom > region.top &&
   bounds.top < region.bottom;
 
+const normalizeRegion = (
+  region: Extract<SelectionArea, { kind: "region" }>
+): Extract<SelectionArea, { kind: "region" }> => ({
+  kind: "region",
+  left: Math.min(region.left, region.right),
+  top: Math.min(region.top, region.bottom),
+  right: Math.max(region.left, region.right),
+  bottom: Math.max(region.top, region.bottom),
+});
+
 const isEntityReference = (reference: SemanticReferenceV1): reference is EntityReferenceV1 =>
   reference.kind === "entity";
 
@@ -165,10 +175,11 @@ export const createSemanticContextPicker = ({
     );
 
   const locateRegion = (area: Extract<SelectionArea, { kind: "region" }>): Registration[] => {
+    const region = normalizeRegion(area);
     const matches = [...registrations]
       .filter(eligible)
       .map((registration) => ({ registration, bounds: registration.element.getBoundingClientRect() }))
-      .filter(({ bounds }) => intersects(bounds, area))
+      .filter(({ bounds }) => intersects(bounds, region))
       .toSorted(
         (left, right) =>
           left.bounds.top - right.bounds.top ||
@@ -267,6 +278,7 @@ export const createSemanticContextPicker = ({
         }
 
         const captureTargets = request.area.kind === "point" ? selected.slice(0, 1) : selected;
+        const selectionLocation = getLocation();
         const outcomes = await Promise.all(
           captureTargets.map(async (registration): Promise<CaptureOutcome> => {
             if (!registration.element.isConnected) {
@@ -289,7 +301,7 @@ export const createSemanticContextPicker = ({
                   item: {
                     reference: registration.target.reference,
                     observed: result.observed,
-                    location: { url: getLocation() },
+                    location: { url: selectionLocation },
                   },
                 };
               }

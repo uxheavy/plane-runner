@@ -242,10 +242,8 @@ class TestSemanticContextHydration:
         assert entity_result["stale"] is True
         assert field_result["canonical"]["value"] == "<p>Approved description</p>"
 
-    @pytest.mark.parametrize("role", [20, 15, 5])
-    def test_all_active_project_roles_can_hydrate_project_entities(
-        self, api_client, workspace, project, work_item, role
-    ):
+    @pytest.mark.parametrize("role", [20, 15])
+    def test_admins_and_members_can_hydrate_project_entities(self, api_client, workspace, project, work_item, role):
         user = _add_user(workspace, project, role)
         api_client.force_authenticate(user=user)
 
@@ -257,6 +255,44 @@ class TestSemanticContextHydration:
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data["results"][0]["ok"] is True
+
+    def test_restricted_guest_can_only_hydrate_work_items_they_created(
+        self, api_client, workspace, project, work_item
+    ):
+        guest = _add_user(workspace, project, role=5)
+        guest_work_item = Issue(
+            name="Guest-created work item",
+            state=work_item.state,
+            priority="none",
+            project=project,
+            workspace=workspace,
+        )
+        guest_work_item.save(created_by_id=guest.id)
+        api_client.force_authenticate(user=guest)
+        restricted_reference = _entity(workspace, project, "work_item", work_item.id)
+
+        response = _hydrate(
+            api_client,
+            workspace,
+            [
+                {"reference": restricted_reference},
+                {"reference": {"kind": "field", "entity": restricted_reference, "fieldKey": "name"}},
+                {
+                    "reference": {
+                        "kind": "editor_block",
+                        "document": restricted_reference,
+                        "blockId": "restricted-block",
+                    }
+                },
+                {"reference": _entity(workspace, project, "work_item", guest_work_item.id)},
+            ],
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        *denied, allowed = response.data["results"]
+        assert all(result["ok"] is False and result["code"] == "FORBIDDEN" for result in denied)
+        assert allowed["ok"] is True
+        assert allowed["canonical"]["value"]["name"] == "Guest-created work item"
 
     def test_workspace_member_without_project_access_is_denied(self, api_client, workspace, project, work_item):
         identity = uuid4()
