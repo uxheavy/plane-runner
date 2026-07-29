@@ -1,64 +1,47 @@
 # Chat Semantic Context Picker
 
-## Current status
+Non-UI foundation for attaching visible Plane content to an agent message without
+copying labels or guessing object identity.
 
-| Item               | Value                                                          |
-| ------------------ | -------------------------------------------------------------- |
-| Phase              | Non-UI core complete                                           |
-| Branch             | `chat-semantic-context-picker-core`                            |
-| Owner              | Codex: product and technical lead                              |
-| UI ownership       | Separate user-managed branch                                   |
-| Product validation | Complete through prior use of Cursor and Codex inspector modes |
-| Release audience   | Single user; no staged rollout required                        |
-| API dogfood        | Complete: three personas, two waves, clean routed API surface  |
-| Next milestone     | User-owned M7 UI integration                                   |
+## Scope
 
-## Product outcome
+The package provides:
 
-A user can point at visible Plane content and attach useful context to an agent message without manually identifying or copying it.
+- typed references for work items, fields, projects, cycles, modules, pages, views,
+  and live editor blocks or ranges;
+- point and region selection through a Plane-owned React Grab adapter;
+- fresh client-store or live-editor observations;
+- Django hydration that rechecks workspace, project, guest, and private-object
+  access before returning curated canonical values;
+- a composer adapter that removes denied observations before handoff; and
+- an in-memory visual fallback with sensitive-surface denial and explicit review.
 
-Structured Plane references and current values are preferred. Visual context is a fallback for regions that Plane cannot describe semantically.
+The composer activation control, crosshair, hover treatment, preview, chips, and
+send workflow are intentionally left to the separate UI integration.
 
-## Documents
+## Integration
 
-| Document                                                       | Purpose                                                                 |
-| -------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| [Product specification](./product-spec.md)                     | Scope, behavior, boundaries, and acceptance criteria                    |
-| [Active goal](./GOAL.md)                                       | Non-UI finish line, verifier, constraints, and approval gates           |
-| [Worklog](./WORKLOG.md)                                        | Attempts, evidence, current state, and next action                      |
-| [Lesson ledger](./LESSONS.md)                                  | Corrections, decisions, dispositions, and structural enforcement        |
-| [Final result](./RESULT.md)                                    | Completion proof and UI-branch handoff                                  |
-| [Technical design](./technical-design.md)                      | Core modules, contracts, freshness, and permissions                     |
-| [Interface design](./interface-design.md)                      | Alternatives, comparison, and chosen public seam                        |
-| [M1 evidence](./m1-selection-foundation.md)                    | Pinned dependency, browser proof, bundle proof, and boundary correction |
-| [M2 evidence](./m2-core-contracts.md)                          | Versioned contract, registry, lifecycle, browser, and build proof       |
-| [M3 evidence](./m3-plane-entity-adapter.md)                    | Plane store mapping, field allowlist, freshness, and privacy proof      |
-| [M4 evidence](./m4-live-editor-adapter.md)                     | Live Tiptap/Yjs blocks, ranges, embeds, and privacy proof               |
-| [M5 evidence](./m5-server-hydration.md)                        | Permission-safe canonical hydration and staleness proof                 |
-| [M6 evidence](./m6-composer-integration.md)                    | Versioned ports, fixtures, runtime guards, and dummy consumer proof     |
-| [M8 evidence](./m8-visual-fallback.md)                         | Concrete renderer, actual pixels, privacy denial, and preview proof     |
-| [API dogfood report](./user-testing/report.md)                 | Three-persona routed API waves, findings, fixes, and stop decision      |
-| [API route map](./user-testing/route-map.md)                   | Authentication, contract, permission, lifecycle, and edge-case coverage |
-| [API issue ledger](./user-testing/issue-ledger.md)             | Verified dogfood findings and retest state                              |
-| [Delivery plan](./delivery-plan.md)                            | Milestones, ownership, status, and completion evidence                  |
-| [ADR 0001](./decisions/0001-selection-foundation.md)           | Selection foundation and dependency decision                            |
-| [ADR 0002](./decisions/0002-picker-core-interface.md)          | Minimal domain-typed picker interface decision                          |
-| [ADR 0003](./decisions/0003-live-editor-identity.md)           | Editor block and range identity decision                                |
-| [ADR 0004](./decisions/0004-server-hydration-boundary.md)      | Batch server hydration and permission boundary decision                 |
-| [ADR 0005](./decisions/0005-composer-integration-interface.md) | UI-free composer Adapter and denied-item filtering decision             |
-| [ADR 0006](./decisions/0006-visual-fallback-boundary.md)       | In-memory visual fallback and denied-pixel boundary                     |
+Import semantic APIs from `@plane/chat-context`. Import the optional screenshot
+renderer from `@plane/chat-context/html2canvas-pro` so semantic-only consumers do
+not bundle it.
 
-## Working rules
+The host must:
 
-- This folder is the source of truth for product scope, decisions, status, and integration requirements.
-- Milestone status changes belong in `delivery-plan.md`.
-- Durable technical decisions receive an ADR under `decisions/`.
-- UI work remains outside this branch unless needed to prove a core interface.
-- Core completion requires the dummy consumer and public integration contract;
-  actual composer wiring remains a UI-branch handoff.
+1. register mounted Plane elements with stable semantic references;
+2. provide access to current Plane stores and mounted Tiptap editors;
+3. implement the authenticated hydration transport and composer consumer ports;
+4. show the exact semantic or visual context before sending; and
+5. mark custom credential or private surfaces with
+   `data-plane-context-sensitive`.
 
-## UI branch next actions
+## Documentation
 
-1. Add activation, overlay, preview, and context-chip presentation.
-2. Connect the authenticated hydration and composer consumer ports.
-3. Run the final UI-to-composer workflow test.
+- [Product specification](./product-spec.md)
+- [Technical design and contracts](./technical-design.md)
+- [Architecture decision](./decisions/0001-semantic-context-picker.md)
+
+## Verification
+
+Run `pnpm verify:chat-context` from the repository root. The command checks types,
+lint, formatting, browser behavior, production bundles, API permissions, and page
+scope.

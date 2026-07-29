@@ -10,7 +10,7 @@ import {
   createSemanticContextPicker,
 } from "../src";
 
-const FIXTURE_ATTRIBUTE = "data-plane-context-picker-m2-fixture";
+const FIXTURE_ATTRIBUTE = "data-plane-context-picker-fixture";
 
 const entityReference = {
   kind: "entity",

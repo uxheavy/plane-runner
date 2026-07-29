@@ -294,7 +294,7 @@ class TestSemanticContextHydration:
         assert allowed["ok"] is True
         assert allowed["canonical"]["value"]["name"] == "Guest-created work item"
 
-    def test_workspace_member_without_project_access_is_denied(self, api_client, workspace, project, work_item):
+    def test_missing_or_inactive_project_access_is_denied(self, api_client, workspace, project, work_item):
         identity = uuid4()
         user = User.objects.create(
             username=f"workspace-only-{identity}",
@@ -312,6 +312,20 @@ class TestSemanticContextHydration:
         assert response.status_code == status.HTTP_200_OK
         assert response.data["results"][0]["ok"] is False
         assert response.data["results"][0]["code"] == "FORBIDDEN"
+
+        ProjectMember.objects.create(
+            workspace=workspace,
+            project=project,
+            member=user,
+            role=15,
+            is_active=False,
+        )
+        inactive_response = _hydrate(
+            api_client,
+            workspace,
+            [{"reference": _entity(workspace, project, "work_item", work_item.id)}],
+        )
+        assert inactive_response.data["results"][0]["code"] == "FORBIDDEN"
 
     def test_private_page_requires_owner_and_editor_capture_is_authorization_only(
         self, session_client, workspace, project, create_user
@@ -374,30 +388,58 @@ class TestSemanticContextHydration:
         )
         cross_project = _entity(workspace, other_project, "work_item", work_item.id)
         deleted_reference = _entity(workspace, project, "work_item", work_item.id)
+        page = Page.objects.create(workspace=workspace, name="Unlinked", owned_by=create_user)
+        project_page = ProjectPage.objects.create(project=project, page=page, workspace=workspace)
+        unlinked_page = _entity(workspace, project, "page", page.id)
+        project_page.delete()
         work_item.delete()
 
         response = _hydrate(
             session_client,
             workspace,
-            [{"reference": deleted_reference}, {"reference": cross_project}],
+            [
+                {"reference": deleted_reference},
+                {"reference": cross_project},
+                {"reference": unlinked_page},
+            ],
         )
 
         assert response.status_code == status.HTTP_200_OK
-        assert [result["code"] for result in response.data["results"]] == ["NOT_FOUND", "NOT_FOUND"]
+        assert [result["code"] for result in response.data["results"]] == ["NOT_FOUND", "NOT_FOUND", "NOT_FOUND"]
 
-    def test_rejects_workspace_mismatch_and_unbounded_batches(self, session_client, workspace, project):
+    def test_rejects_workspace_mismatch_and_enforces_batch_bounds(self, session_client, workspace, project):
         mismatched = _entity(workspace, project, "project", project.id)
         mismatched["workspaceSlug"] = "another-workspace"
 
         mismatch_response = _hydrate(session_client, workspace, [{"reference": mismatched}])
         assert mismatch_response.status_code == status.HTTP_400_BAD_REQUEST
 
-        oversized_response = _hydrate(
-            session_client,
-            workspace,
-            [{"reference": _entity(workspace, project, "project", project.id)}] * 51,
-        )
+        item = {"reference": _entity(workspace, project, "project", project.id)}
+        maximum_response = _hydrate(session_client, workspace, [item] * 50)
+        assert maximum_response.status_code == status.HTTP_200_OK
+        assert len(maximum_response.data["results"]) == 50
+
+        oversized_response = _hydrate(session_client, workspace, [item] * 51)
         assert oversized_response.status_code == status.HTTP_400_BAD_REQUEST
+
+    @pytest.mark.parametrize(
+        "payload",
+        [None, {}, {"schemaVersion": 1, "items": []}, {"schemaVersion": 1, "items": [None]}],
+    )
+    def test_invalid_payloads_are_safe_json_errors(self, session_client, workspace, payload):
+        response = session_client.post(_url(workspace.slug), payload, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.headers["Content-Type"].startswith("application/json")
+        assert "traceback" not in str(response.data).lower()
+
+        marker = "DO-NOT-ECHO-CONTEXT-PAYLOAD"
+        unknown_key_response = session_client.post(
+            _url(workspace.slug),
+            {"schemaVersion": 1, "items": [], marker: marker},
+            format="json",
+        )
+        assert unknown_key_response.status_code == status.HTTP_400_BAD_REQUEST
+        assert marker not in str(unknown_key_response.data)
 
     def test_service_revalidates_references_when_called_without_the_api_serializer(self, create_user, workspace):
         with pytest.raises(ValidationError):

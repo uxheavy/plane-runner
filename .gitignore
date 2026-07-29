@@ -33,7 +33,6 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 .pnpm-debug.log*
-.pnpm-store/
 
 # Local env files
 .env

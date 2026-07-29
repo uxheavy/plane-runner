@@ -79,8 +79,8 @@ type SemanticReferenceV1 =
 Field keys are explicit allowlists grouped by entity type, never arbitrary property
 paths. Other entity field unions are added with their adapters. Editor blocks use
 Plane's existing `UniqueID` values. Ranges use start/end block IDs plus ProseMirror
-offsets relative to each block's content. See
-[ADR 0003](./decisions/0003-live-editor-identity.md).
+offsets relative to each block's content. See the
+[architecture decision](./decisions/0001-semantic-context-picker.md).
 
 ## Selection contract
 
@@ -177,7 +177,8 @@ Visual fallback is a separate in-memory contract. It produces an exact PNG crop
 with `semantic: false`, known Plane references, and `pending_review` status. Only
 a live preview confirmed exactly once becomes a visual attachment. It never
 serializes the semantic observations into visual metadata and performs no upload
-or persistent storage. See [ADR 0006](./decisions/0006-visual-fallback-boundary.md).
+or persistent storage. See the
+[architecture decision](./decisions/0001-semantic-context-picker.md).
 
 ## Failure contract
 
@@ -221,8 +222,7 @@ Each request item contains a `reference` and may include the client's
 
 Failures use `FORBIDDEN`, `NOT_FOUND`, or `UNSUPPORTED`. Malformed batches fail
 as HTTP 400 before resolution. Valid item failures stay inside an HTTP 200 batch
-so one deleted region target does not discard the rest. See
-[ADR 0004](./decisions/0004-server-hydration-boundary.md).
+so one deleted region target does not discard the rest.
 
 ## Freshness rules
 
@@ -255,24 +255,19 @@ The composer implementation is not present in this checkout. The core branch the
 The exported `SemanticContextComposerAdapter` composes two caller-owned ports:
 authenticated hydration and verified attachment consumption. It validates
 unknown server JSON, requires exact ordered reference echoes, strips denied
-observations, and preserves canonical/client values separately. See
-[ADR 0005](./decisions/0005-composer-integration-interface.md).
+observations, and preserves canonical/client values separately.
 
 The missing composer does not block core implementation. It blocks final end-to-end verification only.
 
-See [Interface design](./interface-design.md) and
-[ADR 0002](./decisions/0002-picker-core-interface.md) for the alternatives and
-the stable contract decision.
-
 ## Open-source references
 
-| Project                                                              | Use                                                                           | License  | Decision                                          |
-| -------------------------------------------------------------------- | ----------------------------------------------------------------------------- | -------- | ------------------------------------------------- |
-| [React Grab](https://github.com/aidenybai/react-grab)                | Hit-testing, ignored subtrees, page-freezing, and picker lifecycle primitives | MIT      | Primary foundation behind a Plane-owned adapter   |
-| [React Dev Inspector](https://github.com/zthxxx/react-dev-inspector) | Inspector activation, hover, click, and cleanup reference                     | MIT      | Secondary reference                               |
-| [stagewise](https://github.com/stagewise-io/stagewise)               | Selected-browser-context-to-agent product model                               | AGPL-3.0 | Product reference; do not import the full toolbar |
-| [html2canvas](https://github.com/niklasvh/html2canvas)               | Historical DOM-rendering lineage                                              | MIT      | Reference only; not a production dependency       |
-| [html2canvas-pro](https://github.com/yorickshan/html2canvas-pro)     | DOM pixels, exact crops, cancellation, and modern CSS colors                  | MIT      | Sole production renderer, pinned at 2.3.2         |
+| Project                                                              | Use                                                          | License  | Decision                                          |
+| -------------------------------------------------------------------- | ------------------------------------------------------------ | -------- | ------------------------------------------------- |
+| [React Grab](https://github.com/aidenybai/react-grab)                | Hit-testing and ignored-subtree primitives                   | MIT      | Primary foundation behind a Plane-owned adapter   |
+| [React Dev Inspector](https://github.com/zthxxx/react-dev-inspector) | Inspector activation, hover, click, and cleanup reference    | MIT      | Secondary reference                               |
+| [stagewise](https://github.com/stagewise-io/stagewise)               | Selected-browser-context-to-agent product model              | AGPL-3.0 | Product reference; do not import the full toolbar |
+| [html2canvas](https://github.com/niklasvh/html2canvas)               | Historical DOM-rendering lineage                             | MIT      | Reference only; not a production dependency       |
+| [html2canvas-pro](https://github.com/yorickshan/html2canvas-pro)     | DOM pixels, exact crops, cancellation, and modern CSS colors | MIT      | Sole production renderer, pinned at 2.3.2         |
 
 ## Dependency rule
 

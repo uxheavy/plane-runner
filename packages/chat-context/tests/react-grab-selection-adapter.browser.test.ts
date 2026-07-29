@@ -99,7 +99,7 @@ describe("React Grab selection adapter", () => {
     expect(adapter.getElementsAtPoint(point)[0]).toBe(staleTarget);
 
     staleTarget.remove();
-    window.history.pushState(null, "", "/context-picker-m1-navigation");
+    window.history.pushState(null, "", "/context-picker-navigation");
     expect(adapter.getElementsAtPoint(point)).not.toContain(staleTarget);
 
     const currentTarget = document.createElement("button");
