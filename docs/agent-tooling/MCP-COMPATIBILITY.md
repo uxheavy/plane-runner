@@ -47,6 +47,8 @@ No pinned v0.2.11 tool is deprecated or omitted in v1.
 
 The per-tool disposition expansion is `inventories/plane-mcp-v0.2.11-dispositions.md`. It freezes the compatibility adapter class and gateway mapping strategy for all 177 tools, but it does not replace the generated handler-call and SDK method/path-to-versioned-operation tables required before manifest approval.
 
+`MCP-MAPPING-CONTRACT.md` freezes the exact per-tool proof record, independently generated branch/call inventories, required joins, disposition-specific evidence, forbidden generic terminal mappings, and VM-022 sensitivity controls. VM-012 cannot pass from tool counts, disposition counts, category labels, or bare `sdk_http_intent` values.
+
 ## Gateway-backed adapter contract
 
 - The adapter derives workspace and identity from its authenticated MCP session.

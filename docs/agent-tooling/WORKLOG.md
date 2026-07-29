@@ -406,3 +406,44 @@ Freeze the remaining operation, result, runtime, compatibility, evaluation, and 
 ### Next action
 
 Close independent-review findings, commit this verified inventory increment, then add the requirement-level verification matrix before requesting manifest approval.
+
+## 2026-07-30 — Requirement-level verification coverage proposed
+
+### Coverage map
+
+- Added `REQUIREMENT-COVERAGE.md` with one row for each of the 78 `GOAL.md` completion criteria.
+- Added six primary-verifier obligations and all 18 mandatory `RESULT.md` completion-proof fields.
+- Added all 91 release-manifest table rows: 17 identity, seven workflow, ten pilot-operation, 14 runtime-pin, 18 limit, 21 numeric-gate, and four rollout rows.
+- Added separate mappings for material release prose covering authorities, eager surface, MCP convergence, preflight, qualification, denominator, promotion, rollback triggers, and exceptions.
+- Required the compatibility validator to expand all 177 pinned MCP tools into individual virtual requirement IDs; a count-only assertion cannot pass.
+- Defined 24 content-addressed evidence record classes shared by the matrix.
+
+### Verifier clarifications
+
+- Made property/fuzz suites explicit for schemas, pagination, idempotency keys, result limits, and untrusted results.
+- Made MCP schema-version transitions explicit.
+- Made Computer Use screenshots of both Plane and Hermes state explicit.
+- Made provider/model-fingerprint drift invalidate prior evidence and require the complete live suite again.
+- Made named authorities, threshold-change approval, promotion/retirement documentation, direct-database bypass checks, all execution-limit boundaries, operator alerts/runbooks, rollout windows, and rollback triggers explicit.
+- Replaced check-range shorthand in the requirement matrix with exact VM and evidence IDs for machine validation.
+- Added section-relative source ordinals and 17 exact raw source-block digests; all digests recompute from the current goal and release manifest.
+- Added a non-recursive VM-023 outer qualifier so the primary verifier must reject a failing, missing, ignored, or falsely passing signed result in every required VM-001 through VM-023 slot.
+- Expanded VM-018 with an unapproved numeric-threshold-lowering control.
+- Added an independently scored highest-impact oracle for the mandatory release-plan proposal.
+
+### Exact external MCP mapping
+
+- Added `MCP-MAPPING-CONTRACT.md` with a canonical per-tool proof record covering source, runtime schema/transitions, exact behavior classification, handler branches, stable edge IDs, structured SDK/gateway transformations, call dependencies/cardinality, traces, and typed conformance evidence.
+- Required independent source-derived control inventories and exact set joins; wildcards, catch-alls, category labels, unresolved values, and bare `sdk_http_intent` cannot satisfy routing proof.
+- Added disposition-specific proof for 171 shared-SDK tools, local PQL with zero calls, and each hardened attachment branch.
+- Added VM-022 with 17 mapping-sensitivity mutations covering omitted tools/branches/calls, swapped routes, wrong versions, generic mappings, mutation misclassification, invalid edge/dependency graphs, incomplete transformations, mis-keyed evidence, schema-transition drift, attachment bypass, PQL calls, and gateway bypass.
+
+### Verification state
+
+- Structural counts currently match 78 completion criteria, six primary-verifier obligations, 18 completion-proof fields, and 109 release table/prose rows before the 177 per-tool expansion.
+- Independent goal and MCP mapping re-reviews found no remaining P0, P1, or P2 after the final corrections.
+- This remains a proposed specification. It is not approval, executable verifier evidence, implementation, or production readiness.
+
+### Next action
+
+Rerun fresh structural, source-digest, formatting, staged-diff, and credential-pattern checks, then commit this logical coverage increment. Exact executable scenario fixtures and generated MCP route bundles remain later pre-approval artifacts.
