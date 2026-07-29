@@ -94,6 +94,9 @@ Hermes's existing approval lifecycle is reused:
 
 - The run emits `approval.request`.
 - The affected worker waits.
+- A separate trusted Hermes broker credential submits the human decision to Plane.
+- The ordinary agent credential cannot submit an approval decision.
+- Plane operation prompts allow approve once or deny, not session or permanent approval.
 - Concurrent admitted siblings may continue.
 - An approval response resumes the exact tool call in the same logical turn.
 - Tool results remain paired with stable call IDs and are projected in model-call order.

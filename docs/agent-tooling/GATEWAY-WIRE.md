@@ -86,6 +86,7 @@ type GatewayWireResult =
       attempt_id: string;
       audit_ref: string;
       approval: {
+        approval_id: string;
         effect: string;
         summary: string;
         input_digest: string;
@@ -107,7 +108,7 @@ type GatewayWireResult =
     };
 ```
 
-The approval state does not define who may decide or how a decision resumes. That remains an explicit pre-freeze approval-protocol decision.
+The approval ID is opaque correlation, not a capability. `APPROVAL-PROTOCOL.md` defines the accepted Hermes-broker decision path and the exact same-turn retry; approver eligibility and credential mechanics remain pre-freeze decisions.
 
 ## HTTP behavior
 

@@ -96,6 +96,9 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ATD-088 | V1 does not add a general workflow-graph DSL.                                                       | \_/10      |
 | ATD-089 | The official MCP server reaches the gateway through one optional shared Plane Python SDK transport. | \_/10      |
 | ATD-090 | Cross-process gateway calls use one versioned JSON HTTP adapter in Plane's existing API service.    | \_/10      |
+| ATD-091 | Hermes submits Plane approval decisions through a separate trusted broker credential.               | \_/10      |
+| ATD-092 | Agent execution credentials cannot submit Plane approval decisions.                                 | \_/10      |
+| ATD-093 | Plane operation approval choices are limited to approve once or deny in v1.                         | \_/10      |
 
 ## Superseded
 

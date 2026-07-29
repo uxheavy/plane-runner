@@ -293,3 +293,27 @@ The contracts remain proposed until approval authority, effect labels, generated
 ### Next action
 
 Resolve the approval decision authority and resume protocol, one product decision at a time.
+
+## 2026-07-29 — Hermes approval broker accepted
+
+### Decision
+
+- Hermes remains the live approval UX.
+- A separate trusted broker credential submits the human decision to Plane.
+- The agent execution credential cannot approve its own operation.
+- Generated TypeScript receives neither credential.
+- Plane binds the decision to the exact attempt and input digest, rechecks authority, and consumes approval once.
+
+### Reuse boundary
+
+Hermes's existing queue, prompt routing, blocking wait, timeout, and same-turn continuation are reused. Plane operations add a typed approval entry and exclude Hermes's session and permanent dangerous-command allowances.
+
+### Still open
+
+- Exact human approver eligibility.
+- Default approval-effect policy and administrator overrides.
+- Broker credential issuance, storage, rotation, revocation, and connector binding.
+
+### Next action
+
+Choose the exact Plane human eligibility rule for approving one pending operation.
