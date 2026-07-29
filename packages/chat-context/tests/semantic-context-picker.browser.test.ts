@@ -239,6 +239,27 @@ describe("semantic context picker", () => {
     expect(source.captures).toEqual([priorityReference, stateReference]);
   });
 
+  test("captures an advertised parent without requiring a second mounted registration", async () => {
+    const acquisition = new FakeAcquisitionAdapter();
+    const source = new FakeContextSource();
+    const field = mountElement();
+    acquisition.elements = [field];
+    source.values.set(referenceKey(entityReference), { name: "Issue one" });
+    const picker = createSemanticContextPicker({ acquisition, contextSource: source, getLocation: () => "/issue-1" });
+    picker.register(field, { reference: priorityReference, parent: entityReference });
+
+    await expect(
+      picker.select({
+        operation: "capture",
+        area: { kind: "point", clientX: 10, clientY: 10 },
+        ancestorOffset: 1,
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      context: { items: [{ reference: entityReference, observed: { value: { name: "Issue one" } } }] },
+    });
+  });
+
   test("captures a region dragged from bottom-right to top-left", async () => {
     const acquisition = new FakeAcquisitionAdapter();
     const source = new FakeContextSource();

@@ -204,6 +204,7 @@ class TestSemanticContextHydration:
             "Public view",
         ]
         assert "description" not in entity_values[0]
+        assert entity_values[2]["status"] == "DRAFT"
         assert "query" not in entity_values[-1]
         field_values = {
             field: result["canonical"]["value"] for field, result in zip(work_item_fields, response.data["results"][6:])

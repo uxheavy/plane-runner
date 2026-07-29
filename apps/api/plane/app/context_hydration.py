@@ -309,6 +309,17 @@ def _work_item_value(issue):
     }
 
 
+def _cycle_status(cycle):
+    now = timezone.now()
+    if cycle.start_date is not None and cycle.end_date is not None and cycle.start_date <= now <= cycle.end_date:
+        return "CURRENT"
+    if cycle.start_date is not None and cycle.start_date > now:
+        return "UPCOMING"
+    if cycle.end_date is not None and cycle.end_date < now:
+        return "COMPLETED"
+    return "DRAFT"
+
+
 def _entity_value(entity, reference, project):
     entity_type = reference["entityType"]
     if entity_type == "work_item":
@@ -328,7 +339,7 @@ def _entity_value(entity, reference, project):
             "projectId": str(entity.project_id),
             "name": entity.name,
             "description": entity.description,
-            "status": None,
+            "status": _cycle_status(entity),
             "startDate": _iso(entity.start_date),
             "endDate": _iso(entity.end_date),
             "archivedAt": _iso(entity.archived_at),

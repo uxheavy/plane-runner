@@ -131,6 +131,43 @@ describe("composer integration contract", () => {
     });
   });
 
+  it("reports cancellation while the composer attachment is pending", async () => {
+    const controller = new AbortController();
+    let finishAttachment: (() => void) | undefined;
+    const attachContext = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishAttachment = resolve;
+        })
+    );
+    const adapter = createSemanticContextComposerAdapter({
+      hydration: { hydrate: async () => hydrationFixture },
+      consumer: { attachContext },
+    });
+
+    const pending = adapter.attachContext(fixtureBundle(), { signal: controller.signal });
+    await vi.waitFor(() => expect(attachContext).toHaveBeenCalledOnce());
+    controller.abort();
+    finishAttachment?.();
+
+    await expect(pending).resolves.toMatchObject({ ok: false, code: "ABORTED" });
+  });
+
+  it("rejects entity references without project scope", () => {
+    const missingProject = structuredClone(regionFixture);
+    const reference = missingProject.items[0]?.reference;
+    if (!reference || reference.kind !== "entity") throw new Error("Entity fixture changed");
+    delete (reference as Partial<typeof reference>).projectId;
+
+    expect(isSemanticContextBundleV1(missingProject)).toBe(false);
+
+    const mismatchedProject = structuredClone(regionFixture);
+    const projectReference = mismatchedProject.items[0]?.reference;
+    if (!projectReference || projectReference.kind !== "entity") throw new Error("Entity fixture changed");
+    projectReference.entityType = "project";
+    expect(isSemanticContextBundleV1(mismatchedProject)).toBe(false);
+  });
+
   it("returns a retryable failure when server hydration throws", async () => {
     const consumer = new DummyComposerConsumer();
     const adapter = createSemanticContextComposerAdapter({

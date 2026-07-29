@@ -113,8 +113,8 @@ describe("Plane live editor context source", () => {
         {
           type: "issue-embed-component",
           attrs: {
-            id: "issue-1",
-            entity_identifier: "AGT-42",
+            id: "embed-block-1",
+            entity_identifier: "issue-uuid-1",
             project_identifier: "AGT",
             workspace_identifier: "acme",
             entity_name: "Fix picker",
@@ -143,8 +143,8 @@ describe("Plane live editor context source", () => {
         {
           type: "issue-embed-component",
           attrs: {
-            id: "issue-1",
-            entity_identifier: "AGT-42",
+            id: "embed-block-1",
+            entity_identifier: "issue-uuid-1",
             project_identifier: "AGT",
             workspace_identifier: "acme",
             entity_name: "Fix picker",
@@ -173,7 +173,7 @@ describe("Plane live editor context source", () => {
       },
     });
 
-    const workItem = await source.capture(blockReference("issue-1"), { signal: new AbortController().signal });
+    const workItem = await source.capture(blockReference("embed-block-1"), { signal: new AbortController().signal });
     expect(workItem).toMatchObject({
       ok: true,
       observed: {
@@ -181,8 +181,7 @@ describe("Plane live editor context source", () => {
           metadata: {
             embed: {
               kind: "work_item",
-              entityId: "issue-1",
-              entityIdentifier: "AGT-42",
+              entityId: "issue-uuid-1",
               projectIdentifier: "AGT",
               workspaceSlug: "acme",
               name: "Fix picker",

@@ -124,8 +124,7 @@ const blockMetadata = (node: TiptapNodeContextPort): Record<string, JsonValue> =
       return {
         embed: {
           kind: "work_item",
-          entityId: stringAttribute(node, "id"),
-          entityIdentifier: stringAttribute(node, "entity_identifier"),
+          entityId: stringAttribute(node, "entity_identifier"),
           projectIdentifier: stringAttribute(node, "project_identifier"),
           workspaceSlug: stringAttribute(node, "workspace_identifier"),
           name: stringAttribute(node, "entity_name"),

@@ -38,7 +38,7 @@ private Implementations of the core Module.
 type EntityReferenceV1 = {
   kind: "entity";
   workspaceSlug: string;
-  projectId?: string;
+  projectId: string;
   entityType: "work_item" | "project" | "cycle" | "module" | "page" | "view";
   entityId: string;
 };
@@ -60,7 +60,7 @@ type SemanticReferenceV1 =
   | EntityReferenceV1
   | {
       kind: "field";
-      entity: EntityReferenceV1 & { entityType: "work_item"; projectId: string };
+      entity: EntityReferenceV1 & { entityType: "work_item" };
       fieldKey: WorkItemContextField;
     }
   | {
@@ -191,6 +191,8 @@ type SelectionFailureV1 = {
   retryable: boolean;
 };
 ```
+
+Every reference carries project scope. For a project entity, `projectId` equals `entityId`.
 
 | Code                | Meaning                                                            | Retryable |
 | ------------------- | ------------------------------------------------------------------ | --------- |

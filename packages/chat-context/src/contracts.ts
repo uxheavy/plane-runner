@@ -11,7 +11,7 @@ export type JsonValue = null | boolean | number | string | JsonValue[] | { [key:
 export type EntityReferenceV1 = {
   readonly kind: "entity";
   readonly workspaceSlug: string;
-  readonly projectId?: string;
+  readonly projectId: string;
   readonly entityType: "work_item" | "project" | "cycle" | "module" | "page" | "view";
   readonly entityId: string;
 };
@@ -53,7 +53,7 @@ export type SemanticReferenceV1 =
   | EntityReferenceV1
   | {
       readonly kind: "field";
-      readonly entity: EntityReferenceV1 & { readonly entityType: "work_item"; readonly projectId: string };
+      readonly entity: EntityReferenceV1 & { readonly entityType: "work_item" };
       readonly fieldKey: WorkItemContextField;
     }
   | EditorBlockReferenceV1

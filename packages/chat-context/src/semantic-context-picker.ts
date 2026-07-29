@@ -210,9 +210,12 @@ export const createSemanticContextPicker = ({
   const selectedRegistration = (registration: Registration, ancestorOffset: number): Registration | undefined => {
     if (ancestorOffset === 0) return registration;
     if (ancestorOffset !== 1 || !registration.target.parent) return undefined;
-    const parentKey = referenceKey(registration.target.parent);
-    return [...registrations].find(
-      (candidate) => eligible(candidate) && referenceKey(candidate.target.reference) === parentKey
+    const parent = registration.target.parent;
+    const parentKey = referenceKey(parent);
+    return (
+      [...registrations].find(
+        (candidate) => eligible(candidate) && referenceKey(candidate.target.reference) === parentKey
+      ) ?? { element: registration.element, target: { reference: cloneReference(parent) } }
     );
   };
 

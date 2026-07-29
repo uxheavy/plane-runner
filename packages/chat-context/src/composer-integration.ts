@@ -176,7 +176,8 @@ const isEntityReference = (value: unknown): value is Extract<SemanticReferenceV1
   typeof value.entityId === "string" &&
   typeof value.entityType === "string" &&
   entityTypes.has(value.entityType) &&
-  (value.projectId === undefined || typeof value.projectId === "string");
+  typeof value.projectId === "string" &&
+  (value.entityType !== "project" || value.projectId === value.entityId);
 
 const isRangePoint = (value: unknown): value is { readonly blockId: string; readonly offset: number } =>
   isRecord(value) &&
@@ -418,6 +419,7 @@ export const createSemanticContextComposerAdapter = (
     } catch {
       return signal.aborted ? aborted() : failure("COMPOSER_FAILED", "The composer rejected context", true);
     }
+    if (signal.aborted) return aborted();
     return { ok: true, attachment };
   },
 });
