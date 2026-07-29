@@ -179,6 +179,14 @@ This ledger supersedes conflicting assumptions in the earlier `Plane MCP and Cod
 | PX39 | Plane agents execute authorized operations autonomously.                                              | \_/10      |
 | PX40 | V1 has no runtime human-confirmation prompts for Plane agent operations.                              | \_/10      |
 | PX41 | V1 has no approval-broker credential or pending operation-approval state.                             | \_/10      |
+| PX42 | `plane_search_work_items` is an eager native Hermes tool in v1.                                       | \_/10      |
+| PX43 | `plane_get_work_item` is an eager native Hermes tool in v1.                                           | \_/10      |
+| PX44 | `plane_create_work_item` is an eager native Hermes tool in v1.                                        | \_/10      |
+| PX45 | `plane_update_work_item` is an eager native Hermes tool in v1.                                        | \_/10      |
+| PX46 | `plane_add_comment` is an eager native Hermes tool in v1.                                             | \_/10      |
+| PX47 | `plane_docs` is an eager native Hermes tool in v1.                                                    | \_/10      |
+| PX48 | `plane_search` is an eager native Hermes tool in v1.                                                  | \_/10      |
+| PX49 | `plane_execute` is an eager native Hermes tool in v1.                                                 | \_/10      |
 
 ### Open Decisions
 
@@ -186,7 +194,6 @@ This ledger supersedes conflicting assumptions in the earlier `Plane MCP and Cod
 | ----- | --------------------------------------------------------------------------------------- | ---------- |
 | PXD4  | Define the exact boundary of the supported agent-facing Plane API.                      | \_/10      |
 | PXD6  | Define the metadata layered over generated API schemas.                                 | \_/10      |
-| PXD7  | Select the initial direct semantic tools.                                               | \_/10      |
 | PXD8  | Define how direct tools are promoted from observed agent workflows.                     | \_/10      |
 | PXD9  | Define how direct tools are retired from the eager surface.                             | \_/10      |
 | PXD10 | Define the isolation boundary around model-written TypeScript inside the run container. | \_/10      |

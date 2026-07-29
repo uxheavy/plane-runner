@@ -46,20 +46,20 @@ Merge, CI, credential, staging, production, and deployment authorities must be n
 
 The contract IDs below are proposed semantic v1 identifiers. The public operation column is observed source evidence. Manifest approval freezes the semantic names and eager status.
 
-| Capability                             | Proposed contract operation    | Underlying public operation IDs                                                 | Eager native tool         | Code Mode     | Status         |
-| -------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------- | ------------------------- | ------------- | -------------- |
-| Resolve workspace context              | Host binding, not an operation | No public API-key workspace-discovery operation                                 | None                      | Bound context | Proposed       |
-| Resolve project context                | `plane.projects.resolve@1`     | `list_projects`, `retrieve_project`                                             | None                      | Required      | Proposed       |
-| Read current cycles                    | `plane.cycles.list_current@1`  | `list_cycles`                                                                   | None                      | Required      | Proposed       |
-| Search and list work items             | `plane.work_items.search@1`    | `search_work_items`, `list_work_items`                                          | `plane_search_work_items` | Required      | Proposed       |
-| Read one work item and relations       | `plane.work_items.get@1`       | `retrieve_work_item`, `get_workspace_work_item`, `list_work_item_relations`     | `plane_get_work_item`     | Required      | Proposed       |
-| Read project members                   | `plane.project_members.list@1` | `get_project_members_lite`                                                      | None                      | Required      | Proposed       |
-| Create parent or child work item       | `plane.work_items.create@1`    | `create_work_item`, optionally `add_cycle_work_items`                           | `plane_create_work_item`  | Required      | Proposed       |
-| Update work item or planning placement | `plane.work_items.update@1`    | `update_work_item`, optionally `add_cycle_work_items`, `delete_cycle_work_item` | `plane_update_work_item`  | Required      | Proposed       |
-| Create source-linked comment           | `plane.comments.create@1`      | `create_work_item_comment`                                                      | `plane_add_comment`       | Required      | Proposed       |
-| Create coordinated release plan        | `plane.release_plans.create@1` | Curated semantic application-service composition                                | None                      | Required      | Accepted scope |
+| Capability                             | Proposed contract operation    | Underlying public operation IDs                                                 | Eager native tool         | Code Mode     | Status                            |
+| -------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------- | ------------------------- | ------------- | --------------------------------- |
+| Resolve workspace context              | Host binding, not an operation | No public API-key workspace-discovery operation                                 | None                      | Bound context | Proposed                          |
+| Resolve project context                | `plane.projects.resolve@1`     | `list_projects`, `retrieve_project`                                             | None                      | Required      | Proposed                          |
+| Read current cycles                    | `plane.cycles.list_current@1`  | `list_cycles`                                                                   | None                      | Required      | Proposed                          |
+| Search and list work items             | `plane.work_items.search@1`    | `search_work_items`, `list_work_items`                                          | `plane_search_work_items` | Required      | Eager accepted; contract proposed |
+| Read one work item and relations       | `plane.work_items.get@1`       | `retrieve_work_item`, `get_workspace_work_item`, `list_work_item_relations`     | `plane_get_work_item`     | Required      | Eager accepted; contract proposed |
+| Read project members                   | `plane.project_members.list@1` | `get_project_members_lite`                                                      | None                      | Required      | Proposed                          |
+| Create parent or child work item       | `plane.work_items.create@1`    | `create_work_item`, optionally `add_cycle_work_items`                           | `plane_create_work_item`  | Required      | Eager accepted; contract proposed |
+| Update work item or planning placement | `plane.work_items.update@1`    | `update_work_item`, optionally `add_cycle_work_items`, `delete_cycle_work_item` | `plane_update_work_item`  | Required      | Eager accepted; contract proposed |
+| Create source-linked comment           | `plane.comments.create@1`      | `create_work_item_comment`                                                      | `plane_add_comment`       | Required      | Eager accepted; contract proposed |
+| Create coordinated release plan        | `plane.release_plans.create@1` | Curated semantic application-service composition                                | None                      | Required      | Accepted scope                    |
 
-The five domain tools above plus `plane_docs`, `plane_search`, and `plane_execute` form the proposed eight-tool eager Hermes surface.
+The exact eight-tool eager Hermes surface—`plane_search_work_items`, `plane_get_work_item`, `plane_create_work_item`, `plane_update_work_item`, `plane_add_comment`, `plane_docs`, `plane_search`, and `plane_execute`—was approved by the user at `2026-07-29T20:15:13Z`; their operation schemas remain candidate contracts until manifest approval.
 
 `plane.release_plans.create@1` accepts the complete parent, three-child, and source-comment intent as one semantic operation. The gateway validates and authorizes the full request, claims one stable invocation, and executes autonomously through Plane application services. V1 does not add a general workflow-graph DSL for this workflow.
 

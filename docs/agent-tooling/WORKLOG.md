@@ -4,14 +4,14 @@ This file records durable progress for the Plane Agent Tooling goal. Append entr
 
 ## Current state
 
-| Field                      | Value                                                                           |
-| -------------------------- | ------------------------------------------------------------------------------- |
-| Phase                      | Program definition                                                              |
-| Active gate                | Freeze and approve release and verification manifests                           |
-| Plane branch               | `codex/agent-tooling-architecture`                                              |
-| Hermes branch              | Not created from baseline `5e88745f125c0d332c1d16ea0363860d447657f5`            |
-| Last verified Plane commit | `c91a27b122`                                                                    |
-| Next action                | Freeze the proposed eager tools, operation boundary, runtime, and numeric gates |
+| Field                      | Value                                                                |
+| -------------------------- | -------------------------------------------------------------------- |
+| Phase                      | Program definition                                                   |
+| Active gate                | Freeze and approve release and verification manifests                |
+| Plane branch               | `codex/agent-tooling-architecture`                                   |
+| Hermes branch              | Not created from baseline `5e88745f125c0d332c1d16ea0363860d447657f5` |
+| Last verified Plane commit | `22916237cc`                                                         |
+| Next action                | Freeze the operation boundary, runtime, and remaining numeric gates  |
 
 ## 2026-07-29 — Goal grounding
 
@@ -499,3 +499,22 @@ This design resolves candidate seams only. It is not the executable `safety-v1` 
 ### Next action
 
 Generate the strict safety fixtures, per-scenario prompts and TypeScript probes, trial-result schema, independent live verifier, operator mutation suite, and transitive digest contract. Record the already granted exact eager native tool approval in the next logical documentation increment.
+
+## 2026-07-30 — Exact eager Hermes surface approved
+
+### User decision
+
+- `plane_search_work_items` is eager in v1.
+- `plane_get_work_item` is eager in v1.
+- `plane_create_work_item` is eager in v1.
+- `plane_update_work_item` is eager in v1.
+- `plane_add_comment` is eager in v1.
+- `plane_docs` is eager in v1.
+- `plane_search` is eager in v1.
+- `plane_execute` is eager in v1.
+
+The user approved the exact set at `2026-07-29T20:15:13Z`. This approves tool visibility, not the still-candidate operation schemas or the release and verification manifests.
+
+### Next action
+
+Freeze the remaining safety fixtures and exact supported operation boundary, then present the complete release and verification manifests for their required approvals before implementation.

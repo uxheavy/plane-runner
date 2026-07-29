@@ -62,7 +62,18 @@ Generated TypeScript never receives the Plane credential.
 
 ## Native Hermes tools
 
-Common semantic operations are registered as native Hermes tools. Remaining supported operations are progressively discoverable through Hermes Tool Search and Code Mode.
+The approved v1 eager Hermes surface is exactly:
+
+- `plane_search_work_items`
+- `plane_get_work_item`
+- `plane_create_work_item`
+- `plane_update_work_item`
+- `plane_add_comment`
+- `plane_docs`
+- `plane_search`
+- `plane_execute`
+
+Remaining supported operations are progressively discoverable through Hermes Tool Search and Code Mode.
 
 Native adapters remain thin:
 
@@ -77,9 +88,9 @@ They do not reproduce Plane authorization or business logic.
 
 Code Mode provides three model-facing tools:
 
-- `docs` explains the programming model and common patterns.
-- `search` finds supported operations and relevant schemas.
-- `execute` runs model-written TypeScript that composes catalog operations.
+- `plane_docs` explains the programming model and common patterns.
+- `plane_search` finds supported operations and relevant schemas.
+- `plane_execute` runs model-written TypeScript that composes catalog operations.
 
 TypeScript executes inside the disposable container assigned to the Hermes run. A restricted child isolate has no Plane credentials, ambient environment secrets, arbitrary network, package installation, subprocess creation, or unrelated filesystem access. Its only Plane capability is a credential-free RPC callback to trusted host code.
 

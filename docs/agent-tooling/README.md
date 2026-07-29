@@ -55,7 +55,6 @@ Plane-native Hermes agents can safely perform useful Plane work through native s
 
 ## Current next decisions
 
-1. Select the initial eager native tools.
-2. Approve the exact operation and external MCP inventory.
-3. Complete and approve the release manifest.
-4. Complete and approve the verification manifest.
+1. Approve the exact operation and external MCP inventory.
+2. Complete and approve the release manifest.
+3. Complete and approve the verification manifest.

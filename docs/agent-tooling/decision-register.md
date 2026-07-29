@@ -11,9 +11,9 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ATD-003 | Plane-native Hermes agents use native Hermes tools.                                                 | \_/10      |
 | ATD-004 | Plane-native Hermes agents receive direct semantic Plane tools.                                     | \_/10      |
 | ATD-005 | Plane-native Hermes agents receive TypeScript Code Mode.                                            | \_/10      |
-| ATD-006 | Code Mode exposes `docs`.                                                                           | \_/10      |
-| ATD-007 | Code Mode exposes `search`.                                                                         | \_/10      |
-| ATD-008 | Code Mode exposes `execute`.                                                                        | \_/10      |
+| ATD-006 | Code Mode exposes `plane_docs`.                                                                     | \_/10      |
+| ATD-007 | Code Mode exposes `plane_search`.                                                                   | \_/10      |
+| ATD-008 | Code Mode exposes `plane_execute`.                                                                  | \_/10      |
 | ATD-009 | Common Plane operations are eager native tools.                                                     | \_/10      |
 | ATD-010 | Remaining supported Plane operations are progressively discoverable.                                | \_/10      |
 | ATD-011 | Direct tools are an ergonomic surface rather than a security tier.                                  | \_/10      |
@@ -90,6 +90,14 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ATD-090 | Cross-process gateway calls use one versioned JSON HTTP adapter in Plane's existing API service.    | \_/10      |
 | ATD-094 | Plane agents execute authorized operations autonomously by default.                                 | \_/10      |
 | ATD-097 | V1 has no runtime human-confirmation prompts for agent operations.                                  | \_/10      |
+| ATD-098 | `plane_search_work_items` is an eager native Hermes tool in v1.                                     | \_/10      |
+| ATD-099 | `plane_get_work_item` is an eager native Hermes tool in v1.                                         | \_/10      |
+| ATD-100 | `plane_create_work_item` is an eager native Hermes tool in v1.                                      | \_/10      |
+| ATD-101 | `plane_update_work_item` is an eager native Hermes tool in v1.                                      | \_/10      |
+| ATD-102 | `plane_add_comment` is an eager native Hermes tool in v1.                                           | \_/10      |
+| ATD-103 | `plane_docs` is an eager native Hermes tool in v1.                                                  | \_/10      |
+| ATD-104 | `plane_search` is an eager native Hermes tool in v1.                                                | \_/10      |
+| ATD-105 | `plane_execute` is an eager native Hermes tool in v1.                                               | \_/10      |
 
 ## Superseded
 
@@ -109,7 +117,6 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 
 | ID      | Open decision                                         | Importance |
 | ------- | ----------------------------------------------------- | ---------- |
-| ATO-002 | Select the initial eager native tools.                | \_/10      |
 | ATO-003 | Define the first supported operation boundary.        | \_/10      |
 | ATO-004 | Define the curated overlay fields.                    | \_/10      |
 | ATO-005 | Define direct-tool promotion criteria.                | \_/10      |
@@ -131,7 +138,6 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 
 | ID      | Proposed decision                                                                                                        | Importance |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | ---------- |
-| ATP-002 | Expose five eager semantic domain tools plus `plane_docs`, `plane_search`, and `plane_execute`.                          | \_/10      |
 | ATP-004 | Run TypeScript in a pinned Deno supervisor/Worker with explicit deny permissions inside the disposable Hermes container. | \_/10      |
 | ATP-005 | Use the v1 execution, result, artifact, and audit-retention limits proposed in the release manifest.                     | \_/10      |
 | ATP-006 | Use the proposed 30-minute ten-run load gate and explicit latency, error, and recovery thresholds.                       | \_/10      |
