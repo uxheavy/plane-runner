@@ -198,6 +198,27 @@ type SelectionFailureV1 = {
 Permission, missing, and stale failures from server hydration use the same
 structured result convention but remain a separate server output type.
 
+## Server hydration contract
+
+The composer submits 1-50 ordered references to:
+
+```text
+POST /api/workspaces/{workspaceSlug}/chat-context/hydrate/
+```
+
+Each request item contains a `reference` and may include the client's
+`observedEntityVersion`. Each valid item returns either:
+
+- `resolution: canonical` with an allowlisted `server_canonical` observation
+  and explicit `stale` flag; or
+- `resolution: authorization_only` for a live editor reference whose parent
+  document is still visible to the acting user.
+
+Failures use `FORBIDDEN`, `NOT_FOUND`, or `UNSUPPORTED`. Malformed batches fail
+as HTTP 400 before resolution. Valid item failures stay inside an HTTP 200 batch
+so one deleted region target does not discard the rest. See
+[ADR 0004](./decisions/0004-server-hydration-boundary.md).
+
 ## Freshness rules
 
 | Source               | Treatment                                                                               |

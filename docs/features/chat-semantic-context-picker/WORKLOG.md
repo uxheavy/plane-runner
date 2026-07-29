@@ -4,9 +4,9 @@
 
 | Item                    | Value                                                                |
 | ----------------------- | -------------------------------------------------------------------- |
-| Active phase            | M5: server hydration                                                 |
-| Last completed evidence | M4 live blocks, ranges, Yjs freshness, and embed privacy             |
-| Next action             | Map Django entity permission paths and define the hydration contract |
+| Active phase            | M6: composer integration kit                                         |
+| Last completed evidence | M5 canonical hydration, permission, deletion, and staleness behavior |
+| Next action             | Define transport Adapter, fixtures, and dummy consumer contract      |
 | Blocking condition      | None                                                                 |
 
 ## Evidence log
@@ -27,6 +27,10 @@
 | 2026-07-29 | M4 map    | Chose existing Plane block IDs and block-relative ProseMirror offsets                  | `decisions/0003-live-editor-identity.md`                                   | Write live editor tests         |
 | 2026-07-29 | M4 RED    | Real Tiptap/Yjs suite failed because the editor source export was absent               | `packages/chat-context/tests/M4_EVIDENCE.md`                               | Implement editor Adapter        |
 | 2026-07-29 | M4 GREEN  | Four editor tests and the 19-test browser regression suite passed                      | `m4-live-editor-adapter.md`                                                | Start M5 permission mapping     |
+| 2026-07-29 | M5 map    | Mapped active roles, private pages/views, guest rules, and scoped entity queries       | `decisions/0004-server-hydration-boundary.md`                              | Write Django contract tests     |
+| 2026-07-29 | M5 RED    | Eight endpoint cases failed while the route and hydration service were absent          | `apps/api/plane/tests/contract/api/M5_EVIDENCE.md`                         | Implement the hydration Module  |
+| 2026-07-29 | M5 fix    | RED exposed duplicate test usernames and an unauthenticated owner client               | Focused pytest failure output                                              | Correct fixtures, keep criteria |
+| 2026-07-29 | M5 GREEN  | 11 hydration and five existing page-scope cases passed with Ruff clean                 | `m5-server-hydration.md`                                                   | Start M6 integration kit        |
 
 ## Recording rules
 

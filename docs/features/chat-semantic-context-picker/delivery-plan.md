@@ -2,18 +2,18 @@
 
 ## Milestone status
 
-| ID  | Milestone                         | Scope                                                               | Owner          | Status   | Completion evidence                                       |
-| --- | --------------------------------- | ------------------------------------------------------------------- | -------------- | -------- | --------------------------------------------------------- |
-| M0  | Product and architecture baseline | Scope, boundaries, ADR, branch, tracking                            | Codex          | Complete | Feature dossier merged on feature branch                  |
-| M1  | Selection-foundation spike        | Pin and validate React Grab primitives in Plane                     | Codex          | Complete | Real Chrome tests and production bundle verifier pass     |
-| M2  | Core contracts and registry       | Types, registry, point/region result model                          | Codex          | Complete | Ten browser contract tests and package gates pass         |
-| M3  | Plane entity adapters             | Work items, projects, cycles, modules, pages, views, fields         | Codex          | Complete | Live getter Adapter and 15-test browser regression pass   |
-| M4  | Editor adapter                    | Page blocks, issue descriptions, ranges, embeds, client-live values | Codex          | Complete | Real Tiptap/Yjs tests and privacy allowlist pass          |
-| M5  | Server hydration                  | Permission-safe canonical resolution and stale/deleted handling     | Codex          | Next     | Django tests for roles, projects, private pages, failures |
-| M6  | Composer integration kit          | Versioned adapter, fixtures, contract tests, integration guide      | Codex          | Pending  | Dummy consumer passes contract suite                      |
-| M7  | UI integration                    | Activation, overlay, context chips, preview, composer wiring        | User UI branch | External | End-to-end workflow passes                                |
-| M8  | Region and visual fallback        | Drag regions, deduplication, snapshot evaluation                    | Shared         | Pending  | Region and privacy acceptance tests                       |
-| M9  | Release verification              | Full single-user workflow and regression pass                       | Shared         | Pending  | Acceptance checklist complete                             |
+| ID  | Milestone                         | Scope                                                               | Owner          | Status   | Completion evidence                                     |
+| --- | --------------------------------- | ------------------------------------------------------------------- | -------------- | -------- | ------------------------------------------------------- |
+| M0  | Product and architecture baseline | Scope, boundaries, ADR, branch, tracking                            | Codex          | Complete | Feature dossier merged on feature branch                |
+| M1  | Selection-foundation spike        | Pin and validate React Grab primitives in Plane                     | Codex          | Complete | Real Chrome tests and production bundle verifier pass   |
+| M2  | Core contracts and registry       | Types, registry, point/region result model                          | Codex          | Complete | Ten browser contract tests and package gates pass       |
+| M3  | Plane entity adapters             | Work items, projects, cycles, modules, pages, views, fields         | Codex          | Complete | Live getter Adapter and 15-test browser regression pass |
+| M4  | Editor adapter                    | Page blocks, issue descriptions, ranges, embeds, client-live values | Codex          | Complete | Real Tiptap/Yjs tests and privacy allowlist pass        |
+| M5  | Server hydration                  | Permission-safe canonical resolution and stale/deleted handling     | Codex          | Complete | 11 hydration and five page-scope Django tests pass      |
+| M6  | Composer integration kit          | Versioned adapter, fixtures, contract tests, integration guide      | Codex          | Next     | Dummy consumer passes contract suite                    |
+| M7  | UI integration                    | Activation, overlay, context chips, preview, composer wiring        | User UI branch | External | End-to-end workflow passes                              |
+| M8  | Region and visual fallback        | Drag regions, deduplication, snapshot evaluation                    | Shared         | Pending  | Region and privacy acceptance tests                     |
+| M9  | Release verification              | Full single-user workflow and regression pass                       | Shared         | Pending  | Acceptance checklist complete                           |
 
 The active durable goal covers M1-M6, the non-UI portion of M8, and core release
 verification. M7 and composer end-to-end wiring remain external to this branch.
@@ -70,6 +70,17 @@ verification. M7 and composer end-to-end wiring remain external to this branch.
 - [x] Fail closed for missing, duplicate, stale, and destroyed editor state.
 - [x] Keep Tiptap and Yjs out of production runtime dependencies.
 - [x] Pass the full 19-test browser regression suite and package gates.
+
+## M5 checklist
+
+- [x] Add a bounded, versioned, workspace-scoped batch endpoint.
+- [x] Validate reference shape at the HTTP and service boundaries.
+- [x] Recheck active workspace, project, private object, and guest access.
+- [x] Resolve all six entities and 11 work-item fields through allowlists.
+- [x] Preserve canonical values, versions, resolution time, and staleness.
+- [x] Return authorization-only success for live editor references.
+- [x] Exclude soft-deleted objects and relationship rows.
+- [x] Pass the focused hydration and existing page-scope regressions.
 
 ## Cross-branch contract
 
