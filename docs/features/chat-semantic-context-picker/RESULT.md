@@ -33,8 +33,11 @@ POST /api/workspaces/{workspaceSlug}/chat-context/hydrate/
 
 ## Verification evidence
 
-Fresh verification completed on `2026-07-29 18:38 +07` from commit
-`70860fd441`.
+Fresh verification completed on `2026-07-29 18:53 +07` for the structural
+lesson change set.
+
+The release verifier also checks the implementation fingerprint in `LESSONS.md`,
+so feature implementation and its durable documentation cannot drift silently.
 
 ### Primary cross-stack verifier
 
@@ -46,12 +49,13 @@ pnpm verify:chat-context
 TypeScript: passed
 OxLint: 0 warnings, 0 errors
 Oxfmt: passed
+Documentation contract: passed; 36 implementation files and 12 required documents
 Test Files  8 passed (8)
 Tests       40 passed (40)
 Declarations/build: passed
 Core bundle: 20,803 gzip bytes <= 30,000; forbidden markers: none
 Renderer bundle: 66,955 gzip bytes <= 100,000; html2canvas marker present
-Django/PostgreSQL: 16 passed in 4.91s
+Django/PostgreSQL: 16 passed in 4.87s
 Docker test containers and network: removed
 ```
 
@@ -68,7 +72,7 @@ pnpm check
 
 ```text
 Tasks: 63 successful, 63 total
-Cached: 63 cached, 63 total
+Cached: 60 cached, 63 total
 ```
 
 - Flaky checks: none; the three-pass rule was not triggered.

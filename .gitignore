@@ -33,6 +33,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 .pnpm-debug.log*
+.pnpm-store/
 
 # Local env files
 .env
@@ -111,6 +112,7 @@ build/
 temp/
 scripts/
 !packages/i18n/scripts/
+!packages/chat-context/scripts/
 
 # i18n auto-generated types (regenerated on every build)
 packages/i18n/src/types/keys.generated.ts

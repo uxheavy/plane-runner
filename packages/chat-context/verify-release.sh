@@ -8,6 +8,8 @@ cleanup() {
 
 trap cleanup EXIT
 
+node packages/chat-context/scripts/verify-feature-docs.mjs
+
 pnpm --filter @plane/chat-context check:types
 pnpm --filter @plane/chat-context check:lint
 pnpm --filter @plane/chat-context check:format
