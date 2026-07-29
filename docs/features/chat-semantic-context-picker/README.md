@@ -4,13 +4,13 @@
 
 | Item               | Value                                                          |
 | ------------------ | -------------------------------------------------------------- |
-| Phase              | M9 core release verification                                   |
+| Phase              | Non-UI core complete                                           |
 | Branch             | `chat-semantic-context-picker-core`                            |
 | Owner              | Codex: product and technical lead                              |
 | UI ownership       | Separate user-managed branch                                   |
 | Product validation | Complete through prior use of Cursor and Codex inspector modes |
 | Release audience   | Single user; no staged rollout required                        |
-| Next milestone     | Run and record the clean-state release verifier                |
+| Next milestone     | User-owned M7 UI integration                                   |
 
 ## Product outcome
 
@@ -52,9 +52,8 @@ Structured Plane references and current values are preferred. Visual context is 
 - Core completion requires the dummy consumer and public integration contract;
   actual composer wiring remains a UI-branch handoff.
 
-## Immediate next actions
+## UI branch next actions
 
-1. Run the primary cross-stack integration verifier from a clean state.
-2. Run repository-wide TypeScript, lint, format, and Django permission checks.
-3. Record exact outputs, contracts, limitations, and UI branch handoff.
-4. Commit the final evidence with a clean feature branch.
+1. Add activation, overlay, preview, and context-chip presentation.
+2. Connect the authenticated hydration and composer consumer ports.
+3. Run the final UI-to-composer workflow test.

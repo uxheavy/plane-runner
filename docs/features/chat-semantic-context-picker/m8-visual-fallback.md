@@ -52,14 +52,14 @@ const visualCapture = createVisualContextCapture({
 | --------------- | ------------------------------------------------------------ |
 | Runtime         | Real headless Chrome through production contracts            |
 | Pixel proof     | Exact 64×48 PNG from `oklch`; ignored red overlay absent     |
-| Browser suite   | 35 tests across eight files                                  |
+| Browser suite   | 40 tests across eight files                                  |
 | Package gates   | TypeScript, OxLint, Oxfmt, declarations, and build pass      |
-| Core bundle     | 20,814 gzip bytes of 30,000; no forbidden inspector markers  |
-| Renderer bundle | 66,950 gzip bytes of 100,000; pinned renderer marker present |
+| Core bundle     | 20,803 gzip bytes of 30,000; no forbidden inspector markers  |
+| Renderer bundle | 66,955 gzip bytes of 100,000; pinned renderer marker present |
 
 ```text
 Test Files  8 passed (8)
-Tests       35 passed (35)
+Tests       40 passed (40)
 ```
 
 See [ADR 0006](./decisions/0006-visual-fallback-boundary.md).

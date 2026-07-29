@@ -50,7 +50,7 @@
 
 | Positive                                                   | Cost                                                            |
 | ---------------------------------------------------------- | --------------------------------------------------------------- |
-| Privacy policy is renderer-independent and browser-tested  | DOM rendering adds a separately loaded 66,950-byte gzip bundle. |
+| Privacy policy is renderer-independent and browser-tested  | DOM rendering adds a separately loaded 66,955-byte gzip bundle. |
 | The renderer never runs for intersecting sensitive content | Marking non-standard secret surfaces remains a caller duty.     |
 | Visual evidence cannot be mistaken for semantic context    | Composer transport must model visual and semantic parts.        |
 | No new persistent store or service is introduced           | Previews disappear when their owning page/session is discarded. |

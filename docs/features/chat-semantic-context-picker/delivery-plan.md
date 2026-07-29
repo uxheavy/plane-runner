@@ -12,8 +12,8 @@
 | M5  | Server hydration                  | Permission-safe canonical resolution and stale/deleted handling     | Codex          | Complete | 11 hydration and five page-scope Django tests pass      |
 | M6  | Composer integration kit          | Versioned adapter, fixtures, contract tests, integration guide      | Codex          | Complete | Dummy consumer and 23-test browser regression pass      |
 | M7  | UI integration                    | Activation, overlay, context chips, preview, composer wiring        | User UI branch | External | End-to-end workflow passes                              |
-| M8  | Region and visual fallback        | Drag regions, deduplication, snapshot evaluation                    | Codex          | Complete | Concrete renderer and 35 browser tests pass             |
-| M9  | Release verification              | Full single-user workflow and regression pass                       | Codex          | Active   | Acceptance checklist complete                           |
+| M8  | Region and visual fallback        | Drag regions, deduplication, snapshot evaluation                    | Codex          | Complete | Concrete renderer and 40 browser tests pass             |
+| M9  | Release verification              | Full single-user workflow and regression pass                       | Codex          | Complete | Cross-stack verifier and 63 repository tasks pass       |
 
 The active durable goal covers M1-M6, the non-UI portion of M8, and core release
 verification. M7 and composer end-to-end wiring remain external to this branch.
@@ -105,7 +105,7 @@ verification. M7 and composer end-to-end wiring remain external to this branch.
 - [x] Pin `html2canvas-pro` 2.3.2 as the sole production screenshot engine.
 - [x] Expose the concrete Adapter as an optional package subpath.
 - [x] Prove exact modern-CSS pixels and ignored chrome in real Chrome.
-- [x] Pass the 35-test browser suite and separate core/renderer bundle gates.
+- [x] Pass the 40-test browser suite and separate core/renderer bundle gates.
 
 ## Cross-branch contract
 

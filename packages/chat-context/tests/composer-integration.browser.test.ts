@@ -130,4 +130,60 @@ describe("composer integration contract", () => {
       },
     });
   });
+
+  it("returns a retryable failure when server hydration throws", async () => {
+    const consumer = new DummyComposerConsumer();
+    const adapter = createSemanticContextComposerAdapter({
+      hydration: { hydrate: async () => Promise.reject(new Error("network unavailable")) },
+      consumer,
+    });
+
+    await expect(adapter.attachContext(fixtureBundle())).resolves.toMatchObject({
+      ok: false,
+      code: "HYDRATION_FAILED",
+      retryable: true,
+    });
+    expect(consumer.attachments).toHaveLength(0);
+  });
+
+  it("does not call the composer when hydration denies every selected item", async () => {
+    const bundle = fixtureBundle();
+    const failureCodes = ["FORBIDDEN", "NOT_FOUND", "UNSUPPORTED"] as const;
+    const consumer = new DummyComposerConsumer();
+    const adapter = createSemanticContextComposerAdapter({
+      hydration: {
+        hydrate: async () => ({
+          schemaVersion: 1,
+          results: bundle.items.map(({ reference }, index) => ({
+            ok: false,
+            reference,
+            code: failureCodes[index],
+            message: "Denied",
+            retryable: false,
+          })),
+        }),
+      },
+      consumer,
+    });
+
+    await expect(adapter.attachContext(bundle)).resolves.toMatchObject({
+      ok: false,
+      code: "NO_AUTHORIZED_CONTEXT",
+      retryable: false,
+    });
+    expect(consumer.attachments).toHaveLength(0);
+  });
+
+  it("returns a retryable failure when the composer rejects an authorized attachment", async () => {
+    const adapter = createSemanticContextComposerAdapter({
+      hydration: { hydrate: async () => hydrationFixture },
+      consumer: { attachContext: async () => Promise.reject(new Error("draft unavailable")) },
+    });
+
+    await expect(adapter.attachContext(fixtureBundle())).resolves.toMatchObject({
+      ok: false,
+      code: "COMPOSER_FAILED",
+      retryable: true,
+    });
+  });
 });

@@ -164,4 +164,33 @@ describe("privacy-safe visual context", () => {
 
     await expect(pending).resolves.toMatchObject({ ok: false, code: "ABORTED" });
   });
+
+  test("maps renderer errors to capture failure and rejects an oversized PNG", async () => {
+    const failed = createVisualContextCapture({
+      document,
+      renderer: { render: async () => Promise.reject(new Error("render failed")) },
+    });
+    await expect(
+      failed.capturePreview({ kind: "region", left: 0, top: 0, right: 20, bottom: 20 })
+    ).resolves.toMatchObject({ ok: false, code: "CAPTURE_FAILED", retryable: true });
+
+    const oversized = createVisualContextCapture({
+      document,
+      renderer: png(20, 20, 5),
+      maximumBlobBytes: 4,
+    });
+    await expect(
+      oversized.capturePreview({ kind: "region", left: 0, top: 0, right: 20, bottom: 20 })
+    ).resolves.toMatchObject({ ok: false, code: "TOO_LARGE", retryable: false });
+  });
+
+  test("discard permanently retires a pending preview", async () => {
+    const capture = createVisualContextCapture({ document, renderer: png(20, 20) });
+    const result = await capture.capturePreview({ kind: "region", left: 0, top: 0, right: 20, bottom: 20 });
+    if (!result.ok) throw new Error("Expected a visual preview");
+
+    capture.discard(result.preview);
+
+    expect(capture.confirm(result.preview)).toMatchObject({ ok: false, code: "PREVIEW_EXPIRED" });
+  });
 });

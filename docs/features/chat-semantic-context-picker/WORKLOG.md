@@ -2,12 +2,12 @@
 
 ## Current state
 
-| Item                    | Value                                                      |
-| ----------------------- | ---------------------------------------------------------- |
-| Active phase            | M9: core release verification                              |
-| Last completed evidence | M8 concrete renderer, real-pixel proof, and privacy gate   |
-| Next action             | Build and run the clean-state primary integration verifier |
-| Blocking condition      | None                                                       |
+| Item                    | Value                                                     |
+| ----------------------- | --------------------------------------------------------- |
+| Active phase            | Non-UI core complete                                      |
+| Last completed evidence | Cross-stack release verifier and repository-wide checks   |
+| Next action             | Hand off the stable contracts to the user-owned UI branch |
+| Blocking condition      | None                                                      |
 
 ## Evidence log
 
@@ -40,6 +40,9 @@
 | 2026-07-29 | M8 source | Codex keeps semantic element data separate from pixels; native capture is proprietary   | Public app-server and installed browser contracts                          | Implement a web renderer           |
 | 2026-07-29 | M8 fix    | Pinned `html2canvas-pro` 2.3.2 and removed the simulated production Adapter             | `@plane/chat-context/html2canvas-pro`                                      | Prove actual pixels                |
 | 2026-07-29 | M8 GREEN  | Exact modern-CSS crop, ignored overlay, 35 tests, and both bundle gates passed          | `m8-visual-fallback.md`                                                    | Run clean release verifier         |
+| 2026-07-29 | M9 audit  | Completion audit found five public failure branches without direct contract proof       | `GOAL.md` result-variant requirement                                       | Add missing verifier cases         |
+| 2026-07-29 | M9 GREEN  | All public result variants, 40 Chrome tests, and 16 Django cases passed                 | `pnpm verify:chat-context`                                                 | Run repository gate                |
+| 2026-07-29 | M9 GREEN  | Repository-wide types, lint, format, and builds completed as 63 successful tasks        | `pnpm check`                                                               | Write final handoff                |
 
 ## Recording rules
 
