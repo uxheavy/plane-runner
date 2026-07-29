@@ -64,5 +64,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Prepare API test environment
+        run: |
+          cp apps/api/.env.example apps/api/.env
+          echo "SECRET_KEY=semantic-context-ci" >> apps/api/.env
+
       - name: Verify semantic context
         run: pnpm verify:chat-context
