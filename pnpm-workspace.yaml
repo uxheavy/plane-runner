@@ -5,6 +5,7 @@ packages:
   - "!apps/proxy"
 
 catalog:
+  ajv: 8.18.0
   "@atlaskit/pragmatic-drag-and-drop": "1.7.4"
   "@atlaskit/pragmatic-drag-and-drop-auto-scroll": "1.4.0"
   "@atlaskit/pragmatic-drag-and-drop-hitbox": "1.1.0"
@@ -248,10 +249,10 @@ allowBuilds:
   sharp: false
 
 minimumReleaseAgeExclude:
-  - '@storybook/addon-docs@10.4.6'
-  - '@storybook/builder-vite@10.4.6'
-  - '@storybook/csf-plugin@10.4.6'
-  - '@storybook/react-dom-shim@10.4.6'
-  - '@storybook/react-vite@10.4.6'
-  - '@storybook/react@10.4.6'
+  - "@storybook/addon-docs@10.4.6"
+  - "@storybook/builder-vite@10.4.6"
+  - "@storybook/csf-plugin@10.4.6"
+  - "@storybook/react-dom-shim@10.4.6"
+  - "@storybook/react-vite@10.4.6"
+  - "@storybook/react@10.4.6"
   - storybook@10.4.6

@@ -26,6 +26,8 @@ Every check records:
 
 A summary without underlying immutable logs is insufficient.
 
+The candidate [planning evaluation fixture contract](./EVALUATION-FIXTURE-CONTRACT.md), SHA-256 `2499dd0e1a7ad2ae9322e7aa01bb648ebd9bed43dcb7abb7013e0a44b7ef3fd8`, supplies the exact EV-001 through EV-010 prompt, fixture, schema, predicate, and semantic-oracle digests. It remains non-qualifying until this manifest is approved and the independent verifier implementation is reviewed.
+
 ## Verifier ownership and independence
 
 | Responsibility                 | Qualification                                                    | Independence rule                                                       | Status             |

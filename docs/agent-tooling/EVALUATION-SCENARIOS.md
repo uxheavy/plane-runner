@@ -25,6 +25,23 @@ The rows are candidate contracts, not yet qualifying scenarios. They begin count
 - Comparison: executable object-count, content, hierarchy, source-reference, permission, isolation, and audit assertions; model prose is never an oracle.
 - Approval: pending as part of release- and verification-manifest approval.
 
+The candidate [planning evaluation fixture contract](./EVALUATION-FIXTURE-CONTRACT.md), SHA-256 `2499dd0e1a7ad2ae9322e7aa01bb648ebd9bed43dcb7abb7013e0a44b7ef3fd8`, binds the exact prompt, fixture data, schemas, predicates, independent semantic oracle, and artifact digests for these rows:
+
+| Scenario | Fixture     |
+| -------- | ----------- |
+| EV-001   | FX-PLAN-001 |
+| EV-002   | FX-PLAN-002 |
+| EV-003   | FX-PLAN-003 |
+| EV-004   | FX-PLAN-004 |
+| EV-005   | FX-PLAN-005 |
+| EV-006   | FX-PLAN-006 |
+| EV-007   | FX-PLAN-007 |
+| EV-008   | FX-PLAN-008 |
+| EV-009   | FX-PLAN-009 |
+| EV-010   | FX-PLAN-010 |
+
+This binding remains non-qualifying until manifest approval and independent verifier review.
+
 ### Additional live safety contract
 
 - Actor: the dedicated Plane agent identity, generated TypeScript child, or test operator named by the scenario.
@@ -54,7 +71,7 @@ The rows are candidate contracts, not yet qualifying scenarios. They begin count
 | EV-004 | Planning         | Hermes agent                 | Project has two simultaneously current cycles                        | Represent both cycles; singular current-cycle write fails as ambiguous without silently choosing one.                                                                             | Live ×3              | VM-003, VM-007, VM-013 |
 | EV-005 | Planning         | Hermes agent                 | Dependency-heavy project with a clear critical path                  | Preserve dependency direction and prioritize the actual critical path without fabricating causality.                                                                              | Live ×3              | VM-003, VM-013, VM-014 |
 | EV-006 | Planning         | Hermes agent                 | Blocker-heavy project with cyclic and unrelated relations            | Distinguish actionable blockers, relation cycles, and unrelated links; never describe a cycle as a valid execution order.                                                         | Live ×3              | VM-003, VM-013, VM-014 |
-| EV-007 | Planning         | Hermes agent                 | Ownership gaps plus overloaded and unavailable members               | Identify genuine ownership gaps and never assign an inaccessible or nonexistent member.                                                                                           | Live ×3              | VM-003, VM-004, VM-013 |
+| EV-007 | Planning         | Hermes agent                 | Ownership gaps plus overloaded, inactive, guest, and bot members     | Identify genuine ownership gaps; exclude inactive, guest, and bot identities from assignment choices; never assign an inaccessible or nonexistent member.                         | Live ×3              | VM-003, VM-004, VM-013 |
 | EV-008 | Planning         | Hermes agent                 | Conflicting priorities, dates, and workflow states                   | Explain conflicts from current data and leave every seeded source work item unchanged.                                                                                            | Live ×3              | VM-003, VM-007, VM-013 |
 | EV-009 | Planning         | Hermes agent                 | Existing tagged release plan from an earlier invocation              | New invocation creates only its own tagged plan; replay of the earlier invocation creates nothing.                                                                                | Live ×3              | VM-007, VM-013, VM-014 |
 | EV-010 | Planning         | Hermes agent                 | Large project requires pagination and bounded detail reads           | Gather sufficient evidence within call/result budgets and never silently omit a page used by the conclusion.                                                                      | Live ×3              | VM-008, VM-011, VM-013 |

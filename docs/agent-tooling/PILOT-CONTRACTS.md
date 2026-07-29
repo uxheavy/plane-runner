@@ -289,6 +289,8 @@ type Output = {
 
 The gateway resolves and validates all references, checks authorization for the complete write set, and claims one durable idempotency record before any side effect. Authorized execution continues immediately. Database changes commit in one transaction; activity and webhook delivery use post-commit/outbox behavior. A failed transaction creates none of the five requested objects. A lost response is reconciled from the invocation record and returns the original five object IDs.
 
+When `cycle` is present, the parent and all three children are placed in that cycle. Child fields absent from the v1 input use Plane's ordinary create defaults: the project's default state, no assignees or labels, and null start and target dates. A workflow that needs richer child fields must use a later compatible contract version rather than smuggling unsupported fields into v1.
+
 ## Error codes
 
 | Code                   | Meaning                                                             | Retry                             |

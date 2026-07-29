@@ -10,7 +10,7 @@ This folder is the durable source of truth for taking Plane's agent-facing tooli
 | Current branch        | `codex/agent-tooling-architecture`            |
 | Implementation status | Not started                                   |
 | Current gate          | Freeze the release and verification manifests |
-| Last updated          | 2026-07-29                                    |
+| Last updated          | 2026-07-30                                    |
 
 ## Outcome
 
@@ -28,6 +28,7 @@ Plane-native Hermes agents can safely perform useful Plane work through native s
 | [Verification manifest](./VERIFICATION-MANIFEST.md)                 | Independent checks, oracles, negative controls, and evidence    |
 | [Requirement coverage](./REQUIREMENT-COVERAGE.md)                   | Criterion and release-row checks, oracles, and evidence         |
 | [Evaluation scenarios](./EVALUATION-SCENARIOS.md)                   | Seventy-one behavioral contracts and live-trial allocation      |
+| [Planning fixture contract](./EVALUATION-FIXTURE-CONTRACT.md)       | Digest-bound EV-001 through EV-010 inputs and predicates        |
 | [Source inventory](./SOURCE-INVENTORY.md)                           | Observed Plane API, MCP, and Hermes facts                       |
 | [Interface design](./INTERFACE-DESIGN.md)                           | Four alternatives and the proposed v1 gateway seam              |
 | [MCP compatibility](./MCP-COMPATIBILITY.md)                         | Complete external-tool disposition and conformance plan         |

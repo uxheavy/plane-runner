@@ -249,6 +249,9 @@ catalogs:
     '@vitest/coverage-v8':
       specifier: ^4.1.8
       version: 4.1.8
+    ajv:
+      specifier: 8.18.0
+      version: 8.18.0
     ast-types:
       specifier: 0.14.2
       version: 0.14.2
@@ -582,6 +585,9 @@ importers:
 
   .:
     devDependencies:
+      ajv:
+        specifier: 'catalog:'
+        version: 8.18.0
       husky:
         specifier: 'catalog:'
         version: 9.1.7

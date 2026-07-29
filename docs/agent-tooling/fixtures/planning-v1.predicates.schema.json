@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://plane.so/schemas/agent-tooling/planning-v1.predicates.schema.json",
+  "title": "Plane planning evaluation predicate set v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schema", "predicate_set_id", "fixture_set", "common", "plan_created", "scenario_overrides"],
+  "properties": {
+    "$schema": { "const": "./planning-v1.predicates.schema.json" },
+    "schema": { "const": "plane.agent.predicate-set/v1" },
+    "predicate_set_id": { "const": "plane-agent-tooling-planning-predicates-v1" },
+    "fixture_set": { "const": "plane-agent-tooling-planning-v1" },
+    "common": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/predicate" }
+    },
+    "plan_created": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/predicate" }
+    },
+    "scenario_overrides": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["EV-001", "EV-002", "EV-003", "EV-004", "EV-005", "EV-006", "EV-007", "EV-008", "EV-009", "EV-010"],
+      "properties": {
+        "EV-001": { "$ref": "#/$defs/predicateArray" },
+        "EV-002": { "$ref": "#/$defs/predicateArray" },
+        "EV-003": { "$ref": "#/$defs/predicateArray" },
+        "EV-004": { "$ref": "#/$defs/predicateArray" },
+        "EV-005": { "$ref": "#/$defs/predicateArray" },
+        "EV-006": { "$ref": "#/$defs/predicateArray" },
+        "EV-007": { "$ref": "#/$defs/predicateArray" },
+        "EV-008": { "$ref": "#/$defs/predicateArray" },
+        "EV-009": { "$ref": "#/$defs/predicateArray" },
+        "EV-010": { "$ref": "#/$defs/predicateArray" }
+      }
+    }
+  },
+  "$defs": {
+    "operator": {
+      "enum": [
+        "audit_correlation_complete",
+        "audit_outcome_matrix_complete",
+        "attempt_ledger_complete_no_hidden_retries_or_fallbacks",
+        "callback_trace_complete",
+        "created_assignees_within_exact_eligible_set",
+        "cleanup_verified_absent",
+        "comment_source_link_equals",
+        "control_project_probe_denied",
+        "control_project_unchanged_and_absent",
+        "created_artifact_counts_equal",
+        "created_hierarchy_equals",
+        "created_names_and_comment_contain_run_tag",
+        "created_project_cycle_and_child_source_name_mapping_equals",
+        "current_invocation_replay_matches",
+        "cursor_chain_complete",
+        "dependency_order_equals",
+        "eligible_assignee_choices_equal",
+        "forbidden_assignees_absent",
+        "forbidden_dependency_orders_absent",
+        "forbidden_inventions_absent",
+        "final_readiness_summary_references_selected_sources",
+        "fresh_process_and_seed",
+        "frozen_prompt_exact_and_no_human_steering",
+        "generated_typescript_captured_and_digest_bound",
+        "ineligible_sources_absent",
+        "independent_read_overlap_observed",
+        "extended_isolate_probe_matrix_denied_with_liveness",
+        "no_extra_target_project_effects",
+        "overloaded_members_equal",
+        "prior_artifact_counts_and_digests_unchanged",
+        "prewrite_error_response_and_call_count_equal",
+        "prior_invocation_replay_created_count_equals",
+        "relation_sccs_equal",
+        "required_sources_observed",
+        "required_tool_surface_observed",
+        "resolved_provider_model_equals",
+        "separate_verifier_principal_used",
+        "returned_link_set_equals",
+        "security_violation_counts_equal",
+        "selected_sources_equal_impact_top_three",
+        "source_snapshot_unchanged",
+        "structured_error_and_authorized_candidates_equal",
+        "structured_error_equals",
+        "agent_release_plan_call_count_equals",
+        "run_budgets_within_frozen_limits",
+        "typescript_credential_probe_denied_with_liveness",
+        "typescript_direct_plane_network_probe_denied_with_liveness",
+        "credential_lifecycle_old_credential_denied",
+        "pending_human_confirmation_states_equal",
+        "ui_readback_matches_authoritative_state",
+        "unrelated_relations_not_used_as_causality"
+      ]
+    },
+    "predicateArray": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/predicate" }
+    },
+    "predicate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "operator", "evidence"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^PLAN-(COMMON|CREATED|EV[0-9]{3})-[0-9]{3}$" },
+        "operator": { "$ref": "#/$defs/operator" },
+        "expected": {},
+        "expected_pointer": { "type": "string", "pattern": "^/" },
+        "expected_count": { "type": "integer", "minimum": 0 },
+        "scope": { "enum": ["target_project_full_delta"] },
+        "scoring_pointer": { "type": "string", "pattern": "^/" },
+        "required_fields": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "open_assignment_threshold": { "type": "integer", "minimum": 1 },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "analysis_trace",
+              "artifacts",
+              "audit",
+              "audit_readback",
+              "budget_ledger",
+              "comment_readback",
+              "callback_trace",
+              "cleanup_record",
+              "computer_use_screenshots",
+              "control_snapshot_after",
+              "control_snapshot_before",
+              "created_artifacts",
+              "credential_lifecycle",
+              "expanded_fixture",
+              "final_response",
+              "gateway_result",
+              "generated_typescript",
+              "hermes_approval_state",
+              "host_canary_record",
+              "invocation_readback",
+              "isolate_probe_trace",
+              "member_readback",
+              "plane_readback",
+              "prior_snapshot_after",
+              "prior_snapshot_before",
+              "process_identity",
+              "provider_metadata",
+              "search_trace",
+              "security_probe_results",
+              "seed_bindings",
+              "source_snapshot_after",
+              "source_snapshot_before",
+              "tool_trace",
+              "trace",
+              "transcript",
+              "trial_ledger",
+              "verifier_principal"
+            ]
+          }
+        }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "required": ["expected"],
+              "properties": { "expected": true, "expected_pointer": false, "required_fields": false }
+            },
+            {
+              "required": ["expected_pointer"],
+              "properties": { "expected": false, "expected_pointer": true, "required_fields": false }
+            },
+            {
+              "required": ["required_fields"],
+              "properties": { "expected": false, "expected_pointer": false, "required_fields": true }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

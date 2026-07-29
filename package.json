@@ -23,6 +23,7 @@
     "doctor": "npx react-doctor@latest"
   },
   "devDependencies": {
+    "ajv": "catalog:",
     "husky": "catalog:",
     "lint-staged": "catalog:",
     "oxfmt": "catalog:",

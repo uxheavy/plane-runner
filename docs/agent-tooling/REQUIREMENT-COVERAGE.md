@@ -24,11 +24,11 @@ An ID suffix is the one-based ordinal in its source block: for example, `GC-LA-1
 | `RC-ID-01..17`    | Release identity table data rows                             |   17 | `bf0d3bc3b551514fbf0b9d50ef48413838ad2db65efc35e8e1bacc5c4138af5a` |
 | `RM-WF-*`         | Required workflow table data rows                            |    7 | `11b62218f612ade9919b25d792aa12ccf2f73f293159b24e5da1d7da7d4b6bba` |
 | `RC-OP-01..10`    | Pilot operation table data rows                              |   10 | `748e2d9f52f9d9272e70caed1f621885b626ea8a8714fb54942a81705115a4f8` |
-| `RC-PIN-01..14`   | Runtime-pin table data rows                                  |   14 | `69a545845c325b441883f9ebe3c10a107dd798a81df5a69e1812f6ed93c9b4a6` |
+| `RC-PIN-01..14`   | Runtime-pin table data rows                                  |   14 | `1c2618f9ebdbf4f4b0ffaf479c1c596e4a994bb09c219da88b90b3a0a0f5f6ac` |
 | `RC-LIM-01..18`   | Execution/retention limit table data rows                    |   18 | `ae9993b0e1d4e4ba1dd15719a77cfdcca4ea904956712194b6b3bd31258b6e82` |
 | `RC-GATE-01..21`  | Numeric release-gate table data rows                         |   21 | `3ab47e5b8430a9f1df8863fc87ea20f7821b12905edeedb86b0ff634d7dfcbaa` |
 | `RC-ROLL-01..04`  | Rollout table data rows                                      |    4 | `958d5b42068176bc62cea8ab86cd5d9cf05e48b732d53192ee39fd2fecacdfa6` |
-| Release prose IDs | Exact 17 material prose lines mapped below, in source order  |   17 | `0461b9470cca51034894f23df29fb084127f7adb8b0f747844c0096db03e647e` |
+| Release prose IDs | Exact 17 material prose lines mapped below, in source order  |   17 | `398cee54cc6957481a07b47c3e1dac0ce16076d0f3cd5a566bfee71347af9cce` |
 
 The 17 release-prose source lines are the paragraphs represented, in order, by `RC-ID-18`, `RC-OP-11`, `RC-OP-12`, `RC-MCP-01`, `RC-MCP-02`, `RC-MCP-03`, `RC-MCP-04`, the shared `RC-MCP-05`/`RC-MCP-06` paragraph, `RC-PIN-15`, `RC-LIM-19`, `RC-LIM-20`, `RC-GATE-22`, `RC-GATE-22` qualification detail, `RC-GATE-23`, `RC-ROLL-05`, the shared `RC-ROLL-06`/`RC-ROLL-07` paragraph, and `RC-ROLL-08`. The extraction contains only those 17 nonblank UTF-8 lines with trailing LF. For each shared paragraph, the validator binds the exact line digest to both derived IDs rather than treating ID count as source-row count.
 

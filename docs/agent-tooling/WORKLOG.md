@@ -447,3 +447,35 @@ Close independent-review findings, commit this verified inventory increment, the
 ### Next action
 
 Rerun fresh structural, source-digest, formatting, staged-diff, and credential-pattern checks, then commit this logical coverage increment. Exact executable scenario fixtures and generated MCP route bundles remain later pre-approval artifacts.
+
+## 2026-07-30 — Planning evaluation fixtures proposed
+
+### Candidate artifacts
+
+- Added ten exact, seed-independent fixture variants binding FX-PLAN-001 through FX-PLAN-010 to EV-001 through EV-010.
+- Added a strict Draft 2020-12 fixture schema and predicate-set schema.
+- Added the exact autonomous Hermes acceptance prompt for `openai-codex` and `gpt-5.6-luna`.
+- Added 54 machine-readable common, plan-created, and scenario-specific pass/fail predicates.
+- Added an implementation-independent semantic oracle for references, current-cycle cardinality, deterministic generation, blocker direction, scoring, pagination, pointer resolution, and exact scenario bindings.
+- Added a fixture contract that records six SHA-256 artifact digests, fresh identity and time expansion, predicate selection, evidence binding, and the qualification boundary.
+
+### Validation evidence
+
+- Strict AJV compilation and validation passed for both JSON data/schema pairs.
+- The semantic oracle passed 10 fixtures and 54 predicates.
+- The scoring oracle reproduced every expected top-three source selection, including the 120-item complete-cursor-chain fixture.
+- Initial strict validation found and structurally repaired two schema-condition scoping defects; validation was not weakened.
+- Recomputed the requirement-coverage hashes for the changed 14-row runtime-pin block and 17-line material-prose block.
+- Independent Plane-source review found that EV-009 declared prior-child fields outside `plane.release_plans.create@1`, child-to-source mapping lacked an observable encoding, and generated-artifact eligibility relied on fixture-only metadata.
+- Repaired the candidate without expanding the v1 operation: prior children now use Plane create defaults, generated artifacts use the canonical agent-visible `[run:<tag>]` name marker, and every child encodes its source as `[source:<PROJECT-IDENTIFIER>-<SEQUENCE>]`.
+- The semantic verifier now derives eligibility and source mapping from those observable names, rejects hidden-metadata disagreement, and checks EV-009's prior child inputs against v1-supported defaults.
+- Follow-up review found and closed a remaining harness edge case by constraining every `${RUN_TAG}` to the same canonical marker grammar in the contract, schema, and verifier.
+- Final red-team review replaced EV-010's tautological pagination flag with an exact 25-item, five-page cursor oracle requiring four consumed continuations and a terminal null cursor, and normalized both schema IDs to the `plane.so` namespace.
+
+### Qualification state
+
+This is a digest-bound candidate, not user approval, verifier qualification, implementation authorization, or release evidence. Any change to a bound artifact requires new digests and invalidates evidence tied to the prior candidate.
+
+### Next action
+
+Obtain independent source-alignment and false-pass reviews, close findings, rerun all checks, and commit the verified fixture-freeze increment. The exact eager native tool set remains the next unanswered architecture decision.

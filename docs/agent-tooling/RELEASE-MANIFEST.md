@@ -75,22 +75,22 @@ The accepted convergence seam is an optional gateway transport in Plane Python S
 
 ## Runtime pins
 
-| Input                                 | Required pin                                                    | Status                         |
-| ------------------------------------- | --------------------------------------------------------------- | ------------------------------ |
-| Hermes provider                       | `openai-codex`                                                  | Fixed                          |
-| Model                                 | `gpt-5.6-luna`                                                  | Fixed                          |
-| Subscription authentication           | Existing local ChatGPT subscription                             | Fixed; secret content excluded |
-| Provider endpoint and adapter version | Resolved non-secret endpoint plus Hermes commit/digest          | Pending evidence               |
-| Model metadata fingerprint            | Hash of the locally resolved model metadata used for evaluation | Pending evidence               |
-| System prompt                         | Versioned file plus digest                                      | Pending implementation         |
-| Acceptance prompt                     | Frozen file plus digest                                         | Pending implementation         |
-| Tool schemas                          | Catalog and native adapter digests                              | Pending implementation         |
-| Gateway wire                          | Existing Plane JSON HTTP API; wire media type version 1         | Accepted architecture          |
-| Sampling and reasoning parameters     | Exact versioned configuration                                   | Pending implementation         |
-| Context and output limits             | Values in the v1 execution-limit table                          | Proposed                       |
-| TypeScript runtime and isolate        | Pinned Deno supervisor/Worker inside disposable run container   | Proposed; exact digest pending |
-| Plane server                          | Commit, build, migration, and configuration digest              | Pending implementation         |
-| Seeded data                           | Versioned fixture manifest and digest                           | Pending implementation         |
+| Input                                 | Required pin                                                                                                                                               | Status                         |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| Hermes provider                       | `openai-codex`                                                                                                                                             | Fixed                          |
+| Model                                 | `gpt-5.6-luna`                                                                                                                                             | Fixed                          |
+| Subscription authentication           | Existing local ChatGPT subscription                                                                                                                        | Fixed; secret content excluded |
+| Provider endpoint and adapter version | Resolved non-secret endpoint plus Hermes commit/digest                                                                                                     | Pending evidence               |
+| Model metadata fingerprint            | Hash of the locally resolved model metadata used for evaluation                                                                                            | Pending evidence               |
+| System prompt                         | Versioned file plus digest                                                                                                                                 | Pending implementation         |
+| Acceptance prompt                     | `prompts/release-planning-v1.md` at SHA-256 `f222d7be60baff3969e3fd4c40b100fa533c1649173cead1394e5ad6f526ec31`                                             | Candidate; pending approval    |
+| Tool schemas                          | Catalog and native adapter digests                                                                                                                         | Pending implementation         |
+| Gateway wire                          | Existing Plane JSON HTTP API; wire media type version 1                                                                                                    | Accepted architecture          |
+| Sampling and reasoning parameters     | Exact versioned configuration                                                                                                                              | Pending implementation         |
+| Context and output limits             | Values in the v1 execution-limit table                                                                                                                     | Proposed                       |
+| TypeScript runtime and isolate        | Pinned Deno supervisor/Worker inside disposable run container                                                                                              | Proposed; exact digest pending |
+| Plane server                          | Commit, build, migration, and configuration digest                                                                                                         | Pending implementation         |
+| Seeded data                           | `EVALUATION-FIXTURE-CONTRACT.md` at SHA-256 `2499dd0e1a7ad2ae9322e7aa01bb648ebd9bed43dcb7abb7013e0a44b7ef3fd8`, transitively binding its six artifact rows | Candidate; pending approval    |
 
 If the provider cannot expose an immutable model snapshot, a changed model-metadata fingerprint or provider revision invalidates prior live-evaluation evidence and requires the full live suite again.
 
@@ -151,7 +151,7 @@ Explicit group preflight validates schemas, references, live authorization, budg
 
 Once qualified, the 71 version-controlled scenarios are distinct behavioral cases. The 50 authenticated live trials are executions: the 30 broad-planning trials repeat ten scenario and fixture variants three times each, while the 20 additional trials each execute a distinct denial, failure, recovery, or adversarial scenario. Repeated trials do not increase the distinct-scenario count.
 
-`EVALUATION-SCENARIOS.md` is the proposed 71-row inventory and exact 50-live-trial allocation. No row counts toward the minimum until its fixture and executable predicate contract is frozen with this manifest.
+`EVALUATION-SCENARIOS.md` is the proposed 71-row inventory and exact 50-live-trial allocation. `EVALUATION-FIXTURE-CONTRACT.md` binds the candidate EV-001 through EV-010 artifacts and digests. No row counts toward the minimum until its fixture and executable predicate contract is frozen with this manifest and approved.
 
 Every live attempt is retained in the denominator. Hidden retries, discarded failures, replayed model responses, and fallback provider or model runs do not count as passes.
 
