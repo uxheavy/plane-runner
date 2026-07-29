@@ -40,6 +40,8 @@ Catalog visibility is global. Discovering an operation does not imply permission
 
 The gateway initially lives inside the Plane API service. It is a boundary around existing Plane application services, not a second business-logic implementation.
 
+Cross-process callers use one versioned JSON HTTP adapter under Plane's existing `/api/v1` service. The adapter reuses current API-key and OAuth authentication. Hermes native tools, the credential-free Code Mode host callback, and the official Python SDK transport converge on the same request-bound gateway module below that wire seam.
+
 For every operation it:
 
 1. Authenticates the dedicated Plane agent identity.

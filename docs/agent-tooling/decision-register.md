@@ -95,6 +95,7 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ATD-087 | The v1 release-plan write is one curated semantic gateway operation.                                | \_/10      |
 | ATD-088 | V1 does not add a general workflow-graph DSL.                                                       | \_/10      |
 | ATD-089 | The official MCP server reaches the gateway through one optional shared Plane Python SDK transport. | \_/10      |
+| ATD-090 | Cross-process gateway calls use one versioned JSON HTTP adapter in Plane's existing API service.    | \_/10      |
 
 ## Superseded
 

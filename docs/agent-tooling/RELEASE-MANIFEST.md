@@ -83,6 +83,7 @@ The accepted convergence seam is an optional gateway transport in Plane Python S
 | System prompt                         | Versioned file plus digest                                      | Pending implementation         |
 | Acceptance prompt                     | Frozen file plus digest                                         | Pending implementation         |
 | Tool schemas                          | Catalog and native adapter digests                              | Pending implementation         |
+| Gateway wire                          | Existing Plane JSON HTTP API; wire media type version 1         | Accepted architecture          |
 | Sampling and reasoning parameters     | Exact versioned configuration                                   | Pending implementation         |
 | Context and output limits             | Values in the v1 execution-limit table                          | Proposed                       |
 | TypeScript runtime and isolate        | Pinned Deno supervisor/Worker inside disposable run container   | Proposed; exact digest pending |

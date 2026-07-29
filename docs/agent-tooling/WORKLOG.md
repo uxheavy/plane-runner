@@ -236,3 +236,29 @@ The release integration lock and clean-checkout verifier cover four repositories
 ### Next action
 
 Specify the versioned gateway wire contract used by native Hermes, Code Mode callbacks, and the SDK transport.
+
+## 2026-07-29 — Gateway wire transport accepted
+
+### Decision
+
+- Use one versioned JSON HTTP adapter inside Plane's existing `/api/v1` service.
+- Reuse current Plane API-key and OAuth authentication.
+- Keep identity, authorization, approval, idempotency, result control, and audit inside the deep gateway module.
+- Do not add an internal MCP hop, gRPC service, broker, or separate gateway deployment.
+
+### Proposed wire contract
+
+- Bounded authenticated catalog search and description endpoints.
+- One workspace-bound operation-execution endpoint.
+- Operation major version and catalog digest on every call.
+- Host-derived mutation `Idempotency-Key`.
+- Structured `succeeded`, `approval_required`, `rejected`, `failed`, and `outcome_unknown` states.
+- Optional shared Python SDK transport over the same endpoint.
+
+### Still open
+
+The wire reserves `approval_required`, but the approver authority, decision transport, expiry, and exact resume protocol require a separate decision before manifest freeze.
+
+### Next action
+
+Specify the pilot semantic operation schemas and approval protocol.
