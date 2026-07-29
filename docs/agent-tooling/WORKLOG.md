@@ -4,14 +4,14 @@ This file records durable progress for the Plane Agent Tooling goal. Append entr
 
 ## Current state
 
-| Field                      | Value                                                                                                   |
-| -------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Phase                      | Program definition                                                                                      |
-| Active gate                | Freeze and approve release and verification manifests                                                   |
-| Plane branch               | `codex/agent-tooling-architecture`                                                                      |
-| Hermes branch              | Not created from baseline `5e88745f125c0d332c1d16ea0363860d447657f5`                                    |
-| Last verified Plane commit | `a1954f991d`                                                                                            |
-| Next action                | Resolve manifest-blocking eager tools, operation IDs, MCP inventory, verifier ownership, and thresholds |
+| Field                      | Value                                                                          |
+| -------------------------- | ------------------------------------------------------------------------------ |
+| Phase                      | Program definition                                                             |
+| Active gate                | Freeze and approve release and verification manifests                          |
+| Plane branch               | `codex/agent-tooling-architecture`                                             |
+| Hermes branch              | Not created from baseline `5e88745f125c0d332c1d16ea0363860d447657f5`           |
+| Last verified Plane commit | `f70ec0466a`                                                                   |
+| Next action                | Approve the proposed v1 gateway interface, eager tools, and operation boundary |
 
 ## 2026-07-29 — Goal grounding
 
@@ -83,3 +83,25 @@ Resolve the eager native tools and supported operation boundary required by the 
 - Increased evaluation to 50 retained live Luna runs across ten project variants and adversarial scenarios.
 - Required at least 90% workflow success and zero security, duplicate-mutation, or audit violations.
 - Added cross-repository provenance, operator lifecycle, audit-failure, confused-deputy, full MCP inventory, GA, and rollout-promotion gates.
+
+## 2026-07-29 — Source and interface inventory
+
+### Evidence
+
+- Pinned the official Python MCP compatibility surface at commit `96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1`, package `0.2.11`.
+- Captured 177 unique MCP tools in a machine-readable, checksummed inventory.
+- Traced the public Plane operations and current authorization behavior required by the project-planning workflow.
+- Traced Hermes eager registration, deferred dispatch, middleware, approval, and current Python Code Mode seams.
+- Compared four independent gateway interfaces: one deep operation seam, a named semantic facade, a durable state machine, and a catalog/batch/plan facade.
+
+### Proposed decision
+
+- Use request-bound `execute` as the core gateway interface.
+- Keep catalog `search` and `describe` as a separate read-only interface.
+- Keep approval, idempotency, reconciliation, and audit lifecycle as an internal state machine.
+- Expose five eager domain tools plus `plane_docs`, `plane_search`, and `plane_execute` in Hermes.
+- Do not expose a general graph-planning DSL in v1.
+
+### Next action
+
+Obtain user approval of the proposed interface boundary before freezing the corresponding manifest rows.
