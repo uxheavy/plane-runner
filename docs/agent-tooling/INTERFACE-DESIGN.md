@@ -87,7 +87,7 @@ Use a hybrid in which each layer has one job:
 4. Hermes exposes five named eager domain tools as thin common-case adapters: `plane_search_work_items`, `plane_get_work_item`, `plane_create_work_item`, `plane_update_work_item`, and `plane_add_comment`.
 5. Hermes also exposes `plane_docs`, `plane_search`, and `plane_execute`, producing an eight-tool eager surface.
 6. Generated TypeScript receives a credential-free `plane.call(operation, input)` callback plus catalog types. It does not receive the internal lifecycle protocol.
-7. V1 does not expose a general graph-planning DSL. Explicit preflightable concurrency groups can be added as a small extension only for operations named in the approved release manifest.
+7. V1 does not expose a general graph-planning DSL. The mandatory coordinated release-plan write is one curated semantic catalog operation.
 8. Semantic multi-step compositions live in the operation catalog and gateway implementation, not independently inside native, Code Mode, or MCP adapters.
 9. The 177-tool Python MCP surface is a compatibility adapter. Each MCP contract maps to gateway operations, retained local behavior, or an explicitly approved deprecation disposition.
 

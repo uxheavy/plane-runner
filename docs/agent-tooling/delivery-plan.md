@@ -134,7 +134,7 @@ Selected contents:
 - One parent release-plan work item.
 - Three coordinated child work items.
 - One source-linked planning comment.
-- Group preflight and real approval.
+- Semantic release-plan preflight and real approval.
 - Stable invocation idempotency and duplicate prevention.
 - Structured denied-access proof.
 - Credential and network-isolation probes.

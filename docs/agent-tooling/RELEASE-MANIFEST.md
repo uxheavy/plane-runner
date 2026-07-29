@@ -40,23 +40,28 @@ Merge, CI, credential, staging, production, and deployment authorities must be n
 
 The contract IDs below are proposed semantic v1 identifiers. The public operation column is observed source evidence. Approval freezes the semantic names and eager status.
 
-| Capability                             | Proposed contract operation    | Underlying public operation IDs                                             | Eager native tool         | Code Mode     | Status   |
-| -------------------------------------- | ------------------------------ | --------------------------------------------------------------------------- | ------------------------- | ------------- | -------- |
-| Resolve workspace context              | Host binding, not an operation | No public API-key workspace-discovery operation                             | None                      | Bound context | Proposed |
-| Resolve project context                | `plane.projects.resolve@1`     | `list_projects`, `retrieve_project`                                         | None                      | Required      | Proposed |
-| Read current cycles                    | `plane.cycles.list_current@1`  | `list_cycles`                                                               | None                      | Required      | Proposed |
-| Search and list work items             | `plane.work_items.search@1`    | `search_work_items`, `list_work_items`                                      | `plane_search_work_items` | Required      | Proposed |
-| Read one work item and relations       | `plane.work_items.get@1`       | `retrieve_work_item`, `get_workspace_work_item`, `list_work_item_relations` | `plane_get_work_item`     | Required      | Proposed |
-| Read project members                   | `plane.project_members.list@1` | `get_project_members_lite`                                                  | None                      | Required      | Proposed |
-| Create parent or child work item       | `plane.work_items.create@1`    | `create_work_item`, optionally `add_cycle_work_items`                       | `plane_create_work_item`  | Required      | Proposed |
-| Update work item or planning placement | `plane.work_items.update@1`    | `update_work_item`, optionally `add_cycle_work_items`                       | `plane_update_work_item`  | Required      | Proposed |
-| Create source-linked comment           | `plane.comments.create@1`      | `create_work_item_comment`                                                  | `plane_add_comment`       | Required      | Proposed |
+| Capability                             | Proposed contract operation    | Underlying public operation IDs                                             | Eager native tool         | Code Mode     | Status         |
+| -------------------------------------- | ------------------------------ | --------------------------------------------------------------------------- | ------------------------- | ------------- | -------------- |
+| Resolve workspace context              | Host binding, not an operation | No public API-key workspace-discovery operation                             | None                      | Bound context | Proposed       |
+| Resolve project context                | `plane.projects.resolve@1`     | `list_projects`, `retrieve_project`                                         | None                      | Required      | Proposed       |
+| Read current cycles                    | `plane.cycles.list_current@1`  | `list_cycles`                                                               | None                      | Required      | Proposed       |
+| Search and list work items             | `plane.work_items.search@1`    | `search_work_items`, `list_work_items`                                      | `plane_search_work_items` | Required      | Proposed       |
+| Read one work item and relations       | `plane.work_items.get@1`       | `retrieve_work_item`, `get_workspace_work_item`, `list_work_item_relations` | `plane_get_work_item`     | Required      | Proposed       |
+| Read project members                   | `plane.project_members.list@1` | `get_project_members_lite`                                                  | None                      | Required      | Proposed       |
+| Create parent or child work item       | `plane.work_items.create@1`    | `create_work_item`, optionally `add_cycle_work_items`                       | `plane_create_work_item`  | Required      | Proposed       |
+| Update work item or planning placement | `plane.work_items.update@1`    | `update_work_item`, optionally `add_cycle_work_items`                       | `plane_update_work_item`  | Required      | Proposed       |
+| Create source-linked comment           | `plane.comments.create@1`      | `create_work_item_comment`                                                  | `plane_add_comment`       | Required      | Proposed       |
+| Create coordinated release plan        | `plane.release_plans.create@1` | Curated semantic application-service composition                            | None                      | Required      | Accepted scope |
 
 The five domain tools above plus `plane_docs`, `plane_search`, and `plane_execute` form the proposed eight-tool eager Hermes surface.
+
+`plane.release_plans.create@1` accepts the complete parent, three-child, and source-comment intent as one semantic operation. The gateway validates and authorizes the full request, preflights one approval decision, claims one stable invocation, and executes through Plane application services. V1 does not add a general workflow-graph DSL for this workflow.
 
 No implementation may silently omit a proposed capability after approval. The external MCP baseline is official server commit `96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1`, package `0.2.11`, with 177 unique tools. Its machine-readable inventory is `inventories/plane-mcp-v0.2.11.json`, SHA-256 `2778ef9d6f5426c6fc65894829ec04bf853c18c4ab09d796474896ba01826ad1`.
 
 The proposed complete disposition is defined in `MCP-COMPATIBILITY.md`: 171 ordinary tools use gateway-backed compatibility adapters, `get_pql_reference` retains versioned local read-only behavior, and five attachment tools use a hardened attachment adapter. No pinned tool is omitted or deprecated.
+
+The official Python MCP server remains the deployed external adapter host. V1 evolves its existing handlers incrementally; it does not recreate the server or its 177-tool surface in a new implementation.
 
 ## Runtime pins
 

@@ -8,6 +8,15 @@ Proposed for release-manifest approval. The compatibility baseline is the offici
 
 Compatibility is evaluated per MCP tool contract, not per REST endpoint. An MCP tool may map to one gateway operation, several gateway operations, or deliberately retained local behavior.
 
+## Reuse boundary
+
+- The official Python MCP server remains the supported external server and adapter host.
+- Its existing transports, authentication entry points, tool names, and public contracts are preserved unless an approved compatibility plan says otherwise.
+- Existing handlers become shallow gateway adapters incrementally.
+- The project does not create a second 177-tool MCP server.
+- Internal Hermes agents bypass the MCP transport and use native tools or TypeScript Code Mode through the same gateway.
+- Business rules, authorization, approval, mutation safety, result control, and audit behavior converge below both paths.
+
 The pinned source inventory contains 177 unique tool names. Tool name, input semantics, successful output semantics, structured failure behavior, and documented transport/authentication behavior form the baseline. Exact byte-for-byte output compatibility is not required when the legacy output is nondeterministic, but a normalized comparison must preserve all documented information.
 
 ## Complete disposition

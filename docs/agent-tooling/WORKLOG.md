@@ -182,3 +182,26 @@ Use the least custom code that satisfies the approved production and security ga
 - Explicit preflight groups and omission or inclusion of a graph DSL.
 - Wire transport and external approval behavior.
 - All remaining independent-review blockers before manifest freeze.
+
+## 2026-07-29 — MCP reuse and release-plan write accepted
+
+### Official MCP boundary
+
+- Reuse Plane's official Python MCP server as the external adapter host.
+- Preserve its deployed transports and 177-tool compatibility surface.
+- Migrate existing handlers incrementally to the gateway rather than recreating the server.
+- Keep internal Hermes on native tools and TypeScript Code Mode without an MCP hop.
+
+### Release-plan write boundary
+
+- Represent the parent, three children, and source comment as one curated `plane.release_plans.create@1` semantic operation.
+- Validate, authorize, approve, claim idempotency, execute, reconcile, and audit the complete business action in the gateway.
+- Do not add a general workflow-graph DSL in v1.
+
+### Rationale
+
+These choices reuse existing code and avoid both a duplicate MCP implementation and a generic workflow engine.
+
+### Next action
+
+Freeze the exact semantic operation contract and the gateway wire adapter.

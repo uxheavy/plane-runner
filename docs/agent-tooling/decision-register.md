@@ -90,6 +90,10 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ATD-082 | Read-only catalog search and description use a separate discovery interface.                       | \_/10      |
 | ATD-083 | Approval, idempotency, reconciliation, result, and audit lifecycle remain internal to the gateway. | \_/10      |
 | ATD-084 | The architecture chooses the least custom code that still satisfies approved production gates.     | \_/10      |
+| ATD-085 | Plane's official Python MCP server remains the external adapter host.                              | \_/10      |
+| ATD-086 | Existing MCP handlers migrate incrementally to the shared gateway rather than being recreated.     | \_/10      |
+| ATD-087 | The v1 release-plan write is one curated semantic gateway operation.                               | \_/10      |
+| ATD-088 | V1 does not add a general workflow-graph DSL.                                                      | \_/10      |
 
 ## Superseded
 
@@ -125,7 +129,6 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ID      | Proposed decision                                                                                                        | Importance |
 | ------- | ------------------------------------------------------------------------------------------------------------------------ | ---------- |
 | ATP-002 | Expose five eager semantic domain tools plus `plane_docs`, `plane_search`, and `plane_execute`.                          | \_/10      |
-| ATP-003 | Omit a general workflow-graph DSL from v1.                                                                               | \_/10      |
 | ATP-004 | Run TypeScript in a pinned Deno supervisor/Worker with explicit deny permissions inside the disposable Hermes container. | \_/10      |
 | ATP-005 | Use the v1 execution, result, artifact, approval, and audit-retention limits proposed in the release manifest.           | \_/10      |
 | ATP-006 | Use the proposed 30-minute ten-run load gate and explicit latency, error, and recovery thresholds.                       | \_/10      |
