@@ -116,6 +116,7 @@ catalog:
   "hast": "^1.0.0"
   "hast-util-to-mdast": "^10.1.2"
   "helmet": "^7.1.0"
+  "html2canvas-pro": "2.3.2"
   "highlight.js": "^11.8.0"
   "husky": "9.1.7"
   "i18next": "25.10.9"

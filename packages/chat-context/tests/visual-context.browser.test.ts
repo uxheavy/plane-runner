@@ -4,7 +4,6 @@ import {
   PLANE_CONTEXT_SENSITIVE_ATTRIBUTE,
   type SemanticContextBundleV1,
   type VisualRegionRendererPort,
-  createHtml2CanvasVisualRenderer,
   createVisualContextCapture,
 } from "../src";
 
@@ -164,38 +163,5 @@ describe("privacy-safe visual context", () => {
     finish?.({ blob: new Blob(["png"], { type: "image/png" }), width: 80, height: 50 });
 
     await expect(pending).resolves.toMatchObject({ ok: false, code: "ABORTED" });
-  });
-
-  test("adapts an html2canvas-compatible renderer with a safe exact-region configuration", async () => {
-    const render = vi.fn(async (_root: HTMLElement, options) => {
-      const canvas = document.createElement("canvas");
-      canvas.width = options.width;
-      canvas.height = options.height;
-      canvas.getContext("2d")!.fillRect(0, 0, canvas.width, canvas.height);
-      return canvas;
-    });
-    const renderer = createHtml2CanvasVisualRenderer(render);
-    const controller = new AbortController();
-    const result = await renderer.render({
-      root: document.documentElement,
-      region: { left: 12, top: 18, width: 32, height: 24 },
-      signal: controller.signal,
-      shouldIgnore: () => false,
-    });
-
-    expect(result).toMatchObject({ width: 32, height: 24, blob: { type: "image/png" } });
-    expect(render).toHaveBeenCalledWith(
-      document.documentElement,
-      expect.objectContaining({
-        allowTaint: false,
-        useCORS: false,
-        proxy: undefined,
-        scale: 1,
-        width: 32,
-        height: 24,
-        x: window.scrollX + 12,
-        y: window.scrollY + 18,
-      })
-    );
   });
 });

@@ -108,27 +108,6 @@ export type VisualContextCaptureOptions = {
   readonly maximumBlobBytes?: number;
 };
 
-export type Html2CanvasOptions = {
-  readonly allowTaint: false;
-  readonly backgroundColor: null;
-  readonly height: number;
-  readonly ignoreElements: (element: Element) => boolean;
-  readonly logging: false;
-  readonly proxy: undefined;
-  readonly removeContainer: true;
-  readonly scale: 1;
-  readonly scrollX: number;
-  readonly scrollY: number;
-  readonly useCORS: false;
-  readonly width: number;
-  readonly windowHeight: number;
-  readonly windowWidth: number;
-  readonly x: number;
-  readonly y: number;
-};
-
-export type Html2CanvasRenderer = (element: HTMLElement, options: Html2CanvasOptions) => Promise<HTMLCanvasElement>;
-
 const failure = (code: VisualCaptureFailureCode, message: string, retryable: boolean): VisualCaptureFailure => ({
   ok: false,
   code,
@@ -179,39 +158,6 @@ const normalizeRegion = (
   if (width < 1 || height < 1) return undefined;
   return { left: Math.round(left), top: Math.round(top), width, height };
 };
-
-const canvasToPng = (canvas: HTMLCanvasElement): Promise<Blob | null> =>
-  new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
-
-export const createHtml2CanvasVisualRenderer = (render: Html2CanvasRenderer): VisualRegionRendererPort => ({
-  async render({ root, region, signal, shouldIgnore }) {
-    if (signal.aborted) throw new DOMException("Visual capture was cancelled", "AbortError");
-    const view = root.ownerDocument.defaultView;
-    if (!view) throw new Error("The capture document has no browser window");
-    const canvas = await render(root, {
-      allowTaint: false,
-      backgroundColor: null,
-      height: region.height,
-      ignoreElements: shouldIgnore,
-      logging: false,
-      proxy: undefined,
-      removeContainer: true,
-      scale: 1,
-      scrollX: view.scrollX,
-      scrollY: view.scrollY,
-      useCORS: false,
-      width: region.width,
-      windowHeight: view.innerHeight,
-      windowWidth: view.innerWidth,
-      x: view.scrollX + region.left,
-      y: view.scrollY + region.top,
-    });
-    if (signal.aborted) throw new DOMException("Visual capture was cancelled", "AbortError");
-    const blob = await canvasToPng(canvas);
-    if (!blob) throw new Error("The rendered canvas could not be encoded as PNG");
-    return { blob, width: canvas.width, height: canvas.height };
-  },
-});
 
 export const createVisualContextCapture = ({
   document,

@@ -22,15 +22,18 @@
   shadow roots.
 - Always exclude picker chrome, React Grab ignored content, and sensitive nodes
   inside the renderer as a second defense against DOM changes during capture.
-- Disable tainted and cross-origin image capture in the provided
-  html2canvas-compatible Adapter.
+- Pin `html2canvas-pro` 2.3.2 as the only production DOM screenshot engine and
+  expose its Adapter from `@plane/chat-context/html2canvas-pro`.
+- Disable tainted and cross-origin image capture in that Adapter and pass the
+  capture cancellation signal into the renderer.
 - Keep PNG data in memory as a `Blob`; do not upload or persist it.
 - Return `semantic: false` and carry known Plane references separately.
 - Require a live `pending_review` preview to be explicitly confirmed exactly once
   before it becomes an attachment.
 
-- Accept an html2canvas-compatible function without importing its package.
-- Let the UI branch pin `html2canvas-pro` after testing final application styles.
+- Keep the renderer in a package subpath so semantic-only consumers do not bundle it.
+- Keep `VisualRegionRendererPort` as the test and host seam, not as an invitation
+  to ship a second production renderer.
 
 ## Rejected alternatives
 
@@ -38,6 +41,7 @@
 | ----------------------------------------- | ----------------------------------------------------------------- |
 | Build a custom DOM-to-canvas renderer     | Browser rendering is not trivial and has proven open-source work. |
 | Bundle original `html2canvas` 1.4.1       | It is stale and fails on CSS used by modern applications.         |
+| Let each host choose its own renderer     | It recreates compatibility and privacy decisions in every caller. |
 | Capture the whole viewport then crop      | Denied pixels would exist in memory before policy enforcement.    |
 | Automatically attach a successful capture | The product requires exact-crop review before sharing.            |
 | Upload snapshots from the core            | Storage, retention, and transport are outside the approved scope. |
@@ -46,7 +50,16 @@
 
 | Positive                                                   | Cost                                                            |
 | ---------------------------------------------------------- | --------------------------------------------------------------- |
-| Privacy policy is renderer-independent and browser-tested  | UI integration must provide and verify one renderer function.   |
+| Privacy policy is renderer-independent and browser-tested  | DOM rendering adds a separately loaded 66,950-byte gzip bundle. |
 | The renderer never runs for intersecting sensitive content | Marking non-standard secret surfaces remains a caller duty.     |
 | Visual evidence cannot be mistaken for semantic context    | Composer transport must model visual and semantic parts.        |
 | No new persistent store or service is introduced           | Previews disappear when their owning page/session is discarded. |
+
+## Proven reference boundary
+
+The public Codex app-server source exposes protocol and configuration rather
+than its proprietary browser annotation implementation. The installed Codex
+browser contracts nevertheless confirm the useful separation: element metadata
+and DOM snapshots are acquired independently from viewport or element pixels.
+Plane follows that architecture but cannot reuse Codex's privileged native
+capture backend, so the web-safe pixel implementation is `html2canvas-pro`.

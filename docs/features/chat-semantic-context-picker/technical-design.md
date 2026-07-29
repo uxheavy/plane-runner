@@ -271,12 +271,13 @@ the stable contract decision.
 | [React Grab](https://github.com/aidenybai/react-grab)                | Hit-testing, ignored subtrees, page-freezing, and picker lifecycle primitives | MIT      | Primary foundation behind a Plane-owned adapter   |
 | [React Dev Inspector](https://github.com/zthxxx/react-dev-inspector) | Inspector activation, hover, click, and cleanup reference                     | MIT      | Secondary reference                               |
 | [stagewise](https://github.com/stagewise-io/stagewise)               | Selected-browser-context-to-agent product model                               | AGPL-3.0 | Product reference; do not import the full toolbar |
-| [html2canvas](https://github.com/niklasvh/html2canvas)               | Established DOM-rendering model                                               | MIT      | Reference only; latest release is stale           |
-| [html2canvas-pro](https://github.com/yorickshan/html2canvas-pro)     | Maintained renderer compatible with modern CSS colors                         | MIT      | Recommended behind the exported renderer port     |
+| [html2canvas](https://github.com/niklasvh/html2canvas)               | Historical DOM-rendering lineage                                              | MIT      | Reference only; not a production dependency       |
+| [html2canvas-pro](https://github.com/yorickshan/html2canvas-pro)     | DOM pixels, exact crops, cancellation, and modern CSS colors                  | MIT      | Sole production renderer, pinned at 2.3.2         |
 
 ## Dependency rule
 
-React Grab and visual rendering are isolated behind Plane-owned Adapters.
+React Grab and `html2canvas-pro` are isolated behind Plane-owned Adapters. The
+renderer uses a separate package subpath so the semantic core does not load it.
 Plane-specific references, values, permissions, privacy policy, and serialization
 remain Plane-owned because external inspector tools resolve pixels or source-code
 context rather than Plane domain objects.

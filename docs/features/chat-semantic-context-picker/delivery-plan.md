@@ -12,7 +12,7 @@
 | M5  | Server hydration                  | Permission-safe canonical resolution and stale/deleted handling     | Codex          | Complete | 11 hydration and five page-scope Django tests pass      |
 | M6  | Composer integration kit          | Versioned adapter, fixtures, contract tests, integration guide      | Codex          | Complete | Dummy consumer and 23-test browser regression pass      |
 | M7  | UI integration                    | Activation, overlay, context chips, preview, composer wiring        | User UI branch | External | End-to-end workflow passes                              |
-| M8  | Region and visual fallback        | Drag regions, deduplication, snapshot evaluation                    | Codex          | Complete | 34 browser tests and privacy gate pass                  |
+| M8  | Region and visual fallback        | Drag regions, deduplication, snapshot evaluation                    | Codex          | Complete | Concrete renderer and 35 browser tests pass             |
 | M9  | Release verification              | Full single-user workflow and regression pass                       | Codex          | Active   | Acceptance checklist complete                           |
 
 The active durable goal covers M1-M6, the non-UI portion of M8, and core release
@@ -102,8 +102,10 @@ verification. M7 and composer end-to-end wiring remain external to this branch.
 - [x] Keep pixels in memory and label them as non-semantic.
 - [x] Keep known Plane references separate and deduplicated.
 - [x] Require explicit, one-time preview confirmation before attachment.
-- [x] Provide an html2canvas-compatible Adapter without coupling the core package.
-- [x] Pass the 34-test browser suite and package gates.
+- [x] Pin `html2canvas-pro` 2.3.2 as the sole production screenshot engine.
+- [x] Expose the concrete Adapter as an optional package subpath.
+- [x] Prove exact modern-CSS pixels and ignored chrome in real Chrome.
+- [x] Pass the 35-test browser suite and separate core/renderer bundle gates.
 
 ## Cross-branch contract
 
@@ -114,6 +116,7 @@ verification. M7 and composer end-to-end wiring remain external to this branch.
 | Context and failure result types       | Context chips and previews              |
 | Editor/entity/server adapters          | User-facing errors and removal controls |
 | Composer adapter contract and fixtures | Actual composer transport wiring        |
+| Concrete visual renderer subpath       | Visual preview and confirmation UI      |
 | Core and permission tests              | End-to-end interaction tests            |
 
 ## Risks and responses

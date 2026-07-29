@@ -34,7 +34,7 @@ Structured Plane references and current values are preferred. Visual context is 
 | [M4 evidence](./m4-live-editor-adapter.md)                     | Live Tiptap/Yjs blocks, ranges, embeds, and privacy proof               |
 | [M5 evidence](./m5-server-hydration.md)                        | Permission-safe canonical hydration and staleness proof                 |
 | [M6 evidence](./m6-composer-integration.md)                    | Versioned ports, fixtures, runtime guards, and dummy consumer proof     |
-| [M8 evidence](./m8-visual-fallback.md)                         | In-memory preview, privacy denial, and renderer Adapter proof           |
+| [M8 evidence](./m8-visual-fallback.md)                         | Concrete renderer, actual pixels, privacy denial, and preview proof     |
 | [Delivery plan](./delivery-plan.md)                            | Milestones, ownership, status, and completion evidence                  |
 | [ADR 0001](./decisions/0001-selection-foundation.md)           | Selection foundation and dependency decision                            |
 | [ADR 0002](./decisions/0002-picker-core-interface.md)          | Minimal domain-typed picker interface decision                          |

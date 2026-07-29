@@ -10,6 +10,7 @@
   "types": "./dist/index.d.mts",
   "exports": {
     ".": "./dist/index.mjs",
+    "./html2canvas-pro": "./dist/html2canvas-pro.mjs",
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -24,12 +25,14 @@
     "clean": "rm -rf .turbo node_modules dist"
   },
   "dependencies": {
+    "html2canvas-pro": "catalog:",
     "react-grab": "catalog:"
   },
   "devDependencies": {
     "@plane/typescript-config": "workspace:*",
     "@tiptap/core": "catalog:",
     "@tiptap/extension-collaboration": "catalog:",
+    "@tiptap/pm": "catalog:",
     "@tiptap/starter-kit": "catalog:",
     "@vitest/browser-playwright": "catalog:",
     "playwright": "catalog:",
