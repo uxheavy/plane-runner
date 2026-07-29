@@ -44,4 +44,6 @@ The host must:
 
 Run `pnpm verify:chat-context` from the repository root. The command checks types,
 lint, formatting, browser behavior, production bundles, API permissions, and page
-scope.
+scope. Pull requests to `preview` run the same command through
+`.github/workflows/chat-semantic-context.yml` whenever the feature or its contracts
+change.

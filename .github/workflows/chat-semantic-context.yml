@@ -1,0 +1,68 @@
+name: Verify semantic chat context
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - "preview"
+    types:
+      - "opened"
+      - "synchronize"
+      - "reopened"
+      - "ready_for_review"
+    paths:
+      - ".github/workflows/chat-semantic-context.yml"
+      - "apps/api/plane/app/context_hydration.py"
+      - "apps/api/plane/app/urls/context_hydration.py"
+      - "apps/api/plane/app/urls/__init__.py"
+      - "apps/api/plane/app/views/context_hydration.py"
+      - "apps/api/plane/app/views/__init__.py"
+      - "apps/api/plane/tests/contract/api/test_semantic_context_hydration.py"
+      - "apps/api/plane/tests/contract/app/test_page_version_project_scope_app.py"
+      - "apps/api/requirements/**"
+      - "docker-compose-test.yml"
+      - "package.json"
+      - "packages/chat-context/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify semantic context
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+
+      - name: Enable pnpm
+        run: corepack enable pnpm
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v5
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify semantic context
+        run: pnpm verify:chat-context
