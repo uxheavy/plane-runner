@@ -11,42 +11,196 @@
 | Server resolution | Existing Django/Python API | Reuses Plane permission and entity-query behavior. |
 | Tests | Existing TypeScript and Django test tooling | Avoids parallel infrastructure. |
 
-## Core modules
+## Public core module
 
-| Module | Responsibility | Excludes |
+```ts
+interface SemanticContextPicker {
+  register(element: Element, target: SemanticTarget): () => void;
+  select(request: SelectionRequest): Promise<SelectionResult>;
+  dispose(): void;
+}
+```
+
+| Operation | Responsibility | Excludes |
 | --- | --- | --- |
-| Selection adapter | Hit-test a point, ignore picker UI, and normalize browser events | Plane entity knowledge |
-| Context target registry | Register visible semantic targets and select point/region candidates | Rendering overlays or chips |
-| Context resolver | Convert a registered target into allowlisted current context | Authorization decisions |
-| Editor adapter | Resolve page, block, embed, and text-range context | Generic entity-store lookup |
-| Serializer | Produce a versioned composer-safe context envelope | Fetching authoritative values |
-| Server hydrator | Reauthorize references and resolve canonical current values | Trusting client-supplied values |
-| Composer adapter | Convert core results to the composer attachment interface | Composer presentation |
+| `register` | Associate a mounted element with typed Plane identity | Values, records, permissions, and DOM metadata |
+| `select: preview` | Locate and rank candidates | MobX/editor value reads |
+| `select: capture` | Resolve current allowlisted values and serialize context | Treating client data as authorized or canonical |
+| `dispose` | Cancel work and release browser resources | UI state ownership |
+
+React convenience hooks and an overlay session controller are thin Adapters. The
+registry, React Grab integration, resolvers, serializer, and lifecycle state remain
+private Implementations of the core Module.
+
+## Plane reference contract
+
+```ts
+type EntityReferenceV1 = {
+  kind: "entity";
+  workspaceSlug: string;
+  projectId?: string;
+  entityType: "work_item" | "project" | "cycle" | "module" | "page" | "view";
+  entityId: string;
+};
+
+type WorkItemContextField =
+  | "name"
+  | "description"
+  | "state"
+  | "priority"
+  | "assignees"
+  | "labels"
+  | "start_date"
+  | "target_date"
+  | "estimate"
+  | "cycle"
+  | "module";
+
+type SemanticReferenceV1 =
+  | EntityReferenceV1
+  | {
+      kind: "field";
+      entity: EntityReferenceV1 & { entityType: "work_item"; projectId: string };
+      fieldKey: WorkItemContextField;
+    }
+  | {
+      kind: "editor_block";
+      document: EntityReferenceV1 & { entityType: "page" | "work_item" };
+      blockId: string;
+    };
+```
+
+Field keys are explicit allowlists grouped by entity type, never arbitrary property
+paths. Other entity field unions are added with their adapters. Editor ranges are
+added when M4 proves their stable Tiptap/Yjs identity.
+
+## Selection contract
+
+```ts
+type JsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
+type SemanticTarget = {
+  reference: SemanticReferenceV1;
+  parent?: SemanticReferenceV1;
+};
+
+type SelectionRequest = {
+  operation: "preview" | "capture";
+  area:
+    | { kind: "point"; clientX: number; clientY: number }
+    | { kind: "region"; left: number; top: number; right: number; bottom: number };
+  ancestorOffset?: number;
+  signal?: AbortSignal;
+};
+
+type ContextCandidateV1 = {
+  schemaVersion: 1;
+  reference: SemanticReferenceV1;
+  label: string;
+  selectableAncestors: SemanticReferenceV1[];
+};
+
+type ContextItemV1 = {
+  reference: SemanticReferenceV1;
+  observed: {
+    source: "client_store" | "client_live";
+    value: JsonValue;
+    observedAt: string;
+    entityVersion?: string;
+  };
+  location: { url: string };
+};
+
+type SemanticContextBundleV1 = {
+  schemaVersion: 1;
+  selectionKind: "point" | "region";
+  items: ContextItemV1[];
+  warnings: SelectionFailureV1[];
+};
+
+type SemanticContextBundle = SemanticContextBundleV1;
+
+type SelectionResult =
+  | { ok: true; operation: "preview"; candidates: ContextCandidateV1[] }
+  | { ok: true; operation: "capture"; context: SemanticContextBundle }
+  | { ok: false; failure: SelectionFailureV1 };
+```
+
+Preview does not expose values. Capture returns only JSON-safe data. Input and
+output types are separate even when their fields overlap.
 
 ## Context envelope
 
 ```json
 {
-  "version": 1,
-  "reference": {
-    "workspaceSlug": "acme",
-    "projectId": "project-uuid",
-    "entityType": "work_item",
-    "entityId": "work-item-uuid",
-    "fieldKey": "priority"
-  },
-  "observed": {
-    "value": "high",
-    "observedAt": "ISO-8601 timestamp",
-    "source": "client_store"
-  },
-  "location": {
-    "url": "/acme/projects/project-uuid/issues/work-item-uuid"
-  }
+  "schemaVersion": 1,
+  "selectionKind": "point",
+  "items": [
+    {
+      "reference": {
+        "kind": "field",
+        "entity": {
+          "kind": "entity",
+          "workspaceSlug": "acme",
+          "projectId": "project-uuid",
+          "entityType": "work_item",
+          "entityId": "work-item-uuid"
+        },
+        "fieldKey": "priority"
+      },
+      "observed": {
+        "value": "high",
+        "observedAt": "ISO-8601 timestamp",
+        "source": "client_store"
+      },
+      "location": {
+        "url": "/acme/projects/project-uuid/issues/work-item-uuid"
+      }
+    }
+  ],
+  "warnings": []
 }
 ```
 
-Editor selections may add page ID, block IDs, text ranges, selected content, and `source: "client_live"`. Region selections may contain multiple references and an optional snapshot attachment.
+Editor captures use `source: "client_live"`. Region captures contain multiple
+items and may succeed with structured warnings. The snapshot attachment contract
+is deferred to M8 so privacy and storage decisions do not leak into M2.
+
+## Failure contract
+
+```ts
+type SelectionFailureV1 = {
+  schemaVersion: 1;
+  code:
+    | "NO_TARGET"
+    | "TARGET_GONE"
+    | "UNSUPPORTED"
+    | "VALUE_UNAVAILABLE"
+    | "ABORTED"
+    | "TOO_MANY_TARGETS";
+  message: string;
+  reference?: SemanticReferenceV1;
+  retryable: boolean;
+};
+```
+
+| Code | Meaning | Retryable |
+| --- | --- | --- |
+| `NO_TARGET` | Nothing semantic matched the selection | No |
+| `TARGET_GONE` | The registered target detached before capture | Yes |
+| `UNSUPPORTED` | The target has no approved resolver | No |
+| `VALUE_UNAVAILABLE` | Identity is known but its value cannot be read | Yes |
+| `ABORTED` | Navigation, cancellation, or a newer selection ended the operation | Yes |
+| `TOO_MANY_TARGETS` | A region exceeded its bounded result limit | No |
+
+Permission, missing, and stale failures from server hydration use the same
+structured result convention but remain a separate server output type.
 
 ## Freshness rules
 
@@ -77,6 +231,10 @@ The composer implementation is not present in this checkout. The core branch the
 - Contract tests that a future composer adapter can reuse.
 
 The missing composer does not block core implementation. It blocks final end-to-end verification only.
+
+See [Interface design](./interface-design.md) and
+[ADR 0002](./decisions/0002-picker-core-interface.md) for the alternatives and
+the stable contract decision.
 
 ## Open-source references
 

@@ -24,8 +24,10 @@ Structured Plane references and current values are preferred. Visual context is 
 | --- | --- |
 | [Product specification](./product-spec.md) | Scope, behavior, boundaries, and acceptance criteria |
 | [Technical design](./technical-design.md) | Core modules, contracts, freshness, and permissions |
+| [Interface design](./interface-design.md) | Alternatives, comparison, and chosen public seam |
 | [Delivery plan](./delivery-plan.md) | Milestones, ownership, status, and completion evidence |
 | [ADR 0001](./decisions/0001-selection-foundation.md) | Selection foundation and dependency decision |
+| [ADR 0002](./decisions/0002-picker-core-interface.md) | Minimal domain-typed picker interface decision |
 
 ## Working rules
 
@@ -39,5 +41,5 @@ Structured Plane references and current values are preferred. Visual context is 
 
 1. Inspect the pinned React Grab primitives and their transitive dependencies.
 2. Prove point hit-testing, ignored subtrees, cleanup, and portal behavior in Plane.
-3. Finalize the core context reference contract from the spike evidence.
+3. Validate the accepted core contract against the spike evidence.
 4. Implement the registry and resolver interfaces with tests.

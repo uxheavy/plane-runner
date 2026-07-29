@@ -6,7 +6,7 @@
 | --- | --- | --- | --- | --- | --- |
 | M0 | Product and architecture baseline | Scope, boundaries, ADR, branch, tracking | Codex | Complete | Feature dossier merged on feature branch |
 | M1 | Selection-foundation spike | Pin and validate React Grab primitives in Plane | Codex | Next | Tests or harness prove hit-test, ignore, cleanup, portals |
-| M2 | Core contracts and registry | Types, registry, point/region result model | Codex | Pending | Unit tests and public package exports |
+| M2 | Core contracts and registry | Types, registry, point/region result model | Codex | Designed | ADR 0002 accepted; implementation and tests pending |
 | M3 | Plane entity adapters | Work items, projects, cycles, modules, pages, views, fields | Codex | Pending | Adapter tests with current store values |
 | M4 | Editor adapter | Page blocks, issue descriptions, ranges, embeds, client-live values | Codex | Pending | Tiptap/Yjs adapter tests |
 | M5 | Server hydration | Permission-safe canonical resolution and stale/deleted handling | Codex | Pending | Django tests for roles, projects, private pages, failures |
@@ -24,6 +24,15 @@
 - [ ] Verify cleanup after Escape, selection, navigation, and unmount.
 - [ ] Verify portals and nested interactive elements.
 - [ ] Record findings and update ADR 0001 if the dependency boundary changes.
+
+## M2 accepted boundary
+
+- Public core Module exposes `register`, `select`, and `dispose`.
+- Preview and capture share one discriminated request/result Interface.
+- Plane call sites register typed identity only.
+- React Grab, registry, state machine, resolvers, and serialization stay private.
+- A fake acquisition Adapter and production React Grab Adapter share contract tests.
+- Server hydration and composer transport remain separate Adapters.
 
 ## Cross-branch contract
 
