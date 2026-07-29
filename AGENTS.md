@@ -1,5 +1,10 @@
 # Agent Development Guide
 
+## Scope
+
+This file governs the repository unless a closer `AGENTS.md` applies to the files
+being changed.
+
 ## Commands
 
 - `pnpm dev` - Start all dev servers (web:3000, admin:3001)
@@ -10,6 +15,13 @@
 - `pnpm fix` - Auto-fix format and lint issues
 - `pnpm turbo run <command> --filter=<package>` - Target specific package/app
 - `pnpm --filter=@plane/ui storybook` - Start Storybook on port 6006
+
+## Scoped Instructions
+
+| Path                        | Local Guidance                                                                                  |
+| --------------------------- | ----------------------------------------------------------------------------------------------- |
+| `packages/chat-context/`    | Semantic selection, privacy boundaries, Django hydration contract, and cross-stack verification |
+| `packages/tailwind-config/` | Canvas, surface, layer, and semantic color rules                                                |
 
 ## Code Style
 
