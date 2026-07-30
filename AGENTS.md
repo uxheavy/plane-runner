@@ -22,6 +22,8 @@ Plane is a pnpm/Turborepo monorepo. The Django API and workers live in `apps/api
 
 - Local browser-facing API and file traffic share the proxy origin. API and worker containers reach MinIO through its Docker service name. These are different network boundaries; do not make one endpoint value serve both.
 - Treat `.env.example` files as reproducible local defaults and `.env` files as untracked machine state. Never commit credentials or generated secrets.
+- Keep the Git remote named `upstream` pointed at `https://github.com/uxheavy/plane-runner.git`.
+- Fork every external GitHub repository used by this project into the `uxheavy` organization and reference the `uxheavy` fork rather than the third-party repository directly.
 - Encode recurring corrections in code, tests, validation, or automation first. Add an `AGENTS.md` gotcha only when the decision still requires human judgment.
 
 ## Working Method
