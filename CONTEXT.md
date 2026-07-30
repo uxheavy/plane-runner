@@ -186,6 +186,8 @@ This ledger supersedes conflicting assumptions in the earlier `Plane MCP and Cod
 | PX54 | Every Plane agent receives a small universal Plane work core in its initial tool context.             | \_/10      |
 | PX55 | Initial tool context adds capabilities relevant to the agent profile and current assignment.          | \_/10      |
 | PX56 | Other enabled capabilities remain progressively discoverable.                                         | \_/10      |
+| PX57 | The universal Plane work core exposes one `search_workspace` tool across Plane object types.          | \_/10      |
+| PX58 | Specialized domain searches remain discoverable for advanced filters and projections.                 | \_/10      |
 
 ### Superseded Tool-Surface Decisions
 

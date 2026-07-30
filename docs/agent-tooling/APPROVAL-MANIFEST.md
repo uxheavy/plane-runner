@@ -19,6 +19,7 @@ Ship one production-capable path in which a Plane-native agent can drive an assi
 - The model-facing surface is derived from natural Plane workflows and vocabulary.
 - Every agent initially receives a small universal Plane work core plus eager tools selected from its profile and current assignment.
 - Other enabled capabilities remain progressively discoverable without placing every schema in the model's initial context.
+- The universal core uses one `search_workspace` tool to find typed references across Plane object types; specialized domain searches are discovered only when advanced filters or projections are needed.
 - Exact core tools, discovery tools, and composition-tool names remain open and must be resolved before this manifest can be approved.
 - Internal contract IDs, audit events, and adapter metadata retain the `plane.*` namespace even when native Plane-domain tool names do not.
 - Model-written TypeScript runs in a restricted child isolate inside the disposable Hermes run container.

@@ -91,6 +91,8 @@ Use a hybrid in which each layer has one job:
 9. Semantic multi-step compositions live in the operation catalog and gateway implementation, not independently inside native, Code Mode, or MCP adapters.
 10. The 177-tool Python MCP surface is a compatibility adapter. Each MCP contract maps to gateway operations, retained local behavior, or an explicitly approved deprecation disposition.
 
+The universal profile uses `search_workspace` for ordinary Plane discovery across typed object references. Domain-specific searches remain catalog operations and may be added eagerly by an agent profile or assignment when their specialized filters are relevant.
+
 This keeps the caller interface simple while preserving one enforcement locality. It also lets native tools be ergonomic without turning their small eager set into a security boundary.
 
 ## Proposed catalog descriptor

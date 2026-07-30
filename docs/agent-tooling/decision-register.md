@@ -93,6 +93,8 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ATD-110 | Every Plane agent receives a small universal Plane work core in its initial tool context.           | \_/10      |
 | ATD-111 | Initial tool context adds capabilities relevant to the agent profile and current assignment.        | \_/10      |
 | ATD-112 | Other enabled capabilities remain progressively discoverable.                                       | \_/10      |
+| ATD-113 | The universal Plane work core exposes one `search_workspace` tool across Plane object types.        | \_/10      |
+| ATD-114 | Specialized domain searches remain discoverable for advanced filters and projections.               | \_/10      |
 
 ## Superseded
 
