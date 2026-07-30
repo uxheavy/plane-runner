@@ -65,7 +65,7 @@ Generated TypeScript never receives the Plane credential.
 
 The fork does not expose the `hermes-cli` personality or default 54-tool core as the Plane agent's product surface. A fresh agent begins with Plane identity, role, assignment, current object and conversation context, relevant knowledge, enabled capabilities, and runtime policy.
 
-The model-facing catalog is designed from natural Plane workflows. Common Plane actions are eager only when they are broadly useful and unambiguous. Long-tail Plane operations, external connectors, browser, files, terminal, and specialist capabilities may remain enabled while their schemas are progressively disclosed. The exact eager surface is the next open catalog decision.
+The model-facing catalog is designed from natural Plane workflows. Every run starts with a small universal Plane work core, then adds eager tools relevant to the agent profile and current assignment. Long-tail Plane operations, external connectors, browser, files, terminal, and specialist capabilities may remain enabled while their schemas are progressively disclosed. The exact universal core is the next open catalog decision.
 
 Hermes remains responsible for execution, lifecycle, delegation, memory, skills, scheduling, tool dispatch, transcript persistence, concurrency, and bounded-result machinery beneath this profile. Hermes-specific work systems and operational tools are hidden or adapted when Plane already owns the corresponding product concept.
 

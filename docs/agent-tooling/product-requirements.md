@@ -56,6 +56,8 @@ People who investigate what an agent attempted, what Plane allowed, and what cha
 - Native tools improve ergonomics rather than confer privilege.
 - The complete supported operation catalog remains discoverable.
 - Common workflows should be simple without restricting advanced composition.
+- Initial tool context should contain a small universal Plane work core plus assignment-relevant capabilities.
+- Enabled capabilities outside the initial context should remain discoverable.
 - Failure must be explicit, structured, and safe to retry only when proven safe.
 - The first release should be narrow enough to validate but complete enough to exercise production risks.
 

@@ -90,6 +90,9 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ATD-107 | Hermes is the hidden execution kernel rather than the agent's product identity.                     | \_/10      |
 | ATD-108 | The Plane-native profile does not inherit the `hermes-cli` model-facing tool catalog.               | \_/10      |
 | ATD-109 | Every model-facing tool is redesigned from natural Plane workflows and vocabulary.                  | \_/10      |
+| ATD-110 | Every Plane agent receives a small universal Plane work core in its initial tool context.           | \_/10      |
+| ATD-111 | Initial tool context adds capabilities relevant to the agent profile and current assignment.        | \_/10      |
+| ATD-112 | Other enabled capabilities remain progressively discoverable.                                       | \_/10      |
 
 ## Superseded
 

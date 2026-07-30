@@ -16,8 +16,10 @@ Ship one production-capable path in which a Plane-native agent can drive an assi
 - A Plane Operation Gateway exposes curated, versioned semantic operations through Plane application services; agents never receive database access.
 - The fork exposes a dedicated Plane-native runtime profile rather than inheriting the `hermes-cli` personality or default tool catalog.
 - Hermes supplies execution, lifecycle, delegation, memory, skills, scheduling, and tool-dispatch machinery beneath the Plane-native profile; it is not presented to users or models as a separate product.
-- The model-facing surface is derived from natural Plane workflows and vocabulary. Exact eager tools, discovery tools, and composition-tool names remain open and must be resolved before this manifest can be approved.
-- Enabled long-tail capabilities remain discoverable without placing every schema in the model's initial context.
+- The model-facing surface is derived from natural Plane workflows and vocabulary.
+- Every agent initially receives a small universal Plane work core plus eager tools selected from its profile and current assignment.
+- Other enabled capabilities remain progressively discoverable without placing every schema in the model's initial context.
+- Exact core tools, discovery tools, and composition-tool names remain open and must be resolved before this manifest can be approved.
 - Internal contract IDs, audit events, and adapter metadata retain the `plane.*` namespace even when native Plane-domain tool names do not.
 - Model-written TypeScript runs in a restricted child isolate inside the disposable Hermes run container.
 - Plane credentials remain in host callbacks. Generated TypeScript receives neither credentials nor ambient authority.

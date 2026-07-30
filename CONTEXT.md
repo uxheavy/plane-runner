@@ -183,6 +183,9 @@ This ledger supersedes conflicting assumptions in the earlier `Plane MCP and Cod
 | PX51 | Hermes is the hidden execution kernel rather than the agent's product identity.                       | \_/10      |
 | PX52 | The Plane-native profile does not inherit the `hermes-cli` model-facing tool catalog.                 | \_/10      |
 | PX53 | Every model-facing tool is redesigned from natural Plane workflows and vocabulary.                    | \_/10      |
+| PX54 | Every Plane agent receives a small universal Plane work core in its initial tool context.             | \_/10      |
+| PX55 | Initial tool context adds capabilities relevant to the agent profile and current assignment.          | \_/10      |
+| PX56 | Other enabled capabilities remain progressively discoverable.                                         | \_/10      |
 
 ### Superseded Tool-Surface Decisions
 
