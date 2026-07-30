@@ -47,7 +47,7 @@ Run a pinned Deno process inside the same disposable Hermes run container:
 
 ## Module and seam placement
 
-- `plane_execute` is the Hermes adapter that accepts model-written TypeScript.
+- The Plane-native composition tool, whose final name is pending catalog design, is the adapter that accepts model-written TypeScript.
 - The TypeScript runner module owns compilation/loading, isolate lifecycle, limits, and log/result framing.
 - The credential-free callback is the only seam from the runner to Plane operations.
 - The Plane Operation Gateway remains the sole module that owns authorization, mutation safety, result shaping, and audit evidence.
@@ -63,7 +63,7 @@ Run a pinned Deno process inside the same disposable Hermes run container:
 
 ## Host callback authorization
 
-The outer `plane_execute` call does not pre-authorize its inner operations. Each `plane.call` crosses the host callback and gateway independently. Authorized calls execute autonomously; unauthorized calls fail without affecting independently admitted siblings.
+The outer composition call does not pre-authorize its inner operations. Each host callback crosses the gateway independently. Authorized calls execute autonomously; unauthorized calls fail without affecting independently admitted siblings.
 
 ## Required security qualification
 

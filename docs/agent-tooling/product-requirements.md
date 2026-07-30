@@ -2,7 +2,7 @@
 
 ## Problem
 
-Plane agents need to inspect and change Plane data without receiving database access or credentials. A large flat tool list is difficult for models to use, while an ungoverned code-execution surface can bypass product authorization and auditing.
+Plane agents need to drive assigned outcomes through Plane without receiving database access or credentials. A general-purpose Hermes personality and large flat tool list do not feel like a native Plane teammate, while an ungoverned code-execution surface can bypass product authorization and auditing.
 
 Plane already has an external Python MCP server. Plane-native Hermes agents do not need the latency and lifecycle cost of an internal MCP hop, but both internal and external integrations should converge on the same supported Plane operations.
 
@@ -10,7 +10,7 @@ Plane already has an external Python MCP server. Plane-native Hermes agents do n
 
 ### Plane-native agents
 
-Agents managed by Plane and executed through Hermes. They use native semantic tools for common work and TypeScript Code Mode for discovery and composition.
+Agents managed by Plane and executed by a forked Hermes kernel. They receive a Plane-native runtime profile, native semantic tools for common work, and TypeScript composition for broader enabled capabilities. Users and models do not experience Hermes as a separate product.
 
 ### External agents
 
@@ -27,6 +27,8 @@ People who investigate what an agent attempted, what Plane allowed, and what cha
 ## Required outcomes
 
 - An internal agent can discover supported Plane operations without loading the full catalog into model context.
+- An internal agent begins with Plane identity, assignment, current context, and authorized capability metadata rather than a generic everyday-agent posture.
+- An internal agent does not inherit the `hermes-cli` default tool catalog.
 - An internal agent can use common Plane operations as direct native tools.
 - An internal agent can compose multiple supported operations in model-written TypeScript.
 - Generated code cannot access Plane credentials.

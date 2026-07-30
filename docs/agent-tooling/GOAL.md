@@ -89,7 +89,7 @@ Observed on 2026-07-29:
 
 ### Hermes and TypeScript Code Mode
 
-- Initial eager Plane tools are native Hermes tools.
+- The Plane-native runtime profile exposes the approved eager Plane-domain tools while Hermes remains the hidden execution kernel.
 - Deferred operations are discoverable through Tool Search and Code Mode.
 - `docs`, `search`, and `execute` are implemented for TypeScript.
 - Generated code runs in the disposable Hermes run container inside the approved restricted child isolate.

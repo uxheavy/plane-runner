@@ -8,12 +8,8 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ------- | --------------------------------------------------------------------------------------------------- | ---------- |
 | ATD-001 | External agents access Plane through MCP.                                                           | \_/10      |
 | ATD-002 | Plane's existing Python MCP server remains supported.                                               | \_/10      |
-| ATD-003 | Plane-native Hermes agents use native Hermes tools.                                                 | \_/10      |
 | ATD-004 | Plane-native Hermes agents receive direct semantic Plane tools.                                     | \_/10      |
 | ATD-005 | Plane-native Hermes agents receive TypeScript Code Mode.                                            | \_/10      |
-| ATD-006 | Code Mode exposes `plane_docs`.                                                                     | \_/10      |
-| ATD-007 | Code Mode exposes `plane_search`.                                                                   | \_/10      |
-| ATD-008 | Code Mode exposes `plane_execute`.                                                                  | \_/10      |
 | ATD-009 | Common Plane operations are eager native tools.                                                     | \_/10      |
 | ATD-010 | Remaining supported Plane operations are progressively discoverable.                                | \_/10      |
 | ATD-011 | Direct tools are an ergonomic surface rather than a security tier.                                  | \_/10      |
@@ -90,14 +86,10 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ATD-090 | Cross-process gateway calls use one versioned JSON HTTP adapter in Plane's existing API service.    | \_/10      |
 | ATD-094 | Plane agents execute authorized operations autonomously by default.                                 | \_/10      |
 | ATD-097 | V1 has no runtime human-confirmation prompts for agent operations.                                  | \_/10      |
-| ATD-098 | `plane_search_work_items` is an eager native Hermes tool in v1.                                     | \_/10      |
-| ATD-099 | `plane_get_work_item` is an eager native Hermes tool in v1.                                         | \_/10      |
-| ATD-100 | `plane_create_work_item` is an eager native Hermes tool in v1.                                      | \_/10      |
-| ATD-101 | `plane_update_work_item` is an eager native Hermes tool in v1.                                      | \_/10      |
-| ATD-102 | `plane_add_comment` is an eager native Hermes tool in v1.                                           | \_/10      |
-| ATD-103 | `plane_docs` is an eager native Hermes tool in v1.                                                  | \_/10      |
-| ATD-104 | `plane_search` is an eager native Hermes tool in v1.                                                | \_/10      |
-| ATD-105 | `plane_execute` is an eager native Hermes tool in v1.                                               | \_/10      |
+| ATD-106 | The fork exposes a Plane-native runtime profile.                                                    | \_/10      |
+| ATD-107 | Hermes is the hidden execution kernel rather than the agent's product identity.                     | \_/10      |
+| ATD-108 | The Plane-native profile does not inherit the `hermes-cli` model-facing tool catalog.               | \_/10      |
+| ATD-109 | Every model-facing tool is redesigned from natural Plane workflows and vocabulary.                  | \_/10      |
 
 ## Superseded
 
@@ -112,6 +104,18 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ATS-007 | Submit decisions through a separate Hermes broker credential.                        | ATD-097 removes the approval decision path and credential.               | \_/10      |
 | ATS-008 | Allow administrators to configure optional operation prompts.                        | ATD-097 removes all runtime operation prompts.                           | \_/10      |
 | ATS-009 | Resume the exact Hermes tool call after a Plane approval decision.                   | ATD-097 removes runtime approval decisions and resume behavior.          | \_/10      |
+| ATS-010 | Plane-native agents use the inherited native Hermes tool surface.                    | ATD-106 through ATD-109 define a Plane-native runtime profile.           | \_/10      |
+| ATS-011 | Code Mode exposes `plane_docs`.                                                      | ATD-106 through ATD-109 reopen the Plane-native tool catalog.            | \_/10      |
+| ATS-012 | Code Mode exposes `plane_search`.                                                    | ATD-106 through ATD-109 reopen the Plane-native tool catalog.            | \_/10      |
+| ATS-013 | Code Mode exposes `plane_execute`.                                                   | ATD-106 through ATD-109 reopen the Plane-native tool catalog.            | \_/10      |
+| ATS-014 | `plane_search_work_items` is fixed as an eager v1 tool.                              | ATD-106 through ATD-109 reopen the eager surface.                        | \_/10      |
+| ATS-015 | `plane_get_work_item` is fixed as an eager v1 tool.                                  | ATD-106 through ATD-109 reopen the eager surface.                        | \_/10      |
+| ATS-016 | `plane_create_work_item` is fixed as an eager v1 tool.                               | ATD-106 through ATD-109 reopen the eager surface.                        | \_/10      |
+| ATS-017 | `plane_update_work_item` is fixed as an eager v1 tool.                               | ATD-106 through ATD-109 reopen the eager surface.                        | \_/10      |
+| ATS-018 | `plane_add_comment` is fixed as an eager v1 tool.                                    | ATD-106 through ATD-109 reopen the eager surface.                        | \_/10      |
+| ATS-019 | `plane_docs` is fixed as an eager v1 tool.                                           | ATD-106 through ATD-109 reopen the eager surface.                        | \_/10      |
+| ATS-020 | `plane_search` is fixed as an eager v1 tool.                                         | ATD-106 through ATD-109 reopen the eager surface.                        | \_/10      |
+| ATS-021 | `plane_execute` is fixed as an eager v1 tool.                                        | ATD-106 through ATD-109 reopen the eager surface.                        | \_/10      |
 
 ## Open
 
@@ -133,6 +137,9 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ATO-016 | Define audit retention and redaction periods.         | \_/10      |
 | ATO-017 | Define which operation groups benefit from preflight. | \_/10      |
 | ATO-018 | Define the exact TypeScript isolate technology.       | \_/10      |
+| ATO-019 | Define the exact eager Plane-native tool surface.     | \_/10      |
+| ATO-020 | Define the progressive-discovery tool surface.        | \_/10      |
+| ATO-021 | Define the TypeScript composition tool contract.      | \_/10      |
 
 ## Proposed
 

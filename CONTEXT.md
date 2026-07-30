@@ -141,7 +141,7 @@ This ledger supersedes conflicting assumptions in the earlier `Plane MCP and Cod
 | PX1  | External agents access Plane through MCP.                                                             | \_/10      |
 | PX2  | Plane's existing Python MCP server remains supported for external clients.                            | \_/10      |
 | PX3  | The existing Python MCP server is the compatibility interface for external agent ecosystems.          | \_/10      |
-| PX4  | Plane-native Hermes agents access Plane through native Hermes tools.                                  | \_/10      |
+| PX4  | Plane-native agents access Plane through native tools hosted by the forked Hermes kernel.             | \_/10      |
 | PX5  | Plane-native Hermes agents receive direct semantic Plane tools.                                       | \_/10      |
 | PX6  | Plane-native Hermes agents receive native Code Mode tools.                                            | \_/10      |
 | PX7  | Common Plane operations are exposed as direct tools.                                                  | \_/10      |
@@ -179,14 +179,23 @@ This ledger supersedes conflicting assumptions in the earlier `Plane MCP and Cod
 | PX39 | Plane agents execute authorized operations autonomously.                                              | \_/10      |
 | PX40 | V1 has no runtime human-confirmation prompts for Plane agent operations.                              | \_/10      |
 | PX41 | V1 has no approval-broker credential or pending operation-approval state.                             | \_/10      |
-| PX42 | `plane_search_work_items` is an eager native Hermes tool in v1.                                       | \_/10      |
-| PX43 | `plane_get_work_item` is an eager native Hermes tool in v1.                                           | \_/10      |
-| PX44 | `plane_create_work_item` is an eager native Hermes tool in v1.                                        | \_/10      |
-| PX45 | `plane_update_work_item` is an eager native Hermes tool in v1.                                        | \_/10      |
-| PX46 | `plane_add_comment` is an eager native Hermes tool in v1.                                             | \_/10      |
-| PX47 | `plane_docs` is an eager native Hermes tool in v1.                                                    | \_/10      |
-| PX48 | `plane_search` is an eager native Hermes tool in v1.                                                  | \_/10      |
-| PX49 | `plane_execute` is an eager native Hermes tool in v1.                                                 | \_/10      |
+| PX50 | The fork exposes a Plane-native runtime profile.                                                      | \_/10      |
+| PX51 | Hermes is the hidden execution kernel rather than the agent's product identity.                       | \_/10      |
+| PX52 | The Plane-native profile does not inherit the `hermes-cli` model-facing tool catalog.                 | \_/10      |
+| PX53 | Every model-facing tool is redesigned from natural Plane workflows and vocabulary.                    | \_/10      |
+
+### Superseded Tool-Surface Decisions
+
+| ID   | Superseded decision                                      | Replacement        | Importance |
+| ---- | -------------------------------------------------------- | ------------------ | ---------- |
+| PX42 | `plane_search_work_items` was fixed as an eager v1 tool. | PX50 through PX53. | \_/10      |
+| PX43 | `plane_get_work_item` was fixed as an eager v1 tool.     | PX50 through PX53. | \_/10      |
+| PX44 | `plane_create_work_item` was fixed as an eager v1 tool.  | PX50 through PX53. | \_/10      |
+| PX45 | `plane_update_work_item` was fixed as an eager v1 tool.  | PX50 through PX53. | \_/10      |
+| PX46 | `plane_add_comment` was fixed as an eager v1 tool.       | PX50 through PX53. | \_/10      |
+| PX47 | `plane_docs` was fixed as an eager v1 tool.              | PX50 through PX53. | \_/10      |
+| PX48 | `plane_search` was fixed as an eager v1 tool.            | PX50 through PX53. | \_/10      |
+| PX49 | `plane_execute` was fixed as an eager v1 tool.           | PX50 through PX53. | \_/10      |
 
 ### Open Decisions
 
@@ -198,6 +207,9 @@ This ledger supersedes conflicting assumptions in the earlier `Plane MCP and Cod
 | PXD9  | Define how direct tools are retired from the eager surface.                             | \_/10      |
 | PXD10 | Define the isolation boundary around model-written TypeScript inside the run container. | \_/10      |
 | PXD11 | Define the capabilities available to model-written TypeScript.                          | \_/10      |
+| PXD12 | Define the exact eager Plane-native tool surface.                                       | \_/10      |
+| PXD13 | Define the exact progressive-discovery tool surface.                                    | \_/10      |
+| PXD14 | Define the exact TypeScript composition tool name and contract.                         | \_/10      |
 | PXD16 | Define replay behavior after a container restart.                                       | \_/10      |
 | PXD17 | Define stable invocation identifiers for retries.                                       | \_/10      |
 | PXD18 | Define idempotency requirements for Plane mutations.                                    | \_/10      |

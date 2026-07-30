@@ -4,8 +4,9 @@
 
 ```mermaid
 flowchart LR
-    H["Hermes agent loop"] --> N["Native Plane tools"]
-    H --> C["TypeScript Code Mode"]
+    H["Plane-native agent runtime"] --> N["Plane-native tools"]
+    H --> C["TypeScript composition"]
+    K["Forked Hermes execution kernel"] --> H
     C --> R["Credential-free host RPC"]
     N --> G["Plane Operation Gateway"]
     R --> G
@@ -60,20 +61,13 @@ The initial architecture does not mint run-bound capability tokens or per-operat
 
 Generated TypeScript never receives the Plane credential.
 
-## Native Hermes tools
+## Plane-native runtime profile
 
-The approved v1 eager Hermes surface is exactly:
+The fork does not expose the `hermes-cli` personality or default 54-tool core as the Plane agent's product surface. A fresh agent begins with Plane identity, role, assignment, current object and conversation context, relevant knowledge, enabled capabilities, and runtime policy.
 
-- `plane_search_work_items`
-- `plane_get_work_item`
-- `plane_create_work_item`
-- `plane_update_work_item`
-- `plane_add_comment`
-- `plane_docs`
-- `plane_search`
-- `plane_execute`
+The model-facing catalog is designed from natural Plane workflows. Common Plane actions are eager only when they are broadly useful and unambiguous. Long-tail Plane operations, external connectors, browser, files, terminal, and specialist capabilities may remain enabled while their schemas are progressively disclosed. The exact eager surface is the next open catalog decision.
 
-Remaining supported operations are progressively discoverable through Hermes Tool Search and Code Mode.
+Hermes remains responsible for execution, lifecycle, delegation, memory, skills, scheduling, tool dispatch, transcript persistence, concurrency, and bounded-result machinery beneath this profile. Hermes-specific work systems and operational tools are hidden or adapted when Plane already owns the corresponding product concept.
 
 Native adapters remain thin:
 
@@ -84,13 +78,9 @@ Native adapters remain thin:
 
 They do not reproduce Plane authorization or business logic.
 
-## Code Mode surface
+## TypeScript composition surface
 
-Code Mode provides three model-facing tools:
-
-- `plane_docs` explains the programming model and common patterns.
-- `plane_search` finds supported operations and relevant schemas.
-- `plane_execute` runs model-written TypeScript that composes catalog operations.
+The Plane-native profile retains progressive capability discovery and one self-hosted TypeScript composition path. Its final tool names are not yet frozen. Bare `docs`, `search`, and `execute` are rejected because they collide with company knowledge, web, files, connectors, and Hermes's existing code-execution concepts.
 
 TypeScript executes inside the disposable container assigned to the Hermes run. A restricted child isolate has no Plane credentials, ambient environment secrets, arbitrary network, package installation, subprocess creation, or unrelated filesystem access. Its only Plane capability is a credential-free RPC callback to trusted host code.
 
@@ -140,7 +130,7 @@ Audit and execution metadata pin exact catalog, source schema, TypeScript runtim
 
 The external MCP compatibility surface is versioned independently from native tool ergonomics, while both resolve to the shared operation contract.
 
-## Reuse from Hermes
+## Reuse from the Hermes kernel
 
 Reuse:
 

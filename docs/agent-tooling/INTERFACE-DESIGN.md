@@ -9,7 +9,7 @@ The core deep-hybrid boundary was accepted by the user on 2026-07-29. Exact eage
 - Plane authorization remains the permission oracle for every operation.
 - Credentials, workspace identity, agent identity, and run identity are trusted host context.
 - Generated TypeScript receives none of those credentials.
-- Native Hermes tools, TypeScript Code Mode, and external MCP compatibility converge on one gateway module.
+- Plane-native tools hosted by the Hermes kernel, TypeScript composition, and external MCP compatibility converge on one gateway module.
 - The v1 interface should keep common calls obvious without projecting 177 MCP tools into every model prompt.
 - Idempotency, bounded results, and audit evidence apply uniformly below all adapters.
 
@@ -83,12 +83,13 @@ Use a hybrid in which each layer has one job:
 1. The core Plane Operation Gateway module has a deep request-bound `execute` interface.
 2. A separate read-only catalog module exposes `search` and `describe` because discovery is a distinct interface with different caching and testing needs.
 3. The gateway internally implements a durable command state machine for authorization, idempotency, reconciliation, bounded results, and append-only audit evidence.
-4. Hermes exposes five named eager domain tools as thin common-case adapters: `plane_search_work_items`, `plane_get_work_item`, `plane_create_work_item`, `plane_update_work_item`, and `plane_add_comment`.
-5. Hermes also exposes `plane_docs`, `plane_search`, and `plane_execute`, producing an eight-tool eager surface.
-6. Generated TypeScript receives a credential-free `plane.call(operation, input)` callback plus catalog types. It does not receive the internal lifecycle protocol.
-7. V1 does not expose a general graph-planning DSL. The mandatory coordinated release-plan write is one curated semantic catalog operation.
-8. Semantic multi-step compositions live in the operation catalog and gateway implementation, not independently inside native, Code Mode, or MCP adapters.
-9. The 177-tool Python MCP surface is a compatibility adapter. Each MCP contract maps to gateway operations, retained local behavior, or an explicitly approved deprecation disposition.
+4. The fork exposes a Plane-native runtime profile whose model-facing tools are designed from Plane workflows rather than inherited from `hermes-cli`.
+5. Common Plane-domain tools remain thin common-case adapters. Their exact names and eager boundary are pending the Plane-native catalog decision.
+6. Progressive discovery and TypeScript composition remain required, but the generic `docs`, `search`, and `execute` names and the earlier `plane_docs`, `plane_search`, and `plane_execute` surface are retired.
+7. Generated TypeScript receives a credential-free operation callback plus catalog types. It does not receive the internal lifecycle protocol.
+8. V1 does not expose a general graph-planning DSL. The mandatory coordinated release-plan write is one curated semantic catalog operation.
+9. Semantic multi-step compositions live in the operation catalog and gateway implementation, not independently inside native, Code Mode, or MCP adapters.
+10. The 177-tool Python MCP surface is a compatibility adapter. Each MCP contract maps to gateway operations, retained local behavior, or an explicitly approved deprecation disposition.
 
 This keeps the caller interface simple while preserving one enforcement locality. It also lets native tools be ergonomic without turning their small eager set into a security boundary.
 

@@ -8,15 +8,17 @@ This is the controlling pre-implementation manifest. On approval, it supersedes 
 
 ## Outcome
 
-Ship one production-capable path in which a Plane-native Hermes agent can read and change authorized Plane work through native tools and self-hosted TypeScript Code Mode, with the same Plane authorization and audit boundary used by external MCP clients.
+Ship one production-capable path in which a Plane-native agent can drive an assigned outcome through Plane-native tools and self-hosted TypeScript composition, with Hermes operating as its hidden execution kernel and with the same Plane authorization and audit boundary used by external MCP clients.
 
 ## V1 architecture
 
 - Plane remains the system of record and sole authorization authority.
 - A Plane Operation Gateway exposes curated, versioned semantic operations through Plane application services; agents never receive database access.
-- Hermes exposes eight eager native tools: `search_work_items`, `get_work_item`, `create_work_item`, `update_work_item`, `add_comment`, `docs`, `search`, and `execute`.
-- `docs`, `search`, and `execute` provide Cloudflare-style progressive discovery and TypeScript composition without requiring Cloudflare.
-- The agent-facing names omit the redundant `plane_` prefix because Plane is the agent's native workspace. Internal contract IDs, audit events, and adapter metadata retain the `plane.*` namespace.
+- The fork exposes a dedicated Plane-native runtime profile rather than inheriting the `hermes-cli` personality or default tool catalog.
+- Hermes supplies execution, lifecycle, delegation, memory, skills, scheduling, and tool-dispatch machinery beneath the Plane-native profile; it is not presented to users or models as a separate product.
+- The model-facing surface is derived from natural Plane workflows and vocabulary. Exact eager tools, discovery tools, and composition-tool names remain open and must be resolved before this manifest can be approved.
+- Enabled long-tail capabilities remain discoverable without placing every schema in the model's initial context.
+- Internal contract IDs, audit events, and adapter metadata retain the `plane.*` namespace even when native Plane-domain tool names do not.
 - Model-written TypeScript runs in a restricted child isolate inside the disposable Hermes run container.
 - Plane credentials remain in host callbacks. Generated TypeScript receives neither credentials nor ambient authority.
 - Plane derives the agent identity from its credential and applies live authorization to every operation.
@@ -54,7 +56,7 @@ The catalog may grow additively. New eager tools require evidence that they are 
 
 ## Delivery slices
 
-1. **Read slice:** gateway, catalog, native read tools, `docs/search/execute`, authorization denials, and audit readback.
+1. **Read slice:** gateway, catalog, approved Plane-native read tools, progressive capability discovery, TypeScript composition, authorization denials, and audit readback.
 2. **Mutation slice:** create/update/comment, idempotency, ordered execution, failure handling, and release-plan composition.
 3. **External compatibility:** route the pinned official MCP server through the gateway without breaking its supported clients.
 4. **Production hardening:** limits, observability, kill switches, credential lifecycle, load, rollback, and operator documentation.
