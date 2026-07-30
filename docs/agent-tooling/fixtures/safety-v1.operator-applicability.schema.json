@@ -1,0 +1,420 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://plane.so/schemas/agent-tooling/safety-v1.operator-applicability.schema.json",
+  "title": "Plane safety predicate-instance mutation applicability matrix v1",
+  "description": "Candidate matrices are empty. Qualifying matrices contain the complete 40 predicate-instance by 12 concrete-case product plus the aggregate producer-independence control. Companion validation derives dispositions and operator bindings from frozen inputs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema",
+    "matrix_id",
+    "qualification_status",
+    "predicate_set_id",
+    "operator_registry_id",
+    "mutation_catalog_id",
+    "state_bindings",
+    "companion_rules",
+    "predicate_cells",
+    "control_cells"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "./safety-v1.operator-applicability.schema.json"
+    },
+    "schema": {
+      "const": "plane.agent.safety-operator-applicability/v1"
+    },
+    "matrix_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,95}$"
+    },
+    "operator_registry_id": {
+      "const": "plane-agent-safety-operators-v1"
+    },
+    "mutation_catalog_id": {
+      "const": "plane-agent-safety-mutations-v1"
+    },
+    "predicate_set_id": {
+      "const": "plane-agent-tooling-safety-predicates-v1"
+    },
+    "qualification_status": {
+      "enum": ["candidate_unimplemented", "qualifying_implemented"]
+    },
+    "companion_rules": {
+      "const": {
+        "cartesian_product": "exact_40_predicates_by_12_cases",
+        "unique_key": "predicate_id_mutation_case_id",
+        "mutation_case_resolution": "exact_id_and_class_from_bound_qualifying_catalog",
+        "operator_binding": "derive_from_predicate_set",
+        "disposition": "derive_from_required_mutation_classes_and_resolved_case_class",
+        "detector": "integrity_classes_use_auth_precondition_domain_classes_use_predicate_operator",
+        "failure_code": "derive_from_detector_registry_contract",
+        "reject_all_not_applicable": true,
+        "required_predicate_mutation_classes": "must_detect",
+        "bundle_mutation_class_coverage": "all_12_must_detect",
+        "qualifying_state_agreement": "operator_registry_qualifying_pinned_mutation_catalog_and_applicability_qualifying_implemented",
+        "integrity_detection": "all_four_integrity_classes_must_detect_for_all_40_predicates_via_auth_precondition",
+        "integrity_cell_count": "exactly_160_of_480",
+        "evidence_inputs": "schema_closed_canonical_sequences",
+        "argument_variant_slots": "all_required_slots_present_before_live_execution"
+      }
+    },
+    "predicate_cells": {
+      "type": "array",
+      "maxItems": 480,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/predicateCell"
+      }
+    },
+    "control_cells": {
+      "type": "array",
+      "maxItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/controlCell"
+      }
+    },
+    "state_bindings": {
+      "oneOf": [
+        {
+          "const": {
+            "operator_registry": "candidate_unpinned",
+            "mutation_catalog": "candidate_unimplemented",
+            "applicability": "candidate_unimplemented"
+          }
+        },
+        {
+          "const": {
+            "operator_registry": "qualifying_pinned",
+            "mutation_catalog": "qualifying_implemented",
+            "applicability": "qualifying_implemented"
+          }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "operatorId": {
+      "enum": [
+        "canonical_delta_exact@1",
+        "gateway_envelope_exact@1",
+        "audit_multiset_exact@1",
+        "edge_auth_multiset_exact@1",
+        "trace_sequence_exact@1",
+        "fault_schedule_exact@1",
+        "invocation_state_machine_exact@1",
+        "binding_and_normalized_digest_exact@1",
+        "result_identity_and_digest_equal@1",
+        "no_leak_tokens@1",
+        "attempt_cardinality_exact@1",
+        "timing_indistinguishable@1",
+        "structural_absence_inventory@1",
+        "evidence_authenticity_complete@1",
+        "result_bytes_exact@1",
+        "artifact_reconstruction_exact@1",
+        "sandbox_probe_matrix_exact@1",
+        "concurrency_schedule_exact@1",
+        "process_death_recovery_exact@1",
+        "dependency_recovery_exact@1"
+      ]
+    },
+    "stage": {
+      "enum": [
+        "normalized_application_delta",
+        "normalized_gateway_envelope",
+        "normalized_gateway_audit",
+        "normalized_edge_authentication_audit",
+        "normalized_event_trace",
+        "verified_fault_schedule",
+        "normalized_invocation_ledger",
+        "verified_binding_and_digest",
+        "acquired_evidence_bytes",
+        "authenticated_evidence_index",
+        "normalized_probe_trace",
+        "normalized_concurrency_trace",
+        "normalized_supervisor_trace",
+        "normalized_dependency_trace",
+        "signed_producer_result"
+      ]
+    },
+    "failureCode": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{2,95}$"
+    },
+    "mustDetect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "predicate_id",
+        "operator_id",
+        "mutation_case_id",
+        "disposition",
+        "detector_id",
+        "detector_phase",
+        "detection_stage",
+        "expected_failure_code"
+      ],
+      "properties": {
+        "predicate_id": {
+          "$ref": "#/$defs/predicateId"
+        },
+        "operator_id": {
+          "$ref": "#/$defs/operatorId"
+        },
+        "mutation_case_id": {
+          "enum": [
+            "M-EFFECT-DELETE",
+            "M-EFFECT-ADD",
+            "M-AUDIT-SUPPRESS",
+            "M-AUDIT-DUPLICATE",
+            "M-CORRELATION-SWAP",
+            "M-FAULT-BEFORE-BARRIER",
+            "M-FAULT-AFTER-BARRIER",
+            "M-PRODUCER-SWAP",
+            "M-BYTE-CORRUPT",
+            "M-DIGEST-CORRUPT",
+            "M-PROBE-OMIT",
+            "M-PRODUCER-VERDICT-FLIP"
+          ]
+        },
+        "disposition": {
+          "const": "must_detect"
+        },
+        "detection_stage": {
+          "$ref": "#/$defs/stage"
+        },
+        "expected_failure_code": {
+          "$ref": "#/$defs/failureCode"
+        },
+        "detector_id": {
+          "$ref": "#/$defs/operatorId"
+        },
+        "detector_phase": {
+          "enum": ["after_authenticated_acquisition_before_predicates", "predicate_evaluation"]
+        }
+      }
+    },
+    "notApplicable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["predicate_id", "operator_id", "mutation_case_id", "disposition", "reason"],
+      "properties": {
+        "predicate_id": {
+          "$ref": "#/$defs/predicateId"
+        },
+        "operator_id": {
+          "$ref": "#/$defs/operatorId"
+        },
+        "mutation_case_id": {
+          "enum": [
+            "M-EFFECT-DELETE",
+            "M-EFFECT-ADD",
+            "M-AUDIT-SUPPRESS",
+            "M-AUDIT-DUPLICATE",
+            "M-CORRELATION-SWAP",
+            "M-FAULT-BEFORE-BARRIER",
+            "M-FAULT-AFTER-BARRIER",
+            "M-PRODUCER-SWAP",
+            "M-BYTE-CORRUPT",
+            "M-DIGEST-CORRUPT",
+            "M-PROBE-OMIT",
+            "M-PRODUCER-VERDICT-FLIP"
+          ]
+        },
+        "disposition": {
+          "const": "not_applicable"
+        },
+        "reason": {
+          "enum": [
+            "operator_does_not_consume_target_stage",
+            "mutation_target_absent_from_operator_inputs",
+            "bundle_entrypoint_not_operator_owns_detection"
+          ]
+        }
+      }
+    },
+    "cell": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/mustDetect"
+        },
+        {
+          "$ref": "#/$defs/notApplicable"
+        }
+      ]
+    },
+    "predicateId": {
+      "enum": [
+        "SAFE-EV011-001",
+        "SAFE-EV011-002",
+        "SAFE-EV012-001",
+        "SAFE-EV012-002",
+        "SAFE-EV013-001",
+        "SAFE-EV013-002",
+        "SAFE-EV014-001",
+        "SAFE-EV014-002",
+        "SAFE-EV015-001",
+        "SAFE-EV015-002",
+        "SAFE-EV016-001",
+        "SAFE-EV016-002",
+        "SAFE-EV017-001",
+        "SAFE-EV017-002",
+        "SAFE-EV018-001",
+        "SAFE-EV018-002",
+        "SAFE-EV019-001",
+        "SAFE-EV019-002",
+        "SAFE-EV020-001",
+        "SAFE-EV020-002",
+        "SAFE-EV021-001",
+        "SAFE-EV021-002",
+        "SAFE-EV022-001",
+        "SAFE-EV022-002",
+        "SAFE-EV023-001",
+        "SAFE-EV023-002",
+        "SAFE-EV024-001",
+        "SAFE-EV024-002",
+        "SAFE-EV025-001",
+        "SAFE-EV025-002",
+        "SAFE-EV026-001",
+        "SAFE-EV026-002",
+        "SAFE-EV027-001",
+        "SAFE-EV027-002",
+        "SAFE-EV028-001",
+        "SAFE-EV028-002",
+        "SAFE-EV029-001",
+        "SAFE-EV029-002",
+        "SAFE-EV030-001",
+        "SAFE-EV030-002"
+      ]
+    },
+    "predicateCell": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/mustDetect"
+        },
+        {
+          "$ref": "#/$defs/notApplicable"
+        }
+      ]
+    },
+    "controlCell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "control_id",
+        "entrypoint_id",
+        "mutation_case_id",
+        "mutation_class",
+        "disposition",
+        "detection_stage",
+        "expected_failure_code"
+      ],
+      "properties": {
+        "control_id": {
+          "const": "CTRL-PRODUCER-FALSE-PASS"
+        },
+        "entrypoint_id": {
+          "const": "control_qualifier@1"
+        },
+        "mutation_case_id": {
+          "const": "M-PRODUCER-VERDICT-FLIP"
+        },
+        "mutation_class": {
+          "const": "producer_false_pass"
+        },
+        "disposition": {
+          "const": "must_detect"
+        },
+        "detection_stage": {
+          "const": "qualification_aggregate"
+        },
+        "expected_failure_code": {
+          "const": "producer_verdict_independence_failed"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "qualification_status": {
+            "const": "candidate_unimplemented"
+          }
+        },
+        "required": ["qualification_status"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "state_bindings": {
+            "const": {
+              "operator_registry": "candidate_unpinned",
+              "mutation_catalog": "candidate_unimplemented",
+              "applicability": "candidate_unimplemented"
+            }
+          },
+          "predicate_cells": {
+            "type": "array",
+            "maxItems": 0
+          },
+          "control_cells": {
+            "type": "array",
+            "maxItems": 0
+          }
+        },
+        "required": ["state_bindings", "predicate_cells", "control_cells"]
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "qualification_status": {
+            "const": "qualifying_implemented"
+          }
+        },
+        "required": ["qualification_status"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "state_bindings": {
+            "const": {
+              "operator_registry": "qualifying_pinned",
+              "mutation_catalog": "qualifying_implemented",
+              "applicability": "qualifying_implemented"
+            }
+          },
+          "predicate_cells": {
+            "type": "array",
+            "minItems": 480,
+            "maxItems": 480,
+            "contains": {
+              "type": "object",
+              "properties": {
+                "disposition": {
+                  "const": "must_detect"
+                }
+              },
+              "required": ["disposition"]
+            },
+            "minContains": 1
+          },
+          "control_cells": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "items": {
+              "$ref": "#/$defs/controlCell"
+            }
+          }
+        },
+        "required": ["state_bindings", "predicate_cells", "control_cells"]
+      }
+    }
+  ]
+}

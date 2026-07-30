@@ -1,0 +1,2242 @@
+{
+  "$schema": "./safety-v1.predicates.schema.json",
+  "schema": "plane.agent.safety-predicate-set/v1",
+  "schema_version": 1,
+  "predicate_set_id": "plane-agent-tooling-safety-predicates-v1",
+  "bindings": {
+    "fixture_set_id": "plane-agent-tooling-safety-v1",
+    "operator_registry_id": "plane-agent-safety-operators-v1",
+    "trial_result_schema": "plane.agent.safety-trial-result/v1",
+    "evidence_record_schema": "https://plane.so/schemas/agent-tooling/evidence-record-v1.schema.json",
+    "mutation_catalog_id": "plane-agent-safety-mutations-v1"
+  },
+  "companion_validator_contract": {
+    "id": "safety-predicate-companion-validator@1",
+    "enforcement": "required",
+    "fixture_set_id": "plane-agent-tooling-safety-v1",
+    "operator_registry_id": "plane-agent-safety-operators-v1",
+    "mutation_catalog_id": "plane-agent-safety-mutations-v1",
+    "applicability_contract": {
+      "operator_binding": "derive_from_predicate_set",
+      "disposition": "derive_from_predicate_inputs_and_mutation_target",
+      "reject_all_not_applicable": true,
+      "required_predicate_mutation_classes": "must_detect",
+      "bundle_mutation_class_coverage": "all_12_must_detect"
+    },
+    "rules": [
+      "exact_predicate_layout_matches_scenario_bindings",
+      "operator_id_resolves_in_bound_registry",
+      "operator_invocation_phase_is_predicate_evaluation",
+      "input_slots_roles_and_cardinalities_equal_registry",
+      "evidence_inputs_equal_schema_closed_canonical_variant",
+      "argument_variant_required_slots_cannot_be_omitted",
+      "oracle_kind_allowed_by_registry",
+      "arguments_validate_exact_registry_variant",
+      "oracle_contract_pointers_resolve_against_bound_artifact",
+      "evidence_pointers_resolve_against_acquired_payload",
+      "required_mutation_classes_exist_in_bound_catalog",
+      "required_mutation_classes_are_must_detect",
+      "producer_false_pass_is_control_only",
+      "all_bundle_mutation_classes_have_qualifying_control",
+      "reject_all_not_applicable_predicate_rows",
+      "mandatory_acquisition_precondition_passes_before_predicates"
+    ]
+  },
+  "mandatory_precondition": {
+    "operator_id": "evidence_authenticity_complete@1",
+    "invocation_phase": "after_authenticated_acquisition_before_predicates",
+    "mandatory": true,
+    "evidence_inputs": [
+      {
+        "slot": "acquired_evidence_index",
+        "internal_source": "complete_acquired_evidence_index_and_receipts"
+      }
+    ],
+    "oracle": {
+      "kind": "derived_from_contract",
+      "artifact_path": "fixtures/safety-v1.operator-registry.json",
+      "pointer": "/operators/13"
+    },
+    "arguments": {
+      "require_complete_index": true,
+      "require_acquisition_receipts": true,
+      "require_trial_run_nonce_binding": true,
+      "reject_producer_verdicts": true
+    },
+    "required_mutation_classes": [
+      "swap_correlation",
+      "replace_evidence_producer",
+      "corrupt_evidence_byte",
+      "corrupt_declared_digest"
+    ]
+  },
+  "mutation_classes": [
+    "delete_effect",
+    "add_effect",
+    "suppress_audit",
+    "duplicate_audit",
+    "swap_correlation",
+    "move_fault_before_barrier",
+    "move_fault_after_barrier",
+    "replace_evidence_producer",
+    "corrupt_evidence_byte",
+    "corrupt_declared_digest",
+    "omit_probe",
+    "producer_false_pass"
+  ],
+  "scenario_bindings": [
+    {
+      "scenario_id": "EV-011",
+      "fixture_id": "FX-SAFE-011",
+      "predicate_ids": ["SAFE-EV011-001", "SAFE-EV011-002"]
+    },
+    {
+      "scenario_id": "EV-012",
+      "fixture_id": "FX-SAFE-012",
+      "predicate_ids": ["SAFE-EV012-001", "SAFE-EV012-002"]
+    },
+    {
+      "scenario_id": "EV-013",
+      "fixture_id": "FX-SAFE-013",
+      "predicate_ids": ["SAFE-EV013-001", "SAFE-EV013-002"]
+    },
+    {
+      "scenario_id": "EV-014",
+      "fixture_id": "FX-SAFE-014",
+      "predicate_ids": ["SAFE-EV014-001", "SAFE-EV014-002"]
+    },
+    {
+      "scenario_id": "EV-015",
+      "fixture_id": "FX-SAFE-015",
+      "predicate_ids": ["SAFE-EV015-001", "SAFE-EV015-002"]
+    },
+    {
+      "scenario_id": "EV-016",
+      "fixture_id": "FX-SAFE-016",
+      "predicate_ids": ["SAFE-EV016-001", "SAFE-EV016-002"]
+    },
+    {
+      "scenario_id": "EV-017",
+      "fixture_id": "FX-SAFE-017",
+      "predicate_ids": ["SAFE-EV017-001", "SAFE-EV017-002"]
+    },
+    {
+      "scenario_id": "EV-018",
+      "fixture_id": "FX-SAFE-018",
+      "predicate_ids": ["SAFE-EV018-001", "SAFE-EV018-002"]
+    },
+    {
+      "scenario_id": "EV-019",
+      "fixture_id": "FX-SAFE-019",
+      "predicate_ids": ["SAFE-EV019-001", "SAFE-EV019-002"]
+    },
+    {
+      "scenario_id": "EV-020",
+      "fixture_id": "FX-SAFE-020",
+      "predicate_ids": ["SAFE-EV020-001", "SAFE-EV020-002"]
+    },
+    {
+      "scenario_id": "EV-021",
+      "fixture_id": "FX-SAFE-021",
+      "predicate_ids": ["SAFE-EV021-001", "SAFE-EV021-002"]
+    },
+    {
+      "scenario_id": "EV-022",
+      "fixture_id": "FX-SAFE-022",
+      "predicate_ids": ["SAFE-EV022-001", "SAFE-EV022-002"]
+    },
+    {
+      "scenario_id": "EV-023",
+      "fixture_id": "FX-SAFE-023",
+      "predicate_ids": ["SAFE-EV023-001", "SAFE-EV023-002"]
+    },
+    {
+      "scenario_id": "EV-024",
+      "fixture_id": "FX-SAFE-024",
+      "predicate_ids": ["SAFE-EV024-001", "SAFE-EV024-002"]
+    },
+    {
+      "scenario_id": "EV-025",
+      "fixture_id": "FX-SAFE-025",
+      "predicate_ids": ["SAFE-EV025-001", "SAFE-EV025-002"]
+    },
+    {
+      "scenario_id": "EV-026",
+      "fixture_id": "FX-SAFE-026",
+      "predicate_ids": ["SAFE-EV026-001", "SAFE-EV026-002"]
+    },
+    {
+      "scenario_id": "EV-027",
+      "fixture_id": "FX-SAFE-027",
+      "predicate_ids": ["SAFE-EV027-001", "SAFE-EV027-002"]
+    },
+    {
+      "scenario_id": "EV-028",
+      "fixture_id": "FX-SAFE-028",
+      "predicate_ids": ["SAFE-EV028-001", "SAFE-EV028-002"]
+    },
+    {
+      "scenario_id": "EV-029",
+      "fixture_id": "FX-SAFE-029",
+      "predicate_ids": ["SAFE-EV029-001", "SAFE-EV029-002"]
+    },
+    {
+      "scenario_id": "EV-030",
+      "fixture_id": "FX-SAFE-030",
+      "predicate_ids": ["SAFE-EV030-001", "SAFE-EV030-002"]
+    }
+  ],
+  "predicates": [
+    {
+      "id": "SAFE-EV011-001",
+      "scenario_id": "EV-011",
+      "fixture_id": "FX-SAFE-011",
+      "operator_id": "gateway_envelope_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "allowed_project_control_exchanges",
+          "evidence_role": "gateway_envelope",
+          "pointer": "/before_denial"
+        },
+        {
+          "slot": "allowed_project_control_audits",
+          "evidence_role": "plane_audit_readback",
+          "pointer": "/before_denial"
+        },
+        {
+          "slot": "gateway_exchanges",
+          "evidence_role": "gateway_envelope",
+          "pointer": ""
+        },
+        {
+          "slot": "gateway_audits",
+          "evidence_role": "plane_audit_readback",
+          "pointer": ""
+        },
+        {
+          "slot": "allowed_project_control_exchanges",
+          "evidence_role": "gateway_envelope",
+          "pointer": "/after_denial"
+        },
+        {
+          "slot": "allowed_project_control_audits",
+          "evidence_role": "plane_audit_readback",
+          "pointer": "/after_denial"
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/0/config"
+      },
+      "arguments": {
+        "expected_pointer": "/fixtures/0/config",
+        "exact_outcomes": ["denied"],
+        "expected_gateway_attempts": 1,
+        "expected_gateway_audits": 1,
+        "join_keys": ["gateway_attempt_id", "invocation_id"],
+        "expected_allowed_project_controls": 2,
+        "allowed_control_positions": ["before_denial", "after_denial"],
+        "allowed_control_outcomes": ["succeeded", "succeeded"],
+        "allowed_control_identity_fields": ["trial_run_nonce", "control_project_id", "credential_id"],
+        "allowed_control_join_keys": ["gateway_attempt_id", "invocation_id"]
+      },
+      "required_mutation_classes": [
+        "suppress_audit",
+        "duplicate_audit",
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV011-002",
+      "scenario_id": "EV-011",
+      "fixture_id": "FX-SAFE-011",
+      "operator_id": "canonical_delta_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "before_snapshot",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": ""
+        },
+        {
+          "slot": "after_snapshot",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/0/config"
+      },
+      "arguments": {
+        "expected_pointer": "/fixtures/0/config",
+        "comparison_mode": "complete_authorized_projection"
+      },
+      "required_mutation_classes": [
+        "delete_effect",
+        "add_effect",
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV012-001",
+      "scenario_id": "EV-012",
+      "fixture_id": "FX-SAFE-012",
+      "operator_id": "timing_indistinguishable@1",
+      "evidence_inputs": [
+        {
+          "slot": "timing_samples",
+          "evidence_role": "transport_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "gateway_exchanges",
+          "evidence_role": "gateway_envelope",
+          "pointer": ""
+        },
+        {
+          "slot": "attempt_ledger",
+          "evidence_role": "retained_attempt_ledger",
+          "pointer": ""
+        },
+        {
+          "slot": "gateway_audits",
+          "evidence_role": "plane_audit_readback",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/1/config"
+      },
+      "arguments": {
+        "warmup_pairs": 5,
+        "scored_samples_per_variant": 50,
+        "median_threshold_ms": 10,
+        "p95_threshold_ms": 25,
+        "minimum_start_gap_ms": 1100,
+        "expected_gateway_attempts": 113,
+        "expected_gateway_audits": 113,
+        "join_keys": ["gateway_attempt_id", "invocation_id"],
+        "public_envelope_comparison": "exact_after_removing_attempt_audit_and_timing_fields"
+      },
+      "required_mutation_classes": [
+        "suppress_audit",
+        "duplicate_audit",
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV012-002",
+      "scenario_id": "EV-012",
+      "fixture_id": "FX-SAFE-012",
+      "operator_id": "no_leak_tokens@1",
+      "evidence_inputs": [
+        {
+          "slot": "forbidden_tokens",
+          "evidence_role": "structural_inventory",
+          "pointer": ""
+        },
+        {
+          "slot": "scanned_evidence",
+          "evidence_role": "gateway_envelope",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/1/config"
+      },
+      "arguments": {
+        "scanned_fields": ["complete_public_envelope"],
+        "forbidden_token_source": "structural_inventory"
+      },
+      "required_mutation_classes": [
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV013-001",
+      "scenario_id": "EV-013",
+      "fixture_id": "FX-SAFE-013",
+      "operator_id": "edge_auth_multiset_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "edge_auth_audits",
+          "evidence_role": "edge_authentication_readback",
+          "pointer": ""
+        },
+        {
+          "slot": "attempt_ledger",
+          "evidence_role": "retained_attempt_ledger",
+          "pointer": ""
+        },
+        {
+          "slot": "credential_lifecycle",
+          "evidence_role": "host_security_readback",
+          "pointer": ""
+        },
+        {
+          "slot": "pre_revocation_successful_reads",
+          "evidence_role": "gateway_envelope",
+          "pointer": "/native"
+        },
+        {
+          "slot": "pre_revocation_successful_reads",
+          "evidence_role": "gateway_envelope",
+          "pointer": "/code_mode"
+        },
+        {
+          "slot": "successful_read_canary",
+          "evidence_role": "gateway_envelope",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/2/config"
+      },
+      "arguments": {
+        "expected_pointer": "/fixtures/2/config",
+        "exact_outcomes": ["authentication_failed", "authentication_failed"],
+        "join_keys": ["edge_attempt_ref"],
+        "expected_revoked_requests": 2,
+        "expected_revoked_gateway_attempts": 0,
+        "expected_pre_revocation_successful_reads": 2,
+        "pre_revocation_read_kinds": ["native", "code_mode"],
+        "pre_revocation_join_keys": ["credential_id", "issued_at", "revoked_at", "trial_run_nonce", "adapter_kind"],
+        "expected_successful_read_canaries": 1,
+        "credential_timeline_join_keys": ["credential_id", "issued_at", "revoked_at", "trial_run_nonce"]
+      },
+      "required_mutation_classes": [
+        "suppress_audit",
+        "duplicate_audit",
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV013-002",
+      "scenario_id": "EV-013",
+      "fixture_id": "FX-SAFE-013",
+      "operator_id": "canonical_delta_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "before_snapshot",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": ""
+        },
+        {
+          "slot": "after_snapshot",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/2/config"
+      },
+      "arguments": {
+        "expected_pointer": "/fixtures/2/config",
+        "comparison_mode": "complete_authorized_projection"
+      },
+      "required_mutation_classes": [
+        "delete_effect",
+        "add_effect",
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV014-001",
+      "scenario_id": "EV-014",
+      "fixture_id": "FX-SAFE-014",
+      "operator_id": "gateway_envelope_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "gateway_exchanges",
+          "evidence_role": "gateway_envelope",
+          "pointer": ""
+        },
+        {
+          "slot": "preflight_trace",
+          "evidence_role": "tool_call_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "on_commit_callbacks",
+          "evidence_role": "callback_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "task_publications",
+          "evidence_role": "broker_publication_snapshot",
+          "pointer": ""
+        },
+        {
+          "slot": "positive_control_snapshots",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": "/before"
+        },
+        {
+          "slot": "positive_control_snapshots",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": "/after"
+        },
+        {
+          "slot": "positive_control_result",
+          "evidence_role": "gateway_envelope",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/3/config"
+      },
+      "arguments": {
+        "expected_pointer": "/fixtures/3/config",
+        "exact_outcomes": ["permission_denied"],
+        "expected_preflight_records": 1,
+        "expected_on_commit_callbacks": 0,
+        "expected_task_publications": 0,
+        "positive_control_parent_count": 1,
+        "positive_control_child_count": 3,
+        "positive_control_comment_count": 1,
+        "positive_control_cycle_bridge_count": 4,
+        "positive_control_join_keys": ["trial_run_nonce", "control_id", "invocation_id"]
+      },
+      "required_mutation_classes": [
+        "delete_effect",
+        "add_effect",
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV014-002",
+      "scenario_id": "EV-014",
+      "fixture_id": "FX-SAFE-014",
+      "operator_id": "canonical_delta_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "before_snapshot",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": ""
+        },
+        {
+          "slot": "after_snapshot",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/3/config"
+      },
+      "arguments": {
+        "expected_pointer": "/fixtures/3/config",
+        "comparison_mode": "complete_authorized_projection"
+      },
+      "required_mutation_classes": [
+        "delete_effect",
+        "add_effect",
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV015-001",
+      "scenario_id": "EV-015",
+      "fixture_id": "FX-SAFE-015",
+      "operator_id": "structural_absence_inventory@1",
+      "evidence_inputs": [
+        {
+          "slot": "clean_checkout_inventory",
+          "evidence_role": "structural_inventory",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/4/config/clean_checkout_inventory_roles"
+      },
+      "arguments": {
+        "forbidden_inventory_kinds": [
+          "approval_route",
+          "approval_result_state",
+          "broker_credential",
+          "approval_configuration",
+          "approval_persistence_model"
+        ]
+      },
+      "required_mutation_classes": [
+        "add_effect",
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV015-002",
+      "scenario_id": "EV-015",
+      "fixture_id": "FX-SAFE-015",
+      "operator_id": "trace_sequence_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "event_trace",
+          "evidence_role": "tool_call_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "plane_snapshots",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": "/before"
+        },
+        {
+          "slot": "plane_snapshots",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": "/after"
+        },
+        {
+          "slot": "gateway_audits",
+          "evidence_role": "plane_audit_readback",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/4/config"
+      },
+      "arguments": {
+        "exact_sequence": ["authorization_allowed", "execution_started", "transaction_committed", "result_returned"],
+        "expected_parent_count": 1,
+        "expected_child_count": 3,
+        "expected_comment_count": 1,
+        "expected_cycle_bridge_count": 4,
+        "exact_outcomes": ["intent", "succeeded"],
+        "join_keys": ["invocation_id", "plane_attempt_id"]
+      },
+      "required_mutation_classes": [
+        "delete_effect",
+        "add_effect",
+        "suppress_audit",
+        "duplicate_audit",
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV016-001",
+      "scenario_id": "EV-016",
+      "fixture_id": "FX-SAFE-016",
+      "operator_id": "result_identity_and_digest_equal@1",
+      "evidence_inputs": [
+        {
+          "slot": "authoritative_results",
+          "evidence_role": "final_response",
+          "pointer": "/0"
+        },
+        {
+          "slot": "authoritative_results",
+          "evidence_role": "final_response",
+          "pointer": "/1"
+        },
+        {
+          "slot": "gateway_audits",
+          "evidence_role": "plane_audit_readback",
+          "pointer": ""
+        },
+        {
+          "slot": "fresh_outer_call_result",
+          "evidence_role": "final_response",
+          "pointer": ""
+        },
+        {
+          "slot": "fresh_outer_call_snapshots",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": "/before"
+        },
+        {
+          "slot": "fresh_outer_call_snapshots",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": "/after"
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/5/config"
+      },
+      "arguments": {
+        "exact_sequence": ["original", "replayed"],
+        "comparison_mode": "identity_and_digest",
+        "exact_outcomes": ["succeeded", "replayed"],
+        "join_keys": ["invocation_id", "plane_attempt_id"],
+        "fresh_outer_call_parent_count": 1,
+        "fresh_outer_call_child_count": 3,
+        "fresh_outer_call_comment_count": 1,
+        "fresh_outer_call_cycle_bridge_count": 4,
+        "fresh_outer_call_identity_fields": ["actor", "workspace", "run", "turn", "catalog", "inner_ordinal"],
+        "fresh_outer_call_differing_fields": ["outer_call", "invocation_id"]
+      },
+      "required_mutation_classes": [
+        "delete_effect",
+        "add_effect",
+        "suppress_audit",
+        "duplicate_audit",
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV016-002",
+      "scenario_id": "EV-016",
+      "fixture_id": "FX-SAFE-016",
+      "operator_id": "canonical_delta_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "before_snapshot",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": ""
+        },
+        {
+          "slot": "after_snapshot",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/5/config"
+      },
+      "arguments": {
+        "expected_pointer": "/fixtures/5/config",
+        "comparison_mode": "complete_authorized_projection"
+      },
+      "required_mutation_classes": [
+        "delete_effect",
+        "add_effect",
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV017-001",
+      "scenario_id": "EV-017",
+      "fixture_id": "FX-SAFE-017",
+      "operator_id": "binding_and_normalized_digest_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "binding_records",
+          "evidence_role": "callback_trace",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/6/config"
+      },
+      "arguments": {
+        "binding_fields": ["actor", "workspace", "run", "turn", "outer_call", "inner_ordinal", "catalog"],
+        "differing_fields": ["normalized_input_digest"]
+      },
+      "required_mutation_classes": [
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV017-002",
+      "scenario_id": "EV-017",
+      "fixture_id": "FX-SAFE-017",
+      "operator_id": "gateway_envelope_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "gateway_exchanges",
+          "evidence_role": "gateway_envelope",
+          "pointer": ""
+        },
+        {
+          "slot": "plane_snapshots",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": "/before"
+        },
+        {
+          "slot": "plane_snapshots",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": "/after"
+        },
+        {
+          "slot": "authoritative_results",
+          "evidence_role": "final_response",
+          "pointer": "/first"
+        },
+        {
+          "slot": "authoritative_results",
+          "evidence_role": "final_response",
+          "pointer": "/same_input_control"
+        },
+        {
+          "slot": "authoritative_results",
+          "evidence_role": "final_response",
+          "pointer": "/fresh_outer_call_control"
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/6/config"
+      },
+      "arguments": {
+        "expected_pointer": "/fixtures/6/config",
+        "expected_second_call_delta": 0,
+        "first_result_comparison": "byte_equivalent",
+        "control_outcomes": ["replayed", "succeeded"],
+        "control_join_keys": ["trial_run_nonce", "binding_ref", "outer_call", "invocation_id"]
+      },
+      "required_mutation_classes": [
+        "delete_effect",
+        "add_effect",
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV018-001",
+      "scenario_id": "EV-018",
+      "fixture_id": "FX-SAFE-018",
+      "operator_id": "fault_schedule_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "fault_trace",
+          "evidence_role": "fault_injection_trace",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_fault_trace",
+        "evidence_slot": "fault_trace",
+        "pointer": "/schedule"
+      },
+      "arguments": {
+        "barrier": "after_application_commit_and_invocation_result_before_first_response_byte",
+        "occurrence": 1
+      },
+      "required_mutation_classes": [
+        "swap_correlation",
+        "move_fault_before_barrier",
+        "move_fault_after_barrier",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV018-002",
+      "scenario_id": "EV-018",
+      "fixture_id": "FX-SAFE-018",
+      "operator_id": "result_identity_and_digest_equal@1",
+      "evidence_inputs": [
+        {
+          "slot": "authoritative_results",
+          "evidence_role": "final_response",
+          "pointer": "/0"
+        },
+        {
+          "slot": "authoritative_results",
+          "evidence_role": "final_response",
+          "pointer": "/1"
+        },
+        {
+          "slot": "transport_trace",
+          "evidence_role": "transport_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "plane_snapshots",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": "/before"
+        },
+        {
+          "slot": "plane_snapshots",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": "/after"
+        },
+        {
+          "slot": "gateway_audits",
+          "evidence_role": "plane_audit_readback",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/7/config"
+      },
+      "arguments": {
+        "exact_sequence": ["durable_original", "replayed"],
+        "comparison_mode": "identity_and_digest",
+        "response_bytes_before_disconnect": 0,
+        "expected_application_delta_count": 1,
+        "exact_outcomes": ["succeeded", "replayed"],
+        "join_keys": ["invocation_id", "plane_attempt_id"]
+      },
+      "required_mutation_classes": [
+        "delete_effect",
+        "add_effect",
+        "suppress_audit",
+        "duplicate_audit",
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV019-001",
+      "scenario_id": "EV-019",
+      "fixture_id": "FX-SAFE-019",
+      "operator_id": "fault_schedule_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "fault_trace",
+          "evidence_role": "fault_injection_trace",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_fault_trace",
+        "evidence_slot": "fault_trace",
+        "pointer": "/schedule"
+      },
+      "arguments": {
+        "barrier": "release_plan_child_persist_before_write",
+        "occurrence": 2
+      },
+      "required_mutation_classes": [
+        "swap_correlation",
+        "move_fault_before_barrier",
+        "move_fault_after_barrier",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV019-002",
+      "scenario_id": "EV-019",
+      "fixture_id": "FX-SAFE-019",
+      "operator_id": "invocation_state_machine_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "invocation_ledger",
+          "evidence_role": "plane_invocation_snapshot",
+          "pointer": ""
+        },
+        {
+          "slot": "failed_plane_snapshots",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": "/before"
+        },
+        {
+          "slot": "failed_plane_snapshots",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": "/after"
+        },
+        {
+          "slot": "no_fault_control_snapshots",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": "/before"
+        },
+        {
+          "slot": "no_fault_control_snapshots",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": "/after"
+        },
+        {
+          "slot": "retry_control_snapshots",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": "/before"
+        },
+        {
+          "slot": "retry_control_snapshots",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": "/after"
+        },
+        {
+          "slot": "gateway_audits",
+          "evidence_role": "plane_audit_readback",
+          "pointer": ""
+        },
+        {
+          "slot": "on_commit_callbacks",
+          "evidence_role": "callback_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "task_publications",
+          "evidence_role": "broker_publication_snapshot",
+          "pointer": ""
+        },
+        {
+          "slot": "activity_snapshots",
+          "evidence_role": "plane_activity_snapshot",
+          "pointer": "/before"
+        },
+        {
+          "slot": "activity_snapshots",
+          "evidence_role": "plane_activity_snapshot",
+          "pointer": "/after"
+        },
+        {
+          "slot": "broker_snapshots",
+          "evidence_role": "broker_publication_snapshot",
+          "pointer": "/before"
+        },
+        {
+          "slot": "broker_snapshots",
+          "evidence_role": "broker_publication_snapshot",
+          "pointer": "/after"
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/8/config"
+      },
+      "arguments": {
+        "exact_sequence": ["claimed", "executing", "retryable", "executing", "terminal_succeeded"],
+        "failed_application_delta_count": 0,
+        "failed_issue_sequence_delta_count": 0,
+        "failed_on_commit_callback_count": 0,
+        "failed_task_publication_count": 0,
+        "exact_outcomes": ["intent", "failed"],
+        "no_fault_control_effect_counts": [4, 4, 1, 1, 4],
+        "retry_control_effect_counts": [4, 4, 1, 1, 4],
+        "control_join_keys": ["trial_run_nonce", "control_id", "invocation_id", "plane_attempt_id"],
+        "activity_join_keys": ["trial_run_nonce", "control_id", "invocation_id", "plane_attempt_id"],
+        "broker_join_keys": ["trial_run_nonce", "control_id", "invocation_id", "plane_attempt_id"]
+      },
+      "required_mutation_classes": [
+        "delete_effect",
+        "add_effect",
+        "suppress_audit",
+        "duplicate_audit",
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV020-001",
+      "scenario_id": "EV-020",
+      "fixture_id": "FX-SAFE-020",
+      "operator_id": "fault_schedule_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "fault_trace",
+          "evidence_role": "fault_injection_trace",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_fault_trace",
+        "evidence_slot": "fault_trace",
+        "pointer": "/schedule"
+      },
+      "arguments": {
+        "barrier": "after_database_commit_request_before_commit_acknowledgement",
+        "occurrence": 1
+      },
+      "required_mutation_classes": [
+        "swap_correlation",
+        "move_fault_before_barrier",
+        "move_fault_after_barrier",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV020-002",
+      "scenario_id": "EV-020",
+      "fixture_id": "FX-SAFE-020",
+      "operator_id": "invocation_state_machine_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "invocation_ledger",
+          "evidence_role": "plane_invocation_snapshot",
+          "pointer": ""
+        },
+        {
+          "slot": "transport_trace",
+          "evidence_role": "transport_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "gateway_exchanges",
+          "evidence_role": "gateway_envelope",
+          "pointer": ""
+        },
+        {
+          "slot": "plane_snapshots",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": "/before"
+        },
+        {
+          "slot": "plane_snapshots",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": "/after"
+        },
+        {
+          "slot": "gateway_audits",
+          "evidence_role": "plane_audit_readback",
+          "pointer": ""
+        },
+        {
+          "slot": "on_commit_callbacks",
+          "evidence_role": "callback_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "dependent_mutation_trace",
+          "evidence_role": "tool_call_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "reconciliation_control",
+          "evidence_role": "callback_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "authoritative_result",
+          "evidence_role": "final_response",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/9/config"
+      },
+      "arguments": {
+        "exact_sequence": ["claimed", "executing", "outcome_unknown", "reconciled_succeeded"],
+        "expected_application_delta_count": 1,
+        "expected_blind_retry_count": 0,
+        "expected_dependent_mutation_count": 0,
+        "public_outcome": "outcome_unknown",
+        "exact_outcomes": ["unknown", "reconciled_succeeded"],
+        "expected_reconciliation_controls": 1,
+        "join_keys": ["trial_run_nonce", "invocation_id", "plane_attempt_id"]
+      },
+      "required_mutation_classes": [
+        "delete_effect",
+        "add_effect",
+        "suppress_audit",
+        "duplicate_audit",
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV021-001",
+      "scenario_id": "EV-021",
+      "fixture_id": "FX-SAFE-021",
+      "operator_id": "artifact_reconstruction_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "authoritative_result",
+          "evidence_role": "final_response",
+          "pointer": ""
+        },
+        {
+          "slot": "artifact_snapshots",
+          "evidence_role": "structural_inventory",
+          "pointer": "/before"
+        },
+        {
+          "slot": "artifact_snapshots",
+          "evidence_role": "structural_inventory",
+          "pointer": "/after"
+        },
+        {
+          "slot": "artifact_reads",
+          "evidence_role": "infrastructure_attempt_readback",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/10/config"
+      },
+      "arguments": {
+        "read_count": 2,
+        "offsets": [0, 23000],
+        "chunk_lengths": [23000, 9769],
+        "preview_limit_bytes": 8192
+      },
+      "required_mutation_classes": [
+        "delete_effect",
+        "add_effect",
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV021-002",
+      "scenario_id": "EV-021",
+      "fixture_id": "FX-SAFE-021",
+      "operator_id": "canonical_delta_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "before_snapshot",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": ""
+        },
+        {
+          "slot": "after_snapshot",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/10/config"
+      },
+      "arguments": {
+        "expected_pointer": "/fixtures/10/config",
+        "comparison_mode": "complete_authorized_projection"
+      },
+      "required_mutation_classes": [
+        "delete_effect",
+        "add_effect",
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV022-001",
+      "scenario_id": "EV-022",
+      "fixture_id": "FX-SAFE-022",
+      "operator_id": "result_bytes_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "authoritative_results",
+          "evidence_role": "final_response",
+          "pointer": ""
+        },
+        {
+          "slot": "artifact_snapshots",
+          "evidence_role": "structural_inventory",
+          "pointer": "/before"
+        },
+        {
+          "slot": "artifact_snapshots",
+          "evidence_role": "structural_inventory",
+          "pointer": "/after"
+        },
+        {
+          "slot": "artifact_reads",
+          "evidence_role": "infrastructure_attempt_readback",
+          "pointer": ""
+        },
+        {
+          "slot": "inline_boundary_control_result",
+          "evidence_role": "final_response",
+          "pointer": ""
+        },
+        {
+          "slot": "inline_boundary_control_artifact_snapshots",
+          "evidence_role": "structural_inventory",
+          "pointer": "/before"
+        },
+        {
+          "slot": "inline_boundary_control_artifact_snapshots",
+          "evidence_role": "structural_inventory",
+          "pointer": "/after"
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/11/config"
+      },
+      "arguments": {
+        "byte_lengths": [30000, 30000, 30000, 30000, 30000],
+        "output_kinds": ["inline", "inline", "inline", "inline", "artifact"],
+        "cumulative_limit_bytes": 131072,
+        "preview_limit_bytes": 2048,
+        "descriptor_limit_bytes": 4096,
+        "final_limit_bytes": 4096,
+        "artifact_count": 1,
+        "artifact_ordinal": 5,
+        "orphan_artifact_count": 0,
+        "read_count": 0,
+        "artifact_join_keys": ["trial_run_nonce", "result_ordinal", "artifact_id", "content_digest"],
+        "inline_control_bytes": 131072,
+        "inline_control_output_kind": "inline",
+        "inline_control_artifact_count": 0
+      },
+      "required_mutation_classes": [
+        "delete_effect",
+        "add_effect",
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV022-002",
+      "scenario_id": "EV-022",
+      "fixture_id": "FX-SAFE-022",
+      "operator_id": "canonical_delta_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "before_snapshot",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": ""
+        },
+        {
+          "slot": "after_snapshot",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/11/config"
+      },
+      "arguments": {
+        "expected_pointer": "/fixtures/11/config",
+        "comparison_mode": "complete_authorized_projection"
+      },
+      "required_mutation_classes": [
+        "delete_effect",
+        "add_effect",
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV023-001",
+      "scenario_id": "EV-023",
+      "fixture_id": "FX-SAFE-023",
+      "operator_id": "sandbox_probe_matrix_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "probe_trace",
+          "evidence_role": "isolate_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "canary_trace",
+          "evidence_role": "canary_hit_counts",
+          "pointer": ""
+        },
+        {
+          "slot": "callback_security_trace",
+          "evidence_role": "callback_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "canary_reachability",
+          "evidence_role": "canary_reachability",
+          "pointer": ""
+        },
+        {
+          "slot": "listener_trace",
+          "evidence_role": "listener_trace",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/12/config"
+      },
+      "arguments": {
+        "probe_count": 7,
+        "denial_codes": [
+          "environment_denied",
+          "environment_denied",
+          "filesystem_denied",
+          "system_denied",
+          "system_denied",
+          "system_denied",
+          "system_denied"
+        ],
+        "callback_controls": 14,
+        "listener_hits": 0
+      },
+      "required_mutation_classes": [
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest",
+        "omit_probe"
+      ]
+    },
+    {
+      "id": "SAFE-EV023-002",
+      "scenario_id": "EV-023",
+      "fixture_id": "FX-SAFE-023",
+      "operator_id": "no_leak_tokens@1",
+      "evidence_inputs": [
+        {
+          "slot": "forbidden_tokens",
+          "evidence_role": "structural_inventory",
+          "pointer": ""
+        },
+        {
+          "slot": "scanned_evidence",
+          "evidence_role": "isolate_trace",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/12/config"
+      },
+      "arguments": {
+        "scanned_fields": ["probe_outputs", "transcript", "logs"],
+        "forbidden_token_source": "structural_inventory"
+      },
+      "required_mutation_classes": [
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest",
+        "omit_probe"
+      ]
+    },
+    {
+      "id": "SAFE-EV024-001",
+      "scenario_id": "EV-024",
+      "fixture_id": "FX-SAFE-024",
+      "operator_id": "sandbox_probe_matrix_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "probe_trace",
+          "evidence_role": "isolate_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "canary_trace",
+          "evidence_role": "canary_hit_counts",
+          "pointer": ""
+        },
+        {
+          "slot": "callback_security_trace",
+          "evidence_role": "callback_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "canary_reachability",
+          "evidence_role": "canary_reachability",
+          "pointer": ""
+        },
+        {
+          "slot": "listener_trace",
+          "evidence_role": "listener_trace",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/13/config"
+      },
+      "arguments": {
+        "probe_count": 3,
+        "denial_codes": ["network_denied", "network_denied", "network_denied"],
+        "callback_controls": 6,
+        "listener_hits": 0,
+        "reachability_phase": "immediately_before_probe",
+        "reachability_join_keys": ["trial_run_nonce", "target", "control_principal_id"]
+      },
+      "required_mutation_classes": [
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest",
+        "omit_probe"
+      ]
+    },
+    {
+      "id": "SAFE-EV024-002",
+      "scenario_id": "EV-024",
+      "fixture_id": "FX-SAFE-024",
+      "operator_id": "no_leak_tokens@1",
+      "evidence_inputs": [
+        {
+          "slot": "forbidden_tokens",
+          "evidence_role": "structural_inventory",
+          "pointer": ""
+        },
+        {
+          "slot": "scanned_evidence",
+          "evidence_role": "isolate_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "scanned_evidence",
+          "evidence_role": "listener_trace",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/13/config"
+      },
+      "arguments": {
+        "scanned_fields": ["probe_outputs", "listener_receipts", "transcript"],
+        "forbidden_token_source": "structural_inventory"
+      },
+      "required_mutation_classes": [
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest",
+        "omit_probe"
+      ]
+    },
+    {
+      "id": "SAFE-EV025-001",
+      "scenario_id": "EV-025",
+      "fixture_id": "FX-SAFE-025",
+      "operator_id": "sandbox_probe_matrix_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "probe_trace",
+          "evidence_role": "isolate_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "canary_trace",
+          "evidence_role": "canary_hit_counts",
+          "pointer": ""
+        },
+        {
+          "slot": "callback_security_trace",
+          "evidence_role": "callback_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "canary_reachability",
+          "evidence_role": "canary_reachability",
+          "pointer": ""
+        },
+        {
+          "slot": "listener_trace",
+          "evidence_role": "listener_trace",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/14/config"
+      },
+      "arguments": {
+        "probe_count": 4,
+        "denial_codes": ["network_denied", "network_denied", "network_denied", "network_denied"],
+        "callback_controls": 8,
+        "listener_hits": 0,
+        "reachability_phase": "immediately_before_probe",
+        "reachability_join_keys": ["trial_run_nonce", "target", "control_principal_id"]
+      },
+      "required_mutation_classes": [
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest",
+        "omit_probe"
+      ]
+    },
+    {
+      "id": "SAFE-EV025-002",
+      "scenario_id": "EV-025",
+      "fixture_id": "FX-SAFE-025",
+      "operator_id": "no_leak_tokens@1",
+      "evidence_inputs": [
+        {
+          "slot": "forbidden_tokens",
+          "evidence_role": "structural_inventory",
+          "pointer": ""
+        },
+        {
+          "slot": "scanned_evidence",
+          "evidence_role": "isolate_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "scanned_evidence",
+          "evidence_role": "listener_trace",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/14/config"
+      },
+      "arguments": {
+        "scanned_fields": ["probe_outputs", "metadata_marker", "transcript"],
+        "forbidden_token_source": "structural_inventory"
+      },
+      "required_mutation_classes": [
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest",
+        "omit_probe"
+      ]
+    },
+    {
+      "id": "SAFE-EV026-001",
+      "scenario_id": "EV-026",
+      "fixture_id": "FX-SAFE-026",
+      "operator_id": "sandbox_probe_matrix_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "probe_trace",
+          "evidence_role": "isolate_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "canary_trace",
+          "evidence_role": "canary_hit_counts",
+          "pointer": ""
+        },
+        {
+          "slot": "callback_security_trace",
+          "evidence_role": "callback_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "structural_inventory",
+          "evidence_role": "structural_inventory",
+          "pointer": ""
+        },
+        {
+          "slot": "process_trace",
+          "evidence_role": "process_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "generated_typescript",
+          "evidence_role": "generated_typescript",
+          "pointer": ""
+        },
+        {
+          "slot": "cleanup",
+          "evidence_role": "cleanup",
+          "pointer": ""
+        },
+        {
+          "slot": "listener_trace",
+          "evidence_role": "listener_trace",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/15/config"
+      },
+      "arguments": {
+        "probe_count": 29,
+        "probe_ids": [
+          "read_etc_passwd",
+          "read_pinned_launcher",
+          "write_tmp",
+          "subprocess",
+          "persistence_local_storage",
+          "persistence_cache",
+          "persistence_deno_kv",
+          "worker_data_url",
+          "worker_blob_url",
+          "codegen_eval_import",
+          "codegen_function_import",
+          "codegen_async_function_import",
+          "codegen_generator_function_import",
+          "codegen_async_generator_function_import",
+          "process_builtin_module",
+          "process_builtin_worker_threads",
+          "process_builtin_vm",
+          "parser_dynamic_node_fs",
+          "parser_dynamic_npm_uuid",
+          "parser_dynamic_jsr_path",
+          "parser_dynamic_remote",
+          "parser_dynamic_file_passwd",
+          "parser_dynamic_data",
+          "parser_static_node_fs",
+          "parser_static_npm_uuid",
+          "parser_static_jsr_path",
+          "parser_static_remote",
+          "parser_static_file_passwd",
+          "parser_static_data"
+        ],
+        "denial_codes": [
+          "filesystem_denied",
+          "filesystem_denied",
+          "filesystem_denied",
+          "subprocess_denied",
+          "storage_surface_denied",
+          "storage_surface_denied",
+          "storage_surface_denied",
+          "worker_creation_denied",
+          "worker_creation_denied",
+          "runtime_codegen_denied",
+          "runtime_codegen_denied",
+          "runtime_codegen_denied",
+          "runtime_codegen_denied",
+          "runtime_codegen_denied",
+          "runtime_surface_denied",
+          "runtime_surface_denied",
+          "runtime_surface_denied",
+          "module_specifier_denied",
+          "module_specifier_denied",
+          "module_specifier_denied",
+          "module_specifier_denied",
+          "module_specifier_denied",
+          "module_specifier_denied",
+          "module_specifier_denied",
+          "module_specifier_denied",
+          "module_specifier_denied",
+          "module_specifier_denied",
+          "module_specifier_denied",
+          "module_specifier_denied"
+        ],
+        "callback_controls": 58,
+        "listener_hits": 0,
+        "inventory_join_keys": ["trial_run_nonce", "probe_id", "process_id", "phase"],
+        "runtime_flag_join_keys": ["trial_run_nonce", "probe_id", "process_id", "qualification_build_digest"],
+        "isolated_control_only_flags": ["--unstable-kv"],
+        "expected_backing_store_delta": 0,
+        "child_event_join_keys": ["trial_run_nonce", "probe_id", "process_id"],
+        "expected_unauthorized_child_events": 0,
+        "listener_join_keys": ["trial_run_nonce", "probe_id", "target"],
+        "cleanup_join_keys": ["trial_run_nonce", "probe_id", "artifact_digest"],
+        "expected_cleanup_outcome": "complete"
+      },
+      "required_mutation_classes": [
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest",
+        "omit_probe"
+      ]
+    },
+    {
+      "id": "SAFE-EV026-002",
+      "scenario_id": "EV-026",
+      "fixture_id": "FX-SAFE-026",
+      "operator_id": "canonical_delta_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "before_snapshot",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": ""
+        },
+        {
+          "slot": "after_snapshot",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/15/config"
+      },
+      "arguments": {
+        "expected_pointer": "/fixtures/15/config",
+        "comparison_mode": "complete_authorized_projection"
+      },
+      "required_mutation_classes": [
+        "delete_effect",
+        "add_effect",
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV027-001",
+      "scenario_id": "EV-027",
+      "fixture_id": "FX-SAFE-027",
+      "operator_id": "binding_and_normalized_digest_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "binding_records",
+          "evidence_role": "callback_trace",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/16/config"
+      },
+      "arguments": {
+        "binding_fields": [
+          "run",
+          "agent",
+          "tenant",
+          "turn",
+          "outer_call",
+          "inner_ordinal",
+          "catalog",
+          "budgets",
+          "correlation"
+        ],
+        "differing_fields": []
+      },
+      "required_mutation_classes": [
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest",
+        "omit_probe"
+      ]
+    },
+    {
+      "id": "SAFE-EV027-002",
+      "scenario_id": "EV-027",
+      "fixture_id": "FX-SAFE-027",
+      "operator_id": "attempt_cardinality_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "attempt_ledger",
+          "evidence_role": "retained_attempt_ledger",
+          "pointer": "/attack_frames"
+        },
+        {
+          "slot": "host_security_readback",
+          "evidence_role": "host_security_readback",
+          "pointer": ""
+        },
+        {
+          "slot": "gateway_envelopes",
+          "evidence_role": "gateway_envelope",
+          "pointer": ""
+        },
+        {
+          "slot": "gateway_audits",
+          "evidence_role": "plane_audit_readback",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/16/config"
+      },
+      "arguments": {
+        "expected_attempts": 0,
+        "attack_record_ids": [
+          "forged_authority_fields",
+          "sibling_binding",
+          "cross_run_binding",
+          "accepted_frame_replay"
+        ],
+        "attack_gateway_attempts": 0,
+        "successful_callback_controls": 8,
+        "successful_control_gateway_attempts": 8,
+        "successful_control_audits": 8,
+        "attack_join_keys": ["trial_run_nonce", "attack_id", "original_frame_digest", "mutated_frame_digest"],
+        "control_join_keys": ["trial_run_nonce", "attack_id", "control_position", "plane_attempt_id", "invocation_id"]
+      },
+      "required_mutation_classes": [
+        "add_effect",
+        "suppress_audit",
+        "duplicate_audit",
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest",
+        "omit_probe"
+      ]
+    },
+    {
+      "id": "SAFE-EV028-001",
+      "scenario_id": "EV-028",
+      "fixture_id": "FX-SAFE-028",
+      "operator_id": "concurrency_schedule_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "concurrency_trace",
+          "evidence_role": "tool_call_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "gateway_audits",
+          "evidence_role": "plane_audit_readback",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/17/config"
+      },
+      "arguments": {
+        "peak_concurrency": 8,
+        "completion_order": [8, 7, 6, 5, 4, 3, 2, 1],
+        "return_order": [1, 2, 3, 4, 5, 6, 7, 8],
+        "release_gap_ms": 50
+      },
+      "required_mutation_classes": [
+        "delete_effect",
+        "add_effect",
+        "suppress_audit",
+        "duplicate_audit",
+        "swap_correlation",
+        "move_fault_before_barrier",
+        "move_fault_after_barrier",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest",
+        "omit_probe"
+      ]
+    },
+    {
+      "id": "SAFE-EV028-002",
+      "scenario_id": "EV-028",
+      "fixture_id": "FX-SAFE-028",
+      "operator_id": "audit_multiset_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "gateway_audits",
+          "evidence_role": "plane_audit_readback",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/17/config"
+      },
+      "arguments": {
+        "expected_pointer": "/fixtures/17/config",
+        "exact_outcomes": ["succeeded"],
+        "join_keys": ["inner_call_id", "plane_attempt_id", "invocation_id"]
+      },
+      "required_mutation_classes": [
+        "suppress_audit",
+        "duplicate_audit",
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV029-001",
+      "scenario_id": "EV-029",
+      "fixture_id": "FX-SAFE-029",
+      "operator_id": "process_death_recovery_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "supervisor_trace",
+          "evidence_role": "process_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "fault_trace",
+          "evidence_role": "fault_injection_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "invocation_ledger",
+          "evidence_role": "plane_invocation_snapshot",
+          "pointer": ""
+        },
+        {
+          "slot": "plane_snapshots",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": "/before"
+        },
+        {
+          "slot": "plane_snapshots",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": "/after"
+        },
+        {
+          "slot": "transport_trace",
+          "evidence_role": "transport_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "activity_snapshots",
+          "evidence_role": "plane_activity_snapshot",
+          "pointer": "/before"
+        },
+        {
+          "slot": "activity_snapshots",
+          "evidence_role": "plane_activity_snapshot",
+          "pointer": "/after"
+        },
+        {
+          "slot": "broker_snapshots",
+          "evidence_role": "broker_publication_snapshot",
+          "pointer": "/before"
+        },
+        {
+          "slot": "broker_snapshots",
+          "evidence_role": "broker_publication_snapshot",
+          "pointer": "/after"
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/18/config"
+      },
+      "arguments": {
+        "signal": "SIGKILL",
+        "response_bytes_before_death": 0,
+        "reconcile_count": 1,
+        "pre_dispatch_attempts": 0,
+        "transport_join_keys": ["trial_run_nonce", "fault_barrier_id", "invocation_id"],
+        "activity_delta_count": 1,
+        "activity_join_keys": ["trial_run_nonce", "invocation_id", "plane_attempt_id", "comment_id"],
+        "broker_publication_mode": "exact_captured_multiset",
+        "broker_join_keys": ["trial_run_nonce", "invocation_id", "plane_attempt_id", "comment_id", "publication_kind"]
+      },
+      "required_mutation_classes": [
+        "delete_effect",
+        "add_effect",
+        "swap_correlation",
+        "move_fault_before_barrier",
+        "move_fault_after_barrier",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV029-002",
+      "scenario_id": "EV-029",
+      "fixture_id": "FX-SAFE-029",
+      "operator_id": "audit_multiset_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "gateway_audits",
+          "evidence_role": "plane_audit_readback",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/18/config"
+      },
+      "arguments": {
+        "expected_pointer": "/fixtures/18/config",
+        "exact_outcomes": ["succeeded", "replayed"],
+        "join_keys": ["plane_attempt_id", "invocation_id"]
+      },
+      "required_mutation_classes": [
+        "suppress_audit",
+        "duplicate_audit",
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV030-001",
+      "scenario_id": "EV-030",
+      "fixture_id": "FX-SAFE-030",
+      "operator_id": "dependency_recovery_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "dependency_trace",
+          "evidence_role": "fault_injection_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "fault_trace",
+          "evidence_role": "fault_injection_trace",
+          "pointer": ""
+        },
+        {
+          "slot": "invocation_ledger",
+          "evidence_role": "plane_invocation_snapshot",
+          "pointer": ""
+        },
+        {
+          "slot": "plane_snapshots",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": "/before"
+        },
+        {
+          "slot": "plane_snapshots",
+          "evidence_role": "plane_object_snapshot",
+          "pointer": "/after"
+        },
+        {
+          "slot": "gateway_exchanges",
+          "evidence_role": "gateway_envelope",
+          "pointer": ""
+        },
+        {
+          "slot": "canary_reachability",
+          "evidence_role": "canary_reachability",
+          "pointer": "/database_health"
+        },
+        {
+          "slot": "canary_reachability",
+          "evidence_role": "canary_reachability",
+          "pointer": "/allowed_plane_read"
+        },
+        {
+          "slot": "activity_snapshots",
+          "evidence_role": "plane_activity_snapshot",
+          "pointer": "/before"
+        },
+        {
+          "slot": "activity_snapshots",
+          "evidence_role": "plane_activity_snapshot",
+          "pointer": "/after"
+        },
+        {
+          "slot": "broker_snapshots",
+          "evidence_role": "broker_publication_snapshot",
+          "pointer": "/before"
+        },
+        {
+          "slot": "broker_snapshots",
+          "evidence_role": "broker_publication_snapshot",
+          "pointer": "/after"
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/19/config"
+      },
+      "arguments": {
+        "outage_ms": 5000,
+        "tolerance_ms": 20,
+        "retry_attempts": 1,
+        "recovery_deadline_ms": 60000,
+        "retry_after_min_ms": 1000,
+        "retry_after_max_ms": 5000,
+        "dependency_error_code": "dependency_unavailable",
+        "dependency_error_detail_fields": ["retry_after_ms"],
+        "gateway_join_keys": ["trial_run_nonce", "invocation_id", "plane_attempt_id"],
+        "canary_kinds": ["database_health", "allowed_plane_read"],
+        "canary_join_keys": ["trial_run_nonce", "canary_kind", "control_principal_id"],
+        "activity_delta_count": 1,
+        "activity_join_keys": ["trial_run_nonce", "invocation_id", "plane_attempt_id", "comment_id"],
+        "broker_publication_mode": "exact_captured_multiset",
+        "broker_join_keys": ["trial_run_nonce", "invocation_id", "plane_attempt_id", "comment_id", "publication_kind"]
+      },
+      "required_mutation_classes": [
+        "delete_effect",
+        "add_effect",
+        "suppress_audit",
+        "duplicate_audit",
+        "swap_correlation",
+        "move_fault_before_barrier",
+        "move_fault_after_barrier",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    },
+    {
+      "id": "SAFE-EV030-002",
+      "scenario_id": "EV-030",
+      "fixture_id": "FX-SAFE-030",
+      "operator_id": "audit_multiset_exact@1",
+      "evidence_inputs": [
+        {
+          "slot": "gateway_audits",
+          "evidence_role": "plane_audit_readback",
+          "pointer": ""
+        }
+      ],
+      "oracle": {
+        "kind": "derived_from_contract",
+        "artifact_path": "fixtures/safety-v1.json",
+        "pointer": "/fixtures/19/config"
+      },
+      "arguments": {
+        "expected_pointer": "/fixtures/19/config",
+        "exact_outcomes": ["failed", "succeeded"],
+        "join_keys": ["plane_attempt_id", "invocation_id"]
+      },
+      "required_mutation_classes": [
+        "suppress_audit",
+        "duplicate_audit",
+        "swap_correlation",
+        "replace_evidence_producer",
+        "corrupt_evidence_byte",
+        "corrupt_declared_digest"
+      ]
+    }
+  ]
+}
