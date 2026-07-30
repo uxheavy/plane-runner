@@ -52,9 +52,9 @@ Observed on 2026-07-29:
 - Pin the mandatory live and evaluation harness to model `gpt-5.6-luna`.
 - Use the locally authenticated ChatGPT subscription without copying its credentials into Plane, generated code, logs, fixtures, or result artifacts.
 - Treat any silent provider or model fallback as a verifier failure.
-- Freeze and obtain user approval for `RELEASE-MANIFEST.md` before implementation begins.
-- Freeze and obtain user plus independent-review approval for `VERIFICATION-MANIFEST.md` before implementation begins.
-- Require every approved release-manifest row to pass or carry an explicitly approved exception.
+- Obtain explicit user approval for `APPROVAL-MANIFEST.md` before implementation begins.
+- Treat `RELEASE-MANIFEST.md` and `VERIFICATION-MANIFEST.md` as non-normative design references rather than implementation gates.
+- Require every production requirement in the approved `APPROVAL-MANIFEST.md` to pass or carry an explicitly approved exception.
 - Pin compatible Plane, Hermes, official MCP, and Plane Python SDK commits plus generated-contract digests in a cross-repository integration lock.
 
 ## Non-goals
@@ -178,7 +178,7 @@ The verifier must assert the resolved Hermes provider is `openai-codex` and the 
 
 The frozen system prompt, acceptance prompt, tool schemas, sampling parameters, context limits, seeded-data manifest, Plane, Hermes, official MCP, and Plane Python SDK commits, catalog and adapter digests, Plane configuration, and TypeScript runtime digest must accompany live evidence. A changed provider model fingerprint invalidates prior live evidence and triggers the full live suite again.
 
-Final verification is executed independently from clean checkouts. It records full immutable logs, UTC timestamps, exit codes, dependency and container digests, skip and xpass counts, and reviewer identity. The verifier must first demonstrate failure against approved negative controls.
+Final verification is executed independently from clean checkouts. It records full immutable logs, UTC timestamps, exit codes, dependency and container digests, skip and xpass counts, and reviewer identity.
 
 ## Supporting checks
 
@@ -196,7 +196,6 @@ Final verification is executed independently from clean checkouts. It records fu
 - At least 50 authenticated live Hermes runs using `gpt-5.6-luna`.
 - Two consecutive clean-state passes of the complete deterministic suite.
 - Computer Use screenshots and readbacks for user-visible Plane and Hermes state.
-- Qualified negative controls proving the verifier detects documentation, authorization, model-fallback, and audit failures.
 
 ## Iteration loop
 
@@ -277,8 +276,8 @@ Mark the durable goal blocked only when the same external condition prevents mea
 - Computer Use screenshots of the final Plane and Hermes acceptance state.
 - Correlated audit evidence with secrets redacted.
 - Known residual risks and explicit acceptance.
-- Approved release and verification manifest versions.
+- Approved `APPROVAL-MANIFEST.md` version.
 - Independent verifier identity and immutable full-log references.
 - Reviewed commits mapped through build artifacts to deployment identifiers and enabled configuration.
 
-The goal may be marked complete only after this evidence exists and every approved release-manifest row passes or has an explicitly approved exception.
+The goal may be marked complete only after this evidence exists and every production requirement in the approved `APPROVAL-MANIFEST.md` passes or has an explicitly approved exception.

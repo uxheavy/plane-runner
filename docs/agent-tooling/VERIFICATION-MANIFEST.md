@@ -2,7 +2,9 @@
 
 ## Status and change control
 
-Proposed. Freeze and obtain recorded user approval before implementation begins.
+Legacy verification reference. It does not block implementation and is not the controlling approval surface.
+
+`APPROVAL-MANIFEST.md` replaces this document's implementation-start gate. Its product-level acceptance expectations remain useful input, but verifier-of-verifier qualification, recursive aggregation checks, and preimplementation evidence machinery are retired from the active delivery path.
 
 After freeze, changes require both recorded user approval and an independent review. The implementation lane may implement checks but cannot solely qualify the verifier or execute the final independent proof.
 

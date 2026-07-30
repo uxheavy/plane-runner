@@ -14,8 +14,9 @@ Ship one production-capable path in which a Plane-native Hermes agent can read a
 
 - Plane remains the system of record and sole authorization authority.
 - A Plane Operation Gateway exposes curated, versioned semantic operations through Plane application services; agents never receive database access.
-- Hermes exposes eight eager tools: `plane_search_work_items`, `plane_get_work_item`, `plane_create_work_item`, `plane_update_work_item`, `plane_add_comment`, `plane_docs`, `plane_search`, and `plane_execute`.
-- `plane_docs`, `plane_search`, and `plane_execute` provide Cloudflare-style progressive discovery and TypeScript composition without requiring Cloudflare.
+- Hermes exposes eight eager native tools: `search_work_items`, `get_work_item`, `create_work_item`, `update_work_item`, `add_comment`, `docs`, `search`, and `execute`.
+- `docs`, `search`, and `execute` provide Cloudflare-style progressive discovery and TypeScript composition without requiring Cloudflare.
+- The agent-facing names omit the redundant `plane_` prefix because Plane is the agent's native workspace. Internal contract IDs, audit events, and adapter metadata retain the `plane.*` namespace.
 - Model-written TypeScript runs in a restricted child isolate inside the disposable Hermes run container.
 - Plane credentials remain in host callbacks. Generated TypeScript receives neither credentials nor ambient authority.
 - Plane derives the agent identity from its credential and applies live authorization to every operation.

@@ -2,7 +2,9 @@
 
 ## Status
 
-Proposed. This manifest blocks implementation until its required open rows are resolved and the user records approval of the exact version.
+Legacy design reference. It does not block implementation and is not the controlling approval surface.
+
+`APPROVAL-MANIFEST.md` replaces this document's implementation-start gate. Useful operation, compatibility, limit, and rollout detail remains available here as non-normative input and may be promoted into code, tests, or a later production checklist when needed.
 
 After approval, any scope, target, exclusion, version, or exception change requires a new manifest revision and recorded user approval. Goal completion requires every row in the approved manifest to pass or have an explicitly approved exception.
 
