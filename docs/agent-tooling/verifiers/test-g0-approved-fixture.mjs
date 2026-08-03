@@ -29,9 +29,18 @@ try {
   const readiness = JSON.parse(readFileSync(readinessPath, "utf8"));
   const lock = JSON.parse(readFileSync(lockPath, "utf8"));
   const sealedHead = run(temporaryRoot, ["git", "rev-parse", "HEAD"]);
+  if (run(temporaryRoot, ["git", "rev-parse", `${sealedHead}^`]) !== lock.seal.contentCommit)
+    throw new Error("approved fixture base does not model content commit -> evidence seal -> approval topology");
+  const pendingResult = spawnSync("node", ["docs/agent-tooling/verifiers/verify-g0-preflight.mjs", "--mode", "g0"], {
+    cwd: temporaryRoot,
+    encoding: "utf8",
+  });
+  const pendingOutput = `${pendingResult.stdout}${pendingResult.stderr}`;
+  if (pendingResult.status === 0 || !pendingOutput.includes("human approval"))
+    throw new Error(`real pending G0 did not fail only for pending approval: ${pendingOutput}`);
   readiness.status = "approved";
   readiness.approval.status = "approved";
-  readiness.clauses.find((clause) => clause.id === "G0-HUMAN-APPROVAL").status = "ready";
+  for (const clause of readiness.clauses) clause.status = "ready";
   readiness.approval.approvedBy = {
     identity: "temporary-approved-fixture",
     reference: "docs/agent-tooling/verifiers/test-g0-approved-fixture.mjs",

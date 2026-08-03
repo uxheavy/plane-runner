@@ -10,8 +10,10 @@ const repositoryRoot = resolve(verifierRoot, "../..");
 const mapPath = resolve(verifierRoot, "ownership-map.json");
 const schemaPath = resolve(verifierRoot, "ownership-map.schema.json");
 const planPath = resolve(verifierRoot, "NON-UI-IMPLEMENTATION-PLAN.json");
+const lockPath = resolve(verifierRoot, "integration-lock.g0.json");
 const map = JSON.parse(readFileSync(mapPath, "utf8"));
 const plan = JSON.parse(readFileSync(planPath, "utf8"));
+const lock = JSON.parse(readFileSync(lockPath, "utf8"));
 const failures = [];
 
 function fail(message) {
@@ -24,6 +26,10 @@ function basePath(path) {
 
 function overlaps(left, right) {
   return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
+}
+
+function covers(pattern, path) {
+  return pattern.endsWith("/**") ? path.startsWith(`${pattern.slice(0, -3).replace(/\/$/, "")}/`) : pattern === path;
 }
 
 const ajv = new Ajv2020({ allErrors: true, strict: true });
@@ -63,6 +69,15 @@ for (const surface of map.surfaces) {
     if (!owner.writePaths.includes(path))
       fail(`${surface.surfaceId} path is not declared by ${surface.ownerId}: ${path}`);
   }
+}
+for (const path of lock.seal.contentPaths) {
+  const writers = map.owners.filter(
+    (owner) => owner.repository === "plane" && owner.writePaths.some((writePath) => covers(writePath, path))
+  );
+  if (writers.length !== 1)
+    fail(
+      `sealed normative path ${path} must have exactly one ownership writer; found ${writers.map((owner) => owner.ownerId).join(", ")}`
+    );
 }
 for (const required of map.requiredSurfaceIds)
   if (!surfacesById.has(required)) fail(`missing required surface ${required}`);

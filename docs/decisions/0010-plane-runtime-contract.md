@@ -142,7 +142,7 @@ V1 runs one active invocation per isolated process or container until Hermes pro
 
 The execution lease and container belong to the runtime invocation, not the durable run. They may be released while waiting and recreated from Plane-owned snapshots, events, permitted checkpoints, and remaining budget. No container lifetime is part of the Plane run contract.
 
-Plane and the Hermes fork pin generated schemas and digests for `RunSnapshot`, `InvocationEnvelope`, `RuntimeEvent`, and `RuntimeExit` in the cross-repository integration lock. Contract fixtures cover snapshot immutability, accumulated budgets, human-input references, safe checkpoints, forged binding, duplicate and out-of-order events, receipt verification, illegal transitions, bounded payloads and artifacts, lease/container death, waiting for input, explicit publication, completion, and incompatible versions before `AIAgent` adaptation begins.
+G0 accepts the logical type names, semantics, event variants, trust/publication/dispatch constraints, and the compatibility rules for `RunSnapshot`, `InvocationEnvelope`, `RuntimeEvent`, and `RuntimeExit`. At G1, the exact JSON Schema bytes and their digests are generated and frozen before the implementation lanes that consume those generated schemas begin. Contract fixtures cover snapshot immutability, accumulated budgets, human-input references, safe checkpoints, forged binding, duplicate and out-of-order events, receipt verification, illegal transitions, bounded payloads and artifacts, lease/container death, waiting for input, explicit publication, completion, and incompatible versions.
 
 ## Alternatives considered
 
@@ -183,4 +183,4 @@ Plane and the Hermes fork pin generated schemas and digests for `RunSnapshot`, `
 - Plane owns profile compilation, role governance, run state, publication, conversation, artifacts, evaluator review, and recovery policy.
 - Hermes owns the hidden inner execution mechanisms behind its adapter.
 - A deterministic adapter can test Plane lifecycle without a model or Hermes process.
-- The snapshot/envelope schemas, event taxonomy, publication mapping, cumulative budgets, payload limits, and restart rules must be accepted before implementation begins.
+- G0 accepts the snapshot/envelope logical semantics, event taxonomy, publication mapping, cumulative budgets, payload limits, restart rules, and trust/publication/dispatch constraints. G1 generates and freezes the exact JSON Schema bytes before the implementation lanes that consume those generated schemas begin.

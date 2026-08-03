@@ -35,8 +35,10 @@
         "docs/agent-tooling/MCP-MAPPING-CONTRACT.md",
         "docs/agent-tooling/SAFETY-EVALUATION-DESIGN.md",
         "docs/agent-tooling/ADR-SYNTHESIS.md",
+        "docs/agent-tooling/RESULT.md",
         "docs/agent-tooling/product-requirements.md",
         "docs/agent-tooling/inventories/**",
+        "docs/decisions/**",
         "docs/agent-tooling/WORKLOG.md"
       ],
       "readPaths": ["docs/agent-tooling/**", "docs/decisions/**"]
@@ -323,8 +325,10 @@
         "docs/agent-tooling/MCP-MAPPING-CONTRACT.md",
         "docs/agent-tooling/SAFETY-EVALUATION-DESIGN.md",
         "docs/agent-tooling/ADR-SYNTHESIS.md",
+        "docs/agent-tooling/RESULT.md",
         "docs/agent-tooling/product-requirements.md",
         "docs/agent-tooling/inventories/**",
+        "docs/decisions/**",
         "docs/agent-tooling/WORKLOG.md",
         "apps/api/plane/urls.py",
         "apps/api/plane/agent/apps.py",

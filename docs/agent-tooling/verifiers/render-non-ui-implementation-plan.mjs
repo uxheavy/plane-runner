@@ -82,6 +82,23 @@ function validate() {
     if (finishIndex <= startIndex) fail(`${lane.id} must finish after it starts`);
   }
 
+  const relationships = new Map();
+  for (const [index, relationship] of (plan.phaseLaneRelationships ?? []).entries()) {
+    requireText(relationship.phaseId, `phaseLaneRelationships[${index}].phaseId`);
+    if (!/^P(?:[0-9]|1[01])$/.test(relationship.phaseId)) fail(`${relationship.phaseId} is not a P0-P11 phase`);
+    if (relationships.has(relationship.phaseId)) fail(`duplicate phase relationship ${relationship.phaseId}`);
+    if (!Array.isArray(relationship.laneIds) || relationship.laneIds.length === 0)
+      fail(`${relationship.phaseId} must have at least one lane`);
+    for (const laneId of relationship.laneIds)
+      if (!lanes.has(laneId)) fail(`${relationship.phaseId} references unknown lane ${laneId}`);
+    requireText(relationship.gate, `phaseLaneRelationships[${index}].gate`);
+    relationships.set(relationship.phaseId, relationship);
+  }
+  for (let index = 0; index <= 11; index += 1) {
+    const phaseId = `P${index}`;
+    if (!relationships.has(phaseId)) fail(`${phaseId} is missing an explicit phase-to-lane relationship`);
+  }
+
   const requiredOwners = [
     "Product/technical lead",
     "Plane backend/domain owner",

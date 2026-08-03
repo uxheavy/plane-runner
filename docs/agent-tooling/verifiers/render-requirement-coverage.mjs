@@ -12,6 +12,8 @@ const outputPath = resolve(verifierRoot, "REQUIREMENT-COVERAGE.md");
 const goal = readFileSync(goalPath, "utf8");
 const plan = JSON.parse(readFileSync(planPath, "utf8"));
 const ownership = JSON.parse(readFileSync(ownershipPath, "utf8"));
+const laneById = new Map(plan.lanes.map((lane) => [lane.id, lane]));
+const phaseLaneRelationships = plan.phaseLaneRelationships;
 
 function section(name) {
   const match = goal.match(
@@ -67,14 +69,30 @@ const invariantRows = bulletRows(section("Normative invariants"));
 const completionRows = numberedRows(section("Completion proof"));
 const gates = gateRows();
 const phases = phaseRows();
-const laneByPhase = new Map(plan.lanes.map((lane) => [`P${lane.id.slice(1)}`, lane]));
+if (!Array.isArray(phaseLaneRelationships) || phaseLaneRelationships.length !== phases.length)
+  throw new Error("NON-UI-IMPLEMENTATION-PLAN.json must declare one phase-to-lane relationship for every P0-P11 phase");
+const relationshipByPhase = new Map();
+for (const relationship of phaseLaneRelationships) {
+  if (!/^P(?:[0-9]|1[01])$/.test(relationship.phaseId) || relationshipByPhase.has(relationship.phaseId))
+    throw new Error(`invalid or duplicate phase relationship ${relationship.phaseId}`);
+  if (!Array.isArray(relationship.laneIds) || relationship.laneIds.length === 0)
+    throw new Error(`${relationship.phaseId} must name at least one plan lane`);
+  for (const laneId of relationship.laneIds)
+    if (!laneById.has(laneId)) throw new Error(`${relationship.phaseId} references unknown plan lane ${laneId}`);
+  relationshipByPhase.set(relationship.phaseId, relationship);
+}
+for (const phase of phases)
+  if (!relationshipByPhase.has(phase.id))
+    throw new Error(`${phase.id} is missing an explicit phase-to-lane relationship`);
 const surfacesByLane = new Map();
 for (const surface of ownership.surfaces) {
   for (const laneId of surface.planLaneIds) {
-    const phaseId = `P${laneId.slice(1)}`;
-    const rows = surfacesByLane.get(phaseId) ?? [];
-    rows.push(surface.surfaceId);
-    surfacesByLane.set(phaseId, rows);
+    for (const relationship of phaseLaneRelationships) {
+      if (!relationship.laneIds.includes(laneId)) continue;
+      const rows = surfacesByLane.get(relationship.phaseId) ?? [];
+      rows.push(surface.surfaceId);
+      surfacesByLane.set(relationship.phaseId, rows);
+    }
   }
 }
 
@@ -131,11 +149,29 @@ function render() {
     "## P0–P11 phase and writable-surface join",
     "",
     markdownTable(
-      ["Phase", "Plan lane", "Outcome", "Lane owner", "Gate/integrator", "Owned writable surfaces"],
+      [
+        "Phase",
+        "Plan lane(s)",
+        "Outcome",
+        "Lane owner(s)",
+        "Gate/integrator",
+        "Lane evidence",
+        "Owned writable surfaces",
+      ],
       phases.map((phase) => {
-        const lane = laneByPhase.get(phase.id);
-        const surfaces = surfacesByLane.get(phase.id)?.toSorted().join(", ") ?? "none";
-        return [phase.id, lane?.id ?? "missing", phase.outcome, lane?.owner ?? "missing", phase.integrator, surfaces];
+        const relationship = relationshipByPhase.get(phase.id);
+        const lanes = relationship.laneIds.map((laneId) => laneById.get(laneId));
+        const surfaces = [...new Set(surfacesByLane.get(phase.id) ?? [])].toSorted().join(", ") || "none";
+        const evidence = lanes.map((lane) => `${lane.id}: ${lane.evidence.join("; ")}`).join("; ");
+        return [
+          phase.id,
+          lanes.map((lane) => lane.id).join(", "),
+          phase.outcome,
+          lanes.map((lane) => `${lane.id} ${lane.owner}`).join("; "),
+          phase.integrator,
+          evidence,
+          surfaces,
+        ];
       })
     ),
     "",

@@ -24,6 +24,20 @@
     "Optimize each phase for the final architecture; do not add temporary compatibility layers merely to keep every intermediate state smooth.",
     "Integrate at explicit gates. No runtime, application, or verification implementation starts before explicit APPROVAL-MANIFEST.md approval and G0; every gate must be reproducible and green."
   ],
+  "phaseLaneRelationships": [
+    { "phaseId": "P0", "laneIds": ["L0"], "gate": "G0" },
+    { "phaseId": "P1", "laneIds": ["L1"], "gate": "G1" },
+    { "phaseId": "P2", "laneIds": ["L2"], "gate": "G1" },
+    { "phaseId": "P3", "laneIds": ["L3"], "gate": "G1/G3" },
+    { "phaseId": "P4", "laneIds": ["L4"], "gate": "G2" },
+    { "phaseId": "P5", "laneIds": ["L5"], "gate": "G2" },
+    { "phaseId": "P6", "laneIds": ["L6"], "gate": "G3" },
+    { "phaseId": "P7", "laneIds": ["L7"], "gate": "G3" },
+    { "phaseId": "P8", "laneIds": ["L8"], "gate": "G3" },
+    { "phaseId": "P9", "laneIds": ["L9", "L10"], "gate": "G4" },
+    { "phaseId": "P10", "laneIds": ["L11"], "gate": "G4" },
+    { "phaseId": "P11", "laneIds": ["L11"], "gate": "G5" }
+  ],
   "gates": [
     {
       "id": "G0",

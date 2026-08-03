@@ -37,6 +37,7 @@ const paths = {
   modelSurface: "docs/agent-tooling/model-facing-surface.json",
   plan: "docs/agent-tooling/NON-UI-IMPLEMENTATION-PLAN.json",
   overview: "docs/agent-tooling/NON-UI-IMPLEMENTATION-OVERVIEW.md",
+  result: "docs/agent-tooling/RESULT.md",
   fixture: "docs/agent-tooling/fixtures/planning-v1.json",
   fixtureSchema: "docs/agent-tooling/fixtures/planning-v1.schema.json",
   predicates: "docs/agent-tooling/fixtures/planning-v1.predicates.json",
@@ -59,6 +60,7 @@ const canonicalMarkdown = [
   "RELEASE-MANIFEST.md",
   "VERIFICATION-MANIFEST.md",
   "REQUIREMENT-COVERAGE.md",
+  "RESULT.md",
   "EVALUATION-FIXTURE-CONTRACT.md",
   "EVALUATION-SCENARIOS.md",
   "MCP-COMPATIBILITY.md",
@@ -268,6 +270,39 @@ function checkAuthorityAndContractPolicy() {
   );
 }
 
+function checkAcceptedAdrSchemaAuthority() {
+  for (const path of canonicalMarkdown.filter((candidate) => candidate.startsWith("../decisions/"))) {
+    const source = read(`docs/agent-tooling/${path}`)
+      .replaceAll(/<!--.*?-->/gs, " ")
+      .replaceAll(/\s+/g, " ");
+    const mentionsSchemas =
+      /\b(?:generated|exact|JSON|snapshot|envelope|runtime event)[^.!?]{0,160}\bschemas?\b|\bschemas?\b[^.!?]{0,160}\b(?:generated|exact|JSON|snapshot|envelope|runtime event)\b/i.test(
+        source
+      );
+    const mentionsImplementationPrerequisite =
+      /\b(?:before|prior to|precede|preceding)\b[^.!?]{0,160}\b(?:implementation|implementing|AIAgent adaptation|runtime lane|application lane|verification lane)\b/i.test(
+        source
+      );
+    if (mentionsSchemas && mentionsImplementationPrerequisite) {
+      assert(
+        /\bG1\b[^.!?]{0,180}\b(?:generate|freeze|schema|consumer|lane)|\b(?:consumer|lane)[^.!?]{0,180}\bG1\b/i.test(
+          source
+        ),
+        `${path} retains a generated-schema prerequisite before implementation without the G1 consumer-lane boundary`
+      );
+    }
+  }
+  const runtimeAdr = read("../decisions/0010-plane-runtime-contract.md");
+  assert(
+    /G0[\s\S]{0,500}logical type names[\s\S]{0,500}G1[\s\S]{0,500}exact JSON Schema bytes/i.test(runtimeAdr),
+    "ADR-0010 does not state the G0 logical-contract and G1 generated-schema authority boundary"
+  );
+  assert(
+    /implementation lanes that consume those generated schemas/i.test(runtimeAdr),
+    "ADR-0010 does not bind generated schema freezing to the lanes that consume it"
+  );
+}
+
 function checkManifestAndDigests(lock, readiness) {
   const manifest = read(paths.manifest);
   const statusLine = manifest.split("\n").find((line) => line.startsWith("**")) ?? "";
@@ -332,18 +367,26 @@ function checkSeal(lock, readiness) {
     "sealed content tree is stale"
   );
   const headParent = git(repositoryRoot, ["rev-parse", "HEAD^"]).stdout;
-  if (readiness.status === "pending-human-approval")
-    assert(
-      headParent === contentCommit,
-      "pending package must be exactly content commit followed by one evidence seal commit"
-    );
-  const sealChanges = changedPaths(head);
-  assert(sealChanges.length > 0, "seal commit has no evidence changes");
-  for (const [status, path] of sealChanges)
-    assert(
-      status === "M" && lock.seal.allowedSealPaths.includes(path),
-      `seal commit changed an unapproved path: ${status} ${path}`
-    );
+  const sealCommit =
+    readiness.status === "pending-human-approval" ? head : readiness.approval.evidenceBinding.sealedHead;
+  assert(sealCommit && /^[0-9a-f]{40}$/.test(sealCommit), "seal commit is not recorded as a full commit SHA");
+  const sealParent = git(repositoryRoot, ["rev-parse", `${sealCommit}^`]).stdout;
+  assert(sealParent === contentCommit, "seal commit first parent must equal recorded contentCommit");
+  const allowedSealPaths = [...lock.seal.allowedSealPaths].toSorted();
+  assert(
+    JSON.stringify([...lock.seal.sealEvidencePaths].toSorted()) === JSON.stringify(allowedSealPaths),
+    "seal evidence paths must equal the allowed seal paths"
+  );
+  const sealChanges = changedPaths(sealCommit).toSorted((left, right) =>
+    left.join("\0").localeCompare(right.join("\0"))
+  );
+  const expectedSealChanges = allowedSealPaths
+    .map((path) => ["M", path])
+    .toSorted((left, right) => left.join("\0").localeCompare(right.join("\0")));
+  assert(
+    JSON.stringify(sealChanges) === JSON.stringify(expectedSealChanges),
+    `seal commit changed paths are not exactly the four allowed seal paths: ${JSON.stringify(sealChanges)}`
+  );
   const allowed = new Set(lock.seal.allowedSealPaths);
   for (const path of lock.seal.contentPaths) {
     assert(!allowed.has(path), `content path is also an allowed seal path: ${path}`);
@@ -353,6 +396,7 @@ function checkSeal(lock, readiness) {
       `content commit bytes differ for ${path}`
     );
   }
+  assert(lock.seal.contentPaths.includes(paths.result), "RESULT.md must be in the normative seal content set");
   const evidencePaths = [...lock.seal.contentPaths, "docs/agent-tooling/SOURCE-INVENTORY.md"].toSorted();
   assert(
     JSON.stringify(Object.keys(lock.digests.files).toSorted()) === JSON.stringify(evidencePaths),
@@ -376,7 +420,7 @@ function checkSeal(lock, readiness) {
   if (readiness.status !== "pending-human-approval") {
     const sealedHead = readiness.approval.evidenceBinding.sealedHead;
     assert(
-      headParent === sealedHead,
+      sealCommit === sealedHead && headParent === sealedHead,
       "approved state must be an explicit readiness-only transition from the sealed head"
     );
     assert(
@@ -460,15 +504,96 @@ function checkModelFacingSurface() {
 }
 
 function isHistoricalLine(line) {
-  return /retired|historical|negative[- ]control|supersed|never|not (?:an? )?authorit|rejected|forbidden|replaced|generic/i.test(
+  return /\b(?:retired|historical|negative[- ]control|legacy|supersed(?:ed|es)?|rejected|forbidden|replaced)\b/i.test(
     line
+  );
+}
+
+function isDesignatedInternalIdentifier(line) {
+  return (
+    /\b(?:operationId|runtime[-_ ]adapter(?:[-_ ](?:identifier|id))?|adapter[-_ ](?:identifier|id))\b/i.test(line) ||
+    /\bplane_runtime\.[A-Za-z0-9_.-]+\b[^.!?\n]{0,60}\badapter\b/i.test(line)
+  );
+}
+
+function lineWithoutOrdinaryPaths(line) {
+  return line.replaceAll(/docs\/(?:agent-tooling|decisions)(?:\/[A-Za-z0-9*._/-]*)?/g, "");
+}
+
+function isNonModelFacingStructuredField(segments) {
+  const field = String(segments.at(-1) ?? "");
+  return /(?:path|paths|file|files|sha|digest|tree|commit|ref|repository|description|evidence|role|owner|status|statement|text|notes|reason|label|title|summary|message|content|command|script|surfaceId|laneId|phaseId|gate|id)$/i.test(
+    field
+  );
+}
+
+function retiredNameViolation(line, name) {
+  const token = new RegExp(`(?<![A-Za-z0-9_])${name}(?![A-Za-z0-9_])`);
+  const normalizedLine = lineWithoutOrdinaryPaths(line);
+  if (!token.test(normalizedLine)) return false;
+  if (isHistoricalLine(line) || isDesignatedInternalIdentifier(line)) return false;
+  return true;
+}
+
+function checkStructuredRetiredNames(path, value, retired, segments = []) {
+  if (typeof value === "string") {
+    if (isNonModelFacingStructuredField(segments)) return;
+    for (const name of retired)
+      if (retiredNameViolation(`${segments.join(".")}: ${value}`, name))
+        throw new Error(`${path} authoritatively uses retired name ${name} in ${segments.join(".")}`);
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => checkStructuredRetiredNames(path, item, retired, [...segments, String(index)]));
+    return;
+  }
+  if (value && typeof value === "object")
+    for (const [key, child] of Object.entries(value))
+      checkStructuredRetiredNames(path, child, retired, [...segments, key]);
+}
+
+function checkRetiredNameControls() {
+  const surface = readJson(paths.modelSurface);
+  const retired = [...surface.retiredNames.bare, ...surface.retiredNames.historicalPrefixed];
+  const controls = retired.flatMap((name) => [
+    { name, label: `bare ${name}`, line: `Authoritative model-facing name: ${name}`, rejects: true },
+    { name, label: `dotted ${name}`, line: `Authoritative model-facing name: plane.${name}`, rejects: true },
+    {
+      name,
+      label: `historical ${name}`,
+      line: `Historical negative-control prose: retired alias ${name}`,
+      rejects: false,
+    },
+    { name, label: `internal ${name}`, line: `operationId: "plane.${name}@1"`, rejects: false },
+  ]);
+  for (const control of controls)
+    assert(retiredNameViolation(control.line, control.name) === control.rejects, control.label);
+}
+
+function checkStructuredModelFacingFields() {
+  const surface = readJson(paths.modelSurface);
+  const expected = surface.names.map((entry) => entry.name);
+  assert(new Set(expected).size === expected.length, "model-facing names must be unique");
+  assert(
+    expected.every((name) => !surface.retiredNames.bare.includes(name)),
+    "model-facing names contain a retired bare alias"
+  );
+  assert(
+    expected.every((name) => !surface.retiredNames.historicalPrefixed.includes(name)),
+    "model-facing names contain a retired historical alias"
+  );
+  const predicates = readJson(paths.predicates);
+  const required = predicates.common.find((predicate) => predicate.id === "PLAN-COMMON-007")?.expected?.required;
+  assert(
+    JSON.stringify(required) === JSON.stringify(expected),
+    "structured required tool field differs from exact model-facing set"
   );
 }
 
 function checkRetiredNames() {
   const surface = readJson(paths.modelSurface);
   const retired = [...surface.retiredNames.bare, ...surface.retiredNames.historicalPrefixed];
-  for (const path of [
+  const pathsToCheck = [
     paths.prompt,
     paths.fixture,
     paths.predicates,
@@ -477,24 +602,13 @@ function checkRetiredNames() {
     paths.lock,
     paths.readiness,
     paths.ownershipMap,
-  ]) {
-    for (const line of read(path).split("\n")) {
-      for (const name of retired) {
-        const token = new RegExp(`(?<![A-Za-z0-9_])${name}(?![A-Za-z0-9_])`);
-        const qualifiedInternal = new RegExp(`[A-Za-z0-9_]+\\.${name}(?![A-Za-z0-9_])`).test(line);
-        const ownershipMetadata =
-          path === paths.ownershipMap &&
-          (line.includes('"description"') || line.includes("writePaths") || line.includes("readPaths"));
-        if (
-          token.test(line) &&
-          !(name === "docs" && (/docs\//.test(line) || ownershipMetadata)) &&
-          !qualifiedInternal &&
-          !isHistoricalLine(line)
-        )
-          throw new Error(`${path} authoritatively uses retired name ${name}`);
-      }
-    }
-  }
+  ];
+  for (const path of pathsToCheck)
+    if (path.endsWith(".json")) checkStructuredRetiredNames(path, readJson(path), retired);
+    else
+      for (const line of read(path).split("\n"))
+        for (const name of retired)
+          if (retiredNameViolation(line, name)) throw new Error(`${path} authoritatively uses retired name ${name}`);
   const required =
     readJson(paths.predicates).common.find((predicate) => predicate.id === "PLAN-COMMON-007")?.expected?.required ?? [];
   assert(
@@ -505,6 +619,7 @@ function checkRetiredNames() {
     read(paths.prompt).includes("search_workspace") && read(paths.prompt).includes("compose_typescript"),
     "planning prompt does not use approved names"
   );
+  checkStructuredModelFacingFields();
 }
 
 function checkGeneratedArtifacts(lock) {
@@ -546,13 +661,40 @@ function checkG0Record() {
     readiness.status === "pending-human-approval" || readiness.status === "approved",
     "G0 readiness status is invalid"
   );
-  assert(
-    readiness.status === "approved" ||
-      readiness.clauses
-        .filter((clause) => clause.status === "pending")
-        .every((clause) => clause.id === "G0-HUMAN-APPROVAL"),
-    "only human approval may remain pending"
+  const expectedClauseStatuses = new Map(
+    readiness.status === "pending-human-approval"
+      ? [
+          ["G0-ADR-STATUS", "ready"],
+          ["G0-MANIFEST-STATUS", "ready-pending-approval"],
+          ["G0-SEMANTIC-BOUNDARY", "ready"],
+          ["G0-RUNTIME-CONTRACT", "ready"],
+          ["G0-LIMITS-AUDIT", "ready"],
+          ["G0-OWNERSHIP-LOCK", "ready"],
+          ["G0-LEGACY-RECONCILIATION", "ready"],
+          ["G0-GENERATED-ARTIFACTS", "ready"],
+          ["G0-HUMAN-APPROVAL", "pending"],
+        ]
+      : [
+          ["G0-ADR-STATUS", "ready"],
+          ["G0-MANIFEST-STATUS", "ready"],
+          ["G0-SEMANTIC-BOUNDARY", "ready"],
+          ["G0-RUNTIME-CONTRACT", "ready"],
+          ["G0-LIMITS-AUDIT", "ready"],
+          ["G0-OWNERSHIP-LOCK", "ready"],
+          ["G0-LEGACY-RECONCILIATION", "ready"],
+          ["G0-GENERATED-ARTIFACTS", "ready"],
+          ["G0-HUMAN-APPROVAL", "ready"],
+        ]
   );
+  assert(
+    JSON.stringify(readiness.clauses.map((clause) => clause.id)) === JSON.stringify([...expectedClauseStatuses.keys()]),
+    "G0 readiness clause IDs are not the exact ordered set"
+  );
+  for (const clause of readiness.clauses)
+    assert(
+      clause.status === expectedClauseStatuses.get(clause.id),
+      `${clause.id} has status ${clause.status}; expected ${expectedClauseStatuses.get(clause.id)} for ${readiness.status}`
+    );
 }
 
 const lock = readJson(paths.lock);
@@ -560,11 +702,13 @@ const readiness = readJson(paths.readiness);
 check("local Markdown links, anchors, and portable paths", checkMarkdownLinks);
 check("accepted ADR 0001 through 0010 and register consistency", checkAdrRegister);
 check("single approval authority and G0/G1/G4 policy", checkAuthorityAndContractPolicy);
+check("accepted ADR generated-schema authority", checkAcceptedAdrSchemaAuthority);
 check("manifest and byte-for-byte evidence bindings", () => checkManifestAndDigests(lock, readiness));
 check("source, repository pins, and reviewed-baseline separation", () => checkSourceAndRepositoryPins(lock));
 check("AJV 2020 schemas, ownership join, and pending slots", () => checkOwnershipAndSchemas(lock, readiness));
 check("exact model-facing surface", checkModelFacingSurface);
 check("retired-name negative control", checkRetiredNames);
+check("retired-name table controls", checkRetiredNameControls);
 check("content/evidence seal and append-only WORKLOG prefix", () => checkSeal(lock, readiness));
 check("generated overview, coverage, and planning fixtures", () => checkGeneratedArtifacts(lock));
 check("G0 record completeness", checkG0Record);

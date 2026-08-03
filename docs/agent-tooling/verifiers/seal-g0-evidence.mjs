@@ -83,13 +83,19 @@ const baselineWorklog = spawnSync(
 if (baselineWorklog.status !== 0) throw new Error("the sealed worklog baseline is unavailable");
 
 const sourceInventory = formatMarkdownTables(
-  readFileSync(sourceInventoryPath, "utf8").toString().replaceAll("__CONTENT_COMMIT__", contentCommit)
+  readFileSync(sourceInventoryPath, "utf8")
+    .toString()
+    .replaceAll("__CONTENT_COMMIT__", contentCommit)
+    .replace(/(exact Plane package content SHA is `)[0-9a-f]{40}/, `$1${contentCommit}`)
+    .replace(/(\| Plane package\s+\| `\.`\s+\| `)[0-9a-f]{40}/, `$1${contentCommit}`)
 );
 if (sourceInventory.includes("__CONTENT_COMMIT__"))
   throw new Error("source inventory still contains a seal placeholder");
+if (!sourceInventory.includes(contentCommit))
+  throw new Error("source inventory does not record the sealed content commit");
 writeFileSync(sourceInventoryPath, sourceInventory);
 
-const contentPaths = lock.seal.contentPaths;
+const contentPaths = [...new Set([...lock.seal.contentPaths, "docs/agent-tooling/RESULT.md"])].toSorted();
 const evidencePaths = lock.seal.sealEvidencePaths;
 const digestFiles = Object.fromEntries([
   ...contentPaths.map((path) => [path, sha256(read(path))]),
@@ -99,6 +105,7 @@ lock.repositories.find((repository) => repository.id === "plane").sha = contentC
 lock.digests.files = digestFiles;
 lock.seal.contentCommit = contentCommit;
 lock.seal.contentTree = contentTree;
+lock.seal.contentPaths = contentPaths;
 lock.seal.sealEvidencePaths = evidencePaths;
 lock.seal.worklogBaseline = {
   commit: baselineCommit,

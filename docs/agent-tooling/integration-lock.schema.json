@@ -86,6 +86,7 @@
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
+          "contains": { "const": "docs/agent-tooling/RESULT.md" },
           "items": { "type": "string", "pattern": "^(?!/)(?!.*\\.\\.)[^\\s]+$" }
         },
         "sealEvidencePaths": {

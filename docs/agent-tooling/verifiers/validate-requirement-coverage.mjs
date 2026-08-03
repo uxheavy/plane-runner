@@ -10,6 +10,7 @@ const repositoryRoot = resolve(verifierRoot, "../..");
 const coveragePath = resolve(verifierRoot, "REQUIREMENT-COVERAGE.md");
 const goal = readFileSync(resolve(verifierRoot, "GOAL.md"), "utf8");
 const ownership = JSON.parse(readFileSync(resolve(verifierRoot, "ownership-map.json"), "utf8"));
+const plan = JSON.parse(readFileSync(resolve(verifierRoot, "NON-UI-IMPLEMENTATION-PLAN.json"), "utf8"));
 const coverage = readFileSync(coveragePath, "utf8");
 const failures = [];
 
@@ -37,7 +38,6 @@ for (let index = 1; index <= invariants.length; index += 1)
 for (let index = 0; index <= 5; index += 1) requireRow(`G${index}`, `G${index} gate`);
 for (let index = 0; index <= 11; index += 1) {
   requireRow(`P${index}`, `P${index} phase`);
-  requireRow(`L${index}`, `L${index} plan lane`);
 }
 const proofRows =
   goal
@@ -47,6 +47,46 @@ const proofRows =
 for (let index = 1; index <= proofRows.length; index += 1)
   requireText(`GOAL-PROOF-${String(index).padStart(2, "0")}`, `completion proof ${index}`);
 for (const surface of ownership.surfaces) requireText(surface.surfaceId, `ownership surface ${surface.surfaceId}`);
+
+const expectedPhaseLaneIds = {
+  P0: ["L0"],
+  P1: ["L1"],
+  P2: ["L2"],
+  P3: ["L3"],
+  P4: ["L4"],
+  P5: ["L5"],
+  P6: ["L6"],
+  P7: ["L7"],
+  P8: ["L8"],
+  P9: ["L9", "L10"],
+  P10: ["L11"],
+  P11: ["L11"],
+};
+const actualPhaseLaneIds = Object.fromEntries(
+  (plan.phaseLaneRelationships ?? []).map((relationship) => [relationship.phaseId, relationship.laneIds])
+);
+if (JSON.stringify(actualPhaseLaneIds) !== JSON.stringify(expectedPhaseLaneIds))
+  failures.push(`phase-to-lane relationships are incorrect: ${JSON.stringify(actualPhaseLaneIds)}`);
+const lanesById = new Map(plan.lanes.map((lane) => [lane.id, lane]));
+const surfacesByLane = new Map();
+for (const surface of ownership.surfaces)
+  for (const laneId of surface.planLaneIds)
+    surfacesByLane.set(laneId, [...(surfacesByLane.get(laneId) ?? []), surface.surfaceId]);
+for (const [phaseId, laneIds] of Object.entries(expectedPhaseLaneIds)) {
+  const laneCell = laneIds.join(", ");
+  if (
+    !coverage.includes(`| ${phaseId} `) ||
+    !new RegExp(`\\| ${phaseId}\\s+\\| ${laneCell.replace(", ", ",\\s+")}\\s+\\|`).test(coverage)
+  )
+    failures.push(`coverage is missing exact ${phaseId} to ${laneCell} phase-lane join`);
+  for (const laneId of laneIds) {
+    const lane = lanesById.get(laneId);
+    requireText(`${laneId} ${lane.owner}`, `${phaseId} lane owner`);
+    for (const evidence of lane.evidence) requireText(evidence, `${phaseId} ${laneId} evidence`);
+    for (const surfaceId of surfacesByLane.get(laneId) ?? [])
+      requireText(surfaceId, `${phaseId} ${laneId} writable surface`);
+  }
+}
 requireText("sole G0 human approval", "single approval authority");
 requireText("generated schemas are a G1 gate", "G1 schema gate");
 requireText("production qualification is G4", "G4 production gate");

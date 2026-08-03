@@ -65,6 +65,7 @@ Plane agents can safely perform useful Plane work through native semantic operat
 - The local Freeform board `Plane-runner` (`8208a432-a415-434c-9f06-5731a6185db4`) is the developer's non-normative workplace mind. Ideas become durable only when promoted into this repository.
 - Any local exploratory board or PDF is non-normative developer context and is not an approval or freeze authority.
 - `RELEASE-MANIFEST.md` and `VERIFICATION-MANIFEST.md` provide evidence inputs to the controlling `APPROVAL-MANIFEST.md`; neither is a competing implementation-start gate.
+- `RESULT.md` is the canonical in-progress completion-proof placeholder. It is included in the normative seal now, but its pending contents cannot claim G5 completion.
 - No runtime, application, or verification implementation may begin until the explicit `APPROVAL-MANIFEST.md` gate—the sole implementation-start approval—is approved and G0 is satisfied. Contract/documentation reconciliation may proceed before that gate.
 - G0 freezes semantic names, boundaries, and logical runtime/event/publication invariants only. Generated operation/event schemas are a G1 input; physical queue/RPC transport remains a later ADR-0010 choice. `RELEASE-MANIFEST.md`, `VERIFICATION-MANIFEST.md`, `EVALUATION-FIXTURE-CONTRACT.md`, and `REQUIREMENT-COVERAGE.md` cannot add an approval or freeze prerequisite.
 - Observable interfaces must have contract tests before production rollout.

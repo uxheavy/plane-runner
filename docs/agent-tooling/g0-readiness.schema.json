@@ -91,21 +91,81 @@
     "clauses": {
       "type": "array",
       "minItems": 9,
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["id", "status", "ownerRole", "reviewerRole", "evidence"],
-        "properties": {
-          "id": { "type": "string", "pattern": "^G0-[A-Z0-9-]+$" },
-          "status": { "enum": ["ready", "ready-pending-approval", "pending"] },
-          "ownerRole": { "type": "string", "minLength": 1 },
-          "reviewerRole": { "const": "sol-reviewer" },
-          "evidence": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+      "maxItems": 9,
+      "prefixItems": [
+        {
+          "allOf": [
+            { "$ref": "#/$defs/clause" },
+            { "type": "object", "properties": { "id": { "const": "G0-ADR-STATUS" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/clause" },
+            { "type": "object", "properties": { "id": { "const": "G0-MANIFEST-STATUS" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/clause" },
+            { "type": "object", "properties": { "id": { "const": "G0-SEMANTIC-BOUNDARY" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/clause" },
+            { "type": "object", "properties": { "id": { "const": "G0-RUNTIME-CONTRACT" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/clause" },
+            { "type": "object", "properties": { "id": { "const": "G0-LIMITS-AUDIT" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/clause" },
+            { "type": "object", "properties": { "id": { "const": "G0-OWNERSHIP-LOCK" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/clause" },
+            { "type": "object", "properties": { "id": { "const": "G0-LEGACY-RECONCILIATION" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/clause" },
+            { "type": "object", "properties": { "id": { "const": "G0-GENERATED-ARTIFACTS" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/clause" },
+            { "type": "object", "properties": { "id": { "const": "G0-HUMAN-APPROVAL" } } }
+          ]
         }
-      }
+      ],
+      "items": false
     },
     "preflightCommand": { "const": "node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode preflight" },
     "normalVerificationCommand": { "const": "node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode g0" }
+  },
+  "$defs": {
+    "clause": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "ownerRole", "reviewerRole", "evidence"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^G0-[A-Z0-9-]+$" },
+        "status": { "enum": ["ready", "ready-pending-approval", "pending"] },
+        "ownerRole": { "type": "string", "minLength": 1 },
+        "reviewerRole": { "const": "sol-reviewer" },
+        "evidence": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+      }
+    }
   },
   "allOf": [
     {
@@ -115,6 +175,23 @@
           "approval": {
             "type": "object",
             "properties": { "status": { "const": "pending" } }
+          },
+          "clauses": {
+            "type": "array",
+            "minItems": 9,
+            "maxItems": 9,
+            "prefixItems": [
+              { "type": "object", "properties": { "status": { "const": "ready" } } },
+              { "type": "object", "properties": { "status": { "const": "ready-pending-approval" } } },
+              { "type": "object", "properties": { "status": { "const": "ready" } } },
+              { "type": "object", "properties": { "status": { "const": "ready" } } },
+              { "type": "object", "properties": { "status": { "const": "ready" } } },
+              { "type": "object", "properties": { "status": { "const": "ready" } } },
+              { "type": "object", "properties": { "status": { "const": "ready" } } },
+              { "type": "object", "properties": { "status": { "const": "ready" } } },
+              { "type": "object", "properties": { "status": { "const": "pending" } } }
+            ],
+            "items": false
           }
         },
         "not": {
@@ -143,6 +220,23 @@
               "approvedAt": {},
               "evidenceBinding": {}
             }
+          },
+          "clauses": {
+            "type": "array",
+            "minItems": 9,
+            "maxItems": 9,
+            "prefixItems": [
+              { "type": "object", "properties": { "status": { "const": "ready" } } },
+              { "type": "object", "properties": { "status": { "const": "ready" } } },
+              { "type": "object", "properties": { "status": { "const": "ready" } } },
+              { "type": "object", "properties": { "status": { "const": "ready" } } },
+              { "type": "object", "properties": { "status": { "const": "ready" } } },
+              { "type": "object", "properties": { "status": { "const": "ready" } } },
+              { "type": "object", "properties": { "status": { "const": "ready" } } },
+              { "type": "object", "properties": { "status": { "const": "ready" } } },
+              { "type": "object", "properties": { "status": { "const": "ready" } } }
+            ],
+            "items": false
           }
         }
       }
