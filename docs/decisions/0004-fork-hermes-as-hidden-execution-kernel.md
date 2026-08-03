@@ -18,11 +18,11 @@ Maintain an `uxheavy` fork of Hermes as Plane Agent's internal execution kernel.
 
 Reuse kernel mechanisms when their boundaries fit. Hide, adapt, feature-gate, or remove upstream product surfaces that do not serve Plane Agent. Plane supplies a runtime profile compiled from Plane-owned agent and assignment data; the kernel executes that profile without becoming the product identity.
 
-Plane owns definitions and durable control state for profiles, assignments, runs, conversations, memory, skills, schedules, delegation, artifacts, and outcomes. Hermes may execute model loops, context management, retrieval, learning, skill use, schedules, delegation, tool dispatch, transcript capture, checkpoints, concurrency, and recovery behind Plane adapters. Those mechanisms never become a second source of truth.
+Plane owns definitions and durable control state for profiles, assignments, runs, conversations, agent-private memory, skills, schedules, delegation, artifacts, and outcomes. Hermes may execute model loops, context management, retrieval, learning, skill use, schedules, dynamic delegation, tool dispatch, transcript capture, checkpoints, concurrency, and recovery behind Plane adapters. Those mechanisms never become a second source of truth or a second Plane Agent product model.
 
 A Plane run may span more than one Hermes session, process, or restart. Hermes transcripts and checkpoints are operational inputs to recovery; Plane owns the durable run, conversation, and history record.
 
-Keep Plane-specific integration behind one narrow, versioned runtime adapter so upstream kernel changes do not spread Plane concepts through unrelated Hermes modules. The proposed contract is recorded separately in ADR-0010.
+Keep Plane-specific integration behind one narrow, versioned runtime adapter so upstream kernel changes do not spread Plane concepts through unrelated Hermes modules. The accepted contract is recorded separately in ADR-0010.
 
 ## Alternatives considered
 

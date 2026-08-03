@@ -8,15 +8,20 @@ This is the controlling pre-implementation manifest. On approval, it supersedes 
 
 ## Outcome
 
-Ship one production-capable path in which a Plane-native agent can drive an assigned outcome through Plane-native tools and self-hosted TypeScript composition, with Hermes operating as its hidden execution kernel and with the same Plane authorization and audit boundary used by external MCP clients.
+Ship one production-capable path in which a Plane agent can drive an assigned outcome through Plane semantic operations and self-hosted TypeScript composition, with the same Plane authorization and audit boundary used by external MCP clients.
 
 ## V1 architecture
 
 - Plane remains the system of record and sole authorization authority.
 - A Plane Operation Gateway exposes curated, versioned semantic operations through Plane application services; agents never receive database access.
 - The fork exposes a dedicated Plane-native runtime profile rather than inheriting the `hermes-cli` personality or default tool catalog.
-- Plane owns durable agent lifecycle and definition/control state for profiles, assignments, runs, conversations, memory, skills, schedules, delegation, artifacts, and outcomes. Hermes supplies model-loop, context, learning, skill-use, schedule/delegation execution, tool-dispatch, transcript/checkpoint, concurrency, and recovery mechanisms behind Plane adapters; it is not presented to users or models as a separate product.
-- The model-facing surface is derived from natural Plane workflows and vocabulary.
+- Plane owns one durable Agent product/runtime model with exactly one role per configured agent, plus lifecycle and control state for profiles, assignments, runs, conversations, agent-private memory, skills, schedules, delegation, artifacts, evaluator review, and outcomes. The execution kernel supplies model-loop, context, learning, skill-use, schedule/delegation execution, tool-dispatch, transcript/checkpoint, concurrency, and recovery mechanisms behind Plane adapters; it is not presented to users or models as a separate product.
+- Built-in roles are worker, delegator, gardener, chief of staff, HR, and evaluator. Every human automatically receives one chief-of-staff agent restricted to that human's live Plane permissions. Administrators may define custom single roles on the same model.
+- The dedicated delegator dynamically plans each case, automatically assigns unclaimed work to humans or agents, and records why. Worker and ordinary specialist agents do not freely delegate. Approved schedules create normal assignments and runs.
+- Saved/versioned workflow definitions and a workflow-definition system are outside the target design. There is no workflow-definition lane; the delegator plans each case dynamically.
+- Gardeners may maintain multiple agents and apply private memory/skill improvements automatically across sessions. Knowledge is never copied between agents; every improvement has immutable history and rollback.
+- HR may propose agent creation, change, or retirement, but a workspace administrator approves the proposal. Evaluators review every agent outcome before a human accepts or returns it; human acceptance is final.
+- The model-facing surface is derived from natural Plane work and vocabulary.
 - Every agent initially receives a small universal Plane work core plus eager tools selected from its profile and current assignment.
 - Other available operations remain progressively discoverable without placing every schema in the model's initial context.
 - The universal core uses one `search_workspace` tool to find typed references across Plane object types; specialized domain searches are discovered only when advanced filters or projections are needed.
@@ -24,11 +29,14 @@ Ship one production-capable path in which a Plane-native agent can drive an assi
 - Internal contract IDs, audit events, and adapter metadata retain the `plane.*` namespace even when native Plane-domain tool names do not.
 - Model-written TypeScript runs in a restricted child isolate inside the disposable container for one runtime invocation. Containers may be released and recreated while the durable Plane run continues.
 - Plane credentials remain in host callbacks. Generated TypeScript receives neither credentials nor ambient authority.
-- Plane derives the agent identity from its credential and applies live authorization to every operation.
+- Plane derives the internal Agent identity from its credential and applies live authorization to every operation; external MCP calls retain their authenticated human or integration caller.
 - Authorized operations execute autonomously. V1 adds no second capability-token system and no runtime human-approval prompts.
 - Every attempted operation produces append-only audit records, including denial and failure outcomes.
 - The existing official Plane Python MCP server remains the external-agent interface and is adapted incrementally to the gateway; it is not replaced.
 - The Plane MCP server and Plane Python SDK are maintained as pinned `uxheavy` forks and locked with the Plane and Hermes revisions used for a release.
+- Full Plane integration/action coverage is required before the non-UI program is complete. Adaptive disclosure keeps the full catalog discoverable without placing every schema in the initial context.
+- All required administration reuses existing Plane settings surfaces, services, state, permissions, and UI components; no settings framework is introduced.
+- After verification, rollout may proceed in stages even though there are no current users. Automated safety stops remain mandatory at every stage.
 
 ## Initial operation catalog
 
@@ -64,7 +72,7 @@ The catalog may grow additively. New eager tools require evidence that they are 
 3. **External compatibility:** route the pinned official MCP server through the gateway without breaking its supported clients.
 4. **Production hardening:** limits, observability, kill switches, credential lifecycle, load, rollback, and operator documentation.
 
-Each slice must be demonstrably usable before the next slice expands scope.
+Each slice must be demonstrably usable before the next slice expands scope. No runtime, application, or verification implementation starts until this manifest is explicitly approved and G0 is satisfied.
 
 ## Verification required before production
 
@@ -74,7 +82,7 @@ Each slice must be demonstrably usable before the next slice expands scope.
 - Idempotency, timeout, interruption, concurrency, large-result, and audit-failure tests.
 - Security probes for credential disclosure, forged callbacks, cross-run replay, network, filesystem, subprocess, and package escapes, with zero successful escapes.
 - Real supported-client compatibility tests against the pinned official MCP server.
-- At least 50 retained authenticated Hermes evaluation runs across happy paths, denials, partial failures, retries, hostile generated code, and materially different project shapes; at least 90% complete workflow success and zero authorization bypasses, credential disclosures, duplicate committed mutations, or missing required audit outcomes.
+- At least 50 retained authenticated execution-kernel evaluation runs across happy paths, denials, partial failures, retries, hostile generated code, and materially different project shapes; at least 90% complete scenario success and zero authorization bypasses, credential disclosures, duplicate committed mutations, or missing required audit outcomes.
 - One mandatory clean live acceptance run using the locally authenticated ChatGPT subscription, provider `openai-codex`, and exact model `gpt-5.6-luna`, with no fallback.
 - The live run must read an authorized project, receive a non-leaking denial from a control project, use native tools and TypeScript Code Mode, create exactly one parent release-plan item, three children, and one source-linked comment, then prove idempotent replay and correlated Plane audit records.
 - A documented clean-checkout verification command must fail non-zero on any required check.

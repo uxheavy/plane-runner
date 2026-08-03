@@ -18,7 +18,7 @@ flowchart LR
 
 ## Supported operation contract
 
-The shared contract is a catalog of stable semantic operations. It is the only supported agent-facing path into Plane application behavior.
+The shared contract is a catalog of stable semantic operations and Plane integrations/actions. It is the only supported agent-facing path into Plane application behavior.
 
 The catalog base is generated from Plane's supported public OpenAPI surface. A curated overlay supplies agent-oriented descriptions, examples, aliases, safety metadata, result policies, idempotency metadata, and direct-tool promotion metadata. Agent-native operations may be added when no appropriate public API operation exists. Private UI/session routes are not automatically agent-facing.
 
@@ -33,7 +33,7 @@ Every operation defines:
 - Per-result limit and large-result behavior.
 - Audit redaction rules.
 
-Catalog visibility is global. Discovering an operation does not imply permission to execute it.
+Catalog visibility is global and complete for the supported Plane integration/action inventory. Adaptive disclosure controls which schemas are eager for a role and assignment; it does not remove operations from global discovery. Discovering an operation does not imply permission to execute it.
 
 ## Plane Operation Gateway
 
@@ -43,7 +43,7 @@ Cross-process callers use one versioned JSON HTTP adapter under Plane's existing
 
 For every operation it:
 
-1. Authenticates the dedicated Plane agent identity.
+1. Authenticates the caller: a dedicated Plane Agent identity for internal Agent paths, or the authenticated human/integration principal for external MCP paths.
 2. Validates the operation and input schema.
 3. Evaluates current workspace membership, project role, object permissions, and other Plane authorization.
 4. Applies idempotency and concurrency controls.
@@ -55,7 +55,7 @@ Native tools, Code Mode callbacks, and external MCP handlers all cross this boun
 
 ## Identity and credentials
 
-Each Plane-native agent has a dedicated Plane identity and one revocable Plane credential. Hermes holds the credential in trusted host state and sends it on gateway calls. Plane derives the acting identity from the credential; a model-supplied identity is never authoritative.
+Each Plane-native agent has a dedicated Plane identity and one revocable Plane credential. The trusted runtime host holds the credential and sends it on internal gateway calls. External MCP callers retain their OAuth or personal-access-token principal and do not use an internal Agent credential. Plane derives the acting identity from the authenticated credential; a model-supplied identity is never authoritative.
 
 The initial architecture does not mint run-bound capability tokens or per-operation credentials. Plane's existing authorization remains the sole entitlement system. `run_id`, `tool_call_id`, and invocation ID are correlation and idempotency metadata, not authorization capabilities.
 
@@ -63,17 +63,18 @@ Generated TypeScript never receives the Plane credential.
 
 ## Plane Agent domain ownership
 
-Plane keeps three layers explicit:
+Plane keeps four layers explicit:
 
 1. The agent actor identity owns the durable Plane principal, credential, memberships, roles, and object permissions. These facts are the sole entitlement source and are not versioned as behavioral profile content.
-2. A behavioral profile version owns persona, role, instructions, model/runtime defaults, skill and context references, memory scopes, and default tool-presentation choices. A run pins the resolved version.
-3. Tool availability comes from installed and enabled Plane features and integrations. Tool disclosure chooses which available schemas are eager or progressive. Neither layer grants or denies Plane operations.
+2. A behavioral profile version owns persona, exactly one role, instructions, model/runtime defaults, skill and context references, agent-private memory scopes, and default tool-presentation choices. A run pins the resolved version. Built-in roles are `worker`, `delegator`, `gardener`, `chief_of_staff`, `hr`, and `evaluator`; workspace administrators may define additional single roles.
+3. Human ownership may provision one automatic chief-of-staff agent per human. That agent's effective permissions are the human's current live Plane permissions and are never broader.
+4. Tool availability comes from installed and enabled Plane features and integrations. Tool disclosure chooses which available schemas are eager or progressive. Neither layer grants or denies Plane operations.
 
 The minimum durable relationships have independent lifecycles:
 
 ```text
 Agent actor -> Profile version
-Assignment contract -> target + objective + acceptance + assignee
+Assignment contract -> target + objective + acceptance + assignee + source/rationale
 Run attempt -> assignment + resolved profile/context/tool/runtime snapshot
 Runtime invocation -> one kernel dispatch within a run
 Outcome submission -> run + artifacts + summary/evidence + review
@@ -89,9 +90,9 @@ The model-facing catalog is designed from natural Plane workflows. Every run sta
 
 The universal core has one `search_workspace` discovery primitive. It returns typed references across Plane object types. Specialized searches remain discoverable for workflows that require domain-specific filters or projections; they do not compete in every agent's initial context.
 
-Hermes supplies the hidden execution mechanisms for the model loop, context management, tool dispatch, transcript capture, concurrency, and bounded results. Plane owns the durable product concepts and authoritative state for identity, profiles, assignments, runs, conversations, memory, skills, schedules, delegation, artifacts, and outcomes. Reused Hermes subsystems sit behind Plane adapters when they support those concepts; Hermes-specific work systems and operational tools remain hidden.
+The hidden execution kernel supplies the mechanisms for the model loop, context management, tool dispatch, transcript capture, concurrency, and bounded results. Plane owns the durable product concepts and authoritative state for identity, profiles, assignments, runs, conversations, agent-private memory, skills, schedules, dynamic delegation, artifacts, evaluator review, and outcomes. Reused kernel subsystems sit behind Plane adapters when they support those concepts; kernel-specific work systems and operational tools remain hidden.
 
-Definitions and control state for memory, skills, schedules, workflows, and delegation remain in Plane. Hermes may execute those mechanisms behind adapters. Plane-governed storage remains authoritative; `MEMORY.md`, subject-bound `USER.md`, skill packages, and other files are lossless run projections rather than the source of truth. Automatic learning may produce agent-scoped candidates, but promotion into shared scopes is governed.
+Definitions and control state for memory, skills, schedules, and dynamic delegation remain in Plane. There is no saved/versioned workflow-definition system in this scope. The execution kernel may execute these mechanisms behind adapters. Plane-governed storage remains authoritative; `MEMORY.md`, subject-bound `USER.md`, skill packages, and other files are lossless run projections rather than the source of truth. Gardener improvements remain agent-private, immutable, and rollbackable; no knowledge is copied between agents.
 
 Native adapters remain thin:
 
@@ -102,11 +103,11 @@ Native adapters remain thin:
 
 They do not reproduce Plane authorization or business logic.
 
-## Proposed Plane runtime contract
+## Accepted Plane runtime contract
 
-ADR-0010 proposes one versioned logical runtime contract across a durable cross-process seam to a separate co-located agent-runtime service. The queue or RPC transport remains open. Plane persists an immutable run snapshot and creates a separate invocation envelope for each kernel dispatch. Human answers and other new context remain Plane-owned events referenced by the envelope, while cumulative run budgets cannot reset across invocations. Inside the runtime service, one `plane_runtime.execute` adapter invokes the kernel through a trusted host, validates observations defensively, and transmits them across the cross-process seam. Plane ingress revalidates and maps them into product state. Plane API modules never import the adapter or `AIAgent`; Hermes sessions, profile directories, registry globals, provider clients, and transport details do not cross the logical contract.
+ADR-0010 accepts one versioned logical runtime contract across a durable cross-process seam to a separate co-located agent-runtime service. The queue or RPC transport remains an implementation choice. Plane persists an immutable run snapshot and creates a separate invocation envelope for each kernel dispatch. Human answers and other new context remain Plane-owned events referenced by the envelope, while cumulative run budgets cannot reset across invocations. Inside the runtime service, one `plane_runtime.execute` adapter invokes the kernel through a trusted host, validates observations defensively, and transmits them across the cross-process seam. Plane ingress revalidates and maps them into product state. Plane API modules never import the adapter or the hidden kernel's internal agent class; sessions, profile directories, registry globals, provider clients, and transport details do not cross the logical contract.
 
-A runtime invocation maps to one visible Plane product event: outcome submission, waiting-for-input question, failure or blocker, or cancellation. Kernel final text is not automatically a conversation message. A conversation message requires an explicit agent publication action through an authorized, idempotent, audited Plane semantic operation. Runtime events are untrusted observations until Plane ingress revalidates host binding, identity, schema, sequence, limits, receipts, and legal state transitions. If invocation infrastructure dies first, Plane derives the terminal failure/cancellation from authoritative lease state. Intentional messages and compact activity receipts appear in conversation; detailed model/tool transcript remains in the run-inspection surface.
+A runtime invocation maps to one visible Plane product event: outcome submission, failure, blocker, or cancellation. A waiting-for-input question is a visible non-terminal pause. Kernel final text is not automatically a conversation message. A conversation message requires an explicit agent publication action through an authorized, idempotent, audited Plane semantic operation. Runtime events are untrusted observations until Plane ingress revalidates host binding, identity, schema, sequence, limits, receipts, and legal state transitions. If invocation infrastructure dies first, Plane derives exactly one failure, blocker, or cancellation from authoritative lease state. Intentional messages and compact activity receipts appear in conversation; detailed model/tool transcript remains in the run-inspection surface.
 
 Recoverable invocation failures may continue the same Plane run when safe. `outcome_unknown` is reconciled or escalated and is never blindly replayed. A fresh run follows terminal failure/cancellation or human-requested revision.
 
@@ -122,7 +123,7 @@ Every inner callback traverses Hermes's normal tool middleware and the Plane Ope
 
 ## Autonomous execution and concurrency
 
-Agents execute autonomously within the live permissions of their dedicated Plane identity. An authorized operation proceeds immediately. An unauthorized operation returns a non-leaking denial. V1 has no runtime human-confirmation state, approval credential, pending approval, or same-turn approval resume protocol.
+Agents execute autonomously within the live permissions of their dedicated Plane identity. An authorized operation proceeds immediately. An unauthorized operation returns a non-leaking denial. The dedicated delegator may create normal assignments for unclaimed work and records its rationale; ordinary worker and specialist agents do not freely delegate. V1 has no runtime human-confirmation state, approval credential, pending approval, or same-turn approval resume protocol.
 
 An explicitly declared operation group may be preflighted as a group before concurrent dispatch. Preflight performs schema, reference, authorization, budget, and concurrency validation only. It never emits a prompt, pending state, decision token, or resume requirement. Group execution uses per-operation outcomes rather than pretending to be transactional.
 
@@ -147,8 +148,8 @@ Exact thresholds and retention periods remain configuration decisions.
 
 Each attempted operation records:
 
-- Acting Plane identity.
-- Hermes run, turn, tool call, and invocation identifiers.
+- Authenticated acting principal, with dedicated Plane Agent identity where the caller is internal.
+- Runtime run, turn, tool call, and invocation identifiers when the caller is an internal Agent; external MCP request identifiers otherwise.
 - Operation ID and contract version.
 - Validated arguments or a redacted digest.
 - Authorization decision.
@@ -162,7 +163,7 @@ Audit is append-only. Audit evidence supports investigation and reconciliation; 
 
 Audit and execution metadata pin exact catalog, source schema, TypeScript runtime, and adapter digests. Additive schema evolution is preferred. Breaking behavior requires an explicit compatibility and migration decision.
 
-The external MCP compatibility surface is versioned independently from native tool ergonomics, while both resolve to the shared operation contract.
+The external MCP compatibility surface is versioned independently from native tool ergonomics, while both resolve to the shared operation contract. Full Plane integration/action coverage is a non-UI completion requirement even though adaptive disclosure keeps every schema out of the initial prompt.
 
 ## Reuse from the Hermes kernel
 
@@ -182,3 +183,9 @@ Extend only where Plane requires:
 - Plane identity credential injection in trusted host callbacks.
 - Plane authorization, idempotency, and audit integration.
 - Stronger child-isolate restrictions for Plane Code Mode.
+
+## Administration and release
+
+All required administration reuses Plane's existing settings surfaces, services, state, permissions, and UI components. No second settings framework is introduced. API and CLI administration remain complete and sufficient for non-UI operation.
+
+After verification, release may proceed through staged rollout even though the current product has no users. Automated safety stops remain mandatory at every stage; authorization bypasses, credential exposure, sandbox escapes, duplicate mutations, missing audit events, or unsafe outcome reconciliation stop promotion and trigger rollback review.

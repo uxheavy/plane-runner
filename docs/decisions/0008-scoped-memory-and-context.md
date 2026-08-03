@@ -1,8 +1,8 @@
-# ADR-0008: Scope Plane Agent memory and context explicitly
+# ADR-0008: Keep Agent memory and skills private and governable
 
 ## Status
 
-Proposed
+Accepted
 
 ## Date
 
@@ -10,21 +10,21 @@ Proposed
 
 ## Context
 
-Plane Agent needs organizational knowledge, project context, user preferences, role instructions, and prior-run learning. A single company-wide mutable memory text would mix authority, audience, provenance, and retention. Automatically promoting agent-generated candidates into shared memory would also allow stale or incorrect output to become organization-wide instruction.
+Plane Agent needs project context, user preferences, role instructions, and prior-run learning. A shared knowledge pool would mix authority, audience, provenance, and retention, and would let one agent's learning leak into another agent's behavior. Plane still needs gardeners who can improve agents across sessions without turning those agents into a shared-memory system.
 
-The Freeform design proposes memory gardeners but does not yet establish what may be remembered, who approves it, or which agents may consume it.
+The product requires explicit private scope, immutable history, and rollback for memory and skill changes. Plane context references may point to authorized Plane records, but they are not copied into another agent's private knowledge.
 
 ## Decision
 
-Model durable context as typed entries with explicit scope, provenance, owner, visibility, timestamps, and lifecycle. Initial scopes are workspace, project, agent profile, user preference, assignment, and run. A user-preference entry carries its subject user and is assembled only for an authorized context in which that user's preferences apply. It is never merged into agent, project, or workspace memory merely because the same agent interacted with that user.
+Model durable agent memory and skills as typed, agent-private entries with explicit provenance, owner, timestamps, version, and lifecycle. A gardener may maintain multiple agents, but every read, proposal, and change is evaluated against one target agent at a time. No product operation copies knowledge, memory, or skills from one agent to another. A context reference may point to a Plane workspace, project, assignment, or user preference only when the target agent has the live permission to read it; the reference is not a copy into another agent's private knowledge.
 
-Plane-governed storage is authoritative for durable memory, skills, definitions, versions, promotion state, and access decisions. Hermes may provide retrieval, ranking, compaction, automatic candidate capture, skill creation or improvement, and execution behind Plane adapters.
+Plane-governed storage is authoritative for durable memory, skills, versions, improvement records, rollback state, and access decisions. The execution kernel may provide retrieval, ranking, compaction, automatic candidate capture, skill creation or improvement, and execution behind Plane adapters.
 
-Disposable Hermes and run files are projections, never the source of truth. Plane may materialize lossless Hermes-compatible `MEMORY.md`, subject-bound `USER.md`, and skill packages for execution. A `USER.md` projection contains only preferences for the authorized subject user of that runtime context; it does not accumulate preferences across users. Plane-specific structured or rich-text data stays structured where that representation matters; agents may receive deterministic Markdown and file projections instead of making every Plane object canonically a `.md` file.
+Disposable runtime and run files are projections, never the source of truth. Plane may materialize lossless `MEMORY.md`, subject-bound `USER.md`, and skill packages for execution. A `USER.md` projection contains only preferences for the authorized subject user of that runtime context; it does not accumulate preferences across users or agents. Plane-specific structured or rich-text data stays structured where that representation matters; agents may receive deterministic Markdown and file projections instead of making every Plane object canonically a `.md` file.
 
-Preserve Hermes's automatic learning loop as agent-scoped candidate memory and skills under Plane governance. Local capture and improvement may proceed, but promotion into shared templates, project, workspace, or organization scopes requires human governance. “No automatic promotion” does not mean disabling learning.
+Gardeners may apply approved improvements automatically within the target agent's private memory and skills. Every applied improvement creates an immutable revision with its source, rationale, gardener identity, timestamp, and predecessor. Rollback never rewrites history; it creates a new revision that restores an earlier content state. Automatic improvement does not authorize cross-agent copying or a shared knowledge scope.
 
-For the first vertical slice, resolve curated workspace and profile instructions, assignment context references, conversation segments, artifact links, and bounded agent-scoped learning candidates. Memory gardeners and shared promotion workflows remain deferred until governance and evaluation evidence exist.
+For the first vertical slice, resolve role instructions, authorized assignment context references, conversation segments, artifact links, and bounded agent-private learning candidates. Gardener APIs and schedule-triggered runs remain part of the non-UI breadth gate, while their detailed limits and retention rules are implementation contracts.
 
 ## Alternatives considered
 
@@ -32,25 +32,31 @@ For the first vertical slice, resolve curated workspace and profile instructions
 
 - Benefit: simple retrieval and editing.
 - Cost: unclear authority, leakage risk, conflicts, and poor provenance.
-- Rejected: organizational context has materially different scopes.
+- Rejected: shared knowledge would violate agent-private knowledge and make provenance and rollback ambiguous.
 
 ### Let every agent maintain private unstructured memory
 
 - Benefit: autonomous personalization.
-- Cost: administrators cannot inspect, govern, or reliably reproduce behavior.
-- Rejected: native Plane agents require auditable context.
+- Cost: administrators and gardeners cannot inspect, govern, or reliably reproduce behavior.
+- Rejected: private knowledge still needs typed, auditable, reversible governance.
+
+### Let gardeners copy knowledge between agents
+
+- Benefit: faster reuse of successful guidance.
+- Cost: breaks privacy, provenance, and independent agent behavior.
+- Rejected: no knowledge is copied between agents; gardeners work on each target privately.
 
 ### Disable durable memory permanently
 
 - Benefit: strongest reproducibility.
 - Cost: agents cannot accumulate curated organizational knowledge.
-- Rejected: useful durable context is a product requirement, but promotion must be governed.
+- Rejected: useful durable context is a product requirement, but it remains agent-private and reversible.
 
 ## Consequences
 
-- Context assembly requires deterministic precedence and budget rules.
+- Context assembly requires deterministic precedence and budget rules under the target agent's live permissions.
 - Runs record the resolved context references and versions they consumed.
 - Memory visibility follows Plane authorization and does not create a parallel entitlement system.
 - File projections require deterministic round-trip, provenance, conflict, and reconciliation rules.
-- Automatic learning remains recoverable and agent-scoped until a governed promotion occurs.
-- The promotion, conflict-resolution, retention, and deletion contracts remain open before acceptance.
+- Automatic learning and gardener improvements remain recoverable, immutable, and agent-scoped.
+- Rollback and retention contracts must be tested before the non-UI breadth gate; no shared-memory promotion contract exists in this scope.

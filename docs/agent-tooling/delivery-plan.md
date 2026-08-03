@@ -15,7 +15,7 @@ Deliverables:
 - Success scorecard with numeric targets.
 - Named product, backend, Hermes, security, infrastructure, and quality owners.
 
-Exit gate: no unresolved decision can materially change the first contract or trust boundary.
+Exit gate: the accepted role, privacy, delegation, runtime, and trust-boundary decisions are recorded, and no implementation begins before explicit approval of `APPROVAL-MANIFEST.md`.
 
 ### 1. Operation contract
 
@@ -44,7 +44,7 @@ Deliverables:
 
 Exit gate: authorization-matrix and audit-completeness tests pass for the pilot operations.
 
-### 3. Native Hermes pilot
+### 3. Plane Agent execution pilot
 
 Deliverables:
 
@@ -53,7 +53,7 @@ Deliverables:
 - Correlated run, turn, tool-call, and invocation IDs.
 - Hermes concurrent-execution integration.
 
-Exit gate: named pilot workflows succeed without Code Mode and cannot bypass Plane policy.
+Exit gate: the named pilot scenario succeeds without Code Mode and cannot bypass Plane policy.
 
 ### 4. TypeScript Code Mode
 
@@ -80,7 +80,21 @@ Deliverables:
 
 Exit gate: retry, interruption, network-failure, and container-death tests demonstrate no blind duplicate mutation.
 
-### 6. Evaluation and production hardening
+### 6. Roles, private knowledge, schedules, and dynamic delegation
+
+Deliverables:
+
+- One Agent model with exactly one role per configured agent and the six built-in roles.
+- Automatic chief-of-staff provisioning for every human, restricted to the human's live permissions.
+- Dedicated delegator planning for unclaimed work, rationale records, and normal assignment/run creation.
+- Gardener management of multiple agents' private memory and skills with immutable revisions and rollback; no cross-agent knowledge copying.
+- HR proposal and workspace-admin approval flow for agent creation, change, and retirement.
+- Evaluator review before every human acceptance or return, with human acceptance final.
+- Approved schedules that create normal assignments and runs without saved workflow definitions.
+
+Exit gate: role, schedule, gardener, HR, evaluator, assignment, and delegation contracts pass authorization, privacy, lifecycle, rollback, and audit tests.
+
+### 7. Evaluation and production hardening
 
 Deliverables:
 
@@ -99,9 +113,9 @@ Deliverables:
 - Three consecutive final passes on the exact release artifact.
 - Computer Use screenshots and readbacks for user-visible acceptance.
 
-Exit gate: production scorecard targets are met and rollback is rehearsed.
+Exit gate: full Plane integration/action coverage is verified, production scorecard targets are met, safety stops are qualified, and rollback is rehearsed.
 
-### 7. Controlled rollout
+### 8. Controlled rollout
 
 Stages:
 
@@ -110,9 +124,9 @@ Stages:
 3. Additional workspaces under feature flag.
 4. General availability for the approved catalog.
 
-Each stage requires review of task success, denials, unknown outcomes, audit gaps, sandbox failures, and operator incidents.
+Each stage requires review of task success, denials, unknown outcomes, audit gaps, sandbox failures, operator incidents, and mandatory safety-stop status. Staging remains required even though there are no current users.
 
-### 8. External MCP convergence
+### 9. External MCP convergence
 
 Deliverables:
 
@@ -144,6 +158,9 @@ Selected contents:
 ## Production readiness checklist
 
 - [ ] Product scope and success targets approved.
+- [ ] No saved/versioned workflow-definition lane remains in the target plan.
+- [ ] Every configured agent has exactly one role; built-in roles and custom-role governance are covered.
+- [ ] Chief-of-staff, delegator, gardener, HR, evaluator, schedule, and human-review controls are verified.
 - [ ] Shared operation contracts versioned and tested.
 - [ ] Dedicated agent credential issuance, storage, rotation, and revocation documented.
 - [ ] Authorization matrix passes for all pilot operations.
@@ -157,6 +174,8 @@ Selected contents:
 - [ ] Metrics, alerts, kill switches, and runbooks operational.
 - [ ] Rollback rehearsed before each rollout expansion.
 - [ ] External MCP compatibility verified before handler migration.
+- [ ] Full Plane integration/action coverage is represented in the gateway/catalog or explicitly dispositioned.
+- [ ] All required administration reuses existing Plane settings surfaces without a new settings framework.
 - [ ] Mandatory live Hermes project-planning acceptance passes without a mocked gateway.
 - [ ] Every counted live run resolves `openai-codex` and `gpt-5.6-luna` without fallback.
 - [ ] Extensive evaluation coverage and repetition requirements pass.

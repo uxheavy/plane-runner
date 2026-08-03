@@ -1,8 +1,8 @@
-# ADR-0009: Separate declared workflows from agent delegation
+# ADR-0009: Use dynamic planning and delegation, not saved workflows
 
 ## Status
 
-Proposed
+Accepted
 
 ## Date
 
@@ -10,46 +10,46 @@ Proposed
 
 ## Context
 
-The Freeform design considers a central delegator, delegation skills embedded in manager profiles, and a new workflow unit. These solve different problems. A workflow expresses declared control flow chosen in advance; delegation is a runtime judgment that creates responsibility, authorization, context, cost, and failure-handling relationships between actors.
+The product needs a dedicated delegator that can plan each case and route unclaimed work, but it does not need a saved workflow-definition product. A dynamic plan creates responsibility, authorization, context, cost, and failure-handling relationships at assignment time. Encoding that plan as a reusable definition would create a second product lane and make the target larger than the required Plane Agent model.
 
-Combining them would make deterministic automation depend on model judgment and turn delegation into an implicit workflow engine.
+Approved schedules are still useful triggers, but they create normal assignments and runs through the ordinary Plane lifecycle. They do not store or execute versioned workflow definitions.
 
 ## Decision
 
-Treat Workflow and Delegation as separate Plane concepts.
+Do not create a saved or versioned workflow-definition system in this scope. Do not add a workflow-graph DSL or a workflow-definition delivery lane.
 
-- A **workflow** has explicit, versioned, auditable control-flow semantics chosen in advance and is invocable by authorized humans or agents. Its agent, external-system, and time-varying steps may still produce nondeterministic results.
-- **delegation** is an agent behavior that creates a child assignment contract for another agent or human under explicit scope, budget, lineage, and completion semantics.
+- A **dynamic plan** is a case-specific decision made at assignment time; it is not a saved definition and is recorded as rationale and normal assignment lineage.
+- **delegation** is a capability of the dedicated `delegator` role. It creates normal child assignment contracts for another agent or human under explicit scope, budget, lineage, authorization, and completion semantics.
 
-Plane owns workflow definitions, schedule/control state, delegated assignment records, lineage, and outcomes. Hermes may execute workflow steps, schedules, or delegated runtime invocations behind Plane adapters; those mechanisms do not own the durable definitions or control state.
+Plane owns schedule/control state, delegated assignment records, dynamic-plan rationale, lineage, and outcomes. The execution kernel may execute schedules or delegated runtime invocations behind Plane adapters; it does not own durable definitions or control state.
 
-Do not require a universal Delegator agent. A specialized delegator may later exist as an agent profile, while manager profiles may receive delegation behavior and tools through skills and tool presentation.
+The dedicated delegator dynamically plans work, automatically assigns unclaimed work to humans or agents, and records why each assignment was made. Worker and ordinary specialist roles do not freely delegate merely because they have skills or discoverable operations. Delegator actions remain subject to live Plane permissions and the same assignment/run/audit lifecycle as human-created work.
 
-V1 does not add a general workflow-graph DSL and does not require open-ended delegation. The first vertical slice proves one Plane Agent completing one assigned outcome before either surface expands.
+The first vertical slice proves one Plane Agent completing one assigned outcome. Dynamic planning, schedule-triggered normal assignments, and delegated assignment breadth complete the non-UI program only after the single-agent lifecycle and full Plane operation/action coverage are verified.
 
 ## Alternatives considered
 
-### Route every assignment through one Delegator agent
+### Add a saved workflow-definition product
 
-- Benefit: one place for routing behavior.
-- Cost: central bottleneck, hidden policy, and single-agent failure domain.
-- Rejected as a runtime requirement: delegation can be an optional behavior, tool, and profile.
+- Benefit: reusable declared control flow.
+- Cost: adds a second product model and a versioned execution lane that is not required for case-specific planning.
+- Rejected: the delegator plans each case dynamically and creates ordinary assignments.
 
-### Encode all delegation in skills
+### Let every agent delegate freely
+
+- Benefit: simple local behavior.
+- Cost: uncontrolled assignment fan-out and unclear accountability.
+- Rejected: only the dedicated delegator role owns dynamic routing; specialist agents execute their assignments.
+
+### Encode all delegation only in skills
 
 - Benefit: flexible and close to role behavior.
-- Cost: lacks durable product-level lineage and lifecycle by itself.
-- Rejected as the complete design: skills may guide decisions but Plane records delegation.
-
-### Represent workflows as agents
-
-- Benefit: one execution abstraction.
-- Cost: declared control flow becomes implicit model behavior and harder to reproduce.
-- Rejected: workflows and agents have different guarantees.
+- Cost: lacks durable product-level rationale and assignment lineage by itself.
+- Rejected as the complete design: skills may guide decisions, but Plane records delegation as normal assignments.
 
 ## Consequences
 
-- Workflow execution can be tested independently from model behavior.
+- Dynamic planning is tested as assignment creation and rationale, not as workflow replay.
 - Delegated assignments preserve parent-child lineage and independent authorization.
-- A future Delegator is a profile, not privileged infrastructure.
-- Detailed workflow and delegation schemas remain deferred until the single-agent lifecycle is proven.
+- The dedicated delegator is a role in the one Agent model, not privileged infrastructure.
+- Approved schedules create ordinary assignments and runs, so schedule recovery uses the existing lifecycle.

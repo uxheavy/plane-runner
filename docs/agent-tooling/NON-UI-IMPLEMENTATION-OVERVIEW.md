@@ -4,13 +4,13 @@
 
 ## Status
 
-Proposed delivery coordination overlay
+Accepted delivery coordination overlay; implementation gated by explicit manifest approval
 
 This is a delivery coordination overlay. The ADRs, architecture, decision register, and approved manifests remain normative when they disagree with this overview.
 
 ## Outcome
 
-Finish the Plane Agent system end to end without building chat UI. Plane owns the product and durable control state; the forked Hermes kernel executes behind a narrow runtime service; every supported operation converges on the Plane Operation Gateway; and the exact release is independently verifiable and operable in production.
+Finish the Plane Agent system end to end without building chat UI. Plane owns the product and durable control state; the hidden execution kernel runs behind a narrow runtime service; every supported operation/action converges on the Plane Operation Gateway; and the exact release is independently verifiable and operable in production.
 
 The system is operated through API, CLI, fixtures, and minimal reused settings surfaces until chat UX is designed later.
 
@@ -18,9 +18,9 @@ The system is operated through API, CLI, fixtures, and minimal reused settings s
 
 Included:
 
-- Plane-owned agent identity, profiles, assignments, runs, invocations, outcomes, conversations, artifacts, memory, skills, schedules, workflows, delegation, authorization, and audit
+- Plane-owned Agent identity, profiles, exactly-one-role governance, assignments, runs, invocations, outcomes, conversations, artifacts, agent-private memory, skills, schedules, dynamic delegation, evaluator review, authorization, and audit
 - Plane Operation Gateway, semantic operation catalog, native tools, progressive discovery, TypeScript composition, and external MCP convergence
-- Separate Plane agent-runtime service backed by the forked Hermes kernel
+- Separate Plane agent-runtime service backed by the hidden execution kernel
 - Security isolation, reliability, observability, evaluation, release, and controlled rollout
 - API, CLI, fixtures, operator surfaces, and minimal settings administration needed to configure and verify the system
 
@@ -38,7 +38,7 @@ Excluded:
 2. New production code is allowed only at a Plane-owned domain seam, cross-process contract, security boundary, or missing compatibility adapter.
 3. Build generators, fixtures, contract tests, and verification entry points before broad hand-written expansion.
 4. Optimize each phase for the final architecture; do not add temporary compatibility layers merely to keep every intermediate state smooth.
-5. Integrate at explicit gates. Temporary branch-local breakage is acceptable inside a lane, but every gate must be reproducible and green.
+5. Integrate at explicit gates. No runtime, application, or verification implementation starts before explicit APPROVAL-MANIFEST.md approval and G0; every gate must be reproducible and green.
 
 ## How a traditional company would run it
 
@@ -47,7 +47,7 @@ Excluded:
 3. **Integrate a deterministic slice before adding a model.** The fake runtime proves the complete assignment-to-outcome lifecycle and operation path without UI or model variability.
 4. **Replace only the fake adapter with real Hermes.** Native tools, progressive discovery, Code Mode, context projections, and host callbacks fill the already-tested runtime contract.
 5. **Prove one real assigned outcome.** The first real vertical slice is the forcing function for lifecycle, authorization, mutation safety, publication, isolation, and audit.
-6. **Expand breadth after the spine holds.** Memory, skills, schedules, workflows, delegation, MCP convergence, settings, and operational hardening proceed in parallel without changing the core ownership model.
+6. **Expand breadth after the spine holds.** Private memory, skills, schedules, dynamic delegation, MCP convergence, reused settings surfaces, and operational hardening proceed in parallel without changing the core ownership model.
 7. **Verify the release artifact, then roll out progressively.** Clean-checkout verification, retained live evaluation, canaries, observability, credential drills, and rollback precede each cohort expansion.
 
 Teams integrate at the gates below, not by keeping every branch continuously compatible. A lane may be temporarily incomplete between gates, but it must not introduce throwaway compatibility layers that survive into the target architecture.
@@ -71,7 +71,7 @@ flowchart LR
     NL0 -. starts immediately .-> G0
     NL0 -. evidence into .-> G0
     NL1["L1: Verification and release engineering"]
-    NL1 -. starts immediately .-> G0
+    G0 -. enables .-> NL1
     NL1 -. evidence into .-> G5
     NL2["L2: Plane agent domain and lifecycle"]
     G0 -. enables .-> NL2
@@ -85,10 +85,10 @@ flowchart LR
     NL5["L5: Native tools, progressive discovery, and TypeScript isolation"]
     G1 -. enables .-> NL5
     NL5 -. evidence into .-> G2
-    NL6["L6: Context, memory, skills, and schedules"]
+    NL6["L6: Private memory, skills, gardeners, and schedules"]
     G1 -. enables .-> NL6
     NL6 -. evidence into .-> G3
-    NL7["L7: Declared workflows and delegation"]
+    NL7["L7: Dynamic planning and delegation"]
     G2 -. enables .-> NL7
     NL7 -. evidence into .-> G3
     NL8["L8: External MCP and SDK convergence"]
@@ -105,39 +105,39 @@ flowchart LR
     NL11 -. evidence into .-> G5
 ```
 
-The dotted lane edges show when work starts and the gate by which its evidence must be complete. L1 and L9 are continuous lanes; they do not wait until the end.
+The dotted lane edges show when work starts and the gate by which its evidence must be complete. L9 remains continuous after G0; every other lane follows its declared gate and no implementation lane starts before G0.
 
 ## Lane summary
 
-| Lane | Responsibility                                                | Accountable owner                      | Starts after | Complete by |
-| ---- | ------------------------------------------------------------- | -------------------------------------- | ------------ | ----------- |
-| L0   | Product, architecture, and contract control                   | Product/technical lead                 | Now          | G0          |
-| L1   | Verification and release engineering                          | Quality/release owner                  | Now          | G5          |
-| L2   | Plane agent domain and lifecycle                              | Plane backend/domain owner             | G0           | G3          |
-| L3   | Operation catalog, gateway, authorization, and audit          | Plane API/platform owner               | G0           | G3          |
-| L4   | Runtime service and Hermes kernel adapter                     | Agent runtime/Hermes owner             | G0           | G2          |
-| L5   | Native tools, progressive discovery, and TypeScript isolation | Runtime security/tooling owner         | G1           | G2          |
-| L6   | Context, memory, skills, and schedules                        | Knowledge/automation owner             | G1           | G3          |
-| L7   | Declared workflows and delegation                             | Workflow/domain owner                  | G2           | G3          |
-| L8   | External MCP and SDK convergence                              | SDK/integrations owner                 | G1           | G3          |
-| L9   | Platform, security, reliability, and operations               | Infrastructure/security owner          | G0           | G5          |
-| L10  | Minimal administration and settings                           | Plane web/settings owner               | G1           | G3          |
-| L11  | Evaluation, production proof, and rollout                     | Quality/product/operations gate owners | G2           | G5          |
+| Lane | Responsibility | Accountable owner | Starts after | Complete by |
+| ---- | -------------- | ----------------- | ------------ | ----------- |
+| L0 | Product, architecture, and contract control | Product/technical lead | Now | G0 |
+| L1 | Verification and release engineering | Quality/release owner | G0 | G5 |
+| L2 | Plane agent domain and lifecycle | Plane backend/domain owner | G0 | G3 |
+| L3 | Operation catalog, gateway, authorization, and audit | Plane API/platform owner | G0 | G3 |
+| L4 | Runtime service and Hermes kernel adapter | Agent runtime/Hermes owner | G0 | G2 |
+| L5 | Native tools, progressive discovery, and TypeScript isolation | Runtime security/tooling owner | G1 | G2 |
+| L6 | Private memory, skills, gardeners, and schedules | Knowledge/automation owner | G1 | G3 |
+| L7 | Dynamic planning and delegation | Delegation/domain owner | G2 | G3 |
+| L8 | External MCP and SDK convergence | SDK/integrations owner | G1 | G3 |
+| L9 | Platform, security, reliability, and operations | Infrastructure/security owner | G0 | G5 |
+| L10 | Minimal administration and settings | Plane web/settings owner | G1 | G3 |
+| L11 | Evaluation, production proof, and rollout | Quality/product/operations gate owners | G2 | G5 |
 
 ## Integration gates
 
-| Gate | Meaning                          | Representative exit condition                                                                                                                                                  |
-| ---- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| G0   | Implementation contract frozen   | ADR-0010 is accepted before the runtime spine starts; ADR-0008 and ADR-0009 are accepted before their implementation lanes, with any first-slice deferral recorded explicitly. |
-| G1   | Deterministic domain spine       | A fixture can create an agent actor, profile version, assignment, run snapshot, invocation, and terminal outcome without a model or UI.                                        |
-| G2   | Real single-agent vertical slice | A real forked-Hermes process completes the assigned planning outcome through native tools and progressive TypeScript composition.                                              |
-| G3   | Non-UI feature breadth complete  | Memory/context, skills, schedules, declared workflows, delegation, artifacts, and outcome review APIs satisfy their accepted contracts.                                        |
-| G4   | Production candidate verified    | The clean-checkout primary verifier passes static, contract, authorization, isolation, mutation, compatibility, load, recovery, and operator checks.                           |
-| G5   | Controlled rollout complete      | Development, allowlisted-workspace, expanded-cohort, and approved general-availability stages have recorded evidence and approval.                                             |
+| Gate | Meaning | Representative exit condition |
+| ---- | ------- | ----------------------------- |
+| G0 | Implementation contract frozen | ADR-0008, ADR-0009, and ADR-0010 are accepted before their implementation lanes; the approval manifest is explicitly approved before any runtime, application, or verification implementation starts. |
+| G1 | Deterministic domain spine | A fixture can create an agent actor, profile version, assignment, run snapshot, invocation, and terminal outcome without a model or UI. |
+| G2 | Real single-agent vertical slice | A real forked-Hermes process completes the assigned planning outcome through native tools and progressive TypeScript composition. |
+| G3 | Non-UI feature breadth complete | Full Plane integration/action coverage, private memory/skills, schedules, dynamic delegation, artifacts, evaluator review, and outcome APIs satisfy their accepted contracts. |
+| G4 | Production candidate verified | The clean-checkout primary verifier passes static, contract, authorization, isolation, mutation, compatibility, load, recovery, and operator checks. |
+| G5 | Controlled rollout complete | After verification, development, allowlisted-workspace, expanded-cohort, and approved general-availability stages have recorded evidence and approval even though there are no current users. |
 
 ### G0: Implementation contract frozen
 
-- ADR-0010 is accepted before the runtime spine starts; ADR-0008 and ADR-0009 are accepted before their implementation lanes, with any first-slice deferral recorded explicitly.
+- ADR-0008, ADR-0009, and ADR-0010 are accepted before their implementation lanes; the approval manifest is explicitly approved before any runtime, application, or verification implementation starts.
 - Runtime transport, event schemas, catalog names, limits, retention, idempotency, and audit failure policy are frozen for v1.
 - UI-dependent and stale docs/search/execute verification language is reconciled with the non-UI boundary and current catalog decision.
 - APPROVAL-MANIFEST.md receives the user's explicit implementation approval.
@@ -159,7 +159,7 @@ The dotted lane edges show when work starts and the gate by which its evidence m
 
 ### G3: Non-UI feature breadth complete
 
-- Memory/context, skills, schedules, declared workflows, delegation, artifacts, and outcome review APIs satisfy their accepted contracts.
+- Full Plane integration/action coverage, private memory/skills, schedules, dynamic delegation, artifacts, evaluator review, and outcome APIs satisfy their accepted contracts.
 - The approved external MCP inventory is migrated or explicitly dispositioned through the shared gateway.
 - Minimal administration uses existing Plane settings primitives and introduces no chat UI or parallel design system.
 - All supported behaviors have contract, permission, failure, and compatibility tests.
@@ -172,9 +172,9 @@ The dotted lane edges show when work starts and the gate by which its evidence m
 
 ### G5: Controlled rollout complete
 
-- Development, allowlisted-workspace, expanded-cohort, and approved general-availability stages have recorded evidence and approval.
-- Production canaries prove one permitted and one denied workflow, audit correlation, version readback, and rollback readiness.
-- No unresolved security-critical failure, duplicate mutation, missing audit event, credential disclosure, or sandbox escape remains.
+- After verification, development, allowlisted-workspace, expanded-cohort, and approved general-availability stages have recorded evidence and approval even though there are no current users.
+- Production canaries prove one permitted and one denied Plane scenario, audit correlation, version readback, and rollback readiness.
+- No unresolved security-critical failure, duplicate mutation, missing audit event, credential disclosure, or sandbox escape remains; automated safety stops are mandatory at every stage.
 
 ## Parallel delivery lanes
 
@@ -190,7 +190,7 @@ The dotted lane edges show when work starts and the gate by which its evidence m
 
 Work:
 
-- Resolve the three Proposed ADRs and every decision that can change ownership, trust, or the first runtime contract.
+- Record the accepted role, privacy, dynamic-planning, runtime, and trust-boundary decisions and every remaining decision that can change the first contract.
 - Freeze the pilot operation catalog, model-facing presentation, runtime transport, event taxonomy, limits, retention, and failure semantics.
 - Reconcile current manifests with the no-chat-UI boundary and remove stale fixed tool names.
 - Assign accountable owners, review authorities, milestones, and change-control rules.
@@ -215,7 +215,7 @@ Completion evidence:
 
 **Accountable owner:** Quality/release owner
 
-**Window:** Immediately → G5
+**Window:** G0 → G5
 
 **Can progress alongside:** L0, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11
 
@@ -255,14 +255,14 @@ Completion evidence:
 
 **Can progress alongside:** L3, L4, L10
 
-**Outcome:** Plane durably owns independently versioned actors, profiles, assignments, runs, invocations, outcomes, conversations, artifacts, and review state.
+**Outcome:** Plane durably owns independently versioned actors, exactly-one-role profiles, assignments, runs, invocations, outcomes, conversations, artifacts, evaluator review, and human decision state.
 
 Work:
 
 - Add the minimal Django models, migrations, application services, serializers, and API endpoints for the accepted lifecycle.
 - Persist immutable run snapshots and per-dispatch invocation envelopes, including cumulative budgets and Plane-owned input events.
-- Enforce legal transitions, terminal-event synthesis, cancellation, revision, recovery, and outcome_unknown reconciliation.
-- Expose API/CLI fixtures for assignment, dispatch, inspection, outcome submission, accept, and revise.
+- Enforce legal transitions, terminal-event synthesis, cancellation, blocker representation, revision, recovery, evaluator review, and outcome_unknown reconciliation.
+- Provision one chief-of-staff agent per human within live permissions and expose API/CLI fixtures for assignment, dispatch, inspection, outcome submission, evaluator review, accept, and revise.
 
 Reuse first:
 
@@ -291,14 +291,14 @@ Completion evidence:
 
 **Can progress alongside:** L2, L4, L10
 
-**Outcome:** Native tools, TypeScript callbacks, runtime lifecycle mutations, and migrated MCP handlers share one typed, authorized, idempotent, bounded, audited Plane operation path.
+**Outcome:** Every supported Plane integration/action, native tool, TypeScript callback, runtime lifecycle mutation, and migrated MCP handler shares one typed, authorized, idempotent, bounded, audited Plane operation path.
 
 Work:
 
 - Generate the base catalog from supported OpenAPI and apply a curated semantic overlay.
 - Implement the request-bound gateway around existing Plane application services rather than copying business logic.
-- Add dedicated agent identity authentication, live authorization, invocation idempotency, reconciliation, result shaping, structured errors, and append-only audit.
-- Implement the v1 semantic planning operation and then expand catalog coverage by approved inventory.
+- Add caller authentication—dedicated Agent identity for internal paths and authenticated human/integration identity for external MCP—plus live authorization, invocation idempotency, reconciliation, result shaping, structured errors, and append-only audit.
+- Implement the v1 semantic planning operation and complete the full supported Plane integration/action catalog before G3.
 
 Reuse first:
 
@@ -392,7 +392,7 @@ Completion evidence:
 - Nested authorization/audit traces
 - Output and budget boundary tests
 
-### L6: Context, memory, skills, and schedules
+### L6: Private memory, skills, gardeners, and schedules
 
 **Accountable owner:** Knowledge/automation owner
 
@@ -400,14 +400,14 @@ Completion evidence:
 
 **Can progress alongside:** L4, L5, L7
 
-**Outcome:** Plane governs durable context, memory, skills, and schedule definitions while Hermes reuses its retrieval, learning, skill, and scheduling mechanisms behind adapters.
+**Outcome:** Plane governs agent-private context, memory, skills, gardeners, and schedule control while the hidden execution kernel supplies reusable retrieval, learning, skill, and scheduling mechanisms behind adapters.
 
 Work:
 
-- Implement typed scopes, provenance, visibility, retention, candidate/promotion state, and deterministic context assembly.
+- Implement agent-private typed scopes, provenance, visibility, retention, immutable revisions, rollback, and deterministic context assembly.
 - Generate lossless MEMORY.md, subject-bound USER.md, and skill-package projections without treating files as the source of truth.
-- Preserve automatic agent-scoped learning candidates and require governance before shared promotion.
-- Store schedule definitions/control state in Plane and execute due invocations through the same run contract.
+- Let gardeners maintain multiple agents while keeping every memory and skill change scoped to one target; never copy knowledge between agents.
+- Store approved schedule control state in Plane and execute due events by creating normal assignments and runs through the same run contract.
 
 Reuse first:
 
@@ -418,49 +418,49 @@ Reuse first:
 
 Unavoidable custom seams:
 
-- Plane governance records and projection adapters
+- Plane gardener governance records and projection adapters
 - Deterministic context assembler
-- Promotion/retention policy enforcement
+- Immutable revision, rollback, and retention policy enforcement
 
 Completion evidence:
 
 - Scope/leakage matrix
 - Projection round-trip tests
-- Candidate promotion tests
+- Gardener privacy, revision, and rollback tests
 - Schedule recovery tests
 
-### L7: Declared workflows and delegation
+### L7: Dynamic planning and delegation
 
-**Accountable owner:** Workflow/domain owner
+**Accountable owner:** Delegation/domain owner
 
 **Window:** G2 → G3
 
 **Can progress alongside:** L6, L8, L10
 
-**Outcome:** Plane supports versioned declared control flow and runtime-created delegated responsibility as separate, auditable concepts after the single-agent lifecycle is proven.
+**Outcome:** Plane supports case-specific dynamic planning, normal delegated assignments, and schedule-triggered runs after the single-agent lifecycle is proven, without a saved workflow-definition product.
 
 Work:
 
-- Accept the detailed workflow and delegation schemas after incorporating single-agent implementation evidence.
-- Implement versioned workflow definitions/control state without promising deterministic outputs from nondeterministic steps.
-- Implement child assignment contracts with scope, budgets, lineage, authorization, completion, and failure semantics.
-- Route workflow steps, schedules, and delegated execution through the same run/invocation contract.
+- Implement the dedicated delegator role's case-specific planning and rationale records.
+- Automatically assign unclaimed work to humans or agents through normal assignment contracts.
+- Implement delegated assignment scope, budgets, lineage, authorization, completion, and failure semantics.
+- Allow approved schedules to create normal assignments and runs through the same run/invocation contract; add no saved workflow definitions.
 
 Reuse first:
 
 - Plane assignment/run lifecycle and schedule control state
 - Hermes tools/delegate_tool.py and agent/subagent_lifecycle.py as execution donors
-- Buzz workflow schema/executor as a design and code donor where it fits without becoming a dependency
+- Existing assignment and schedule mechanisms as the canonical Plane lifecycle; no workflow-definition donor is required
 
 Unavoidable custom seams:
 
-- Plane workflow/delegation domain records
-- Workflow control application service
+- Plane dynamic-plan/delegation domain records
 - Delegated assignment policy adapter
+- Schedule-to-assignment application service
 
 Completion evidence:
 
-- Workflow version/replay tests
+- Dynamic-plan rationale and replay-safety tests
 - Delegation lineage and budget tests
 - Authorization and cancellation tests
 
@@ -472,7 +472,7 @@ Completion evidence:
 
 **Can progress alongside:** L7, L9, L10
 
-**Outcome:** The supported Python MCP surface remains compatible while incrementally routing approved operations through the same Plane gateway.
+**Outcome:** The supported Python MCP surface remains compatible while incrementally routing approved operations through the same Plane gateway, with the full supported action inventory covered or explicitly dispositioned.
 
 Work:
 
@@ -544,12 +544,12 @@ Completion evidence:
 
 **Can progress alongside:** L2, L3, L6, L8, L9
 
-**Outcome:** Administrators can configure and inspect the non-chat system using Plane's existing settings architecture, while all agent execution remains operable without UI.
+**Outcome:** Administrators can configure and inspect roles, agents, HR proposals, gardeners, schedules, evaluators, limits, and kill switches through Plane's existing settings architecture, while all agent execution remains operable without UI.
 
 Work:
 
 - Keep API and CLI administration complete before adding pages.
-- Add only settings entries required for actors, profile versions, credentials, operation availability/presentation, memory/skill governance, schedules, limits, and kill switches.
+- Add only settings entries required for actors, exactly-one-role profiles, credentials, HR proposals, operation availability/presentation, private memory/skill governance, schedules, evaluators, limits, and kill switches.
 - Reuse existing settings layouts, headers, forms, tables, drawers/modals, services, stores, permissions, and @plane/ui components.
 - Do not build message lists, composers, conversation navigation, transcript viewers, or a custom agent UI framework.
 
@@ -578,14 +578,14 @@ Completion evidence:
 
 **Can progress alongside:** L1, L7, L8, L9, L10
 
-**Outcome:** The exact release artifact meets the approved functional, security, reliability, compatibility, operational, and rollout thresholds with immutable evidence.
+**Outcome:** The exact release artifact meets the approved full-coverage, functional, security, reliability, compatibility, operational, and rollout thresholds with immutable evidence.
 
 Work:
 
-- Run the mandatory real-Hermes planning acceptance through API/CLI readback and ordinary Plane object pages, not chat UI.
+- Run the mandatory real Plane Agent planning acceptance through API/CLI readback and ordinary Plane object pages, not chat UI.
 - Execute the retained scenario matrix, including denials, retries, outcome_unknown, large results, hostile code, concurrency, and recovery.
 - Qualify verifier negative controls, pin artifacts/digests, and run repeated clean-state final verification.
-- Promote through development, allowlisted workspace, expanded cohort, and approved GA with canary and rollback evidence.
+- Verify full Plane integration/action coverage, then promote through development, allowlisted workspace, expanded cohort, and approved GA with canary, safety-stop, and rollback evidence even though there are no current users.
 
 Reuse first:
 
@@ -620,4 +620,4 @@ Buzz remains a reference/code donor, not a production authority. Hermes remains 
 
 ## Definition of finished
 
-“Finished except chat UI” means G5 passes. It does not mean only that the model can call a tool. The completed system must have the full Plane-owned lifecycle, the real Hermes-backed runtime, TypeScript isolation, governed knowledge and automation, MCP compatibility, production operations, retained verification evidence, and controlled rollout. Chat/composer/thread UX remains a separate future program.
+“Finished except chat UI” means G5 passes. It does not mean only that the model can call a tool. The completed system must have the full Plane-owned lifecycle, the hidden-kernel-backed runtime, TypeScript isolation, private governed knowledge, schedules, dynamic delegation, full Plane integration/action coverage, MCP compatibility, production operations, retained verification evidence, and controlled rollout with mandatory safety stops even though there are no current users. Chat/composer/thread UX remains a separate future program.

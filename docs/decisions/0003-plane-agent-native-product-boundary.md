@@ -10,15 +10,17 @@ Accepted
 
 ## Context
 
-Plane needs agents that behave like teammates inside normal Plane workflows. Treating Hermes as a visible adjacent product would expose a second identity model, vocabulary, configuration surface, and interaction model. Users would have to understand both Plane and Hermes even though their intent is to assign an outcome in Plane and review the result there.
+Plane needs agents that behave like teammates inside normal Plane work. Treating the execution kernel as a visible adjacent product would expose a second identity model, vocabulary, configuration surface, and interaction model. Users should be able to assign an outcome in Plane and review the result there.
 
 The product boundary must remain stable even if the execution kernel changes later.
 
 ## Decision
 
-Plane Agent is the product abstraction. It is a first-class Plane actor whose durable identity, memberships, roles, object permissions, credential, behavioral profiles, assignment contracts, run attempts, conversations, outcome submissions, artifacts, and history are owned by Plane.
+Plane Agent is the product abstraction. It is one underlying Plane product and runtime model for every configured agent. Each configured agent has exactly one role, while its durable identity, memberships, roles, object permissions, credential, behavioral profiles, assignment contracts, run attempts, conversations, outcome submissions, artifacts, and history are owned by Plane. Built-in roles and their governance are defined in ADR-0005; administrators may define additional single roles without creating another runtime model.
 
-Users create, configure, assign, observe, and review agents entirely through Plane. Model-facing concepts use Plane vocabulary and natural Plane workflows. Hermes is not exposed as the agent's identity, user experience, or configuration contract.
+Users create, configure, assign, observe, and review agents entirely through Plane. Model-facing concepts use Plane vocabulary and natural Plane work. Every human receives one automatically provisioned chief-of-staff agent; that agent operates only within the human's current live Plane permissions and is not a permission shortcut. The execution kernel is not exposed as the agent's identity, user experience, or configuration contract.
+
+External MCP callers remain external callers. Their authenticated human or integration principal is preserved through the same gateway and is not represented as a dedicated internal Plane Agent identity.
 
 Buzz may inform conversation, ACP, and inspectability design, but it is a reference and code donor rather than a Plane runtime dependency or source of durable product state.
 

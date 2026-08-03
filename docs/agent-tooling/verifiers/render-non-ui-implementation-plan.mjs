@@ -166,7 +166,7 @@ This is a delivery coordination overlay. The ADRs, architecture, decision regist
 
 ## Outcome
 
-Finish the Plane Agent system end to end without building chat UI. Plane owns the product and durable control state; the forked Hermes kernel executes behind a narrow runtime service; every supported operation converges on the Plane Operation Gateway; and the exact release is independently verifiable and operable in production.
+Finish the Plane Agent system end to end without building chat UI. Plane owns the product and durable control state; the hidden execution kernel runs behind a narrow runtime service; every supported operation/action converges on the Plane Operation Gateway; and the exact release is independently verifiable and operable in production.
 
 The system is operated through API, CLI, fixtures, and minimal reused settings surfaces until chat UX is designed later.
 
@@ -193,7 +193,7 @@ ${numberedList(plan.principles)}
 3. **Integrate a deterministic slice before adding a model.** The fake runtime proves the complete assignment-to-outcome lifecycle and operation path without UI or model variability.
 4. **Replace only the fake adapter with real Hermes.** Native tools, progressive discovery, Code Mode, context projections, and host callbacks fill the already-tested runtime contract.
 5. **Prove one real assigned outcome.** The first real vertical slice is the forcing function for lifecycle, authorization, mutation safety, publication, isolation, and audit.
-6. **Expand breadth after the spine holds.** Memory, skills, schedules, workflows, delegation, MCP convergence, settings, and operational hardening proceed in parallel without changing the core ownership model.
+6. **Expand breadth after the spine holds.** Private memory, skills, schedules, dynamic delegation, MCP convergence, reused settings surfaces, and operational hardening proceed in parallel without changing the core ownership model.
 7. **Verify the release artifact, then roll out progressively.** Clean-checkout verification, retained live evaluation, canaries, observability, credential drills, and rollback precede each cohort expansion.
 
 Teams integrate at the gates below, not by keeping every branch continuously compatible. A lane may be temporarily incomplete between gates, but it must not introduce throwaway compatibility layers that survive into the target architecture.
@@ -204,7 +204,7 @@ Teams integrate at the gates below, not by keeping every branch continuously com
 ${renderExecutionMap()}
 \`\`\`
 
-The dotted lane edges show when work starts and the gate by which its evidence must be complete. L1 and L9 are continuous lanes; they do not wait until the end.
+The dotted lane edges show when work starts and the gate by which its evidence must be complete. L9 remains continuous after G0; every other lane follows its declared gate and no implementation lane starts before G0.
 
 ## Lane summary
 
@@ -238,7 +238,7 @@ Buzz remains a reference/code donor, not a production authority. Hermes remains 
 
 ## Definition of finished
 
-“Finished except chat UI” means G5 passes. It does not mean only that the model can call a tool. The completed system must have the full Plane-owned lifecycle, the real Hermes-backed runtime, TypeScript isolation, governed knowledge and automation, MCP compatibility, production operations, retained verification evidence, and controlled rollout. Chat/composer/thread UX remains a separate future program.
+“Finished except chat UI” means G5 passes. It does not mean only that the model can call a tool. The completed system must have the full Plane-owned lifecycle, the hidden-kernel-backed runtime, TypeScript isolation, private governed knowledge, schedules, dynamic delegation, full Plane integration/action coverage, MCP compatibility, production operations, retained verification evidence, and controlled rollout with mandatory safety stops even though there are no current users. Chat/composer/thread UX remains a separate future program.
 `;
 }
 
@@ -249,6 +249,7 @@ function formatMarkdown(markdown) {
     encoding: "utf8",
     input: markdown,
   });
+  if (result.error?.code === "ENOENT") return markdown;
   if (result.status !== 0) {
     fail(`oxfmt could not format the generated overview: ${result.stderr || result.stdout}`);
   }

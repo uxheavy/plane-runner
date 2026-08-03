@@ -13,7 +13,7 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ATD-009 | Common Plane operations are eager native tools.                                                       | \_/10      |
 | ATD-010 | Remaining supported Plane operations are progressively discoverable.                                  | \_/10      |
 | ATD-011 | Direct tools are an ergonomic surface rather than a security tier.                                    | \_/10      |
-| ATD-012 | Catalog visibility is identical for every Plane identity.                                             | \_/10      |
+| ATD-012 | Every authenticated agent client can discover the complete supported operation/action catalog.          | \_/10      |
 | ATD-013 | Catalog visibility does not imply execution permission.                                               | \_/10      |
 | ATD-014 | Plane's live authorization model decides every operation.                                             | \_/10      |
 | ATD-015 | The tooling layer does not duplicate Plane authorization with an operation allowlist.                 | \_/10      |
@@ -54,7 +54,7 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ATD-058 | Audit metadata pins exact catalog and adapter versions.                                               | \_/10      |
 | ATD-059 | Audit metadata pins the TypeScript runtime version.                                                   | \_/10      |
 | ATD-060 | External MCP compatibility is versioned independently from native tool ergonomics.                    | \_/10      |
-| ATD-061 | The first pilot is a broader end-to-end project-planning workflow.                                    | \_/10      |
+| ATD-061 | The first pilot is a broader end-to-end project-planning scenario.                                    | \_/10      |
 | ATD-062 | Goal completion requires a real Hermes run against the authenticated Plane development server.        | \_/10      |
 | ATD-063 | The mandatory live Hermes acceptance cannot use a mocked Plane Operation Gateway.                     | \_/10      |
 | ATD-064 | The live pilot creates one parent release plan and three coordinated child work items.                | \_/10      |
@@ -98,7 +98,7 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ATD-115 | Plane Agent is the product abstraction; Hermes is not exposed as a separate product.                  | \_/10      |
 | ATD-116 | Plane owns durable agent identity, profile, assignment, run, conversation, artifact, and history.     | \_/10      |
 | ATD-117 | The `uxheavy` Hermes fork is maintained as Plane Agent's hidden execution kernel.                     | \_/10      |
-| ATD-118 | Agent roles are declarative, versioned Plane profiles rather than separate runtime implementations.   | \_/10      |
+| ATD-118 | One underlying Plane Agent model uses exactly one role per configured agent; roles are declarative and versioned rather than separate runtime implementations. | \_/10      |
 | ATD-119 | An assignment is a durable commission to produce an outcome; the submission is the reviewable result. | \_/10      |
 | ATD-120 | Plane is authoritative for assignment, run, outcome, conversation, artifact, and history state.       | \_/10      |
 | ATD-121 | Mutations remain explicit semantic operations rather than one universal mutation tool.                | \_/10      |
@@ -106,8 +106,25 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ATD-123 | Actor authorization, behavioral profile versions, and tool availability/disclosure are separate.      | \_/10      |
 | ATD-124 | A Plane run may span kernel invocations, sessions, processes, or restarts.                            | \_/10      |
 | ATD-125 | Plane-governed storage is authoritative; Hermes-compatible files are execution projections.           | \_/10      |
-| ATD-126 | Automatic learning creates agent-scoped candidates; shared promotion requires human governance.       | \_/10      |
-| ATD-127 | Plane records exactly one visible terminal product event for every terminal runtime invocation.       | \_/10      |
+| ATD-126 | Agent memory and skills remain private to one agent; gardener improvements are immutable and rollbackable, and no knowledge is copied between agents. | \_/10      |
+| ATD-127 | Plane records exactly one visible terminal product event for every terminal runtime invocation: outcome, failure, blocker, or cancellation. | \_/10      |
+| ATD-128 | Built-in Agent roles are worker, delegator, gardener, chief of staff, HR, and evaluator.              | \_/10      |
+| ATD-129 | Workspace administrators may define additional custom single roles on the same Agent model.          | \_/10      |
+| ATD-130 | Every human automatically receives one chief-of-staff Agent restricted to that human's live permissions. | \_/10      |
+| ATD-131 | A dedicated delegator dynamically plans each case, assigns unclaimed work to humans or Agents, and records assignment rationale. | \_/10      |
+| ATD-132 | Worker and ordinary specialist Agents do not freely delegate.                                      | \_/10      |
+| ATD-133 | Saved or versioned workflow definitions and a workflow-definition delivery lane are out of scope; each case is planned dynamically. | \_/10      |
+| ATD-134 | Approved schedules create normal assignments and runs through the standard lifecycle.                | \_/10      |
+| ATD-135 | HR proposes Agent creation, change, and retirement; a workspace administrator approves each proposal. | \_/10      |
+| ATD-136 | An evaluator reviews every Agent outcome before human acceptance or return; human acceptance remains final. | \_/10      |
+| ATD-137 | Full Plane integration/action coverage is required before the non-UI program is finished.             | \_/10      |
+| ATD-138 | Adaptive disclosure controls eager schemas without reducing global catalog discoverability or operation coverage. | \_/10      |
+| ATD-139 | Required administration reuses existing Plane settings surfaces; no new settings framework is created. | \_/10      |
+| ATD-140 | After verification, rollout may be staged despite no current users, and automated safety stops remain mandatory. | \_/10      |
+| ATD-141 | The approval manifest is the implementation gate; no runtime, application, or verification implementation begins before explicit approval and G0. | \_/10      |
+| ATD-142 | Internal Agent calls use dedicated Agent identity; external MCP calls preserve the authenticated human or integration caller. | \_/10      |
+| ATD-143 | ADR-0008, ADR-0009, and ADR-0010 are accepted decisions before their implementation lanes begin.   | \_/10      |
+| ATD-144 | Terminal cancellation and blocker are distinct visible Plane events; waiting for input is non-terminal. | \_/10      |
 
 ## Superseded
 
@@ -158,9 +175,6 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ATO-019 | Define the exact eager Plane-native tool surface.                                                | \_/10      |
 | ATO-020 | Define the progressive-discovery tool surface.                                                   | \_/10      |
 | ATO-021 | Define the TypeScript composition tool contract.                                                 | \_/10      |
-| ATO-022 | Accept scoped memory governance, precedence, retention, and promotion rules in ADR-0008.         | \_/10      |
-| ATO-023 | Accept workflow and delegation contracts after the single-agent lifecycle is proven in ADR-0009. | \_/10      |
-| ATO-024 | Accept the versioned Plane runtime contract and cross-repository fixtures in ADR-0010.           | \_/10      |
 
 ## Proposed
 
@@ -170,4 +184,3 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ATP-005 | Use the v1 execution, result, artifact, and audit-retention limits proposed in the release manifest.                                 | \_/10      |
 | ATP-006 | Use the proposed 30-minute ten-run load gate and explicit latency, error, and recovery thresholds.                                   | \_/10      |
 | ATP-007 | Require 24-hour development, 72-hour allowlisted, 72-hour expanded, and 24-hour GA observation windows.                              | \_/10      |
-| ATP-008 | Use one versioned `plane_runtime.execute` contract between Plane and the Hermes fork.                                                | \_/10      |

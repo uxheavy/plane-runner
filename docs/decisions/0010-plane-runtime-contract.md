@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Date
 
@@ -18,7 +18,7 @@ Plane also needs a run to survive kernel process loss or span several sessions w
 
 Introduce one Plane-owned, versioned logical runtime contract implemented by the separate agent-runtime service and a deterministic test adapter.
 
-Plane product callers use intent-level agent commands. Plane persists control state and dispatches runtime invocations across a durable cross-process seam. The exact queue or RPC transport remains Proposed and must not change the domain contract.
+Plane product callers use intent-level agent commands. Plane persists control state and dispatches runtime invocations across a durable cross-process seam. The exact queue or RPC transport remains an implementation choice and must not change the domain contract. Internal Plane Agent calls carry a bound dedicated Agent identity; external MCP calls carry the authenticated human or integration caller and do not masquerade as an internal Agent.
 
 Inside the runtime service, only the narrow runtime adapter crosses into Hermes:
 
@@ -32,7 +32,7 @@ exit = await plane_runtime.execute(
 )
 ```
 
-`plane_runtime.execute` is the logical adapter interface inside the runtime service, not a Python import used by Plane API modules. No Plane product module and no other runtime-service module imports `AIAgent`, Hermes profile loaders, gateways, session databases, registry globals, cron, delegation, or chat-platform types.
+`plane_runtime.execute` is the logical adapter interface inside the runtime service, not a Python import used by Plane API modules. No Plane product module and no other runtime-service module imports `AIAgent`, Hermes profile loaders, gateways, session databases, registry globals, cron, delegation, workflow-definition state, or chat-platform types.
 
 ### Runtime hierarchy
 
@@ -117,11 +117,12 @@ type RuntimeEvent = Readonly<{
     | ArtifactObserved
     | UsageObserved
     | OutcomeSubmissionObserved
-    | FailureObserved;
+    | FailureObserved
+    | BlockerObserved;
 }>;
 
 type RuntimeExit = Readonly<{
-  kind: "completed" | "waiting_for_input" | "failed" | "cancelled";
+  kind: "completed" | "waiting_for_input" | "failed" | "blocked" | "cancelled";
   finalSequence: number;
   failure?: RuntimeFailure;
 }>;
@@ -133,7 +134,7 @@ Product-visible mutations do not occur merely because an event arrived. An expli
 
 If some lifecycle proposals use a dedicated host event-ingress endpoint rather than the general operation endpoint, that endpoint is trusted-host bound and reuses equivalent Plane authentication, authorization, idempotency, application-service, transition, and audit rules. It is not a parallel path around the Operation Gateway invariants.
 
-Every terminal invocation must map to one visible Plane terminal product event: outcome submission, waiting-for-input question, failure or blocker, or cancellation. This is a Plane lifecycle invariant, not a promise the kernel can always fulfill. If the lease expires or the container dies before a terminal observation arrives, Plane or its trusted supervisor reconciles lease state and records the visible failure or cancellation through the same authoritative application-service and audit rules. `RuntimeExit.completed` is kernel evidence, not authority to submit or accept an outcome.
+Every terminal invocation must map to one visible Plane terminal product event: outcome submission, failure, blocker, or cancellation. A `waiting_for_input` exit is a visible non-terminal question that pauses the run and may start a later invocation. This is a Plane lifecycle invariant, not a promise the kernel can always fulfill. If the lease expires or the container dies before a terminal observation arrives, Plane or its trusted supervisor reconciles the authoritative cause and records exactly one visible failure, blocker, or cancellation through the same application-service and audit rules. `RuntimeExit.completed` is kernel evidence, not authority to submit or accept an outcome.
 
 ### Isolation and compatibility
 
@@ -179,7 +180,7 @@ Plane and the Hermes fork pin generated schemas and digests for `RunSnapshot`, `
 
 - Plane and Hermes share one small compatibility artifact rather than internal module types.
 - Plane and the runtime service communicate across a durable cross-process seam whose transport can change without changing agent-domain state.
-- Plane owns profile compilation, run state, publication, conversation, artifacts, and recovery policy.
+- Plane owns profile compilation, role governance, run state, publication, conversation, artifacts, evaluator review, and recovery policy.
 - Hermes owns the hidden inner execution mechanisms behind its adapter.
 - A deterministic adapter can test Plane lifecycle without a model or Hermes process.
 - The snapshot/envelope schemas, event taxonomy, publication mapping, cumulative budgets, payload limits, and restart rules must be accepted before implementation begins.

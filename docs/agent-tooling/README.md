@@ -6,16 +6,16 @@ This folder is the durable source of truth for taking Plane's agent-facing tooli
 
 | Field                  | Value                                                         |
 | ---------------------- | ------------------------------------------------------------- |
-| Program status         | Architecture and contract definition                          |
+| Program status         | Accepted architecture and contracts; implementation not started |
 | Current branch         | `codex/agent-tooling-architecture`                            |
 | Agent runtime status   | Not implemented                                               |
 | Related delivered base | Semantic context picker core merged separately into `preview` |
-| Current gate           | Reconcile native domain/runtime ADRs and contract fixtures    |
+| Current gate           | Obtain explicit approval of `APPROVAL-MANIFEST.md` before implementation |
 | Last updated           | 2026-08-03                                                    |
 
 ## Outcome
 
-Plane-native agents backed by the forked Hermes kernel can safely perform useful Plane work through native semantic tools and TypeScript Code Mode. External agents continue to use Plane's supported MCP interface. Every path shares Plane authorization, result controls, and append-only audit evidence.
+Plane agents can safely perform useful Plane work through native semantic operations and TypeScript composition. External agents continue to use Plane's supported MCP interface. Every path shares Plane authorization, result controls, and append-only audit evidence.
 
 ## Documents
 
@@ -48,12 +48,12 @@ Plane-native agents backed by the forked Hermes kernel can safely perform useful
 | [ADR-0002](../decisions/0002-autonomous-agent-operations.md)            | Supersedes runtime operation approval with autonomous execution      |
 | [ADR-0003](../decisions/0003-plane-agent-native-product-boundary.md)    | Plane Agent is the native product abstraction                        |
 | [ADR-0004](../decisions/0004-fork-hermes-as-hidden-execution-kernel.md) | Hermes fork is the hidden execution kernel                           |
-| [ADR-0005](../decisions/0005-plane-owned-agent-profiles.md)             | Actor identity and versioned behavioral profiles                     |
+| [ADR-0005](../decisions/0005-plane-owned-agent-profiles.md)             | One role-bearing Agent model and profile governance                 |
 | [ADR-0006](../decisions/0006-assignment-and-run-lifecycle.md)           | Assignment, run, invocation, outcome, and publication lifecycle      |
 | [ADR-0007](../decisions/0007-adaptive-plane-tool-exposure.md)           | Adaptive tool availability and disclosure                            |
-| [ADR-0008](../decisions/0008-scoped-memory-and-context.md)              | Proposed scoped memory, context, and file projections                |
-| [ADR-0009](../decisions/0009-workflows-and-agent-delegation.md)         | Proposed workflow and delegation separation                          |
-| [ADR-0010](../decisions/0010-plane-runtime-contract.md)                 | Proposed Plane-to-Hermes runtime contract                            |
+| [ADR-0008](../decisions/0008-scoped-memory-and-context.md)              | Accepted private memory, skills, gardener, and rollback rules         |
+| [ADR-0009](../decisions/0009-workflows-and-agent-delegation.md)         | Accepted dynamic planning and delegation without saved workflows     |
+| [ADR-0010](../decisions/0010-plane-runtime-contract.md)                 | Accepted versioned Plane runtime contract                            |
 
 ## Source-of-truth rules
 
@@ -62,12 +62,13 @@ Plane-native agents backed by the forked Hermes kernel can safely perform useful
 - The decision register tracks both accepted decisions and unresolved questions.
 - `CONTEXT.md` preserves the broader interview history but does not override accepted decisions here.
 - The local Freeform board `Plane-runner` (`8208a432-a415-434c-9f06-5731a6185db4`) is the developer's non-normative workplace mind. Ideas become durable only when promoted into this repository.
-- Implementation must not begin for a workstream until its entry gate is satisfied.
+- The local `/private/tmp/plane-runner.pdf` is exploratory developer context, not normative authority. It cannot override this folder, accepted ADRs, or approved manifests.
+- No runtime, application, or verification implementation may begin until the explicit `APPROVAL-MANIFEST.md` gate is approved and G0 is satisfied. Contract/documentation reconciliation may proceed before that gate.
 - Observable interfaces must have contract tests before production rollout.
 
 ## Current next decisions
 
-1. Freeze the Plane runtime contract and fixtures across Plane and the Hermes fork.
-2. Resolve the proposed memory/context and workflow/delegation governance decisions.
-3. Approve the exact operation and external MCP inventory.
-4. Complete and approve the release and verification manifests.
+1. Freeze the accepted runtime contract and fixtures across Plane and the runtime service.
+2. Approve the exact operation/action catalog and external MCP inventory.
+3. Complete and approve the release and verification manifests.
+4. Pass G0, then implement full Plane integration/action coverage with adaptive disclosure and reused settings administration.

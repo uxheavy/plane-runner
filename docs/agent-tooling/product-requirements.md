@@ -2,15 +2,15 @@
 
 ## Problem
 
-Plane agents need to drive assigned outcomes through Plane without receiving database access or credentials. A general-purpose Hermes personality and large flat tool list do not feel like a native Plane teammate, while an ungoverned code-execution surface can bypass product authorization and auditing.
+Plane agents need to drive assigned outcomes through Plane without receiving database access or credentials. A general-purpose execution personality and large flat tool list do not feel like a native Plane teammate, while an ungoverned code-execution surface can bypass product authorization and auditing.
 
-Plane already has an external Python MCP server. Plane-native agents backed by the forked Hermes kernel do not need the latency and lifecycle cost of an internal MCP hop, but both internal and external integrations should converge on the same supported Plane operations.
+Plane already has an external Python MCP server. Plane agents do not need the latency and lifecycle cost of an internal MCP hop, but internal and external integrations should converge on the same supported Plane operations.
 
 ## Users
 
 ### Plane-native agents
 
-Agents managed by Plane and executed by a forked Hermes kernel. They receive a Plane-native behavioral profile, native semantic tools for common work, and TypeScript composition for broader available operations. Users and models do not experience Hermes as a separate product.
+Agents managed by Plane. They receive a Plane-owned behavioral profile, exactly one role, native semantic operations for common work, and TypeScript composition for broader available operations. Users and models experience one Plane Agent product.
 
 ### External agents
 
@@ -39,6 +39,17 @@ People who investigate what an agent attempted, what Plane allowed, and what cha
 - Ambiguous mutation outcomes are reported explicitly.
 - External MCP compatibility remains supported during migration.
 
+## Agent model and roles
+
+Plane uses one underlying Agent product/runtime model. Every configured agent has exactly one role. The built-in roles are worker, delegator, gardener, chief of staff, HR, and evaluator; workspace administrators may define additional custom single roles on the same model.
+
+- Every human automatically receives one chief-of-staff agent. It operates only within that human's current live Plane permissions.
+- The dedicated delegator dynamically plans each case, automatically assigns unclaimed work to humans or agents, and records why. Workers and ordinary specialist agents do not freely delegate.
+- Approved schedules create normal assignments and runs. There is no saved or versioned workflow-definition product; the delegator plans each case dynamically.
+- Gardeners may maintain multiple agents and curate private memory and skills across sessions. Knowledge is never copied between agents. Gardener improvements may apply automatically, but every revision is immutable and rollbackable.
+- HR proposes agent creation, change, or retirement; a workspace administrator approves the proposal.
+- Evaluators review every agent outcome before a human accepts or returns it. Human acceptance remains final.
+
 ## Non-goals
 
 - Direct agent access to the Plane database.
@@ -55,11 +66,15 @@ People who investigate what an agent attempted, what Plane allowed, and what cha
 - Plane remains the authority for identity, membership, roles, and object permissions.
 - Native tools improve ergonomics rather than confer privilege.
 - The complete supported operation catalog remains discoverable.
-- Common workflows should be simple without restricting advanced composition.
+- Full Plane integration/action coverage is required before the non-UI program is complete.
+- Common Plane work should be simple without restricting advanced composition.
 - Initial tool context should contain a small universal Plane work core plus assignment-relevant operation schemas.
 - Other available operations outside the initial context should remain discoverable.
 - Failure must be explicit, structured, and safe to retry only when proven safe.
 - The first release should be narrow enough to validate but complete enough to exercise production risks.
+- Adaptive disclosure keeps the complete catalog discoverable without exposing every schema in the initial context.
+- Required administration reuses existing Plane settings surfaces; no new settings framework is introduced.
+- After verification, rollout may proceed in stages despite there being no current users; automated safety stops remain mandatory.
 
 ## Pilot options
 
@@ -69,7 +84,7 @@ People who investigate what an agent attempted, what Plane allowed, and what cha
 | Read-only first    | Lowest initial operational risk                                                 | Does not validate idempotency or unknown outcomes  |
 | Broad catalog beta | Reaches more workflows immediately                                              | Multiplies contract, testing, and incident surface |
 
-Selected: a broader end-to-end project-planning workflow. A real Hermes run analyzes a seeded project's release readiness, composes a parent plan and coordinated child work items, autonomously writes the plan, proves idempotency and audit correlation, and demonstrates denial against an inaccessible control project.
+Selected: a broader end-to-end project-planning scenario. A real Plane Agent analyzes a seeded project's release readiness, composes a parent plan and coordinated child work items, autonomously writes the plan, proves idempotency and audit correlation, and demonstrates denial against an inaccessible control project.
 
 ## Success measures
 
