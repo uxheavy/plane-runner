@@ -90,6 +90,40 @@ const canonicalMarkdown = [
   ),
 ];
 
+// Structured authority is explicit and fail-closed. The model-facing surface
+// is authoritative by default under each named operation; only these exact
+// JSON-pointer contexts are metadata or historical registries. Other
+// structured artifacts are evidence/configuration, except for the exact
+// predicate field that mirrors the model-facing name set.
+const structuredRetiredNamePolicies = {
+  [paths.modelSurface]: {
+    default: "unclassified",
+    authoritative: [
+      ["g0ContractPolicy", "*"],
+      ["names", "*", "*"],
+    ],
+    nonModelFacing: [
+      ["$schema"],
+      ["schemaVersion"],
+      ["surfaceId"],
+      ["status"],
+      ["names", "*", "operationId"],
+      ["retiredNames", "*"],
+      ["retiredNames", "*", "*"],
+    ],
+  },
+  [paths.predicates]: {
+    default: "non-model-facing",
+    authoritative: [["common", "*", "expected", "required", "*"]],
+    nonModelFacing: [],
+  },
+  [paths.fixture]: { default: "non-model-facing", authoritative: [], nonModelFacing: [] },
+  [paths.plan]: { default: "non-model-facing", authoritative: [], nonModelFacing: [] },
+  [paths.lock]: { default: "non-model-facing", authoritative: [], nonModelFacing: [] },
+  [paths.readiness]: { default: "non-model-facing", authoritative: [], nonModelFacing: [] },
+  [paths.ownershipMap]: { default: "non-model-facing", authoritative: [], nonModelFacing: [] },
+};
+
 function absolute(relativePath) {
   return relativePath.startsWith("docs/") ? resolve(repositoryRoot, relativePath) : resolve(root, relativePath);
 }
@@ -487,13 +521,13 @@ function checkModelFacingSurface() {
     "eager direct set is not exact"
   );
   assert(
-    surface.names.find((entry) => entry.name === "search_workspace").description.includes("not work-item search"),
+    surface.names.find((entry) => entry.name === "search_workspace").description.includes("not work-item lookup"),
     "search_workspace is not separated from search_work_items"
   );
   assert(
     surface.names
       .find((entry) => entry.name === "search_work_items")
-      .description.includes("does not search all workspace object types"),
+      .description.includes("does not cover all workspace object types"),
     "search_work_items is not separated from search_workspace"
   );
   assert(
@@ -503,44 +537,93 @@ function checkModelFacingSurface() {
   );
 }
 
-function isHistoricalLine(line) {
-  return /\b(?:retired|historical|negative[- ]control|legacy|supersed(?:ed|es)?|rejected|forbidden|replaced)\b/i.test(
+function escapeRegExp(value) {
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function tokenOccurrences(text, name) {
+  const token = new RegExp(`(?<![A-Za-z0-9_])${escapeRegExp(name)}(?![A-Za-z0-9_])`, "g");
+  return [...text.matchAll(token)].map((match) => ({ start: match.index, end: match.index + match[0].length }));
+}
+
+function rangesForPattern(text, pattern, valueGroup = 0) {
+  return [...text.matchAll(pattern)].map((match) => {
+    const value =
+      valueGroup === 0 ? match[0] : match.slice(valueGroup).find((candidate) => candidate !== undefined) ?? match[0];
+    const valueOffset = valueGroup === 0 ? 0 : match[0].indexOf(value);
+    return { start: match.index + valueOffset, end: match.index + valueOffset + value.length };
+  });
+}
+
+function isWithinRange(occurrence, ranges) {
+  return ranges.some((range) => occurrence.start >= range.start && occurrence.end <= range.end);
+}
+
+function historicalOccurrence(line, occurrence) {
+  const marker = "(?:retired|historical|negative[- ]control|legacy|supersed(?:ed|es)?|rejected|forbidden|replaced)";
+  const before = line.slice(Math.max(0, occurrence.start - 72), occurrence.start).split(/[;|.!?\n]/).at(-1) ?? "";
+  const after = line.slice(occurrence.end, occurrence.end + 72).split(/[;|.!?\n]/)[0] ?? "";
+  return new RegExp(`\\b${marker}\\b[^;|.!?\\n]{0,48}$`, "i").test(before) ||
+    new RegExp(`^[^;|.!?\\n]{0,48}\\b${marker}\\b`, "i").test(after);
+}
+
+function designatedInternalIdentifierRanges(line) {
+  const ranges = rangesForPattern(
+    line,
+    /\b(?:operationId|runtime[-_ ]adapter(?:[-_ ](?:identifier|id))?|adapter[-_ ](?:identifier|id))\b\s*[:=]\s*(?:"([^"]+)"|'([^']+)'|`([^`]+)`|([A-Za-z0-9_.@-]+))/gi,
+    1
+  );
+  ranges.push(...rangesForPattern(line, /\bplane_runtime\.[A-Za-z0-9_.-]+/g));
+  return ranges;
+}
+
+function ordinaryPathRanges(line) {
+  return rangesForPattern(line, /\bdocs\/[A-Za-z0-9_.*\/-]+/g);
+}
+
+function hasAuthoritativeTextMarker(line) {
+  return /\bauthoritative\b|\bmodel[- ]facing\s+(?:name|description|purpose|schema|operation|alias|input|output|error)\b|\b(?:semantic purpose|input note|output note|error note|schema note)\b/i.test(
     line
   );
 }
 
-function isDesignatedInternalIdentifier(line) {
-  return (
-    /\b(?:operationId|runtime[-_ ]adapter(?:[-_ ](?:identifier|id))?|adapter[-_ ](?:identifier|id))\b/i.test(line) ||
-    /\bplane_runtime\.[A-Za-z0-9_.-]+\b[^.!?\n]{0,60}\badapter\b/i.test(line)
+function retiredNameViolation(line, name, { structured = false } = {}) {
+  const occurrences = tokenOccurrences(line, name);
+  if (occurrences.length === 0 || (!structured && !hasAuthoritativeTextMarker(line))) return false;
+  const internalRanges = designatedInternalIdentifierRanges(line);
+  const pathRanges = ordinaryPathRanges(line);
+  return occurrences.some(
+    (occurrence) =>
+      !historicalOccurrence(line, occurrence) &&
+      !isWithinRange(occurrence, internalRanges) &&
+      !isWithinRange(occurrence, pathRanges)
   );
 }
 
-function lineWithoutOrdinaryPaths(line) {
-  return line.replaceAll(/docs\/(?:agent-tooling|decisions)(?:\/[A-Za-z0-9*._/-]*)?/g, "");
+function pointerMatches(segments, pattern) {
+  return segments.length === pattern.length && pattern.every((part, index) => part === "*" || part === segments[index]);
 }
 
-function isNonModelFacingStructuredField(segments) {
-  const field = String(segments.at(-1) ?? "");
-  return /(?:path|paths|file|files|sha|digest|tree|commit|ref|repository|description|evidence|role|owner|status|statement|text|notes|reason|label|title|summary|message|content|command|script|surfaceId|laneId|phaseId|gate|id)$/i.test(
-    field
-  );
+function structuredFieldClassification(path, segments) {
+  const policy = structuredRetiredNamePolicies[path];
+  assert(policy, `no structured retired-name authority policy exists for ${path}`);
+  if (policy.nonModelFacing.some((pattern) => pointerMatches(segments, pattern))) return "non-model-facing";
+  if (policy.authoritative.some((pattern) => pointerMatches(segments, pattern))) return "authoritative";
+  return policy.default;
 }
 
-function retiredNameViolation(line, name) {
-  const token = new RegExp(`(?<![A-Za-z0-9_])${name}(?![A-Za-z0-9_])`);
-  const normalizedLine = lineWithoutOrdinaryPaths(line);
-  if (!token.test(normalizedLine)) return false;
-  if (isHistoricalLine(line) || isDesignatedInternalIdentifier(line)) return false;
-  return true;
+function jsonPointer(segments) {
+  return `/${segments.map((segment) => String(segment).replaceAll("~", "~0").replaceAll("/", "~1")).join("/")}`;
 }
 
 function checkStructuredRetiredNames(path, value, retired, segments = []) {
   if (typeof value === "string") {
-    if (isNonModelFacingStructuredField(segments)) return;
+    const classification = structuredFieldClassification(path, segments);
+    if (classification === "unclassified") throw new Error(`${path} has an unclassified authority pointer ${jsonPointer(segments)}`);
+    if (classification !== "authoritative") return;
     for (const name of retired)
-      if (retiredNameViolation(`${segments.join(".")}: ${value}`, name))
-        throw new Error(`${path} authoritatively uses retired name ${name} in ${segments.join(".")}`);
+      if (retiredNameViolation(value, name, { structured: true }))
+        throw new Error(`${path} authoritatively uses retired name ${name} in ${jsonPointer(segments)}`);
     return;
   }
   if (Array.isArray(value)) {
@@ -565,6 +648,24 @@ function checkRetiredNameControls() {
       rejects: false,
     },
     { name, label: `internal ${name}`, line: `operationId: "plane.${name}@1"`, rejects: false },
+    {
+      name,
+      label: `mixed internal and authoritative ${name}`,
+      line: `operationId: "plane.${name}@1"; Authoritative model-facing name: ${name}`,
+      rejects: true,
+    },
+    {
+      name,
+      label: `mixed historical and authoritative ${name}`,
+      line: `Rejected historical alias ${name}; Authoritative model-facing name: ${name}`,
+      rejects: true,
+    },
+    {
+      name,
+      label: `ordinary path and prose ${name}`,
+      line: `Implementation note: see docs/agent-tooling/README.md; ordinary prose may ${name}.`,
+      rejects: false,
+    },
   ]);
   for (const control of controls)
     assert(retiredNameViolation(control.line, control.name) === control.rejects, control.label);
@@ -594,6 +695,7 @@ function checkRetiredNames() {
   const surface = readJson(paths.modelSurface);
   const retired = [...surface.retiredNames.bare, ...surface.retiredNames.historicalPrefixed];
   const pathsToCheck = [
+    paths.modelSurface,
     paths.prompt,
     paths.fixture,
     paths.predicates,

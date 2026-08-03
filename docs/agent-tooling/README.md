@@ -90,6 +90,8 @@ It must remain non-zero until the exact approval statement in `APPROVAL-MANIFEST
 
 The package is sealed with two logical commits: a content/remediation commit followed by an evidence-seal commit that changes only `SOURCE-INVENTORY.md`, `WORKLOG.md`, `g0-readiness.json`, and `integration-lock.g0.json`. Run `node docs/agent-tooling/verifiers/seal-g0-evidence.mjs` after the clean content commit and before the evidence-seal commit. The verifier requires the seal commit's first parent to be the recorded content commit and rejects later semantic or unsealed commits.
 
+Retired-name validation treats `model-facing-surface.json` as structured authority. Its operation names and every model-facing field under each operation are scanned by explicit JSON-pointer policy; only declared internal identifiers and the historical registry are excluded. Text exclusions are token-local: a marked historical occurrence, an ordinary repository path, or a designated internal identifier cannot exempt a separate authoritative occurrence on the same line. The negative-control command includes valid-reseal adversarial controls for every retired token family and positive historical, internal-identifier, path, and ordinary-prose contexts.
+
 The pending record has no approver identity or timestamp. A temporary approved-state test may add `approvedBy`, `approvedAt`, and `evidenceBinding` to a copied readiness record; the approved transition may change only that copied readiness file. The real record remains pending until the human uses the exact statement in `APPROVAL-MANIFEST.md`.
 
 Run the machine-readable evidence checks directly with:

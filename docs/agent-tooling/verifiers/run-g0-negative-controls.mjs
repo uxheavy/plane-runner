@@ -55,7 +55,7 @@ function replace(directory, path, from, to) {
 }
 
 function commit(directory, message, args = []) {
-  return run(directory, ["git", "commit", ...args, "-m", message], {
+  run(directory, ["git", "commit", ...args, "-m", message], {
     env: {
       ...process.env,
       GIT_AUTHOR_NAME: "g0-negative-control",
@@ -64,6 +64,18 @@ function commit(directory, message, args = []) {
       GIT_COMMITTER_EMAIL: "g0-negative-control@example.invalid",
     },
   });
+  return run(directory, ["git", "rev-parse", "HEAD"]);
+}
+
+function createTemporaryCheckout() {
+  const temporaryParent = mkdtempSync(join(tmpdir(), "plane-g0-negative-"));
+  const temporaryRoot = join(temporaryParent, "checkout");
+  // Keep dependencies outside the checkout so a resealed control is clean
+  // when the verifier checks its own clean-worktree invariant.
+  symlinkSync(join(repositoryRoot, "node_modules"), join(temporaryParent, "node_modules"), "dir");
+  run(repositoryRoot, ["git", "clone", "--local", "--no-hardlinks", repositoryRoot, temporaryRoot]);
+  run(temporaryRoot, ["git", "remote", "add", "upstream", "https://github.com/uxheavy/plane-runner.git"]);
+  return { temporaryParent, temporaryRoot };
 }
 
 function createApprovedChain(directory) {
@@ -246,28 +258,139 @@ cases.push(
   }
 );
 
+const resealedAdversarialCases = [];
+for (const name of retiredNames) {
+  resealedAdversarialCases.push({
+    name: `valid-reseal authoritative model-facing description ${name}`,
+    mutate: (directory) =>
+      replace(
+        directory,
+        "docs/agent-tooling/model-facing-surface.json",
+        '"description": "Create one sanitized source-linked comment under current Plane authorization."',
+        `"description": "Invoke ${name} as an authoritative model-facing operation."`
+      ),
+    expected: `docs/agent-tooling/model-facing-surface.json authoritatively uses retired name ${name}`,
+    reseal: true,
+  });
+  resealedAdversarialCases.push({
+    name: `valid-reseal authoritative semantic note ${name}`,
+    mutate: (directory) =>
+      append(
+        directory,
+        "docs/agent-tooling/prompts/release-planning-v1.md",
+        `\nAuthoritative semantic purpose/schema note: this control rejects ${name}.\n`
+      ),
+    expected: `docs/agent-tooling/prompts/release-planning-v1.md authoritatively uses retired name ${name}`,
+    reseal: true,
+  });
+  resealedAdversarialCases.push({
+    name: `valid-reseal mixed internal and authoritative ${name}`,
+    mutate: (directory) =>
+      append(
+        directory,
+        "docs/agent-tooling/prompts/release-planning-v1.md",
+        `\noperationId: "plane.${name}@1"; Authoritative model-facing name: ${name}\n`
+      ),
+    expected: `docs/agent-tooling/prompts/release-planning-v1.md authoritatively uses retired name ${name}`,
+    reseal: true,
+  });
+  resealedAdversarialCases.push({
+    name: `valid-reseal mixed historical and authoritative ${name}`,
+    mutate: (directory) =>
+      append(
+        directory,
+        "docs/agent-tooling/prompts/release-planning-v1.md",
+        `\nRejected historical alias ${name}; separate authoritative model-facing name: ${name}\n`
+      ),
+    expected: `docs/agent-tooling/prompts/release-planning-v1.md authoritatively uses retired name ${name}`,
+    reseal: true,
+  });
+}
+
+const resealedPositiveCases = [
+  {
+    name: "valid-reseal clearly marked historical occurrence",
+    mutate: (directory) =>
+      append(
+        directory,
+        "docs/agent-tooling/prompts/release-planning-v1.md",
+        "\nHistorical negative-control prose: retired alias plane_add_comment.\n"
+      ),
+    expected: "PASS retired-name negative control",
+    expectSuccess: true,
+    reseal: true,
+  },
+  {
+    name: "valid-reseal designated internal identifier occurrence",
+    mutate: (directory) =>
+      append(directory, "docs/agent-tooling/prompts/release-planning-v1.md", '\noperationId: "plane.plane_add_comment@1"\n'),
+    expected: "PASS retired-name negative control",
+    expectSuccess: true,
+    reseal: true,
+  },
+  {
+    name: "valid-reseal ordinary docs path and non-model-facing prose",
+    mutate: (directory) =>
+      append(
+        directory,
+        "docs/agent-tooling/NON-UI-IMPLEMENTATION-OVERVIEW.md",
+        "\nImplementation note: see docs/agent-tooling/README.md; ordinary prose may execute a later adapter step.\n"
+      ),
+    expected: "PASS retired-name negative control",
+    expectSuccess: true,
+    reseal: true,
+  },
+];
+
+cases.push(...resealedAdversarialCases, ...resealedPositiveCases);
+
+function runPreflight(directory, testCase, { allowDirty = false } = {}) {
+  const args = ["docs/agent-tooling/verifiers/verify-g0-preflight.mjs", "--mode", "preflight"];
+  if (allowDirty) args.push("--negative-control");
+  const result = spawnSync("node", args, { cwd: directory, encoding: "utf8" });
+  const output = `${result.stdout}${result.stderr}`;
+  const observed = output.includes(testCase.expected);
+  if (testCase.expectSuccess ? result.status !== 0 || !observed : result.status === 0 || !observed)
+    throw new Error(`unexpected result; exit=${result.status}; output=${output}`);
+  return result;
+}
+
 function runCase(testCase) {
-  const temporaryRoot = mkdtempSync(join(tmpdir(), "plane-g0-negative-"));
+  const { temporaryParent, temporaryRoot } = createTemporaryCheckout();
   try {
-    run(repositoryRoot, ["git", "clone", "--local", "--no-hardlinks", repositoryRoot, temporaryRoot]);
-    run(temporaryRoot, ["git", "remote", "add", "upstream", "https://github.com/uxheavy/plane-runner.git"]);
-    symlinkSync(join(repositoryRoot, "node_modules"), join(temporaryRoot, "node_modules"), "dir");
     if (testCase.allowDirty !== false) writeFileSync(join(temporaryRoot, ".g0-negative-control"), `${testCase.name}\n`);
     testCase.mutate(temporaryRoot);
-    const args = ["docs/agent-tooling/verifiers/verify-g0-preflight.mjs", "--mode", "preflight"];
-    if (testCase.allowDirty !== false) args.push("--negative-control");
-    const result = spawnSync("node", args, { cwd: temporaryRoot, encoding: "utf8" });
-    const output = `${result.stdout}${result.stderr}`;
-    const observed = output.includes(testCase.expected);
-    if (testCase.expectSuccess ? result.status !== 0 || !observed : result.status === 0 || !observed)
-      throw new Error(`unexpected result; exit=${result.status}; output=${output}`);
+    runPreflight(temporaryRoot, testCase, { allowDirty: testCase.allowDirty !== false });
     console.log(
       `${testCase.expectSuccess ? "PASS" : "PASS"}: ${testCase.name} ${testCase.expectSuccess ? "accepted" : `rejected for ${testCase.expected}`}`
     );
   } finally {
-    rmSync(temporaryRoot, { recursive: true, force: true });
+    rmSync(temporaryParent, { recursive: true, force: true });
   }
 }
 
-for (const testCase of cases) runCase(testCase);
+function runResealedCase(testCase) {
+  const { temporaryParent, temporaryRoot } = createTemporaryCheckout();
+  try {
+    testCase.mutate(temporaryRoot);
+    run(temporaryRoot, ["git", "add", "--all"]);
+    const contentCommit = commit(temporaryRoot, `negative-control-content-${testCase.name}`);
+    run(temporaryRoot, ["node", "docs/agent-tooling/verifiers/seal-g0-evidence.mjs"]);
+    append(
+      temporaryRoot,
+      "docs/agent-tooling/WORKLOG.md",
+      `\nValid-reseal negative control: ${testCase.name}; content commit ${contentCommit}.\n`
+    );
+    run(temporaryRoot, ["git", "add", ...allowedSealPaths]);
+    commit(temporaryRoot, `negative-control-seal-${testCase.name}`);
+    runPreflight(temporaryRoot, testCase);
+    console.log(
+      `${testCase.expectSuccess ? "PASS" : "PASS"}: ${testCase.name} ${testCase.expectSuccess ? "accepted" : `rejected for ${testCase.expected}`}`
+    );
+  } finally {
+    rmSync(temporaryParent, { recursive: true, force: true });
+  }
+}
+
+for (const testCase of cases) (testCase.reseal ? runResealedCase : runCase)(testCase);
 console.log(`PASS: ${cases.length} G0 negative controls exercised`);
