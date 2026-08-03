@@ -24,6 +24,7 @@ Plane-native agents backed by the forked Hermes kernel can safely perform useful
 | [Product requirements](./product-requirements.md)                       | Users, outcomes, boundaries, and success measures                    |
 | [Architecture](./architecture.md)                                       | Components, trust boundaries, contracts, and runtime behavior        |
 | [Delivery plan](./delivery-plan.md)                                     | Workstreams, dependencies, gates, rollout, and ownership             |
+| [Non-UI implementation overview](./NON-UI-IMPLEMENTATION-OVERVIEW.md)   | Generated parallel-lane execution map through production rollout     |
 | [Decision register](./decision-register.md)                             | Accepted, superseded, and open decisions                             |
 | [Release manifest](./RELEASE-MANIFEST.md)                               | Frozen scope, versions, rollout cohort, and numeric gates            |
 | [Verification manifest](./VERIFICATION-MANIFEST.md)                     | Independent checks, oracles, negative controls, and evidence         |
