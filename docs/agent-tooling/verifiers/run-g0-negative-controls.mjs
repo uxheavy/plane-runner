@@ -60,16 +60,18 @@ function refreshPromptDigest(directory) {
   const validatorPath = join(directory, "docs/agent-tooling/verifiers/validate-planning-fixtures.mjs");
   const validator = readFileSync(validatorPath, "utf8");
   const updatedValidator = validator.replace(/(  prompt: ")[0-9a-f]{64}(",)/, `$1${promptDigest}$2`);
-  if (updatedValidator === validator) throw new Error("prompt digest anchor missing in planning validator");
-  writeFileSync(validatorPath, updatedValidator);
+  if (updatedValidator === validator && !validator.includes(`prompt: "${promptDigest}"`))
+    throw new Error("prompt digest anchor missing in planning validator");
+  if (updatedValidator !== validator) writeFileSync(validatorPath, updatedValidator);
   const contractPath = join(directory, "docs/agent-tooling/EVALUATION-FIXTURE-CONTRACT.md");
   const contract = readFileSync(contractPath, "utf8");
   const updatedContract = contract.replace(
     /(\| `prompts\/release-planning-v1\.md`\s+\| `)[0-9a-f]{64}/,
     `$1${promptDigest}`
   );
-  if (updatedContract === contract) throw new Error("prompt digest anchor missing in fixture contract");
-  writeFileSync(contractPath, updatedContract);
+  if (updatedContract === contract && !contract.includes(promptDigest))
+    throw new Error("prompt digest anchor missing in fixture contract");
+  if (updatedContract !== contract) writeFileSync(contractPath, updatedContract);
 }
 
 function commit(directory, message, args = []) {
