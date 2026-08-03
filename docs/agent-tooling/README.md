@@ -26,8 +26,8 @@ Plane agents can safely perform useful Plane work through native semantic operat
 | [Delivery plan](./delivery-plan.md)                                     | Workstreams, dependencies, gates, rollout, and ownership             |
 | [Non-UI implementation overview](./NON-UI-IMPLEMENTATION-OVERVIEW.md)   | Generated parallel-lane execution map through production rollout     |
 | [Decision register](./decision-register.md)                             | Accepted, superseded, and open decisions                             |
-| [Release manifest](./RELEASE-MANIFEST.md)                               | Frozen scope, versions, rollout cohort, and numeric gates            |
-| [Verification manifest](./VERIFICATION-MANIFEST.md)                     | Independent checks, oracles, negative controls, and evidence         |
+| [Release manifest](./RELEASE-MANIFEST.md)                               | Release-scope, version, rollout, and numeric-gate evidence input     |
+| [Verification manifest](./VERIFICATION-MANIFEST.md)                     | Check, oracle, negative-control, and evidence input                  |
 | [Requirement coverage](./REQUIREMENT-COVERAGE.md)                       | Criterion and release-row checks, oracles, and evidence              |
 | [Evaluation scenarios](./EVALUATION-SCENARIOS.md)                       | Seventy-one behavioral contracts and live-trial allocation           |
 | [Planning fixture contract](./EVALUATION-FIXTURE-CONTRACT.md)           | Digest-bound EV-001 through EV-010 inputs and predicates             |
@@ -63,12 +63,13 @@ Plane agents can safely perform useful Plane work through native semantic operat
 - `CONTEXT.md` preserves the broader interview history but does not override accepted decisions here.
 - The local Freeform board `Plane-runner` (`8208a432-a415-434c-9f06-5731a6185db4`) is the developer's non-normative workplace mind. Ideas become durable only when promoted into this repository.
 - The local `/private/tmp/plane-runner.pdf` is exploratory developer context, not normative authority. It cannot override this folder, accepted ADRs, or approved manifests.
-- No runtime, application, or verification implementation may begin until the explicit `APPROVAL-MANIFEST.md` gate is approved and G0 is satisfied. Contract/documentation reconciliation may proceed before that gate.
+- `RELEASE-MANIFEST.md` and `VERIFICATION-MANIFEST.md` provide evidence inputs to the controlling `APPROVAL-MANIFEST.md`; neither is a competing implementation-start gate.
+- No runtime, application, or verification implementation may begin until the explicit `APPROVAL-MANIFEST.md` gate—the sole implementation-start approval—is approved and G0 is satisfied. Contract/documentation reconciliation may proceed before that gate.
 - Observable interfaces must have contract tests before production rollout.
 
 ## Current next decisions
 
 1. Freeze the accepted runtime contract and fixtures across Plane and the runtime service.
 2. Approve the exact operation/action catalog and external MCP inventory.
-3. Complete and approve the release and verification manifests.
+3. Complete the release and verification evidence inputs and bind their approved references into `APPROVAL-MANIFEST.md`.
 4. Pass G0, then implement full Plane integration/action coverage with adaptive disclosure and reused settings administration.

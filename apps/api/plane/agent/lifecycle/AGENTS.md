@@ -29,8 +29,9 @@ than exposing transition helpers from each record package.
 
 ## Local Verification
 
-From the repository root, verify the retained lifecycle seam in the
-repository-supported API test container:
+From the repository root, first run `./setup.sh` as the repository prerequisite,
+then verify the retained lifecycle seam in the repository-supported API test
+container:
 
 ```sh
 docker compose -f docker-compose-test.yml run --rm --build api-tests \

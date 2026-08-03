@@ -10,8 +10,8 @@ This file records durable progress for the Plane Agent Tooling goal. Append entr
 | Active gate                | Explicit approval of `APPROVAL-MANIFEST.md` (single implementation gate) |
 | Plane branch               | `codex/agent-tooling-architecture`                                   |
 | Hermes branch              | Not created from baseline `5e88745f125c0d332c1d16ea0363860d447657f5` |
-| Last verified Plane commit | `22916237cc`                                                         |
-| Next action                | Obtain explicit `APPROVAL-MANIFEST.md` approval, then enter G0 and freeze the remaining delivery gates |
+| Last verified Plane commit | `c5f4537686` (current integrated base at reconciliation)             |
+| Next action                | Obtain explicit `APPROVAL-MANIFEST.md` approval, then enter G0; release and verification manifests remain evidence inputs |
 
 ## 2026-07-29 — Goal grounding
 
@@ -550,3 +550,12 @@ This remains a proposed runtime boundary. The exact Deno artifact, complete laun
 ### Qualification state
 
 The source facts are confirmed. The exact gateway/application-service composition and its complete broker-publication multiset remain candidate release-manifest inputs and require manifest approval before implementation; the current direct `.delay()` paths do not yet satisfy the proposed transaction contract.
+
+## 2026-08-04 — Accepted contract reconciliation
+
+### Reconciliation
+
+- ADR-0008, ADR-0009, and ADR-0010 are accepted and now control their respective private-memory/gardener, dynamic-delegation/schedule, and versioned-runtime-contract implementation lanes.
+- Evaluator review is mandatory before a human accepts or returns any Agent outcome; human acceptance remains the final product decision.
+- Explicit approval of `APPROVAL-MANIFEST.md` plus G0 is the sole implementation-start gate. `RELEASE-MANIFEST.md` and `VERIFICATION-MANIFEST.md` are evidence inputs to that approval and are not competing pre-implementation gates.
+- The current integrated Plane state at reconciliation is branch `codex/agent-tooling-architecture`, commit `c5f4537686152dd510c6aaefc0fd82a3eb358d2c`; runtime, application, and verification implementation remain not started.

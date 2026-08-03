@@ -7,8 +7,9 @@ This file governs `apps/api/plane/agent/` and its descendants.
 ## Local Responsibility
 
 This package is the Plane-owned importable seam for one Agent system. The
-scaffold intentionally retains only the package root plus the `lifecycle` and
-`adapters` seams; it does not reserve empty packages for future concepts.
+scaffold intentionally retains only the retained root package initializer and
+the `lifecycle`/`adapters` seams; it does not reserve empty packages for future
+concepts.
 
 It is a regular importable Python package, not a Django app yet. Do not add
 `apps.py`, models, migrations, routes, settings registration, test harnesses,
@@ -50,15 +51,15 @@ instead of copying their behavior here.
 
 | Gotcha | Why It Matters | Correct Action |
 | --- | --- | --- |
-| This scaffold is not a Django app. | Registering it or adding migrations would create runtime and schema commitments before the lifecycle contract exists. | Keep it out of `INSTALLED_APPS`; retain only the root/seam markers until implementation is explicitly in scope, and add future concepts only with real behavior. |
+| This scaffold is not a Django app. | Registering it or adding migrations would create runtime and schema commitments before the lifecycle contract exists. | Keep it out of `INSTALLED_APPS`; retain only the retained root package initializer and lifecycle/adapters seams until implementation is explicitly in scope, and add future concepts only with real behavior. |
 | A profile role is not an execution engine. | Role-specific runners would duplicate lifecycle and authorization behavior. | Express built-in roles as Plane-owned data/configuration over the common agent system. |
 | The external operation count is not the domain shape. | Mirroring 177 operations as prompt/runtime modules makes discovery shallow and fragments enforcement. | Grow the catalog and adapters behind the shared Plane lifecycle/application rules. |
-| Empty package markers are not architecture. | Marker-only concept or subadapter packages create false ownership and shallow seams before behavior exists. | Keep only the retained root, lifecycle, and adapters seams; add future concept packages only with real behavior and tests. |
+| Marker-only packages are not architecture. | Marker-only concept or subadapter packages create false ownership and shallow seams before behavior exists. | Keep only the retained root package initializer and lifecycle/adapters seams; add future concept packages only with real behavior and tests. |
 
 ## Local Verification
 
-From the repository root, verify all retained seams in the repository-supported API
-test container:
+From the repository root, first run `./setup.sh` as the repository prerequisite,
+then verify all retained seams in the repository-supported API test container:
 
 ```sh
 docker compose -f docker-compose-test.yml run --rm --build api-tests \

@@ -66,8 +66,6 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 | ATD-070 | The evaluation manifest contains at least 50 distinct scenarios.                                      | \_/10      |
 | ATD-071 | Production approval requires at least 50 authenticated live Hermes evaluation runs.                   | \_/10      |
 | ATD-072 | Computer Use provides user-visible Plane and Hermes acceptance evidence.                              | \_/10      |
-| ATD-073 | An approved release manifest freezes scope and numeric gates before implementation.                   | \_/10      |
-| ATD-074 | An independently reviewed verification manifest freezes checks and oracles before implementation.     | \_/10      |
 | ATD-075 | Final verification must pass qualified negative controls.                                             | \_/10      |
 | ATD-076 | Final verification runs independently from clean Plane and Hermes checkouts.                          | \_/10      |
 | ATD-077 | Goal completion requires every general-availability rollout stage.                                    | \_/10      |
@@ -130,6 +128,8 @@ Each row contains one decision. Importance is intentionally left as `_/10` for p
 
 | ID      | Superseded decision                                                                  | Replacement                                                              | Importance |
 | ------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ---------- |
+| ATD-073 | An approved release manifest is a pre-implementation gate that freezes scope and numeric gates. | ATD-141 makes `APPROVAL-MANIFEST.md` the sole implementation-start approval; the release manifest is an evidence input. | \_/10 |
+| ATD-074 | An independently reviewed verification manifest is a pre-implementation gate that freezes checks and oracles. | ATD-141 makes `APPROVAL-MANIFEST.md` the sole implementation-start approval; the verification manifest is an evidence input. | \_/10 |
 | ATS-001 | Pause Code Mode by releasing the container and replaying prior calls after approval. | ATD-097 removes runtime operation approvals.                             | \_/10      |
 | ATS-002 | Mint a short-lived assertion for every Hermes run.                                   | ATD-017 uses one revocable credential per Plane agent identity.          | \_/10      |
 | ATS-003 | Evaluate a separate runtime approval policy for agent operations.                    | ATD-094 and ATD-097 use autonomous execution within Plane authorization. | \_/10      |

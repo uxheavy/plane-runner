@@ -2,7 +2,7 @@
 
 ## Status
 
-Candidate pre-approval design for live scenarios EV-011 through EV-030. It resolves the evidence, fault, result, and sandbox seams required to generate executable fixtures. It does not approve the release manifest, authorize implementation, or qualify any trial.
+Candidate pre-approval design for live scenarios EV-011 through EV-030. It resolves the evidence, fault, result, and sandbox seams required to generate executable fixtures. `RELEASE-MANIFEST.md` and `VERIFICATION-MANIFEST.md` are evidence inputs to the controlling `APPROVAL-MANIFEST.md`; this design does not authorize implementation or qualify any trial.
 
 ## Separate bundle
 
@@ -217,7 +217,7 @@ One logical invocation progresses through `claimed`, `executing`, and one of `re
 - `outcome_unknown` permits explicit reconciliation only. Reconciliation runs through the original trusted host/operator context bound to the original authenticated agent and invocation; a separate verifier principal only reads the appended reconciliation fact.
 - A changed normalized digest under any existing invocation returns `idempotency_conflict` without state transition or execution.
 
-Replay and conflict trials use an evaluation-only trusted-host driver placed immediately above the production gateway adapter. The verifier seeds an opaque `binding_ref` that resolves inside trusted host memory to the original authenticated actor, workspace, run, turn, outer call, inner ordinal, catalog, and derived invocation identity. The driver accepts only a fixture action reference plus `binding_ref`; it cannot accept a raw credential, idempotency key, actor, workspace, or correlation field and is absent from production routing. The first mutation is the one Hermes agent call; each replay/conflict/control action is explicitly attributed to the trusted harness in the attempt ledger.
+Replay and conflict trials use an evaluation-only trusted-host driver placed immediately above the production gateway adapter. The verifier seeds an opaque `binding_ref` that resolves inside trusted host memory to the original authenticated actor, workspace, run, turn, outer call, inner ordinal, catalog, and derived invocation identity. The driver accepts only a fixture action reference plus `binding_ref`; it cannot accept a raw credential, idempotency key, actor, workspace, or correlation field and is absent from production routing. The first mutation is the one Plane Agent call through the hidden Hermes adapter/kernel; each replay/conflict/control action is explicitly attributed to the trusted harness in the attempt ledger.
 
 ## Exact live scenario profiles
 
@@ -403,6 +403,6 @@ EV-026 has exactly 29 hostile subcases and 58 successful authorized-callback con
 This design selects candidate v1 behavior but does not approve it. Before implementation:
 
 - generate and digest-bind the complete `safety-v1` bundle, 20 prompts, probe programs, result schema, verifier, and operator mutation suite;
-- incorporate these decisions into the release and verification manifests;
+- incorporate these decisions into the release and verification manifests as evidence inputs to the controlling `APPROVAL-MANIFEST.md`;
 - update the integration lock to the exact approved repository revisions;
-- obtain user approval of the release manifest and user plus independent-review approval of the verification manifest.
+- obtain explicit approval of `APPROVAL-MANIFEST.md`, the sole implementation-start approval; release, pilot, and production remain separately gated by their evidence and operational approvals.

@@ -4,7 +4,7 @@
 
 Proposed requirement-level verification map. `APPROVAL-MANIFEST.md` is the single implementation gate. This document must be frozen with `RELEASE-MANIFEST.md`, `VERIFICATION-MANIFEST.md`, and `EVALUATION-SCENARIOS.md` as evidence inputs before that gate is approved and implementation begins.
 
-Every completion criterion in `GOAL.md` and every normative row in `RELEASE-MANIFEST.md` appears exactly once below. A row is covered only when its named checks pass their stated oracle and the content-addressed evidence record is present in the final evidence index. Section-relative requirement IDs are stable; the documentation validator compares the source sections and release tables with this inventory and fails on a missing, duplicate, or stale row.
+Every completion criterion in `GOAL.md`, every normative row in `RELEASE-MANIFEST.md`, every controlling requirement in `APPROVAL-MANIFEST.md`, and every accepted contract in ADR-0008 through ADR-0010 appears exactly once below. A row is covered only when its named checks pass their stated oracle and the content-addressed evidence record is present in the final evidence index. Section-relative requirement IDs are stable; the documentation validator compares the source sections and release tables with this inventory and fails on a missing, duplicate, or stale row.
 
 ## Source anchors and stale-row detection
 
@@ -62,6 +62,45 @@ All records include the common evidence fields from `VERIFICATION-MANIFEST.md` a
 | E-022    | Final clean-checkout result index, commands, exit codes, raw-log digests, and independent reviewer identity          |
 | E-023    | Expected VM-012 exact-MCP-mapping mutation failures and positive control                                             |
 | E-024    | Expected per-check primary-verifier aggregation failures and positive control                                        |
+
+## Controlling `APPROVAL-MANIFEST.md` requirements
+
+`APPROVAL-MANIFEST.md` is the controlling implementation-start authority. Its
+release and verification documents are evidence inputs, not competing
+implementation gates. The rows below make the accepted Plane Agent product
+governance explicit in the coverage inventory; the manifest's operation
+catalog and shared gateway/safety requirements are also covered by the
+`GC-*`, `RC-*`, and `VM-*` rows below.
+
+| ID     | Controlling requirement                                                                                              | Checks                         | Observable oracle                                                                                                          | Evidence                          |
+| ------ | --------------------------------------------------------------------------------------------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| AM-001 | One Plane Agent model with exactly one declarative role and Plane-owned control state                                 | VM-001, VM-003, VM-004         | Role/profile, assignment, run, outcome, and authorization records use one model and remain independently versioned         | E-001, E-003, E-004               |
+| AM-002 | Every human automatically receives one chief-of-staff Agent within that human's live permissions                      | VM-003, VM-004, VM-015         | Provisioning is exactly once per human, the Agent is restricted to live permissions, and provisioning is auditable         | E-003, E-004, E-015               |
+| AM-003 | A dedicated delegator dynamically plans and assigns unclaimed work with rationale; other Agents do not freely delegate | VM-003, VM-004, VM-006, VM-007 | Child assignments carry scope, authorization, lineage, completion semantics, and rationale; unauthorized delegation is denied | E-003, E-004, E-006, E-007       |
+| AM-004 | Approved schedules create normal assignments and runs; no saved/versioned workflow-definition system                   | VM-001, VM-003, VM-006, VM-007 | A due schedule enters the ordinary assignment/run lifecycle and no durable workflow definition or graph DSL is persisted | E-001, E-003, E-006, E-007     |
+| AM-005 | Gardener improvements remain strictly Agent-private, apply automatically, and are versioned and rollback-capable       | VM-003, VM-004, VM-007, VM-015, VM-017 | Automatic revisions are scoped to one target Agent, immutable, provenance-bearing, rollbackable, and never copy knowledge | E-003, E-004, E-007, E-015, E-017 |
+| AM-006 | HR may propose Agent creation, change, or retirement; a workspace administrator approves each proposal                | VM-003, VM-004, VM-015         | Unapproved HR proposals do not change Agent state; an authorized administrator approval is recorded before each change   | E-003, E-004, E-015               |
+| AM-007 | An evaluator reviews every Agent outcome before human acceptance or return; human acceptance remains final             | VM-001, VM-003, VM-006, VM-015 | No outcome reaches human accept/return without evaluator review, and the human decision remains the final product transition | E-001, E-003, E-006, E-015       |
+| AM-008 | Explicit approval of `APPROVAL-MANIFEST.md` plus G0 is the sole implementation-start gate                             | VM-001, VM-018                 | Release/verification evidence inputs and their digests are referenced by the approval record; missing approval blocks implementation | E-001, E-018               |
+
+## Accepted ADR-0008 through ADR-0010 contracts
+
+These rows are the accepted contract obligations from the three ADRs dated
+2026-08-03. They are covered independently of their decision-register entries
+so that implementation cannot satisfy a high-level decision while omitting a
+durable contract detail.
+
+| ID          | Accepted contract                                                                                                      | Checks                         | Observable oracle                                                                                                               | Evidence                          |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| ADR-0008-01 | Durable memory and skills are typed, versioned, provenance-bearing, and private to one target Agent                    | VM-001, VM-003, VM-004         | Reads and writes name one target Agent, owner, source, version, lifecycle, and live authorization; cross-Agent copies fail      | E-001, E-003, E-004               |
+| ADR-0008-02 | Plane-governed storage is authoritative and runtime files are lossless execution projections                           | VM-004, VM-009, VM-016         | Projection round-trip and subject-bound `USER.md` checks preserve Plane authority, permissions, and provenance                | E-004, E-009, E-016               |
+| ADR-0008-03 | Gardener improvements apply automatically within private scope with immutable revisions and rollback                    | VM-003, VM-007, VM-015, VM-017 | Each automatic change records source, rationale, gardener, timestamp, predecessor, and rollback revision without rewriting history | E-003, E-007, E-015, E-017      |
+| ADR-0009-01 | Dynamic plans and delegation replace saved/versioned workflows and workflow graphs                                       | VM-001, VM-003, VM-005         | Case-specific rationale and normal assignment lineage exist while no workflow-definition persistence or execution path exists | E-001, E-003, E-005              |
+| ADR-0009-02 | The dedicated delegator creates authorized normal child assignments; worker/specialist Agents do not freely delegate     | VM-003, VM-004, VM-006, VM-007 | Delegation preserves scope, budget, lineage, authorization, completion, and failure semantics; forbidden delegators are denied | E-003, E-004, E-006, E-007       |
+| ADR-0009-03 | Approved schedules trigger ordinary assignments and runs through the shared lifecycle                                    | VM-003, VM-005, VM-006, VM-007 | Schedule recovery and execution produce the same assignment/run/audit transitions as an ordinary commission                  | E-003, E-005, E-006, E-007       |
+| ADR-0010-01 | A versioned Plane runtime contract crosses a separate runtime-service seam; Hermes remains behind one adapter              | VM-001, VM-003, VM-009, VM-010, VM-016 | Snapshot, invocation, event, and exit schemas cross the seam without Plane imports of Hermes internals or leaked transport state | E-001, E-003, E-009, E-010, E-016 |
+| ADR-0010-02 | Immutable run snapshots and invocation envelopes preserve accumulated budgets, bindings, and safe continuation          | VM-003, VM-007, VM-010         | New invocations cannot reset budgets; human-input/restart references and host-bound identity remain valid and tamper-resistant | E-003, E-007, E-010             |
+| ADR-0010-03 | Runtime observations are untrusted until Plane validates them and every terminal invocation has one visible product event | VM-003, VM-006, VM-007, VM-016 | Invalid, duplicate, out-of-order, and illegal-transition events are rejected; outcome/failure/blocker/cancellation is emitted exactly once | E-003, E-006, E-007, E-016 |
 
 ## `GOAL.md` completion criteria
 
