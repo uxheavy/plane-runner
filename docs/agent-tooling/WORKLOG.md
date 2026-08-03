@@ -580,3 +580,20 @@ The source facts are confirmed. The exact gateway/application-service compositio
 
 - Active phase: **P0 — durable contracts and approval baseline**.
 - Next action: the root coordinator refreshes the authoritative approval record, ownership boundaries, integration-lock inputs, and P0 verifier evidence, then delegates only the first disjoint implementation lanes whose dependencies and start gate are satisfied.
+
+## 2026-08-04 — Independent review correction of durable Ultragoal
+
+### Corrections
+
+- Replaced the active objective with the exact durable absolute-path form `Complete and independently verify the objective defined in /Users/nqh/Desktop/CODES/plane/docs/agent-tooling/GOAL.md.` and preserved the activation rule that `create_goal` must omit `token_budget`.
+- Added the normative identity/profile, disclosure/authorization, assignment/run/outcome, invocation/restart, publication/receipt, `outcome_unknown`, terminal-event, and Plane/Hermes ownership invariants.
+- Clarified that every delegated unit is a separate user-visible Codex task/thread, never a subagent; the coordinator waits patiently without rushing; a fresh Luna remediation task requires a fresh independent Sol Medium review task; and tasks are archived only after outputs are incorporated with no follow-up.
+- Retained `architect` and `codebase-design` as grounding resources already used for the approved architecture while explicitly prohibiting their incompatible arena/subagent workflows during autonomous delivery; future independent design proposals/reviews use separate user-visible tasks/threads.
+- Corrected the baseline record: `f2be7a8279` is the pre-goal implementation baseline, not current HEAD; `eaeb220b50` is the integrated initial Ultragoal checkpoint. In this entry, the resulting correction commit is recorded as “this correction commit (see git history for this entry)” because its SHA is unknowable before commit.
+- Defined G0–G5 inline from the current generated overview and delivery plan, with links to both authoritative documents, while preserving the settled product boundaries, P0–P11 plan, named resources, anti-cheating rules, proof, approvals, rollback, and no-chat-UI scope.
+
+### Validation record
+
+- This correction commit (see git history for this entry) is intentionally not named by a predicted SHA. Final commit identity and clean-status evidence are reported by the coordinator after commit.
+- Pre-commit validation passed: `git diff --check`; exactly two changed files; the `WORKLOG.md` delta is additions only; all four relative link targets and anchors resolve; every named routing skill/resource exists; all absolute paths in the goal/worklog resolve; and the required objective, invariants, G0–G5 definitions, baseline markers, delegation rules, and contradiction guard are present.
+- Product implementation tests were not run because this correction is documentation-only and does not change product code.

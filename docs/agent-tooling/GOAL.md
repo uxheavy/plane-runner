@@ -2,7 +2,9 @@
 
 ## Active objective
 
-Complete and independently verify the production-ready non-UI Plane Agent system described here, then prove rollout, readback, rollback, and clean repository state.
+Complete and independently verify the objective defined in /Users/nqh/Desktop/CODES/plane/docs/agent-tooling/GOAL.md.
+
+When this goal is activated with `create_goal`, use that exact objective and omit `token_budget`.
 
 This is the durable program state for later unattended delegation. It is intentionally compact at the active-objective line and detailed below so another coordinator can resume from any interruption without treating a narrative claim as progress.
 
@@ -55,13 +57,25 @@ Authorized Agent operations execute autonomously within the Agent's live Plane p
 
 After verification, staged rollout is allowed even though there are no current users. The absence of users does not waive canaries, observation windows, automated safety stops, rollback readiness, or post-rollout readback.
 
+## Normative invariants
+
+- AgentActor identity/authorization is the sole live entitlement source and is not versioned profile content.
+- ProfileVersion is versioned behavioral configuration snapshotted/resolved for a run.
+- tool availability/disclosure controls integrations and eager/progressive presentation, never a second permission system.
+- AssignmentContract is the durable commission, RunAttempt is the durable execution attempt, OutcomeSubmission is the submitted artifacts/evidence/result; they have independent lifecycles.
+- a run may span RuntimeInvocations/restarts; RunSnapshot is immutable per run; InvocationEnvelope is per dispatch and carries new Plane-owned event refs/remaining cumulative budget.
+- explicit publication only; ordinary model final text remains transcript evidence; semantic Plane mutations use the Operation Gateway and publication carries/correlates authoritative receipts.
+- outcome_unknown is never blindly replayed.
+- Plane/supervisor records exactly one visible terminal product event per terminal invocation, synthesizing failure/cancellation after lease death.
+- Plane owns durable run/conversation/history; Hermes operational sessions/checkpoints are projections/mechanisms only.
+
 ## Current baseline and evidence
 
 The baseline below is observed and must be refreshed by the coordinator when resuming after a repository change. Abbreviated hashes are included for quick recognition; full hashes are the evidence values.
 
 | Repository or fact | Current evidence |
 | --- | --- |
-| Plane | `/Users/nqh/Desktop/CODES/plane`, branch `codex/agent-tooling-architecture`, commit `f2be7a82792611ac843e6d6b210f83723b2c4066` (`f2be7a8279`), current integrated state beginning with `f2be7a8279`. |
+| Plane | `/Users/nqh/Desktop/CODES/plane`, branch `codex/agent-tooling-architecture`; pre-goal implementation baseline `f2be7a82792611ac843e6d6b210f83723b2c4066` (`f2be7a8279`), not current HEAD; integrated initial Ultragoal checkpoint `eaeb220b50f344d720275947d563a1e3ae59aed5` (`eaeb220b50`). |
 | Hermes | `/Users/nqh/Desktop/CODES/hermes-agent`, branch `main`, commit `112f51a5543d490768931514d48a780ad964a868` (`112f51a55`). |
 | Plane implementation | Only the thin scaffold at `apps/api/plane/agent/`: root package, `lifecycle`, and `adapters` seams plus their local `AGENTS.md` instructions. There are no Agent models, migrations, routes, application services, runtime implementation, or verification implementation yet. |
 | Plane scaffold authority | `apps/api/plane/agent/AGENTS.md`, `apps/api/plane/agent/__init__.py`, `apps/api/plane/agent/lifecycle/AGENTS.md`, `apps/api/plane/agent/lifecycle/__init__.py`, `apps/api/plane/agent/adapters/AGENTS.md`, and `apps/api/plane/agent/adapters/__init__.py`. The scaffold is not a Django app and marker-only future packages must not be added. |
@@ -119,6 +133,47 @@ The canonical documentation set includes these exact files and directories:
 - The 177-tool machine inventory and 177-row dispositions are the external compatibility baseline. Exact handler-branch and SDK method/path mapping in `MCP-MAPPING-CONTRACT.md` is required; a count, category, wildcard, or generic adapter label is not proof.
 - Planning fixture inputs and predicates are `fixtures/planning-v1.*` and are validated by `verifiers/validate-planning-fixtures.mjs`. Safety trial inputs, probes, evidence, and independent predicates must be generated and digest-bound before safety qualification.
 - `EVALUATION-SCENARIOS.md`, `EVALUATION-FIXTURE-CONTRACT.md`, `SAFETY-EVALUATION-DESIGN.md`, `REQUIREMENT-COVERAGE.md`, `VERIFICATION-MANIFEST.md`, `RESULT.md`, and the immutable evidence index define how behavior becomes qualifying evidence. Evidence must be independently acquired, content-addressed, and bound to the exact repository/build/configuration state.
+
+## Integration gates (G0–G5)
+
+The authoritative generated definitions are in [NON-UI-IMPLEMENTATION-OVERVIEW.md — Integration gates](./NON-UI-IMPLEMENTATION-OVERVIEW.md#integration-gates); the delivery dependencies and exit gates are in [delivery-plan.md — Workstreams and gates](./delivery-plan.md#workstreams-and-gates). These inline definitions are the meanings of every promotion reference below; naming `G0`–`G5` without satisfying the corresponding definition is not evidence of promotion.
+
+### G0 — Implementation contract frozen
+
+- ADR-0008, ADR-0009, and ADR-0010 are accepted before their implementation lanes, and `APPROVAL-MANIFEST.md` is explicitly approved before any runtime, application, or verification implementation starts.
+- Runtime transport, event schemas, catalog names, limits, retention, idempotency, and audit failure policy are frozen for v1; stale UI-dependent/search/execute language is reconciled with the non-UI boundary and current catalog decision.
+- Owners and repositories are assigned, and the cross-repository integration-lock format is agreed.
+
+### G1 — Deterministic domain spine
+
+- A fixture creates an Agent actor, profile version, assignment, run snapshot, invocation, and terminal outcome without a model or UI.
+- The deterministic runtime adapter crosses the same dispatch and event-ingress contracts intended for Hermes.
+- Pilot reads and one semantic mutation cross the gateway with live authorization, idempotency, bounded results, and append-only audit; shared contract fixtures pass in Plane and the runtime service.
+
+### G2 — Real single-agent vertical slice
+
+- A real forked-Hermes process completes the assigned planning outcome through native tools and progressive TypeScript composition.
+- The runtime publishes exactly one visible terminal product event through Plane APIs; raw model text remains run-inspection evidence only.
+- Authorized work succeeds, inaccessible project access is denied without leakage, stable replay creates no duplicate mutation, credentials remain host-only, and the slice is operable through API, CLI, and fixtures with no chat UI.
+
+### G3 — Non-UI feature breadth complete
+
+- Full Plane integration/action coverage, private memory/skills, schedules, dynamic delegation, artifacts, evaluator review, and outcome APIs satisfy their accepted contracts.
+- HR proposes Agent creation/change/retirement with workspace-admin approval; every human has one chief-of-staff Agent restricted to that human's live permissions.
+- Gardener application is automatic, versioned, and rollback-capable across sessions while strict per-Agent walls prevent knowledge copying; the approved external MCP inventory is migrated or explicitly dispositioned through the shared gateway.
+- Minimal administration uses existing Plane settings primitives with no chat UI or parallel design system, and all supported behavior has contract, permission, failure, and compatibility tests.
+
+### G4 — Production candidate verified
+
+- The clean-checkout primary verifier passes static, contract, authorization, isolation, mutation, compatibility, load, recovery, and operator checks.
+- The mandatory live pilot and retained evaluation suite meet approved thresholds with no provider/model fallback.
+- Integration locks, artifacts, migrations, observability, runbooks, kill switches, credential lifecycle, retention, and rollback evidence are complete.
+
+### G5 — Controlled rollout complete
+
+- After verification, development, allowlisted-workspace, expanded-cohort, and approved general-availability stages have recorded evidence and approval even though there are no current users.
+- Production canaries prove one permitted and one denied Plane scenario, audit correlation, version readback, and rollback readiness.
+- No unresolved security-critical failure, duplicate mutation, missing audit event, credential disclosure, or sandbox escape remains; automated safety stops are mandatory at every stage.
 
 ## Durable phase plan
 
@@ -302,18 +357,20 @@ Verifier and gate: real permitted and denied canaries, audit readback, version/c
 
 ## Skill-routing catalog
 
-This is routing, not permission to ignore a skill's trigger or read rules. A worker loads the complete `SKILL.md` for every selected skill before acting, resolves any referenced instructions itself, and follows the user's direct instruction when it conflicts with a generic routing suggestion. The coordinator chooses the smallest set that covers the lane; a skill is not silently carried across phases.
+This is a routing inventory, not a promise that every named skill or linked workflow will be invoked. A worker loads the complete `SKILL.md` for every selected skill before acting, resolves any referenced instructions itself, and follows the user's direct instruction when it conflicts with a generic routing suggestion. The coordinator chooses the smallest set that covers the lane; a skill is not silently carried across phases.
 
 | Phase or use | Skills and when they are loaded |
 | --- | --- |
-| P0 goal/authority grounding | `ultragoal` when reading, revising, resuming, or validating this durable goal; `documentation-and-adrs` when reconciling durable product/technical decisions and canonical docs; `architect` when setting system ownership and trust boundaries; `codebase-design` when assigning repository/module seams; `agents-md` before entering a repository or nested path with local instructions; `interrogate` when a factual ambiguity could change scope, authority, or a verifier. |
+| P0 goal/authority grounding | `ultragoal` when reading, revising, resuming, or validating this durable goal; `documentation-and-adrs` when reconciling durable product/technical decisions and canonical docs; the already-applied `architect` and `codebase-design` grounding resources for system ownership and repository/module seams; `agents-md` before entering a repository or nested path with local instructions; `interrogate` when a factual ambiguity could change scope, authority, or a verifier. |
 | P0 principles and subtraction | `principle-outcome-oriented-execution` at each phase/gate to keep work tied to observable outcomes; `principle-boundary-discipline` when defining Plane/Hermes/Buzz/MCP ownership; `principle-build-the-lever` when deciding whether a generator, contract, or mechanism should replace repeated manual work; `principle-subtract-before-you-add` before introducing a package, protocol, tool, or UI surface; `principle-encode-lessons-in-structure` after a correction, failure, or repeated gotcha; `principle-never-block-on-the-human` when safe evidence gathering or a bounded alternative can proceed without a preference decision; `principle-model-the-domain` when product concepts or state ownership are being shaped. |
 | P1 contracts and schemas | `context-engineering` when preparing bounded worker context and evidence packets; `domain-modeling` for lifecycle/state/invariant modeling; `api-and-interface-design` for the Gateway, runtime, catalog, and cross-process seams; `typed-service-contracts` for generated schemas, versions, structured errors, receipts, and event envelopes; `tool-design` when choosing native/adaptive/composition tool contracts; `principle-make-operations-idempotent` for invocation keys, replay, reconciliation, and retry semantics. |
-| P2–P4 domain, gateway, runtime | `architect`, `codebase-design`, and `domain-modeling` when ownership or durable state changes; `api-and-interface-design` and `typed-service-contracts` for public/cross-process contracts; `build-audit-logs` for append-only intent/outcome evidence; `implementing-security-layers` for identity, authorization, host binding, isolation, and trust boundaries; `principle-boundary-discipline` and `principle-make-operations-idempotent` for gateway/runtime seams; `principle-prove-it-works` and `principle-sequence-verifiable-units` when a verifiable vertical slice or gate is assembled. |
+| P2–P4 domain, gateway, runtime | `domain-modeling` when ownership or durable state changes; the already-applied `architect` and `codebase-design` grounding resources remain references, not future workflow invocations; `api-and-interface-design` and `typed-service-contracts` for public/cross-process contracts; `build-audit-logs` for append-only intent/outcome evidence; `implementing-security-layers` for identity, authorization, host binding, isolation, and trust boundaries; `principle-boundary-discipline` and `principle-make-operations-idempotent` for gateway/runtime seams; `principle-prove-it-works` and `principle-sequence-verifiable-units` when a verifiable vertical slice or gate is assembled. |
 | P5–P8 tools, knowledge, delegation, compatibility | `tool-design` for adaptive disclosure, native adapters, composition, and MCP ergonomics; `context-engineering` for private context and bounded model-visible results; `domain-modeling` for memory/skills/gardener/schedule/delegation/evaluator records; `api-and-interface-design` and `typed-service-contracts` for catalog, SDK, MCP, and event evolution; `build-audit-logs` and `implementing-security-layers` for traceability and isolation; `principle-subtract-before-you-add`, `principle-boundary-discipline`, and `principle-encode-lessons-in-structure` for reuse and systemic fixes. |
 | P9–P11 verification and delivery | `expert-testing` when designing broad, adversarial, integration, and load coverage; `test-systematically` when executing deterministic/live matrices, retries, recovery, and clean-state passes; `principle-prove-it-works` for independent observable proof; `principle-sequence-verifiable-units` for phase/gate ordering; `git-workflow-and-versioning` for branch/commit/integration-lock provenance and clean worktrees; `build-audit-logs` for evidence indexes and reviewer traceability; `implementing-security-layers` for rollout safety and stop triggers; `interrogate` when evidence conflicts or a gate decision needs a bounded fact-finding pass. |
 
 The exact named routing catalog is: `ultragoal`, `documentation-and-adrs`, `architect`, `codebase-design`, `agents-md`, `principle-build-the-lever`, `principle-outcome-oriented-execution`, `principle-boundary-discipline`, `principle-encode-lessons-in-structure`, `principle-make-operations-idempotent`, `principle-model-the-domain`, `principle-never-block-on-the-human`, `principle-prove-it-works`, `principle-sequence-verifiable-units`, `principle-subtract-before-you-add`, `context-engineering`, `domain-modeling`, `api-and-interface-design`, `typed-service-contracts`, `tool-design`, `build-audit-logs`, `implementing-security-layers`, `expert-testing`, `test-systematically`, `git-workflow-and-versioning`, and `interrogate`.
+
+The named `architect` and `codebase-design` resources are retained because their grounding, vocabulary, and approved design comparisons already shaped the architecture recorded in [ADR-SYNTHESIS.md — Architect arena](./ADR-SYNTHESIS.md#architect-arena) and [INTERFACE-DESIGN.md — Accepted v1 core boundary](./INTERFACE-DESIGN.md#accepted-v1-core-boundary). Their linked workflows can require arena/subagent execution: `architect` Phase B uses arena runners, and `codebase-design` links `DESIGN-IT-TWICE.md`, which mandates sub-agents. Skill instructions that mandate subagents are incompatible with this goal's task-only execution contract and must not be invoked during autonomous delivery. Future design changes route only through a threads-compatible process; equivalent independent proposals and reviews use separate user-visible Codex tasks/threads, never subagents. This catalog does not claim that those incompatible workflows will be invoked.
 
 ## Delegation operating contract
 
@@ -321,13 +378,13 @@ The root thread is the delegator/coordinator, not a feature implementer. It owns
 
 - Implementation and work threads use GPT-5.6 Luna xhigh.
 - Review threads use GPT-5.6 Sol Medium, following the latest user override.
-- Use threads, never subagents, for delegated work.
+- Every delegated unit is a separate user-visible Codex task/thread; no delegated unit is a subagent.
 - Every task packet contains: objective, repository/lane ownership, non-goals, dependencies, exact files or surfaces, skill-routing requirements, verifier command/oracle, stop condition, expected evidence, and commit SHA requirement.
 - One writer owns each repository/lane at a time. No two threads edit overlapping files or integration-lock entries. Documentation-only changes do not grant permission to edit code, ADRs, plans, or external repositories outside the packet.
-- Workers and reviewers may take as long as their task needs. Do not rush, interrupt, or reassign solely because a thread has been running for a long time.
+- The coordinator waits patiently without rushing; workers and reviewers may take as long as their task needs. Do not interrupt or reassign solely because a task/thread has been running for a long time.
 - Integrate only reviewed commits whose evidence and ownership boundary are clear. The root coordinator performs integration and conflict resolution; it does not silently take an unreviewed patch.
-- If Sol Medium finds an issue, route a new bounded Luna fix thread to the issue, then send the resulting commit back to Sol Medium for re-review. Do not ask the original review to self-approve a changed implementation.
-- Archive every spawned thread after its evidence is incorporated and it has no follow-up. Preserve its task, verdict, commit, and verifier evidence in the worklog or evidence index before archive.
+- If Sol Medium finds an issue, route a fresh bounded Luna remediation task to the issue, then a fresh independent Sol Medium review task is mandatory for the resulting commit. Do not ask the original review task to self-approve a changed implementation.
+- Archive tasks only after their outputs are incorporated and no follow-up is needed. Preserve each task's objective, verdict, commit, and verifier evidence in the worklog or evidence index before archive.
 - Local commits are progress checkpoints. A commit is not proof until the relevant verifier and clean-state status are recorded.
 - The root owns final integration, conflict resolution, lock/digest updates, gate decisions, production proof, result assembly, cleanup, and final repository-status checks.
 
