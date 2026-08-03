@@ -2,7 +2,7 @@
 
 ## Status
 
-Candidate pre-approval design for live scenarios EV-011 through EV-030. It resolves the evidence, fault, result, and sandbox seams required to generate executable fixtures. `RELEASE-MANIFEST.md` and `VERIFICATION-MANIFEST.md` are evidence inputs to the controlling `APPROVAL-MANIFEST.md`; this design does not authorize implementation or qualify any trial.
+G2/G4 evidence input for live scenarios EV-011 through EV-030. It resolves the evidence, fault, result, and sandbox seams required to generate executable fixtures. `RELEASE-MANIFEST.md` and `VERIFICATION-MANIFEST.md` are evidence inputs to the controlling `APPROVAL-MANIFEST.md`; this design is not an approval or freeze authority, does not add a G0 prerequisite, and does not authorize implementation or qualify any trial.
 
 ## Separate bundle
 
@@ -400,7 +400,7 @@ EV-026 has exactly 29 hostile subcases and 58 successful authorized-callback con
 
 ## Remaining qualification boundary
 
-This design selects candidate v1 behavior but does not approve it. Before implementation:
+This design selects candidate v1 behavior but does not approve it. Before safety implementation and qualification at the applicable later gates:
 
 - generate and digest-bind the complete `safety-v1` bundle, 20 prompts, probe programs, result schema, verifier, and operator mutation suite;
 - incorporate these decisions into the release and verification manifests as evidence inputs to the controlling `APPROVAL-MANIFEST.md`;

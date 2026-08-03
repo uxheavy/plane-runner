@@ -1,136 +1,34 @@
 # Source Inventory
 
-This document records observed source facts used to prepare the v1 approval package. It distinguishes the reviewed current baseline from the target architecture. It is evidence, not implementation proof.
+This inventory records stable repository identities and exact source SHAs used by the approval package. It contains no local absolute paths and does not require sibling checkouts for clean-worktree verification. The reviewed baseline and sealed package evidence are separate facts.
 
-## Pinned sources
+## Reviewed baseline
 
-| Source                     | Reviewed current revision / ref                                                              | Evidence                                                                          |
-| -------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Plane                      | `dac96b0ff9a3adb6bfcc3fea235ab4a697ae5acd` on `codex/agent-tooling-architecture`             | Clean local authoritative checkout; reviewed before this reconciliation package   |
-| Hermes                     | `112f51a5543d490768931514d48a780ad964a868` on `main`                                         | Clean local checkout; `main` is two commits ahead of `upstream/main`              |
-| Buzz                       | `3b8567a05d4c40e667d061666feb7aa7bc38212d` on `main`                                         | Clean `uxheavy/buzz` fork checkout; reference donor only                          |
-| Plane MCP submodule        | `96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1` on `codex/agent-tooling-v1`, package `0.2.11`     | Clean `uxheavy/plane-mcp-server` submodule checkout                               |
-| Local MCP inspection       | `96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1` on `main`                                         | Clean `uxheavy/plane-mcp-server-1` inspection checkout; content matches submodule |
-| Python MCP SDK dependency  | `plane-sdk==0.2.20`                                                                          | MCP `pyproject.toml`                                                              |
-| Plane Python SDK submodule | tag `v0.2.20`, commit `78702e9224bd9c5e8fffdabfbfdd582ac1fa9426` on `codex/agent-tooling-v1` | Clean `uxheavy/plane-python-sdk` submodule checkout                               |
+| Repository | Stable path           | Reviewed SHA                               | Ref                                | Authority and role                                                     |
+| ---------- | --------------------- | ------------------------------------------ | ---------------------------------- | ---------------------------------------------------------------------- |
+| Plane      | repository root (`.`) | `dac96b0ff9a3adb6bfcc3fea235ab4a697ae5acd` | `codex/agent-tooling-architecture` | historical reviewed baseline; not required to equal the sealed package |
 
-## Current repository evidence
+The reviewed baseline is an ancestor check only. The exact Plane package content SHA is `__CONTENT_COMMIT__` and is also machine-bound as `integration-lock.g0.json#/seal/contentCommit`; the seal commit is the current first-parent evidence boundary. No branch name is used as package identity.
 
-The reviewed Plane checkout is `/Users/nqh/.codex/worktrees/5099/plane` at the same `dac96b0ff9...` commit as the authoritative branch checkout `/Users/nqh/Desktop/CODES/plane`. The working trees for Plane, Hermes, Buzz, the MCP inspection checkout, and the materialized Plane MCP/SDK submodules were clean when this inventory was captured. The Plane checkout used for this package is detached because the Codex worktree is pinned to the reviewed commit; the branch ref remains `codex/agent-tooling-architecture` in the authoritative checkout.
+## Current pinned source revisions
 
-| Repository / checkout | Remote used for the pin                                  | Working ref                                            | Status evidence                                                                      |
-| --------------------- | -------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| Plane                 | `upstream=https://github.com/uxheavy/plane-runner.git`   | `codex/agent-tooling-architecture` at the reviewed SHA | `git status --short` empty                                                           |
-| Hermes                | `upstream=https://github.com/uxheavy/hermes-agent.git`   | `main` at the reviewed SHA                             | `git status --short` empty; ahead of upstream by 2 is recorded, not treated as dirty |
-| Buzz                  | `upstream=https://github.com/uxheavy/buzz.git`           | `main` at the reviewed SHA                             | `git status --short` empty; reference-only                                           |
-| MCP submodule         | `origin=https://github.com/uxheavy/plane-mcp-server.git` | `codex/agent-tooling-v1` at the reviewed SHA           | `git status --short` empty                                                           |
-| SDK submodule         | `origin=https://github.com/uxheavy/plane-python-sdk.git` | `codex/agent-tooling-v1` at the reviewed SHA           | `git status --short` empty                                                           |
+| Repository            | Stable repository path            | Exact SHA                                  | Ref/tag                              | Role                                                               |
+| --------------------- | --------------------------------- | ------------------------------------------ | ------------------------------------ | ------------------------------------------------------------------ |
+| Plane package         | `.`                               | `__CONTENT_COMMIT__`                       | sealed content commit                | control plane, domain, gateway, catalog, and integration root      |
+| Hermes                | `repository:uxheavy/hermes-agent` | `112f51a5543d490768931514d48a780ad964a868` | `main`                               | separate runtime service and hidden execution-kernel adapter donor |
+| Buzz                  | `repository:uxheavy/buzz`         | `3b8567a05d4c40e667d061666feb7aa7bc38212d` | `main`                               | reference donor only; never a runtime dependency or authority      |
+| Plane MCP fork        | `external/plane-mcp-server`       | `96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1` | `codex/agent-tooling-v1` / `0.2.11`  | official MCP compatibility adapter host                            |
+| Plane Python SDK fork | `external/plane-python-sdk`       | `78702e9224bd9c5e8fffdabfbfdd582ac1fa9426` | `codex/agent-tooling-v1` / `v0.2.20` | shared Python SDK transport seam                                   |
 
-The prior Plane `d4679197ba...` and Hermes `5e88745f...` values are historical evidence from an earlier draft and are not current pins. The historical MCP/SDK pins remain current and are repeated above with their package/tag facts.
+## Plane gitlink evidence
 
-## Plane public interface
+The sealed content commit must point these submodules at the exact pinned SHAs:
 
-- The public Plane interface is mounted under `/api/v1/`.
-- Public API-key authentication uses `X-Api-Key`.
-- OpenAPI generation uses DRF Spectacular when `ENABLE_DRF_SPECTACULAR=1`.
-- The OpenAPI hook emits only `/api/v1/` paths and excludes `PUT`.
-- No generated OpenAPI document is checked into the inspected Plane revision.
-- `/api/v1/` does not expose API-key-authenticated workspace discovery.
-- Workspace slug must therefore be trusted host context for the v1 internal-agent workflow.
-- The internal workspace-discovery route uses session authentication and is not part of the v1 agent contract.
+| Gitlink                     | Required SHA                               |
+| --------------------------- | ------------------------------------------ |
+| `external/plane-mcp-server` | `96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1` |
+| `external/plane-python-sdk` | `78702e9224bd9c5e8fffdabfbfdd582ac1fa9426` |
 
-## Planning-workflow operations
+## Evidence boundary
 
-| Capability             | Public method and path                                                                     | Declared operation ID      | Important current behavior                                                |
-| ---------------------- | ------------------------------------------------------------------------------------------ | -------------------------- | ------------------------------------------------------------------------- |
-| List projects          | `GET /api/v1/workspaces/{slug}/projects/`                                                  | `list_projects`            | Membership/public-network filtered and paginated                          |
-| Retrieve project       | `GET /api/v1/workspaces/{slug}/projects/{project_id}/`                                     | `retrieve_project`         | Project UUID comes from list/lite lookup                                  |
-| List current cycles    | `GET /api/v1/workspaces/{slug}/projects/{project_id}/cycles/?cycle_view=current`           | `list_cycles`              | Returns a bare array with zero or more overlapping current cycles         |
-| Search work items      | `GET /api/v1/workspaces/{slug}/work-items/search/`                                         | `search_work_items`        | Text/identifier search, not semantic embedding search                     |
-| List work items        | `GET /api/v1/workspaces/{slug}/projects/{project_id}/work-items/`                          | `list_work_items`          | Paginated; supports fields, expand, ordering, and external lookup         |
-| Retrieve work item     | `GET /api/v1/workspaces/{slug}/projects/{project_id}/work-items/{work_item_id}/`           | `retrieve_work_item`       | Supports expanded assignees through serializer behavior                   |
-| Retrieve by identifier | `GET /api/v1/workspaces/{slug}/work-items/{PROJECT}-{SEQUENCE}/`                           | `get_workspace_work_item`  | Resolves project membership from the identifier                           |
-| List project members   | `GET /api/v1/workspaces/{slug}/projects/{project_id}/project-members-lite/`                | `get_project_members_lite` | Exposes member activity status and role                                   |
-| List relations         | `GET /api/v1/workspaces/{slug}/projects/{project_id}/work-items/{work_item_id}/relations/` | `list_work_item_relations` | Returns grouped related IDs, not expanded work items                      |
-| Create parent or child | `POST /api/v1/workspaces/{slug}/projects/{project_id}/work-items/`                         | `create_work_item`         | A child supplies `parent`; parent must be in the same project             |
-| Update work item       | `PATCH /api/v1/workspaces/{slug}/projects/{project_id}/work-items/{work_item_id}/`         | `update_work_item`         | Partial state/priority/parent/assignee updates; cycle/module are separate |
-| Assign cycle           | `POST /api/v1/workspaces/{slug}/projects/{project_id}/cycles/{cycle_id}/cycle-issues/`     | `add_cycle_work_items`     | State converges but repeated calls emit activity                          |
-| Create comment         | `POST /api/v1/workspaces/{slug}/projects/{project_id}/work-items/{work_item_id}/comments/` | `create_work_item_comment` | Source links must be encoded in supported comment content/fields          |
-
-## Plane permission behavior
-
-- Safe project reads require active workspace membership and then apply project-membership or public-project filtering.
-- Work-item, cycle, and relation reads require active project membership.
-- Work-item, cycle, and relation mutations require active project membership with member or administrator role.
-- Comment creation currently requires active project membership but does not use the stricter member/admin mutation role check.
-- Search independently filters results to active project memberships.
-- These current behaviors are the authorization oracle; the agent layer must not broaden them.
-
-## Plane idempotency gaps
-
-- `create_work_item` has no standard idempotency-key support.
-- Optional external identifiers return `409` on an observed duplicate rather than replaying the first success.
-- The external-identifier precheck has no database uniqueness constraint and is not race-safe.
-- `create_work_item_comment` has the same non-race-safe duplicate-precheck behavior.
-- `update_work_item` repeats timestamps, activity, and webhook side effects even when field state converges.
-- Cycle assignment and relation creation converge principal database state but repeat activity side effects.
-- The Plane Operation Gateway must add invocation-level idempotency and outcome reconciliation for the v1 write workflow.
-
-## Existing Python MCP compatibility surface
-
-- The official Python MCP uses Python, FastMCP `3.2.0`, and `plane-sdk==0.2.20`.
-- Source registration contains 177 unique tools across 25 top-level categories.
-- The README's older “100+ tools across 20 categories” statement is not the compatibility oracle.
-- The pinned machine-readable inventory is `inventories/plane-mcp-v0.2.11.json`.
-- The pinned inventory SHA-256 is `2778ef9d6f5426c6fc65894829ec04bf853c18c4ab09d796474896ba01826ad1`.
-- The inventory contains tool name, category, source file, line, signature, and return annotation.
-- Most MCP tools call the public Plane SDK.
-- Some MCP tools compose several public operations.
-- `get_pql_reference` is local-only behavior.
-- Attachment tools may call public source or presigned object-storage URLs in addition to Plane.
-- Compatibility must therefore map each MCP tool contract to one or more gateway operations or explicitly retained local behavior.
-
-### Shared SDK transport seam
-
-- Every ordinary MCP handler obtains `PlaneClient` through `get_plane_client_context()`.
-- `PlaneClient` constructs resource objects over a shared `Configuration` type.
-- Every SDK resource inherits `BaseResource`.
-- `BaseResource` owns the common `requests.Session`, URL construction, authentication headers, retries, and HTTP response normalization.
-- SDK v0.2.20 does not currently accept a custom transport.
-- Adding one optional transport at `BaseResource` is the smallest common seam for preserving existing MCP handlers while routing their SDK calls through the gateway.
-
-### Authentication and transports
-
-- Stdio requires `PLANE_API_KEY` and `PLANE_WORKSPACE_SLUG`.
-- Hosted OAuth uses `/http/mcp` with read and write scopes.
-- Hosted PAT uses `/http/api-key/mcp` with bearer PAT and `X-Workspace-slug`.
-- Legacy SSE OAuth uses `/sse`.
-- The inspected stdio startup does not implement the README's claimed `PLANE_ACCESS_TOKEN` environment alternative.
-
-## Hermes integration facts
-
-- Native tools self-register through the Hermes registry.
-- Truly eager tools must be registered and included in `_HERMES_CORE_TOOLS`.
-- Non-core native, plugin, and MCP tools can be deferred behind Hermes Tool Search.
-- Deferred calls are unwrapped before middleware, approval hooks, guardrails, and dispatch.
-- Plane v1 does not invoke Hermes approval hooks to confirm Plane operations; the observation above describes existing Hermes behavior only.
-- Hermes's current `execute_code` runtime is Python-only.
-- The Python runtime already demonstrates credential scrubbing and authenticated local host RPC.
-- Plane TypeScript Code Mode needs a separate restricted runner rather than adding Plane access to generic Python Code Mode.
-- `openai-codex` resolves to the subscription-backed Codex Responses mode.
-- `gpt-5.6-luna` is in Hermes's current curated Codex model catalog.
-
-## Superseded eager Hermes surface proposal
-
-The following earlier proposal is retained as source history but superseded by ATD-106 through ATD-114 and ADR-0007. It is not the current native tool contract:
-
-- `plane_search_work_items`
-- `plane_get_work_item`
-- `plane_create_work_item`
-- `plane_update_work_item`
-- `plane_add_comment`
-- `plane_docs`
-- `plane_search`
-- `plane_execute`
-
-Workspace, project, and run identity remain host-bound context. Final eager and progressive tool names and schemas remain open catalog decisions.
+`integration-lock.g0.json` binds every source SHA, remote, ref, gitlink, normative documentation input, accepted ADR, generator, fixture, and verifier input. The lock's `reviewedBaseline` is not a digest of the package. The lock's `seal.contentCommit` is the first parent of the evidence-seal commit; the verifier rejects a semantic change or an extra unsealed commit after that boundary.

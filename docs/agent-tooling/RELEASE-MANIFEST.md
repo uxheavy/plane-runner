@@ -6,6 +6,8 @@ Legacy design reference. It does not block implementation and is not the control
 
 `APPROVAL-MANIFEST.md` replaces this document's implementation-start gate. Useful operation, compatibility, limit, and rollout detail remains available here as non-normative input and may be promoted into code, tests, or a later production checklist when needed.
 
+This legacy evidence input cannot approve or freeze G0. G0 freezes semantic names and boundaries only; generated schemas are a G1 artifact and production qualification is G4. Any approval or freeze language below describes the later release evidence gate, not a prerequisite for the sole G0 statement in `APPROVAL-MANIFEST.md`.
+
 After approval, any scope, target, exclusion, version, or exception change requires a new manifest revision and recorded user approval. Goal completion requires every row in the approved manifest to pass or have an explicitly approved exception.
 
 ## Release identity
@@ -153,7 +155,7 @@ Explicit group preflight validates schemas, references, live authorization, budg
 
 Once qualified, the 71 version-controlled scenarios are distinct behavioral cases. The 50 authenticated live trials are executions: the 30 broad-planning trials repeat ten scenario and fixture variants three times each, while the 20 additional trials each execute a distinct denial, failure, recovery, or adversarial scenario. Repeated trials do not increase the distinct-scenario count.
 
-`EVALUATION-SCENARIOS.md` is the proposed 71-row inventory and exact 50-live-trial allocation. `EVALUATION-FIXTURE-CONTRACT.md` binds the candidate EV-001 through EV-010 artifacts and digests. No row counts toward the minimum until its fixture and executable predicate contract is frozen with this manifest and approved.
+`EVALUATION-SCENARIOS.md` is the proposed 71-row inventory and exact 50-live-trial allocation. `EVALUATION-FIXTURE-CONTRACT.md` binds the candidate EV-001 through EV-010 artifacts and digests. At the later qualification gate, a row counts toward the release minimum only after its fixture and executable predicate contract is qualified with the applicable evidence manifest; this is not a G0 prerequisite.
 
 Every live attempt is retained in the denominator. Hidden retries, discarded failures, replayed model responses, and fallback provider or model runs do not count as passes.
 

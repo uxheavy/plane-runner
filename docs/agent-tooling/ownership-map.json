@@ -1,101 +1,27 @@
 {
+  "$schema": "./ownership-map.schema.json",
   "schemaVersion": 1,
   "mapId": "plane-agent-tooling-g0-ownership",
   "status": "candidate-for-approval",
   "repositoryRoot": ".",
-  "overlapRule": "No two writers may own the same repository and a path that is equal to, below, or above another writer path.",
+  "overlapRule": "No two writers may own the same repository path or an ancestor/descendant path; shared wiring has one root-integrator owner.",
   "owners": [
     {
-      "ownerId": "plane-control-plane-owner",
-      "role": "Plane control-plane owner",
-      "repository": "plane",
-      "writePaths": ["apps/api/plane/agent/control/**"],
-      "readPaths": ["apps/api/plane/agent/**"]
-    },
-    {
-      "ownerId": "plane-domain-owner",
-      "role": "Plane domain owner",
-      "repository": "plane",
-      "writePaths": ["apps/api/plane/agent/domain/**"],
-      "readPaths": ["apps/api/plane/agent/**"]
-    },
-    {
-      "ownerId": "plane-gateway-owner",
-      "role": "Plane gateway owner",
-      "repository": "plane",
-      "writePaths": ["apps/api/plane/agent/gateway/**"],
-      "readPaths": ["apps/api/plane/agent/**"]
-    },
-    {
-      "ownerId": "plane-catalog-owner",
-      "role": "Plane catalog owner",
-      "repository": "plane",
-      "writePaths": ["apps/api/plane/agent/catalog/**"],
-      "readPaths": ["docs/agent-tooling/**"]
-    },
-    {
-      "ownerId": "hermes-runtime-owner",
-      "role": "Separate runtime service / Hermes adapter owner",
-      "repository": "hermes",
-      "writePaths": ["plane_runtime/**"],
-      "readPaths": ["tests/**", "pyproject.toml"]
-    },
-    {
-      "ownerId": "mcp-fork-owner",
-      "role": "Official MCP fork owner",
-      "repository": "plane-mcp",
-      "writePaths": ["plane_mcp/**", "tests/**", "pyproject.toml"],
-      "readPaths": []
-    },
-    {
-      "ownerId": "sdk-fork-owner",
-      "role": "Plane Python SDK fork owner",
-      "repository": "plane-sdk",
-      "writePaths": ["plane/**", "tests/**", "pyproject.toml"],
-      "readPaths": []
-    },
-    {
-      "ownerId": "buzz-reference-owner",
-      "role": "Buzz reference owner",
-      "repository": "buzz",
-      "writePaths": [],
-      "readPaths": ["**"],
-      "restriction": "reference-only; no runtime dependency or production write"
-    },
-    {
-      "ownerId": "shared-contracts-owner",
-      "role": "Shared generated contracts and fixtures owner",
-      "repository": "plane",
-      "writePaths": [
-        "docs/agent-tooling/fixtures/**",
-        "docs/agent-tooling/prompts/**",
-        "docs/agent-tooling/NON-UI-IMPLEMENTATION-PLAN.json",
-        "docs/agent-tooling/NON-UI-IMPLEMENTATION-OVERVIEW.md"
-      ],
-      "readPaths": ["docs/agent-tooling/**"]
-    },
-    {
-      "ownerId": "integration-lock-writer",
-      "role": "Integration-lock writer",
-      "repository": "plane",
-      "writePaths": [
-        "docs/agent-tooling/ownership-map.json",
-        "docs/agent-tooling/integration-lock.schema.json",
-        "docs/agent-tooling/integration-lock.g0.json"
-      ],
-      "readPaths": ["docs/agent-tooling/**"]
-    },
-    {
       "ownerId": "root-integrator",
-      "role": "Root integrator",
+      "role": "Root integrator and shared wiring owner",
       "repository": "plane",
+      "planLaneIds": ["L0"],
       "writePaths": [
-        "docs/agent-tooling/APPROVAL-MANIFEST.md",
+        "apps/api/plane/urls.py",
+        "apps/api/plane/agent/apps.py",
+        "apps/api/plane/agent/urls.py",
+        "apps/api/plane/agent/migrations/**",
+        "docs/agent-tooling/README.md",
         "docs/agent-tooling/GOAL.md",
+        "docs/agent-tooling/APPROVAL-MANIFEST.md",
         "docs/agent-tooling/SOURCE-INVENTORY.md",
         "docs/agent-tooling/decision-register.md",
         "docs/agent-tooling/delivery-plan.md",
-        "docs/agent-tooling/README.md",
         "docs/agent-tooling/architecture.md",
         "docs/agent-tooling/INTERFACE-DESIGN.md",
         "docs/agent-tooling/RUNTIME-DESIGN.md",
@@ -103,18 +29,350 @@
         "docs/agent-tooling/PILOT-CONTRACTS.md",
         "docs/agent-tooling/RELEASE-MANIFEST.md",
         "docs/agent-tooling/VERIFICATION-MANIFEST.md",
+        "docs/agent-tooling/EVALUATION-FIXTURE-CONTRACT.md",
+        "docs/agent-tooling/EVALUATION-SCENARIOS.md",
+        "docs/agent-tooling/MCP-COMPATIBILITY.md",
+        "docs/agent-tooling/MCP-MAPPING-CONTRACT.md",
+        "docs/agent-tooling/SAFETY-EVALUATION-DESIGN.md",
+        "docs/agent-tooling/ADR-SYNTHESIS.md",
+        "docs/agent-tooling/product-requirements.md",
+        "docs/agent-tooling/inventories/**",
+        "docs/agent-tooling/WORKLOG.md"
+      ],
+      "readPaths": ["docs/agent-tooling/**", "docs/decisions/**"]
+    },
+    {
+      "ownerId": "plane-domain-owner",
+      "role": "Plane domain and application-service owner",
+      "repository": "plane",
+      "planLaneIds": ["L2", "L6", "L7"],
+      "writePaths": [
+        "apps/api/plane/agent/domain/**",
+        "apps/api/plane/agent/application/**",
+        "apps/api/plane/agent/knowledge/**",
+        "apps/api/plane/agent/delegation/**"
+      ],
+      "readPaths": ["apps/api/plane/agent/**"]
+    },
+    {
+      "ownerId": "plane-gateway-owner",
+      "role": "Plane gateway, authorization, idempotency, and audit owner",
+      "repository": "plane",
+      "planLaneIds": ["L3"],
+      "writePaths": ["apps/api/plane/agent/gateway/**"],
+      "readPaths": ["apps/api/plane/agent/**"]
+    },
+    {
+      "ownerId": "plane-catalog-owner",
+      "role": "Plane operation catalog and native adapter owner",
+      "repository": "plane",
+      "planLaneIds": ["L3", "L5"],
+      "writePaths": ["apps/api/plane/agent/catalog/**", "apps/api/plane/agent/tools/**"],
+      "readPaths": ["docs/agent-tooling/**", "apps/api/plane/agent/gateway/**"]
+    },
+    {
+      "ownerId": "runtime-service-owner",
+      "role": "Separate runtime service owner",
+      "repository": "hermes",
+      "planLaneIds": ["L4"],
+      "writePaths": ["plane_runtime/dispatch/**", "plane_runtime/hermes_adapter/**"],
+      "readPaths": ["plane_runtime/**", "tests/**"]
+    },
+    {
+      "ownerId": "runtime-security-owner",
+      "role": "Runtime tooling and TypeScript isolation owner",
+      "repository": "hermes",
+      "planLaneIds": ["L5"],
+      "writePaths": ["plane_runtime/tooling/**", "plane_runtime/isolate/**"],
+      "readPaths": ["plane_runtime/**", "tests/**"]
+    },
+    {
+      "ownerId": "mcp-fork-owner",
+      "role": "Official MCP fork compatibility owner",
+      "repository": "plane-mcp",
+      "planLaneIds": ["L8"],
+      "writePaths": ["plane_mcp/**", "tests/**", "pyproject.toml"],
+      "readPaths": []
+    },
+    {
+      "ownerId": "sdk-fork-owner",
+      "role": "Plane Python SDK fork compatibility owner",
+      "repository": "plane-sdk",
+      "planLaneIds": ["L8"],
+      "writePaths": ["plane/**", "tests/**", "pyproject.toml"],
+      "readPaths": []
+    },
+    {
+      "ownerId": "shared-contracts-owner",
+      "role": "Shared generated contracts, catalog surface, and fixtures owner",
+      "repository": "plane",
+      "planLaneIds": ["L1", "L3"],
+      "writePaths": [
+        "packages/agent-contracts/**",
+        "docs/agent-tooling/fixtures/**",
+        "docs/agent-tooling/prompts/**",
+        "docs/agent-tooling/NON-UI-IMPLEMENTATION-PLAN.json",
+        "docs/agent-tooling/NON-UI-IMPLEMENTATION-OVERVIEW.md",
+        "docs/agent-tooling/model-facing-surface.json",
+        "docs/agent-tooling/model-facing-surface.schema.json"
+      ],
+      "readPaths": ["docs/agent-tooling/**"]
+    },
+    {
+      "ownerId": "verification-owner",
+      "role": "Verifier, generator, coverage, and evidence-index owner",
+      "repository": "plane",
+      "planLaneIds": ["L1", "L10", "L11"],
+      "writePaths": [
+        "docs/agent-tooling/verifiers/**",
+        "docs/agent-tooling/REQUIREMENT-COVERAGE.md",
+        "docs/agent-tooling/evidence/verification/**",
+        "docs/agent-tooling/evidence/rollout/**"
+      ],
+      "readPaths": ["docs/agent-tooling/**", "docs/decisions/**"]
+    },
+    {
+      "ownerId": "integration-lock-writer",
+      "role": "Integration lock and machine-readable evidence writer",
+      "repository": "plane",
+      "planLaneIds": ["L1"],
+      "writePaths": [
+        "docs/agent-tooling/ownership-map.json",
+        "docs/agent-tooling/ownership-map.schema.json",
+        "docs/agent-tooling/integration-lock.g0.json",
+        "docs/agent-tooling/integration-lock.schema.json",
         "docs/agent-tooling/g0-readiness.json",
         "docs/agent-tooling/g0-readiness.schema.json"
       ],
       "readPaths": ["docs/agent-tooling/**"]
     },
     {
-      "ownerId": "sol-reviewer",
-      "role": "Sol reviewer",
+      "ownerId": "operations-owner",
+      "role": "Deployment, operations, security, and reliability owner",
       "repository": "plane",
+      "planLaneIds": ["L9"],
+      "writePaths": ["deployments/agent-runtime/**", "tools/agent-runtime/**"],
+      "readPaths": ["deployments/**", "tools/**", "docs/agent-tooling/**"]
+    },
+    {
+      "ownerId": "settings-owner",
+      "role": "Existing Plane settings and administration owner",
+      "repository": "plane",
+      "planLaneIds": ["L10"],
+      "writePaths": ["apps/web/app/(all)/[workspaceSlug]/(settings)/settings/agent/**"],
+      "readPaths": ["apps/web/app/(all)/[workspaceSlug]/(settings)/settings/**"]
+    },
+    {
+      "ownerId": "buzz-reference-owner",
+      "role": "Buzz reference donor",
+      "repository": "buzz",
+      "planLaneIds": [],
+      "writePaths": [],
+      "readPaths": ["**"],
+      "restriction": "reference-only; no runtime dependency, product authority, or production write"
+    },
+    {
+      "ownerId": "sol-reviewer",
+      "role": "Independent Sol Medium reviewer",
+      "repository": "plane",
+      "planLaneIds": [],
       "writePaths": [],
       "readPaths": ["docs/agent-tooling/**", "docs/decisions/**"],
       "restriction": "review-only; cannot write or approve its own review"
     }
+  ],
+  "surfaces": [
+    {
+      "surfaceId": "plane-domain-services",
+      "description": "Plane Agent domain models, lifecycle, application services, private context, and dynamic delegation",
+      "repository": "plane",
+      "paths": [
+        "apps/api/plane/agent/domain/**",
+        "apps/api/plane/agent/application/**",
+        "apps/api/plane/agent/knowledge/**",
+        "apps/api/plane/agent/delegation/**"
+      ],
+      "ownerId": "plane-domain-owner",
+      "planLaneIds": ["L2", "L6", "L7"]
+    },
+    {
+      "surfaceId": "django-migrations-root-wiring-routes",
+      "description": "Django migrations, app wiring, and shared root URL registration",
+      "repository": "plane",
+      "paths": [
+        "apps/api/plane/agent/migrations/**",
+        "apps/api/plane/agent/apps.py",
+        "apps/api/plane/agent/urls.py",
+        "apps/api/plane/urls.py"
+      ],
+      "ownerId": "root-integrator",
+      "planLaneIds": ["L0", "L2"]
+    },
+    {
+      "surfaceId": "plane-gateway-audit",
+      "description": "Plane gateway, authorization, idempotency, and audit seam",
+      "repository": "plane",
+      "paths": ["apps/api/plane/agent/gateway/**"],
+      "ownerId": "plane-gateway-owner",
+      "planLaneIds": ["L3"]
+    },
+    {
+      "surfaceId": "plane-catalog-native-tools",
+      "description": "Operation catalog and native tool adapters",
+      "repository": "plane",
+      "paths": ["apps/api/plane/agent/catalog/**", "apps/api/plane/agent/tools/**"],
+      "ownerId": "plane-catalog-owner",
+      "planLaneIds": ["L3", "L5"]
+    },
+    {
+      "surfaceId": "runtime-hermes-adapter",
+      "description": "Separate runtime dispatch and hidden Hermes adapter",
+      "repository": "hermes",
+      "paths": ["plane_runtime/dispatch/**", "plane_runtime/hermes_adapter/**"],
+      "ownerId": "runtime-service-owner",
+      "planLaneIds": ["L4"]
+    },
+    {
+      "surfaceId": "runtime-typescript-isolation",
+      "description": "Runtime tooling, host callbacks, and TypeScript isolation",
+      "repository": "hermes",
+      "paths": ["plane_runtime/tooling/**", "plane_runtime/isolate/**"],
+      "ownerId": "runtime-security-owner",
+      "planLaneIds": ["L5"]
+    },
+    {
+      "surfaceId": "mcp-fork",
+      "description": "Pinned official MCP fork and its compatibility tests",
+      "repository": "plane-mcp",
+      "paths": ["plane_mcp/**", "tests/**", "pyproject.toml"],
+      "ownerId": "mcp-fork-owner",
+      "planLaneIds": ["L8"]
+    },
+    {
+      "surfaceId": "sdk-fork",
+      "description": "Pinned Plane Python SDK fork and its transport tests",
+      "repository": "plane-sdk",
+      "paths": ["plane/**", "tests/**", "pyproject.toml"],
+      "ownerId": "sdk-fork-owner",
+      "planLaneIds": ["L8"]
+    },
+    {
+      "surfaceId": "shared-generated-contracts-fixtures",
+      "description": "Shared generated contracts, fixtures, prompts, and overview",
+      "repository": "plane",
+      "paths": [
+        "packages/agent-contracts/**",
+        "docs/agent-tooling/fixtures/**",
+        "docs/agent-tooling/prompts/**",
+        "docs/agent-tooling/NON-UI-IMPLEMENTATION-PLAN.json",
+        "docs/agent-tooling/NON-UI-IMPLEMENTATION-OVERVIEW.md"
+      ],
+      "ownerId": "shared-contracts-owner",
+      "planLaneIds": ["L1"]
+    },
+    {
+      "surfaceId": "verifiers-generators-evidence",
+      "description": "Generators, validators, primary verifier, and evidence indexes",
+      "repository": "plane",
+      "paths": [
+        "docs/agent-tooling/verifiers/**",
+        "docs/agent-tooling/REQUIREMENT-COVERAGE.md",
+        "docs/agent-tooling/evidence/verification/**",
+        "docs/agent-tooling/evidence/rollout/**"
+      ],
+      "ownerId": "verification-owner",
+      "planLaneIds": ["L1", "L11"]
+    },
+    {
+      "surfaceId": "deployment-operations",
+      "description": "Deployment, operations, security, reliability, and runbook surfaces",
+      "repository": "plane",
+      "paths": ["deployments/agent-runtime/**", "tools/agent-runtime/**"],
+      "ownerId": "operations-owner",
+      "planLaneIds": ["L9"]
+    },
+    {
+      "surfaceId": "existing-settings-administration",
+      "description": "Existing Plane settings routes and reused administration surfaces",
+      "repository": "plane",
+      "paths": ["apps/web/app/(all)/[workspaceSlug]/(settings)/settings/agent/**"],
+      "ownerId": "settings-owner",
+      "planLaneIds": ["L10"]
+    },
+    {
+      "surfaceId": "root-integrator-canonical-wiring",
+      "description": "Canonical docs, authority reconciliation, and shared repository wiring",
+      "repository": "plane",
+      "paths": [
+        "docs/agent-tooling/README.md",
+        "docs/agent-tooling/GOAL.md",
+        "docs/agent-tooling/APPROVAL-MANIFEST.md",
+        "docs/agent-tooling/SOURCE-INVENTORY.md",
+        "docs/agent-tooling/decision-register.md",
+        "docs/agent-tooling/delivery-plan.md",
+        "docs/agent-tooling/architecture.md",
+        "docs/agent-tooling/INTERFACE-DESIGN.md",
+        "docs/agent-tooling/RUNTIME-DESIGN.md",
+        "docs/agent-tooling/GATEWAY-WIRE.md",
+        "docs/agent-tooling/PILOT-CONTRACTS.md",
+        "docs/agent-tooling/RELEASE-MANIFEST.md",
+        "docs/agent-tooling/VERIFICATION-MANIFEST.md",
+        "docs/agent-tooling/EVALUATION-FIXTURE-CONTRACT.md",
+        "docs/agent-tooling/EVALUATION-SCENARIOS.md",
+        "docs/agent-tooling/MCP-COMPATIBILITY.md",
+        "docs/agent-tooling/MCP-MAPPING-CONTRACT.md",
+        "docs/agent-tooling/SAFETY-EVALUATION-DESIGN.md",
+        "docs/agent-tooling/ADR-SYNTHESIS.md",
+        "docs/agent-tooling/product-requirements.md",
+        "docs/agent-tooling/inventories/**",
+        "docs/agent-tooling/WORKLOG.md",
+        "apps/api/plane/urls.py",
+        "apps/api/plane/agent/apps.py",
+        "apps/api/plane/agent/urls.py",
+        "apps/api/plane/agent/migrations/**"
+      ],
+      "ownerId": "root-integrator",
+      "planLaneIds": ["L0"]
+    },
+    {
+      "surfaceId": "integration-lock-and-readiness",
+      "description": "Machine-readable ownership, lock, and readiness records",
+      "repository": "plane",
+      "paths": [
+        "docs/agent-tooling/ownership-map.json",
+        "docs/agent-tooling/ownership-map.schema.json",
+        "docs/agent-tooling/integration-lock.g0.json",
+        "docs/agent-tooling/integration-lock.schema.json",
+        "docs/agent-tooling/g0-readiness.json",
+        "docs/agent-tooling/g0-readiness.schema.json"
+      ],
+      "ownerId": "integration-lock-writer",
+      "planLaneIds": ["L1"]
+    },
+    {
+      "surfaceId": "model-facing-catalog-surface",
+      "description": "Exact model-facing name set and G0/G1 contract policy",
+      "repository": "plane",
+      "paths": ["docs/agent-tooling/model-facing-surface.json", "docs/agent-tooling/model-facing-surface.schema.json"],
+      "ownerId": "shared-contracts-owner",
+      "planLaneIds": ["L1", "L3"]
+    }
+  ],
+  "requiredSurfaceIds": [
+    "plane-domain-services",
+    "django-migrations-root-wiring-routes",
+    "plane-gateway-audit",
+    "plane-catalog-native-tools",
+    "runtime-hermes-adapter",
+    "runtime-typescript-isolation",
+    "mcp-fork",
+    "sdk-fork",
+    "shared-generated-contracts-fixtures",
+    "verifiers-generators-evidence",
+    "deployment-operations",
+    "existing-settings-administration",
+    "root-integrator-canonical-wiring",
+    "integration-lock-and-readiness",
+    "model-facing-catalog-surface"
   ]
 }

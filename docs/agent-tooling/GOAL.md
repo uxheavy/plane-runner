@@ -2,7 +2,7 @@
 
 ## Active objective
 
-Complete and independently verify the objective defined in /Users/nqh/Desktop/CODES/plane/docs/agent-tooling/GOAL.md.
+Complete and independently verify the objective defined in `docs/agent-tooling/GOAL.md` from the repository root.
 
 When this goal is activated with `create_goal`, use that exact objective and omit `token_budget`.
 
@@ -77,17 +77,17 @@ The baseline below is observed at the reviewed pre-P0 reconciliation state and m
 
 | Repository or fact       | Current evidence                                                                                                                                                                                                                                                                                                                                |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Plane                    | `/Users/nqh/Desktop/CODES/plane`, branch `codex/agent-tooling-architecture`; reviewed pre-P0 reconciliation baseline `dac96b0ff9a3adb6bfcc3fea235ab4a697ae5acd` (`dac96b0ff9`). Earlier `f2be7a...` and `eaeb220...` values are historical checkpoints, not current evidence.                                                                   |
-| Hermes                   | `/Users/nqh/Desktop/CODES/hermes-agent`, branch `main`, commit `112f51a5543d490768931514d48a780ad964a868` (`112f51a55`).                                                                                                                                                                                                                        |
+| Plane                    | Repository root; reviewed pre-P0 reconciliation baseline `dac96b0ff9a3adb6bfcc3fea235ab4a697ae5acd` (`dac96b0ff9`). The sealed package content SHA is recorded by `integration-lock.g0.json`; earlier values are historical checkpoints, not current evidence.                                                                                  |
+| Hermes                   | `repository:uxheavy/hermes-agent`, branch `main`, commit `112f51a5543d490768931514d48a780ad964a868` (`112f51a55`).                                                                                                                                                                                                                              |
 | Plane implementation     | Only the thin scaffold at `apps/api/plane/agent/`: root package, `lifecycle`, and `adapters` seams plus their local `AGENTS.md` instructions. There are no Agent models, migrations, routes, application services, runtime implementation, or verification implementation yet.                                                                  |
 | Plane scaffold authority | `apps/api/plane/agent/AGENTS.md`, `apps/api/plane/agent/__init__.py`, `apps/api/plane/agent/lifecycle/AGENTS.md`, `apps/api/plane/agent/lifecycle/__init__.py`, `apps/api/plane/agent/adapters/AGENTS.md`, and `apps/api/plane/agent/adapters/__init__.py`. The scaffold is not a Django app and marker-only future packages must not be added. |
-| Hermes runtime boundary  | `plane_runtime/` is installed and discoverable in Hermes; `python3 -c 'import plane_runtime; print(plane_runtime.__file__)'` resolves `/Users/nqh/Desktop/CODES/hermes-agent/plane_runtime/__init__.py`. It is a marker-only adapter package, not implementation.                                                                               |
-| Hermes runtime authority | `/Users/nqh/Desktop/CODES/hermes-agent/plane_runtime/AGENTS.md` and `plane_runtime/README.md`; the logical `plane_runtime.execute` interface remains inside the separate runtime service.                                                                                                                                                       |
+| Hermes runtime boundary  | `plane_runtime/` is the separate-service runtime boundary and is currently a marker-only adapter package, not implementation.                                                                                                                                                                                                                   |
+| Hermes runtime authority | The pinned `repository:uxheavy/hermes-agent` source and its `plane_runtime/` package; the logical `plane_runtime.execute` interface remains inside the separate runtime service.                                                                                                                                                                |
 | External MCP source      | Plane's `external/plane-mcp-server` submodule, pinned at `96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1`, package `0.2.11`, maintained as the `uxheavy/plane-mcp-server` fork.                                                                                                                                                                       |
 | Python SDK source        | Plane's `external/plane-python-sdk` submodule, pinned at `78702e9224bd9c5e8fffdabfbfdd582ac1fa9426`, tag `v0.2.20`, maintained as the `uxheavy/plane-python-sdk` fork.                                                                                                                                                                          |
 | MCP inventory            | `docs/agent-tooling/inventories/plane-mcp-v0.2.11.json` and its 177-row disposition companion; inventory digest is `2778ef9d6f5426c6fc65894829ec04bf853c18c4ab09d796474896ba01826ad1`.                                                                                                                                                          |
 | Implementation status    | Work beyond the Plane and Hermes scaffolds has not started. Documentation, contracts, fixtures, and verifiers are design/evidence inputs until the applicable implementation gate is recorded.                                                                                                                                                  |
-| Exploratory mind         | `/private/tmp/plane-runner.pdf`, the Freeform `Plane-runner` board (`8208a432-a415-434c-9f06-5731a6185db4`), and top-down historical task `019fa696-357f-79d0-8dbb-bfe4fa722241` are exploratory context only. They do not override this goal, accepted ADRs, current source evidence, or controlling approval records.                         |
+| Exploratory mind         | Local boards, PDFs, and historical tasks are exploratory context only. They do not override this goal, accepted ADRs, current source evidence, or controlling approval records.                                                                                                                                                                 |
 
 The baseline says what exists, not what is complete. Documentation, a scaffold, a generated plan, a fixture, a model response, or an imported package is never counted as implemented behavior without an executable verifier and authoritative readback.
 
@@ -104,10 +104,10 @@ The coordinator uses the following order when sources disagree:
 
 ### Repository authorities
 
-- Plane: `/Users/nqh/Desktop/CODES/plane`. Plane application services, authentication, live authorization, object permissions, product state, and audit are authoritative for Plane behavior.
-- Hermes: `/Users/nqh/Desktop/CODES/hermes-agent`. Hermes is the hidden execution-kernel source and adapter donor; its product vocabulary, sessions, files, profiles, and UI are not Plane product authority.
+- Plane: repository root. Plane application services, authentication, live authorization, object permissions, product state, and audit are authoritative for Plane behavior.
+- Hermes: `repository:uxheavy/hermes-agent`. Hermes is the hidden execution-kernel source and adapter donor; its product vocabulary, sessions, files, profiles, and UI are not Plane product authority.
 - Buzz: the Buzz repository/source named by the current architecture and implementation plan. It is a reference/code donor only and must not become a runtime dependency or durable-state authority.
-- `/Users/nqh/Desktop/CODES/plane-mcp`: the local official MCP source checkout used for source inspection and compatibility evidence. The Plane delivery target remains the pinned `external/plane-mcp-server` `uxheavy` fork.
+- The pinned `external/plane-mcp-server` `uxheavy` fork is the official MCP source used for compatibility evidence.
 - Plane `external/plane-mcp-server`: official Python MCP adapter host and 177-tool compatibility surface; handlers migrate incrementally rather than being rewritten as 177 Plane modules.
 - Plane `external/plane-python-sdk`: shared SDK transport seam at `BaseResource`; ordinary MCP handlers continue to use existing resources while the optional gateway transport is introduced.
 
@@ -124,8 +124,9 @@ The canonical documentation set includes these exact files and directories:
 - `docs/agent-tooling/EVALUATION-SCENARIOS.md`, `EVALUATION-FIXTURE-CONTRACT.md`, and `SAFETY-EVALUATION-DESIGN.md`.
 - `docs/agent-tooling/fixtures/planning-v1.json`, `planning-v1.schema.json`, `planning-v1.predicates.json`, and `planning-v1.predicates.schema.json`; later safety fixtures must follow `SAFETY-EVALUATION-DESIGN.md`.
 - `docs/agent-tooling/verifiers/render-non-ui-implementation-plan.mjs` and `verifiers/validate-planning-fixtures.mjs`.
+- `docs/agent-tooling/verifiers/` generators, AJV validators, ownership and coverage validators, G0 seal/negative-control fixtures, and the primary preflight verifier.
 - `docs/agent-tooling/verifiers/verify-g0-preflight.mjs`.
-- `docs/agent-tooling/ownership-map.json`, `integration-lock.schema.json`, `integration-lock.g0.json`, `g0-readiness.schema.json`, and `g0-readiness.json`.
+- `docs/agent-tooling/ownership-map.schema.json`, `ownership-map.json`, `integration-lock.schema.json`, `integration-lock.g0.json`, `g0-readiness.schema.json`, `g0-readiness.json`, `model-facing-surface.schema.json`, and `model-facing-surface.json`.
 - `docs/agent-tooling/inventories/plane-mcp-v0.2.11.json` and `inventories/plane-mcp-v0.2.11-dispositions.md`.
 - `docs/decisions/0001-plane-agent-tooling-architecture.md` through `docs/decisions/0010-plane-runtime-contract.md`.
 

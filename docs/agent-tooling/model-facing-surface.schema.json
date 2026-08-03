@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://plane.so/schemas/agent-tooling/model-facing-surface-v1.schema.json",
+  "title": "Plane Agent model-facing surface v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schemaVersion", "surfaceId", "status", "g0ContractPolicy", "names", "retiredNames"],
+  "properties": {
+    "$schema": { "const": "./model-facing-surface.schema.json" },
+    "schemaVersion": { "const": 1 },
+    "surfaceId": { "const": "plane-agent-model-facing-surface-v1" },
+    "status": { "const": "candidate-for-approval" },
+    "g0ContractPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["namesAndBoundaries", "generatedSchemaGate", "physicalTransportGate"],
+      "properties": {
+        "namesAndBoundaries": { "const": "frozen-at-G0-pending-manifest-approval" },
+        "generatedSchemaGate": { "const": "G1" },
+        "physicalTransportGate": { "const": "later-gate-under-ADR-0010" }
+      }
+    },
+    "names": {
+      "type": "array",
+      "minItems": 9,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "kind", "operationId", "description", "disclosure", "eager", "modelFacing"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]{2,63}$" },
+          "kind": { "enum": ["universal", "profile", "eager-direct"] },
+          "operationId": { "type": "string", "pattern": "^plane\\.[a-z0-9_.-]+@[0-9]+$" },
+          "description": { "type": "string", "minLength": 1 },
+          "disclosure": { "enum": ["universal", "profile", "eager", "progressive"] },
+          "eager": { "type": "boolean" },
+          "modelFacing": { "const": true }
+        }
+      }
+    },
+    "retiredNames": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bare", "historicalPrefixed", "policy"],
+      "properties": {
+        "bare": {
+          "type": "array",
+          "const": ["docs", "search", "execute"]
+        },
+        "historicalPrefixed": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^plane_[a-z][a-z0-9_]*$" }
+        },
+        "policy": {
+          "const": "reject-authoritative-uses; permit-only-clearly-labeled-historical-or-negative-control-prose"
+        }
+      }
+    }
+  }
+}

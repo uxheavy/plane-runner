@@ -6,6 +6,8 @@
 
 This is the controlling pre-implementation manifest. `RELEASE-MANIFEST.md` and `VERIFICATION-MANIFEST.md` remain legacy evidence inputs; neither is a competing implementation-start gate. The G0 preflight is a coordination verifier and cannot override an ADR, this manifest, or the user approval gate. This manifest is not approved.
 
+`APPROVAL-MANIFEST.md` is the sole G0 human approval authority. G0 freezes semantic names, boundaries, and logical runtime/event/publication invariants only; G1 freezes generated operation/event schemas and catalog artifacts. Physical queue/RPC transport remains a later ADR-0010 implementation choice. No fixture, release, verification, coverage, or generated-artifact document can add a G0 approval or freeze prerequisite.
+
 ## Outcome and authority
 
 Ship one production-capable path in which a Plane agent can drive an assigned outcome through Plane semantic operations and self-hosted TypeScript composition, with the same Plane authorization and audit boundary used by external MCP clients.
@@ -31,6 +33,8 @@ Ship one production-capable path in which a Plane agent can drive an assigned ou
 ## First supported semantic operation boundary
 
 The first supported semantic boundary is the nine existing major-version operation IDs already grounded in `RELEASE-MANIFEST.md` and `PILOT-CONTRACTS.md`. Their schemas, curated projections, errors, authorization mappings, idempotency, and reconciliation rules are generated from the frozen catalog in P1; no replacement IDs or generic REST projection are introduced.
+
+At G0, this paragraph freezes semantic operation IDs and boundaries only. The machine-readable names are in [`model-facing-surface.json`](./model-facing-surface.json); generated input/output/error schemas and event/publication schemas are explicitly a G1 generation and qualification input.
 
 | Operation ID                   | Semantic capability                                                                 | Initial disclosure                   |
 | ------------------------------ | ----------------------------------------------------------------------------------- | ------------------------------------ |

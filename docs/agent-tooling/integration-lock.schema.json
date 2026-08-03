@@ -1,24 +1,26 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://plane.so/schemas/agent-tooling/integration-lock-v1.schema.json",
-  "title": "Plane Agent Tooling G0 integration lock v1",
+  "$id": "https://plane.so/schemas/agent-tooling/integration-lock-v2.schema.json",
+  "title": "Plane Agent Tooling G0 integration lock v2",
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "$schema",
     "schemaVersion",
     "lockId",
     "status",
     "reviewedBaseline",
     "repositories",
     "digests",
+    "seal",
     "pendingInputs",
     "owners"
   ],
   "properties": {
-    "$schema": { "type": "string" },
-    "schemaVersion": { "const": 1 },
+    "$schema": { "const": "./integration-lock.schema.json" },
+    "schemaVersion": { "const": 2 },
     "lockId": { "const": "plane-agent-tooling-g0" },
-    "status": { "enum": ["candidate-for-approval", "approved"] },
+    "status": { "const": "candidate-for-approval" },
     "reviewedBaseline": {
       "type": "object",
       "additionalProperties": false,
@@ -27,7 +29,7 @@
         "planeSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
         "planeBranch": { "type": "string", "minLength": 1 },
         "policy": {
-          "const": "the reviewed Plane SHA must remain an ancestor of the clean verification checkout; the package commit may be a descendant"
+          "const": "reviewed baseline is evidence only; sealed package content is a descendant and is verified by contentCommit"
         }
       }
     },
@@ -40,8 +42,8 @@
         "required": ["id", "path", "remote", "sha", "ref", "status", "role"],
         "properties": {
           "id": { "type": "string", "minLength": 1 },
-          "path": { "type": "string", "minLength": 1 },
-          "remote": { "type": "string", "minLength": 1 },
+          "path": { "type": "string", "pattern": "^(?!/)(?!.*\\.\\.)[^\\s]+$" },
+          "remote": { "type": "string", "pattern": "^https://" },
           "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
           "ref": { "type": "string", "minLength": 1 },
           "status": { "const": "clean" },
@@ -55,19 +57,66 @@
     "digests": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["manifest", "sourceInventory", "catalogBundle", "fixtureBundle", "planBundle", "ownershipMap"],
+      "required": ["files"],
       "properties": {
-        "manifest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-        "sourceInventory": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-        "catalogBundle": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-        "fixtureBundle": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-        "planBundle": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-        "ownershipMap": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-        "files": { "type": "object", "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
+        "files": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      }
+    },
+    "seal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "contentCommit",
+        "contentTree",
+        "contentPaths",
+        "sealEvidencePaths",
+        "allowedSealPaths",
+        "worklogBaseline"
+      ],
+      "properties": {
+        "state": { "const": "sealed" },
+        "contentCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "contentTree": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "contentPaths": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^(?!/)(?!.*\\.\\.)[^\\s]+$" }
+        },
+        "sealEvidencePaths": {
+          "type": "array",
+          "minItems": 4,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^(?!/)(?!.*\\.\\.)[^\\s]+$" }
+        },
+        "allowedSealPaths": {
+          "const": [
+            "docs/agent-tooling/SOURCE-INVENTORY.md",
+            "docs/agent-tooling/WORKLOG.md",
+            "docs/agent-tooling/g0-readiness.json",
+            "docs/agent-tooling/integration-lock.g0.json"
+          ]
+        },
+        "worklogBaseline": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["commit", "byteLength", "sha256"],
+          "properties": {
+            "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+            "byteLength": { "type": "integer", "minimum": 1 },
+            "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+          }
+        }
       }
     },
     "pendingInputs": {
       "type": "array",
+      "minItems": 1,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -75,7 +124,7 @@
         "properties": {
           "id": { "type": "string", "minLength": 1 },
           "description": { "type": "string", "minLength": 1 },
-          "dependentGate": { "type": "string", "minLength": 1 },
+          "dependentGate": { "type": "string", "pattern": "^(?:G[1-5])$" },
           "state": { "const": "pending" }
         }
       }

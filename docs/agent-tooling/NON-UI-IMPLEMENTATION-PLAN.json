@@ -30,7 +30,7 @@
       "name": "Implementation contract frozen",
       "exit": [
         "ADR-0008, ADR-0009, and ADR-0010 are accepted before their implementation lanes; the approval manifest is explicitly approved before any runtime, application, or verification implementation starts.",
-        "The logical plane.agent-runtime/v1 contract, dispatch semantics, versioned event/publication schemas, catalog names, limits, retention, idempotency, and audit failure policy are frozen for v1; the physical durable queue/RPC transport remains implementation-defined under ADR-0010.",
+        "G0 freezes the logical plane.agent-runtime/v1 boundary, dispatch semantics, event/publication variants, catalog names, limits, retention, idempotency, and audit failure policy; generated operation/event schemas are a G1 input and the physical durable queue/RPC transport remains implementation-defined under ADR-0010.",
         "UI-dependent and retired-name verification language is reconciled with the non-UI boundary and current model-facing catalog decision.",
         "APPROVAL-MANIFEST.md receives the user's explicit implementation approval.",
         "Owners and repositories are assigned, and the cross-repository integration-lock format is agreed."
@@ -98,7 +98,7 @@
       "outcome": "The team has one approved, internally consistent contract and a named definition of done before implementation begins.",
       "work": [
         "Record the accepted role, privacy, dynamic-planning, runtime, and trust-boundary decisions and every remaining decision that can change the first contract.",
-        "Freeze the pilot operation catalog, model-facing presentation, runtime transport, event taxonomy, limits, retention, and failure semantics.",
+        "Freeze the semantic operation catalog, model-facing presentation, logical runtime/event/publication boundary, limits, retention, and failure semantics; leave generated schemas to G1 and physical transport to ADR-0010's later gate.",
         "Reconcile current manifests with the no-chat-UI boundary and remove stale fixed tool names.",
         "Assign accountable owners, review authorities, milestones, and change-control rules."
       ],

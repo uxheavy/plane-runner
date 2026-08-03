@@ -1,19 +1,19 @@
 {
   "$schema": "./integration-lock.schema.json",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "lockId": "plane-agent-tooling-g0",
   "status": "candidate-for-approval",
   "reviewedBaseline": {
     "planeSha": "dac96b0ff9a3adb6bfcc3fea235ab4a697ae5acd",
     "planeBranch": "codex/agent-tooling-architecture",
-    "policy": "the reviewed Plane SHA must remain an ancestor of the clean verification checkout; the package commit may be a descendant"
+    "policy": "reviewed baseline is evidence only; sealed package content is a descendant and is verified by contentCommit"
   },
   "repositories": [
     {
       "id": "plane",
       "path": ".",
       "remote": "https://github.com/uxheavy/plane-runner.git",
-      "sha": "dac96b0ff9a3adb6bfcc3fea235ab4a697ae5acd",
+      "sha": "0000000000000000000000000000000000000000",
       "ref": "codex/agent-tooling-architecture",
       "status": "clean",
       "role": "control plane, domain, gateway, catalog, and integration root",
@@ -24,7 +24,7 @@
     },
     {
       "id": "hermes",
-      "path": "/Users/nqh/Desktop/CODES/hermes-agent",
+      "path": "repository:uxheavy/hermes-agent",
       "remote": "https://github.com/uxheavy/hermes-agent.git",
       "sha": "112f51a5543d490768931514d48a780ad964a868",
       "ref": "main",
@@ -33,7 +33,7 @@
     },
     {
       "id": "buzz",
-      "path": "/Users/nqh/Desktop/CODES/buzz",
+      "path": "repository:uxheavy/buzz",
       "remote": "https://github.com/uxheavy/buzz.git",
       "sha": "3b8567a05d4c40e667d061666feb7aa7bc38212d",
       "ref": "main",
@@ -42,7 +42,7 @@
     },
     {
       "id": "plane-mcp",
-      "path": "/Users/nqh/Desktop/CODES/plane/external/plane-mcp-server",
+      "path": "external/plane-mcp-server",
       "remote": "https://github.com/uxheavy/plane-mcp-server.git",
       "sha": "96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1",
       "ref": "codex/agent-tooling-v1",
@@ -52,7 +52,7 @@
     },
     {
       "id": "plane-sdk",
-      "path": "/Users/nqh/Desktop/CODES/plane/external/plane-python-sdk",
+      "path": "external/plane-python-sdk",
       "remote": "https://github.com/uxheavy/plane-python-sdk.git",
       "sha": "78702e9224bd9c5e8fffdabfbfdd582ac1fa9426",
       "ref": "codex/agent-tooling-v1",
@@ -62,23 +62,99 @@
     }
   ],
   "digests": {
-    "manifest": "de1492b42f9846d8a124ed15878797be5dfd2f53dcbe9d55374a98eeec69252a",
-    "sourceInventory": "40224793e772ba84e6f1a7510f529f99fb32c2af004bd917cec60e17ba10493d",
-    "catalogBundle": "3c67d4450d12d4ca6de1b2bf64c5640ba310057469898017dbd3dc7574ba6af1",
-    "fixtureBundle": "1c7aa97eb1dcf8b6864318756f66552bc3099e6f97a1917f2fd9f6c93ac3f085",
-    "planBundle": "5a6bac96d904c766d9d217b8acd298eaf1dbf09e1fcd97d626b69923c2c5ae8b",
-    "ownershipMap": "e52f7596d934ee7258f417e4243a65e53f8a9f4680fb8e26028f3716101b9543"
+    "files": {
+      "__pending_seal__": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "seal": {
+    "state": "sealed",
+    "contentCommit": "0000000000000000000000000000000000000000",
+    "contentTree": "0000000000000000000000000000000000000000",
+    "contentPaths": [
+      "docs/agent-tooling/README.md",
+      "docs/agent-tooling/GOAL.md",
+      "docs/agent-tooling/APPROVAL-MANIFEST.md",
+      "docs/agent-tooling/decision-register.md",
+      "docs/agent-tooling/delivery-plan.md",
+      "docs/agent-tooling/architecture.md",
+      "docs/agent-tooling/INTERFACE-DESIGN.md",
+      "docs/agent-tooling/RUNTIME-DESIGN.md",
+      "docs/agent-tooling/GATEWAY-WIRE.md",
+      "docs/agent-tooling/PILOT-CONTRACTS.md",
+      "docs/agent-tooling/RELEASE-MANIFEST.md",
+      "docs/agent-tooling/VERIFICATION-MANIFEST.md",
+      "docs/agent-tooling/EVALUATION-FIXTURE-CONTRACT.md",
+      "docs/agent-tooling/EVALUATION-SCENARIOS.md",
+      "docs/agent-tooling/MCP-COMPATIBILITY.md",
+      "docs/agent-tooling/MCP-MAPPING-CONTRACT.md",
+      "docs/agent-tooling/SAFETY-EVALUATION-DESIGN.md",
+      "docs/agent-tooling/ADR-SYNTHESIS.md",
+      "docs/agent-tooling/product-requirements.md",
+      "docs/agent-tooling/REQUIREMENT-COVERAGE.md",
+      "docs/agent-tooling/NON-UI-IMPLEMENTATION-PLAN.json",
+      "docs/agent-tooling/NON-UI-IMPLEMENTATION-OVERVIEW.md",
+      "docs/agent-tooling/prompts/release-planning-v1.md",
+      "docs/agent-tooling/fixtures/planning-v1.json",
+      "docs/agent-tooling/fixtures/planning-v1.schema.json",
+      "docs/agent-tooling/fixtures/planning-v1.predicates.json",
+      "docs/agent-tooling/fixtures/planning-v1.predicates.schema.json",
+      "docs/agent-tooling/verifiers/render-non-ui-implementation-plan.mjs",
+      "docs/agent-tooling/verifiers/validate-planning-fixtures.mjs",
+      "docs/agent-tooling/verifiers/verify-g0-preflight.mjs",
+      "docs/agent-tooling/verifiers/validate-ajv-2020.mjs",
+      "docs/agent-tooling/verifiers/validate-ownership-map.mjs",
+      "docs/agent-tooling/verifiers/render-requirement-coverage.mjs",
+      "docs/agent-tooling/verifiers/validate-requirement-coverage.mjs",
+      "docs/agent-tooling/verifiers/seal-g0-evidence.mjs",
+      "docs/agent-tooling/verifiers/run-g0-negative-controls.mjs",
+      "docs/agent-tooling/verifiers/test-g0-approved-fixture.mjs",
+      "docs/agent-tooling/ownership-map.json",
+      "docs/agent-tooling/ownership-map.schema.json",
+      "docs/agent-tooling/integration-lock.schema.json",
+      "docs/agent-tooling/g0-readiness.schema.json",
+      "docs/agent-tooling/model-facing-surface.json",
+      "docs/agent-tooling/model-facing-surface.schema.json",
+      "docs/agent-tooling/inventories/plane-mcp-v0.2.11.json",
+      "docs/agent-tooling/inventories/plane-mcp-v0.2.11-dispositions.md",
+      "docs/decisions/0001-plane-agent-tooling-architecture.md",
+      "docs/decisions/0002-autonomous-agent-operations.md",
+      "docs/decisions/0003-plane-agent-native-product-boundary.md",
+      "docs/decisions/0004-fork-hermes-as-hidden-execution-kernel.md",
+      "docs/decisions/0005-plane-owned-agent-profiles.md",
+      "docs/decisions/0006-assignment-and-run-lifecycle.md",
+      "docs/decisions/0007-adaptive-plane-tool-exposure.md",
+      "docs/decisions/0008-scoped-memory-and-context.md",
+      "docs/decisions/0009-workflows-and-agent-delegation.md",
+      "docs/decisions/0010-plane-runtime-contract.md"
+    ],
+    "sealEvidencePaths": [
+      "docs/agent-tooling/SOURCE-INVENTORY.md",
+      "docs/agent-tooling/WORKLOG.md",
+      "docs/agent-tooling/g0-readiness.json",
+      "docs/agent-tooling/integration-lock.g0.json"
+    ],
+    "allowedSealPaths": [
+      "docs/agent-tooling/SOURCE-INVENTORY.md",
+      "docs/agent-tooling/WORKLOG.md",
+      "docs/agent-tooling/g0-readiness.json",
+      "docs/agent-tooling/integration-lock.g0.json"
+    ],
+    "worklogBaseline": {
+      "commit": "96bd075c967c3f25e536734bb477269f273767cd",
+      "byteLength": 1,
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
   },
   "pendingInputs": [
     {
-      "id": "P1-contract-schemas",
-      "description": "Generated JSON Schemas and catalog digest for the frozen semantic boundary",
+      "id": "P1-generated-contract-schemas",
+      "description": "Generated operation and event JSON Schemas, catalog digest, and cross-repository compatibility bundle",
       "dependentGate": "G1",
       "state": "pending"
     },
     {
-      "id": "P1-runtime-artifacts",
-      "description": "Runtime-service, adapter, system-prompt, model metadata, and configuration digests",
+      "id": "P2-runtime-artifacts",
+      "description": "Runtime-service, adapter, prompt, model metadata, and configuration digests",
       "dependentGate": "G2",
       "state": "pending"
     },
@@ -89,7 +165,7 @@
       "state": "pending"
     },
     {
-      "id": "G4-production-targets",
+      "id": "P10-production-targets",
       "description": "Production load, latency, error, recovery, and rollout-window evidence",
       "dependentGate": "G4",
       "state": "pending"

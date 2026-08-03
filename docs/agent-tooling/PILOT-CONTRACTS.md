@@ -2,7 +2,7 @@
 
 ## Status
 
-Candidate contract input for `APPROVAL-MANIFEST.md`. The nine operation IDs, curated projections, and coordinated release-plan semantics are promoted into the controlling manifest; this document remains the detailed P1 schema source and does not authorize implementation.
+Candidate contract input for `APPROVAL-MANIFEST.md`. The nine operation IDs, semantic boundaries, curated projections, and coordinated release-plan semantics are evidence inputs; this document is not an approval or freeze authority and does not authorize implementation. G0 freezes names and boundaries only. Generated operation schemas are produced and qualified at G1.
 
 ## Contract rules
 
@@ -317,11 +317,11 @@ Validation errors may include bounded field paths and safe corrective hints. Aut
 - The public API represents cycle placement through separate add and delete cycle-work-item endpoints. The semantic create, update, and release-plan operations make placement part of one contract and one invocation lifecycle.
 - The public search endpoint returns an unordered limit-only ad hoc projection. The semantic query module owns deterministic cursor pagination and hydration of the curated search fields.
 
-## Freeze requirements
+## G1 generation inputs (not a G0 prerequisite)
 
-Before these contracts can be approved and frozen:
+These details are prepared for G1 generation after the sole G0 approval. They do not add a second approval or freeze prerequisite:
 
-1. Generate machine-readable JSON Schemas from the frozen catalog and pin their digest.
+1. Generate machine-readable JSON Schemas from the G0 semantic catalog and pin their digest at G1.
 2. Add positive, denial, ambiguity, stale-reference, idempotency, lost-response, and size-bound fixtures for every operation.
 3. Verify each authorization mapping against executable Plane permission tests.
 4. Record every official MCP tool that maps to a pilot operation without changing its public MCP schema or behavior.

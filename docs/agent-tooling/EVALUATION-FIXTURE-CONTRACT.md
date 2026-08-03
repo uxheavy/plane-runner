@@ -1,6 +1,6 @@
 # Planning Evaluation Fixture Contract
 
-Status: candidate pre-approval artifact. This contract freezes executable inputs for planning scenarios EV-001 through EV-010. It does not authorize implementation, qualification, or release.
+Status: G1 evidence input. This contract describes executable inputs for planning scenarios EV-001 through EV-010. It does not approve or freeze G0, authorize implementation, qualification, or release. The sole G0 human approval is the exact statement in `APPROVAL-MANIFEST.md`.
 
 ## Bound artifacts
 
@@ -13,7 +13,7 @@ Status: candidate pre-approval artifact. This contract freezes executable inputs
 | `prompts/release-planning-v1.md`              | `9c6674acce0e060b8570a764f31c792297d718fd08d8559ca59d19c0dd4d89a1` | Exact Hermes acceptance prompt                      |
 | `verifiers/validate-planning-fixtures.mjs`    | `f6c785ae848d92c788a1b96e5359fbbddedd84b002fc3ef4658c8d6890b882b2` | Independent semantic and strict-schema oracle       |
 
-The release manifest must bind the SHA-256 digest of every artifact above before qualification begins. The validator digest binds the oracle used to check the other artifacts; it does not permit the validator to call the implementation under test. Any content change creates a new candidate and invalidates prior qualification evidence.
+At G1, the applicable evidence index must bind the SHA-256 digest of every artifact above before qualification begins. The validator digest binds the oracle used to check the other artifacts; it does not permit the validator to call the implementation under test. Any content change creates a new candidate and invalidates prior qualification evidence.
 
 ## Identity and time expansion
 

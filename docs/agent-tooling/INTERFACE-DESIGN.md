@@ -2,7 +2,7 @@
 
 ## Status
 
-The core deep-hybrid boundary was accepted by the user on 2026-07-29. The first operation boundary, model-facing names, eager set, limits, and compatibility rules are candidate-frozen in `APPROVAL-MANIFEST.md` pending its explicit approval. This decision does not authorize implementation.
+The core deep-hybrid boundary was accepted by the user on 2026-07-29. The first operation boundary, model-facing names, eager set, limits, and compatibility rules are candidate G0 inputs in `APPROVAL-MANIFEST.md` pending its explicit approval. This document is not an approval or freeze authority: G0 records names, boundaries, and logical runtime invariants; generated schemas are a G1 input and physical transport is later under ADR-0010. This decision does not authorize implementation.
 
 ## Design constraints
 

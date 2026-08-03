@@ -1,0 +1,108 @@
+{
+  "$schema": "./model-facing-surface.schema.json",
+  "schemaVersion": 1,
+  "surfaceId": "plane-agent-model-facing-surface-v1",
+  "status": "candidate-for-approval",
+  "g0ContractPolicy": {
+    "namesAndBoundaries": "frozen-at-G0-pending-manifest-approval",
+    "generatedSchemaGate": "G1",
+    "physicalTransportGate": "later-gate-under-ADR-0010"
+  },
+  "names": [
+    {
+      "name": "search_workspace",
+      "kind": "universal",
+      "operationId": "plane.workspace.search@1",
+      "description": "Search authorized Plane object references across workspace types; this is not work-item search.",
+      "disclosure": "universal",
+      "eager": true,
+      "modelFacing": true
+    },
+    {
+      "name": "search_catalog",
+      "kind": "universal",
+      "operationId": "plane.catalog.search@1",
+      "description": "Search the complete supported operation catalog without granting execution permission.",
+      "disclosure": "universal",
+      "eager": true,
+      "modelFacing": true
+    },
+    {
+      "name": "describe_operation",
+      "kind": "universal",
+      "operationId": "plane.catalog.describe@1",
+      "description": "Describe one exact major-version operation contract and its curated overlay.",
+      "disclosure": "universal",
+      "eager": true,
+      "modelFacing": true
+    },
+    {
+      "name": "compose_typescript",
+      "kind": "profile",
+      "operationId": "plane.typescript.compose@1",
+      "description": "Run bounded model-written TypeScript through credential-free host callbacks.",
+      "disclosure": "profile",
+      "eager": true,
+      "modelFacing": true
+    },
+    {
+      "name": "search_work_items",
+      "kind": "eager-direct",
+      "operationId": "plane.work_items.search@1",
+      "description": "Search authorized work items by text, sequence, or project identifier; it does not search all workspace object types.",
+      "disclosure": "eager",
+      "eager": true,
+      "modelFacing": true
+    },
+    {
+      "name": "get_work_item",
+      "kind": "eager-direct",
+      "operationId": "plane.work_items.get@1",
+      "description": "Read one authorized work item and its bounded visible relations.",
+      "disclosure": "eager",
+      "eager": true,
+      "modelFacing": true
+    },
+    {
+      "name": "create_work_item",
+      "kind": "eager-direct",
+      "operationId": "plane.work_items.create@1",
+      "description": "Create one authorized parent or child work item with optional cycle placement.",
+      "disclosure": "eager",
+      "eager": true,
+      "modelFacing": true
+    },
+    {
+      "name": "update_work_item",
+      "kind": "eager-direct",
+      "operationId": "plane.work_items.update@1",
+      "description": "Update authorized work-item fields or cycle placement.",
+      "disclosure": "eager",
+      "eager": true,
+      "modelFacing": true
+    },
+    {
+      "name": "create_comment",
+      "kind": "eager-direct",
+      "operationId": "plane.comments.create@1",
+      "description": "Create one sanitized source-linked comment under current Plane authorization.",
+      "disclosure": "eager",
+      "eager": true,
+      "modelFacing": true
+    }
+  ],
+  "retiredNames": {
+    "bare": ["docs", "search", "execute"],
+    "historicalPrefixed": [
+      "plane_docs",
+      "plane_search",
+      "plane_execute",
+      "plane_search_work_items",
+      "plane_get_work_item",
+      "plane_create_work_item",
+      "plane_update_work_item",
+      "plane_add_comment"
+    ],
+    "policy": "reject-authoritative-uses; permit-only-clearly-labeled-historical-or-negative-control-prose"
+  }
+}

@@ -6,7 +6,9 @@ Legacy verification reference. It does not block implementation and is not the c
 
 `APPROVAL-MANIFEST.md` replaces this document's implementation-start gate. Its product-level acceptance expectations remain useful input, but verifier-of-verifier qualification, recursive aggregation checks, and preimplementation evidence machinery are retired from the active delivery path.
 
-After freeze, changes require both recorded user approval and an independent review. The implementation lane may implement checks but cannot solely qualify the verifier or execute the final independent proof.
+This legacy evidence input cannot approve or freeze G0. G0 freezes semantic names and boundaries only; generated schemas are a G1 artifact and production qualification is G4. Verification qualification and release approval remain later evidence gates under `APPROVAL-MANIFEST.md`.
+
+For later evidence qualification after the applicable G1-G4 gates, changes require both recorded user approval and an independent review. The implementation lane may implement checks but cannot solely qualify the verifier or execute the final independent proof; this later rule is not a G0 approval prerequisite.
 
 ## Evidence contract
 
@@ -28,7 +30,7 @@ Every check records:
 
 A summary without underlying immutable logs is insufficient.
 
-The candidate [planning evaluation fixture contract](./EVALUATION-FIXTURE-CONTRACT.md), SHA-256 `2499dd0e1a7ad2ae9322e7aa01bb648ebd9bed43dcb7abb7013e0a44b7ef3fd8`, supplies the exact EV-001 through EV-010 prompt, fixture, schema, predicate, and semantic-oracle digests. It remains non-qualifying until this manifest is approved and the independent verifier implementation is reviewed.
+The candidate [planning evaluation fixture contract](./EVALUATION-FIXTURE-CONTRACT.md), SHA-256 `2499dd0e1a7ad2ae9322e7aa01bb648ebd9bed43dcb7abb7013e0a44b7ef3fd8`, supplies the exact EV-001 through EV-010 prompt, fixture, schema, predicate, and semantic-oracle digests. It remains non-qualifying for its later evidence gate until the applicable manifest is approved and the independent verifier implementation is reviewed; that qualification condition is not a G0 prerequisite.
 
 ## Verifier ownership and independence
 
@@ -82,7 +84,7 @@ The primary implementation agent may create tests and fix failures. It cannot so
 | Operations and rollout                | VM-011, VM-015, VM-016, VM-017                            |
 | Verifier sensitivity and independence | VM-018 through VM-023 plus final clean-checkout execution |
 
-Before this verification manifest can be approved, `REQUIREMENT-COVERAGE.md` must map every completion criterion, primary-verifier obligation, completion-proof field, and every row in the approved release manifest to at least one check, one observable oracle, and one immutable evidence record. The documentation validator fails when a source requirement is missing, duplicated, stale, or has zero checks.
+For later verification qualification, `REQUIREMENT-COVERAGE.md` must map every completion criterion, primary-verifier obligation, completion-proof field, and every row in the approved release manifest to at least one check, one observable oracle, and one immutable evidence record. The documentation validator fails when a source requirement is missing, duplicated, stale, or has zero checks; this later evidence condition is not a G0 prerequisite.
 
 ## Mandatory live-project oracles
 
@@ -123,7 +125,7 @@ Each row records:
 
 The aggregate verifier recomputes all release metrics from ledger rows and raw evidence. A manually entered aggregate is insufficient.
 
-`EVALUATION-SCENARIOS.md` defines the exact scenario contracts and live-trial allocation. Manifest approval freezes both documents together.
+`EVALUATION-SCENARIOS.md` defines the exact scenario contracts and live-trial allocation. The applicable later evidence manifest qualifies these documents together; this legacy statement cannot add a G0 freeze prerequisite.
 
 ## Negative-control qualification
 
@@ -151,6 +153,6 @@ The final entry point must:
 
 ## Primary entry point
 
-The proposed final command is `./scripts/agent-tooling/verify-release --integration-lock <approved-lock> --evidence <immutable-evidence-index>`. Its path and arguments are frozen by manifest approval even though the executable is pending implementation.
+The proposed final command is `./scripts/agent-tooling/verify-release --integration-lock <approved-lock> --evidence <immutable-evidence-index>`. Its path and arguments are frozen by the applicable later release evidence approval even though the executable is pending implementation; this does not add a G0 prerequisite.
 
 The final verifier must be executed independently from clean Plane, Hermes, official MCP, and Plane Python SDK checkouts at the exact integration-lock commits. It must prove its own sensitivity by passing VM-018 through VM-023 as expected failures before its positive result is accepted.

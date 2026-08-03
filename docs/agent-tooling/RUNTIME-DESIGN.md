@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed for release-manifest approval. This is an architecture decision, not implementation authorization.
+Proposed architecture input. This document is not an approval or freeze authority and does not authorize implementation. G0 freezes the logical runtime/event/publication boundary; generated schemas are a G1 input, while physical queue/RPC remains implementation-defined under ADR-0010.
 
 ## Options considered
 

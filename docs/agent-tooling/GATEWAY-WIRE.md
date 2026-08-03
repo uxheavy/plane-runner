@@ -4,6 +4,8 @@
 
 The use of Plane's existing JSON HTTP API service as the v1 gateway adapter was accepted by the user on 2026-07-29. The exact wire schemas below are P1 generation inputs under the controlling logical contract; they do not choose the separate runtime service's physical durable queue/RPC transport and do not authorize implementation.
 
+This document is an evidence/input contract, not an approval or freeze authority. Only the exact statement in `APPROVAL-MANIFEST.md` can approve G0; generated wire schemas are qualified at G1.
+
 ## Boundary
 
 The deep `PlaneOperationGateway.execute()` module remains the core interface inside Plane. One thin Django REST adapter exposes that interface to trusted hosts in other processes.

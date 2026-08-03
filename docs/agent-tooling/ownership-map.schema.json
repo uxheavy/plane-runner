@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://plane.so/schemas/agent-tooling/ownership-map-v1.schema.json",
+  "title": "Plane Agent implementation ownership map v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "mapId",
+    "status",
+    "repositoryRoot",
+    "overlapRule",
+    "owners",
+    "surfaces",
+    "requiredSurfaceIds"
+  ],
+  "properties": {
+    "$schema": { "const": "./ownership-map.schema.json" },
+    "schemaVersion": { "const": 1 },
+    "mapId": { "const": "plane-agent-tooling-g0-ownership" },
+    "status": { "const": "candidate-for-approval" },
+    "repositoryRoot": { "const": "." },
+    "overlapRule": {
+      "const": "No two writers may own the same repository path or an ancestor/descendant path; shared wiring has one root-integrator owner."
+    },
+    "owners": {
+      "type": "array",
+      "minItems": 12,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ownerId", "role", "repository", "planLaneIds", "writePaths", "readPaths"],
+        "properties": {
+          "ownerId": { "type": "string", "pattern": "^[a-z][a-z0-9-]+$" },
+          "role": { "type": "string", "minLength": 1 },
+          "repository": { "enum": ["plane", "hermes", "buzz", "plane-mcp", "plane-sdk"] },
+          "planLaneIds": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "pattern": "^L(?:[0-9]|1[01])$" }
+          },
+          "writePaths": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "pattern": "^(?!/)(?!.*\\.\\.)[^\\s{}]+(?:/\\*\\*)?$" }
+          },
+          "readPaths": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "pattern": "^(?!/)(?!.*\\.\\.)[^\\s{}]+(?:/\\*\\*)?$" }
+          },
+          "restriction": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "surfaces": {
+      "type": "array",
+      "minItems": 12,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["surfaceId", "description", "repository", "paths", "ownerId", "planLaneIds"],
+        "properties": {
+          "surfaceId": { "type": "string", "pattern": "^[a-z][a-z0-9-]+$" },
+          "description": { "type": "string", "minLength": 1 },
+          "repository": { "enum": ["plane", "hermes", "buzz", "plane-mcp", "plane-sdk"] },
+          "paths": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "pattern": "^(?!/)(?!.*\\.\\.)[^\\s{}]+(?:/\\*\\*)?$" }
+          },
+          "ownerId": { "type": "string", "pattern": "^[a-z][a-z0-9-]+$" },
+          "planLaneIds": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "pattern": "^L(?:[0-9]|1[01])$" }
+          }
+        }
+      }
+    },
+    "requiredSurfaceIds": {
+      "type": "array",
+      "minItems": 12,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]+$" }
+    }
+  }
+}
