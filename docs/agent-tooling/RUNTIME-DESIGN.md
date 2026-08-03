@@ -12,11 +12,11 @@ Node can restrict filesystem, network, child-process, worker, native-addon, WASI
 
 Disposition: reject as the only generated-code isolate. It may remain a trusted build or host runtime.
 
-### Deno permission sandbox in the run container
+### Deno permission sandbox in the runtime-invocation container
 
 Deno executes TypeScript directly and denies sensitive I/O unless granted. Its permission model covers filesystem, network, environment, subprocess, system information, FFI, and imports. Explicit deny flags take precedence and `--no-prompt` prevents generated code from requesting permission interactively.
 
-Disposition: recommended, with a trusted supervisor and the existing disposable run container as defense in depth.
+Disposition: recommended, with a trusted supervisor and a disposable runtime-invocation container as defense in depth.
 
 ### Embedded QuickJS or WebAssembly runtime
 
@@ -26,13 +26,13 @@ Disposition: reserve as fallback if the Deno security qualification fails.
 
 ### Nested container or microVM per execution
 
-This gives the strongest kernel boundary but adds image lifecycle, startup, scheduling, networking, and cleanup complexity inside an already disposable run container.
+This gives the strongest kernel boundary but adds image lifecycle, startup, scheduling, networking, and cleanup complexity inside an already disposable runtime-invocation container.
 
 Disposition: not v1. Reconsider only if the approved threat model requires a kernel boundary between Hermes and generated code.
 
 ## Recommended v1 boundary
 
-Run a pinned Deno process inside the same disposable Hermes run container:
+Run a pinned Deno process inside the disposable container for one Hermes-backed runtime invocation:
 
 1. Hermes starts a trusted, versioned supervisor entry point under a dedicated unprivileged child identity.
 2. The child receives a minimal fixed environment with no Plane, model-provider, subscription, MCP, storage, or host credentials.
@@ -42,8 +42,8 @@ Run a pinned Deno process inside the same disposable Hermes run container:
 6. A dedicated inherited descriptor carries framed supervisor-to-host RPC. Generated code receives no descriptor, endpoint, token, or authoritative context fields.
 7. The supervisor converts allowed Worker messages into `plane.call(operation, input)` requests. The host supplies workspace, agent, run, turn, outer tool call, budgets, catalog digest, and audit correlation.
 8. Arbitrary stdout and stderr are treated only as bounded logs, never as authenticated RPC.
-9. The host enforces wall time, CPU, memory, process count, inner-call count, concurrency, cumulative result, and ephemeral-disk limits and terminates the child on violation. The child storage namespace is unique per execution and destroyed with the disposable run container.
-10. The outer disposable run container supplies the kernel, mount, process, and cleanup boundary. Generated code receives no direct database or Plane network route.
+9. The host enforces wall time, CPU, memory, process count, inner-call count, concurrency, cumulative result, and ephemeral-disk limits and terminates the child on violation. The child storage namespace is unique per execution and destroyed with the disposable runtime-invocation container.
+10. The outer disposable runtime-invocation container supplies the kernel, mount, process, and cleanup boundary. Generated code receives no direct database or Plane network route. Container lifetime is not Plane run lifetime; a later invocation may use a replacement container while the durable run continues from Plane-owned state.
 
 ## Module and seam placement
 

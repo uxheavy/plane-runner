@@ -61,15 +61,37 @@ The initial architecture does not mint run-bound capability tokens or per-operat
 
 Generated TypeScript never receives the Plane credential.
 
+## Plane Agent domain ownership
+
+Plane keeps three layers explicit:
+
+1. The agent actor identity owns the durable Plane principal, credential, memberships, roles, and object permissions. These facts are the sole entitlement source and are not versioned as behavioral profile content.
+2. A behavioral profile version owns persona, role, instructions, model/runtime defaults, skill and context references, memory scopes, and default tool-presentation choices. A run pins the resolved version.
+3. Tool availability comes from installed and enabled Plane features and integrations. Tool disclosure chooses which available schemas are eager or progressive. Neither layer grants or denies Plane operations.
+
+The minimum durable relationships have independent lifecycles:
+
+```text
+Agent actor -> Profile version
+Assignment contract -> target + objective + acceptance + assignee
+Run attempt -> assignment + resolved profile/context/tool/runtime snapshot
+Runtime invocation -> one kernel dispatch within a run
+Outcome submission -> run + artifacts + summary/evidence + review
+```
+
+An assignment is the commission to produce an outcome, not the outcome itself. A Plane run may span multiple Hermes sessions, invocations, processes, or restarts. Plane owns the durable conversation and history throughout.
+
 ## Plane-native runtime profile
 
-The fork does not expose the `hermes-cli` personality or default 54-tool core as the Plane agent's product surface. A fresh agent begins with Plane identity, role, assignment, current object and conversation context, relevant knowledge, enabled capabilities, and runtime policy.
+The fork does not expose the `hermes-cli` personality or default 54-tool core as the Plane agent's product surface. A fresh agent begins with Plane identity, role, assignment, current object and conversation context, relevant knowledge, available operations, tool-presentation defaults, and runtime policy.
 
-The model-facing catalog is designed from natural Plane workflows. Every run starts with a small universal Plane work core, then adds eager tools relevant to the agent profile and current assignment. Long-tail Plane operations, external connectors, browser, files, terminal, and specialist capabilities may remain enabled while their schemas are progressively disclosed. The exact universal core is the next open catalog decision.
+The model-facing catalog is designed from natural Plane workflows. Every run starts with a small universal Plane work core, then adds eager tools relevant to the agent profile and current assignment. Long-tail Plane operations, external connectors, browser, files, terminal, and specialist integrations may remain available while their schemas are progressively disclosed. The exact universal core is the next open catalog decision.
 
 The universal core has one `search_workspace` discovery primitive. It returns typed references across Plane object types. Specialized searches remain discoverable for workflows that require domain-specific filters or projections; they do not compete in every agent's initial context.
 
-Hermes remains responsible for execution, lifecycle, delegation, memory, skills, scheduling, tool dispatch, transcript persistence, concurrency, and bounded-result machinery beneath this profile. Hermes-specific work systems and operational tools are hidden or adapted when Plane already owns the corresponding product concept.
+Hermes supplies the hidden execution mechanisms for the model loop, context management, tool dispatch, transcript capture, concurrency, and bounded results. Plane owns the durable product concepts and authoritative state for identity, profiles, assignments, runs, conversations, memory, skills, schedules, delegation, artifacts, and outcomes. Reused Hermes subsystems sit behind Plane adapters when they support those concepts; Hermes-specific work systems and operational tools remain hidden.
+
+Definitions and control state for memory, skills, schedules, workflows, and delegation remain in Plane. Hermes may execute those mechanisms behind adapters. Plane-governed storage remains authoritative; `MEMORY.md`, subject-bound `USER.md`, skill packages, and other files are lossless run projections rather than the source of truth. Automatic learning may produce agent-scoped candidates, but promotion into shared scopes is governed.
 
 Native adapters remain thin:
 
@@ -80,11 +102,21 @@ Native adapters remain thin:
 
 They do not reproduce Plane authorization or business logic.
 
+## Proposed Plane runtime contract
+
+ADR-0010 proposes one versioned logical runtime contract across a durable cross-process seam to a separate co-located agent-runtime service. The queue or RPC transport remains open. Plane persists an immutable run snapshot and creates a separate invocation envelope for each kernel dispatch. Human answers and other new context remain Plane-owned events referenced by the envelope, while cumulative run budgets cannot reset across invocations. Inside the runtime service, one `plane_runtime.execute` adapter invokes the kernel through a trusted host, validates observations defensively, and transmits them across the cross-process seam. Plane ingress revalidates and maps them into product state. Plane API modules never import the adapter or `AIAgent`; Hermes sessions, profile directories, registry globals, provider clients, and transport details do not cross the logical contract.
+
+A runtime invocation maps to one visible Plane product event: outcome submission, waiting-for-input question, failure or blocker, or cancellation. Kernel final text is not automatically a conversation message. A conversation message requires an explicit agent publication action through an authorized, idempotent, audited Plane semantic operation. Runtime events are untrusted observations until Plane ingress revalidates host binding, identity, schema, sequence, limits, receipts, and legal state transitions. If invocation infrastructure dies first, Plane derives the terminal failure/cancellation from authoritative lease state. Intentional messages and compact activity receipts appear in conversation; detailed model/tool transcript remains in the run-inspection surface.
+
+Recoverable invocation failures may continue the same Plane run when safe. `outcome_unknown` is reconciled or escalated and is never blindly replayed. A fresh run follows terminal failure/cancellation or human-requested revision.
+
+Execution leases and containers belong to runtime invocations, not runs. A long-waiting run may release them and later recreate invocation infrastructure from Plane-owned snapshots, events, permitted checkpoints, and remaining budget.
+
 ## TypeScript composition surface
 
 The Plane-native profile retains progressive capability discovery and one self-hosted TypeScript composition path. Its final tool names are not yet frozen. Bare `docs`, `search`, and `execute` are rejected because they collide with company knowledge, web, files, connectors, and Hermes's existing code-execution concepts.
 
-TypeScript executes inside the disposable container assigned to the Hermes run. A restricted child isolate has no Plane credentials, ambient environment secrets, arbitrary network, package installation, subprocess creation, or unrelated filesystem access. Its only Plane capability is a credential-free RPC callback to trusted host code.
+TypeScript executes inside the disposable container assigned to one runtime invocation. A restricted child isolate has no Plane credentials, ambient environment secrets, arbitrary network, package installation, subprocess creation, or unrelated filesystem access. Its only Plane capability is a credential-free RPC callback to trusted host code.
 
 Every inner callback traverses Hermes's normal tool middleware and the Plane Operation Gateway. Inner calls therefore retain authorization, audit, result limits, and tool-call correlation.
 

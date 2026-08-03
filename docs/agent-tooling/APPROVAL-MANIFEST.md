@@ -15,14 +15,14 @@ Ship one production-capable path in which a Plane-native agent can drive an assi
 - Plane remains the system of record and sole authorization authority.
 - A Plane Operation Gateway exposes curated, versioned semantic operations through Plane application services; agents never receive database access.
 - The fork exposes a dedicated Plane-native runtime profile rather than inheriting the `hermes-cli` personality or default tool catalog.
-- Hermes supplies execution, lifecycle, delegation, memory, skills, scheduling, and tool-dispatch machinery beneath the Plane-native profile; it is not presented to users or models as a separate product.
+- Plane owns durable agent lifecycle and definition/control state for profiles, assignments, runs, conversations, memory, skills, schedules, delegation, artifacts, and outcomes. Hermes supplies model-loop, context, learning, skill-use, schedule/delegation execution, tool-dispatch, transcript/checkpoint, concurrency, and recovery mechanisms behind Plane adapters; it is not presented to users or models as a separate product.
 - The model-facing surface is derived from natural Plane workflows and vocabulary.
 - Every agent initially receives a small universal Plane work core plus eager tools selected from its profile and current assignment.
-- Other enabled capabilities remain progressively discoverable without placing every schema in the model's initial context.
+- Other available operations remain progressively discoverable without placing every schema in the model's initial context.
 - The universal core uses one `search_workspace` tool to find typed references across Plane object types; specialized domain searches are discovered only when advanced filters or projections are needed.
 - Exact core tools, discovery tools, and composition-tool names remain open and must be resolved before this manifest can be approved.
 - Internal contract IDs, audit events, and adapter metadata retain the `plane.*` namespace even when native Plane-domain tool names do not.
-- Model-written TypeScript runs in a restricted child isolate inside the disposable Hermes run container.
+- Model-written TypeScript runs in a restricted child isolate inside the disposable container for one runtime invocation. Containers may be released and recreated while the durable Plane run continues.
 - Plane credentials remain in host callbacks. Generated TypeScript receives neither credentials nor ambient authority.
 - Plane derives the agent identity from its credential and applies live authorization to every operation.
 - Authorized operations execute autonomously. V1 adds no second capability-token system and no runtime human-approval prompts.

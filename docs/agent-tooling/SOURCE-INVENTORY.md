@@ -104,9 +104,9 @@ This document records observed source facts used to freeze the v1 release. It di
 - `openai-codex` resolves to the subscription-backed Codex Responses mode.
 - `gpt-5.6-luna` is in Hermes's current curated Codex model catalog.
 
-## Proposed eager Hermes surface
+## Superseded eager Hermes surface proposal
 
-This is proposed for release-manifest approval, not yet an implemented contract:
+The following earlier proposal is retained as source history but superseded by ATD-106 through ATD-114 and ADR-0007. It is not the current native tool contract:
 
 - `plane_search_work_items`
 - `plane_get_work_item`
@@ -117,4 +117,4 @@ This is proposed for release-manifest approval, not yet an implemented contract:
 - `plane_search`
 - `plane_execute`
 
-Workspace, project, and run identity remain host-bound context. Projects, cycles, members, relations, labels, modules, initiatives, administration, and the remaining long tail stay discoverable through `plane_search` and composable through `plane_execute`.
+Workspace, project, and run identity remain host-bound context. Final eager and progressive tool names and schemas remain open catalog decisions.

@@ -4,13 +4,13 @@
 
 Plane agents need to drive assigned outcomes through Plane without receiving database access or credentials. A general-purpose Hermes personality and large flat tool list do not feel like a native Plane teammate, while an ungoverned code-execution surface can bypass product authorization and auditing.
 
-Plane already has an external Python MCP server. Plane-native Hermes agents do not need the latency and lifecycle cost of an internal MCP hop, but both internal and external integrations should converge on the same supported Plane operations.
+Plane already has an external Python MCP server. Plane-native agents backed by the forked Hermes kernel do not need the latency and lifecycle cost of an internal MCP hop, but both internal and external integrations should converge on the same supported Plane operations.
 
 ## Users
 
 ### Plane-native agents
 
-Agents managed by Plane and executed by a forked Hermes kernel. They receive a Plane-native runtime profile, native semantic tools for common work, and TypeScript composition for broader enabled capabilities. Users and models do not experience Hermes as a separate product.
+Agents managed by Plane and executed by a forked Hermes kernel. They receive a Plane-native behavioral profile, native semantic tools for common work, and TypeScript composition for broader available operations. Users and models do not experience Hermes as a separate product.
 
 ### External agents
 
@@ -27,7 +27,7 @@ People who investigate what an agent attempted, what Plane allowed, and what cha
 ## Required outcomes
 
 - An internal agent can discover supported Plane operations without loading the full catalog into model context.
-- An internal agent begins with Plane identity, assignment, current context, and authorized capability metadata rather than a generic everyday-agent posture.
+- An internal agent begins with Plane identity, assignment, current context, and available-operation metadata rather than a generic everyday-agent posture. Plane authorization remains live and final.
 - An internal agent does not inherit the `hermes-cli` default tool catalog.
 - An internal agent can use common Plane operations as direct native tools.
 - An internal agent can compose multiple supported operations in model-written TypeScript.
@@ -56,8 +56,8 @@ People who investigate what an agent attempted, what Plane allowed, and what cha
 - Native tools improve ergonomics rather than confer privilege.
 - The complete supported operation catalog remains discoverable.
 - Common workflows should be simple without restricting advanced composition.
-- Initial tool context should contain a small universal Plane work core plus assignment-relevant capabilities.
-- Enabled capabilities outside the initial context should remain discoverable.
+- Initial tool context should contain a small universal Plane work core plus assignment-relevant operation schemas.
+- Other available operations outside the initial context should remain discoverable.
 - Failure must be explicit, structured, and safe to retry only when proven safe.
 - The first release should be narrow enough to validate but complete enough to exercise production risks.
 

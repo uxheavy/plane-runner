@@ -59,9 +59,9 @@ Exit gate: named pilot workflows succeed without Code Mode and cannot bypass Pla
 
 Deliverables:
 
-- `docs`, `search`, and `execute` surfaces.
+- Progressive discovery and TypeScript composition surfaces, with names and schemas frozen by the catalog decision.
 - Generated TypeScript client from the operation contract.
-- Restricted child isolate in the run container.
+- Restricted child isolate in the runtime-invocation container.
 - Credential-free host RPC.
 - Resource, call-count, stdout, result, and cumulative limits.
 - Nested authorization and audit propagation.

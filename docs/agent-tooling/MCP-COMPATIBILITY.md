@@ -14,7 +14,7 @@ Compatibility is evaluated per MCP tool contract, not per REST endpoint. An MCP 
 - Its existing transports, authentication entry points, tool names, and public contracts are preserved unless an approved compatibility plan says otherwise.
 - Existing handlers become shallow gateway adapters incrementally.
 - The project does not create a second 177-tool MCP server.
-- Internal Hermes agents bypass the MCP transport and use native tools or TypeScript Code Mode through the same gateway.
+- Plane-native agents bypass the MCP transport and use native tools or TypeScript Code Mode through the same gateway.
 - Business rules, authorization, mutation safety, result control, and audit behavior converge below both paths.
 
 ## Accepted migration seam

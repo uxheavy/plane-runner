@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted; runtime operation-approval portions superseded by ADR-0002
+Accepted; runtime operation-approval portions superseded by ADR-0002; run-container lifetime wording superseded by ADR-0006
 
 ## Date
 

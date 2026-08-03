@@ -4,8 +4,8 @@
 
 Deliver Plane's agent-tooling architecture as a production-ready, independently verified system:
 
-- Plane-native Hermes agents use native semantic Plane tools.
-- Plane-native Hermes agents use self-hosted TypeScript Code Mode with `docs`, `search`, and `execute`.
+- Plane-native agents use native semantic Plane tools.
+- Plane-native agents use self-hosted TypeScript composition with progressively discovered Plane operations; final model-facing tool names remain a catalog decision.
 - Native tools, Code Mode callbacks, and the supported external MCP compatibility path share the Plane Operation Gateway.
 - Plane identity, live authorization, mutation safety, bounded results, versioning, and append-only auditing hold for every operation.
 - Generated code receives neither Plane credentials nor direct database access.
@@ -91,8 +91,8 @@ Observed on 2026-07-29:
 
 - The Plane-native runtime profile exposes the approved eager Plane-domain tools while Hermes remains the hidden execution kernel.
 - Deferred operations are discoverable through Tool Search and Code Mode.
-- `docs`, `search`, and `execute` are implemented for TypeScript.
-- Generated code runs in the disposable Hermes run container inside the approved restricted child isolate.
+- The approved progressive-discovery and TypeScript-composition interfaces are implemented with their frozen names and schemas.
+- Generated code runs in the disposable runtime-invocation container inside the approved restricted child isolate.
 - Generated code has no ambient Plane credentials, arbitrary network, package installation, subprocess, or unrelated filesystem access.
 - Credential-free host callbacks retain Hermes tool IDs, middleware, concurrency, and Plane audit correlation.
 - The local callback channel is bound host-side to the exact run, agent, tenant, operation budgets, and correlation identifiers.
