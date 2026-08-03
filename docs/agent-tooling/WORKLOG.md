@@ -597,3 +597,11 @@ The source facts are confirmed. The exact gateway/application-service compositio
 - This correction commit (see git history for this entry) is intentionally not named by a predicted SHA. Final commit identity and clean-status evidence are reported by the coordinator after commit.
 - Pre-commit validation passed: `git diff --check`; exactly two changed files; the `WORKLOG.md` delta is additions only; all four relative link targets and anchors resolve; every named routing skill/resource exists; all absolute paths in the goal/worklog resolve; and the required objective, invariants, G0–G5 definitions, baseline markers, delegation rules, and contradiction guard are present.
 - Product implementation tests were not run because this correction is documentation-only and does not change product code.
+
+## 2026-08-04 — Sol Medium documentation correction
+
+### Correction and evidence
+
+- Corrected `GOAL.md` to keep AgentActor authorization, installed/enabled integration and catalog availability, and profile/assignment disclosure separate, with live Plane authorization final for every operation; cross-checked [ADR-0007](../decisions/0007-adaptive-plane-tool-exposure.md).
+- Corrected the lease/container-death invariant to reconcile the authoritative cause and synthesize exactly one visible failure, blocker, or cancellation product event; cross-checked [ADR-0010](../decisions/0010-plane-runtime-contract.md).
+- Source was Plane commit `6cd8a17f6e2989adc8943aad72c51b73ff1d606a`; the only intended files are `docs/agent-tooling/GOAL.md` and this append-only `docs/agent-tooling/WORKLOG.md`. `git diff --check` and documentation-only link/scope checks passed; no product tests were run. Commit SHA is recorded in git history for this entry.

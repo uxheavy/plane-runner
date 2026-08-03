@@ -61,12 +61,14 @@ After verification, staged rollout is allowed even though there are no current u
 
 - AgentActor identity/authorization is the sole live entitlement source and is not versioned profile content.
 - ProfileVersion is versioned behavioral configuration snapshotted/resolved for a run.
-- tool availability/disclosure controls integrations and eager/progressive presentation, never a second permission system.
+- Tool availability is supplied by installed and enabled Plane features or integrations and represented in the shared operation catalog.
+- Tool disclosure/presentation determines which available schemas are eager versus progressively disclosed for the resolved profile and assignment.
+- Availability and disclosure are not a second permission system; every operation remains subject to live Plane authorization.
 - AssignmentContract is the durable commission, RunAttempt is the durable execution attempt, OutcomeSubmission is the submitted artifacts/evidence/result; they have independent lifecycles.
 - a run may span RuntimeInvocations/restarts; RunSnapshot is immutable per run; InvocationEnvelope is per dispatch and carries new Plane-owned event refs/remaining cumulative budget.
 - explicit publication only; ordinary model final text remains transcript evidence; semantic Plane mutations use the Operation Gateway and publication carries/correlates authoritative receipts.
 - outcome_unknown is never blindly replayed.
-- Plane/supervisor records exactly one visible terminal product event per terminal invocation, synthesizing failure/cancellation after lease death.
+- If a lease expires or the container dies before a terminal observation arrives, Plane/supervisor reconciles the authoritative cause and synthesizes exactly one visible failure, blocker, or cancellation product event for the terminal invocation.
 - Plane owns durable run/conversation/history; Hermes operational sessions/checkpoints are projections/mechanisms only.
 
 ## Current baseline and evidence
