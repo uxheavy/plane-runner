@@ -685,3 +685,13 @@ Stage and commit this single documentation/contract/evidence-control checkpoint,
 - `./node_modules/.bin/oxlint --deny-warnings docs/agent-tooling/verifiers/*.mjs` — exit 0; 0 warnings and 0 errors.
 - `git diff --check` — exit 0.
 - `test -z "$(git status --short)"` — exit 0; authoritative worktree clean before this append.
+
+## 2026-08-04 — Second Sol Medium remediation correction
+
+### Evidence
+
+- The content/remediation commit is `81ef25959ce2ca41d85d3b093520b6f0c1b4e763`; it narrows the change to G0 evidence controls, ADR-0010 authority, explicit phase/lane coverage, ownership, generated coverage, structural retired-name validation, and clean approved-state negative controls. `RESULT.md` content remains unchanged and is now in the normative seal set.
+- `pnpm install --frozen-lockfile` — exit 0 from the documented fresh-checkout setup after the sandbox-only attempt was terminated at exit 130; the repository-installed AJV/OxLint/formatter dependencies are available.
+- `node docs/agent-tooling/verifiers/seal-g0-evidence.mjs` — exit 0; 56 content paths and 4 seal paths bound from the exact content commit.
+- `node docs/agent-tooling/verifiers/validate-ajv-2020.mjs`, ownership, requirement coverage, both render checks, and planning fixtures — exit 0.
+- Node syntax checks for all eight changed/new verifier modules, direct repository-installed OxLint, and `git diff --check` — exit 0.
