@@ -13,7 +13,7 @@
       "id": "plane",
       "path": ".",
       "remote": "https://github.com/uxheavy/plane-runner.git",
-      "sha": "6e19d96d42194772829b90d4fbbc11b93811928f",
+      "sha": "d944acb8c3db7b893dbdf25eb434ac9f78143284",
       "ref": "codex/agent-tooling-architecture",
       "status": "clean",
       "role": "control plane, domain, gateway, catalog, and integration root",
@@ -101,7 +101,7 @@
       "docs/agent-tooling/prompts/release-planning-v1.md": "9c6674acce0e060b8570a764f31c792297d718fd08d8559ca59d19c0dd4d89a1",
       "docs/agent-tooling/verifiers/render-non-ui-implementation-plan.mjs": "83b0ec4956af73a0fc49cac17ef5473e7f8b197e09ff1c6c404653888847c795",
       "docs/agent-tooling/verifiers/render-requirement-coverage.mjs": "5993661f3c05af46bae762bb59058f5a477a35b7d5649325fbba9d9200eae542",
-      "docs/agent-tooling/verifiers/run-g0-negative-controls.mjs": "7d19e92f9da421a0cdacfe75347556a45560f9b85e02ab63d51bf7146c49e80a",
+      "docs/agent-tooling/verifiers/run-g0-negative-controls.mjs": "be8167989913e3d7bcfb3dee5e0f7400628a8031773d2a351de72bf58148f699",
       "docs/agent-tooling/verifiers/seal-g0-evidence.mjs": "c66bb534ce85a0562a4b535ed1feba6aeaf99ebcd6d19d91d480e363743d497f",
       "docs/agent-tooling/verifiers/test-g0-approved-fixture.mjs": "e58ac31a3f41dc592a89fb90e57c6b9293a457ebe49204721d8eaa766140db4e",
       "docs/agent-tooling/verifiers/validate-ajv-2020.mjs": "d5cab3244bdb63e91522a861058b243bc49e056932f855a332812aad6f3df3ea",
@@ -119,13 +119,13 @@
       "docs/decisions/0008-scoped-memory-and-context.md": "4fba4c326c428af491bdef6dbd55f0b8a1cc22f5e04e2fc26f59c61fe4b22c10",
       "docs/decisions/0009-workflows-and-agent-delegation.md": "81b0e3a6b7665897f3cf461f3b647cfc2b8c4bef6e2d26f4a4908b6c5f9b4740",
       "docs/decisions/0010-plane-runtime-contract.md": "2d6bbdf50580602fd4da6df10715bbb6f77e65ed4a8167e2d7c34bb45d32537b",
-      "docs/agent-tooling/SOURCE-INVENTORY.md": "5fa3a05570d222f07c89cbf04f81fd54062bd8ac36181b7fdee3b54fc5243cea"
+      "docs/agent-tooling/SOURCE-INVENTORY.md": "4c6384c7b36f8bc31db479fd4805f3ed096ef1f8fb866e64108c05e6cb87134e"
     }
   },
   "seal": {
     "state": "sealed",
-    "contentCommit": "6e19d96d42194772829b90d4fbbc11b93811928f",
-    "contentTree": "ce6b8c84119bfc98ca943c1af772d8c78f4caf3f",
+    "contentCommit": "d944acb8c3db7b893dbdf25eb434ac9f78143284",
+    "contentTree": "2f1c4eae19ed420c8b18cd4187b000fde7ceb98c",
     "contentPaths": [
       "docs/agent-tooling/ADR-SYNTHESIS.md",
       "docs/agent-tooling/APPROVAL-MANIFEST.md",
