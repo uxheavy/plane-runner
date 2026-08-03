@@ -704,3 +704,8 @@ Stage and commit this single documentation/contract/evidence-control checkpoint,
 - Content/remediation commit: `794733b68fe206a345a67d06e48b9855d4040ce7`. It adds fail-closed JSON-pointer authority policy, token-local historical/internal/path handling, and valid-reseal controls while preserving the prior 36 controls.
 - The expanded negative-control matrix is 83 controls: the prior 36, 44 valid-reseal adversarial controls covering every retired token family across model-facing descriptions, semantic/schema notes, mixed internal lines, and mixed historical lines, plus three valid-reseal positive contexts.
 - `node docs/agent-tooling/verifiers/seal-g0-evidence.mjs` — exit 0; the actual generator bound 56 content paths and the exact four seal-evidence paths to the content commit. `RESULT.md` remains byte-for-byte unchanged at SHA-256 `c7b6404f435ea1ce53c9b360ba2b8745096f1d3dd42d81de4bdbb55117c4bb87`.
+
+### Control-harness correction
+
+- Prompt-mutating valid-reseal controls now refresh the legitimate prompt digest in the verifier-owned planning oracle and fixture contract before sealing. This keeps each adversarial reseal failure attributable to the intended retired-name reason and lets historical, internal-identifier, and ordinary path/prose positives prove a complete clean preflight.
+- Final content/remediation checkpoint for this correction: `6e19d96d42194772829b90d4fbbc11b93811928f`.
