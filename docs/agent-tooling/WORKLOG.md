@@ -660,3 +660,28 @@ Stage and commit this single documentation/contract/evidence-control checkpoint,
 - Commit `9c176239de` was created successfully, but the repository hook formatter changed canonical manifest, inventory, catalog, and generated-plan bytes after the pre-commit digest check. The committed files were otherwise within the intended 27-file package.
 - Recomputed and updated the integration-lock/readiness bindings to the post-hook bytes, then re-ran `node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode preflight`, the renderer check, the planning validator, the direct Oxlint check, and `git diff --check`; all pass. Normal G0 remains intentionally non-zero only for pending human approval.
 - Next action: amend the checkpoint so the final commit contains the refreshed evidence digests and remains the single logical package.
+
+## 2026-08-04 — Fresh Sol Medium remediation evidence seal
+
+### Seal generation
+
+- Content/remediation commit: `719550667a21520803ac9b79b3951188404be2b7`.
+- `node docs/agent-tooling/verifiers/seal-g0-evidence.mjs` — exit 0; sealed 55 normative content paths and 4 seal-evidence paths, with the reviewed baseline retained as ancestor-only evidence.
+- The real `g0-readiness.json` remains `pending-human-approval`; no approver identity, approval timestamp, or approval evidence binding was fabricated.
+
+### Final validation matrix (executed before this entry was appended)
+
+- `node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode preflight` — exit 0.
+- `node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode g0` — exit 1; the only failing condition was the expected pending human approval, with no implementation authorization implied.
+- `node docs/agent-tooling/verifiers/test-g0-approved-fixture.mjs` — exit 0; a temporary approved state passed and the real pending record was unchanged.
+- `node docs/agent-tooling/verifiers/run-g0-negative-controls.mjs` — exit 0; all 8 mutations were rejected for their intended reasons: retired bare `execute`, changed operation name, changed GOAL, changed ADR, changed verifier, changed ownership, dirty tracked package, and extra post-seal commit.
+- `node docs/agent-tooling/verifiers/validate-ajv-2020.mjs` — exit 0.
+- `node docs/agent-tooling/verifiers/validate-ownership-map.mjs` — exit 0.
+- `node docs/agent-tooling/verifiers/validate-requirement-coverage.mjs` — exit 0.
+- `node docs/agent-tooling/verifiers/render-non-ui-implementation-plan.mjs --check` — exit 0.
+- `node docs/agent-tooling/verifiers/render-requirement-coverage.mjs --check` — exit 0.
+- `node docs/agent-tooling/verifiers/validate-planning-fixtures.mjs` — exit 0.
+- `for file in docs/agent-tooling/verifiers/*.mjs; do node --check "$file" || exit 1; done` — exit 0.
+- `./node_modules/.bin/oxlint --deny-warnings docs/agent-tooling/verifiers/*.mjs` — exit 0; 0 warnings and 0 errors.
+- `git diff --check` — exit 0.
+- `test -z "$(git status --short)"` — exit 0; authoritative worktree clean before this append.
