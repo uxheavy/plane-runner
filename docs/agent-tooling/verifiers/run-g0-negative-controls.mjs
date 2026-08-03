@@ -63,13 +63,18 @@ function refreshPromptDigest(directory) {
   if (updatedValidator === validator && !validator.includes(`prompt: "${promptDigest}"`))
     throw new Error("prompt digest anchor missing in planning validator");
   if (updatedValidator !== validator) writeFileSync(validatorPath, updatedValidator);
+  const validatorDigest = sha256(readFileSync(validatorPath));
   const contractPath = join(directory, "docs/agent-tooling/EVALUATION-FIXTURE-CONTRACT.md");
   const contract = readFileSync(contractPath, "utf8");
-  const updatedContract = contract.replace(
+  const updatedContractWithPrompt = contract.replace(
     /(\| `prompts\/release-planning-v1\.md`\s+\| `)[0-9a-f]{64}/,
     `$1${promptDigest}`
   );
-  if (updatedContract === contract && !contract.includes(promptDigest))
+  const updatedContract = updatedContractWithPrompt.replace(
+    /(\| `verifiers\/validate-planning-fixtures\.mjs`\s+\| `)[0-9a-f]{64}/,
+    `$1${validatorDigest}`
+  );
+  if (updatedContract === contract && (!contract.includes(promptDigest) || !contract.includes(validatorDigest)))
     throw new Error("prompt digest anchor missing in fixture contract");
   if (updatedContract !== contract) writeFileSync(contractPath, updatedContract);
 }
