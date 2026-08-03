@@ -54,6 +54,24 @@ function replace(directory, path, from, to) {
   writeFileSync(target, source.replace(from, to));
 }
 
+function refreshPromptDigest(directory) {
+  const promptPath = join(directory, "docs/agent-tooling/prompts/release-planning-v1.md");
+  const promptDigest = sha256(readFileSync(promptPath));
+  const validatorPath = join(directory, "docs/agent-tooling/verifiers/validate-planning-fixtures.mjs");
+  const validator = readFileSync(validatorPath, "utf8");
+  const updatedValidator = validator.replace(/(  prompt: ")[0-9a-f]{64}(",)/, `$1${promptDigest}$2`);
+  if (updatedValidator === validator) throw new Error("prompt digest anchor missing in planning validator");
+  writeFileSync(validatorPath, updatedValidator);
+  const contractPath = join(directory, "docs/agent-tooling/EVALUATION-FIXTURE-CONTRACT.md");
+  const contract = readFileSync(contractPath, "utf8");
+  const updatedContract = contract.replace(
+    /(\| `prompts\/release-planning-v1\.md`\s+\| `)[0-9a-f]{64}/,
+    `$1${promptDigest}`
+  );
+  if (updatedContract === contract) throw new Error("prompt digest anchor missing in fixture contract");
+  writeFileSync(contractPath, updatedContract);
+}
+
 function commit(directory, message, args = []) {
   run(directory, ["git", "commit", ...args, "-m", message], {
     env: {
@@ -271,6 +289,7 @@ for (const name of retiredNames) {
       ),
     expected: `docs/agent-tooling/model-facing-surface.json authoritatively uses retired name ${name}`,
     reseal: true,
+    refreshPromptDigest: true,
   });
   resealedAdversarialCases.push({
     name: `valid-reseal authoritative semantic note ${name}`,
@@ -282,6 +301,7 @@ for (const name of retiredNames) {
       ),
     expected: `docs/agent-tooling/prompts/release-planning-v1.md authoritatively uses retired name ${name}`,
     reseal: true,
+    refreshPromptDigest: true,
   });
   resealedAdversarialCases.push({
     name: `valid-reseal mixed internal and authoritative ${name}`,
@@ -293,6 +313,7 @@ for (const name of retiredNames) {
       ),
     expected: `docs/agent-tooling/prompts/release-planning-v1.md authoritatively uses retired name ${name}`,
     reseal: true,
+    refreshPromptDigest: true,
   });
   resealedAdversarialCases.push({
     name: `valid-reseal mixed historical and authoritative ${name}`,
@@ -304,6 +325,7 @@ for (const name of retiredNames) {
       ),
     expected: `docs/agent-tooling/prompts/release-planning-v1.md authoritatively uses retired name ${name}`,
     reseal: true,
+    refreshPromptDigest: true,
   });
 }
 
@@ -319,6 +341,7 @@ const resealedPositiveCases = [
     expected: "PASS retired-name negative control",
     expectSuccess: true,
     reseal: true,
+    refreshPromptDigest: true,
   },
   {
     name: "valid-reseal designated internal identifier occurrence",
@@ -327,6 +350,7 @@ const resealedPositiveCases = [
     expected: "PASS retired-name negative control",
     expectSuccess: true,
     reseal: true,
+    refreshPromptDigest: true,
   },
   {
     name: "valid-reseal ordinary docs path and non-model-facing prose",
@@ -373,6 +397,7 @@ function runResealedCase(testCase) {
   const { temporaryParent, temporaryRoot } = createTemporaryCheckout();
   try {
     testCase.mutate(temporaryRoot);
+    if (testCase.refreshPromptDigest) refreshPromptDigest(temporaryRoot);
     run(temporaryRoot, ["git", "add", "--all"]);
     const contentCommit = commit(temporaryRoot, `negative-control-content-${testCase.name}`);
     run(temporaryRoot, ["node", "docs/agent-tooling/verifiers/seal-g0-evidence.mjs"]);
