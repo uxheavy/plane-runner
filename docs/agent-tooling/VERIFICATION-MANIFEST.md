@@ -91,7 +91,7 @@ Before this verification manifest can be approved, `REQUIREMENT-COVERAGE.md` mus
 - Add a unique non-authoritative run tag to expected artifacts.
 - Prove authorized operations create no pending human-confirmation state.
 - Trace actual native tool calls.
-- Trace actual `docs`, `search`, and `execute` calls.
+- Trace the approved model-facing surface: `search_workspace`, `search_catalog`, `describe_operation`, `compose_typescript`, and the five minimal eager direct Plane tools.
 - Preserve generated TypeScript and its digest.
 - Trace concurrent safe reads and every inner gateway call.
 - Verify exactly one tagged parent, three tagged children, and one tagged source comment after autonomous execution.

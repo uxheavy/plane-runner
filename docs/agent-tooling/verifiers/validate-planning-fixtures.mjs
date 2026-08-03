@@ -30,9 +30,9 @@ const failures = [];
 const frozenArtifactDigests = {
   fixture: "88b38a00f06d65418e01f3019a0914cfef7ddacf6dbb9f4b078374623040a6c7",
   fixtureSchema: "f24542f534bf3eb22bc5a15a32ca5c2ae9208ddb21f5e8e59c9e3859b0640b89",
-  predicates: "a808b01da9a07f3cfdd69143a32b2843bcaf571fbcc0e076010abd9cb89e2f2c",
+  predicates: "1a65f29d6f080688624a9e4125b550851a54f84fd8be96570d680c1d47ea25a0",
   predicateSchema: "189bda3b24ee601339f9a13ca0af53c60b31cc2ca70da3281652a7454e4f3226",
-  prompt: "f222d7be60baff3969e3fd4c40b100fa533c1649173cead1394e5ad6f526ec31",
+  prompt: "9c6674acce0e060b8570a764f31c792297d718fd08d8559ca59d19c0dd4d89a1",
 };
 
 const frozenScoring = {

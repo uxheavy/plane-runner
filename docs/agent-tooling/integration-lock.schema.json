@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://plane.so/schemas/agent-tooling/integration-lock-v1.schema.json",
+  "title": "Plane Agent Tooling G0 integration lock v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "lockId",
+    "status",
+    "reviewedBaseline",
+    "repositories",
+    "digests",
+    "pendingInputs",
+    "owners"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "lockId": { "const": "plane-agent-tooling-g0" },
+    "status": { "enum": ["candidate-for-approval", "approved"] },
+    "reviewedBaseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["planeSha", "planeBranch", "policy"],
+      "properties": {
+        "planeSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "planeBranch": { "type": "string", "minLength": 1 },
+        "policy": {
+          "const": "the reviewed Plane SHA must remain an ancestor of the clean verification checkout; the package commit may be a descendant"
+        }
+      }
+    },
+    "repositories": {
+      "type": "array",
+      "minItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "path", "remote", "sha", "ref", "status", "role"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "path": { "type": "string", "minLength": 1 },
+          "remote": { "type": "string", "minLength": 1 },
+          "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+          "ref": { "type": "string", "minLength": 1 },
+          "status": { "const": "clean" },
+          "role": { "type": "string", "minLength": 1 },
+          "package": { "type": "string" },
+          "tag": { "type": "string" },
+          "submodules": { "type": "object", "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{40}$" } }
+        }
+      }
+    },
+    "digests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest", "sourceInventory", "catalogBundle", "fixtureBundle", "planBundle", "ownershipMap"],
+      "properties": {
+        "manifest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "sourceInventory": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "catalogBundle": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "fixtureBundle": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "planBundle": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "ownershipMap": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "files": { "type": "object", "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
+      }
+    },
+    "pendingInputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "description", "dependentGate", "state"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 },
+          "dependentGate": { "type": "string", "minLength": 1 },
+          "state": { "const": "pending" }
+        }
+      }
+    },
+    "owners": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["writer", "integrator", "reviewer"],
+      "properties": {
+        "writer": { "const": "integration-lock-writer" },
+        "integrator": { "const": "root-integrator" },
+        "reviewer": { "const": "sol-reviewer" }
+      }
+    }
+  }
+}

@@ -2,7 +2,7 @@
 
 ## Status
 
-The use of Plane's existing JSON HTTP API service as the v1 cross-process transport was accepted by the user on 2026-07-29. Exact schemas below are proposed for release-manifest approval. This document does not authorize implementation.
+The use of Plane's existing JSON HTTP API service as the v1 gateway adapter was accepted by the user on 2026-07-29. The exact wire schemas below are P1 generation inputs under the controlling logical contract; they do not choose the separate runtime service's physical durable queue/RPC transport and do not authorize implementation.
 
 ## Boundary
 

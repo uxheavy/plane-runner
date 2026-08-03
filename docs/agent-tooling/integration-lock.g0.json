@@ -1,0 +1,103 @@
+{
+  "$schema": "./integration-lock.schema.json",
+  "schemaVersion": 1,
+  "lockId": "plane-agent-tooling-g0",
+  "status": "candidate-for-approval",
+  "reviewedBaseline": {
+    "planeSha": "dac96b0ff9a3adb6bfcc3fea235ab4a697ae5acd",
+    "planeBranch": "codex/agent-tooling-architecture",
+    "policy": "the reviewed Plane SHA must remain an ancestor of the clean verification checkout; the package commit may be a descendant"
+  },
+  "repositories": [
+    {
+      "id": "plane",
+      "path": ".",
+      "remote": "https://github.com/uxheavy/plane-runner.git",
+      "sha": "dac96b0ff9a3adb6bfcc3fea235ab4a697ae5acd",
+      "ref": "codex/agent-tooling-architecture",
+      "status": "clean",
+      "role": "control plane, domain, gateway, catalog, and integration root",
+      "submodules": {
+        "external/plane-mcp-server": "96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1",
+        "external/plane-python-sdk": "78702e9224bd9c5e8fffdabfbfdd582ac1fa9426"
+      }
+    },
+    {
+      "id": "hermes",
+      "path": "/Users/nqh/Desktop/CODES/hermes-agent",
+      "remote": "https://github.com/uxheavy/hermes-agent.git",
+      "sha": "112f51a5543d490768931514d48a780ad964a868",
+      "ref": "main",
+      "status": "clean",
+      "role": "separate runtime service and hidden Hermes adapter"
+    },
+    {
+      "id": "buzz",
+      "path": "/Users/nqh/Desktop/CODES/buzz",
+      "remote": "https://github.com/uxheavy/buzz.git",
+      "sha": "3b8567a05d4c40e667d061666feb7aa7bc38212d",
+      "ref": "main",
+      "status": "clean",
+      "role": "reference donor only"
+    },
+    {
+      "id": "plane-mcp",
+      "path": "/Users/nqh/Desktop/CODES/plane/external/plane-mcp-server",
+      "remote": "https://github.com/uxheavy/plane-mcp-server.git",
+      "sha": "96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1",
+      "ref": "codex/agent-tooling-v1",
+      "status": "clean",
+      "package": "0.2.11",
+      "role": "official MCP compatibility adapter host"
+    },
+    {
+      "id": "plane-sdk",
+      "path": "/Users/nqh/Desktop/CODES/plane/external/plane-python-sdk",
+      "remote": "https://github.com/uxheavy/plane-python-sdk.git",
+      "sha": "78702e9224bd9c5e8fffdabfbfdd582ac1fa9426",
+      "ref": "codex/agent-tooling-v1",
+      "status": "clean",
+      "tag": "v0.2.20",
+      "role": "shared Python SDK transport seam"
+    }
+  ],
+  "digests": {
+    "manifest": "de1492b42f9846d8a124ed15878797be5dfd2f53dcbe9d55374a98eeec69252a",
+    "sourceInventory": "40224793e772ba84e6f1a7510f529f99fb32c2af004bd917cec60e17ba10493d",
+    "catalogBundle": "3c67d4450d12d4ca6de1b2bf64c5640ba310057469898017dbd3dc7574ba6af1",
+    "fixtureBundle": "1c7aa97eb1dcf8b6864318756f66552bc3099e6f97a1917f2fd9f6c93ac3f085",
+    "planBundle": "5a6bac96d904c766d9d217b8acd298eaf1dbf09e1fcd97d626b69923c2c5ae8b",
+    "ownershipMap": "e52f7596d934ee7258f417e4243a65e53f8a9f4680fb8e26028f3716101b9543"
+  },
+  "pendingInputs": [
+    {
+      "id": "P1-contract-schemas",
+      "description": "Generated JSON Schemas and catalog digest for the frozen semantic boundary",
+      "dependentGate": "G1",
+      "state": "pending"
+    },
+    {
+      "id": "P1-runtime-artifacts",
+      "description": "Runtime-service, adapter, system-prompt, model metadata, and configuration digests",
+      "dependentGate": "G2",
+      "state": "pending"
+    },
+    {
+      "id": "P8-mcp-mapping",
+      "description": "Exact handler-branch to SDK method/path to gateway-operation mapping bundle",
+      "dependentGate": "G3",
+      "state": "pending"
+    },
+    {
+      "id": "G4-production-targets",
+      "description": "Production load, latency, error, recovery, and rollout-window evidence",
+      "dependentGate": "G4",
+      "state": "pending"
+    }
+  ],
+  "owners": {
+    "writer": "integration-lock-writer",
+    "integrator": "root-integrator",
+    "reviewer": "sol-reviewer"
+  }
+}

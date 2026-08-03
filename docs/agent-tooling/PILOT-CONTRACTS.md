@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed for release-manifest approval. The operation set and the coordinated release-plan scope are accepted; the exact schemas and limits in this document are not yet frozen. This document does not authorize implementation.
+Candidate contract input for `APPROVAL-MANIFEST.md`. The nine operation IDs, curated projections, and coordinated release-plan semantics are promoted into the controlling manifest; this document remains the detailed P1 schema source and does not authorize implementation.
 
 ## Contract rules
 

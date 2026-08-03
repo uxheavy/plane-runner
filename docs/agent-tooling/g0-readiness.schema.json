@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://plane.so/schemas/agent-tooling/g0-readiness-v1.schema.json",
+  "title": "Plane Agent Tooling G0 readiness record v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "recordId",
+    "status",
+    "approval",
+    "owners",
+    "integrationLock",
+    "evidenceDigests",
+    "clauses",
+    "preflightCommand",
+    "normalVerificationCommand"
+  ],
+  "properties": {
+    "$schema": { "const": "./g0-readiness.schema.json" },
+    "schemaVersion": { "const": 1 },
+    "recordId": { "const": "plane-agent-tooling-g0-readiness" },
+    "status": { "const": "pending-human-approval" },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "manifestPath", "manifestDigest", "statement", "approvedBy", "approvedAt"],
+      "properties": {
+        "status": { "enum": ["pending", "approved"] },
+        "manifestPath": { "const": "docs/agent-tooling/APPROVAL-MANIFEST.md" },
+        "manifestDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "statement": {
+          "const": "I approve `APPROVAL-MANIFEST.md` as the controlling Plane Agent Tooling V1 scope and authorize implementation to begin. I understand that pilot and production remain separately gated."
+        },
+        "approvedBy": { "type": ["string", "null"] },
+        "approvedAt": { "type": ["string", "null"] }
+      }
+    },
+    "owners": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ownerRole", "reviewerRole", "lockWriterRole", "approvalAuthority"],
+      "properties": {
+        "ownerRole": { "const": "root-integrator" },
+        "reviewerRole": { "const": "sol-reviewer" },
+        "lockWriterRole": { "const": "integration-lock-writer" },
+        "approvalAuthority": { "const": "user-controlling-this-codex-task" }
+      }
+    },
+    "integrationLock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "schemaPath", "lockId"],
+      "properties": {
+        "path": { "const": "docs/agent-tooling/integration-lock.g0.json" },
+        "schemaPath": { "const": "docs/agent-tooling/integration-lock.schema.json" },
+        "lockId": { "const": "plane-agent-tooling-g0" }
+      }
+    },
+    "evidenceDigests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest", "sourceInventory", "ownershipMap", "catalogBundle", "fixtureBundle", "planBundle"],
+      "properties": {
+        "manifest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "sourceInventory": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "ownershipMap": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "catalogBundle": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "fixtureBundle": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "planBundle": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "clauses": {
+      "type": "array",
+      "minItems": 9,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "status", "ownerRole", "reviewerRole", "evidence"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^G0-[A-Z0-9-]+$" },
+          "status": { "enum": ["ready", "ready-pending-approval", "pending"] },
+          "ownerRole": { "type": "string", "minLength": 1 },
+          "reviewerRole": { "const": "sol-reviewer" },
+          "evidence": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+        }
+      }
+    },
+    "preflightCommand": { "const": "node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode preflight" },
+    "normalVerificationCommand": { "const": "node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode g0" }
+  }
+}

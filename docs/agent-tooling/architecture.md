@@ -86,7 +86,7 @@ An assignment is the commission to produce an outcome, not the outcome itself. A
 
 The fork does not expose the `hermes-cli` personality or default 54-tool core as the Plane agent's product surface. A fresh agent begins with Plane identity, role, assignment, current object and conversation context, relevant knowledge, available operations, tool-presentation defaults, and runtime policy.
 
-The model-facing catalog is designed from natural Plane workflows. Every run starts with a small universal Plane work core, then adds eager tools relevant to the agent profile and current assignment. Long-tail Plane operations, external connectors, browser, files, terminal, and specialist integrations may remain available while their schemas are progressively disclosed. The exact universal core is the next open catalog decision.
+The model-facing catalog is designed from natural Plane workflows. Every run starts with the frozen universal Plane work core and adds eager tools relevant to the agent profile and current assignment. Long-tail Plane operations, external connectors, browser, files, terminal, and specialist integrations may remain available while their schemas are progressively disclosed. The exact first-boundary names and eager set are controlled by `APPROVAL-MANIFEST.md`; later long-tail promotion remains a lane decision.
 
 The universal core has one `search_workspace` discovery primitive. It returns typed references across Plane object types. Specialized searches remain discoverable for workflows that require domain-specific filters or projections; they do not compete in every agent's initial context.
 
@@ -115,7 +115,7 @@ Execution leases and containers belong to runtime invocations, not runs. A long-
 
 ## TypeScript composition surface
 
-The Plane-native profile retains progressive capability discovery and one self-hosted TypeScript composition path. Its final tool names are not yet frozen. Bare `docs`, `search`, and `execute` are rejected because they collide with company knowledge, web, files, connectors, and Hermes's existing code-execution concepts.
+The Plane-native profile retains progressive capability discovery and one self-hosted TypeScript composition path. The first-boundary names are `search_workspace`, `search_catalog`, `describe_operation`, and `compose_typescript`, plus the five minimal eager direct pilot adapters frozen in `APPROVAL-MANIFEST.md`. Bare `docs`, `search`, and `execute`, and the retired `plane_*` variants, are rejected because they collide with company knowledge, web, files, connectors, and Hermes's existing code-execution concepts.
 
 TypeScript executes inside the disposable container assigned to one runtime invocation. A restricted child isolate has no Plane credentials, ambient environment secrets, arbitrary network, package installation, subprocess creation, or unrelated filesystem access. Its only Plane capability is a credential-free RPC callback to trusted host code.
 
@@ -142,7 +142,7 @@ Model-visible results are always bounded. Normal results return structured data 
 
 After a temporary artifact expires, durable audit retains the redacted intent, affected object IDs, outcome, result hash, and bounded summary rather than the full bulky payload.
 
-Exact thresholds and retention periods remain configuration decisions.
+The exact v1 thresholds and retention periods are frozen in `APPROVAL-MANIFEST.md`; deployment configuration may be stricter but cannot be looser without a manifest revision. Exact isolate technology remains a later TypeScript-lane decision.
 
 ## Audit and replay evidence
 

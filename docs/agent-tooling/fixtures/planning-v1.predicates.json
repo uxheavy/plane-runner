@@ -58,7 +58,17 @@
       "id": "PLAN-COMMON-007",
       "operator": "required_tool_surface_observed",
       "expected": {
-        "required": ["plane_docs", "plane_search", "plane_execute"],
+        "required": [
+          "search_workspace",
+          "search_catalog",
+          "describe_operation",
+          "compose_typescript",
+          "search_work_items",
+          "get_work_item",
+          "create_work_item",
+          "update_work_item",
+          "create_comment"
+        ],
         "require_any_native_plane_tool": true
       },
       "evidence": ["tool_trace", "generated_typescript"]

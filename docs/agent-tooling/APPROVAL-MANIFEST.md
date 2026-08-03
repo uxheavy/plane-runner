@@ -2,104 +2,193 @@
 
 ## Status
 
-**Proposed — implementation is blocked until the user approves the gate at the end of this document.**
+**Ready for approval — implementation remains blocked until explicit user approval.**
 
-This is the controlling pre-implementation manifest. On approval, it supersedes the implementation-start gates in `RELEASE-MANIFEST.md` and `VERIFICATION-MANIFEST.md`. Those documents remain design and test references; unfinished detail in them does not block coding. Deployment remains separately gated.
+This is the controlling pre-implementation manifest. `RELEASE-MANIFEST.md` and `VERIFICATION-MANIFEST.md` remain legacy evidence inputs; neither is a competing implementation-start gate. The G0 preflight is a coordination verifier and cannot override an ADR, this manifest, or the user approval gate. This manifest is not approved.
 
-## Outcome
+## Outcome and authority
 
 Ship one production-capable path in which a Plane agent can drive an assigned outcome through Plane semantic operations and self-hosted TypeScript composition, with the same Plane authorization and audit boundary used by external MCP clients.
 
-## V1 architecture
+- Plane is the product owner, system of record, sole authorization authority, and owner of Agent identity, profiles, assignments, runs, invocations, conversations, publication, artifacts, agent-private memory, skills, schedules, delegation, evaluator review, outcomes, gateway, catalog, audit, and settings administration.
+- Hermes is the hidden execution kernel and separate runtime-service owner. Its product identity, chat UI, session store, profile directories, registry globals, and operational vocabulary do not cross the Plane product boundary. `plane_runtime.execute` is the narrow adapter seam.
+- Buzz is a reference/code donor only. It is not a runtime dependency, production owner, product authority, or durable-state authority.
+- The pinned `uxheavy` Plane MCP and Python SDK forks are compatibility adapters. Existing MCP handlers migrate incrementally through the shared gateway and are not recreated as 177 Plane modules.
+- Shared generated contracts and fixtures are the cross-repository compatibility source. The integration lock binds their digests to Plane, Hermes, MCP, and SDK revisions.
+- All administration reuses existing Plane settings surfaces, services, state, permissions, and UI components. No chat, composer, inbox, thread, sidecar, transcript, or conversation-navigation UI and no second settings framework are in scope.
 
-- Plane remains the system of record and sole authorization authority.
-- A Plane Operation Gateway exposes curated, versioned semantic operations through Plane application services; agents never receive database access.
-- The fork exposes a dedicated Plane-native runtime profile rather than inheriting the `hermes-cli` personality or default tool catalog.
-- Plane owns one durable Agent product/runtime model with exactly one role per configured agent, plus lifecycle and control state for profiles, assignments, runs, conversations, agent-private memory, skills, schedules, delegation, artifacts, evaluator review, and outcomes. The execution kernel supplies model-loop, context, learning, skill-use, schedule/delegation execution, tool-dispatch, transcript/checkpoint, concurrency, and recovery mechanisms behind Plane adapters; it is not presented to users or models as a separate product.
-- Built-in roles are worker, delegator, gardener, chief of staff, HR, and evaluator. Every human automatically receives one chief-of-staff agent restricted to that human's live Plane permissions. Administrators may define custom single roles on the same model.
-- The dedicated delegator dynamically plans each case, automatically assigns unclaimed work to humans or agents, and records why. Worker and ordinary specialist agents do not freely delegate. Approved schedules create normal assignments and runs.
-- Saved/versioned workflow definitions and a workflow-definition system are outside the target design. There is no workflow-definition lane; the delegator plans each case dynamically.
-- Gardeners may maintain multiple agents and apply private memory/skill improvements automatically across sessions. Knowledge is never copied between agents; every improvement has immutable history and rollback.
-- HR may propose agent creation, change, or retirement, but a workspace administrator approves the proposal. Evaluators review every agent outcome before a human accepts or returns it; human acceptance is final.
-- The model-facing surface is derived from natural Plane work and vocabulary.
-- Every agent initially receives a small universal Plane work core plus eager tools selected from its profile and current assignment.
-- Other available operations remain progressively discoverable without placing every schema in the model's initial context.
-- The universal core uses one `search_workspace` tool to find typed references across Plane object types; specialized domain searches are discovered only when advanced filters or projections are needed.
-- Exact core tools, discovery tools, and composition-tool names remain open and must be resolved before this manifest can be approved.
-- Internal contract IDs, audit events, and adapter metadata retain the `plane.*` namespace even when native Plane-domain tool names do not.
-- Model-written TypeScript runs in a restricted child isolate inside the disposable container for one runtime invocation. Containers may be released and recreated while the durable Plane run continues.
-- Plane credentials remain in host callbacks. Generated TypeScript receives neither credentials nor ambient authority.
-- Plane derives the internal Agent identity from its credential and applies live authorization to every operation; external MCP calls retain their authenticated human or integration caller.
-- Authorized operations execute autonomously. V1 adds no second capability-token system and no runtime human-approval prompts.
-- Every attempted operation produces append-only audit records, including denial and failure outcomes.
-- The existing official Plane Python MCP server remains the external-agent interface and is adapted incrementally to the gateway; it is not replaced.
-- The Plane MCP server and Plane Python SDK are maintained as pinned `uxheavy` forks and locked with the Plane and Hermes revisions used for a release.
-- Full Plane integration/action coverage is required before the non-UI program is complete. Adaptive disclosure keeps the full catalog discoverable without placing every schema in the initial context.
-- All required administration reuses existing Plane settings surfaces, services, state, permissions, and UI components; no settings framework is introduced.
-- After verification, rollout may proceed in stages even though there are no current users. Automated safety stops remain mandatory at every stage.
+## Product invariants
 
-## Initial operation catalog
+- One underlying Plane Agent model has exactly one declarative role per configured agent. Built-in roles are `worker`, `delegator`, `gardener`, `chief_of_staff`, `hr`, and `evaluator`; administrators may define additional single roles.
+- Every human receives exactly one chief-of-staff Agent restricted to that human's live Plane permissions. HR proposes Agent creation, change, and retirement; a workspace administrator approves each proposal.
+- An assignment is a durable commission, a run is an execution attempt, an invocation is one kernel dispatch, and an outcome submission is the reviewable result. Evaluators review every outcome before a human accepts or returns it; human acceptance is final.
+- Approved schedules create ordinary assignments and runs. The dedicated delegator dynamically plans each case, assigns unclaimed work to humans or Agents, and records rationale. Workers and ordinary specialists do not freely delegate. Saved/versioned workflow definitions are out of scope.
+- Gardeners may apply approved improvements to private memory and skills across sessions, but knowledge is never copied between Agents. Every improvement is immutable and rollbackable.
+- Authorized runtime operations execute autonomously within the dedicated Agent's live Plane authorization. V1 has no runtime human-confirmation prompt, approval broker, capability-token system, or pending operation-approval state. Release, rollout, deployment, HR/admin approval, evaluator review, and human outcome acceptance remain separate human-controlled gates.
+- Every attempted operation produces append-only intent/outcome audit evidence. Model-visible results are bounded; oversized authoritative results use temporary artifacts and durable audit retains only the approved redacted summary and digest.
+- Full Plane integration/action coverage is required before the non-UI program is complete. Adaptive disclosure controls initial context, not global catalog visibility or authorization.
 
-The searchable catalog includes these semantic operations:
+## First supported semantic operation boundary
 
-1. Resolve project context.
-2. List current cycles.
-3. Search work items.
-4. Read a work item and its relations.
-5. List project members.
-6. Create a work item, including parent/child placement.
-7. Update a work item and planning placement.
-8. Create a source-linked comment.
-9. Create one coordinated release plan containing one parent, three children, and one source-linked comment.
+The first supported semantic boundary is the nine existing major-version operation IDs already grounded in `RELEASE-MANIFEST.md` and `PILOT-CONTRACTS.md`. Their schemas, curated projections, errors, authorization mappings, idempotency, and reconciliation rules are generated from the frozen catalog in P1; no replacement IDs or generic REST projection are introduced.
 
-The catalog may grow additively. New eager tools require evidence that they are common enough to justify permanent model context.
+| Operation ID                   | Semantic capability                                                                 | Initial disclosure                   |
+| ------------------------------ | ----------------------------------------------------------------------------------- | ------------------------------------ |
+| `plane.projects.resolve@1`     | Resolve an authorized project by exact ID or identifier                             | Progressive                          |
+| `plane.cycles.list_current@1`  | List current cycles with bounded cursor pagination                                  | Progressive                          |
+| `plane.work_items.search@1`    | Search work items by text, sequence, or project identifier                          | Eager direct adapter                 |
+| `plane.work_items.get@1`       | Read one work item and bounded visible relations                                    | Eager direct adapter                 |
+| `plane.project_members.list@1` | List eligible active project members                                                | Progressive                          |
+| `plane.work_items.create@1`    | Create one parent or child work item with optional cycle placement                  | Eager direct adapter                 |
+| `plane.work_items.update@1`    | Patch one work item and optional cycle placement                                    | Eager direct adapter                 |
+| `plane.comments.create@1`      | Create one sanitized source-linked comment                                          | Eager direct adapter                 |
+| `plane.release_plans.create@1` | Atomically create one parent, exactly three children, and one source-linked comment | Progressive; required by composition |
 
-## Required behavior
+Workspace binding is trusted host context, not a caller-supplied operation. The universal discovery primitive is a separate catalog adapter and is always available to an authenticated client; discovery never grants execution permission.
 
-- Typed, versioned inputs, outputs, pagination, bounded results, and structured errors.
-- Stable invocation keys for mutations; retries must not duplicate committed effects.
-- Unknown non-idempotent outcomes are reported as `outcome_unknown` and are never retried blindly.
-- Safe independent reads may run concurrently. Mutations preserve declared ordering.
-- Callback identity, tenant, run, operation budget, and audit correlation are host-bound and cannot be supplied authoritatively by generated code.
-- Generated code has no arbitrary network, subprocess, package-installation, unrelated filesystem, or cross-run callback access.
-- Oversized results are summarized or spilled to bounded, expiring artifacts.
-- Compatibility dispositions exist for every tool in the pinned official MCP version before that version is declared production-compatible.
+## Frozen model-facing surface
 
-## Delivery slices
+These names are the only model-facing names for the first boundary. They are intentionally unqualified natural Plane vocabulary at the runtime profile boundary; internal contract IDs retain the `plane.*` namespace. The catalog and composition adapters are distinct from domain mutations so no generic `search`, `describe`, or `execute` collision is possible.
 
-1. **Read slice:** gateway, catalog, approved Plane-native read tools, progressive capability discovery, TypeScript composition, authorization denials, and audit readback.
-2. **Mutation slice:** create/update/comment, idempotency, ordered execution, failure handling, and release-plan composition.
-3. **External compatibility:** route the pinned official MCP server through the gateway without breaking its supported clients.
-4. **Production hardening:** limits, observability, kill switches, credential lifecycle, load, rollback, and operator documentation.
+| Model-facing name    | Surface contract                        | Dispatch or purpose                                                         | Compatibility status                                                                      |
+| -------------------- | --------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `search_workspace`   | `plane.workspace.search@1`              | Universal typed-reference discovery across authorized Plane object types    | New approved universal primitive; replaces no legacy contract                             |
+| `search_catalog`     | `plane.catalog.search@1`                | Bounded read-only search of the complete supported operation catalog        | New approved discovery name; replaces generic `search`                                    |
+| `describe_operation` | `plane.catalog.describe@1`              | Return one exact major-version operation contract and curated overlay       | New approved discovery name; replaces generic `describe`                                  |
+| `compose_typescript` | `plane.typescript.compose@1`            | Run bounded model-written TypeScript through credential-free host callbacks | New approved composition name; supersedes retired generic and prefixed Code Mode surfaces |
+| `search_work_items`  | adapter for `plane.work_items.search@1` | Common work-item search                                                     | New approved natural Plane name; supersedes the historical prefixed proposal              |
+| `get_work_item`      | adapter for `plane.work_items.get@1`    | Read a work item and visible relations                                      | New approved natural Plane name; supersedes the historical prefixed proposal              |
+| `create_work_item`   | adapter for `plane.work_items.create@1` | Create one parent or child work item                                        | New approved natural Plane name; supersedes the historical prefixed proposal              |
+| `update_work_item`   | adapter for `plane.work_items.update@1` | Update work-item fields or cycle placement                                  | New approved natural Plane name; supersedes the historical prefixed proposal              |
+| `create_comment`     | adapter for `plane.comments.create@1`   | Create a source-linked comment                                              | New approved natural Plane name; supersedes the historical prefixed proposal              |
 
-Each slice must be demonstrably usable before the next slice expands scope. No runtime, application, or verification implementation starts until this manifest is explicitly approved and G0 is satisfied.
+The minimal eager direct pilot set is exactly `search_workspace`, `search_work_items`, `get_work_item`, `create_work_item`, `update_work_item`, and `create_comment`. `search_catalog`, `describe_operation`, and `compose_typescript` are universal/profile tools; the remaining semantic operations are progressively discoverable. The coordinated release-plan operation is invoked through the composition surface in the live planning prompt. This is the smallest useful ergonomic surface; the retired-name negative control rejects generic `docs`, `search`, and `execute` plus the historical `plane_*` variants.
 
-## Verification required before production
+## Curated catalog overlay
 
-- Unit and contract tests for every catalog operation and structured error.
-- Authorization matrix covering allowed and denied Plane roles and object scopes.
-- Integration tests proving all three entry paths—native tools, Code Mode callbacks, and external MCP—cross the gateway.
-- Idempotency, timeout, interruption, concurrency, large-result, and audit-failure tests.
+Every generated catalog entry has exactly these behavioral fields in addition to its stable operation ID and major version:
+
+- `purpose`, `model_description`, `examples`, and `aliases`;
+- `input_schema`, `output_schema`, and `error_schema`;
+- `classification` (`read` or `mutation`), `safety_metadata`, and `authorization_mapping`;
+- `idempotency_policy` and `reconciliation_policy`;
+- `result_policy` and `artifact_policy`;
+- `audit_redaction_policy`;
+- `public_api_composition` or `retained_local_behavior`;
+- `native_adapter`, `mcp_adapter`, `typescript_adapter`, and `compatibility`;
+- `disclosure`, `direct_tool`, `promotion_criteria`, `retirement_criteria`, and `lifecycle`.
+
+OpenAPI supplies transport facts where accurate. The curated overlay owns agent descriptions, semantic composition, authorization mapping, idempotency, result/artifact policy, audit redaction, and disclosure behavior. Private UI/session routes are not automatically catalog operations.
+
+## Logical runtime, dispatch, publication, and event contracts
+
+The controlling logical contract is `plane.agent-runtime/v1`, as accepted by ADR-0010. Plane persists the immutable `RunSnapshot` and per-dispatch `InvocationEnvelope`; the runtime service exposes the logical adapter `plane_runtime.execute(run, invocation, host, emit, cancellation) -> RuntimeExit`. Dispatch is durable, host-bound, schema-validated, idempotent at ingress, ordered by `(runId, invocationId, sequence)`, duplicate-safe, and rejected for forged identity, stale digest, out-of-order sequence, over-limit payloads, or illegal lifecycle transitions. Runtime observations are untrusted until Plane ingress validates them and verifies publication receipts.
+
+The physical durable queue/RPC transport between Plane and the separate runtime service remains implementation-defined, exactly as ADR-0010 permits. A later transport choice cannot change the logical contract, event taxonomy, dispatch semantics, ownership, or evidence requirements. The accepted gateway HTTP adapter remains a thin versioned adapter under Plane's existing API service; it is not a second domain authority.
+
+The versioned runtime event union is:
+
+```ts
+type RuntimeEventV1 = {
+  protocol: "plane.agent-runtime/v1";
+  runId: string;
+  invocationId: string;
+  sequence: number;
+  eventId: string;
+  body:
+    | ProgressObserved
+    | ConversationPublicationObserved
+    | InputRequestObserved
+    | ArtifactObserved
+    | UsageObserved
+    | OutcomeSubmissionObserved
+    | FailureObserved
+    | BlockerObserved;
+};
+
+type RuntimeExitV1 = {
+  kind: "completed" | "waiting_for_input" | "failed" | "blocked" | "cancelled";
+  finalSequence: number;
+  failure?: RuntimeFailure;
+};
+```
+
+Every terminal invocation produces exactly one visible Plane terminal product event: outcome, failure, blocker, or cancellation. `waiting_for_input` is visible and non-terminal. Raw model final text is run-inspection evidence only.
+
+Explicit publication uses `plane.publication.create@1` through the trusted `RuntimeHost` and the Operation Gateway:
+
+```ts
+type PublicationRequestV1 = {
+  protocol: "plane.agent-publication/v1";
+  publicationId: string;
+  runId: string;
+  invocationId: string;
+  sourceEventId: string;
+  kind: "conversation" | "input_request" | "artifact" | "outcome";
+  ref: string;
+};
+
+type PublicationReceiptV1 = {
+  protocol: "plane.agent-publication/v1";
+  operation: "plane.publication.create@1";
+  publicationId: string;
+  attemptId: string;
+  auditRef: string;
+  productEventRef: string;
+  state: "accepted" | "replayed";
+};
+```
+
+The receipt is required before Plane projects conversation, input-request, artifact, or outcome state. Publication is idempotent by actor, workspace, operation major version, and `publicationId`; the trusted host supplies authoritative identity and correlation fields.
+
+## Frozen v1 execution, result, artifact, and audit policy
+
+These values promote the existing detailed v1 table from `RELEASE-MANIFEST.md`; deployment may be stricter but may not be looser without a manifest revision and approval.
+
+| Limit                                        |                                           V1 maximum or rule |
+| -------------------------------------------- | -----------------------------------------------------------: |
+| Model-written TypeScript source              |                                                 64 KiB UTF-8 |
+| Total TypeScript composition wall time       |                                                  120 seconds |
+| TypeScript child CPU time                    |                                                   30 seconds |
+| TypeScript child memory                      |                                                      256 MiB |
+| Inner Plane calls per execution              |                                                           64 |
+| Concurrent inner Plane calls                 |                                                            8 |
+| Operations in one explicit preflight group   |                                                           16 |
+| Inline serialized result per inner operation |                                                       32 KiB |
+| Cumulative inline inner results              |                                                      128 KiB |
+| Final model-visible composition result       |                                                       64 KiB |
+| Combined model-visible stdout and stderr     |                                                       32 KiB |
+| Oversized-result preview                     |                                                        8 KiB |
+| Temporary authoritative artifact             |                                                       10 MiB |
+| Bounded artifact read response               |               32 KiB canonical; at most 23,000 decoded bytes |
+| Temporary artifact retention                 |                                        1 hour after creation |
+| Expired-artifact cleanup lag                 |                                                   15 minutes |
+| Invocation and audit metadata retention      |                                             365 days minimum |
+| Bulky full results in durable audit          | Never by default; retain digest and bounded redacted summary |
+
+The host counts attempts before asynchronous dispatch. Rejected, denied, failed, and successful callback attempts consume the inner-call budget. Explicit group preflight validates schema, references, live authorization, budget, and concurrency only; it never emits approval state.
+
+For the coordinated release-plan write, the gateway claims one durable invocation/idempotency record before side effects and commits the four work items, four `IssueSequence` rows, one comment, one `Description` backing row, four cycle bridges when applicable, terminal-success audit fact, and invocation result transition through one named PostgreSQL connection and transaction. Success-audit or result-transition failure, any pre-commit failure, or a proven-not-committed server rejection rolls back all application effects, then appends exactly one correlated `failed` outcome and moves the invocation to `retryable`. Lost commit acknowledgement is `outcome_unknown`, never proven rollback, and requires reconciliation without blind retry. All initial activity/webhook publications register with `transaction.on_commit()`; direct `.delay()` inside the transaction is forbidden. A failed transaction publishes zero callbacks/tasks; broker publications and eventual activity readback are verified separately.
+
+## Delivery and gates
+
+Each slice is demonstrably usable before the next expands scope. Native-only pilot execution is an intermediate prerequisite for the deterministic domain spine; it is not the final G2. G2 requires the real forked-Hermes path with both the approved native direct surface and `compose_typescript`. External MCP mapping may be prepared after G0, handler migration starts after G1, does not block G2, and is required for G3/full compatibility.
+
+- **Pilot gate:** deterministic read and mutation slices, shared contract fixtures, native-only prerequisite, and the mandatory live acceptance run pass. Pilot does not authorize deployment.
+- **Production gate:** all release and verification evidence, pinned artifacts, operator readiness, rollback, load, compatibility, and security gates pass; deployment authority explicitly approves.
+- **Deployment gate:** each development, allowlisted, expanded, and GA promotion has its own deployed artifact, configuration, observation window, safety-stop, readback, rollback evidence, and explicit approver. No approval here authorizes pushing, merging, deploying, purchasing services, or mutating production.
+
+Exact Deno/Worker technology, the long-tail catalog and promotion set, MCP migration order, production load/latency targets, and rollout observation windows remain open in their declared later lanes. They cannot change this first semantic boundary or logical runtime contract without a new manifest revision.
+
+## Required evidence before production
+
+- Unit and contract tests for every frozen catalog operation and structured error.
+- Authorization matrix for allowed and denied Plane roles and object scopes.
+- Native, TypeScript callback, and external MCP integration paths crossing the same gateway.
+- Idempotency, timeout, interruption, concurrency, bounded-result, artifact-expiry, publication-receipt, and audit-failure tests.
 - Security probes for credential disclosure, forged callbacks, cross-run replay, network, filesystem, subprocess, and package escapes, with zero successful escapes.
 - Real supported-client compatibility tests against the pinned official MCP server.
-- At least 50 retained authenticated execution-kernel evaluation runs across happy paths, denials, partial failures, retries, hostile generated code, and materially different project shapes; at least 90% complete scenario success and zero authorization bypasses, credential disclosures, duplicate committed mutations, or missing required audit outcomes.
-- One mandatory clean live acceptance run using the locally authenticated ChatGPT subscription, provider `openai-codex`, and exact model `gpt-5.6-luna`, with no fallback.
-- The live run must read an authorized project, receive a non-leaking denial from a control project, use native tools and TypeScript Code Mode, create exactly one parent release-plan item, three children, and one source-linked comment, then prove idempotent replay and correlated Plane audit records.
-- A documented clean-checkout verification command must fail non-zero on any required check.
-
-## Not required before coding starts
-
-- A completed verifier implementation.
-- Pre-generated evidence for code that does not exist.
-- Exhaustive mutation-testing of the verification harness.
-- Production deployment, rollout approval, or changes to shared environments.
-- General workflow DSLs, direct REST catalog projection, direct database access, or a second permission model.
-
-## Separate later gates
-
-- **Pilot gate:** the read and mutation slices pass deterministic tests and the mandatory live acceptance run.
-- **Production gate:** all verification above passes against pinned release artifacts; operational readiness, rollback evidence, and deployment authority are explicitly approved.
-- No approval of this document authorizes pushing, merging, deploying, purchasing services, or mutating production.
+- The existing release/verification numeric and rollout gates, as later-lane evidence inputs, after their applicable contracts are qualified.
 
 ## Implementation approval gate
 

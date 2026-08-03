@@ -109,37 +109,37 @@ The dotted lane edges show when work starts and the gate by which its evidence m
 
 ## Lane summary
 
-| Lane | Responsibility | Accountable owner | Starts after | Complete by |
-| ---- | -------------- | ----------------- | ------------ | ----------- |
-| L0 | Product, architecture, and contract control | Product/technical lead | Now | G0 |
-| L1 | Verification and release engineering | Quality/release owner | G0 | G5 |
-| L2 | Plane agent domain and lifecycle | Plane backend/domain owner | G0 | G3 |
-| L3 | Operation catalog, gateway, authorization, and audit | Plane API/platform owner | G0 | G3 |
-| L4 | Runtime service and Hermes kernel adapter | Agent runtime/Hermes owner | G0 | G2 |
-| L5 | Native tools, progressive discovery, and TypeScript isolation | Runtime security/tooling owner | G1 | G2 |
-| L6 | Private memory, skills, gardeners, and schedules | Knowledge/automation owner | G1 | G3 |
-| L7 | Dynamic planning and delegation | Delegation/domain owner | G2 | G3 |
-| L8 | External MCP and SDK convergence | SDK/integrations owner | G1 | G3 |
-| L9 | Platform, security, reliability, and operations | Infrastructure/security owner | G0 | G5 |
-| L10 | Minimal administration and settings | Plane web/settings owner | G1 | G3 |
-| L11 | Evaluation, production proof, and rollout | Quality/product/operations gate owners | G2 | G5 |
+| Lane | Responsibility                                                | Accountable owner                      | Starts after | Complete by |
+| ---- | ------------------------------------------------------------- | -------------------------------------- | ------------ | ----------- |
+| L0   | Product, architecture, and contract control                   | Product/technical lead                 | Now          | G0          |
+| L1   | Verification and release engineering                          | Quality/release owner                  | G0           | G5          |
+| L2   | Plane agent domain and lifecycle                              | Plane backend/domain owner             | G0           | G3          |
+| L3   | Operation catalog, gateway, authorization, and audit          | Plane API/platform owner               | G0           | G3          |
+| L4   | Runtime service and Hermes kernel adapter                     | Agent runtime/Hermes owner             | G0           | G2          |
+| L5   | Native tools, progressive discovery, and TypeScript isolation | Runtime security/tooling owner         | G1           | G2          |
+| L6   | Private memory, skills, gardeners, and schedules              | Knowledge/automation owner             | G1           | G3          |
+| L7   | Dynamic planning and delegation                               | Delegation/domain owner                | G2           | G3          |
+| L8   | External MCP and SDK convergence                              | SDK/integrations owner                 | G1           | G3          |
+| L9   | Platform, security, reliability, and operations               | Infrastructure/security owner          | G0           | G5          |
+| L10  | Minimal administration and settings                           | Plane web/settings owner               | G1           | G3          |
+| L11  | Evaluation, production proof, and rollout                     | Quality/product/operations gate owners | G2           | G5          |
 
 ## Integration gates
 
-| Gate | Meaning | Representative exit condition |
-| ---- | ------- | ----------------------------- |
-| G0 | Implementation contract frozen | ADR-0008, ADR-0009, and ADR-0010 are accepted before their implementation lanes; the approval manifest is explicitly approved before any runtime, application, or verification implementation starts. |
-| G1 | Deterministic domain spine | A fixture can create an agent actor, profile version, assignment, run snapshot, invocation, and terminal outcome without a model or UI. |
-| G2 | Real single-agent vertical slice | A real forked-Hermes process completes the assigned planning outcome through native tools and progressive TypeScript composition. |
-| G3 | Non-UI feature breadth complete | Full Plane integration/action coverage, private memory/skills, schedules, dynamic delegation, artifacts, evaluator review, and outcome APIs satisfy their accepted contracts. |
-| G4 | Production candidate verified | The clean-checkout primary verifier passes static, contract, authorization, isolation, mutation, compatibility, load, recovery, and operator checks. |
-| G5 | Controlled rollout complete | After verification, development, allowlisted-workspace, expanded-cohort, and approved general-availability stages have recorded evidence and approval even though there are no current users. |
+| Gate | Meaning                          | Representative exit condition                                                                                                                                                                         |
+| ---- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| G0   | Implementation contract frozen   | ADR-0008, ADR-0009, and ADR-0010 are accepted before their implementation lanes; the approval manifest is explicitly approved before any runtime, application, or verification implementation starts. |
+| G1   | Deterministic domain spine       | A fixture can create an agent actor, profile version, assignment, run snapshot, invocation, and terminal outcome without a model or UI.                                                               |
+| G2   | Real single-agent vertical slice | A real forked-Hermes process completes the assigned planning outcome through native tools and progressive TypeScript composition.                                                                     |
+| G3   | Non-UI feature breadth complete  | Full Plane integration/action coverage, private memory/skills, schedules, dynamic delegation, artifacts, evaluator review, and outcome APIs satisfy their accepted contracts.                         |
+| G4   | Production candidate verified    | The clean-checkout primary verifier passes static, contract, authorization, isolation, mutation, compatibility, load, recovery, and operator checks.                                                  |
+| G5   | Controlled rollout complete      | After verification, development, allowlisted-workspace, expanded-cohort, and approved general-availability stages have recorded evidence and approval even though there are no current users.         |
 
 ### G0: Implementation contract frozen
 
 - ADR-0008, ADR-0009, and ADR-0010 are accepted before their implementation lanes; the approval manifest is explicitly approved before any runtime, application, or verification implementation starts.
-- Runtime transport, event schemas, catalog names, limits, retention, idempotency, and audit failure policy are frozen for v1.
-- UI-dependent and stale docs/search/execute verification language is reconciled with the non-UI boundary and current catalog decision.
+- The logical plane.agent-runtime/v1 contract, dispatch semantics, versioned event/publication schemas, catalog names, limits, retention, idempotency, and audit failure policy are frozen for v1; the physical durable queue/RPC transport remains implementation-defined under ADR-0010.
+- UI-dependent and retired-name verification language is reconciled with the non-UI boundary and current model-facing catalog decision.
 - APPROVAL-MANIFEST.md receives the user's explicit implementation approval.
 - Owners and repositories are assigned, and the cross-repository integration-lock format is agreed.
 

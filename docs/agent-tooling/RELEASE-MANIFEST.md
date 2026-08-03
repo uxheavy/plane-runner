@@ -10,25 +10,25 @@ After approval, any scope, target, exclusion, version, or exception change requi
 
 ## Release identity
 
-| Field                                | Value                                      |
-| ------------------------------------ | ------------------------------------------ |
-| Release ID                           | `plane-agent-tooling-v1`                   |
-| Manifest version                     | `1-draft`                                  |
-| Human product and approval authority | User controlling this Codex task           |
-| Product and technical delivery owner | Primary Codex agent                        |
-| Plane baseline                       | `a1954f991db12d637483bbc4ed9656151b524e53` |
-| Hermes baseline                      | `5e88745f125c0d332c1d16ea0363860d447657f5` |
-| Official MCP baseline                | `96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1` |
-| Plane Python SDK baseline            | `78702e9224bd9c5e8fffdabfbfdd582ac1fa9426` |
-| Plane delivery branch                | `codex/agent-tooling-architecture`         |
-| Hermes delivery branch               | Not created                                |
-| Official MCP delivery branch         | `uxheavy:codex/agent-tooling-v1`           |
-| Plane Python SDK delivery branch     | `uxheavy:codex/agent-tooling-v1`           |
-| Final Plane commit                   | Pending                                    |
-| Final Hermes commit                  | Pending                                    |
-| Final official MCP commit            | Pending                                    |
-| Final Plane Python SDK commit        | Pending                                    |
-| Integration-lock digest              | Pending                                    |
+| Field                                | Value                                                                    |
+| ------------------------------------ | ------------------------------------------------------------------------ |
+| Release ID                           | `plane-agent-tooling-v1`                                                 |
+| Manifest version                     | `1-draft`                                                                |
+| Human product and approval authority | User controlling this Codex task                                         |
+| Product and technical delivery owner | Primary Codex agent                                                      |
+| Plane baseline                       | Historical draft value; current reviewed pin is in `SOURCE-INVENTORY.md` |
+| Hermes baseline                      | Historical draft value; current reviewed pin is in `SOURCE-INVENTORY.md` |
+| Official MCP baseline                | `96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1`                               |
+| Plane Python SDK baseline            | `78702e9224bd9c5e8fffdabfbfdd582ac1fa9426`                               |
+| Plane delivery branch                | `codex/agent-tooling-architecture`                                       |
+| Hermes delivery branch               | Not created                                                              |
+| Official MCP delivery branch         | `uxheavy:codex/agent-tooling-v1`                                         |
+| Plane Python SDK delivery branch     | `uxheavy:codex/agent-tooling-v1`                                         |
+| Final Plane commit                   | Pending                                                                  |
+| Final Hermes commit                  | Pending                                                                  |
+| Final official MCP commit            | Pending                                                                  |
+| Final Plane Python SDK commit        | Pending                                                                  |
+| Integration-lock digest              | Pending                                                                  |
 
 Merge, CI, credential, staging, production, and deployment authorities must be named before their respective gates.
 
@@ -46,22 +46,22 @@ Merge, CI, credential, staging, production, and deployment authorities must be n
 
 ## Pilot operation inventory
 
-The contract IDs below are proposed semantic v1 identifiers. The public operation column is observed source evidence. Manifest approval freezes the semantic names and eager status.
+The contract IDs below are the existing semantic v1 identifiers. The public operation column is observed source evidence. The controlling approval manifest freezes the semantic names and eager status; this legacy document remains an evidence input.
 
-| Capability                             | Proposed contract operation    | Underlying public operation IDs                                                 | Eager native tool         | Code Mode     | Status                            |
-| -------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------- | ------------------------- | ------------- | --------------------------------- |
-| Resolve workspace context              | Host binding, not an operation | No public API-key workspace-discovery operation                                 | None                      | Bound context | Proposed                          |
-| Resolve project context                | `plane.projects.resolve@1`     | `list_projects`, `retrieve_project`                                             | None                      | Required      | Proposed                          |
-| Read current cycles                    | `plane.cycles.list_current@1`  | `list_cycles`                                                                   | None                      | Required      | Proposed                          |
-| Search and list work items             | `plane.work_items.search@1`    | `search_work_items`, `list_work_items`                                          | `plane_search_work_items` | Required      | Eager accepted; contract proposed |
-| Read one work item and relations       | `plane.work_items.get@1`       | `retrieve_work_item`, `get_workspace_work_item`, `list_work_item_relations`     | `plane_get_work_item`     | Required      | Eager accepted; contract proposed |
-| Read project members                   | `plane.project_members.list@1` | `get_project_members_lite`                                                      | None                      | Required      | Proposed                          |
-| Create parent or child work item       | `plane.work_items.create@1`    | `create_work_item`, optionally `add_cycle_work_items`                           | `plane_create_work_item`  | Required      | Eager accepted; contract proposed |
-| Update work item or planning placement | `plane.work_items.update@1`    | `update_work_item`, optionally `add_cycle_work_items`, `delete_cycle_work_item` | `plane_update_work_item`  | Required      | Eager accepted; contract proposed |
-| Create source-linked comment           | `plane.comments.create@1`      | `create_work_item_comment`                                                      | `plane_add_comment`       | Required      | Eager accepted; contract proposed |
-| Create coordinated release plan        | `plane.release_plans.create@1` | Curated semantic application-service composition                                | None                      | Required      | Accepted scope                    |
+| Capability                             | Proposed contract operation    | Underlying public operation IDs                                                 | Eager native tool   | Code Mode     | Status                                |
+| -------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------- | ------------------- | ------------- | ------------------------------------- |
+| Resolve workspace context              | Host binding, not an operation | No public API-key workspace-discovery operation                                 | None                | Bound context | Proposed                              |
+| Resolve project context                | `plane.projects.resolve@1`     | `list_projects`, `retrieve_project`                                             | None                | Required      | Proposed                              |
+| Read current cycles                    | `plane.cycles.list_current@1`  | `list_cycles`                                                                   | None                | Required      | Proposed                              |
+| Search and list work items             | `plane.work_items.search@1`    | `search_work_items`, `list_work_items`                                          | `search_work_items` | Required      | Eager candidate; controlling manifest |
+| Read one work item and relations       | `plane.work_items.get@1`       | `retrieve_work_item`, `get_workspace_work_item`, `list_work_item_relations`     | `get_work_item`     | Required      | Eager candidate; controlling manifest |
+| Read project members                   | `plane.project_members.list@1` | `get_project_members_lite`                                                      | None                | Required      | Proposed                              |
+| Create parent or child work item       | `plane.work_items.create@1`    | `create_work_item`, optionally `add_cycle_work_items`                           | `create_work_item`  | Required      | Eager candidate; controlling manifest |
+| Update work item or planning placement | `plane.work_items.update@1`    | `update_work_item`, optionally `add_cycle_work_items`, `delete_cycle_work_item` | `update_work_item`  | Required      | Eager candidate; controlling manifest |
+| Create source-linked comment           | `plane.comments.create@1`      | `create_work_item_comment`                                                      | `create_comment`    | Required      | Eager candidate; controlling manifest |
+| Create coordinated release plan        | `plane.release_plans.create@1` | Curated semantic application-service composition                                | None                | Required      | Accepted scope                        |
 
-The exact eight-tool eager Hermes surface—`plane_search_work_items`, `plane_get_work_item`, `plane_create_work_item`, `plane_update_work_item`, `plane_add_comment`, `plane_docs`, `plane_search`, and `plane_execute`—was approved by the user at `2026-07-29T20:15:13Z`; their operation schemas remain candidate contracts until manifest approval.
+An earlier eight-tool eager Hermes proposal was recorded on `2026-07-29T20:15:13Z`. That proposal is historical and superseded by the natural names and minimal eager set in `APPROVAL-MANIFEST.md`; it cannot authorize a current contract.
 
 `plane.release_plans.create@1` accepts the complete parent, three-child, and source-comment intent as one semantic operation. The gateway validates and authorizes the full request, claims one stable invocation, and executes autonomously through Plane application services. V1 does not add a general workflow-graph DSL for this workflow.
 
@@ -100,26 +100,26 @@ If the provider cannot expose an immutable model snapshot, a changed model-metad
 
 These values are proposed release maxima. Deployment configuration may be stricter but cannot be looser without a manifest revision.
 
-| Limit                                        |                               Proposed maximum |
-| -------------------------------------------- | ---------------------------------------------: |
-| Model-written TypeScript source              |                                   64 KiB UTF-8 |
-| Total `plane_execute` wall time              |                                    120 seconds |
-| TypeScript child CPU time                    |                                     30 seconds |
-| TypeScript child memory                      |                                        256 MiB |
-| Inner Plane calls per execution              |                                             64 |
-| Concurrent inner Plane calls                 |                                              8 |
-| Operations in one explicit preflight group   |                                             16 |
-| Inline serialized result per inner operation |                                         32 KiB |
-| Cumulative inline inner results              |                                        128 KiB |
-| Final model-visible `plane_execute` result   |                                         64 KiB |
-| Combined model-visible stdout and stderr     |                                         32 KiB |
-| Oversized-result preview                     |                                          8 KiB |
-| Temporary authoritative artifact             |                                         10 MiB |
-| Bounded artifact read response               | 32 KiB canonical; at most 23,000 decoded bytes |
-| Temporary artifact retention                 |                          1 hour after creation |
-| Expired-artifact cleanup lag                 |                                     15 minutes |
-| Append-only invocation and audit metadata    |                               365 days minimum |
-| Bulky full results in durable audit          |                               Never by default |
+| Limit                                           |                               Proposed maximum |
+| ----------------------------------------------- | ---------------------------------------------: |
+| Model-written TypeScript source                 |                                   64 KiB UTF-8 |
+| Total `compose_typescript` wall time            |                                    120 seconds |
+| TypeScript child CPU time                       |                                     30 seconds |
+| TypeScript child memory                         |                                        256 MiB |
+| Inner Plane calls per execution                 |                                             64 |
+| Concurrent inner Plane calls                    |                                              8 |
+| Operations in one explicit preflight group      |                                             16 |
+| Inline serialized result per inner operation    |                                         32 KiB |
+| Cumulative inline inner results                 |                                        128 KiB |
+| Final model-visible `compose_typescript` result |                                         64 KiB |
+| Combined model-visible stdout and stderr        |                                         32 KiB |
+| Oversized-result preview                        |                                          8 KiB |
+| Temporary authoritative artifact                |                                         10 MiB |
+| Bounded artifact read response                  | 32 KiB canonical; at most 23,000 decoded bytes |
+| Temporary artifact retention                    |                          1 hour after creation |
+| Expired-artifact cleanup lag                    |                                     15 minutes |
+| Append-only invocation and audit metadata       |                               365 days minimum |
+| Bulky full results in durable audit             |                               Never by default |
 
 The host counts requests before asynchronous dispatch. Rejected, denied, failed, and successful callback attempts all consume the inner-call budget. Artifact storage is authoritative only for its retention window; durable audit retains its digest and bounded redacted summary.
 

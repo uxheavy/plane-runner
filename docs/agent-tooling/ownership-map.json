@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "mapId": "plane-agent-tooling-g0-ownership",
+  "status": "candidate-for-approval",
+  "repositoryRoot": ".",
+  "overlapRule": "No two writers may own the same repository and a path that is equal to, below, or above another writer path.",
+  "owners": [
+    {
+      "ownerId": "plane-control-plane-owner",
+      "role": "Plane control-plane owner",
+      "repository": "plane",
+      "writePaths": ["apps/api/plane/agent/control/**"],
+      "readPaths": ["apps/api/plane/agent/**"]
+    },
+    {
+      "ownerId": "plane-domain-owner",
+      "role": "Plane domain owner",
+      "repository": "plane",
+      "writePaths": ["apps/api/plane/agent/domain/**"],
+      "readPaths": ["apps/api/plane/agent/**"]
+    },
+    {
+      "ownerId": "plane-gateway-owner",
+      "role": "Plane gateway owner",
+      "repository": "plane",
+      "writePaths": ["apps/api/plane/agent/gateway/**"],
+      "readPaths": ["apps/api/plane/agent/**"]
+    },
+    {
+      "ownerId": "plane-catalog-owner",
+      "role": "Plane catalog owner",
+      "repository": "plane",
+      "writePaths": ["apps/api/plane/agent/catalog/**"],
+      "readPaths": ["docs/agent-tooling/**"]
+    },
+    {
+      "ownerId": "hermes-runtime-owner",
+      "role": "Separate runtime service / Hermes adapter owner",
+      "repository": "hermes",
+      "writePaths": ["plane_runtime/**"],
+      "readPaths": ["tests/**", "pyproject.toml"]
+    },
+    {
+      "ownerId": "mcp-fork-owner",
+      "role": "Official MCP fork owner",
+      "repository": "plane-mcp",
+      "writePaths": ["plane_mcp/**", "tests/**", "pyproject.toml"],
+      "readPaths": []
+    },
+    {
+      "ownerId": "sdk-fork-owner",
+      "role": "Plane Python SDK fork owner",
+      "repository": "plane-sdk",
+      "writePaths": ["plane/**", "tests/**", "pyproject.toml"],
+      "readPaths": []
+    },
+    {
+      "ownerId": "buzz-reference-owner",
+      "role": "Buzz reference owner",
+      "repository": "buzz",
+      "writePaths": [],
+      "readPaths": ["**"],
+      "restriction": "reference-only; no runtime dependency or production write"
+    },
+    {
+      "ownerId": "shared-contracts-owner",
+      "role": "Shared generated contracts and fixtures owner",
+      "repository": "plane",
+      "writePaths": [
+        "docs/agent-tooling/fixtures/**",
+        "docs/agent-tooling/prompts/**",
+        "docs/agent-tooling/NON-UI-IMPLEMENTATION-PLAN.json",
+        "docs/agent-tooling/NON-UI-IMPLEMENTATION-OVERVIEW.md"
+      ],
+      "readPaths": ["docs/agent-tooling/**"]
+    },
+    {
+      "ownerId": "integration-lock-writer",
+      "role": "Integration-lock writer",
+      "repository": "plane",
+      "writePaths": [
+        "docs/agent-tooling/ownership-map.json",
+        "docs/agent-tooling/integration-lock.schema.json",
+        "docs/agent-tooling/integration-lock.g0.json"
+      ],
+      "readPaths": ["docs/agent-tooling/**"]
+    },
+    {
+      "ownerId": "root-integrator",
+      "role": "Root integrator",
+      "repository": "plane",
+      "writePaths": [
+        "docs/agent-tooling/APPROVAL-MANIFEST.md",
+        "docs/agent-tooling/GOAL.md",
+        "docs/agent-tooling/SOURCE-INVENTORY.md",
+        "docs/agent-tooling/decision-register.md",
+        "docs/agent-tooling/delivery-plan.md",
+        "docs/agent-tooling/README.md",
+        "docs/agent-tooling/architecture.md",
+        "docs/agent-tooling/INTERFACE-DESIGN.md",
+        "docs/agent-tooling/RUNTIME-DESIGN.md",
+        "docs/agent-tooling/GATEWAY-WIRE.md",
+        "docs/agent-tooling/PILOT-CONTRACTS.md",
+        "docs/agent-tooling/RELEASE-MANIFEST.md",
+        "docs/agent-tooling/VERIFICATION-MANIFEST.md",
+        "docs/agent-tooling/g0-readiness.json",
+        "docs/agent-tooling/g0-readiness.schema.json"
+      ],
+      "readPaths": ["docs/agent-tooling/**"]
+    },
+    {
+      "ownerId": "sol-reviewer",
+      "role": "Sol reviewer",
+      "repository": "plane",
+      "writePaths": [],
+      "readPaths": ["docs/agent-tooling/**", "docs/decisions/**"],
+      "restriction": "review-only; cannot write or approve its own review"
+    }
+  ]
+}

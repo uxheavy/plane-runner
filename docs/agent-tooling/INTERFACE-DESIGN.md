@@ -2,7 +2,7 @@
 
 ## Status
 
-The core deep-hybrid boundary was accepted by the user on 2026-07-29. Exact eager tools, operation scope, preflight groups, limits, and compatibility rows remain subject to release-manifest approval. This decision does not authorize implementation.
+The core deep-hybrid boundary was accepted by the user on 2026-07-29. The first operation boundary, model-facing names, eager set, limits, and compatibility rules are candidate-frozen in `APPROVAL-MANIFEST.md` pending its explicit approval. This decision does not authorize implementation.
 
 ## Design constraints
 
@@ -84,8 +84,8 @@ Use a hybrid in which each layer has one job:
 2. A separate read-only catalog module exposes `search` and `describe` because discovery is a distinct interface with different caching and testing needs.
 3. The gateway internally implements a durable command state machine for authorization, idempotency, reconciliation, bounded results, and append-only audit evidence.
 4. The fork exposes a Plane-native runtime profile whose model-facing tools are designed from Plane workflows rather than inherited from `hermes-cli`.
-5. Common Plane-domain tools remain thin common-case adapters. Their exact names and eager boundary are pending the Plane-native catalog decision.
-6. Progressive discovery and TypeScript composition remain required, but the generic `docs`, `search`, and `execute` names and the earlier `plane_docs`, `plane_search`, and `plane_execute` surface are retired.
+5. Common Plane-domain tools remain thin common-case adapters. Their first-boundary names and eager boundary are `APPROVAL-MANIFEST.md` decisions; later long-tail promotion remains progressive.
+6. Progressive discovery and TypeScript composition remain required. The approved names are `search_catalog`, `describe_operation`, and `compose_typescript`; generic `docs`, `search`, and `execute` names and every earlier `plane_*` surface are retired.
 7. Generated TypeScript receives a credential-free operation callback plus catalog types. It does not receive the internal lifecycle protocol.
 8. V1 does not expose a general graph-planning DSL. The mandatory coordinated release-plan write is one curated semantic catalog operation.
 9. Semantic multi-step compositions live in the operation catalog and gateway implementation, not independently inside native, Code Mode, or MCP adapters.

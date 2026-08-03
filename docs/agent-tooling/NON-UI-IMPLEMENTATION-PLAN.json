@@ -30,8 +30,8 @@
       "name": "Implementation contract frozen",
       "exit": [
         "ADR-0008, ADR-0009, and ADR-0010 are accepted before their implementation lanes; the approval manifest is explicitly approved before any runtime, application, or verification implementation starts.",
-        "Runtime transport, event schemas, catalog names, limits, retention, idempotency, and audit failure policy are frozen for v1.",
-        "UI-dependent and stale docs/search/execute verification language is reconciled with the non-UI boundary and current catalog decision.",
+        "The logical plane.agent-runtime/v1 contract, dispatch semantics, versioned event/publication schemas, catalog names, limits, retention, idempotency, and audit failure policy are frozen for v1; the physical durable queue/RPC transport remains implementation-defined under ADR-0010.",
+        "UI-dependent and retired-name verification language is reconciled with the non-UI boundary and current model-facing catalog decision.",
         "APPROVAL-MANIFEST.md receives the user's explicit implementation approval.",
         "Owners and repositories are assigned, and the cross-repository integration-lock format is agreed."
       ]
@@ -318,10 +318,7 @@
         "Hermes tools/delegate_tool.py and agent/subagent_lifecycle.py as execution donors",
         "Existing assignment mechanisms as the canonical Plane lifecycle; no workflow-definition donor is required"
       ],
-      "customCode": [
-        "Plane dynamic-plan/delegation domain records",
-        "Delegated assignment policy adapter"
-      ],
+      "customCode": ["Plane dynamic-plan/delegation domain records", "Delegated assignment policy adapter"],
       "evidence": [
         "Dynamic-plan rationale and replay-safety tests",
         "Delegation lineage and budget tests",

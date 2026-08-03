@@ -8,10 +8,10 @@ Status: candidate pre-approval artifact. This contract freezes executable inputs
 | --------------------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------- |
 | `fixtures/planning-v1.json`                   | `88b38a00f06d65418e01f3019a0914cfef7ddacf6dbb9f4b078374623040a6c7` | Seed-independent fixture data and expected outcomes |
 | `fixtures/planning-v1.schema.json`            | `f24542f534bf3eb22bc5a15a32ca5c2ae9208ddb21f5e8e59c9e3859b0640b89` | Strict fixture-set syntax                           |
-| `fixtures/planning-v1.predicates.json`        | `a808b01da9a07f3cfdd69143a32b2843bcaf571fbcc0e076010abd9cb89e2f2c` | Machine-readable pass/fail predicates               |
+| `fixtures/planning-v1.predicates.json`        | `1a65f29d6f080688624a9e4125b550851a54f84fd8be96570d680c1d47ea25a0` | Machine-readable pass/fail predicates               |
 | `fixtures/planning-v1.predicates.schema.json` | `189bda3b24ee601339f9a13ca0af53c60b31cc2ca70da3281652a7454e4f3226` | Strict predicate-set syntax                         |
-| `prompts/release-planning-v1.md`              | `f222d7be60baff3969e3fd4c40b100fa533c1649173cead1394e5ad6f526ec31` | Exact Hermes acceptance prompt                      |
-| `verifiers/validate-planning-fixtures.mjs`    | `14202ba98d0f19bc78bf988a10514708a318ed9842d5de8c6126d8a526a03a27` | Independent semantic and strict-schema oracle       |
+| `prompts/release-planning-v1.md`              | `9c6674acce0e060b8570a764f31c792297d718fd08d8559ca59d19c0dd4d89a1` | Exact Hermes acceptance prompt                      |
+| `verifiers/validate-planning-fixtures.mjs`    | `f6c785ae848d92c788a1b96e5359fbbddedd84b002fc3ef4658c8d6890b882b2` | Independent semantic and strict-schema oracle       |
 
 The release manifest must bind the SHA-256 digest of every artifact above before qualification begins. The validator digest binds the oracle used to check the other artifacts; it does not permit the validator to call the implementation under test. Any content change creates a new candidate and invalidates prior qualification evidence.
 

@@ -2,7 +2,7 @@
 
 ## Delivery strategy
 
-Build one narrow vertical slice through the final architecture before expanding catalog coverage. External MCP convergence proceeds after the internal path is proven and must not block the internal pilot.
+Build one narrow vertical slice through the final architecture before expanding catalog coverage. MCP mapping may be prepared after G0, but handler migration starts only after the deterministic G1 gateway path is proven; MCP compatibility is required for G3 and does not block the real G2 pilot.
 
 ## Workstreams and gates
 
@@ -53,7 +53,7 @@ Deliverables:
 - Correlated run, turn, tool-call, and invocation IDs.
 - Hermes concurrent-execution integration.
 
-Exit gate: the named pilot scenario succeeds without Code Mode and cannot bypass Plane policy.
+Exit gate: the native-only pilot prerequisite succeeds without Code Mode and cannot bypass Plane policy. This is an intermediate prerequisite, not final G2; G2 also requires the real Hermes path with `compose_typescript`.
 
 ### 4. TypeScript Code Mode
 
@@ -179,7 +179,7 @@ Selected contents:
 - [ ] Mandatory live Hermes project-planning acceptance passes without a mocked gateway.
 - [ ] Every counted live run resolves `openai-codex` and `gpt-5.6-luna` without fallback.
 - [ ] Extensive evaluation coverage and repetition requirements pass.
-- [ ] Approved release and verification manifests are fully satisfied or carry explicit approved exceptions.
+- [ ] The controlling approval manifest is satisfied, with applicable release/verification evidence inputs and approved exceptions bound at their later gates.
 - [ ] Independent verifier passes qualified negative controls and final clean-checkout execution.
 
 ## Ownership model

@@ -47,7 +47,7 @@ Run a pinned Deno process inside the disposable container for one Hermes-backed 
 
 ## Module and seam placement
 
-- The Plane-native composition tool, whose final name is pending catalog design, is the adapter that accepts model-written TypeScript.
+- The `compose_typescript` Plane-native composition tool is the adapter that accepts model-written TypeScript; its semantic surface contract is `plane.typescript.compose@1`.
 - The TypeScript runner module owns compilation/loading, isolate lifecycle, limits, and log/result framing.
 - The credential-free callback is the only seam from the runner to Plane operations.
 - The Plane Operation Gateway remains the sole module that owns authorization, mutation safety, result shaping, and audit evidence.

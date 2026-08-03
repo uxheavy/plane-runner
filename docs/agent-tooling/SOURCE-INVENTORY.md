@@ -1,16 +1,32 @@
 # Source Inventory
 
-This document records observed source facts used to freeze the v1 release. It distinguishes current implementation from the target architecture.
+This document records observed source facts used to prepare the v1 approval package. It distinguishes the reviewed current baseline from the target architecture. It is evidence, not implementation proof.
 
 ## Pinned sources
 
-| Source                    | Revision                                                         | Evidence                     |
-| ------------------------- | ---------------------------------------------------------------- | ---------------------------- |
-| Plane                     | `d4679197ba` on `codex/agent-tooling-architecture`               | Local authoritative worktree |
-| Hermes                    | `5e88745f125c0d332c1d16ea0363860d447657f5` on `main`             | Local authoritative worktree |
-| Official Python MCP       | `96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1`, package `0.2.11`     | `makeplane/plane-mcp-server` |
-| Python MCP SDK dependency | `plane-sdk==0.2.20`                                              | MCP `pyproject.toml`         |
-| Plane Python SDK          | tag `v0.2.20`, commit `78702e9224bd9c5e8fffdabfbfdd582ac1fa9426` | `makeplane/plane-python-sdk` |
+| Source                     | Reviewed current revision / ref                                                              | Evidence                                                                          |
+| -------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Plane                      | `dac96b0ff9a3adb6bfcc3fea235ab4a697ae5acd` on `codex/agent-tooling-architecture`             | Clean local authoritative checkout; reviewed before this reconciliation package   |
+| Hermes                     | `112f51a5543d490768931514d48a780ad964a868` on `main`                                         | Clean local checkout; `main` is two commits ahead of `upstream/main`              |
+| Buzz                       | `3b8567a05d4c40e667d061666feb7aa7bc38212d` on `main`                                         | Clean `uxheavy/buzz` fork checkout; reference donor only                          |
+| Plane MCP submodule        | `96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1` on `codex/agent-tooling-v1`, package `0.2.11`     | Clean `uxheavy/plane-mcp-server` submodule checkout                               |
+| Local MCP inspection       | `96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1` on `main`                                         | Clean `uxheavy/plane-mcp-server-1` inspection checkout; content matches submodule |
+| Python MCP SDK dependency  | `plane-sdk==0.2.20`                                                                          | MCP `pyproject.toml`                                                              |
+| Plane Python SDK submodule | tag `v0.2.20`, commit `78702e9224bd9c5e8fffdabfbfdd582ac1fa9426` on `codex/agent-tooling-v1` | Clean `uxheavy/plane-python-sdk` submodule checkout                               |
+
+## Current repository evidence
+
+The reviewed Plane checkout is `/Users/nqh/.codex/worktrees/5099/plane` at the same `dac96b0ff9...` commit as the authoritative branch checkout `/Users/nqh/Desktop/CODES/plane`. The working trees for Plane, Hermes, Buzz, the MCP inspection checkout, and the materialized Plane MCP/SDK submodules were clean when this inventory was captured. The Plane checkout used for this package is detached because the Codex worktree is pinned to the reviewed commit; the branch ref remains `codex/agent-tooling-architecture` in the authoritative checkout.
+
+| Repository / checkout | Remote used for the pin                                  | Working ref                                            | Status evidence                                                                      |
+| --------------------- | -------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| Plane                 | `upstream=https://github.com/uxheavy/plane-runner.git`   | `codex/agent-tooling-architecture` at the reviewed SHA | `git status --short` empty                                                           |
+| Hermes                | `upstream=https://github.com/uxheavy/hermes-agent.git`   | `main` at the reviewed SHA                             | `git status --short` empty; ahead of upstream by 2 is recorded, not treated as dirty |
+| Buzz                  | `upstream=https://github.com/uxheavy/buzz.git`           | `main` at the reviewed SHA                             | `git status --short` empty; reference-only                                           |
+| MCP submodule         | `origin=https://github.com/uxheavy/plane-mcp-server.git` | `codex/agent-tooling-v1` at the reviewed SHA           | `git status --short` empty                                                           |
+| SDK submodule         | `origin=https://github.com/uxheavy/plane-python-sdk.git` | `codex/agent-tooling-v1` at the reviewed SHA           | `git status --short` empty                                                           |
+
+The prior Plane `d4679197ba...` and Hermes `5e88745f...` values are historical evidence from an earlier draft and are not current pins. The historical MCP/SDK pins remain current and are repeated above with their package/tag facts.
 
 ## Plane public interface
 

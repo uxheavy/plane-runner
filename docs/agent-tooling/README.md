@@ -4,14 +4,14 @@ This folder is the durable source of truth for taking Plane's agent-facing tooli
 
 ## Status
 
-| Field                  | Value                                                         |
-| ---------------------- | ------------------------------------------------------------- |
-| Program status         | Accepted architecture and contracts; implementation not started |
-| Current branch         | `codex/agent-tooling-architecture`                            |
-| Agent runtime status   | Not implemented                                               |
-| Related delivered base | Semantic context picker core merged separately into `preview` |
-| Current gate           | Obtain explicit approval of `APPROVAL-MANIFEST.md` before implementation |
-| Last updated           | 2026-08-03                                                    |
+| Field                  | Value                                                                            |
+| ---------------------- | -------------------------------------------------------------------------------- |
+| Program status         | Accepted architecture and contracts; implementation not started                  |
+| Reviewed baseline      | `dac96b0ff9a3adb6bfcc3fea235ab4a697ae5acd` on `codex/agent-tooling-architecture` |
+| Agent runtime status   | Not implemented                                                                  |
+| Related delivered base | Semantic context picker core merged separately into `preview`                    |
+| Current gate           | Obtain explicit approval of `APPROVAL-MANIFEST.md` before implementation         |
+| Last updated           | 2026-08-03                                                                       |
 
 ## Outcome
 
@@ -48,10 +48,10 @@ Plane agents can safely perform useful Plane work through native semantic operat
 | [ADR-0002](../decisions/0002-autonomous-agent-operations.md)            | Supersedes runtime operation approval with autonomous execution      |
 | [ADR-0003](../decisions/0003-plane-agent-native-product-boundary.md)    | Plane Agent is the native product abstraction                        |
 | [ADR-0004](../decisions/0004-fork-hermes-as-hidden-execution-kernel.md) | Hermes fork is the hidden execution kernel                           |
-| [ADR-0005](../decisions/0005-plane-owned-agent-profiles.md)             | One role-bearing Agent model and profile governance                 |
+| [ADR-0005](../decisions/0005-plane-owned-agent-profiles.md)             | One role-bearing Agent model and profile governance                  |
 | [ADR-0006](../decisions/0006-assignment-and-run-lifecycle.md)           | Assignment, run, invocation, outcome, and publication lifecycle      |
 | [ADR-0007](../decisions/0007-adaptive-plane-tool-exposure.md)           | Adaptive tool availability and disclosure                            |
-| [ADR-0008](../decisions/0008-scoped-memory-and-context.md)              | Accepted private memory, skills, gardener, and rollback rules         |
+| [ADR-0008](../decisions/0008-scoped-memory-and-context.md)              | Accepted private memory, skills, gardener, and rollback rules        |
 | [ADR-0009](../decisions/0009-workflows-and-agent-delegation.md)         | Accepted dynamic planning and delegation without saved workflows     |
 | [ADR-0010](../decisions/0010-plane-runtime-contract.md)                 | Accepted versioned Plane runtime contract                            |
 
@@ -66,6 +66,22 @@ Plane agents can safely perform useful Plane work through native semantic operat
 - `RELEASE-MANIFEST.md` and `VERIFICATION-MANIFEST.md` provide evidence inputs to the controlling `APPROVAL-MANIFEST.md`; neither is a competing implementation-start gate.
 - No runtime, application, or verification implementation may begin until the explicit `APPROVAL-MANIFEST.md` gate—the sole implementation-start approval—is approved and G0 is satisfied. Contract/documentation reconciliation may proceed before that gate.
 - Observable interfaces must have contract tests before production rollout.
+
+## G0 preflight
+
+Run the approval-ready preflight with:
+
+```sh
+node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode preflight
+```
+
+This mode must pass while human approval is pending. Normal G0 verification is:
+
+```sh
+node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode g0
+```
+
+It must remain non-zero until the exact approval statement in `APPROVAL-MANIFEST.md` is recorded.
 
 ## Current next decisions
 

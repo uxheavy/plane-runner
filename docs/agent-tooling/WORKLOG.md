@@ -4,13 +4,13 @@ This file records durable progress for the Plane Agent Tooling goal. Append entr
 
 ## Current state
 
-| Field                      | Value                                                                |
-| -------------------------- | -------------------------------------------------------------------- |
-| Phase                      | Program definition                                                   |
-| Active gate                | Explicit approval of `APPROVAL-MANIFEST.md` (single implementation gate) |
-| Plane branch               | `codex/agent-tooling-architecture`                                   |
-| Hermes branch              | Not created from baseline `5e88745f125c0d332c1d16ea0363860d447657f5` |
-| Last verified Plane commit | `c5f4537686` (current integrated base at reconciliation)             |
+| Field                      | Value                                                                                                                     |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Phase                      | Program definition                                                                                                        |
+| Active gate                | Explicit approval of `APPROVAL-MANIFEST.md` (single implementation gate)                                                  |
+| Plane branch               | `codex/agent-tooling-architecture`                                                                                        |
+| Hermes branch              | Not created from baseline `5e88745f125c0d332c1d16ea0363860d447657f5`                                                      |
+| Last verified Plane commit | `c5f4537686` (current integrated base at reconciliation)                                                                  |
 | Next action                | Obtain explicit `APPROVAL-MANIFEST.md` approval, then enter G0; release and verification manifests remain evidence inputs |
 
 ## 2026-07-29 — Goal grounding
@@ -605,3 +605,58 @@ The source facts are confirmed. The exact gateway/application-service compositio
 - Corrected `GOAL.md` to keep AgentActor authorization, installed/enabled integration and catalog availability, and profile/assignment disclosure separate, with live Plane authorization final for every operation; cross-checked [ADR-0007](../decisions/0007-adaptive-plane-tool-exposure.md).
 - Corrected the lease/container-death invariant to reconcile the authoritative cause and synthesize exactly one visible failure, blocker, or cancellation product event; cross-checked [ADR-0010](../decisions/0010-plane-runtime-contract.md).
 - Source was Plane commit `6cd8a17f6e2989adc8943aad72c51b73ff1d606a`; the only intended files are `docs/agent-tooling/GOAL.md` and this append-only `docs/agent-tooling/WORKLOG.md`. `git diff --check` and documentation-only link/scope checks passed; no product tests were run. Commit SHA is recorded in git history for this entry.
+
+## 2026-08-04 — P0/G0 pre-approval reconciliation package
+
+### Scope and evidence
+
+- Reconciled the P0/G0 documentation and contract package from reviewed Plane baseline `dac96b0ff9a3adb6bfcc3fea235ab4a697ae5acd` on `codex/agent-tooling-architecture`.
+- Read the applicable repository instructions and the required documentation, interface, typed-contract, tool-design, boundary, idempotency, proof, subtraction, and agent-instruction guidance. Re-read the three P0 audit reports and checked the cited local repositories when task context was insufficient.
+- Refreshed current evidence: Plane `dac96b0ff9`, Hermes `112f51a55`, Buzz `3b8567a05`, MCP `96cf4d51`, and SDK `78702e92`, with their current `uxheavy` remotes, refs, submodule pins, and clean external checkout status recorded in `SOURCE-INVENTORY.md` and `integration-lock.g0.json`. Historical Plane/Hermes SHAs remain labeled as historical evidence.
+
+### Contract and control changes
+
+- Made `APPROVAL-MANIFEST.md` ready for one high-level user approval while keeping the exact approval statement, implementation block, separate pilot/production/deployment gates, one-Agent/one-role model, no-chat-UI boundary, existing-settings reuse, Plane/Hermes/Buzz ownership, full action coverage, live Plane authorization, schedules/delegation/memory/evaluator/HR invariants, operation boundary, catalog names, curated overlays, logical runtime/event/publication contract, dispatch semantics, v1 limits, and transaction/audit failure policy coherent.
+- Reclassified only the frozen-in-manifest decisions in `decision-register.md`; later isolate, long-tail, MCP migration, production load, rollout-window, and progressive-surface decisions remain explicitly later-lane open/proposed decisions.
+- Reconciled `GOAL.md`, `architecture.md`, `INTERFACE-DESIGN.md`, `RUNTIME-DESIGN.md`, `GATEWAY-WIRE.md`, `PILOT-CONTRACTS.md`, `delivery-plan.md`, `RELEASE-MANIFEST.md`, `VERIFICATION-MANIFEST.md`, and `REQUIREMENT-COVERAGE.md`. Legacy manifests remain evidence inputs and no longer authorize retired tool names. Native-only is an intermediate prerequisite, not final G2; MCP mapping preparation follows G0, handler migration follows G1, and required convergence is G3.
+- Replaced retired planning names with the frozen candidate names and semantics, updated the predicate/prompt digests, and regenerated `NON-UI-IMPLEMENTATION-OVERVIEW.md` from the plan.
+
+### G0 structure added
+
+- Added `ownership-map.json` with disjoint exact writer paths for Plane control/domain/gateway/catalog, Hermes runtime/adapter, MCP fork, SDK fork, shared generated artifacts, the integration-lock writer, root integrator, and Sol reviewer. The map gives Buzz read-only reference status and makes overlapping writers a verifier failure.
+- Added versioned `integration-lock.schema.json` and `integration-lock.g0.json`, binding current repository pins, submodules, manifest/source/catalog/fixture/plan/ownership digests, and explicit pending P1/G2/G3/G4 inputs. Pending fields are gate-scoped rather than vague missing-artifact failures.
+- Added versioned `g0-readiness.schema.json` and `g0-readiness.json`, bound to the manifest digest, with pending human approval, exact owner/reviewer roles, current evidence digests, and clause-level readiness.
+- Added `verifiers/verify-g0-preflight.mjs` using Node built-ins. It checks Markdown links/anchors/absolute paths, ADR/register consistency, manifest status/digest, repository pins and inventory, ownership overlap, lock/readiness schemas and instances, retired-name negative controls, generated overview freshness, planning fixture freshness, and G0 record completeness. `--mode preflight` passes with approval pending; `--mode g0` remains non-zero only for pending approval. The command is documented in `README.md` and the readiness record.
+
+### Validation
+
+- `node docs/agent-tooling/verifiers/render-non-ui-implementation-plan.mjs --write` — exit 0; overview regenerated.
+- `node docs/agent-tooling/verifiers/render-non-ui-implementation-plan.mjs --check` — exit 0.
+- First `pnpm install --frozen-lockfile` attempt in the sandbox stalled and was terminated with exit 130; the repository-approved dependency setup was then rerun with escalation and completed with exit 0, providing `ajv@8.18.0`. The generated `.pnpm-store/` artifact was removed before validation.
+- `node docs/agent-tooling/verifiers/validate-planning-fixtures.mjs` — exit 0: `10 fixtures, 54 predicates, deterministic scoring and references`.
+- Ajv 2020 validation of `integration-lock.g0.json`, `g0-readiness.json`, `fixtures/planning-v1.json`, and `fixtures/planning-v1.predicates.json` against their schemas — exit 0.
+- `node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode preflight` — exit 0; all ten non-approval clauses passed and approval remained pending by design.
+- `node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode g0` — exit 1 specifically because human approval is pending; all ten non-approval clauses passed and no implementation authorization was implied.
+- `node --check docs/agent-tooling/verifiers/verify-g0-preflight.mjs` and `git diff --check` — exit 0.
+
+### Changed-file scope
+
+- Modified: `APPROVAL-MANIFEST.md`, `EVALUATION-FIXTURE-CONTRACT.md`, `GATEWAY-WIRE.md`, `GOAL.md`, `INTERFACE-DESIGN.md`, `NON-UI-IMPLEMENTATION-OVERVIEW.md`, `NON-UI-IMPLEMENTATION-PLAN.json`, `PILOT-CONTRACTS.md`, `README.md`, `RELEASE-MANIFEST.md`, `REQUIREMENT-COVERAGE.md`, `RUNTIME-DESIGN.md`, `SOURCE-INVENTORY.md`, `VERIFICATION-MANIFEST.md`, `WORKLOG.md` (append-only entry), `architecture.md`, `decision-register.md`, `delivery-plan.md`, `fixtures/planning-v1.predicates.json`, `prompts/release-planning-v1.md`, and `verifiers/validate-planning-fixtures.mjs`.
+- Added: `g0-readiness.json`, `g0-readiness.schema.json`, `integration-lock.g0.json`, `integration-lock.schema.json`, `ownership-map.json`, and `verifiers/verify-g0-preflight.mjs`.
+- No runtime, application, domain, gateway, MCP, SDK, product-verification implementation, or `RESULT.md` changes were made.
+
+### Next action
+
+Stage and commit this single documentation/contract/evidence-control checkpoint, then obtain the exact user approval statement. Implementation remains blocked until that approval; later-lane pending inputs remain gated at their declared dependent gates.
+
+### Final pre-commit correction
+
+- The first `git commit -m "docs(agent): reconcile P0 G0 approval package"` attempt exited 1 because the repository hook found seven verifier lint warnings. Removed unused Node imports and helper code, renamed the shadowing command parameter, simplified the empty-array assertion, and replaced mutating `sort()` with `toSorted()`.
+- `./node_modules/.bin/oxlint --deny-warnings docs/agent-tooling/verifiers/verify-g0-preflight.mjs` now exits 0. The hook's `pnpm exec` invocation was not used for this final check after a standalone invocation stalled and was terminated with exit 130; the repository-installed binary provided the equivalent lint validation.
+- Re-ran preflight, renderer check, planning validator, Node syntax check, and `git diff --check`; all pass. Removed the transient `.pnpm-store/` artifact again before the final staging attempt.
+
+### Post-hook digest refresh
+
+- Commit `9c176239de` was created successfully, but the repository hook formatter changed canonical manifest, inventory, catalog, and generated-plan bytes after the pre-commit digest check. The committed files were otherwise within the intended 27-file package.
+- Recomputed and updated the integration-lock/readiness bindings to the post-hook bytes, then re-ran `node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode preflight`, the renderer check, the planning validator, the direct Oxlint check, and `git diff --check`; all pass. Normal G0 remains intentionally non-zero only for pending human approval.
+- Next action: amend the checkpoint so the final commit contains the refreshed evidence digests and remains the single logical package.

@@ -1,0 +1,100 @@
+{
+  "$schema": "./g0-readiness.schema.json",
+  "schemaVersion": 1,
+  "recordId": "plane-agent-tooling-g0-readiness",
+  "status": "pending-human-approval",
+  "approval": {
+    "status": "pending",
+    "manifestPath": "docs/agent-tooling/APPROVAL-MANIFEST.md",
+    "manifestDigest": "de1492b42f9846d8a124ed15878797be5dfd2f53dcbe9d55374a98eeec69252a",
+    "statement": "I approve `APPROVAL-MANIFEST.md` as the controlling Plane Agent Tooling V1 scope and authorize implementation to begin. I understand that pilot and production remain separately gated.",
+    "approvedBy": null,
+    "approvedAt": null
+  },
+  "owners": {
+    "ownerRole": "root-integrator",
+    "reviewerRole": "sol-reviewer",
+    "lockWriterRole": "integration-lock-writer",
+    "approvalAuthority": "user-controlling-this-codex-task"
+  },
+  "integrationLock": {
+    "path": "docs/agent-tooling/integration-lock.g0.json",
+    "schemaPath": "docs/agent-tooling/integration-lock.schema.json",
+    "lockId": "plane-agent-tooling-g0"
+  },
+  "evidenceDigests": {
+    "manifest": "de1492b42f9846d8a124ed15878797be5dfd2f53dcbe9d55374a98eeec69252a",
+    "sourceInventory": "40224793e772ba84e6f1a7510f529f99fb32c2af004bd917cec60e17ba10493d",
+    "ownershipMap": "e52f7596d934ee7258f417e4243a65e53f8a9f4680fb8e26028f3716101b9543",
+    "catalogBundle": "3c67d4450d12d4ca6de1b2bf64c5640ba310057469898017dbd3dc7574ba6af1",
+    "fixtureBundle": "1c7aa97eb1dcf8b6864318756f66552bc3099e6f97a1917f2fd9f6c93ac3f085",
+    "planBundle": "5a6bac96d904c766d9d217b8acd298eaf1dbf09e1fcd97d626b69923c2c5ae8b"
+  },
+  "clauses": [
+    {
+      "id": "G0-ADR-STATUS",
+      "status": "ready",
+      "ownerRole": "root-integrator",
+      "reviewerRole": "sol-reviewer",
+      "evidence": ["ADR-0008", "ADR-0009", "ADR-0010", "ATD-143"]
+    },
+    {
+      "id": "G0-MANIFEST-STATUS",
+      "status": "ready-pending-approval",
+      "ownerRole": "root-integrator",
+      "reviewerRole": "sol-reviewer",
+      "evidence": ["APPROVAL-MANIFEST.md", "manifestDigest"]
+    },
+    {
+      "id": "G0-SEMANTIC-BOUNDARY",
+      "status": "ready",
+      "ownerRole": "plane-catalog-owner",
+      "reviewerRole": "sol-reviewer",
+      "evidence": ["APPROVAL-MANIFEST.md", "RELEASE-MANIFEST.md", "PILOT-CONTRACTS.md"]
+    },
+    {
+      "id": "G0-RUNTIME-CONTRACT",
+      "status": "ready",
+      "ownerRole": "plane-gateway-owner",
+      "reviewerRole": "sol-reviewer",
+      "evidence": ["ADR-0010", "GATEWAY-WIRE.md", "APPROVAL-MANIFEST.md"]
+    },
+    {
+      "id": "G0-LIMITS-AUDIT",
+      "status": "ready",
+      "ownerRole": "plane-gateway-owner",
+      "reviewerRole": "sol-reviewer",
+      "evidence": ["APPROVAL-MANIFEST.md", "PILOT-CONTRACTS.md", "RELEASE-MANIFEST.md"]
+    },
+    {
+      "id": "G0-OWNERSHIP-LOCK",
+      "status": "ready",
+      "ownerRole": "integration-lock-writer",
+      "reviewerRole": "sol-reviewer",
+      "evidence": ["ownership-map.json", "integration-lock.g0.json"]
+    },
+    {
+      "id": "G0-LEGACY-RECONCILIATION",
+      "status": "ready",
+      "ownerRole": "root-integrator",
+      "reviewerRole": "sol-reviewer",
+      "evidence": ["RELEASE-MANIFEST.md", "VERIFICATION-MANIFEST.md", "retired-name-negative-control"]
+    },
+    {
+      "id": "G0-GENERATED-ARTIFACTS",
+      "status": "ready",
+      "ownerRole": "shared-contracts-owner",
+      "reviewerRole": "sol-reviewer",
+      "evidence": ["NON-UI-IMPLEMENTATION-OVERVIEW.md", "planning-v1 fixtures", "planning-v1 predicates"]
+    },
+    {
+      "id": "G0-HUMAN-APPROVAL",
+      "status": "pending",
+      "ownerRole": "user-controlling-this-codex-task",
+      "reviewerRole": "sol-reviewer",
+      "evidence": ["approval.status"]
+    }
+  ],
+  "preflightCommand": "node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode preflight",
+  "normalVerificationCommand": "node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode g0"
+}
