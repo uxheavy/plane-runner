@@ -695,3 +695,12 @@ Stage and commit this single documentation/contract/evidence-control checkpoint,
 - `node docs/agent-tooling/verifiers/seal-g0-evidence.mjs` — exit 0; 56 content paths and 4 seal paths bound from the exact content commit.
 - `node docs/agent-tooling/verifiers/validate-ajv-2020.mjs`, ownership, requirement coverage, both render checks, and planning fixtures — exit 0.
 - Node syntax checks for all eight changed/new verifier modules, direct repository-installed OxLint, and `git diff --check` — exit 0.
+
+## 2026-08-04 — Retired-name authority remediation
+
+### Evidence
+
+- The reviewer’s sole high finding was a valid-reseal retired-name bypass: model-facing descriptions were excluded, description suffixes were broadly exempted, and internal or historical text exempted an entire line. The fix is confined to verifier, negative-control, model-surface description, and documentation evidence; no product/runtime behavior or G0 approval state changed.
+- Content/remediation commit: `794733b68fe206a345a67d06e48b9855d4040ce7`. It adds fail-closed JSON-pointer authority policy, token-local historical/internal/path handling, and valid-reseal controls while preserving the prior 36 controls.
+- The expanded negative-control matrix is 83 controls: the prior 36, 44 valid-reseal adversarial controls covering every retired token family across model-facing descriptions, semantic/schema notes, mixed internal lines, and mixed historical lines, plus three valid-reseal positive contexts.
+- `node docs/agent-tooling/verifiers/seal-g0-evidence.mjs` — exit 0; the actual generator bound 56 content paths and the exact four seal-evidence paths to the content commit. `RESULT.md` remains byte-for-byte unchanged at SHA-256 `c7b6404f435ea1ce53c9b360ba2b8745096f1d3dd42d81de4bdbb55117c4bb87`.
