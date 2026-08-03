@@ -1,283 +1,424 @@
-# Durable Goal: Plane Agent Tooling to Production
+# Durable Ultragoal: Complete the non-UI Plane Agent system
 
-## Outcome
+## Active objective
 
-Deliver Plane's agent-tooling architecture as a production-ready, independently verified system:
+Complete and independently verify the production-ready non-UI Plane Agent system described here, then prove rollout, readback, rollback, and clean repository state.
 
-- Plane-native agents use native semantic Plane tools.
-- Plane-native agents use self-hosted TypeScript composition with progressively discovered Plane operations; final model-facing tool names remain a catalog decision.
-- Native tools, Code Mode callbacks, and the supported external MCP compatibility path share the Plane Operation Gateway.
-- Plane identity, live authorization, mutation safety, bounded results, versioning, and append-only auditing hold for every operation.
-- Generated code receives neither Plane credentials nor direct database access.
-- Operators have rollout controls, observability, credential procedures, incident runbooks, and rollback evidence.
-- The approved production rollout is completed and verified.
+This is the durable program state for later unattended delegation. It is intentionally compact at the active-objective line and detailed below so another coordinator can resume from any interruption without treating a narrative claim as progress.
 
-## Audience and destinations
+## Observable outcome and audience
 
-- Plane-native agent users and workspace administrators.
-- External agents using Plane's supported Python MCP compatibility interface.
-- Plane and Hermes maintainers and production operators.
-- Canonical program state lives in `/Users/nqh/Desktop/CODES/plane/docs/agent-tooling/`.
-- Plane implementation lives in `/Users/nqh/Desktop/CODES/plane`.
-- Hermes integration lives in `/Users/nqh/Desktop/CODES/hermes-agent`.
-- External MCP compatibility lives in the `external/plane-mcp-server` submodule sourced from `uxheavy/plane-mcp-server`.
-- Shared Python gateway transport lives in the `external/plane-python-sdk` submodule sourced from `uxheavy/plane-python-sdk`.
+The outcome is one complete, production-ready Plane Agent system for backend conversations, assignments, runs, artifacts, outcomes, reviews, and product events. It includes the full Plane Agent control plane and every supported Plane integration/action required for completion. It does not include chat, composer, thread, inbox, sidecar, transcript, or conversation-navigation UI.
 
-## Baseline
+The system must be operable and verifiable through Plane APIs, CLI/fixtures, ordinary Plane object pages, operator surfaces, and reused settings surfaces. Every required administration workflow reuses Plane's existing settings routes, forms, tables, drawers/modals, services, stores, permissions, and `@plane/ui` components. No new settings framework or parallel design system is created.
 
-Observed on 2026-07-29:
+The audience is:
 
-- Plane branch `codex/agent-tooling-architecture` contains the product, architecture, delivery, decision, and ADR baseline.
-- Plane agent-tooling implementation has not started.
-- Hermes already provides native tool registration, Tool Search, concurrent tool execution, session persistence, and oversized-result spill.
-- Hermes Code Mode currently executes Python rather than the required TypeScript surface.
-- Hermes keeps downstream credentials host-side and scrubs generated-code environments.
-- Hermes API caller authentication is currently a shared long-lived bearer credential.
-- Plane's existing Python MCP remains the external compatibility interface.
+- Plane users and workspace administrators who assign work and review outcomes.
+- Operators responsible for credentials, limits, observability, rollout, incident response, and rollback.
+- Plane maintainers who own product state, permissions, application services, and the Operation Gateway.
+- Hermes maintainers who own the hidden execution kernel and its narrow Plane adapter.
+- External agents and clients using Plane's supported Python MCP compatibility surface.
 
-## Material constraints
+Plane is the product and control plane and the sole source of truth for Agent identity, permissions, product lifecycle, backend conversations, events, assignments, runs, memory/skills governance, schedules, delegation, outcomes, review, audit, and recovery. Hermes is a hidden, replaceable execution kernel behind a narrow versioned runtime adapter. Buzz is a donor/reference for useful conversation, ACP, inspectability, or isolation patterns only; it is not a Plane runtime dependency, product authority, or source of durable state.
 
-- Preserve every accepted decision in `decision-register.md` unless a new ADR explicitly supersedes it.
-- Prefer the smallest architecture that satisfies the production gates.
-- Reuse Hermes mechanisms when their boundaries fit.
-- Keep Plane authorization as the sole entitlement authority.
-- Use one revocable Plane credential per dedicated agent identity initially.
-- Do not add direct database access for agents.
-- Do not expose Plane credentials to generated TypeScript.
-- Do not add runtime human-confirmation prompts for otherwise-authorized agent operations.
-- Preserve external Python MCP compatibility during migration.
-- Keep observable contracts additive unless an approved compatibility plan says otherwise.
-- Preserve unrelated user changes in every repository.
-- Run the mandatory live and evaluation harness through Hermes provider `openai-codex`.
-- Pin the mandatory live and evaluation harness to model `gpt-5.6-luna`.
-- Use the locally authenticated ChatGPT subscription without copying its credentials into Plane, generated code, logs, fixtures, or result artifacts.
-- Treat any silent provider or model fallback as a verifier failure.
-- Obtain explicit user approval for `APPROVAL-MANIFEST.md` before implementation begins.
-- Treat `RELEASE-MANIFEST.md` and `VERIFICATION-MANIFEST.md` as non-normative design references rather than implementation gates.
-- Require every production requirement in the approved `APPROVAL-MANIFEST.md` to pass or carry an explicitly approved exception.
-- Pin compatible Plane, Hermes, official MCP, and Plane Python SDK commits plus generated-contract digests in a cross-repository integration lock.
+Full Plane integration/action coverage is a completion requirement. Adaptive disclosure keeps the complete supported catalog discoverable while exposing only a small universal core plus role- and assignment-relevant eager schemas to the model. A discoverable operation is not an authorization grant.
 
-## Non-goals
+## Accepted product model
 
-- Replacing Plane's user, membership, role, or object-permission model.
-- Building a second tool-specific permission system.
-- Adding run-bound capability-token infrastructure to the initial release.
-- Rewriting Hermes mechanisms that already satisfy the contract.
-- Automatically pushing, merging, deploying, purchasing services, or mutating shared environments without approval.
+There is one underlying Plane Agent system. Every configured Agent has exactly one role at a time. Roles are Plane-owned profile data, governance, skills, and presentation defaults over the shared lifecycle; they are not separate runtime classes, permission systems, or products.
 
-## Completion criteria
+Built-in roles are:
 
-### Product and contract
+- `worker`: complete an assigned outcome.
+- `delegator`: dynamically plan a case, automatically assign unclaimed work to humans or Agents, and record the rationale. Worker and ordinary specialist Agents do not freely delegate.
+- `gardener`: maintain multiple Agents across sessions and apply private memory/skill improvements within each target Agent's wall.
+- `chief_of_staff`: the automatically provisioned Agent for one human.
+- `hr`: propose Agent creation, change, or retirement.
+- `evaluator`: review every Agent outcome before human acceptance or return.
 
-- Named pilot and general-availability workflows are documented.
-- Numeric success and reliability targets are approved.
-- Supported operations have stable typed contracts and structured errors.
-- OpenAPI generation and curated overlay produce a deterministic searchable catalog.
-- Eager native-tool promotion and retirement rules are documented.
-- The approved release manifest freezes exact workflows, operations, eager tools, MCP dispositions, versions, cohorts, and numeric gates.
-- The approved verification manifest maps every completion criterion to an independently observable check and oracle.
+Workspace administrators may define custom roles, but each custom role remains exactly one role on the same Agent model and cannot bypass Plane authorization, delegated-assignment rules, private-memory walls, HR governance, evaluator review, or final human review.
 
-### Plane Operation Gateway
+Every human automatically receives exactly one chief-of-staff Agent. Its effective authority is exactly that human's current live Plane permissions and can never be broader. Provisioning is a product invariant, not a shortcut around membership, project roles, object permissions, or credential revocation.
 
-- All supported native, Code Mode, and migrated MCP operations cross the gateway.
-- The gateway derives the acting agent from its credential.
-- Live Plane authorization runs for every operation.
-- Idempotency, result shaping, version metadata, and append-only audit are enforced.
-- No supported operation bypasses Plane application services through direct database access.
-- Audit intent and outcome durability covers invalid, unauthorized, execution-failed, unknown, and successful attempts.
-- Injected audit-storage failures follow an approved fail-closed or durable-outbox policy without unaudited successful mutation.
+The dedicated delegator plans each case dynamically, assigns unclaimed work to humans or Agents through normal assignment contracts, and records why each assignment was made. Specialist Agents execute their assignments and do not gain free delegation merely from receiving a skill or discovering an operation. There is no saved or versioned workflow-definition product, workflow-definition package, reusable workflow graph, or workflow DSL in scope.
 
-### Hermes and TypeScript Code Mode
+Approved schedules create normal Plane assignments and runs through the ordinary lifecycle. A schedule is a trigger and control record, not a separate execution authority or workflow-definition system.
 
-- The Plane-native runtime profile exposes the approved eager Plane-domain tools while Hermes remains the hidden execution kernel.
-- Deferred operations are discoverable through Tool Search and Code Mode.
-- The approved progressive-discovery and TypeScript-composition interfaces are implemented with their frozen names and schemas.
-- Generated code runs in the disposable runtime-invocation container inside the approved restricted child isolate.
-- Generated code has no ambient Plane credentials, arbitrary network, package installation, subprocess, or unrelated filesystem access.
-- Credential-free host callbacks retain Hermes tool IDs, middleware, concurrency, and Plane audit correlation.
-- The local callback channel is bound host-side to the exact run, agent, tenant, operation budgets, and correlation identifiers.
-- Generated code cannot supply authoritative identity or correlation fields.
-- Sibling-process, cross-run replay, and forged-callback attempts fail.
+Gardeners may maintain multiple Agents across sessions, but strict Agent-private walls prevent copying knowledge, memory, or skills between Agents. Plane-governed storage is authoritative. Gardener improvements are automatically applicable only within the selected target Agent's private scope and are immutable, versioned, provenance-bearing, auditable, and rollback-capable. Rollback creates a new revision; it never rewrites history.
 
-### Reliability and safety
+HR may propose Agent creation, change, or retirement. A workspace administrator must approve each proposal before Agent state changes. This is product governance, not a runtime confirmation prompt for an already-authorized operation.
 
-- Pilot mutations have tested idempotency or explicit `outcome_unknown` behavior.
-- Unknown non-idempotent outcomes are never retried blindly.
-- Model-visible per-result and cumulative output are bounded.
-- Oversized results use temporary bounded-read artifacts with verified cleanup.
-- Authorization, sandbox, concurrency, interruption, timeout, retry, and container-death test matrices pass.
-- External MCP compatibility tests pass for approved clients and operations.
+An evaluator reviews every Agent outcome before a human accepts it or returns it for revision. Human acceptance or return is the final product decision. Evaluator feedback is evidence and guidance, not a substitute for the human decision.
 
-### Mandatory live Hermes acceptance
+Authorized Agent operations execute autonomously within the Agent's live Plane permissions. Unauthorized operations return a non-leaking denial and have no effect. There are no runtime human-confirmation prompts, approval brokers, decision tokens, pending approval records, or approval-resume paths for otherwise-authorized operations. Human approvals remain for product governance, release/rollout/deployment, destructive changes, incompatible public contracts, credentials, and other explicit safety gates.
 
-- A real Hermes process runs against the authenticated Plane development server.
-- Hermes uses the locally authenticated ChatGPT subscription through provider `openai-codex`.
-- Hermes uses the exact canonical model ID `gpt-5.6-luna`.
-- Run evidence records the resolved provider and model.
-- A run resolved to any fallback provider or model fails acceptance.
-- The run uses a dedicated Plane test-agent identity and host-held credential.
-- The run uses the real Plane Operation Gateway rather than a mocked gateway.
-- A seeded allowed project contains a current cycle, representative open work items, blockers, dependencies, priorities, and ownership gaps.
-- A seeded control project is inaccessible to the test agent.
-- Hermes is asked to analyze release readiness without modifying the seeded source work items.
-- Hermes uses native tools for common project context.
-- Hermes uses TypeScript Code Mode to discover, filter, and compose the broader project analysis.
-- Independent reads execute concurrently where safe.
-- Hermes proposes one parent release-plan work item and three coordinated child work items for the highest-impact actions.
-- The broad write executes autonomously after authorization.
-- Plane creates exactly one parent work item, exactly three child work items, and exactly one source-linked planning comment.
-- Retrying the same stable invocations creates no duplicate planning artifacts.
-- Hermes returns links to every created Plane object.
-- Plane UI or API readback verifies content, hierarchy, project placement, and source references.
-- Plane audit readback correlates agent identity, Hermes run, turn, tool calls, invocations, operations, and affected object IDs.
-- A real attempt to access the control project returns a structured denial without object-data leakage.
-- A generated-TypeScript probe confirms Plane credentials are unavailable.
-- A generated-TypeScript probe confirms Plane cannot be reached except through the host callback.
-- The complete prompts, run IDs, created object IDs, readbacks, audit references, and cleanup procedure are recorded in `RESULT.md`.
+After verification, staged rollout is allowed even though there are no current users. The absence of users does not waive canaries, observation windows, automated safety stops, rollback readiness, or post-rollout readback.
 
-### Operations and rollout
+## Current baseline and evidence
 
-- Metrics, traces, alerts, feature flags, mutation and Code Mode kill switches, credential rotation, audit retention, incident response, and rollback runbooks exist.
-- Load and latency targets pass at the approved production profile.
-- Realistic agent workflow evaluations meet their approved targets.
-- A clean-state rollback rehearsal succeeds.
-- Each controlled rollout stage has recorded evidence and approval.
-- Production verification succeeds after deployment.
+The baseline below is observed and must be refreshed by the coordinator when resuming after a repository change. Abbreviated hashes are included for quick recognition; full hashes are the evidence values.
 
-### Extensive testing and evaluation
+| Repository or fact | Current evidence |
+| --- | --- |
+| Plane | `/Users/nqh/Desktop/CODES/plane`, branch `codex/agent-tooling-architecture`, commit `f2be7a82792611ac843e6d6b210f83723b2c4066` (`f2be7a8279`), current integrated state beginning with `f2be7a8279`. |
+| Hermes | `/Users/nqh/Desktop/CODES/hermes-agent`, branch `main`, commit `112f51a5543d490768931514d48a780ad964a868` (`112f51a55`). |
+| Plane implementation | Only the thin scaffold at `apps/api/plane/agent/`: root package, `lifecycle`, and `adapters` seams plus their local `AGENTS.md` instructions. There are no Agent models, migrations, routes, application services, runtime implementation, or verification implementation yet. |
+| Plane scaffold authority | `apps/api/plane/agent/AGENTS.md`, `apps/api/plane/agent/__init__.py`, `apps/api/plane/agent/lifecycle/AGENTS.md`, `apps/api/plane/agent/lifecycle/__init__.py`, `apps/api/plane/agent/adapters/AGENTS.md`, and `apps/api/plane/agent/adapters/__init__.py`. The scaffold is not a Django app and marker-only future packages must not be added. |
+| Hermes runtime boundary | `plane_runtime/` is installed and discoverable in Hermes; `python3 -c 'import plane_runtime; print(plane_runtime.__file__)'` resolves `/Users/nqh/Desktop/CODES/hermes-agent/plane_runtime/__init__.py`. It is a marker-only adapter package, not implementation. |
+| Hermes runtime authority | `/Users/nqh/Desktop/CODES/hermes-agent/plane_runtime/AGENTS.md` and `plane_runtime/README.md`; the logical `plane_runtime.execute` interface remains inside the separate runtime service. |
+| External MCP source | Plane's `external/plane-mcp-server` submodule, pinned at `96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1`, package `0.2.11`, maintained as the `uxheavy/plane-mcp-server` fork. |
+| Python SDK source | Plane's `external/plane-python-sdk` submodule, pinned at `78702e9224bd9c5e8fffdabfbfdd582ac1fa9426`, tag `v0.2.20`, maintained as the `uxheavy/plane-python-sdk` fork. |
+| MCP inventory | `docs/agent-tooling/inventories/plane-mcp-v0.2.11.json` and its 177-row disposition companion; inventory digest is `2778ef9d6f5426c6fc65894829ec04bf853c18c4ab09d796474896ba01826ad1`. |
+| Implementation status | Work beyond the Plane and Hermes scaffolds has not started. Documentation, contracts, fixtures, and verifiers are design/evidence inputs until the applicable implementation gate is recorded. |
+| Exploratory mind | `/private/tmp/plane-runner.pdf`, the Freeform `Plane-runner` board (`8208a432-a415-434c-9f06-5731a6185db4`), and top-down historical task `019fa696-357f-79d0-8dbb-bfe4fa722241` are exploratory context only. They do not override this goal, accepted ADRs, current source evidence, or controlling approval records. |
 
-- A version-controlled evaluation manifest covers at least 50 distinct scenarios.
-- The manifest covers functional, authorization, mutation, concurrency, sandbox, result, compatibility, observability, rollback, and operator-recovery behavior.
-- The mandatory project-planning workflow runs live through Hermes on at least ten materially different seeded project shapes.
-- Each seeded project shape passes at least three independent `gpt-5.6-luna` runs.
-- At least 20 additional live Luna runs cover denials, partial failure, idempotent retry, ambiguous outcome, large results, and hostile generated code.
-- Live evaluation therefore includes at least 50 authenticated Hermes runs before production approval.
-- Complete workflow success is at least 90% across all retained live attempts.
-- Security-critical expectations tolerate zero authorization bypasses, credential disclosures, sandbox escapes, duplicate committed mutations, or missing required audit records for any attempted operation.
-- Deterministic test matrices cover every supported pilot operation and every relevant Plane role or permission boundary.
-- Property or fuzz tests cover schema validation, pagination, idempotency keys, result limits, and untrusted operation results.
-- Concurrency tests cover simultaneous runs, concurrent inner calls, result ordering, retry races, and rate limiting.
-- Compatibility tests cover the approved Python MCP client matrix and schema-version transitions.
-- A sustained load or soak run executes at the approved production concurrency and duration.
-- Deterministic contract and security matrices pass at 100% with zero skips or xpasses.
-- The complete deterministic suite passes twice from clean state.
-- The exact release artifact passes three consecutive final verification runs.
-- The live Luna acceptance and evaluation suite passes from a fresh Hermes process and freshly seeded Plane fixtures.
-- Computer Use verifies the user-visible Plane and Hermes UI state and captures screenshots for the mandatory live acceptance.
-- Exact numeric task-success, latency, and load targets are approved before the production gate and cannot be lowered without recorded approval.
+The baseline says what exists, not what is complete. Documentation, a scaffold, a generated plan, a fixture, a model response, or an imported package is never counted as implemented behavior without an executable verifier and authoritative readback.
 
-## Primary verifier
+## Normative resource catalog and authority
 
-Before completion, the repositories must expose one documented, version-controlled production-verification entry point callable from a clean checkout. It must fail non-zero when any required Plane contract, backend, Hermes integration, authorization, sandbox, mutation-safety, MCP compatibility, or end-to-end check fails.
+The coordinator uses the following order when sources disagree:
 
-The final command and its environment prerequisites must be recorded in `RESULT.md`. Production deployment also requires an authenticated post-deployment readback proving the enabled version, a permitted workflow, a denied workflow, audit correlation, and rollback readiness.
+1. The accepted product model and explicit current steering in the task.
+2. Accepted ADRs `0001` through `0010` and the accepted rows in `docs/agent-tooling/decision-register.md`.
+3. The current canonical contracts and controlling approval records in `docs/agent-tooling/`, including `APPROVAL-MANIFEST.md` where its current authority applies. `RELEASE-MANIFEST.md` and `VERIFICATION-MANIFEST.md` are evidence inputs to that authority, not competing implementation-start gates.
+4. Current Plane and Hermes source behavior, official OpenAPI output, pinned MCP/SDK sources, generated catalogs, fixtures, and immutable verifier evidence.
+5. The generated coordination plan and overview, which must be regenerated from their source and cannot override the preceding authorities.
+6. Exploratory boards, PDFs, historical tasks, donor repositories, and model suggestions.
 
-The primary verifier must invoke or require the mandatory live Hermes acceptance scenario. A mocked agent loop, mocked gateway, or database-only fixture assertion cannot satisfy this requirement.
+### Repository authorities
 
-The verifier must assert the resolved Hermes provider is `openai-codex` and the resolved model is `gpt-5.6-luna`. Model availability, authentication failure, or fallback must fail non-zero rather than skip live evaluation.
+- Plane: `/Users/nqh/Desktop/CODES/plane`. Plane application services, authentication, live authorization, object permissions, product state, and audit are authoritative for Plane behavior.
+- Hermes: `/Users/nqh/Desktop/CODES/hermes-agent`. Hermes is the hidden execution-kernel source and adapter donor; its product vocabulary, sessions, files, profiles, and UI are not Plane product authority.
+- Buzz: the Buzz repository/source named by the current architecture and implementation plan. It is a reference/code donor only and must not become a runtime dependency or durable-state authority.
+- `/Users/nqh/Desktop/CODES/plane-mcp`: the local official MCP source checkout used for source inspection and compatibility evidence. The Plane delivery target remains the pinned `external/plane-mcp-server` `uxheavy` fork.
+- Plane `external/plane-mcp-server`: official Python MCP adapter host and 177-tool compatibility surface; handlers migrate incrementally rather than being rewritten as 177 Plane modules.
+- Plane `external/plane-python-sdk`: shared SDK transport seam at `BaseResource`; ordinary MCP handlers continue to use existing resources while the optional gateway transport is introduced.
 
-The frozen system prompt, acceptance prompt, tool schemas, sampling parameters, context limits, seeded-data manifest, Plane, Hermes, official MCP, and Plane Python SDK commits, catalog and adapter digests, Plane configuration, and TypeScript runtime digest must accompany live evidence. A changed provider model fingerprint invalidates prior live evidence and triggers the full live suite again.
+### Canonical Plane Agent documents
 
-Final verification is executed independently from clean checkouts. It records full immutable logs, UTC timestamps, exit codes, dependency and container digests, skip and xpass counts, and reviewer identity.
+The canonical documentation set includes these exact files and directories:
 
-## Supporting checks
+- `docs/agent-tooling/README.md`, `GOAL.md`, `WORKLOG.md`, `RESULT.md`.
+- `docs/agent-tooling/product-requirements.md`, `architecture.md`, `delivery-plan.md`, and `decision-register.md`.
+- `docs/agent-tooling/APPROVAL-MANIFEST.md`, `RELEASE-MANIFEST.md`, `VERIFICATION-MANIFEST.md`, and `REQUIREMENT-COVERAGE.md`.
+- `docs/agent-tooling/NON-UI-IMPLEMENTATION-PLAN.json` and generated `NON-UI-IMPLEMENTATION-OVERVIEW.md`.
+- `docs/agent-tooling/GATEWAY-WIRE.md`, `PILOT-CONTRACTS.md`, `INTERFACE-DESIGN.md`, and `RUNTIME-DESIGN.md`.
+- `docs/agent-tooling/MCP-COMPATIBILITY.md`, `MCP-MAPPING-CONTRACT.md`, `SOURCE-INVENTORY.md`, and `ADR-SYNTHESIS.md`.
+- `docs/agent-tooling/EVALUATION-SCENARIOS.md`, `EVALUATION-FIXTURE-CONTRACT.md`, and `SAFETY-EVALUATION-DESIGN.md`.
+- `docs/agent-tooling/fixtures/planning-v1.json`, `planning-v1.schema.json`, `planning-v1.predicates.json`, and `planning-v1.predicates.schema.json`; later safety fixtures must follow `SAFETY-EVALUATION-DESIGN.md`.
+- `docs/agent-tooling/verifiers/render-non-ui-implementation-plan.mjs` and `verifiers/validate-planning-fixtures.mjs`.
+- `docs/agent-tooling/inventories/plane-mcp-v0.2.11.json` and `inventories/plane-mcp-v0.2.11-dispositions.md`.
+- `docs/decisions/0001-plane-agent-tooling-architecture.md` through `docs/decisions/0010-plane-runtime-contract.md`.
 
-- Plane formatting, lint, type, unit, backend, migration, and targeted integration checks.
-- Hermes formatting, lint, unit, integration, and gateway checks.
-- Deterministic catalog generation and schema compatibility checks.
-- Permission-matrix and revoked-agent tests.
-- Autonomous admission, denial-without-effects, concurrent sibling, interruption, and restart-failure tests.
-- Credential-exfiltration and sandbox-escape tests.
-- Idempotency, ambiguous outcome, and duplicate-delivery tests.
-- Result-budget and artifact-expiry tests.
-- Representative external MCP client compatibility checks.
-- Clean-checkout and clean-state reproduction.
-- Evaluation-manifest coverage check for the required 50 scenarios.
-- At least 50 authenticated live Hermes runs using `gpt-5.6-luna`.
-- Two consecutive clean-state passes of the complete deterministic suite.
-- Computer Use screenshots and readbacks for user-visible Plane and Hermes state.
+### Source, catalog, fixture, and evidence authorities
 
-## Iteration loop
+- The official Plane public interface is `/api/v1/`, with DRF Spectacular as the OpenAPI generator when enabled. At the baseline no generated OpenAPI document is checked in; the source-inventory facts and the generated artifact produced from the exact Plane commit must be captured before catalog qualification.
+- The supported catalog is generated from the public OpenAPI surface and a curated overlay. The overlay owns agent descriptions, examples, aliases, safety and result policies, idempotency metadata, semantic compositions, and disclosure metadata. Private UI/session routes are not automatically catalog operations.
+- `SOURCE-INVENTORY.md` records observed Plane, Hermes, MCP, SDK, authentication, transport, and current authorization facts. Current source behavior is rechecked whenever a contract or verifier depends on it.
+- The 177-tool machine inventory and 177-row dispositions are the external compatibility baseline. Exact handler-branch and SDK method/path mapping in `MCP-MAPPING-CONTRACT.md` is required; a count, category, wildcard, or generic adapter label is not proof.
+- Planning fixture inputs and predicates are `fixtures/planning-v1.*` and are validated by `verifiers/validate-planning-fixtures.mjs`. Safety trial inputs, probes, evidence, and independent predicates must be generated and digest-bound before safety qualification.
+- `EVALUATION-SCENARIOS.md`, `EVALUATION-FIXTURE-CONTRACT.md`, `SAFETY-EVALUATION-DESIGN.md`, `REQUIREMENT-COVERAGE.md`, `VERIFICATION-MANIFEST.md`, `RESULT.md`, and the immutable evidence index define how behavior becomes qualifying evidence. Evidence must be independently acquired, content-addressed, and bound to the exact repository/build/configuration state.
 
-1. Inspect the active goal, worklog, repository state, and next unsatisfied gate.
-2. Resolve factual uncertainty from canonical source or primary documentation.
-3. Ask the user only when a missing choice changes the product boundary or grants consequential approval.
-4. Implement the smallest meaningful vertical increment.
-5. Run the strongest relevant verifier and regression checks.
-6. Record commands, outputs, failures, decisions, and next action in `WORKLOG.md`.
-7. Commit one validated logical change on the correct repository branch.
-8. Continue while a safe relevant action remains.
+## Durable phase plan
 
-## Anti-cheating rules
+Each phase has one accountable integrator. Implementation may proceed in parallel only across disjoint ownership lanes and only after its dependency gate. A phase is complete only when its exit evidence is recorded and its verifier passes from the required clean state. A failure stops promotion of dependent phases but does not justify weakening the verifier.
 
-- Do not weaken, skip, delete, or narrow a verifier to obtain a pass.
-- Do not replace real authorization, sandbox, or gateway behavior with mocks in the production end-to-end proof.
-- Do not silently shrink supported workflows or operations.
-- Do not count documentation, generated fixtures, or model claims as implemented behavior.
-- Do not hide skipped checks, flaky failures, warnings, or unavailable dependencies.
-- Do not change numeric targets, compatibility baselines, or completion criteria without recording approval.
-- Do not claim production readiness from development-only or single-happy-path evidence.
-- Do not count a run using a fallback provider or model toward live evaluation totals.
-- Do not reuse one recorded model output as evidence for multiple independent runs.
-- Do not omit failed live runs from the evaluation denominator.
+| Phase | Outcome | Dependencies | Parallel lanes | Integrator and gate |
+| --- | --- | --- | --- | --- |
+| P0 | Durable contracts and approval baseline are coherent, owned, and resumable. | Current ADRs, source inventory, product model. | Documentation, authority reconciliation, ownership mapping. | Root coordinator; G0. |
+| P1 | Generated contracts, catalog inputs, fixtures, and cross-repository integration lock are deterministic. | P0. | Contract generation, fixture/oracle work, lock tooling. | Contract/release integrator; G1 entry. |
+| P2 | Plane owns the Agent domain, lifecycle, and exactly-one-role governance. | P0; P1 schemas/fixtures. | Domain models/services and deterministic lifecycle tests. | Plane domain integrator; G1. |
+| P3 | Operation Gateway, security, idempotency, audit, and full-catalog foundation are real and shared. | P0; P1; Plane application-service facts. | Gateway, authorization matrix, audit/evidence, catalog generation. | Plane API integrator; G1/G3. |
+| P4 | Separate runtime service and Hermes narrow adapter execute immutable snapshots and invocations. | P0; P1; P2 lifecycle contract. | Runtime service, deterministic fake, Hermes adapter. | Runtime integrator; G2 entry. |
+| P5 | Restricted TypeScript composition and adaptive tool discovery work through host callbacks. | P1, P3, P4; deterministic runtime seam. | Native adapters, Tool Search/disclosure, TypeScript isolate. | Runtime security/tooling integrator; G2. |
+| P6 | Private memory, skills, gardeners, and schedules are Plane-governed and recoverable. | P2; P3; P4; P5 context seam. | Memory/skill governance, gardener revisions, schedule triggers. | Knowledge/automation integrator; G3. |
+| P7 | Delegation, chief-of-staff, HR, and evaluator product behavior is complete. | P2; P3; P4; P6 where private context is used. | Dynamic planning, auto-provisioning, HR proposals, evaluation review. | Plane product-lifecycle integrator; G3. |
+| P8 | Full Plane action coverage and MCP/SDK compatibility converge on the shared gateway. | P1, P3, P5; stable catalog and gateway. | Full action adapters, MCP mapping, SDK transport, real-client tests. | Integration/compatibility integrator; G3. |
+| P9 | Reused settings administration, operations, observability, credentials, and runbooks are complete. | P2–P8 contracts; P3 audit; P4 runtime. | Settings/API/CLI, deployment, dashboards, credential drills, runbooks. | Operations integrator; G4 entry. |
+| P10 | Deterministic and live evaluation, security, load, recovery, and rollback proof passes. | P3–P9; pinned artifact lock. | Independent verifier, live trials, hostile probes, load/recovery, rollback. | Quality/release integrator with independent reviewer; G4. |
+| P11 | Staged rollout, post-deploy readback, rollback readiness, and GA completion are evidenced. | P10 and explicit rollout authority. | Canaries, observation windows, production readback, rollback. | Root coordinator and operations authority; G5. |
 
-## Delivery and release approval gates
+### P0 — Durable contracts and approval baseline
 
-These gates govern Codex delivery actions, manifest freeze, rollout promotion, and deployment. They do not add a human-confirmation step to deployed Plane agent operations.
+Outcome: one internally consistent, durable source of truth exists for the accepted product model, repository ownership, current approval authority, runtime/no-UI boundary, full-action completion rule, and evidence contract. P0 records the current approval state from the authoritative record and does not copy superseded runtime-approval claims into the goal.
 
-Separate user approval is required before:
+Work:
 
-- Pushing either repository branch.
-- Creating or updating a pull request.
-- Merging to a shared branch.
-- Applying migrations to a shared environment.
-- Enabling the feature for users outside the approved test scope.
-- Deploying to staging or production.
-- Rotating or revoking shared credentials.
-- Deleting or destructively rewriting material data.
-- Purchasing or provisioning a paid external service.
-- Making an incompatible public API or MCP contract change.
-- Approving or revising the release manifest.
-- Approving or revising the verification manifest after implementation begins.
-- Setting or lowering numeric production thresholds.
-- Selecting the final TypeScript isolate and threat boundary.
-- Excluding or deprecating an external MCP operation or client.
-- Accepting a security exception or residual risk.
-- Promoting each rollout stage.
+- Reconcile ADRs `0001`–`0010`, `decision-register.md`, `architecture.md`, `product-requirements.md`, `APPROVAL-MANIFEST.md`, and the generated plan/overview.
+- Freeze ownership, repository/lane boundaries, review authority, change-control rules, runtime contract versions, catalog authority, and evidence authority.
+- Confirm that runtime operations are autonomous within live Plane permissions and that HR approval, evaluator review, human acceptance, release approval, rollout promotion, and deployment approval are distinct product/delivery controls.
+- Confirm the no-chat/composer/thread UI boundary and the reuse-existing-settings rule.
+- Resolve only decisions that change the first contract; record any remaining open question with owner, impact, verifier, and decision deadline.
 
-## Delegation and resources
+Verifier and gate: link/path validation, ADR/status consistency, source-digest comparison, ownership-overlap check, and a coordinator-approved G0 record. Stop if an accepted product boundary, role, authority, trust boundary, or safety rule contradicts another canonical source.
 
-The primary agent owns product scope, integration, conflict resolution, verification, and completion. It may use available skills, tools, MCP servers, installed plugins, and bounded subagents when they materially improve delivery.
+### P1 — Generated contracts, catalog, fixtures, and integration lock
 
-Delegated lanes must state their objective, non-goals, file or system ownership, verifier, stop condition, and returned evidence. Independent security and final-verifier reviews must not be performed solely by the implementation lane. No child goal is active initially.
+Outcome: Plane and runtime-service lanes consume the same versioned generated contracts and golden fixtures. Catalog generation from OpenAPI plus the curated overlay is deterministic, searchable, and digest-bound. The lock names exact Plane, Hermes, MCP, SDK, catalog, adapter, runtime, fixture, and configuration revisions.
+
+Work:
+
+- Generate `RunSnapshot`, `InvocationEnvelope`, `RuntimeEvent`, `RuntimeExit`, Operation Gateway envelopes, errors, result/artifact descriptors, audit references, and lifecycle fixtures.
+- Generate the complete supported operation/action catalog with adaptive-disclosure metadata. Keep global visibility complete and model context selective.
+- Freeze planning and safety fixture schemas, independent predicates, negative controls, and evidence-index fields.
+- Generate exact MCP handler-call and SDK method/path-to-operation mapping inputs; no 177-tool mapping may remain category-only.
+- Make the integration lock fail on missing, changed, unpinned, or silently substituted revisions.
+
+Verifier and gate: repeated generation byte/digest equality; strict schema and semantic fixture validators; route/mapping set joins; lock provenance check; intentional mutation checks for omitted catalog rows, changed schema, and changed digest. Stop if a downstream lane would need handwritten duplicate contract definitions.
+
+### P2 — Plane domain, lifecycle, and roles
+
+Outcome: Plane durably owns Agent actors, exactly-one-role profiles, assignments, runs, invocations, outcomes, evaluator review, human decision state, conversations, artifacts, and legal transitions as separate concepts with independent lifecycles.
+
+Work:
+
+- Implement Plane application services, persistence, serializers, APIs, and migrations using existing Plane conventions only after the approved contract gate.
+- Keep actor authorization facts separate from behavioral profile versions and tool presentation. A run pins the resolved profile/context/tool/runtime snapshot.
+- Implement assignment → run → outcome submission → evaluator review → human accept/return, including waiting, failed, blocked, cancelled, revision, recovery, and `outcome_unknown` states.
+- Treat runtime observations as untrusted until Plane validates binding, schema, sequence, limits, receipts, and legal transitions.
+- Keep backend conversations and product events authoritative in Plane; raw kernel final text is inspection evidence and is not an implicit product message.
+
+Verifier and gate: domain invariants, migration tests, API contract tests, state-machine/property tests, forged/duplicate/out-of-order event tests, lease-death terminal-event synthesis, and deterministic fixture execution without model or UI. Stop if a session, transcript, checkpoint, or runtime process becomes the Plane record.
+
+### P3 — Operation Gateway, security, idempotency, audit, and catalog foundation
+
+Outcome: native Plane tools, TypeScript host callbacks, runtime lifecycle mutations, and migrated MCP calls share one typed Plane Operation Gateway around existing application services.
+
+Work:
+
+- Authenticate internal calls as the dedicated Plane Agent identity and preserve the authenticated human/integration principal for external MCP calls.
+- Run live Plane authorization for every operation. Tool availability and disclosure never replace authorization.
+- Validate typed inputs, structured errors, reference visibility, idempotency, concurrency, result budgets, version metadata, and append-only audit.
+- Implement safe replay for known success, retry only for known pre-commit failure, explicit `outcome_unknown` for ambiguous non-idempotent mutation, and reconciliation without blind retry.
+- Keep the gateway inside Plane's API service initially and use the accepted versioned JSON HTTP adapter; do not create a second business-logic implementation, internal MCP hop, or direct database path.
+- Build the catalog/full-action foundation so P8 can expand breadth without 177 shallow prompt/runtime modules.
+
+Verifier and gate: three-entry-path traces, complete role/object authorization matrix, credential revocation, non-leaking denial, idempotency/replay/race/fault tests, result/artifact bounds, audit intent/outcome completeness, audit-failure policy, and direct-database bypass inventory. Stop on any authorization bypass, credential exposure, missing audit record, duplicate committed mutation, or unsupported fallback.
+
+### P4 — Separate runtime service, Hermes adapter, and snapshot/invocation protocol
+
+Outcome: a separately deployed, co-located runtime service executes immutable Plane invocations through one narrow `plane_runtime.execute` adapter while Hermes remains hidden and replaceable.
+
+Work:
+
+- Implement cross-process dispatch, leases, cancellation, event ingress, checkpoints, durable continuation, and terminal-event synthesis against the deterministic fake first.
+- Keep all Plane translation in `plane_runtime/`; do not import Hermes `AIAgent`, profile loaders, session databases, registry globals, cron, delegation, workflow state, or chat types into Plane API modules or unrelated Hermes core modules.
+- Map Hermes progress, questions, usage, artifacts, transcripts, failures, exits, and tool observations into bounded versioned observations; Plane ingress remains authoritative.
+- Scope containers and processes to invocations, not durable runs. Recreate infrastructure from Plane snapshots, input events, safe checkpoints, and remaining cumulative budget.
+
+Verifier and gate: cross-process contract tests, snapshot immutability, accumulated-budget tests, restart/continuation tests, forged/duplicate/out-of-order event tests, real adapter tests, and one visible terminal Plane event per terminal invocation. Stop if an infrastructure restart resets budgets, bypasses receipts, or makes Hermes session state authoritative.
+
+### P5 — Restricted TypeScript composition and adaptive tool discovery
+
+Outcome: Plane Agents use a small universal Plane work core, assignment/profile-relevant eager tools, and progressively discoverable long-tail operations; model-written TypeScript can compose authorized calls only through a credential-free host callback.
+
+Work:
+
+- Build thin native adapters from generated contracts and reuse Hermes registry, Tool Search, middleware, tool-call IDs, concurrency, ordered result projection, and bounded-result mechanisms.
+- Freeze final names/schemas/promotions through the catalog decision rather than importing old fixed tool-name proposals or the default Hermes product catalog.
+- Implement the restricted child TypeScript isolate, verified parser/transpiler/engine boundary, generated client, host callback binding, cumulative budgets, result spill, bounded artifact reads, and clean replacement.
+- Deny credentials, arbitrary network, direct Plane HTTP, DNS, filesystem, subprocess, package installation, module loading, persistence surfaces, sibling/cross-run callbacks, forged authority, and replayed frames.
+
+Verifier and gate: catalog disclosure tests, generated-code credential/network/filesystem/process/package probes with liveness controls, host-bound callback tests, nested authorization/audit traces, output/call/CPU/memory/wall-time boundaries, artifact expiry/cleanup, and post-probe clean-isolate health. Stop on a policy bypass, vacuous probe, leaked secret, unbounded result, or silent model/provider fallback.
+
+### P6 — Private memory, skills, gardeners, and schedules
+
+Outcome: Plane governs typed private context, memory, skills, gardener revisions, and schedules; the kernel supplies only reusable execution/retrieval mechanisms behind adapters.
+
+Work:
+
+- Store target Agent, owner, source/provenance, visibility, version, lifecycle, retention, and authorization for every memory/skill entry and revision.
+- Assemble context deterministically from authorized references and lossless runtime projections such as `MEMORY.md`, subject-bound `USER.md`, and skill packages; files are never the source of truth.
+- Apply gardener improvements automatically within one target Agent's private wall, record immutable predecessor/rationale/revision history, and support rollback without rewriting history.
+- Make approved schedules trigger ordinary assignments and runs with recovery, idempotency, limits, and audit through the same lifecycle.
+
+Verifier and gate: scope/leakage matrix, cross-Agent negative controls, projection round-trip/provenance tests, gardener automatic-apply/version/rollback tests, retention tests, schedule trigger/recovery tests, and audit readback. Stop if any knowledge crosses Agent walls, if runtime files become authoritative, or if a schedule introduces a workflow-definition execution path.
+
+### P7 — Dynamic delegation, chief-of-staff, HR, and evaluation
+
+Outcome: the complete role governance and outcome-review product works through normal Plane assignments and backend events.
+
+Work:
+
+- Implement the dedicated delegator's case-specific dynamic plan, normal child assignment contracts, rationale, lineage, scope, budget, authorization, completion, cancellation, and failure semantics.
+- Automatically provision exactly one chief-of-staff Agent per human and reconcile its authority to the human's current live permissions.
+- Implement HR proposal lifecycle for Agent creation/change/retirement and workspace-admin approval, without turning it into runtime operation confirmation.
+- Require evaluator review before every human accept/return decision and preserve the human as final decision-maker.
+- Include backend conversation/publication/product-event receipts and run inspection APIs while leaving chat/composer/thread UI out of scope.
+
+Verifier and gate: delegation-role authorization and non-delegator denial tests, rationale/lineage/replay tests, one-per-human provisioning tests, permission-revocation tests, HR approval tests, evaluator-before-human invariant tests, outcome revision tests, and backend event readbacks. Stop if specialist agents can freely delegate, if HR changes state without admin approval, or if an outcome bypasses evaluator review or human finality.
+
+### P8 — Full Plane action and MCP/SDK compatibility convergence
+
+Outcome: every supported Plane integration/action is represented in the global catalog and backed by a tested gateway path or an explicit approved compatibility disposition. The official Python MCP surface remains usable while converging incrementally on the same gateway.
+
+Work:
+
+- Complete full Plane action/integration coverage before declaring the program finished; adaptive disclosure controls context, not coverage.
+- Use Plane application services and generated catalog metadata; add custom code only at unavoidable Plane-owned semantic, security, runtime, or compatibility seams.
+- Route the pinned official MCP server through the optional SDK `BaseResource` gateway transport where applicable, preserve local PQL behavior where explicitly retained, and harden attachment/transfer paths against unsafe destinations.
+- Prove exact one-to-one disposition and mapping for all 177 pinned tools, supported schemas/transitions, client/auth/transport modes, route branches, SDK method/path calls, and gateway traces.
+- Preserve additive compatibility unless an explicit approved compatibility/deprecation decision says otherwise.
+
+Verifier and gate: generated catalog diff, complete MCP inventory/disposition/mapping join, real stdio/OAuth/PAT/legacy-SSE client tests where supported, attachment SSRF tests, SDK route tests, schema transition tests, shadow comparison, rollback test, and no-unmapped-route negative control. Stop on an omitted action, generic mapping, public contract regression, direct gateway bypass, or unapproved deprecation.
+
+### P9 — Reused settings, operations, observability, credentials, and runbooks
+
+Outcome: administrators and operators can configure, inspect, limit, stop, recover, and roll back the system without chat UI or a new settings architecture.
+
+Work:
+
+- Complete API and CLI administration first; extend existing Plane settings UI only for the required Agent, role, credential, HR, gardener, schedule, evaluator, operation-presentation, limit, and kill-switch workflows.
+- Package the runtime service with invocation-scoped leases, quotas, cancellation, cleanup, replacement, and deployment configuration.
+- Add metrics, traces, alerts, audit lookup, redaction, retention, feature flags, mutation and Code Mode kill switches, credential issue/rotate/revoke drills, incident response, and operator runbooks.
+- Define last-known-good artifact/configuration, migration, rollback, rollout, and readback procedures.
+
+Verifier and gate: API/UI parity, settings reuse review, permission tests, operational smoke tests, alert and kill-switch exercises, credential lifecycle evidence, retention/readback checks, load/soak prerequisites, incident-runbook rehearsal, and rollback rehearsal. Stop on an operator control that changes authorization unexpectedly, exposes a secret, cannot kill the declared surface, or lacks a readback.
+
+### P10 — Deterministic/live evaluation, security, load, recovery, and rollback
+
+Outcome: the exact release artifact passes independent proof from clean checkouts and clean state, including real Plane+Hermes behavior and qualified negative controls.
+
+Required proof:
+
+- A version-controlled primary verifier fails non-zero for contract, lifecycle, gateway, authorization, sandbox, mutation safety, runtime, MCP, operations, load, recovery, provenance, or rollout-readiness failure.
+- The mandatory live Hermes acceptance uses the real Plane server and gateway, a dedicated Plane Agent credential held host-side, provider `openai-codex`, exact model `gpt-5.6-luna`, no fallback, native tools, TypeScript composition, allowed and denied project readback, exactly one parent/three children/one source-linked comment, idempotent replay, correlated audit evidence, credential isolation, network isolation, and cleanup.
+- The retained evaluation set contains at least 50 qualifying scenarios and at least 50 authenticated Hermes/Luna runs: ten materially different planning fixtures at three independent runs each plus 20 safety trials, with every attempt retained in the denominator.
+- Complete live success is at least 90%; authorization bypasses, credential disclosures, sandbox escapes, duplicate committed mutations, and missing required audit records are zero-tolerance failures.
+- Deterministic contract/security/compatibility checks pass at 100% with zero skips or xpasses; the complete deterministic suite passes twice from clean state; the exact release artifact passes three consecutive final verification runs.
+- Security negative controls prove the verifier detects documentation, authorization, audit, mapping, provider/model-fallback, aggregation, and other declared mutations for the intended reason.
+- Load, latency, interruption, outcome reconciliation, artifact expiry, credential revocation, kill-switch, clean-state rollback, and post-recovery proofs meet the approved numeric gates.
+
+Verifier and gate: independent verifier principal and immutable evidence index. Every record binds the repository commit, worktree, integration-lock digest, catalog/adapter/runtime/configuration digests, command, environment, UTC timestamps, exit code, artifact hashes, negative controls, and reviewer. Stop on any missing, borrowed, unsigned, unbound, skipped, fallback, or model-claimed evidence.
+
+### P11 — Staged rollout, post-deploy proof, and GA completion
+
+Outcome: the verified release is promoted through controlled stages and production readback proves the enabled version, permitted path, denied path, audit correlation, and rollback readiness.
+
+Stages are development/internal, one allowlisted workspace, expanded approved workspaces, and general availability. Each stage has a declared artifact/configuration, cohort, observation window, thresholds, approver, immutable evidence, last-known-good target, and rollback trigger. Because there are no current users, staged rollout may proceed after P10; that fact does not permit skipping safety stops.
+
+Verifier and gate: real permitted and denied canaries, audit readback, version/configuration readback, alert/kill-switch exercise, observation-window metrics, post-deploy smoke checks, rollback rehearsal, and explicit stage authority. Immediate rollback is mandatory for auth bypass, credential exposure, isolation escape, duplicate mutation, missing audit, unsafe `outcome_unknown` handling, or any other declared security-critical violation. Stop if any stage lacks evidence, approval, readback, or a tested last-known-good path.
+
+## Skill-routing catalog
+
+This is routing, not permission to ignore a skill's trigger or read rules. A worker loads the complete `SKILL.md` for every selected skill before acting, resolves any referenced instructions itself, and follows the user's direct instruction when it conflicts with a generic routing suggestion. The coordinator chooses the smallest set that covers the lane; a skill is not silently carried across phases.
+
+| Phase or use | Skills and when they are loaded |
+| --- | --- |
+| P0 goal/authority grounding | `ultragoal` when reading, revising, resuming, or validating this durable goal; `documentation-and-adrs` when reconciling durable product/technical decisions and canonical docs; `architect` when setting system ownership and trust boundaries; `codebase-design` when assigning repository/module seams; `agents-md` before entering a repository or nested path with local instructions; `interrogate` when a factual ambiguity could change scope, authority, or a verifier. |
+| P0 principles and subtraction | `principle-outcome-oriented-execution` at each phase/gate to keep work tied to observable outcomes; `principle-boundary-discipline` when defining Plane/Hermes/Buzz/MCP ownership; `principle-build-the-lever` when deciding whether a generator, contract, or mechanism should replace repeated manual work; `principle-subtract-before-you-add` before introducing a package, protocol, tool, or UI surface; `principle-encode-lessons-in-structure` after a correction, failure, or repeated gotcha; `principle-never-block-on-the-human` when safe evidence gathering or a bounded alternative can proceed without a preference decision; `principle-model-the-domain` when product concepts or state ownership are being shaped. |
+| P1 contracts and schemas | `context-engineering` when preparing bounded worker context and evidence packets; `domain-modeling` for lifecycle/state/invariant modeling; `api-and-interface-design` for the Gateway, runtime, catalog, and cross-process seams; `typed-service-contracts` for generated schemas, versions, structured errors, receipts, and event envelopes; `tool-design` when choosing native/adaptive/composition tool contracts; `principle-make-operations-idempotent` for invocation keys, replay, reconciliation, and retry semantics. |
+| P2–P4 domain, gateway, runtime | `architect`, `codebase-design`, and `domain-modeling` when ownership or durable state changes; `api-and-interface-design` and `typed-service-contracts` for public/cross-process contracts; `build-audit-logs` for append-only intent/outcome evidence; `implementing-security-layers` for identity, authorization, host binding, isolation, and trust boundaries; `principle-boundary-discipline` and `principle-make-operations-idempotent` for gateway/runtime seams; `principle-prove-it-works` and `principle-sequence-verifiable-units` when a verifiable vertical slice or gate is assembled. |
+| P5–P8 tools, knowledge, delegation, compatibility | `tool-design` for adaptive disclosure, native adapters, composition, and MCP ergonomics; `context-engineering` for private context and bounded model-visible results; `domain-modeling` for memory/skills/gardener/schedule/delegation/evaluator records; `api-and-interface-design` and `typed-service-contracts` for catalog, SDK, MCP, and event evolution; `build-audit-logs` and `implementing-security-layers` for traceability and isolation; `principle-subtract-before-you-add`, `principle-boundary-discipline`, and `principle-encode-lessons-in-structure` for reuse and systemic fixes. |
+| P9–P11 verification and delivery | `expert-testing` when designing broad, adversarial, integration, and load coverage; `test-systematically` when executing deterministic/live matrices, retries, recovery, and clean-state passes; `principle-prove-it-works` for independent observable proof; `principle-sequence-verifiable-units` for phase/gate ordering; `git-workflow-and-versioning` for branch/commit/integration-lock provenance and clean worktrees; `build-audit-logs` for evidence indexes and reviewer traceability; `implementing-security-layers` for rollout safety and stop triggers; `interrogate` when evidence conflicts or a gate decision needs a bounded fact-finding pass. |
+
+The exact named routing catalog is: `ultragoal`, `documentation-and-adrs`, `architect`, `codebase-design`, `agents-md`, `principle-build-the-lever`, `principle-outcome-oriented-execution`, `principle-boundary-discipline`, `principle-encode-lessons-in-structure`, `principle-make-operations-idempotent`, `principle-model-the-domain`, `principle-never-block-on-the-human`, `principle-prove-it-works`, `principle-sequence-verifiable-units`, `principle-subtract-before-you-add`, `context-engineering`, `domain-modeling`, `api-and-interface-design`, `typed-service-contracts`, `tool-design`, `build-audit-logs`, `implementing-security-layers`, `expert-testing`, `test-systematically`, `git-workflow-and-versioning`, and `interrogate`.
+
+## Delegation operating contract
+
+The root thread is the delegator/coordinator, not a feature implementer. It owns product scope, source authority, task decomposition, integration, conflict resolution, integration-lock updates, gate decisions, and final proof.
+
+- Implementation and work threads use GPT-5.6 Luna xhigh.
+- Review threads use GPT-5.6 Sol Medium, following the latest user override.
+- Use threads, never subagents, for delegated work.
+- Every task packet contains: objective, repository/lane ownership, non-goals, dependencies, exact files or surfaces, skill-routing requirements, verifier command/oracle, stop condition, expected evidence, and commit SHA requirement.
+- One writer owns each repository/lane at a time. No two threads edit overlapping files or integration-lock entries. Documentation-only changes do not grant permission to edit code, ADRs, plans, or external repositories outside the packet.
+- Workers and reviewers may take as long as their task needs. Do not rush, interrupt, or reassign solely because a thread has been running for a long time.
+- Integrate only reviewed commits whose evidence and ownership boundary are clear. The root coordinator performs integration and conflict resolution; it does not silently take an unreviewed patch.
+- If Sol Medium finds an issue, route a new bounded Luna fix thread to the issue, then send the resulting commit back to Sol Medium for re-review. Do not ask the original review to self-approve a changed implementation.
+- Archive every spawned thread after its evidence is incorporated and it has no follow-up. Preserve its task, verdict, commit, and verifier evidence in the worklog or evidence index before archive.
+- Local commits are progress checkpoints. A commit is not proof until the relevant verifier and clean-state status are recorded.
+- The root owns final integration, conflict resolution, lock/digest updates, gate decisions, production proof, result assembly, cleanup, and final repository-status checks.
+
+## Reuse and subtraction rules
+
+1. Inspect and reuse existing Plane application services, identity, permissions, settings, API/CLI, pagination, serializers, activities, assets, feature flags, deployment, tests, and monitoring before adding a Plane seam.
+2. Reuse Hermes registry, Tool Search, middleware, tool-call IDs, concurrency, ordered results, session/checkpoint mechanisms, memory/skill/schedule execution, and bounded-result/artifact mechanisms where their boundaries fit. Adapt behind `plane_runtime`; do not expose Hermes as the product.
+3. Use Buzz only as a reference/code donor. Never add a Buzz runtime dependency or make Buzz state authoritative.
+4. Reuse the official MCP server, its FastMCP host, its existing handlers, the official SDK resources, and the `BaseResource` transport seam. Add mapping/gateway code only where necessary.
+5. Custom production code is allowed only at an unavoidable Plane-owned domain seam, cross-process contract, security boundary, catalog/adapter seam, or missing compatibility adapter. Every new seam records the inspected donor, rejected reuse, narrow need, and verifier.
+6. Do not create a duplicate permission model, chat/composer/thread UI, general workflow-definition DSL, second workflow engine, broad Hermes product vocabulary, internal MCP hop, direct database path, or 177 shallow prompt/runtime modules.
+7. Remove marker-only scaffold packages that do not yet own behavior; retain only the current root, lifecycle, and adapters seams until a child package has real behavior, tests, and ownership.
+8. Subtract before adding: delete obsolete compatibility layers after callers migrate and the verifier proves they are unnecessary. Do not preserve an intermediate seam as permanent architecture merely because it is convenient.
+
+## Goal loop and durable state
+
+On every resume or continuation:
+
+1. Read this `GOAL.md`, the latest appended `WORKLOG.md` entry, applicable `AGENTS.md` files, repository statuses, current integration lock, and the next unsatisfied phase gate.
+2. Refresh volatile facts from the exact local repositories and canonical source documents. Treat missing evidence as unknown, not as success.
+3. Select one smallest meaningful phase increment and dispatch only disjoint bounded lanes.
+4. Require the worker to run the strongest relevant verifier, record failures and negative controls, and commit one logical checkpoint.
+5. Send the commit and evidence to the independent reviewer when the lane is reviewable.
+6. Integrate only the reviewed commit, resolve conflicts at the root, regenerate affected artifacts, and rerun affected plus regression checks.
+7. Append exact commands, environment, worktree/commit, exit codes, artifacts, reviewer, decision, failure, and next action to `WORKLOG.md`.
+8. Continue while a safe, relevant, authorized next action exists. Wait for delegated threads when work is in flight; do not create overlapping writers.
+
+Durable state rules:
+
+- `GOAL.md` holds the outcome, accepted model, baseline, authority, phases, routing, delegation, gates, and completion proof.
+- `WORKLOG.md` is append-only. Preserve failures, superseded decisions, exact evidence, and next actions; never rewrite history to make a pass look cleaner.
+- `RESULT.md` is the final evidence packet and must be completed before the goal can be declared complete.
+- Integration locks, generated catalogs, fixtures, manifests, evidence indexes, and result artifacts are content-addressed where their canonical docs require it. Any bound-input change invalidates dependent evidence and triggers the declared rerun.
+- Worktree cleanliness is verified before and after each root integration. Incidental artifacts are removed only when they are known to be generated by this task and safe to remove; unrelated user work is preserved.
+
+## Anti-cheating, approval, and safety gates
+
+No worker or coordinator may:
+
+- weaken, skip, delete, narrow, or rewrite a verifier to obtain a pass;
+- replace real Plane authorization, sandbox, gateway, MCP, or end-to-end behavior with mocks for final proof;
+- claim implementation from docs, scaffolds, generated fixtures, imports, model prose, screenshots alone, or a happy-path trace;
+- hide failures, skips, xpasses, retries, provider/model fallbacks, setup failures, or extra live attempts;
+- silently shrink full Plane action/integration coverage, omit an MCP tool, accept a generic mapping, or deprecate a compatibility path without the explicit authority required by the current manifest/ADR;
+- copy credentials into Plane, generated code, prompts, fixtures, logs, evidence, or result artifacts; or repurpose a credential outside its approved host-held scope;
+- retry `outcome_unknown` blindly, infer success from a lost response, or perform dependent mutation before reconciliation;
+- let model-supplied actor, workspace, tenant, run, budget, catalog, audit, or correlation fields become authoritative;
+- use an exploratory board/PDF, historical task, or donor implementation as normative authority;
+- lower numeric targets or change product boundaries without a recorded decision and the required approval.
+
+Approval and safety gates:
+
+- The current canonical approval record and G0 determine when runtime, application, or verification implementation may begin. `APPROVAL-MANIFEST.md` is the controlling implementation-start authority where the current docs assign it that role; `RELEASE-MANIFEST.md` and `VERIFICATION-MANIFEST.md` are evidence inputs, not competing gates. Do not infer approval from a prose status line, a branch name, or a worker claim.
+- Runtime Plane operations are autonomous within live Plane authorization. HR/admin proposal approval, evaluator review, human outcome acceptance, release approval, rollout promotion, deployment, destructive data changes, credential rotation/revocation, incompatible public contracts, paid services, and security exceptions remain explicit product/delivery gates and are not runtime confirmation prompts.
+- Staged rollout may proceed after P10 verification despite no users, but every stage requires the declared authority, observation, canary, safety stop, readback, and rollback evidence.
+- Automatically stop and trigger rollback review on authorization bypass, credential disclosure, isolation/network escape, duplicate committed mutation, missing required audit, unsafe replay/reconciliation, unbound event, model/provider fallback, or evidence-integrity failure.
+- Destructive data changes, purchases, shared-environment writes, credential repurposing, public incompatible changes, deployment, push/merge, and external system mutations require explicit approval before the action.
 
 ## Blocker standard
 
-Difficulty, uncertainty, long runtime, a failing test, or a useful unanswered investigation is not a blocker. Record the failure and continue with the smallest safe next action.
+Difficulty, uncertainty, a long-running worker, a failing test, missing convenience, or a useful unanswered investigation is not by itself a blocker. The coordinator must record the failure and take the smallest safe next action: inspect the source, narrow the task without changing scope, add a fixture/negative control, route a fix thread, wait, or escalate the exact decision.
 
-Mark the durable goal blocked only when the same external condition prevents meaningful progress for the required repeated goal turns and no authorized alternative remains. Record the exact condition, evidence, preserved partial work, and smallest user or external action that would unblock it.
+A true blocker requires the same external condition to prevent meaningful progress for the required repeated goal turns, no authorized alternative, and a recorded packet containing the exact condition, evidence, affected phase, preserved partial work, and smallest user or external action that would unblock it. Never label a task blocked merely to stop waiting.
+
+## Evidence contract
+
+Every qualifying claim binds all of the following:
+
+- exact repository, branch/worktree, commit SHA, and clean-status result;
+- integration-lock version/digest and all relevant Plane, Hermes, MCP, SDK, catalog, adapter, runtime, fixture, prompt, model metadata, configuration, isolate, container, and execution-limit digests;
+- command, arguments, environment prerequisites, UTC start/end, exit code, and raw-log/artifact hashes;
+- authoritative before/after Plane state, gateway envelopes, audit intent/outcome, runtime/event traces, object IDs, cleanup, and negative-control results;
+- producer identity and independent acquisition/binding evidence where required;
+- worker commit, Sol Medium review verdict, root integration commit, and any approved exception with reason, risk, compensating control, expiry, approver, timestamp, and immutable evidence reference.
+
+Evidence from another repository state, run, trial, nonce, actor, workspace, channel, or producer role does not qualify even when its content hash matches. Model output is never the oracle for Plane state, authorization, isolation, mutation count, audit completeness, or evaluator/human review transitions.
 
 ## Completion proof
 
-`RESULT.md` must contain:
+The goal is complete only when all of these are true:
 
-- Final Plane, Hermes, official MCP, and Plane Python SDK commit IDs and clean status.
-- The production-verification command and complete passing output summary.
-- Required focused test commands and results.
-- Catalog and public compatibility evidence.
-- Security-review findings and their disposition.
-- Load, latency, workflow-evaluation, and reliability results.
-- Migration and rollback rehearsal evidence.
-- Production deployment approval and deployment identifier.
-- Post-deployment permitted and denied workflow readbacks.
-- Mandatory live Hermes acceptance evidence from the authenticated Plane development server.
-- Resolved `openai-codex` provider and `gpt-5.6-luna` model evidence for every counted live run.
-- Evaluation manifest, aggregate metrics, and all failed-run dispositions.
-- Computer Use screenshots of the final Plane and Hermes acceptance state.
-- Correlated audit evidence with secrets redacted.
-- Known residual risks and explicit acceptance.
-- Approved `APPROVAL-MANIFEST.md` version.
-- Independent verifier identity and immutable full-log references.
-- Reviewed commits mapped through build artifacts to deployment identifiers and enabled configuration.
+1. P0–P11 exit gates pass and their evidence is incorporated into `RESULT.md` and the append-only `WORKLOG.md`.
+2. Plane, Hermes, the official MCP fork, and the Plane Python SDK resolve to the final integration lock from clean checkouts; all involved repository statuses are clean.
+3. The version-controlled primary verifier, callable from clean checkouts (the current design proposes `./scripts/agent-tooling/verify-release --integration-lock <approved-lock> --evidence <immutable-evidence-index>`), passes non-zero on any required contract, lifecycle, gateway, authorization, isolation, mutation, runtime, compatibility, operations, load, recovery, provenance, or rollout failure.
+4. The mandatory live Plane+Hermes acceptance passes on the real Plane gateway with host-held Agent credentials, `openai-codex`, exact `gpt-5.6-luna`, native tools, TypeScript composition, allowed/denied readback, exact planning artifacts, idempotent replay, audit correlation, credential/network isolation, and cleanup. No fallback run counts.
+5. Full Plane action/integration coverage is evidenced through the generated catalog, typed gateway paths, adaptive discovery, and complete 177-tool MCP/SDK mapping and compatibility evidence. No operation is omitted merely because it is not eager.
+6. Backend conversations, product events, assignments, runs, artifacts, outcomes, evaluator review, human final decision, private memory/skills, schedules, delegation, chief-of-staff, HR governance, and reused settings/API/CLI operations satisfy their accepted contracts. Chat/composer/thread UI remains excluded.
+7. Deterministic tests pass at 100% with zero skips/xpasses, the full deterministic suite passes twice from clean state, and the exact final artifact passes three consecutive final verification runs. Live evaluation retains at least 50 qualifying authenticated Hermes/Luna attempts, at least 90% complete success, and zero security-critical violations.
+8. Security, load/soak, latency, interruption, `outcome_unknown` reconciliation, artifact expiry/cleanup, credential rotation/revocation, kill-switch, recovery, migration, and rollback evidence meets the approved numeric gates.
+9. Staged rollout has recorded development, allowlisted, expanded, and GA evidence, explicit authority, safety stops, post-deploy enabled/permitted/denied/audit readbacks, and last-known-good rollback proof.
+10. `RESULT.md` contains final SHAs/statuses, verifier command/output, focused checks, catalog/MCP evidence, security findings/disposition, load/reliability/evaluation metrics, migration/rollback, rollout/deployment/readback, redacted audit evidence, residual risks/acceptance, manifest version, independent reviewer, and immutable log references.
+11. All spawned implementation/review threads are archived after evidence incorporation and no follow-up remains; no incidental artifacts remain; `git status --short` is empty in every repository in scope.
 
-The goal may be marked complete only after this evidence exists and every production requirement in the approved `APPROVAL-MANIFEST.md` passes or has an explicitly approved exception.
+Only after this proof exists may the root coordinator report completion. A local commit, green documentation check, generated plan, or successful scaffold import is a progress checkpoint, not completion.

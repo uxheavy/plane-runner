@@ -559,3 +559,24 @@ The source facts are confirmed. The exact gateway/application-service compositio
 - Evaluator review is mandatory before a human accepts or returns any Agent outcome; human acceptance remains the final product decision.
 - Explicit approval of `APPROVAL-MANIFEST.md` plus G0 is the sole implementation-start gate. `RELEASE-MANIFEST.md` and `VERIFICATION-MANIFEST.md` are evidence inputs to that approval and are not competing pre-implementation gates.
 - The current integrated Plane state at reconciliation is branch `codex/agent-tooling-architecture`, commit `c5f4537686152dd510c6aaefc0fd82a3eb358d2c`; runtime, application, and verification implementation remain not started.
+
+## 2026-08-04 — Durable non-UI ultragoal created
+
+### Evidence
+
+- Rewrote `docs/agent-tooling/GOAL.md` into the durable ultragoal for the complete non-UI Plane Agent program. The goal now records the accepted one-Agent/one-role product model, backend conversation and event scope, no-chat-UI boundary, reused-settings rule, Plane/Hermes/Buzz ownership, adaptive disclosure, full action/integration completion, phase gates P0–P11, delegated-thread contract, reuse/subtraction rules, anti-cheating rules, safety stops, evidence binding, blocker standard, durable state rules, and completion proof.
+- Current Plane evidence: `/Users/nqh/Desktop/CODES/plane`, branch `codex/agent-tooling-architecture`, commit `f2be7a82792611ac843e6d6b210f83723b2c4066` (`f2be7a8279`).
+- Current Hermes evidence: `/Users/nqh/Desktop/CODES/hermes-agent`, branch `main`, commit `112f51a5543d490768931514d48a780ad964a868` (`112f51a55`).
+- Plane remains at the thin `apps/api/plane/agent` root/lifecycle/adapters scaffold; Hermes `plane_runtime` is installed and discoverable at `/Users/nqh/Desktop/CODES/hermes-agent/plane_runtime/__init__.py`; implementation beyond these scaffolds has not started.
+- `/private/tmp/plane-runner.pdf`, the Freeform `Plane-runner` board, and historical task `019fa696-357f-79d0-8dbb-bfe4fa722241` remain exploratory context and are not normative authority.
+
+### Model and delegation policy
+
+- Implementation/work threads use GPT-5.6 Luna xhigh.
+- Review threads use GPT-5.6 Sol Medium, following the latest user override.
+- The root thread is coordinator/delegator, not feature implementer; work is delegated through threads, never subagents. The root owns integration, conflict resolution, lock/digest updates, gate decisions, final proof, cleanup, and task archiving.
+
+### Active phase and next action
+
+- Active phase: **P0 — durable contracts and approval baseline**.
+- Next action: the root coordinator refreshes the authoritative approval record, ownership boundaries, integration-lock inputs, and P0 verifier evidence, then delegates only the first disjoint implementation lanes whose dependencies and start gate are satisfied.
