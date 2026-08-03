@@ -7,11 +7,11 @@ This file records durable progress for the Plane Agent Tooling goal. Append entr
 | Field                      | Value                                                                |
 | -------------------------- | -------------------------------------------------------------------- |
 | Phase                      | Program definition                                                   |
-| Active gate                | Freeze and approve release and verification manifests                |
+| Active gate                | Explicit approval of `APPROVAL-MANIFEST.md` (single implementation gate) |
 | Plane branch               | `codex/agent-tooling-architecture`                                   |
 | Hermes branch              | Not created from baseline `5e88745f125c0d332c1d16ea0363860d447657f5` |
 | Last verified Plane commit | `22916237cc`                                                         |
-| Next action                | Freeze the operation boundary, runtime, and remaining numeric gates  |
+| Next action                | Obtain explicit `APPROVAL-MANIFEST.md` approval, then enter G0 and freeze the remaining delivery gates |
 
 ## 2026-07-29 — Goal grounding
 

@@ -2,7 +2,7 @@
 
 ## Status and rule
 
-Proposed requirement-level verification map. This document must be frozen with `RELEASE-MANIFEST.md`, `VERIFICATION-MANIFEST.md`, and `EVALUATION-SCENARIOS.md` before implementation begins.
+Proposed requirement-level verification map. `APPROVAL-MANIFEST.md` is the single implementation gate. This document must be frozen with `RELEASE-MANIFEST.md`, `VERIFICATION-MANIFEST.md`, and `EVALUATION-SCENARIOS.md` as evidence inputs before that gate is approved and implementation begins.
 
 Every completion criterion in `GOAL.md` and every normative row in `RELEASE-MANIFEST.md` appears exactly once below. A row is covered only when its named checks pass their stated oracle and the content-addressed evidence record is present in the final evidence index. Section-relative requirement IDs are stable; the documentation validator compares the source sections and release tables with this inventory and fails on a missing, duplicate, or stale row.
 

@@ -35,6 +35,7 @@ The Plane branch was 37 commits ahead of and 10 behind local `upstream/preview` 
 - Buzz supplies design and code evidence but no runtime authority.
 - Hermes files are run projections. Plane-governed storage remains authoritative.
 - Plane live authorization is the only runtime allow-or-deny decision.
+- An evaluator reviews every Agent outcome before a human accepts or returns it; human acceptance remains final.
 
 ## Architect arena
 
@@ -62,13 +63,13 @@ Rejected:
 - Buzz as a production runtime dependency.
 - A universal mutation tool or profile-owned operation allowlist.
 - One outcome aggregate that collapses actor, profile, assignment, run, and submission lifecycles.
-- Event sourcing, workflow graphs, memory gardeners, or open-ended delegation before the single-agent slice proves the domain spine.
+- Event sourcing, saved workflow graphs, or open-ended delegation before the single-agent slice proves the domain spine.
 
 ## Synthesis decision
 
-ADRs 0003 through 0007 remain Accepted. ADR-0008 and ADR-0009 remain Proposed because shared-memory governance and workflow/delegation contracts are not resolved. ADR-0010 is Proposed until cross-repository schema fixtures prove the narrow runtime seam.
+ADRs 0003 through 0010 are Accepted. The accepted decisions require governed private memory and skills, dynamic planning and delegation without saved workflows, the versioned runtime seam, and evaluator review before human acceptance or return, with human acceptance final. `APPROVAL-MANIFEST.md` is the single implementation gate; no runtime, application, or verification implementation begins until it is explicitly approved.
 
-The first implementation slice should prove one Plane agent actor, one profile version, one assignment contract, one immutable run snapshot, one or more invocation envelopes through a deterministic adapter, one visible terminal outcome event, and human acceptance or revision. Only then should the Hermes adapter be introduced.
+The first implementation slice should prove one Plane Agent actor, one profile version, one assignment contract, one immutable run snapshot, one or more invocation envelopes through a deterministic adapter, one visible terminal outcome event, evaluator review, and human acceptance or return. Only then should the Hermes adapter be introduced.
 
 ## Verification record
 

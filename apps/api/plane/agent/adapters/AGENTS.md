@@ -6,10 +6,11 @@ This file governs `apps/api/plane/agent/adapters/` and its descendants.
 
 ## Local Responsibility
 
-These packages reserve Plane-owned seams for the Operation Gateway, operation
-catalog, invocation idempotency, and append-only audit. They translate
-transport or storage concerns; they do not own a second authorization model or
-duplicate Plane business logic.
+This retained seam is Plane-owned for the Operation Gateway, operation
+catalog, invocation idempotency, and append-only audit. Future child adapters
+must land with real behavior and tests; they translate transport or storage
+concerns and do not own a second authorization model or duplicate Plane
+business logic.
 
 ## Working Method
 
@@ -29,6 +30,14 @@ adapters rather than adding one prompt/runtime module per external operation.
 
 ## Local Verification
 
-From `apps/api/`, verify imports for `plane.agent.adapters` and each child
-package. Confirm no adapter imports a chat UI, saved workflow definition, or
+From the repository root, verify the retained adapters seam in the
+repository-supported API test container:
+
+```sh
+docker compose -f docker-compose-test.yml run --rm --build api-tests \
+  python -c "import plane.agent.adapters"
+```
+
+Do not add child-package imports until a child adapter has real behavior and
+tests. Confirm no adapter imports a chat UI, saved workflow definition, or
 direct runtime-kernel state.

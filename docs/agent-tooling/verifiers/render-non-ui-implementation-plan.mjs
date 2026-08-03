@@ -75,6 +75,9 @@ function validate() {
     for (const peer of lane.parallelWith) {
       if (!lanes.has(peer)) fail(`${lane.id} has unknown parallel lane ${peer}`);
       if (peer === lane.id) fail(`${lane.id} cannot be parallel with itself`);
+      if (!lanes.get(peer).parallelWith.includes(lane.id)) {
+        fail(`${lane.id} and ${peer} must list each other in parallelWith`);
+      }
     }
     const startIndex = lane.startAfter === null ? -1 : Number(lane.startAfter.slice(1));
     const finishIndex = Number(lane.finishBy.slice(1));

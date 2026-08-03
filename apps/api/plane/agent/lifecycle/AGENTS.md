@@ -29,6 +29,13 @@ than exposing transition helpers from each record package.
 
 ## Local Verification
 
-From `apps/api/`, verify `import plane.agent.lifecycle` and inspect that this
-package contains no Django models, migrations, routes, or runtime-provider
-imports.
+From the repository root, verify the retained lifecycle seam in the
+repository-supported API test container:
+
+```sh
+docker compose -f docker-compose-test.yml run --rm --build api-tests \
+  python -c "import plane.agent.lifecycle"
+```
+
+The package must contain no Django models, migrations, routes, or
+runtime-provider imports.

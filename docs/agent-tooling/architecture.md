@@ -67,7 +67,7 @@ Plane keeps four layers explicit:
 
 1. The agent actor identity owns the durable Plane principal, credential, memberships, roles, and object permissions. These facts are the sole entitlement source and are not versioned as behavioral profile content.
 2. A behavioral profile version owns persona, exactly one role, instructions, model/runtime defaults, skill and context references, agent-private memory scopes, and default tool-presentation choices. A run pins the resolved version. Built-in roles are `worker`, `delegator`, `gardener`, `chief_of_staff`, `hr`, and `evaluator`; workspace administrators may define additional single roles.
-3. Human ownership may provision one automatic chief-of-staff agent per human. That agent's effective permissions are the human's current live Plane permissions and are never broader.
+3. Human ownership automatically provisions exactly one chief-of-staff agent per human. This provisioning is mandatory, and that agent's effective permissions are the human's current live Plane permissions and are never broader.
 4. Tool availability comes from installed and enabled Plane features and integrations. Tool disclosure chooses which available schemas are eager or progressive. Neither layer grants or denies Plane operations.
 
 The minimum durable relationships have independent lifecycles:
@@ -90,7 +90,7 @@ The model-facing catalog is designed from natural Plane workflows. Every run sta
 
 The universal core has one `search_workspace` discovery primitive. It returns typed references across Plane object types. Specialized searches remain discoverable for workflows that require domain-specific filters or projections; they do not compete in every agent's initial context.
 
-The hidden execution kernel supplies the mechanisms for the model loop, context management, tool dispatch, transcript capture, concurrency, and bounded results. Plane owns the durable product concepts and authoritative state for identity, profiles, assignments, runs, conversations, agent-private memory, skills, schedules, dynamic delegation, artifacts, evaluator review, and outcomes. Reused kernel subsystems sit behind Plane adapters when they support those concepts; kernel-specific work systems and operational tools remain hidden.
+The hidden execution kernel supplies the mechanisms for the model loop, context management, tool dispatch, transcript capture, concurrency, and bounded results. Plane owns the durable product concepts and authoritative state for identity, profiles, assignments, runs, conversations, agent-private memory, skills, schedules, dynamic delegation, artifacts, evaluator review before human acceptance or return, and outcomes. Reused kernel subsystems sit behind Plane adapters when they support those concepts; kernel-specific work systems and operational tools remain hidden.
 
 Definitions and control state for memory, skills, schedules, and dynamic delegation remain in Plane. There is no saved/versioned workflow-definition system in this scope. The execution kernel may execute these mechanisms behind adapters. Plane-governed storage remains authoritative; `MEMORY.md`, subject-bound `USER.md`, skill packages, and other files are lossless run projections rather than the source of truth. Gardener improvements remain agent-private, immutable, and rollbackable; no knowledge is copied between agents.
 

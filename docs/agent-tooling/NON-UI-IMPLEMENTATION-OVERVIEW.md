@@ -160,6 +160,8 @@ The dotted lane edges show when work starts and the gate by which its evidence m
 ### G3: Non-UI feature breadth complete
 
 - Full Plane integration/action coverage, private memory/skills, schedules, dynamic delegation, artifacts, evaluator review, and outcome APIs satisfy their accepted contracts.
+- HR proposes Agent creation, change, and retirement; workspace administrators approve each proposal; and every human has one mandatory chief-of-staff Agent restricted to that human's live permissions.
+- Gardener application is automatic, versioned, and rollback-capable across sessions while strict per-Agent walls prevent knowledge from being copied between Agents.
 - The approved external MCP inventory is migrated or explicitly dispositioned through the shared gateway.
 - Minimal administration uses existing Plane settings primitives and introduces no chat UI or parallel design system.
 - All supported behaviors have contract, permission, failure, and compatibility tests.
@@ -253,7 +255,7 @@ Completion evidence:
 
 **Window:** G0 → G3
 
-**Can progress alongside:** L3, L4, L10
+**Can progress alongside:** L1, L3, L4, L10
 
 **Outcome:** Plane durably owns independently versioned actors, exactly-one-role profiles, assignments, runs, invocations, outcomes, conversations, artifacts, evaluator review, and human decision state.
 
@@ -262,7 +264,8 @@ Work:
 - Add the minimal Django models, migrations, application services, serializers, and API endpoints for the accepted lifecycle.
 - Persist immutable run snapshots and per-dispatch invocation envelopes, including cumulative budgets and Plane-owned input events.
 - Enforce legal transitions, terminal-event synthesis, cancellation, blocker representation, revision, recovery, evaluator review, and outcome_unknown reconciliation.
-- Provision one chief-of-staff agent per human within live permissions and expose API/CLI fixtures for assignment, dispatch, inspection, outcome submission, evaluator review, accept, and revise.
+- Implement HR proposals for Agent creation, change, and retirement, with workspace-administrator approval for each proposal.
+- Automatically provision one mandatory chief-of-staff Agent per human within that human's live permissions and expose API/CLI fixtures for assignment, dispatch, inspection, outcome submission, evaluator review, accept, and revise.
 
 Reuse first:
 
@@ -289,7 +292,7 @@ Completion evidence:
 
 **Window:** G0 → G3
 
-**Can progress alongside:** L2, L4, L10
+**Can progress alongside:** L1, L2, L4, L10
 
 **Outcome:** Every supported Plane integration/action, native tool, TypeScript callback, runtime lifecycle mutation, and migrated MCP handler shares one typed, authorized, idempotent, bounded, audited Plane operation path.
 
@@ -326,7 +329,7 @@ Completion evidence:
 
 **Window:** G0 → G2
 
-**Can progress alongside:** L2, L3, L5, L6
+**Can progress alongside:** L1, L2, L3, L5, L6, L9
 
 **Outcome:** A separately deployed runtime service executes versioned Plane invocations through one narrow adapter while Hermes remains hidden and replaceable.
 
@@ -362,7 +365,7 @@ Completion evidence:
 
 **Window:** G1 → G2
 
-**Can progress alongside:** L4, L6, L10
+**Can progress alongside:** L1, L4, L6, L9, L10
 
 **Outcome:** Agents can efficiently use eager Plane tools and compose deferred operations in restricted TypeScript without receiving credentials or ambient authority.
 
@@ -398,16 +401,16 @@ Completion evidence:
 
 **Window:** G1 → G3
 
-**Can progress alongside:** L4, L5, L7
+**Can progress alongside:** L1, L4, L5, L7, L10
 
-**Outcome:** Plane governs agent-private context, memory, skills, gardeners, and schedule control while the hidden execution kernel supplies reusable retrieval, learning, skill, and scheduling mechanisms behind adapters.
+**Outcome:** Plane governs agent-private context, memory, skills, gardeners, and schedule definition/control while automatically applying versioned, rollback-capable gardener revisions across sessions behind strict per-Agent walls; the hidden execution kernel supplies reusable retrieval, learning, skill, and scheduling mechanisms behind adapters.
 
 Work:
 
 - Implement agent-private typed scopes, provenance, visibility, retention, immutable revisions, rollback, and deterministic context assembly.
 - Generate lossless MEMORY.md, subject-bound USER.md, and skill-package projections without treating files as the source of truth.
-- Let gardeners maintain multiple agents while keeping every memory and skill change scoped to one target; never copy knowledge between agents.
-- Store approved schedule control state in Plane and execute due events by creating normal assignments and runs through the same run contract.
+- Apply versioned, rollback-capable gardener revisions automatically across sessions while keeping every memory and skill change scoped to one target behind strict per-Agent walls; never copy knowledge between Agents.
+- Own schedule definition and control state in Plane, then trigger due schedules into normal assignments and runs through the same run contract.
 
 Reuse first:
 
@@ -435,28 +438,27 @@ Completion evidence:
 
 **Window:** G2 → G3
 
-**Can progress alongside:** L6, L8, L10
+**Can progress alongside:** L1, L6, L8, L10, L11
 
-**Outcome:** Plane supports case-specific dynamic planning, normal delegated assignments, and schedule-triggered runs after the single-agent lifecycle is proven, without a saved workflow-definition product.
+**Outcome:** Plane supports case-specific dynamic planning, normal delegated assignments, recorded rationale, and delegation lineage after the single-agent lifecycle is proven, without a saved workflow-definition product.
 
 Work:
 
-- Implement the dedicated delegator role's case-specific planning and rationale records.
+- Implement the dedicated delegator role's case-specific planning.
 - Automatically assign unclaimed work to humans or agents through normal assignment contracts.
-- Implement delegated assignment scope, budgets, lineage, authorization, completion, and failure semantics.
-- Allow approved schedules to create normal assignments and runs through the same run/invocation contract; add no saved workflow definitions.
+- Record the rationale for every automatic assignment.
+- Persist delegation lineage with scope, budgets, authorization, completion, and failure semantics.
 
 Reuse first:
 
-- Plane assignment/run lifecycle and schedule control state
+- Plane assignment/run lifecycle
 - Hermes tools/delegate_tool.py and agent/subagent_lifecycle.py as execution donors
-- Existing assignment and schedule mechanisms as the canonical Plane lifecycle; no workflow-definition donor is required
+- Existing assignment mechanisms as the canonical Plane lifecycle; no workflow-definition donor is required
 
 Unavoidable custom seams:
 
 - Plane dynamic-plan/delegation domain records
 - Delegated assignment policy adapter
-- Schedule-to-assignment application service
 
 Completion evidence:
 
@@ -470,7 +472,7 @@ Completion evidence:
 
 **Window:** G1 → G3
 
-**Can progress alongside:** L7, L9, L10
+**Can progress alongside:** L1, L7, L9, L10, L11
 
 **Outcome:** The supported Python MCP surface remains compatible while incrementally routing approved operations through the same Plane gateway, with the full supported action inventory covered or explicitly dispositioned.
 
@@ -505,7 +507,7 @@ Completion evidence:
 
 **Window:** G0 → G5
 
-**Can progress alongside:** L1, L4, L5, L8, L10
+**Can progress alongside:** L1, L4, L5, L8, L10, L11
 
 **Outcome:** The runtime can be safely operated, observed, limited, upgraded, killed, recovered, and rolled back in production.
 
@@ -542,7 +544,7 @@ Completion evidence:
 
 **Window:** G1 → G3
 
-**Can progress alongside:** L2, L3, L6, L8, L9
+**Can progress alongside:** L1, L2, L3, L5, L6, L7, L8, L9, L11
 
 **Outcome:** Administrators can configure and inspect roles, agents, HR proposals, gardeners, schedules, evaluators, limits, and kill switches through Plane's existing settings architecture, while all agent execution remains operable without UI.
 
