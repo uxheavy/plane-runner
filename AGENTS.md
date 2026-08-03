@@ -56,6 +56,13 @@ Plane is a pnpm/Turborepo monorepo. The Django API and workers live in `apps/api
 - `pnpm turbo run <command> --filter=<package>` — run a targeted task.
 - `pnpm --filter=@plane/ui storybook` — start Storybook on port 6006.
 
+## Scoped Instructions
+
+| Path                        | Local Guidance                                                                                  |
+| --------------------------- | ----------------------------------------------------------------------------------------------- |
+| `packages/chat-context/`    | Semantic selection, privacy boundaries, Django hydration contract, and cross-stack verification |
+| `packages/tailwind-config/` | Canvas, surface, layer, and semantic color rules                                                |
+
 ## Code Style
 
 - Use `workspace:*` for internal dependencies and `catalog:` for external dependencies.

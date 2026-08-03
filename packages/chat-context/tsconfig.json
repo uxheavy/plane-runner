@@ -1,0 +1,5 @@
+{
+  "extends": "@plane/typescript-config/react-library.json",
+  "include": ["src/**/*", "tests/**/*", "vitest.config.ts"],
+  "exclude": ["node_modules", "dist"]
+}
