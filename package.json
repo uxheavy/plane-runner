@@ -21,8 +21,7 @@
     "check:local-dev:runtime": "./tools/check-local-dev.sh --runtime",
     "prepare": "husky",
     "doctor": "npx react-doctor@latest",
-    "verify:chat-context": "./packages/chat-context/verify-release.sh",
-    "verify:agent-implementation-plan": "node docs/agent-tooling/verifiers/render-non-ui-implementation-plan.mjs --check"
+    "verify:chat-context": "./packages/chat-context/verify-release.sh"
   },
   "devDependencies": {
     "ajv": "catalog:",
