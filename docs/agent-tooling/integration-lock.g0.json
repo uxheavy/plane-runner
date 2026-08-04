@@ -13,7 +13,7 @@
       "id": "plane",
       "path": ".",
       "remote": "https://github.com/uxheavy/plane-runner.git",
-      "sha": "f95240ca5897bd13acf8c933fa054ae88ef034f0",
+      "sha": "d35f68c7d7692f9abfeeb96fe538d4bf9c4fe9b5",
       "ref": "codex/agent-tooling-architecture",
       "status": "clean",
       "role": "control plane, domain, gateway, catalog, and integration root",
@@ -82,7 +82,7 @@
       "docs/agent-tooling/RUNTIME-DESIGN.md": "8729632d156fabc5314d8ed8260e230196f412fa08846a3a1665c81138742381",
       "docs/agent-tooling/SAFETY-EVALUATION-DESIGN.md": "5505d474d3c190fd5094256eea17af21ef4a7e0ac9306636cb93b03dd51f9bb3",
       "docs/agent-tooling/VERIFICATION-MANIFEST.md": "1b9dfda047f61247399e0ffe9310f84e4e4bfbd08f66f7bce5caa8bc8952f9b4",
-      "docs/agent-tooling/architecture.md": "2d69cd61552f25ede272abfa633d66dcd4f2471b50f3a474afe4c73175af632b",
+      "docs/agent-tooling/architecture.md": "87e579c9c84f5156458a16d6e3a55fbdc603b95edd52465e2e3696ae9bcd8dc0",
       "docs/agent-tooling/decision-register.md": "1805af44e3976054a62648cf7cab9141791c282eadc2d05959ce698d6130c376",
       "docs/agent-tooling/delivery-plan.md": "fd18d2fcabbd086cd13248b4e12f42abd05141883ed9de8ba0a26886a35894a4",
       "docs/agent-tooling/fixtures/planning-v1.json": "88b38a00f06d65418e01f3019a0914cfef7ddacf6dbb9f4b078374623040a6c7",
@@ -119,13 +119,13 @@
       "docs/decisions/0008-scoped-memory-and-context.md": "4fba4c326c428af491bdef6dbd55f0b8a1cc22f5e04e2fc26f59c61fe4b22c10",
       "docs/decisions/0009-workflows-and-agent-delegation.md": "81b0e3a6b7665897f3cf461f3b647cfc2b8c4bef6e2d26f4a4908b6c5f9b4740",
       "docs/decisions/0010-plane-runtime-contract.md": "2d6bbdf50580602fd4da6df10715bbb6f77e65ed4a8167e2d7c34bb45d32537b",
-      "docs/agent-tooling/SOURCE-INVENTORY.md": "88ad685c723874cb01e2f1ff2a8b13b6db73ec65578475767cc3b830c0f0d7a3"
+      "docs/agent-tooling/SOURCE-INVENTORY.md": "327b16427bbec3fcf3e1cbd7e3496676d52006cad7911e5e0cceee7935c35ee8"
     }
   },
   "seal": {
     "state": "sealed",
-    "contentCommit": "f95240ca5897bd13acf8c933fa054ae88ef034f0",
-    "contentTree": "8132648413d253013d7e1c74001bc2176b3a4ca1",
+    "contentCommit": "d35f68c7d7692f9abfeeb96fe538d4bf9c4fe9b5",
+    "contentTree": "f2f812102f422927ab4811ea1bd9d39ec65e87bb",
     "contentPaths": [
       "docs/agent-tooling/ADR-SYNTHESIS.md",
       "docs/agent-tooling/APPROVAL-MANIFEST.md",
