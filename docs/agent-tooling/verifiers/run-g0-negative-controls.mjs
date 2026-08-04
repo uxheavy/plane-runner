@@ -364,7 +364,7 @@ const resealedPositiveCases = [
     mutate: (directory) =>
       append(
         directory,
-        "docs/agent-tooling/NON-UI-IMPLEMENTATION-OVERVIEW.md",
+        "docs/agent-tooling/README.md",
         "\nImplementation note: see docs/agent-tooling/README.md; ordinary prose may execute a later adapter step.\n"
       ),
     expected: "PASS retired-name negative control",
