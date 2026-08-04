@@ -559,31 +559,48 @@ function isWithinRange(occurrence, ranges) {
   return ranges.some((range) => occurrence.start >= range.start && occurrence.end <= range.end);
 }
 
-function historicalOccurrence(line, occurrence, occurrences) {
-  const marker =
+function classifyHistoricalOccurrences(line, occurrences) {
+  const markerPattern =
     /\b(?:retired|historical|negative[- ]control|legacy|supersed(?:ed|es)?|rejected|forbidden|replaced)\b/gi;
   const separators = /[;|.!?\n]/g;
   const separatorPositions = [...line.matchAll(separators)].map((match) => match.index);
-  const previousSeparator = separatorPositions.findLast((position) => position < occurrence.start);
-  const clauseStart = previousSeparator === undefined ? 0 : previousSeparator + 1;
-  const clauseEnd = separatorPositions.find((position) => position >= occurrence.end) ?? line.length;
-  const clauseOccurrences = occurrences.filter(
-    (candidate) => candidate.start >= clauseStart && candidate.end <= clauseEnd
-  );
+  const historical = new Set();
 
-  for (const match of line.matchAll(marker)) {
-    const markerStart = match.index;
-    const markerEnd = markerStart + match[0].length;
-    if (markerStart < clauseStart || markerEnd > clauseEnd) continue;
-    if (markerEnd <= occurrence.start) {
-      const firstFollowing = clauseOccurrences.find((candidate) => candidate.start >= markerEnd);
-      if (firstFollowing?.start === occurrence.start) return true;
-    } else if (markerStart >= occurrence.end) {
-      const lastPreceding = clauseOccurrences.findLast((candidate) => candidate.end <= markerStart);
-      if (lastPreceding?.start === occurrence.start) return true;
+  // Pair each marker and occurrence once at the clause level. A marker between
+  // two occurrences has two directional candidates, so it is ambiguous and
+  // cannot exempt either occurrence from authoritative-name validation.
+  const clauses = [];
+  let clauseStart = 0;
+  for (const separatorPosition of [...separatorPositions, line.length]) {
+    clauses.push({ start: clauseStart, end: separatorPosition });
+    clauseStart = separatorPosition + 1;
+  }
+
+  for (const clause of clauses) {
+    const clauseOccurrences = occurrences
+      .map((occurrence, index) => ({ occurrence, index }))
+      .filter(({ occurrence }) => occurrence.start >= clause.start && occurrence.end <= clause.end);
+    const clauseMarkers = [...line.matchAll(markerPattern)]
+      .map((match) => ({ start: match.index, end: match.index + match[0].length }))
+      .filter((marker) => marker.start >= clause.start && marker.end <= clause.end);
+    const consumedOccurrences = new Set();
+
+    for (const marker of clauseMarkers) {
+      const candidates = new Set();
+      const firstFollowing = clauseOccurrences.find(({ occurrence }) => occurrence.start >= marker.end);
+      const lastPreceding = clauseOccurrences.findLast(({ occurrence }) => occurrence.end <= marker.start);
+      if (firstFollowing) candidates.add(firstFollowing.index);
+      if (lastPreceding) candidates.add(lastPreceding.index);
+
+      if (candidates.size !== 1) continue;
+      const [occurrenceIndex] = candidates;
+      if (consumedOccurrences.has(occurrenceIndex)) continue;
+      consumedOccurrences.add(occurrenceIndex);
+      historical.add(occurrenceIndex);
     }
   }
-  return false;
+
+  return occurrences.map((_, index) => historical.has(index));
 }
 
 function designatedInternalIdentifierRanges(line) {
@@ -611,11 +628,10 @@ function retiredNameViolation(line, name, { structured = false } = {}) {
   if (occurrences.length === 0 || (!structured && !hasAuthoritativeTextMarker(line))) return false;
   const internalRanges = designatedInternalIdentifierRanges(line);
   const pathRanges = ordinaryPathRanges(line);
+  const historical = classifyHistoricalOccurrences(line, occurrences);
   return occurrences.some(
-    (occurrence) =>
-      !historicalOccurrence(line, occurrence, occurrences) &&
-      !isWithinRange(occurrence, internalRanges) &&
-      !isWithinRange(occurrence, pathRanges)
+    (occurrence, index) =>
+      !historical[index] && !isWithinRange(occurrence, internalRanges) && !isWithinRange(occurrence, pathRanges)
   );
 }
 
@@ -694,17 +710,20 @@ function checkRetiredNameControls() {
     const line = `Rejected ${name} authoritative model-facing name ${name}`;
     const occurrences = tokenOccurrences(line, name);
     assert(occurrences.length === 2, `compact same-clause control must contain two ${name} occurrences`);
-    assert(
-      historicalOccurrence(line, occurrences[0], occurrences),
-      `compact same-clause control did not allow the explicitly rejected ${name} occurrence`
-    );
-    assert(
-      !historicalOccurrence(line, occurrences[1], occurrences),
-      `compact same-clause control incorrectly allowed the authoritative ${name} occurrence`
-    );
+    const historical = classifyHistoricalOccurrences(line, occurrences);
+    assert(historical[0], `compact same-clause control did not allow the explicitly rejected ${name} occurrence`);
+    assert(!historical[1], `compact same-clause control incorrectly allowed the authoritative ${name} occurrence`);
     assert(
       retiredNameViolation(line, name),
       `compact same-clause control did not reject the later authoritative ${name} occurrence`
+    );
+
+    const ambiguousLine = `${name} rejected ${name} authoritative model-facing name`;
+    const ambiguousOccurrences = tokenOccurrences(ambiguousLine, name);
+    assert(ambiguousOccurrences.length === 2, `ambiguous same-clause control must contain two ${name} occurrences`);
+    assert(
+      classifyHistoricalOccurrences(ambiguousLine, ambiguousOccurrences).every((matched) => !matched),
+      `ambiguous same-clause control consumed a marker for ${name}`
     );
   }
 }

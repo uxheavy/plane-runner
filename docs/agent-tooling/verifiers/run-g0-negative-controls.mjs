@@ -286,6 +286,18 @@ cases.push(
 const resealedAdversarialCases = [];
 for (const name of retiredNames) {
   resealedAdversarialCases.push({
+    name: `valid-reseal ambiguous marker between identical occurrences ${name}`,
+    mutate: (directory) =>
+      append(
+        directory,
+        "docs/agent-tooling/prompts/release-planning-v1.md",
+        `\n${name} rejected ${name} authoritative model-facing name\n`
+      ),
+    expected: `docs/agent-tooling/prompts/release-planning-v1.md authoritatively uses retired name ${name}`,
+    reseal: true,
+    refreshPromptDigest: true,
+  });
+  resealedAdversarialCases.push({
     name: `valid-reseal compact same-clause historical and authoritative ${name}`,
     mutate: (directory) =>
       append(
@@ -348,7 +360,21 @@ for (const name of retiredNames) {
   });
 }
 
-const resealedPositiveCases = [
+const resealedPositiveCases = retiredNames.map((name) => ({
+  name: `valid-reseal two corresponding marker directions ${name}`,
+  mutate: (directory) =>
+    append(
+      directory,
+      "docs/agent-tooling/prompts/release-planning-v1.md",
+      `\nRejected ${name}; ${name} was historical\n`
+    ),
+  expected: "PASS retired-name negative control",
+  expectSuccess: true,
+  reseal: true,
+  refreshPromptDigest: true,
+}));
+
+const existingResealedPositiveCases = [
   {
     name: "valid-reseal clearly marked historical occurrence",
     mutate: (directory) =>
@@ -389,7 +415,7 @@ const resealedPositiveCases = [
   },
 ];
 
-cases.push(...resealedAdversarialCases, ...resealedPositiveCases);
+cases.push(...resealedAdversarialCases, ...existingResealedPositiveCases, ...resealedPositiveCases);
 
 function runPreflight(directory, testCase, { allowDirty = false } = {}) {
   const args = ["docs/agent-tooling/verifiers/verify-g0-preflight.mjs", "--mode", "preflight"];
