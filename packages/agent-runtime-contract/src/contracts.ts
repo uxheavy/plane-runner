@@ -1,12 +1,27 @@
 import { createHash } from "node:crypto";
 
-import byteConstraints from "./byte-constraints.json" with { type: "json" };
-import { copyUint8Array, uint8ArrayByteLength, utf8ByteLengthUpTo } from "./internal-byte-utils";
+import { utf8ByteLengthUpTo } from "./internal-utf8-utils";
 
 export const PLANE_AGENT_RUNTIME_PROTOCOL = "plane.agent-runtime/v1" as const;
 
-const MAX_REF_LENGTH = byteConstraints.reference.jsonSchemaMaxLength;
-const REF_IDENTIFIER_MAX_LENGTH = byteConstraints.reference.identifierCharacterMaxLength;
+const MAX_REF_LENGTH = 128;
+const REF_IDENTIFIER_MAX_LENGTH = 120;
+const CONTRACT_DIGEST_BYTE_MIN = 64;
+const CONTRACT_DIGEST_BYTE_MAX = 64;
+const CONTENT_DIGEST_BYTE_MIN = 72;
+const CONTENT_DIGEST_BYTE_MAX = 72;
+const RUN_SNAPSHOT_CONTENT_DIGEST_BYTE_MIN = 73;
+const RUN_SNAPSHOT_CONTENT_DIGEST_BYTE_MAX = 73;
+const BOUNDED_TEXT_BYTE_MIN = 1;
+const BOUNDED_TEXT_BYTE_MAX = 4096;
+const BOUNDED_PROMPT_BYTE_MIN = 1;
+const BOUNDED_PROMPT_BYTE_MAX = 32768;
+const BOUNDED_TOKEN_BYTE_MIN = 1;
+const BOUNDED_TOKEN_BYTE_MAX = 256;
+const TIMESTAMP_BYTE_MIN = 1;
+const TIMESTAMP_BYTE_MAX = 64;
+const MAX_BOUNDED_BYTE_COUNT = 1_048_576;
+const MAX_SERIALIZED_JSON_BYTES = 1_048_576;
 declare const validatedContractBrand: unique symbol;
 
 export type PlaneAgentRuntimeProtocol = typeof PLANE_AGENT_RUNTIME_PROTOCOL;
@@ -87,30 +102,22 @@ const NAMESPACED_REF_PATTERN = new RegExp(
 );
 const hexDigestPattern = (minimum: number, maximum: number) =>
   new RegExp(`^[a-f0-9]{${minimum === maximum ? minimum : `${minimum},${maximum}`}}$`);
-const DIGEST_PATTERN = hexDigestPattern(
-  byteConstraints.contractDigest.jsonSchemaMinLength,
-  byteConstraints.contractDigest.jsonSchemaMaxLength
-);
+const DIGEST_PATTERN = hexDigestPattern(CONTRACT_DIGEST_BYTE_MIN, CONTRACT_DIGEST_BYTE_MAX);
 
 type RefTag = string;
 
 function makeNamespacedRef<Tag extends RefTag>(tag: Tag, namespace: string, value: string): OpaqueRef<Tag> {
   void tag;
   if (typeof value !== "string") {
-    throw new TypeError(`${namespace} references must be strings`);
+    throw new ContractParseError("reference", "invalid contract reference");
   }
   if (!REF_SUFFIX_PATTERN.test(value)) {
-    throw new TypeError(
-      `${namespace} references must contain a 1-${REF_IDENTIFIER_MAX_LENGTH} character identifier suffix`
-    );
+    throw new ContractParseError("reference", "invalid contract reference");
   }
 
   const namespaced = `${namespace}:${value}`;
-  if (
-    namespaced.length > MAX_REF_LENGTH ||
-    utf8ByteLengthUpTo(namespaced, UTF8_BYTE_LIMITS.reference) > UTF8_BYTE_LIMITS.reference
-  ) {
-    throw new TypeError(`${namespace} references must be at most 128 characters`);
+  if (namespaced.length > MAX_REF_LENGTH || utf8ByteLengthUpTo(namespaced, MAX_REF_LENGTH) > MAX_REF_LENGTH) {
+    throw new ContractParseError("reference", "invalid contract reference");
   }
 
   return namespaced as OpaqueRef<Tag>;
@@ -121,14 +128,14 @@ function parseNamespacedRef<Tag extends RefTag>(tag: Tag, namespace: string, val
   if (
     typeof value !== "string" ||
     value.length > MAX_REF_LENGTH ||
-    utf8ByteLengthUpTo(value, UTF8_BYTE_LIMITS.reference) > UTF8_BYTE_LIMITS.reference ||
+    utf8ByteLengthUpTo(value, MAX_REF_LENGTH) > MAX_REF_LENGTH ||
     !NAMESPACED_REF_PATTERN.test(value)
   ) {
-    throw new TypeError(`${namespace} references must use the ${namespace}:<identifier> namespace`);
+    throw new ContractParseError("reference", "invalid contract reference");
   }
 
   if (!value.startsWith(`${namespace}:`)) {
-    throw new TypeError(`Expected a ${namespace} reference`);
+    throw new ContractParseError("reference", "invalid contract reference");
   }
 
   return value as OpaqueRef<Tag>;
@@ -229,11 +236,11 @@ export const parseGatewayReceiptRef = refs.gatewayReceipt.parse;
 export const createAuthorizationReceiptRef = refs.authorizationReceipt.create;
 export const parseAuthorizationReceiptRef = refs.authorizationReceipt.parse;
 
-function namespacedDigestBounds(namespace: string, constraint: typeof byteConstraints.contentDigest) {
+function namespacedDigestBounds(namespace: string, minimum: number, maximum: number) {
   const prefixBytes = utf8ByteLengthUpTo(`${namespace}:`);
   return {
-    minimum: constraint.utf8ByteMin - prefixBytes,
-    maximum: constraint.utf8ByteMax - prefixBytes,
+    minimum: minimum - prefixBytes,
+    maximum: maximum - prefixBytes,
   };
 }
 
@@ -241,20 +248,21 @@ function makeDigest<Tag extends RefTag>(
   tag: Tag,
   namespace: string,
   value: string,
-  constraint: typeof byteConstraints.contentDigest
+  minimum: number,
+  maximum: number
 ): OpaqueRef<Tag> {
   void tag;
   if (typeof value !== "string") {
-    throw new TypeError(`${namespace} digests must be strings`);
+    throw new ContractParseError("digest", "invalid contract digest");
   }
-  const bounds = namespacedDigestBounds(namespace, constraint);
+  const bounds = namespacedDigestBounds(namespace, minimum, maximum);
   const bytes = utf8ByteLengthUpTo(value);
   if (
     bytes < bounds.minimum ||
     bytes > bounds.maximum ||
     !hexDigestPattern(bounds.minimum, bounds.maximum).test(value)
   ) {
-    throw new TypeError(`${namespace} digests must be lowercase SHA-256 hex strings`);
+    throw new ContractParseError("digest", "invalid contract digest");
   }
 
   return `${namespace}:${value}` as OpaqueRef<Tag>;
@@ -264,27 +272,24 @@ function parseNamespacedDigest<Tag extends RefTag>(
   tag: Tag,
   namespace: string,
   value: unknown,
-  constraint: typeof byteConstraints.contentDigest
+  minimum: number,
+  maximum: number
 ): OpaqueRef<Tag> {
   void tag;
   if (typeof value !== "string" || !value.startsWith(`${namespace}:`)) {
-    throw new TypeError(`Expected a ${namespace} digest`);
+    throw new ContractParseError("digest", "invalid contract digest");
   }
 
-  return makeDigest(tag, namespace, value.slice(namespace.length + 1), constraint);
+  return makeDigest(tag, namespace, value.slice(namespace.length + 1), minimum, maximum);
 }
 
 export function createContractDigest(value: string): ContractDigest {
   if (typeof value !== "string") {
-    throw new TypeError("Contract digests must be strings");
+    throw new ContractParseError("digest", "invalid contract digest");
   }
   const bytes = utf8ByteLengthUpTo(value);
-  if (
-    bytes < byteConstraints.contractDigest.utf8ByteMin ||
-    bytes > byteConstraints.contractDigest.utf8ByteMax ||
-    !DIGEST_PATTERN.test(value)
-  ) {
-    throw new TypeError("Contract digests must be lowercase SHA-256 hex strings");
+  if (bytes < CONTRACT_DIGEST_BYTE_MIN || bytes > CONTRACT_DIGEST_BYTE_MAX || !DIGEST_PATTERN.test(value)) {
+    throw new ContractParseError("digest", "invalid contract digest");
   }
 
   return value as ContractDigest;
@@ -292,27 +297,39 @@ export function createContractDigest(value: string): ContractDigest {
 
 export function parseContractDigest(value: unknown): ContractDigest {
   if (typeof value !== "string") {
-    throw new TypeError("Contract digests must be strings");
+    throw new ContractParseError("digest", "invalid contract digest");
   }
 
   return createContractDigest(value);
 }
 
 export const createContentDigest = (value: string): ContentDigest =>
-  makeDigest("content-digest", "content", value, byteConstraints.contentDigest);
+  makeDigest("content-digest", "content", value, CONTENT_DIGEST_BYTE_MIN, CONTENT_DIGEST_BYTE_MAX);
 export const parseContentDigest = (value: unknown): ContentDigest =>
-  parseNamespacedDigest("content-digest", "content", value, byteConstraints.contentDigest);
+  parseNamespacedDigest("content-digest", "content", value, CONTENT_DIGEST_BYTE_MIN, CONTENT_DIGEST_BYTE_MAX);
 export const createRunSnapshotContentDigest = (value: string): RunSnapshotContentDigest =>
-  makeDigest("run-snapshot-content-digest", "snapshot", value, byteConstraints.runSnapshotContentDigest);
+  makeDigest(
+    "run-snapshot-content-digest",
+    "snapshot",
+    value,
+    RUN_SNAPSHOT_CONTENT_DIGEST_BYTE_MIN,
+    RUN_SNAPSHOT_CONTENT_DIGEST_BYTE_MAX
+  );
 export const parseRunSnapshotContentDigest = (value: unknown): RunSnapshotContentDigest =>
-  parseNamespacedDigest("run-snapshot-content-digest", "snapshot", value, byteConstraints.runSnapshotContentDigest);
+  parseNamespacedDigest(
+    "run-snapshot-content-digest",
+    "snapshot",
+    value,
+    RUN_SNAPSHOT_CONTENT_DIGEST_BYTE_MIN,
+    RUN_SNAPSHOT_CONTENT_DIGEST_BYTE_MAX
+  );
 
 function deepFreeze<T>(value: T): T {
   if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
     for (const key of Reflect.ownKeys(value)) {
       const descriptor = Object.getOwnPropertyDescriptor(value, key);
       if (descriptor === undefined || !("value" in descriptor)) {
-        throw new TypeError("Contract values cannot contain accessors");
+        throw new ContractParseError("contract", "invalid contract value");
       }
       deepFreeze(descriptor.value);
     }
@@ -394,7 +411,7 @@ export type ContractDigests = Readonly<{
   runtimeDurableState: ContractDigest;
 }>;
 
-export const CONTRACT_SCHEMA_NAMES = [
+const CONTRACT_SCHEMA_NAMES = [
   "run-snapshot",
   "invocation-envelope",
   "runtime-event",
@@ -425,7 +442,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function parseManifestEntry(value: unknown, name: ContractSchemaName) {
   const object = requireRecord(value, `ContractManifest.schemas.${name}`, ["filename", "sha256"]);
   if (object.filename !== `${name}.schema.json`) {
-    throw new TypeError(`Invalid manifest entry for ${name}`);
+    throw new ContractParseError("ContractManifest.schemas", "invalid contract manifest");
   }
 
   return { filename: object.filename, sha256: parseContractDigest(object.sha256) };
@@ -434,7 +451,7 @@ function parseManifestEntry(value: unknown, name: ContractSchemaName) {
 function parseContractManifestObject(value: unknown): ContractManifest {
   const object = requireRecord(parseOwnedJson(value, "ContractManifest"), "ContractManifest", ["protocol", "schemas"]);
   if (object.protocol !== PLANE_AGENT_RUNTIME_PROTOCOL) {
-    throw new TypeError("Invalid Plane Agent runtime contract manifest");
+    throw new ContractParseError("ContractManifest", "invalid contract manifest");
   }
   const schemas = requireRecord(object.schemas, "ContractManifest.schemas", CONTRACT_SCHEMA_NAMES);
   return deepFreeze({
@@ -449,40 +466,22 @@ function parseContractManifestObject(value: unknown): ContractManifest {
   });
 }
 
-export type ContractJsonInput = string | Uint8Array;
-
-const isUint8Array = (value: unknown): value is Uint8Array => ArrayBuffer.isView(value) && value instanceof Uint8Array;
+export type ContractJsonInput = string;
 
 function parseSerializedJson(value: unknown, path: string): unknown {
-  let text: string;
-  if (typeof value === "string") {
-    if (utf8ByteLengthUpTo(value, MAX_SERIALIZED_JSON_BYTES) > MAX_SERIALIZED_JSON_BYTES) {
-      throw new ContractParseError(
-        path,
-        "serialized input exceeds the maximum UTF-8 byte size",
-        "serialized_input_too_large"
-      );
-    }
-    text = value;
-  } else if (isUint8Array(value)) {
-    if (uint8ArrayByteLength(value) > MAX_SERIALIZED_JSON_BYTES) {
-      throw new ContractParseError(
-        path,
-        "serialized input exceeds the maximum UTF-8 byte size",
-        "serialized_input_too_large"
-      );
-    }
-    try {
-      text = new TextDecoder("utf-8", { fatal: true }).decode(copyUint8Array(value));
-    } catch {
-      throw new ContractParseError(path, "serialized input must be valid UTF-8 JSON", "invalid_serialized_input");
-    }
-  } else {
-    throw new ContractParseError(path, "input must be serialized JSON text or UTF-8 bytes", "unsupported_live_input");
+  if (typeof value !== "string") {
+    throw new ContractParseError(path, "input must be serialized JSON text", "unsupported_live_input");
+  }
+  if (utf8ByteLengthUpTo(value, MAX_SERIALIZED_JSON_BYTES) > MAX_SERIALIZED_JSON_BYTES) {
+    throw new ContractParseError(
+      path,
+      "serialized input exceeds the maximum UTF-8 byte size",
+      "serialized_input_too_large"
+    );
   }
 
   try {
-    return JSON.parse(text) as unknown;
+    return JSON.parse(value) as unknown;
   } catch {
     throw new ContractParseError(path, "serialized input must be valid JSON", "invalid_serialized_input");
   }
@@ -537,18 +536,6 @@ export function serializedJsonByteLength(value: ContractJsonInput): number {
   return serializedOwnedJsonByteLength(parseSerializedJson(value, "serializedJson"));
 }
 
-export const UTF8_BYTE_LIMITS = {
-  reference: byteConstraints.reference.utf8ByteMax,
-  boundedText: byteConstraints.boundedText.utf8ByteMax,
-  boundedPrompt: byteConstraints.boundedPrompt.utf8ByteMax,
-  boundedToken: byteConstraints.boundedToken.utf8ByteMax,
-  timestamp: byteConstraints.timestamp.utf8ByteMax,
-  serializedContract: byteConstraints.serializedContract.utf8ByteMax,
-} as const;
-
-export const MAX_SERIALIZED_JSON_BYTES = UTF8_BYTE_LIMITS.serializedContract;
-const MAX_BOUNDED_BYTE_COUNT = byteConstraints.boundedByteCount.numericMax;
-
 type CanonicalJsonLimits = Readonly<{
   maxDepth: number;
   maxNodes: number;
@@ -589,6 +576,7 @@ class SafeJsonError extends TypeError {
     super(code);
     this.name = "SafeJsonError";
     this.code = code;
+    Object.freeze(this);
   }
 }
 
@@ -942,7 +930,7 @@ export type ContractParseErrorCode =
 
 const safeContractPath = (path: string): string => (/^[A-Za-z][A-Za-z0-9_.[\]-]*$/.test(path) ? path : "input");
 
-export class ContractParseError extends TypeError {
+class ContractParseError extends TypeError {
   readonly code: ContractParseErrorCode;
   readonly path: string;
 
@@ -952,6 +940,7 @@ export class ContractParseError extends TypeError {
     this.name = "ContractParseError";
     this.code = code;
     this.path = safePath;
+    Object.freeze(this);
   }
 }
 
@@ -1015,37 +1004,32 @@ function parseRef<Tag extends string>(
 ): OpaqueRef<Tag> {
   try {
     const parsed = parser(value);
-    if (serializedOwnedJsonByteLength(parsed) - 2 > UTF8_BYTE_LIMITS.reference) {
-      throw new TypeError("reference exceeds the UTF-8 byte limit");
+    if (serializedOwnedJsonByteLength(parsed) - 2 > MAX_REF_LENGTH) {
+      throw new ContractParseError(path, "invalid contract reference");
     }
     return parsed;
   } catch (error) {
     if (error instanceof ContractParseError) {
       throw error;
     }
-    throw new ContractParseError(path, error instanceof Error ? error.message : "invalid reference");
+    throw new ContractParseError(path, "invalid contract reference");
   }
 }
 
 function parseBoundedText(value: unknown, path: string): BoundedText {
-  return parseString(value, path, UTF8_BYTE_LIMITS.boundedText, byteConstraints.boundedText.utf8ByteMin) as BoundedText;
+  return parseString(value, path, BOUNDED_TEXT_BYTE_MAX, BOUNDED_TEXT_BYTE_MIN) as BoundedText;
 }
 
 function parseBoundedPrompt(value: unknown, path: string): BoundedPrompt {
-  return parseString(
-    value,
-    path,
-    UTF8_BYTE_LIMITS.boundedPrompt,
-    byteConstraints.boundedPrompt.utf8ByteMin
-  ) as BoundedPrompt;
+  return parseString(value, path, BOUNDED_PROMPT_BYTE_MAX, BOUNDED_PROMPT_BYTE_MIN) as BoundedPrompt;
 }
 
 function parseBoundedToken(value: unknown, path: string): string {
-  return parseString(value, path, UTF8_BYTE_LIMITS.boundedToken, byteConstraints.boundedToken.utf8ByteMin);
+  return parseString(value, path, BOUNDED_TOKEN_BYTE_MAX, BOUNDED_TOKEN_BYTE_MIN);
 }
 
 function parseTimestamp(value: unknown, path: string): Timestamp {
-  return parseString(value, path, UTF8_BYTE_LIMITS.timestamp, byteConstraints.timestamp.utf8ByteMin) as Timestamp;
+  return parseString(value, path, TIMESTAMP_BYTE_MAX, TIMESTAMP_BYTE_MIN) as Timestamp;
 }
 
 function parseDigest(
@@ -1055,8 +1039,8 @@ function parseDigest(
 ) {
   try {
     return parser(value);
-  } catch (error) {
-    throw new ContractParseError(path, error instanceof Error ? error.message : "invalid digest");
+  } catch (_error) {
+    throw new ContractParseError(path, "invalid contract digest");
   }
 }
 
@@ -2390,10 +2374,6 @@ export type RuntimeVerificationFailure = Readonly<{
 }>;
 
 export type RuntimeVerificationResult = RuntimeVerificationSuccess | RuntimeVerificationFailure;
-
-export interface RuntimeSemanticVerifier {
-  verify(input: ContractJsonInput): RuntimeVerificationResult;
-}
 
 const DURABLE_EVENT_KINDS = [
   "progress_observed",
@@ -4913,7 +4893,3 @@ export function verifyRuntimeExecution(value: ContractJsonInput): RuntimeVerific
     ]);
   }
 }
-
-export const runtimeSemanticVerifier: RuntimeSemanticVerifier = {
-  verify: verifyRuntimeExecution,
-};

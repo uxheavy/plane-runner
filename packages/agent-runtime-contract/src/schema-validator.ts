@@ -1,13 +1,14 @@
-import Ajv2020, { type ErrorObject, type ValidateFunction } from "ajv/dist/2020.js";
+import Ajv2020, { type ValidateFunction } from "ajv/dist/2020.js";
 
 import invocationEnvelopeSchema from "../schemas/v1/invocation-envelope.schema.json" with { type: "json" };
 import runSnapshotSchema from "../schemas/v1/run-snapshot.schema.json" with { type: "json" };
 import runtimeDurableStateSchema from "../schemas/v1/runtime-durable-state.schema.json" with { type: "json" };
 import runtimeEventSchema from "../schemas/v1/runtime-event.schema.json" with { type: "json" };
 import runtimeExitSchema from "../schemas/v1/runtime-exit.schema.json" with { type: "json" };
-import { MAX_SERIALIZED_JSON_BYTES, PLANE_AGENT_RUNTIME_PROTOCOL, type ContractJsonInput } from "./contracts";
-import { copyUint8Array, uint8ArrayByteLength, utf8ByteLengthAtMost } from "./internal-byte-utils";
+import { PLANE_AGENT_RUNTIME_PROTOCOL, type ContractJsonInput } from "./contracts";
+import { utf8ByteLengthAtMost } from "./internal-utf8-utils";
 
+const MAX_SERIALIZED_JSON_BYTES = 1_048_576;
 const MAX_DEPTH = 64;
 const MAX_NODES = 10_000;
 const MAX_COLLECTION_ITEMS = 4096;
@@ -21,7 +22,15 @@ const schemaDefinitions = {
   "runtime-durable-state": runtimeDurableStateSchema,
 } as const;
 
-const requiredProperties: Record<RuntimeSchemaName, readonly string[]> = {
+const RUNTIME_SCHEMA_NAME_SET = new Set<keyof typeof schemaDefinitions>([
+  "run-snapshot",
+  "invocation-envelope",
+  "runtime-event",
+  "runtime-exit",
+  "runtime-durable-state",
+]);
+
+const requiredProperties = {
   "run-snapshot": [
     "protocol",
     "workspaceRef",
@@ -92,66 +101,71 @@ const requiredProperties: Record<RuntimeSchemaName, readonly string[]> = {
     "acceptedHumanInputAnswers",
     "acceptedExits",
   ],
-};
+} as const;
 
-const optionalProperties: Record<RuntimeSchemaName, readonly string[]> = {
+const optionalProperties = {
   "run-snapshot": [],
   "invocation-envelope": ["checkpointRef"],
   "runtime-event": [],
   "runtime-exit": ["inputEventRef", "failure"],
   "runtime-durable-state": ["previousRevision", "previousStateDigest", "terminal", "pendingInput"],
-};
-
-const safeBoundaryError = (): readonly SafeValidationError[] =>
-  Object.freeze([
-    Object.freeze({
-      instancePath: "",
-      schemaPath: "#",
-      keyword: "x-plane-safe-json",
-      params: Object.freeze({}),
-      message: "input must be bounded serialized JSON",
-    }),
-  ]);
-
-export const RUNTIME_SCHEMA_NAMES = Object.keys(schemaDefinitions) as [
-  keyof typeof schemaDefinitions,
-  ...(keyof typeof schemaDefinitions)[],
-];
+} as const;
 
 export type RuntimeSchemaName = keyof typeof schemaDefinitions;
 
 export type SafeValidationError = Readonly<{
   instancePath: "";
-  schemaPath: string;
-  keyword: string;
+  schemaPath: "#";
+  keyword: "x-plane-schema-name" | "x-plane-safe-json";
   params: Readonly<Record<string, never>>;
-  message: string;
+  message: "unknown runtime schema" | "contract value is invalid";
+}>;
+
+export type RuntimeSchemaValidationResult = Readonly<{
+  valid: boolean;
+  errors: readonly SafeValidationError[] | null;
 }>;
 
 export type RuntimeSchemaValidator = Readonly<{
-  validate(name: RuntimeSchemaName, value: ContractJsonInput): boolean;
-  errors(name: RuntimeSchemaName): readonly SafeValidationError[] | null;
+  validate(name: unknown, value: ContractJsonInput): boolean;
 }>;
 
-const isUint8Array = (value: unknown): value is Uint8Array => ArrayBuffer.isView(value) && value instanceof Uint8Array;
+const isKnownRuntimeSchemaName = (value: unknown): value is RuntimeSchemaName =>
+  typeof value === "string" && RUNTIME_SCHEMA_NAME_SET.has(value as RuntimeSchemaName);
 
-function decodeSerializedJson(value: ContractJsonInput): unknown {
-  let text: string;
-  if (typeof value === "string") {
-    if (!utf8ByteLengthAtMost(value, MAX_SERIALIZED_JSON_BYTES)) return undefined;
-    text = value;
-  } else if (isUint8Array(value)) {
-    if (uint8ArrayByteLength(value) > MAX_SERIALIZED_JSON_BYTES) return undefined;
-    try {
-      text = new TextDecoder("utf-8", { fatal: true }).decode(copyUint8Array(value));
-    } catch {
-      return undefined;
-    }
-  } else {
-    return undefined;
-  }
+const schemaNameError = (): readonly SafeValidationError[] =>
+  Object.freeze([
+    Object.freeze({
+      instancePath: "" as const,
+      schemaPath: "#" as const,
+      keyword: "x-plane-schema-name" as const,
+      params: Object.freeze({}),
+      message: "unknown runtime schema" as const,
+    }),
+  ]);
+
+const valueError = (): readonly SafeValidationError[] =>
+  Object.freeze([
+    Object.freeze({
+      instancePath: "" as const,
+      schemaPath: "#" as const,
+      keyword: "x-plane-safe-json" as const,
+      params: Object.freeze({}),
+      message: "contract value is invalid" as const,
+    }),
+  ]);
+
+const invalidSchemaResult = (): RuntimeSchemaValidationResult =>
+  Object.freeze({ valid: false, errors: schemaNameError() });
+
+const invalidValueResult = (): RuntimeSchemaValidationResult => Object.freeze({ valid: false, errors: valueError() });
+
+const validResult = (): RuntimeSchemaValidationResult => Object.freeze({ valid: true, errors: null });
+
+function decodeSerializedJson(value: unknown): unknown {
+  if (typeof value !== "string" || !utf8ByteLengthAtMost(value, MAX_SERIALIZED_JSON_BYTES)) return undefined;
   try {
-    return JSON.parse(text) as unknown;
+    return JSON.parse(value) as unknown;
   } catch {
     return undefined;
   }
@@ -162,7 +176,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 function cheapRootCheck(name: RuntimeSchemaName, value: unknown): boolean {
   if (!isRecord(value) || value.protocol !== PLANE_AGENT_RUNTIME_PROTOCOL) return false;
-  const allowed = new Set([...requiredProperties[name], ...optionalProperties[name]]);
+  const allowed = new Set<string>([...requiredProperties[name], ...optionalProperties[name]]);
   let propertyCount = 0;
   for (const key in value) {
     if (!Object.hasOwn(value, key)) continue;
@@ -254,9 +268,7 @@ function boundedJsonByteLength(value: unknown): number | undefined {
     if (frame.index > 0) add(1);
     const key = frame.keys[frame.index];
     frame.index += 1;
-    if (!frame.array) {
-      add(utf8Bytes(JSON.stringify(key)) + 1);
-    }
+    if (!frame.array) add(utf8Bytes(JSON.stringify(key)) + 1);
     const child = (frame.value as Record<string, unknown>)[key];
     push(child, stack.length);
   }
@@ -289,19 +301,7 @@ const serializedUtf8ByteMaxValidator = (limit: number, value: unknown): boolean 
   }
 };
 
-function sanitizeAjvError(error: ErrorObject): SafeValidationError {
-  const schemaPath = /^#[A-Za-z0-9_./~$-]*$/.test(error.schemaPath) ? error.schemaPath : "#";
-  return Object.freeze({
-    instancePath: "",
-    schemaPath,
-    keyword: error.keyword,
-    params: Object.freeze({}),
-    message: "contract value is invalid",
-  });
-}
-
-/** Validate serialized contract bytes without exposing Ajv state or accepting live objects. */
-export function createRuntimeSchemaValidator(): RuntimeSchemaValidator {
+function compileValidators(): Record<RuntimeSchemaName, ValidateFunction> {
   const ajv = new Ajv2020({ allErrors: false, strict: true, strictRequired: false, strictTypes: false });
   ajv.addKeyword({ keyword: "x-utf8ByteMax", type: "string", schemaType: "number", validate: utf8ByteMaxValidator });
   ajv.addKeyword({
@@ -316,37 +316,27 @@ export function createRuntimeSchemaValidator(): RuntimeSchemaValidator {
     schemaType: "number",
     validate: serializedUtf8ByteMaxValidator,
   });
-
-  const validators = Object.fromEntries(
+  return Object.fromEntries(
     Object.entries(schemaDefinitions).map(([name, schema]) => [name, ajv.compile(schema)])
   ) as Record<RuntimeSchemaName, ValidateFunction>;
-  const validationErrors = new Map<RuntimeSchemaName, readonly SafeValidationError[] | null>();
+}
 
-  return {
-    validate(name, value) {
-      const decoded = decodeSerializedJson(value);
-      if (decoded === undefined || !cheapRootCheck(name, decoded)) {
-        validationErrors.set(name, safeBoundaryError());
-        return false;
-      }
-      try {
-        const valid = validators[name](decoded);
-        const errors = validators[name].errors;
-        validationErrors.set(
-          name,
-          valid || errors === null || errors === undefined ? null : Object.freeze(errors.map(sanitizeAjvError))
-        );
-        return valid;
-      } catch {
-        validationErrors.set(name, safeBoundaryError());
-        return false;
-      }
+export function validateRuntimeSchema(name: unknown, value: ContractJsonInput): RuntimeSchemaValidationResult {
+  if (!isKnownRuntimeSchemaName(name)) return invalidSchemaResult();
+  const decoded = decodeSerializedJson(value);
+  if (decoded === undefined || !cheapRootCheck(name, decoded)) return invalidValueResult();
+  try {
+    return compileValidators()[name](decoded) ? validResult() : invalidValueResult();
+  } catch {
+    return invalidValueResult();
+  }
+}
+
+/** Validate one bounded JSON string without exposing parser or validator state. */
+export function createRuntimeSchemaValidator(): RuntimeSchemaValidator {
+  return Object.freeze({
+    validate(name: unknown, value: ContractJsonInput): boolean {
+      return validateRuntimeSchema(name, value).valid;
     },
-    errors(name) {
-      const errors = validationErrors.get(name);
-      return errors === null || errors === undefined
-        ? (errors ?? null)
-        : Object.freeze(errors.map((error) => Object.freeze({ ...error, params: Object.freeze({}) })));
-    },
-  };
+  });
 }

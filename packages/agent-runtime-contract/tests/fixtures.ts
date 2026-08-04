@@ -48,8 +48,7 @@ import {
   type TrustedHumanInputAnswer,
 } from "../src";
 
-const toWire = (value: unknown): string | Uint8Array =>
-  typeof value === "string" || value instanceof Uint8Array ? value : JSON.stringify(value);
+const toWire = (value: unknown): string => (typeof value === "string" ? value : JSON.stringify(value));
 const createRunSnapshot = (input: unknown, manifestValue: unknown) =>
   createRunSnapshotWire(toWire(input), toWire(manifestValue));
 const parseInvocationEnvelope = (value: unknown) => parseInvocationEnvelopeWire(toWire(value));

@@ -28,15 +28,3 @@ export const utf8ByteLengthUpTo = (value: string, limit = Number.MAX_SAFE_INTEGE
 
 export const utf8ByteLengthAtMost = (value: string, limit: number): boolean =>
   utf8ByteLengthUpTo(value, limit) <= limit;
-
-const typedArrayByteLengthGetter = Object.getOwnPropertyDescriptor(
-  Object.getPrototypeOf(Uint8Array.prototype),
-  "byteLength"
-)?.get;
-
-export const uint8ArrayByteLength = (value: Uint8Array): number => {
-  if (typedArrayByteLengthGetter === undefined) throw new TypeError("Uint8Array byte length is unavailable");
-  return typedArrayByteLengthGetter.call(value) as number;
-};
-
-export const copyUint8Array = (value: Uint8Array): Uint8Array => Uint8Array.prototype.slice.call(value);

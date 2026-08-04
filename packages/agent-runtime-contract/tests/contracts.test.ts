@@ -27,7 +27,6 @@ import {
   createReceiptRef,
   createRunId,
   createWorkspaceRef,
-  MAX_SERIALIZED_JSON_BYTES,
   createOutcomeSubmissionRef,
   parseInvocationEnvelope as parseInvocationEnvelopeWire,
   parseRunSnapshot as parseRunSnapshotWire,
@@ -35,7 +34,6 @@ import {
   parseRuntimeExit as parseRuntimeExitWire,
   parseRuntimeDurableState as parseRuntimeDurableStateWire,
   serializedJsonByteLength as serializedJsonByteLengthWire,
-  UTF8_BYTE_LIMITS,
   verifyRuntimeExecution as verifyRuntimeExecutionWire,
   type RuntimeDurableState,
   type RuntimeEvent,
@@ -70,8 +68,17 @@ import {
   trustedHumanInputAnswer,
 } from "./fixtures";
 
-const toWire = (value: unknown): string | Uint8Array =>
-  typeof value === "string" || value instanceof Uint8Array ? value : JSON.stringify(value);
+const UTF8_BYTE_LIMITS = Object.freeze({
+  reference: 128,
+  boundedText: 4096,
+  boundedPrompt: 32768,
+  boundedToken: 256,
+  timestamp: 64,
+  serializedContract: 1_048_576,
+});
+const MAX_SERIALIZED_JSON_BYTES = 1_048_576;
+
+const toWire = (value: unknown): string => (typeof value === "string" ? value : JSON.stringify(value));
 const parseInvocationEnvelope = (value: unknown) => parseInvocationEnvelopeWire(toWire(value));
 const parseRunSnapshot = (value: unknown) => parseRunSnapshotWire(toWire(value));
 const parseRuntimeEvent = (value: unknown) => parseRuntimeEventWire(toWire(value));
@@ -82,8 +89,7 @@ const computeRunSnapshotContentDigest = (value: unknown) => computeRunSnapshotCo
 const computeRuntimeDurableStateDigest = (value: unknown) => computeRuntimeDurableStateDigestWire(toWire(value));
 const computeTrustedHumanInputAnswerDigest = (value: unknown) =>
   computeTrustedHumanInputAnswerDigestWire(toWire(value));
-const serializedJsonByteLength = (value: unknown) =>
-  serializedJsonByteLengthWire(value instanceof Uint8Array ? value : JSON.stringify(value));
+const serializedJsonByteLength = (value: unknown) => serializedJsonByteLengthWire(JSON.stringify(value));
 const verifyRuntimeExecution = (value: unknown) => verifyRuntimeExecutionWire(toWire(value));
 
 const schemaNames = [
@@ -100,7 +106,7 @@ const validators = Object.fromEntries(
 
 const assertValid = (name: (typeof schemaNames)[number], value: unknown) => {
   const valid = validators[name](value);
-  expect(valid, schemaValidator.errors(name) ? JSON.stringify(schemaValidator.errors(name)) : undefined).toBe(true);
+  expect(valid).toBe(true);
 };
 
 const durableStateWithAppliedEvent = (body: RuntimeEventBody, productBindingOverride?: unknown) => {
