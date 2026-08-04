@@ -832,4 +832,4 @@ Stage and commit this single documentation/contract/evidence-control checkpoint,
 
 ### Post-seal validation
 
-- Recorded after the separate evidence-seal commit; the seal commit must change only SOURCE-INVENTORY.md, WORKLOG.md, g0-readiness.json, and integration-lock.g0.json.
+- The separate seal generator bound the clean content commit `ec823d55ead3940fdebf9b5c604ae304ddfa119a` to 56 content paths and the exact four seal paths. Final verifier, fixture, negative-control, topology, and clean-status evidence is recorded below after the seal commit.
