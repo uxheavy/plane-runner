@@ -697,7 +697,7 @@ const policyCoverageCases = [
       replace(
         directory,
         "docs/agent-tooling/verifiers/verify-g0-preflight.mjs",
-        '        2,\n        "Required outcomes",\n        "authoritative/model-facing"\n      ],',
+        '[2, "Required outcomes", "authoritative/model-facing"],',
         ""
       );
       insertAfterHeading(
@@ -728,8 +728,8 @@ const policyCoverageCases = [
       replace(
         directory,
         "docs/agent-tooling/verifiers/verify-g0-preflight.mjs",
-        '  "docs/agent-tooling/g0-readiness.json": { authoritative: [], authoritativeSubtrees: [], nonModelFacingSubtrees: [[]] },',
-        '  "docs/agent-tooling/g0-readiness.json": { authoritative: [], authoritativeSubtrees: [], nonModelFacingSubtrees: [] },'
+        '  "docs/agent-tooling/g0-readiness.json": {\n    authoritative: [],\n    authoritativeSubtrees: [],\n    nonModelFacingSubtrees: [[]],\n  },',
+        '  "docs/agent-tooling/g0-readiness.json": {\n    authoritative: [],\n    authoritativeSubtrees: [],\n    nonModelFacingSubtrees: [],\n  },'
       ),
     expected: "docs/agent-tooling/g0-readiness.json has an unclassified structured authority pointer",
     reseal: true,
