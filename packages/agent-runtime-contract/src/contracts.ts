@@ -1,34 +1,46 @@
 import { createHash } from "node:crypto";
 
+import byteConstraints from "./byte-constraints.json" with { type: "json" };
+
 export const PLANE_AGENT_RUNTIME_PROTOCOL = "plane.agent-runtime/v1" as const;
-export const MAX_SERIALIZED_JSON_BYTES = 1_048_576;
+
+const MAX_REF_LENGTH = byteConstraints.reference.jsonSchemaMaxLength;
+const REF_IDENTIFIER_MAX_LENGTH = byteConstraints.reference.identifierCharacterMaxLength;
+declare const validatedContractBrand: unique symbol;
 
 export type PlaneAgentRuntimeProtocol = typeof PLANE_AGENT_RUNTIME_PROTOCOL;
 
 declare const opaqueRefBrand: unique symbol;
-const validatedContractMarker = Symbol("plane.agent-runtime/v1 validated contract");
 
 type ValidatedContract<Name extends string> = {
-  readonly [validatedContractMarker]: Name;
+  readonly [validatedContractBrand]: Name;
 };
 
-type ValidatedContractName = "RunSnapshot" | "InvocationEnvelope" | "RuntimeEvent" | "RuntimeExit";
+type ValidatedContractName =
+  | "RunSnapshot"
+  | "InvocationEnvelope"
+  | "RuntimeEvent"
+  | "RuntimeExit"
+  | "RuntimeDurableState";
+
+const parsedContracts: Readonly<Record<ValidatedContractName, WeakSet<object>>> = {
+  RunSnapshot: new WeakSet<object>(),
+  InvocationEnvelope: new WeakSet<object>(),
+  RuntimeEvent: new WeakSet<object>(),
+  RuntimeExit: new WeakSet<object>(),
+  RuntimeDurableState: new WeakSet<object>(),
+};
 
 function markValidatedContract<Name extends ValidatedContractName, T extends object>(
   value: T,
   name: Name
 ): T & ValidatedContract<Name> {
-  Object.defineProperty(value, validatedContractMarker, {
-    configurable: false,
-    enumerable: false,
-    value: name,
-    writable: false,
-  });
+  parsedContracts[name].add(value);
   return value as T & ValidatedContract<Name>;
 }
 
 function isValidatedContract<Name extends ValidatedContractName>(value: unknown, name: Name): boolean {
-  return isRecord(value) && (value as Record<PropertyKey, unknown>)[validatedContractMarker] === name;
+  return value !== null && typeof value === "object" && parsedContracts[name].has(value);
 }
 
 export type OpaqueRef<Tag extends string> = string & {
@@ -67,21 +79,32 @@ export type ContractDigest = OpaqueRef<"contract-digest">;
 export type ContentDigest = OpaqueRef<"content-digest">;
 export type RunSnapshotContentDigest = OpaqueRef<"run-snapshot-content-digest">;
 
-const REF_SUFFIX_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$/;
-const NAMESPACED_REF_PATTERN = /^[a-z][a-z0-9-]{0,30}:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$/;
-const DIGEST_PATTERN = /^[a-f0-9]{64}$/;
-const MAX_REF_LENGTH = 128;
+const REF_SUFFIX_PATTERN = new RegExp(`^[A-Za-z0-9][A-Za-z0-9._~/-]{0,${REF_IDENTIFIER_MAX_LENGTH - 1}}$`);
+const NAMESPACED_REF_PATTERN = new RegExp(
+  `^[a-z][a-z0-9-]{0,30}:[A-Za-z0-9][A-Za-z0-9._~/-]{0,${REF_IDENTIFIER_MAX_LENGTH - 1}}$`
+);
+const hexDigestPattern = (minimum: number, maximum: number) =>
+  new RegExp(`^[a-f0-9]{${minimum === maximum ? minimum : `${minimum},${maximum}`}}$`);
+const DIGEST_PATTERN = hexDigestPattern(
+  byteConstraints.contractDigest.jsonSchemaMinLength,
+  byteConstraints.contractDigest.jsonSchemaMaxLength
+);
 
 type RefTag = string;
 
 function makeNamespacedRef<Tag extends RefTag>(tag: Tag, namespace: string, value: string): OpaqueRef<Tag> {
   void tag;
   if (!REF_SUFFIX_PATTERN.test(value)) {
-    throw new TypeError(`${namespace} references must contain a 1-120 character identifier suffix`);
+    throw new TypeError(
+      `${namespace} references must contain a 1-${REF_IDENTIFIER_MAX_LENGTH} character identifier suffix`
+    );
   }
 
   const namespaced = `${namespace}:${value}`;
-  if (namespaced.length > MAX_REF_LENGTH) {
+  if (
+    namespaced.length > MAX_REF_LENGTH ||
+    new TextEncoder().encode(namespaced).byteLength > UTF8_BYTE_LIMITS.reference
+  ) {
     throw new TypeError(`${namespace} references must be at most 128 characters`);
   }
 
@@ -90,7 +113,12 @@ function makeNamespacedRef<Tag extends RefTag>(tag: Tag, namespace: string, valu
 
 function parseNamespacedRef<Tag extends RefTag>(tag: Tag, namespace: string, value: unknown): OpaqueRef<Tag> {
   void tag;
-  if (typeof value !== "string" || value.length > MAX_REF_LENGTH || !NAMESPACED_REF_PATTERN.test(value)) {
+  if (
+    typeof value !== "string" ||
+    value.length > MAX_REF_LENGTH ||
+    new TextEncoder().encode(value).byteLength > UTF8_BYTE_LIMITS.reference ||
+    !NAMESPACED_REF_PATTERN.test(value)
+  ) {
     throw new TypeError(`${namespace} references must use the ${namespace}:<identifier> namespace`);
   }
 
@@ -193,26 +221,55 @@ export const parseApplicationServiceRef = refs.applicationService.parse;
 export const createGatewayReceiptRef = refs.gatewayReceipt.create;
 export const parseGatewayReceiptRef = refs.gatewayReceipt.parse;
 
-function makeDigest<Tag extends RefTag>(tag: Tag, namespace: string, value: string): OpaqueRef<Tag> {
+function namespacedDigestBounds(namespace: string, constraint: typeof byteConstraints.contentDigest) {
+  const prefixBytes = new TextEncoder().encode(`${namespace}:`).byteLength;
+  return {
+    minimum: constraint.utf8ByteMin - prefixBytes,
+    maximum: constraint.utf8ByteMax - prefixBytes,
+  };
+}
+
+function makeDigest<Tag extends RefTag>(
+  tag: Tag,
+  namespace: string,
+  value: string,
+  constraint: typeof byteConstraints.contentDigest
+): OpaqueRef<Tag> {
   void tag;
-  if (!DIGEST_PATTERN.test(value)) {
+  const bounds = namespacedDigestBounds(namespace, constraint);
+  const bytes = new TextEncoder().encode(value).byteLength;
+  if (
+    bytes < bounds.minimum ||
+    bytes > bounds.maximum ||
+    !hexDigestPattern(bounds.minimum, bounds.maximum).test(value)
+  ) {
     throw new TypeError(`${namespace} digests must be lowercase SHA-256 hex strings`);
   }
 
   return `${namespace}:${value}` as OpaqueRef<Tag>;
 }
 
-function parseNamespacedDigest<Tag extends RefTag>(tag: Tag, namespace: string, value: unknown): OpaqueRef<Tag> {
+function parseNamespacedDigest<Tag extends RefTag>(
+  tag: Tag,
+  namespace: string,
+  value: unknown,
+  constraint: typeof byteConstraints.contentDigest
+): OpaqueRef<Tag> {
   void tag;
   if (typeof value !== "string" || !value.startsWith(`${namespace}:`)) {
     throw new TypeError(`Expected a ${namespace} digest`);
   }
 
-  return makeDigest(tag, namespace, value.slice(namespace.length + 1));
+  return makeDigest(tag, namespace, value.slice(namespace.length + 1), constraint);
 }
 
 export function createContractDigest(value: string): ContractDigest {
-  if (!DIGEST_PATTERN.test(value)) {
+  const bytes = new TextEncoder().encode(value).byteLength;
+  if (
+    bytes < byteConstraints.contractDigest.utf8ByteMin ||
+    bytes > byteConstraints.contractDigest.utf8ByteMax ||
+    !DIGEST_PATTERN.test(value)
+  ) {
     throw new TypeError("Contract digests must be lowercase SHA-256 hex strings");
   }
 
@@ -227,13 +284,14 @@ export function parseContractDigest(value: unknown): ContractDigest {
   return createContractDigest(value);
 }
 
-export const createContentDigest = (value: string): ContentDigest => makeDigest("content-digest", "content", value);
+export const createContentDigest = (value: string): ContentDigest =>
+  makeDigest("content-digest", "content", value, byteConstraints.contentDigest);
 export const parseContentDigest = (value: unknown): ContentDigest =>
-  parseNamespacedDigest("content-digest", "content", value);
+  parseNamespacedDigest("content-digest", "content", value, byteConstraints.contentDigest);
 export const createRunSnapshotContentDigest = (value: string): RunSnapshotContentDigest =>
-  makeDigest("run-snapshot-content-digest", "snapshot", value);
+  makeDigest("run-snapshot-content-digest", "snapshot", value, byteConstraints.runSnapshotContentDigest);
 export const parseRunSnapshotContentDigest = (value: unknown): RunSnapshotContentDigest =>
-  parseNamespacedDigest("run-snapshot-content-digest", "snapshot", value);
+  parseNamespacedDigest("run-snapshot-content-digest", "snapshot", value, byteConstraints.runSnapshotContentDigest);
 
 function deepFreeze<T>(value: T): T {
   if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
@@ -319,9 +377,16 @@ export type ContractDigests = Readonly<{
   invocationEnvelope: ContractDigest;
   runtimeEvent: ContractDigest;
   runtimeExit: ContractDigest;
+  runtimeDurableState: ContractDigest;
 }>;
 
-export const CONTRACT_SCHEMA_NAMES = ["run-snapshot", "invocation-envelope", "runtime-event", "runtime-exit"] as const;
+export const CONTRACT_SCHEMA_NAMES = [
+  "run-snapshot",
+  "invocation-envelope",
+  "runtime-event",
+  "runtime-exit",
+  "runtime-durable-state",
+] as const;
 export type ContractSchemaName = (typeof CONTRACT_SCHEMA_NAMES)[number];
 
 export type ContractManifest = Readonly<{
@@ -335,6 +400,7 @@ export function contractDigestsFromManifest(manifest: ContractManifest): Contrac
     invocationEnvelope: manifest.schemas["invocation-envelope"].sha256,
     runtimeEvent: manifest.schemas["runtime-event"].sha256,
     runtimeExit: manifest.schemas["runtime-exit"].sha256,
+    runtimeDurableState: manifest.schemas["runtime-durable-state"].sha256,
   };
 }
 
@@ -363,6 +429,7 @@ export function parseContractManifest(value: unknown): ContractManifest {
       "invocation-envelope": parseManifestEntry(schemas["invocation-envelope"], "invocation-envelope"),
       "runtime-event": parseManifestEntry(schemas["runtime-event"], "runtime-event"),
       "runtime-exit": parseManifestEntry(schemas["runtime-exit"], "runtime-exit"),
+      "runtime-durable-state": parseManifestEntry(schemas["runtime-durable-state"], "runtime-durable-state"),
     },
   };
 }
@@ -431,13 +498,16 @@ export function serializedJsonByteLength(value: unknown): number {
 }
 
 export const UTF8_BYTE_LIMITS = {
-  reference: 128,
-  boundedText: 4096,
-  boundedPrompt: 32768,
-  boundedToken: 256,
-  timestamp: 64,
-  serializedContract: MAX_SERIALIZED_JSON_BYTES,
+  reference: byteConstraints.reference.utf8ByteMax,
+  boundedText: byteConstraints.boundedText.utf8ByteMax,
+  boundedPrompt: byteConstraints.boundedPrompt.utf8ByteMax,
+  boundedToken: byteConstraints.boundedToken.utf8ByteMax,
+  timestamp: byteConstraints.timestamp.utf8ByteMax,
+  serializedContract: byteConstraints.serializedContract.utf8ByteMax,
 } as const;
+
+export const MAX_SERIALIZED_JSON_BYTES = UTF8_BYTE_LIMITS.serializedContract;
+const MAX_BOUNDED_BYTE_COUNT = byteConstraints.boundedByteCount.numericMax;
 
 export class ContractParseError extends TypeError {
   readonly path: string;
@@ -524,19 +594,24 @@ function parseRef<Tag extends string>(
 }
 
 function parseBoundedText(value: unknown, path: string): BoundedText {
-  return parseString(value, path, UTF8_BYTE_LIMITS.boundedText) as BoundedText;
+  return parseString(value, path, UTF8_BYTE_LIMITS.boundedText, byteConstraints.boundedText.utf8ByteMin) as BoundedText;
 }
 
 function parseBoundedPrompt(value: unknown, path: string): BoundedPrompt {
-  return parseString(value, path, UTF8_BYTE_LIMITS.boundedPrompt) as BoundedPrompt;
+  return parseString(
+    value,
+    path,
+    UTF8_BYTE_LIMITS.boundedPrompt,
+    byteConstraints.boundedPrompt.utf8ByteMin
+  ) as BoundedPrompt;
 }
 
 function parseBoundedToken(value: unknown, path: string): string {
-  return parseString(value, path, UTF8_BYTE_LIMITS.boundedToken);
+  return parseString(value, path, UTF8_BYTE_LIMITS.boundedToken, byteConstraints.boundedToken.utf8ByteMin);
 }
 
 function parseTimestamp(value: unknown, path: string): Timestamp {
-  return parseString(value, path, UTF8_BYTE_LIMITS.timestamp) as Timestamp;
+  return parseString(value, path, UTF8_BYTE_LIMITS.timestamp, byteConstraints.timestamp.utf8ByteMin) as Timestamp;
 }
 
 function parseDigest(
@@ -674,7 +749,7 @@ function parseBoundedPayload(value: unknown, path: string): BoundedPayload {
       payloadRef: parseRef(reference.payloadRef, `${path}.payloadRef`, parsePayloadRef),
       contentType: parseBoundedToken(reference.contentType, `${path}.contentType`),
       contentDigest: parseDigest(reference.contentDigest, `${path}.contentDigest`, parseContentDigest) as ContentDigest,
-      sizeBytes: parseInteger(reference.sizeBytes, `${path}.sizeBytes`, 1_048_576),
+      sizeBytes: parseInteger(reference.sizeBytes, `${path}.sizeBytes`, MAX_BOUNDED_BYTE_COUNT),
     };
   }
   throw new ContractParseError(`${path}.kind`, "must identify a supported payload variant");
@@ -686,7 +761,7 @@ function parseArtifact(value: unknown, path: string): ArtifactReference {
     artifactRef: parseRef(object.artifactRef, `${path}.artifactRef`, parseArtifactRef),
     contentDigest: parseDigest(object.contentDigest, `${path}.contentDigest`, parseContentDigest) as ContentDigest,
     mediaType: parseBoundedToken(object.mediaType, `${path}.mediaType`),
-    sizeBytes: parseInteger(object.sizeBytes, `${path}.sizeBytes`, 1_048_576),
+    sizeBytes: parseInteger(object.sizeBytes, `${path}.sizeBytes`, MAX_BOUNDED_BYTE_COUNT),
   };
 }
 
@@ -742,6 +817,17 @@ function parseBody(value: unknown, path: string): RuntimeEventBody {
         question: parseBoundedText(object.question, `${path}.question`),
         publication: parsePublication(object.publication, `${path}.publication`, "input_request", (item) =>
           parseRef(item, `${path}.publication.productRef`, parseInputRequestRef)
+        ),
+      } as RuntimeEventBody;
+    }
+    case "human_input_answer_observed": {
+      const object = requireRecord(base, path, ["kind", "inputRequestRef", "payload", "publication"]);
+      return {
+        kind: base.kind,
+        inputRequestRef: parseRef(object.inputRequestRef, `${path}.inputRequestRef`, parseInputRequestRef),
+        payload: parseBoundedPayload(object.payload, `${path}.payload`),
+        publication: parsePublication(object.publication, `${path}.publication`, "human_input_answer", (item) =>
+          parseRef(item, `${path}.publication.productRef`, parseProductEventRef)
         ),
       } as RuntimeEventBody;
     }
@@ -847,7 +933,13 @@ function parseBody(value: unknown, path: string): RuntimeEventBody {
 }
 
 function parseContractDigests(value: unknown, path: string): ContractDigests {
-  const object = requireRecord(value, path, ["runSnapshot", "invocationEnvelope", "runtimeEvent", "runtimeExit"]);
+  const object = requireRecord(value, path, [
+    "runSnapshot",
+    "invocationEnvelope",
+    "runtimeEvent",
+    "runtimeExit",
+    "runtimeDurableState",
+  ]);
   return {
     runSnapshot: parseDigest(object.runSnapshot, `${path}.runSnapshot`, parseContractDigest) as ContractDigest,
     invocationEnvelope: parseDigest(
@@ -857,6 +949,11 @@ function parseContractDigests(value: unknown, path: string): ContractDigests {
     ) as ContractDigest,
     runtimeEvent: parseDigest(object.runtimeEvent, `${path}.runtimeEvent`, parseContractDigest) as ContractDigest,
     runtimeExit: parseDigest(object.runtimeExit, `${path}.runtimeExit`, parseContractDigest) as ContractDigest,
+    runtimeDurableState: parseDigest(
+      object.runtimeDurableState,
+      `${path}.runtimeDurableState`,
+      parseContractDigest
+    ) as ContractDigest,
   };
 }
 
@@ -996,17 +1093,17 @@ function parseSnapshotContent(value: unknown, path: string): RunSnapshotContent 
       maxEventPayloadBytes: parseInteger(
         runtimePolicyObject.maxEventPayloadBytes,
         `${path}.runtimePolicy.maxEventPayloadBytes`,
-        1_048_576
+        MAX_BOUNDED_BYTE_COUNT
       ),
       maxArtifactBytes: parseInteger(
         runtimePolicyObject.maxArtifactBytes,
         `${path}.runtimePolicy.maxArtifactBytes`,
-        1_048_576
+        MAX_BOUNDED_BYTE_COUNT
       ),
       maxReceiptBytes: parseInteger(
         runtimePolicyObject.maxReceiptBytes,
         `${path}.runtimePolicy.maxReceiptBytes`,
-        1_048_576
+        MAX_BOUNDED_BYTE_COUNT
       ),
     },
     totalBudget: parseBudget(object.totalBudget, `${path}.totalBudget`),
@@ -1070,21 +1167,50 @@ export function parseInvocationEnvelope(value: unknown): InvocationEnvelope {
     ],
     ["checkpointRef"]
   );
-  const triggerObject = requireRecord(object.trigger, "InvocationEnvelope.trigger", ["kind"], ["eventRef"]);
+  const triggerObject = requireRecord(
+    object.trigger,
+    "InvocationEnvelope.trigger",
+    ["kind"],
+    ["eventRef", "pendingInputEventRef"]
+  );
   let trigger: InvocationTrigger;
   if (triggerObject.kind === "initial") {
-    if (Object.hasOwn(triggerObject, "eventRef")) {
-      throw new ContractParseError("InvocationEnvelope.trigger.eventRef", "is forbidden for an initial invocation");
+    if (Object.hasOwn(triggerObject, "eventRef") || Object.hasOwn(triggerObject, "pendingInputEventRef")) {
+      throw new ContractParseError("InvocationEnvelope.trigger", "initial invocations cannot cite continuation events");
     }
     trigger = { kind: "initial" };
-  } else if (
-    triggerObject.kind === "human_input" ||
-    triggerObject.kind === "recoverable_restart" ||
-    triggerObject.kind === "continuation"
-  ) {
+  } else if (triggerObject.kind === "human_input") {
+    if (!Object.hasOwn(triggerObject, "eventRef") || !Object.hasOwn(triggerObject, "pendingInputEventRef")) {
+      throw new ContractParseError(
+        "InvocationEnvelope.trigger",
+        "human-input invocations require both the Plane answer event and exact pending input event"
+      );
+    }
+    trigger = {
+      kind: "human_input",
+      eventRef: parseRef(triggerObject.eventRef, "InvocationEnvelope.trigger.eventRef", parseEventRef),
+      pendingInputEventRef: parseRef(
+        triggerObject.pendingInputEventRef,
+        "InvocationEnvelope.trigger.pendingInputEventRef",
+        parseEventRef
+      ),
+    };
+  } else if (triggerObject.kind === "recoverable_restart" || triggerObject.kind === "continuation") {
+    if (!Object.hasOwn(triggerObject, "eventRef")) {
+      throw new ContractParseError("InvocationEnvelope.trigger.eventRef", "is required for a continuation");
+    }
     trigger = {
       kind: triggerObject.kind,
       eventRef: parseRef(triggerObject.eventRef, "InvocationEnvelope.trigger.eventRef", parseEventRef),
+      ...(triggerObject.pendingInputEventRef === undefined
+        ? {}
+        : {
+            pendingInputEventRef: parseRef(
+              triggerObject.pendingInputEventRef,
+              "InvocationEnvelope.trigger.pendingInputEventRef",
+              parseEventRef
+            ),
+          }),
     };
   } else {
     throw new ContractParseError("InvocationEnvelope.trigger.kind", "is not supported");
@@ -1259,8 +1385,14 @@ export function createRunSnapshot(
 export type InvocationTrigger =
   | Readonly<{ kind: "initial" }>
   | Readonly<{
-      kind: "human_input" | "recoverable_restart" | "continuation";
+      kind: "human_input";
       eventRef: EventRef;
+      pendingInputEventRef: EventRef;
+    }>
+  | Readonly<{
+      kind: "recoverable_restart" | "continuation";
+      eventRef: EventRef;
+      pendingInputEventRef?: EventRef;
     }>;
 
 export type RuntimeLease = Readonly<{
@@ -1340,6 +1472,7 @@ type Publication<ProductKind extends string, ProductRef extends OpaqueRef<string
 
 export type ConversationPublication = Publication<"conversation", ConversationRef>;
 export type InputRequestPublication = Publication<"input_request", InputRequestRef>;
+export type HumanInputAnswerPublication = Publication<"human_input_answer", ProductEventRef>;
 export type ArtifactPublication = Publication<"artifact", ArtifactRef>;
 export type OutcomeSubmissionPublication = Publication<"outcome_submission", OutcomeSubmissionRef>;
 type TerminalPublication<ProductKind extends string> = Readonly<{
@@ -1364,6 +1497,7 @@ export type CancellationPublication = TerminalPublication<"run_cancellation"> &
 export type AnyProductPublication =
   | ConversationPublication
   | InputRequestPublication
+  | HumanInputAnswerPublication
   | ArtifactPublication
   | OutcomeSubmissionPublication
   | FailurePublication
@@ -1385,6 +1519,12 @@ export type RuntimeEventBody =
       kind: "input_request_observed";
       question: BoundedText;
       publication: InputRequestPublication;
+    }>
+  | Readonly<{
+      kind: "human_input_answer_observed";
+      inputRequestRef: InputRequestRef;
+      payload: BoundedPayload;
+      publication: HumanInputAnswerPublication;
     }>
   | Readonly<{
       kind: "artifact_observed";
@@ -1463,6 +1603,8 @@ export type RuntimeExit = RuntimeExitShape & ValidatedContract<"RuntimeExit">;
 
 export type RuntimeVerificationErrorCode =
   | "unparsed_contract_input"
+  | "unparsed_durable_state"
+  | "durable_state_invalid"
   | "authority_facts_missing"
   | "contract_digest_mismatch"
   | "snapshot_content_digest_mismatch"
@@ -1484,6 +1626,8 @@ export type RuntimeVerificationErrorCode =
   | "event_payload_too_large"
   | "artifact_too_large"
   | "receipt_too_large"
+  | "publication_receipt_duplicate"
+  | "publication_receipt_unused"
   | "publication_receipt_missing"
   | "publication_receipt_mismatch"
   | "publication_authority_mismatch"
@@ -1493,7 +1637,8 @@ export type RuntimeVerificationErrorCode =
   | "final_sequence_mismatch"
   | "exit_identity_mismatch"
   | "exit_reference_mismatch"
-  | "exit_failure_mismatch";
+  | "exit_failure_mismatch"
+  | "pending_input_mismatch";
 
 export type RuntimeVerificationError = Readonly<{
   code: RuntimeVerificationErrorCode;
@@ -1538,29 +1683,105 @@ export type TrustedRuntimeAuthority = Readonly<{
   invocationIdempotencyKey: IdempotencyKey;
 }>;
 
+export const RUNTIME_DURABLE_STATE_VERSION = "v1" as const;
+
+export type RuntimeDurableStateBinding = Readonly<{
+  workspaceRef: WorkspaceRef;
+  actorRef: ActorRef;
+  profileVersionRef: ProfileVersionRef;
+  runId: RunId;
+  snapshotContentDigest: RunSnapshotContentDigest;
+}>;
+
+export type DurableAcceptedProductBinding =
+  | Readonly<{
+      action: "proposal";
+      productKind: AnyProductPublication["productKind"];
+      productRef: AnyProductPublication["productRef"];
+      operationAttemptRef: OperationAttemptRef;
+    }>
+  | Readonly<{
+      action: "applied";
+      productKind: AnyProductPublication["productKind"];
+      productRef: AnyProductPublication["productRef"];
+      operationAttemptRef: OperationAttemptRef;
+      operationRef: OperationRef;
+      applicationServiceRef: ApplicationServiceRef;
+      gatewayReceiptRef: GatewayReceiptRef;
+      receiptRef: ReceiptRef;
+      auditReceiptRef: AuditReceiptRef;
+      productEventRef: ProductEventRef;
+      cancellationRef?: CancellationRef;
+    }>;
+
 export type DurableAcceptedEvent = Readonly<{
+  workspaceRef: WorkspaceRef;
+  actorRef: ActorRef;
+  profileVersionRef: ProfileVersionRef;
+  runId: RunId;
+  snapshotContentDigest: RunSnapshotContentDigest;
   eventId: EventId;
   idempotencyKey: IdempotencyKey;
   invocationId: InvocationId;
+  correlationId: CorrelationId;
+  causationRef: CausationRef;
   sequence: number;
   fingerprint: ContentDigest;
   kind: RuntimeEventBody["kind"];
+  productBinding?: DurableAcceptedProductBinding;
 }>;
 
 export type DurableAcceptedExit = Readonly<{
+  workspaceRef: WorkspaceRef;
+  actorRef: ActorRef;
+  profileVersionRef: ProfileVersionRef;
+  runId: RunId;
+  snapshotContentDigest: RunSnapshotContentDigest;
   invocationId: InvocationId;
   idempotencyKey: IdempotencyKey;
   finalSequence: number;
   fingerprint: ContentDigest;
   kind: RuntimeExit["kind"];
+  terminalEventId?: EventId;
 }>;
 
-export type RuntimeDurableState = Readonly<{
+export type DurableTerminalBinding = Readonly<{
+  eventId: EventId;
+  invocationId: InvocationId;
+  correlationId: CorrelationId;
+  causationRef: CausationRef;
+  productBinding: Extract<DurableAcceptedProductBinding, { action: "applied" }>;
+}>;
+
+export type DurablePendingInputBinding = Readonly<{
+  eventId: EventId;
+  invocationId: InvocationId;
+  correlationId: CorrelationId;
+  causationRef: CausationRef;
+  inputRequestRef: InputRequestRef;
+  productEventRef: ProductEventRef;
+  operationAttemptRef: OperationAttemptRef;
+  operationRef: OperationRef;
+  applicationServiceRef: ApplicationServiceRef;
+  gatewayReceiptRef: GatewayReceiptRef;
+  receiptRef: ReceiptRef;
+  auditReceiptRef: AuditReceiptRef;
+  questionDigest: ContentDigest;
+}>;
+
+type RuntimeDurableStateShape = Readonly<{
+  protocol: PlaneAgentRuntimeProtocol;
+  stateVersion: typeof RUNTIME_DURABLE_STATE_VERSION;
+  binding: RuntimeDurableStateBinding;
   state: RuntimeLifecycleState;
   lastAcceptedSequence: number;
   acceptedEvents: readonly DurableAcceptedEvent[];
   acceptedExits: readonly DurableAcceptedExit[];
+  terminal?: DurableTerminalBinding;
+  pendingInput?: DurablePendingInputBinding;
 }>;
+
+export type RuntimeDurableState = RuntimeDurableStateShape & ValidatedContract<"RuntimeDurableState">;
 
 export type TrustedPublicationReceipt = Readonly<{
   workspaceRef: WorkspaceRef;
@@ -1568,7 +1789,6 @@ export type TrustedPublicationReceipt = Readonly<{
   profileVersionRef: ProfileVersionRef;
   runId: RunId;
   invocationId: InvocationId;
-  cancellationRef?: CancellationRef;
   productKind: AnyProductPublication["productKind"];
   productRef: AnyProductPublication["productRef"];
   operationAttemptRef: OperationAttemptRef;
@@ -1578,6 +1798,7 @@ export type TrustedPublicationReceipt = Readonly<{
   receiptRef: ReceiptRef;
   auditReceiptRef: AuditReceiptRef;
   productEventRef: ProductEventRef;
+  cancellationRef?: CancellationRef;
 }>;
 
 export type RuntimeVerificationFacts = Readonly<{
@@ -1619,6 +1840,717 @@ export type RuntimeVerificationResult = RuntimeVerificationSuccess | RuntimeVeri
 
 export interface RuntimeSemanticVerifier {
   verify(input: RuntimeVerificationInput): RuntimeVerificationResult;
+}
+
+const DURABLE_EVENT_KINDS = [
+  "progress_observed",
+  "conversation_publication_observed",
+  "input_request_observed",
+  "human_input_answer_observed",
+  "artifact_observed",
+  "usage_observed",
+  "outcome_submission_observed",
+  "failure_observed",
+  "blocker_observed",
+  "cancellation_observed",
+  "transcript_evidence_observed",
+] as const;
+
+const DURABLE_PRODUCT_KINDS = [
+  "conversation",
+  "input_request",
+  "human_input_answer",
+  "artifact",
+  "outcome_submission",
+  "run_failure",
+  "run_blocker",
+  "run_cancellation",
+] as const;
+
+const DURABLE_TERMINAL_KINDS = ["run_failure", "run_blocker", "run_cancellation", "outcome_submission"] as const;
+
+function parseRuntimeDurableStateBinding(value: unknown, path: string): RuntimeDurableStateBinding {
+  const object = requireRecord(value, path, [
+    "workspaceRef",
+    "actorRef",
+    "profileVersionRef",
+    "runId",
+    "snapshotContentDigest",
+  ]);
+  return {
+    workspaceRef: parseRef(object.workspaceRef, `${path}.workspaceRef`, parseWorkspaceRef),
+    actorRef: parseRef(object.actorRef, `${path}.actorRef`, parseActorRef),
+    profileVersionRef: parseRef(object.profileVersionRef, `${path}.profileVersionRef`, parseProfileVersionRef),
+    runId: parseRef(object.runId, `${path}.runId`, parseRunId),
+    snapshotContentDigest: parseDigest(
+      object.snapshotContentDigest,
+      `${path}.snapshotContentDigest`,
+      parseRunSnapshotContentDigest
+    ) as RunSnapshotContentDigest,
+  };
+}
+
+function parseDurableProductRef(productKind: (typeof DURABLE_PRODUCT_KINDS)[number], value: unknown, path: string) {
+  switch (productKind) {
+    case "conversation":
+      return parseRef(value, path, parseConversationRef);
+    case "input_request":
+      return parseRef(value, path, parseInputRequestRef);
+    case "human_input_answer":
+    case "run_failure":
+    case "run_blocker":
+    case "run_cancellation":
+      return parseRef(value, path, parseProductEventRef);
+    case "artifact":
+      return parseRef(value, path, parseArtifactRef);
+    case "outcome_submission":
+      return parseRef(value, path, parseOutcomeSubmissionRef);
+  }
+}
+
+function parseDurableProductBinding(value: unknown, path: string): DurableAcceptedProductBinding {
+  const base = requireRecord(
+    value,
+    path,
+    ["action", "productKind", "productRef", "operationAttemptRef"],
+    [
+      "operationRef",
+      "applicationServiceRef",
+      "gatewayReceiptRef",
+      "receiptRef",
+      "auditReceiptRef",
+      "productEventRef",
+      "cancellationRef",
+    ]
+  );
+  if (base.action !== "proposal" && base.action !== "applied") {
+    throw new ContractParseError(`${path}.action`, "must be proposal or applied");
+  }
+  if (!DURABLE_PRODUCT_KINDS.includes(base.productKind as (typeof DURABLE_PRODUCT_KINDS)[number])) {
+    throw new ContractParseError(`${path}.productKind`, "is not a supported product kind");
+  }
+  const productKind = base.productKind as (typeof DURABLE_PRODUCT_KINDS)[number];
+  const productRef = parseDurableProductRef(productKind, base.productRef, `${path}.productRef`);
+  const operationAttemptRef = parseRef(
+    base.operationAttemptRef,
+    `${path}.operationAttemptRef`,
+    parseOperationAttemptRef
+  );
+  if (base.action === "proposal") {
+    for (const key of [
+      "operationRef",
+      "applicationServiceRef",
+      "gatewayReceiptRef",
+      "receiptRef",
+      "auditReceiptRef",
+      "productEventRef",
+      "cancellationRef",
+    ]) {
+      if (Object.hasOwn(base, key)) {
+        throw new ContractParseError(`${path}.${key}`, "is only valid for an applied product binding");
+      }
+    }
+    return { action: "proposal", productKind, productRef, operationAttemptRef } as DurableAcceptedProductBinding;
+  }
+
+  const object = requireRecord(
+    value,
+    path,
+    [
+      "action",
+      "productKind",
+      "productRef",
+      "operationAttemptRef",
+      "operationRef",
+      "applicationServiceRef",
+      "gatewayReceiptRef",
+      "receiptRef",
+      "auditReceiptRef",
+      "productEventRef",
+      ...(productKind === "run_cancellation" ? ["cancellationRef"] : []),
+    ],
+    []
+  );
+  const applied = {
+    action: "applied" as const,
+    productKind,
+    productRef,
+    operationAttemptRef,
+    operationRef: parseRef(object.operationRef, `${path}.operationRef`, parseOperationRef),
+    applicationServiceRef: parseRef(
+      object.applicationServiceRef,
+      `${path}.applicationServiceRef`,
+      parseApplicationServiceRef
+    ),
+    gatewayReceiptRef: parseRef(object.gatewayReceiptRef, `${path}.gatewayReceiptRef`, parseGatewayReceiptRef),
+    receiptRef: parseRef(object.receiptRef, `${path}.receiptRef`, parseReceiptRef),
+    auditReceiptRef: parseRef(object.auditReceiptRef, `${path}.auditReceiptRef`, parseAuditReceiptRef),
+    productEventRef: parseRef(object.productEventRef, `${path}.productEventRef`, parseProductEventRef),
+  };
+  if (productKind === "run_cancellation") {
+    return {
+      ...applied,
+      cancellationRef: parseRef(object.cancellationRef, `${path}.cancellationRef`, parseCancellationRef),
+    } as DurableAcceptedProductBinding;
+  }
+  return applied as DurableAcceptedProductBinding;
+}
+
+function parseDurableAcceptedEvent(value: unknown, path: string): DurableAcceptedEvent {
+  const object = requireRecord(
+    value,
+    path,
+    [
+      "workspaceRef",
+      "actorRef",
+      "profileVersionRef",
+      "runId",
+      "snapshotContentDigest",
+      "invocationId",
+      "eventId",
+      "idempotencyKey",
+      "correlationId",
+      "causationRef",
+      "sequence",
+      "fingerprint",
+      "kind",
+    ],
+    ["productBinding"]
+  );
+  if (!DURABLE_EVENT_KINDS.includes(object.kind as (typeof DURABLE_EVENT_KINDS)[number])) {
+    throw new ContractParseError(`${path}.kind`, "is not a supported runtime event kind");
+  }
+  const productBinding = Object.hasOwn(object, "productBinding")
+    ? parseDurableProductBinding(object.productBinding, `${path}.productBinding`)
+    : undefined;
+  return {
+    workspaceRef: parseRef(object.workspaceRef, `${path}.workspaceRef`, parseWorkspaceRef),
+    actorRef: parseRef(object.actorRef, `${path}.actorRef`, parseActorRef),
+    profileVersionRef: parseRef(object.profileVersionRef, `${path}.profileVersionRef`, parseProfileVersionRef),
+    runId: parseRef(object.runId, `${path}.runId`, parseRunId),
+    snapshotContentDigest: parseDigest(
+      object.snapshotContentDigest,
+      `${path}.snapshotContentDigest`,
+      parseRunSnapshotContentDigest
+    ) as RunSnapshotContentDigest,
+    invocationId: parseRef(object.invocationId, `${path}.invocationId`, parseInvocationId),
+    eventId: parseRef(object.eventId, `${path}.eventId`, parseEventRef),
+    idempotencyKey: parseRef(object.idempotencyKey, `${path}.idempotencyKey`, parseIdempotencyKey),
+    correlationId: parseRef(object.correlationId, `${path}.correlationId`, parseCorrelationId),
+    causationRef: parseRef(object.causationRef, `${path}.causationRef`, parseCausationRef),
+    sequence: parseInteger(object.sequence, `${path}.sequence`),
+    fingerprint: parseDigest(object.fingerprint, `${path}.fingerprint`, parseContentDigest) as ContentDigest,
+    kind: object.kind as RuntimeEventBody["kind"],
+    ...(productBinding === undefined ? {} : { productBinding }),
+  };
+}
+
+function parseDurableAcceptedExit(value: unknown, path: string): DurableAcceptedExit {
+  const object = requireRecord(
+    value,
+    path,
+    [
+      "workspaceRef",
+      "actorRef",
+      "profileVersionRef",
+      "runId",
+      "snapshotContentDigest",
+      "invocationId",
+      "idempotencyKey",
+      "finalSequence",
+      "fingerprint",
+      "kind",
+    ],
+    ["terminalEventId"]
+  );
+  const kinds = ["completed", "waiting_for_input", "failed", "blocked", "cancelled"] as const;
+  if (!kinds.includes(object.kind as (typeof kinds)[number])) {
+    throw new ContractParseError(`${path}.kind`, "is not a supported runtime exit kind");
+  }
+  const terminalEventId = Object.hasOwn(object, "terminalEventId")
+    ? parseRef(object.terminalEventId, `${path}.terminalEventId`, parseEventRef)
+    : undefined;
+  return {
+    workspaceRef: parseRef(object.workspaceRef, `${path}.workspaceRef`, parseWorkspaceRef),
+    actorRef: parseRef(object.actorRef, `${path}.actorRef`, parseActorRef),
+    profileVersionRef: parseRef(object.profileVersionRef, `${path}.profileVersionRef`, parseProfileVersionRef),
+    runId: parseRef(object.runId, `${path}.runId`, parseRunId),
+    snapshotContentDigest: parseDigest(
+      object.snapshotContentDigest,
+      `${path}.snapshotContentDigest`,
+      parseRunSnapshotContentDigest
+    ) as RunSnapshotContentDigest,
+    invocationId: parseRef(object.invocationId, `${path}.invocationId`, parseInvocationId),
+    idempotencyKey: parseRef(object.idempotencyKey, `${path}.idempotencyKey`, parseIdempotencyKey),
+    finalSequence: parseInteger(object.finalSequence, `${path}.finalSequence`),
+    fingerprint: parseDigest(object.fingerprint, `${path}.fingerprint`, parseContentDigest) as ContentDigest,
+    kind: object.kind as RuntimeExit["kind"],
+    ...(terminalEventId === undefined ? {} : { terminalEventId }),
+  };
+}
+
+function parseDurableTerminalBinding(value: unknown, path: string): DurableTerminalBinding {
+  const object = requireRecord(value, path, [
+    "eventId",
+    "invocationId",
+    "correlationId",
+    "causationRef",
+    "productBinding",
+  ]);
+  const productBinding = parseDurableProductBinding(object.productBinding, `${path}.productBinding`);
+  if (
+    productBinding.action !== "applied" ||
+    !DURABLE_TERMINAL_KINDS.includes(productBinding.productKind as (typeof DURABLE_TERMINAL_KINDS)[number])
+  ) {
+    throw new ContractParseError(`${path}.productBinding`, "must be one applied terminal product binding");
+  }
+  if (
+    productBinding.productKind !== "outcome_submission" &&
+    productBinding.productRef !== productBinding.productEventRef
+  ) {
+    throw new ContractParseError(`${path}.productBinding.productEventRef`, "must identify the terminal product");
+  }
+  return {
+    eventId: parseRef(object.eventId, `${path}.eventId`, parseEventRef),
+    invocationId: parseRef(object.invocationId, `${path}.invocationId`, parseInvocationId),
+    correlationId: parseRef(object.correlationId, `${path}.correlationId`, parseCorrelationId),
+    causationRef: parseRef(object.causationRef, `${path}.causationRef`, parseCausationRef),
+    productBinding: productBinding as Extract<DurableAcceptedProductBinding, { action: "applied" }>,
+  };
+}
+
+function parseDurablePendingInput(value: unknown, path: string): DurablePendingInputBinding {
+  const object = requireRecord(value, path, [
+    "eventId",
+    "invocationId",
+    "correlationId",
+    "causationRef",
+    "inputRequestRef",
+    "productEventRef",
+    "operationAttemptRef",
+    "operationRef",
+    "applicationServiceRef",
+    "gatewayReceiptRef",
+    "receiptRef",
+    "auditReceiptRef",
+    "questionDigest",
+  ]);
+  return {
+    eventId: parseRef(object.eventId, `${path}.eventId`, parseEventRef),
+    invocationId: parseRef(object.invocationId, `${path}.invocationId`, parseInvocationId),
+    correlationId: parseRef(object.correlationId, `${path}.correlationId`, parseCorrelationId),
+    causationRef: parseRef(object.causationRef, `${path}.causationRef`, parseCausationRef),
+    inputRequestRef: parseRef(object.inputRequestRef, `${path}.inputRequestRef`, parseInputRequestRef),
+    productEventRef: parseRef(object.productEventRef, `${path}.productEventRef`, parseProductEventRef),
+    operationAttemptRef: parseRef(object.operationAttemptRef, `${path}.operationAttemptRef`, parseOperationAttemptRef),
+    operationRef: parseRef(object.operationRef, `${path}.operationRef`, parseOperationRef),
+    applicationServiceRef: parseRef(
+      object.applicationServiceRef,
+      `${path}.applicationServiceRef`,
+      parseApplicationServiceRef
+    ),
+    gatewayReceiptRef: parseRef(object.gatewayReceiptRef, `${path}.gatewayReceiptRef`, parseGatewayReceiptRef),
+    receiptRef: parseRef(object.receiptRef, `${path}.receiptRef`, parseReceiptRef),
+    auditReceiptRef: parseRef(object.auditReceiptRef, `${path}.auditReceiptRef`, parseAuditReceiptRef),
+    questionDigest: parseDigest(object.questionDigest, `${path}.questionDigest`, parseContentDigest) as ContentDigest,
+  };
+}
+
+function requireDurableConsistency(condition: boolean, path: string, message: string): asserts condition {
+  if (!condition) {
+    throw new ContractParseError(path, message);
+  }
+}
+
+function sameJson(left: unknown, right: unknown): boolean {
+  return canonicalizeJson(left) === canonicalizeJson(right);
+}
+
+function validateRuntimeDurableStateConsistency(state: RuntimeDurableStateShape, path: string): void {
+  const eventIds = new Set<string>();
+  const eventKeys = new Set<string>();
+  let previousSequence = -1;
+  for (const [index, event] of state.acceptedEvents.entries()) {
+    requireDurableConsistency(
+      !eventIds.has(event.eventId),
+      `${path}.acceptedEvents[${index}].eventId`,
+      "must be unique"
+    );
+    requireDurableConsistency(
+      !eventKeys.has(event.idempotencyKey),
+      `${path}.acceptedEvents[${index}].idempotencyKey`,
+      "must be unique"
+    );
+    requireDurableConsistency(
+      event.sequence === previousSequence + 1,
+      `${path}.acceptedEvents[${index}].sequence`,
+      "must be strictly monotonic"
+    );
+    requireDurableConsistency(
+      event.workspaceRef === state.binding.workspaceRef &&
+        event.actorRef === state.binding.actorRef &&
+        event.profileVersionRef === state.binding.profileVersionRef &&
+        event.runId === state.binding.runId &&
+        event.snapshotContentDigest === state.binding.snapshotContentDigest,
+      `${path}.acceptedEvents[${index}]`,
+      "must bind to the durable run, actor, profile, and snapshot"
+    );
+    eventIds.add(event.eventId);
+    eventKeys.add(event.idempotencyKey);
+    previousSequence = event.sequence;
+    const productRequired = [
+      "conversation_publication_observed",
+      "input_request_observed",
+      "human_input_answer_observed",
+      "artifact_observed",
+      "outcome_submission_observed",
+      "failure_observed",
+      "blocker_observed",
+      "cancellation_observed",
+    ].includes(event.kind);
+    requireDurableConsistency(
+      productRequired === (event.productBinding !== undefined),
+      `${path}.acceptedEvents[${index}].productBinding`,
+      productRequired ? "is required for product events" : "is forbidden for observation-only events"
+    );
+    if (event.productBinding !== undefined) {
+      const expectedProductKind =
+        event.kind === "conversation_publication_observed"
+          ? "conversation"
+          : event.kind === "input_request_observed"
+            ? "input_request"
+            : event.kind === "human_input_answer_observed"
+              ? "human_input_answer"
+              : event.kind === "artifact_observed"
+                ? "artifact"
+                : event.kind === "outcome_submission_observed"
+                  ? "outcome_submission"
+                  : event.kind === "failure_observed"
+                    ? "run_failure"
+                    : event.kind === "blocker_observed"
+                      ? "run_blocker"
+                      : "run_cancellation";
+      requireDurableConsistency(
+        event.productBinding.productKind === expectedProductKind,
+        `${path}.acceptedEvents[${index}].productBinding.productKind`,
+        "must match the accepted event kind"
+      );
+    }
+  }
+  requireDurableConsistency(
+    state.lastAcceptedSequence === previousSequence,
+    `${path}.lastAcceptedSequence`,
+    "must equal the last accepted event sequence"
+  );
+
+  const exitInvocations = new Set<string>();
+  const exitKeys = new Set<string>();
+  const terminalExits = state.acceptedExits.filter((exit) => exit.kind !== "waiting_for_input");
+  for (const [index, exit] of state.acceptedExits.entries()) {
+    requireDurableConsistency(
+      !exitInvocations.has(exit.invocationId),
+      `${path}.acceptedExits[${index}].invocationId`,
+      "must be unique"
+    );
+    requireDurableConsistency(
+      !exitKeys.has(exit.idempotencyKey),
+      `${path}.acceptedExits[${index}].idempotencyKey`,
+      "must be unique"
+    );
+    requireDurableConsistency(
+      exit.workspaceRef === state.binding.workspaceRef &&
+        exit.actorRef === state.binding.actorRef &&
+        exit.profileVersionRef === state.binding.profileVersionRef &&
+        exit.runId === state.binding.runId &&
+        exit.snapshotContentDigest === state.binding.snapshotContentDigest,
+      `${path}.acceptedExits[${index}]`,
+      "must bind to the durable run, actor, profile, and snapshot"
+    );
+    requireDurableConsistency(
+      exit.finalSequence <= state.lastAcceptedSequence,
+      `${path}.acceptedExits[${index}].finalSequence`,
+      "cannot exceed the accepted sequence"
+    );
+    exitInvocations.add(exit.invocationId);
+    exitKeys.add(exit.idempotencyKey);
+  }
+  requireDurableConsistency(
+    terminalExits.length <= 1,
+    `${path}.acceptedExits`,
+    "must contain at most one terminal exit"
+  );
+
+  if (state.state === "queued" || state.state === "running") {
+    requireDurableConsistency(state.terminal === undefined, `${path}.terminal`, "is forbidden before a terminal exit");
+    requireDurableConsistency(
+      state.pendingInput === undefined,
+      `${path}.pendingInput`,
+      "is forbidden outside waiting_for_input"
+    );
+    requireDurableConsistency(state.acceptedExits.length === 0, `${path}.acceptedExits`, "is forbidden before an exit");
+    if (state.state === "queued") {
+      requireDurableConsistency(
+        state.acceptedEvents.length === 0,
+        `${path}.acceptedEvents`,
+        "is forbidden while queued"
+      );
+      requireDurableConsistency(
+        state.lastAcceptedSequence === -1,
+        `${path}.lastAcceptedSequence`,
+        "must remain -1 while queued"
+      );
+    }
+    return;
+  }
+
+  if (state.state === "waiting_for_input") {
+    requireDurableConsistency(state.terminal === undefined, `${path}.terminal`, "is forbidden while waiting for input");
+    const pending = state.pendingInput;
+    requireDurableConsistency(pending !== undefined, `${path}.pendingInput`, "is required while waiting for input");
+    if (pending !== undefined) {
+      const pendingEvent = state.acceptedEvents.find((event) => event.eventId === pending.eventId);
+      requireDurableConsistency(
+        pendingEvent !== undefined,
+        `${path}.pendingInput.eventId`,
+        "must identify an accepted event"
+      );
+      requireDurableConsistency(
+        pendingEvent?.kind === "input_request_observed",
+        `${path}.pendingInput.eventId`,
+        "must identify the accepted pending request"
+      );
+      const binding = pendingEvent?.productBinding;
+      requireDurableConsistency(
+        binding?.action === "applied" && binding.productKind === "input_request",
+        `${path}.pendingInput`,
+        "must bind to an applied input request"
+      );
+      if (binding?.action === "applied" && binding.productKind === "input_request") {
+        requireDurableConsistency(
+          binding.productRef === pending.inputRequestRef,
+          `${path}.pendingInput.inputRequestRef`,
+          "must match the accepted request"
+        );
+        requireDurableConsistency(
+          binding.productEventRef === pending.productEventRef,
+          `${path}.pendingInput.productEventRef`,
+          "must match the accepted request receipt"
+        );
+        requireDurableConsistency(
+          binding.operationAttemptRef === pending.operationAttemptRef,
+          `${path}.pendingInput.operationAttemptRef`,
+          "must match the accepted request receipt"
+        );
+        requireDurableConsistency(
+          binding.operationRef === pending.operationRef,
+          `${path}.pendingInput.operationRef`,
+          "must match the accepted request receipt"
+        );
+        requireDurableConsistency(
+          binding.applicationServiceRef === pending.applicationServiceRef,
+          `${path}.pendingInput.applicationServiceRef`,
+          "must match the accepted request receipt"
+        );
+        requireDurableConsistency(
+          binding.gatewayReceiptRef === pending.gatewayReceiptRef,
+          `${path}.pendingInput.gatewayReceiptRef`,
+          "must match the accepted request receipt"
+        );
+        requireDurableConsistency(
+          binding.receiptRef === pending.receiptRef,
+          `${path}.pendingInput.receiptRef`,
+          "must match the accepted request receipt"
+        );
+        requireDurableConsistency(
+          binding.auditReceiptRef === pending.auditReceiptRef,
+          `${path}.pendingInput.auditReceiptRef`,
+          "must match the accepted request receipt"
+        );
+      }
+      requireDurableConsistency(
+        pendingEvent?.invocationId === pending.invocationId,
+        `${path}.pendingInput.invocationId`,
+        "must match the request event"
+      );
+      requireDurableConsistency(
+        pendingEvent?.correlationId === pending.correlationId,
+        `${path}.pendingInput.correlationId`,
+        "must match the request event"
+      );
+      requireDurableConsistency(
+        pendingEvent?.causationRef === pending.causationRef,
+        `${path}.pendingInput.causationRef`,
+        "must match the request event"
+      );
+    }
+    requireDurableConsistency(
+      terminalExits.length === 0,
+      `${path}.acceptedExits`,
+      "must not contain a terminal exit while waiting"
+    );
+    requireDurableConsistency(state.acceptedExits.length > 0, `${path}.acceptedExits`, "must contain a waiting exit");
+    requireDurableConsistency(
+      state.acceptedExits.every((exit) => exit.kind === "waiting_for_input"),
+      `${path}.acceptedExits`,
+      "must contain only waiting exits"
+    );
+    const lastExit = state.acceptedExits.at(-1);
+    requireDurableConsistency(
+      lastExit?.kind === "waiting_for_input" && lastExit.finalSequence === state.lastAcceptedSequence,
+      `${path}.acceptedExits`,
+      "must end with the waiting exit"
+    );
+    return;
+  }
+
+  const terminal = state.terminal;
+  requireDurableConsistency(terminal !== undefined, `${path}.terminal`, "is required after a terminal exit");
+  requireDurableConsistency(
+    state.pendingInput === undefined,
+    `${path}.pendingInput`,
+    "is forbidden after a terminal exit"
+  );
+  const terminalExit = terminalExits[0];
+  requireDurableConsistency(terminalExit !== undefined, `${path}.acceptedExits`, "must contain one terminal exit");
+  if (terminal !== undefined && terminalExit !== undefined) {
+    requireDurableConsistency(
+      terminal.eventId === terminalExit.terminalEventId,
+      `${path}.terminal.eventId`,
+      "must match the accepted terminal exit"
+    );
+    requireDurableConsistency(
+      terminal.invocationId === terminalExit.invocationId,
+      `${path}.terminal.invocationId`,
+      "must match the accepted terminal exit"
+    );
+    const expectedProductKind =
+      state.state === "succeeded"
+        ? "outcome_submission"
+        : state.state === "failed"
+          ? "run_failure"
+          : state.state === "blocked"
+            ? "run_blocker"
+            : "run_cancellation";
+    const expectedExitKind =
+      state.state === "succeeded"
+        ? "completed"
+        : state.state === "failed"
+          ? "failed"
+          : state.state === "blocked"
+            ? "blocked"
+            : "cancelled";
+    const expectedTerminalEventKind =
+      state.state === "succeeded"
+        ? "outcome_submission_observed"
+        : state.state === "failed"
+          ? "failure_observed"
+          : state.state === "blocked"
+            ? "blocker_observed"
+            : "cancellation_observed";
+    requireDurableConsistency(
+      terminalExit.kind === expectedExitKind,
+      `${path}.acceptedExits`,
+      "must match the lifecycle state"
+    );
+    requireDurableConsistency(
+      terminalExit.finalSequence === state.lastAcceptedSequence,
+      `${path}.acceptedExits`,
+      "must end at the accepted sequence"
+    );
+    requireDurableConsistency(
+      terminal.productBinding.productKind === expectedProductKind,
+      `${path}.terminal.productBinding.productKind`,
+      "must match the lifecycle state"
+    );
+    const terminalEvent = state.acceptedEvents.find((event) => event.eventId === terminal.eventId);
+    requireDurableConsistency(
+      terminalEvent !== undefined,
+      `${path}.terminal.eventId`,
+      "must identify an accepted terminal event"
+    );
+    if (terminalEvent !== undefined) {
+      requireDurableConsistency(
+        terminalEvent.sequence === state.lastAcceptedSequence,
+        `${path}.terminal.eventId`,
+        "must identify the final accepted event"
+      );
+      requireDurableConsistency(
+        terminalEvent.kind === expectedTerminalEventKind,
+        `${path}.terminal.eventId`,
+        "must identify the lifecycle terminal event kind"
+      );
+      requireDurableConsistency(
+        terminalEvent.invocationId === terminal.invocationId,
+        `${path}.terminal.invocationId`,
+        "must match the terminal event"
+      );
+      requireDurableConsistency(
+        terminalEvent.correlationId === terminal.correlationId,
+        `${path}.terminal.correlationId`,
+        "must match the terminal event"
+      );
+      requireDurableConsistency(
+        terminalEvent.causationRef === terminal.causationRef,
+        `${path}.terminal.causationRef`,
+        "must match the terminal event"
+      );
+      requireDurableConsistency(
+        terminalEvent.productBinding !== undefined && sameJson(terminalEvent.productBinding, terminal.productBinding),
+        `${path}.terminal`,
+        "must match the accepted terminal event"
+      );
+    }
+  }
+}
+
+export function parseRuntimeDurableState(value: unknown): RuntimeDurableState {
+  const raw = parseRawJson(value, "RuntimeDurableState");
+  const object = requireRecord(
+    raw,
+    "RuntimeDurableState",
+    ["protocol", "stateVersion", "binding", "state", "lastAcceptedSequence", "acceptedEvents", "acceptedExits"],
+    ["terminal", "pendingInput"]
+  );
+  const states = ["queued", "running", "waiting_for_input", "succeeded", "failed", "blocked", "cancelled"] as const;
+  if (!states.includes(object.state as (typeof states)[number])) {
+    throw new ContractParseError("RuntimeDurableState.state", "is not a supported lifecycle state");
+  }
+  const acceptedEventsRaw = object.acceptedEvents;
+  if (!Array.isArray(acceptedEventsRaw) || acceptedEventsRaw.length > 4096) {
+    throw new ContractParseError("RuntimeDurableState.acceptedEvents", "must contain at most 4096 events");
+  }
+  const acceptedExitsRaw = object.acceptedExits;
+  if (!Array.isArray(acceptedExitsRaw) || acceptedExitsRaw.length > 256) {
+    throw new ContractParseError("RuntimeDurableState.acceptedExits", "must contain at most 256 exits");
+  }
+  if (
+    typeof object.lastAcceptedSequence !== "number" ||
+    !Number.isInteger(object.lastAcceptedSequence) ||
+    object.lastAcceptedSequence < -1
+  ) {
+    throw new ContractParseError("RuntimeDurableState.lastAcceptedSequence", "must be -1 or a non-negative integer");
+  }
+  const parsed: RuntimeDurableStateShape = {
+    protocol: parseLiteral(object.protocol, PLANE_AGENT_RUNTIME_PROTOCOL, "RuntimeDurableState.protocol"),
+    stateVersion: parseLiteral(object.stateVersion, RUNTIME_DURABLE_STATE_VERSION, "RuntimeDurableState.stateVersion"),
+    binding: parseRuntimeDurableStateBinding(object.binding, "RuntimeDurableState.binding"),
+    state: object.state as RuntimeLifecycleState,
+    lastAcceptedSequence: object.lastAcceptedSequence,
+    acceptedEvents: acceptedEventsRaw.map((item, index) =>
+      parseDurableAcceptedEvent(item, `RuntimeDurableState.acceptedEvents[${index}]`)
+    ),
+    acceptedExits: acceptedExitsRaw.map((item, index) =>
+      parseDurableAcceptedExit(item, `RuntimeDurableState.acceptedExits[${index}]`)
+    ),
+    ...(Object.hasOwn(object, "terminal")
+      ? { terminal: parseDurableTerminalBinding(object.terminal, "RuntimeDurableState.terminal") }
+      : {}),
+    ...(Object.hasOwn(object, "pendingInput")
+      ? { pendingInput: parseDurablePendingInput(object.pendingInput, "RuntimeDurableState.pendingInput") }
+      : {}),
+  };
+  validateRuntimeDurableStateConsistency(parsed, "RuntimeDurableState");
+  return deepFreeze(markValidatedContract(parsed, "RuntimeDurableState"));
 }
 
 const budgetFields = ["inputTokens", "outputTokens", "durationMs"] as const;
@@ -1675,6 +2607,7 @@ function receiptMatches(
   invocation: InvocationEnvelope
 ): boolean {
   const cancellationRef = "cancellationRef" in publication ? publication.cancellationRef : undefined;
+  const receiptCancellationRef = "cancellationRef" in receipt ? receipt.cancellationRef : undefined;
   return (
     receipt.workspaceRef === snapshot.workspaceRef &&
     receipt.actorRef === snapshot.actorRef &&
@@ -1690,8 +2623,76 @@ function receiptMatches(
     receipt.receiptRef === publication.receiptRef &&
     receipt.auditReceiptRef === publication.auditReceiptRef &&
     receipt.productEventRef === publication.productEventRef &&
-    receipt.cancellationRef === cancellationRef
+    receiptCancellationRef === cancellationRef
   );
+}
+
+function receiptBindingKey(receipt: TrustedPublicationReceipt): string {
+  return canonicalizeJson({
+    workspaceRef: receipt.workspaceRef,
+    actorRef: receipt.actorRef,
+    profileVersionRef: receipt.profileVersionRef,
+    runId: receipt.runId,
+    invocationId: receipt.invocationId,
+    productKind: receipt.productKind,
+    productRef: receipt.productRef,
+    operationAttemptRef: receipt.operationAttemptRef,
+    operationRef: receipt.operationRef,
+    applicationServiceRef: receipt.applicationServiceRef,
+    gatewayReceiptRef: receipt.gatewayReceiptRef,
+    receiptRef: receipt.receiptRef,
+    auditReceiptRef: receipt.auditReceiptRef,
+    productEventRef: receipt.productEventRef,
+    ...("cancellationRef" in receipt ? { cancellationRef: receipt.cancellationRef } : {}),
+  });
+}
+
+function prevalidatePublicationReceipts(
+  receipts: readonly TrustedPublicationReceipt[],
+  errors: RuntimeVerificationError[]
+): void {
+  const uniqueFields = [
+    "operationAttemptRef",
+    "gatewayReceiptRef",
+    "receiptRef",
+    "auditReceiptRef",
+    "productEventRef",
+  ] as const;
+  const seen = new Map<string, number>();
+  for (const [index, receipt] of receipts.entries()) {
+    for (const field of uniqueFields) {
+      const key = `${field}:${receipt[field]}`;
+      if (seen.has(key)) {
+        addVerificationError(
+          errors,
+          "publication_receipt_duplicate",
+          `trusted.publicationReceipts[${index}].${field}`,
+          `${field} must identify exactly one trusted application receipt`
+        );
+      } else {
+        seen.set(key, index);
+      }
+    }
+    const operationGatewayKey = `operation-gateway:${receipt.operationRef}:${receipt.gatewayReceiptRef}`;
+    const productKey = `product:${receipt.productKind}:${receipt.productRef}`;
+    const bindingKey = `binding:${receiptBindingKey(receipt)}`;
+    for (const [label, key] of [
+      ["operation/gateway receipt", operationGatewayKey],
+      ["product identity", productKey],
+      ["binding tuple", bindingKey],
+    ] as const) {
+      if (seen.has(key)) {
+        addVerificationError(
+          errors,
+          "publication_receipt_duplicate",
+          `trusted.publicationReceipts[${index}]`,
+          `${label} must identify exactly one trusted application receipt`
+        );
+      } else {
+        seen.set(key, index);
+      }
+    }
+  }
 }
 
 function verifyPublication(
@@ -1699,13 +2700,14 @@ function verifyPublication(
   eventPath: string,
   snapshot: RunSnapshot,
   invocation: InvocationEnvelope,
-  authority: TrustedRuntimeAuthority,
   trustedReceipts: readonly TrustedPublicationReceipt[],
+  usedReceiptIndexes: Set<number>,
   errors: RuntimeVerificationError[]
 ) {
   const publicationBody =
     body.kind === "conversation_publication_observed" ||
     body.kind === "input_request_observed" ||
+    body.kind === "human_input_answer_observed" ||
     body.kind === "artifact_observed" ||
     body.kind === "outcome_submission_observed" ||
     body.kind === "failure_observed" ||
@@ -1758,19 +2760,31 @@ function verifyPublication(
       "Publication application receipt metadata exceeds the resolved snapshot receipt limit"
     );
   }
-  const matchingReceipt = trustedReceipts.find((receipt) => receiptMatches(publication, receipt, snapshot, invocation));
-  if (matchingReceipt === undefined) {
+  const matchingReceiptIndexes = trustedReceipts
+    .map((receipt, index) => (receiptMatches(publication, receipt, snapshot, invocation) ? index : undefined))
+    .filter((index): index is number => index !== undefined);
+  const receiptAlreadyConsumed =
+    matchingReceiptIndexes.length === 1 && usedReceiptIndexes.has(matchingReceiptIndexes[0]);
+  if (matchingReceiptIndexes.length !== 1 || receiptAlreadyConsumed) {
     const sameProduct = trustedReceipts.some(
       (receipt) => receipt.productKind === publication.productKind && receipt.productRef === publication.productRef
     );
     addVerificationError(
       errors,
-      sameProduct ? "publication_authority_mismatch" : "publication_receipt_missing",
+      matchingReceiptIndexes.length > 1 || receiptAlreadyConsumed
+        ? "publication_receipt_mismatch"
+        : sameProduct
+          ? "publication_authority_mismatch"
+          : "publication_receipt_missing",
       `${eventPath}.publication`,
-      sameProduct
-        ? "The product receipt is not bound to the trusted workspace, actor, profile, run, invocation, or gateway facts"
-        : "Applied product publication requires a matching trusted Plane application-service, gateway, and audit receipt"
+      receiptAlreadyConsumed
+        ? "A trusted application receipt can be consumed by only one applied runtime event"
+        : sameProduct
+          ? "The product receipt is not bound to the trusted workspace, actor, profile, run, invocation, or gateway facts"
+          : "Applied product publication requires a matching trusted Plane application-service, gateway, and audit receipt"
     );
+  } else {
+    usedReceiptIndexes.add(matchingReceiptIndexes[0]);
   }
 }
 
@@ -1939,8 +2953,10 @@ function hasAcceptedTriggerEvent(trigger: InvocationTrigger, acceptedEvents: rea
   if (trigger.kind === "initial") {
     return true;
   }
-  const accepted = acceptedEvents.find((event) => event.eventId === trigger.eventRef);
-  return accepted !== undefined && (trigger.kind !== "human_input" || accepted.kind === "input_request_observed");
+  if (trigger.kind === "human_input" || trigger.pendingInputEventRef !== undefined) {
+    return acceptedEvents.some((event) => event.eventId === trigger.pendingInputEventRef);
+  }
+  return acceptedEvents.some((event) => event.eventId === trigger.eventRef);
 }
 
 function validateLifecycleFacts(lifecycle: RuntimeDurableState, errors: RuntimeVerificationError[]) {
@@ -1976,20 +2992,168 @@ function validateLifecycleFacts(lifecycle: RuntimeDurableState, errors: RuntimeV
   }
 }
 
-export function verifyRuntimeExecution(input: RuntimeVerificationInput): RuntimeVerificationResult {
-  const errors: RuntimeVerificationError[] = [];
-  const { manifest, snapshot, invocation, events, exit, trusted } = input;
+function durableProductBindingFromPublication(publication: AnyProductPublication): DurableAcceptedProductBinding {
+  return publication;
+}
+
+function durableAcceptedEventFromRuntimeEvent(
+  event: RuntimeEvent,
+  binding: RuntimeDurableStateBinding
+): DurableAcceptedEvent {
+  const body = event.body;
+  const publication =
+    body.kind === "conversation_publication_observed" ||
+    body.kind === "input_request_observed" ||
+    body.kind === "human_input_answer_observed" ||
+    body.kind === "artifact_observed" ||
+    body.kind === "outcome_submission_observed" ||
+    body.kind === "failure_observed" ||
+    body.kind === "blocker_observed" ||
+    body.kind === "cancellation_observed"
+      ? body.publication
+      : undefined;
+  return {
+    ...binding,
+    invocationId: event.invocationId,
+    eventId: event.eventId,
+    idempotencyKey: event.idempotencyKey,
+    correlationId: event.correlationId,
+    causationRef: event.causationRef,
+    sequence: event.sequence,
+    fingerprint: fingerprint(event),
+    kind: body.kind,
+    ...(publication === undefined ? {} : { productBinding: durableProductBindingFromPublication(publication) }),
+  };
+}
+
+function pendingInputFromRuntimeEvent(event: RuntimeEvent): DurablePendingInputBinding | undefined {
+  if (event.body.kind !== "input_request_observed" || event.body.publication.action !== "applied") {
+    return undefined;
+  }
+  const publication = event.body.publication;
+  return {
+    eventId: event.eventId,
+    invocationId: event.invocationId,
+    correlationId: event.correlationId,
+    causationRef: event.causationRef,
+    inputRequestRef: publication.productRef,
+    productEventRef: publication.productEventRef,
+    operationAttemptRef: publication.operationAttemptRef,
+    operationRef: publication.operationRef,
+    applicationServiceRef: publication.applicationServiceRef,
+    gatewayReceiptRef: publication.gatewayReceiptRef,
+    receiptRef: publication.receiptRef,
+    auditReceiptRef: publication.auditReceiptRef,
+    questionDigest: fingerprint({ question: event.body.question }),
+  };
+}
+
+function terminalBindingFromRuntimeEvent(event: RuntimeEvent): DurableTerminalBinding | undefined {
   if (
-    !isValidatedContract(snapshot, "RunSnapshot") ||
-    !isValidatedContract(invocation, "InvocationEnvelope") ||
-    !events.every((event) => isValidatedContract(event, "RuntimeEvent")) ||
-    !isValidatedContract(exit, "RuntimeExit")
+    event.body.kind !== "outcome_submission_observed" &&
+    event.body.kind !== "failure_observed" &&
+    event.body.kind !== "blocker_observed" &&
+    event.body.kind !== "cancellation_observed"
+  ) {
+    return undefined;
+  }
+  if (event.body.publication.action !== "applied") {
+    return undefined;
+  }
+  return {
+    eventId: event.eventId,
+    invocationId: event.invocationId,
+    correlationId: event.correlationId,
+    causationRef: event.causationRef,
+    productBinding: durableProductBindingFromPublication(event.body.publication) as Extract<
+      DurableAcceptedProductBinding,
+      { action: "applied" }
+    >,
+  };
+}
+
+function verifyPendingInputContinuation(
+  trigger: InvocationTrigger,
+  lifecycle: RuntimeDurableState,
+  events: readonly RuntimeEvent[],
+  newContextEventRefs: readonly EventRef[],
+  errors: RuntimeVerificationError[]
+): void {
+  const isWaiting = lifecycle.state === "waiting_for_input";
+  const hasPendingTrigger = trigger.kind !== "initial" && trigger.pendingInputEventRef !== undefined;
+  if (!isWaiting) {
+    if (trigger.kind === "human_input" || hasPendingTrigger) {
+      addVerificationError(
+        errors,
+        "pending_input_mismatch",
+        "invocation.trigger",
+        "Only a waiting run may continue from a pending input request"
+      );
+    }
+    return;
+  }
+
+  const pending = lifecycle.pendingInput;
+  if (
+    (trigger.kind !== "human_input" && trigger.kind !== "continuation") ||
+    pending === undefined ||
+    trigger.pendingInputEventRef === undefined ||
+    trigger.pendingInputEventRef !== pending.eventId
   ) {
     addVerificationError(
       errors,
-      "unparsed_contract_input",
+      "pending_input_mismatch",
+      "invocation.trigger.pendingInputEventRef",
+      "Continuation must cite the exact currently pending input request event"
+    );
+    return;
+  }
+  if (!newContextEventRefs.includes(pending.eventId) || !newContextEventRefs.includes(trigger.eventRef)) {
+    addVerificationError(
+      errors,
+      "pending_input_mismatch",
+      "invocation.newContextEventRefs",
+      "Continuation context must include both the pending request and the Plane-owned answer event"
+    );
+  }
+  const answers = events.filter((event) => event.body.kind === "human_input_answer_observed");
+  const answer = answers.find((event) => event.eventId === trigger.eventRef);
+  if (
+    answers.length !== 1 ||
+    answer === undefined ||
+    answer.body.kind !== "human_input_answer_observed" ||
+    answer.body.inputRequestRef !== pending.inputRequestRef ||
+    answer.eventId === pending.eventId ||
+    answer.body.publication.action !== "applied"
+  ) {
+    addVerificationError(
+      errors,
+      "pending_input_mismatch",
+      "invocation.trigger.eventRef",
+      "Continuation must cite exactly one applied Plane answer for the current pending request"
+    );
+  }
+}
+
+export function verifyRuntimeExecution(input: RuntimeVerificationInput): RuntimeVerificationResult {
+  const errors: RuntimeVerificationError[] = [];
+  const { manifest, snapshot, invocation, events, exit, trusted } = input;
+  const durableStateParsed = trusted !== undefined && isValidatedContract(trusted.lifecycle, "RuntimeDurableState");
+  if (
+    !trusted ||
+    !isValidatedContract(snapshot, "RunSnapshot") ||
+    !isValidatedContract(invocation, "InvocationEnvelope") ||
+    !events.every((event) => isValidatedContract(event, "RuntimeEvent")) ||
+    !isValidatedContract(exit, "RuntimeExit") ||
+    !durableStateParsed
+  ) {
+    addVerificationError(
+      errors,
+      !durableStateParsed ? "unparsed_durable_state" : "unparsed_contract_input",
       "input",
-      "Runtime semantic verification accepts only parser-produced contract values"
+      !durableStateParsed
+        ? "Runtime semantic verification accepts only parser-produced durable state"
+        : "Runtime semantic verification accepts only parser-produced contract values"
     );
     return { ok: false, errors };
   }
@@ -2003,6 +3167,20 @@ export function verifyRuntimeExecution(input: RuntimeVerificationInput): Runtime
     return { ok: false, errors };
   }
   validateLifecycleFacts(trusted.lifecycle, errors);
+  if (
+    trusted.lifecycle.binding.workspaceRef !== snapshot.workspaceRef ||
+    trusted.lifecycle.binding.actorRef !== snapshot.actorRef ||
+    trusted.lifecycle.binding.profileVersionRef !== snapshot.profile.profileRef ||
+    trusted.lifecycle.binding.runId !== snapshot.runId ||
+    trusted.lifecycle.binding.snapshotContentDigest !== snapshot.contentDigest
+  ) {
+    addVerificationError(
+      errors,
+      "durable_state_invalid",
+      "trusted.lifecycle.binding",
+      "Durable state must bind to the exact workspace, actor, profile, run, and snapshot"
+    );
+  }
   const expectedContractDigests = contractDigestsFromManifest(manifest);
   if (JSON.stringify(snapshot.contractDigests) !== JSON.stringify(expectedContractDigests)) {
     addVerificationError(
@@ -2142,6 +3320,8 @@ export function verifyRuntimeExecution(input: RuntimeVerificationInput): Runtime
   const newEvents: DurableAcceptedEvent[] = [];
   let expectedSequence = trusted.lifecycle.lastAcceptedSequence + 1;
   let allEventsReplay = true;
+  const usedReceiptIndexes = new Set<number>();
+  prevalidatePublicationReceipts(trusted.publicationReceipts, errors);
   for (const [index, event] of events.entries()) {
     const path = `events[${index}]`;
     if (
@@ -2207,14 +3387,7 @@ export function verifyRuntimeExecution(input: RuntimeVerificationInput): Runtime
         );
       }
       expectedSequence += 1;
-      newEvents.push({
-        eventId: event.eventId,
-        idempotencyKey: event.idempotencyKey,
-        invocationId: event.invocationId,
-        sequence: event.sequence,
-        fingerprint: eventFingerprint,
-        kind: event.body.kind,
-      });
+      newEvents.push(durableAcceptedEventFromRuntimeEvent(event, trusted.lifecycle.binding));
     }
     if (
       serializedJsonByteLength(event) > MAX_SERIALIZED_JSON_BYTES ||
@@ -2238,7 +3411,7 @@ export function verifyRuntimeExecution(input: RuntimeVerificationInput): Runtime
         "Artifact size exceeds the resolved snapshot artifact limit"
       );
     }
-    verifyPublication(event.body, path, snapshot, invocation, trusted.authority, trusted.publicationReceipts, errors);
+    verifyPublication(event.body, path, snapshot, invocation, trusted.publicationReceipts, usedReceiptIndexes, errors);
   }
   for (let index = 1; index < events.length; index += 1) {
     if (isTerminalBody(events[index - 1].body)) {
@@ -2260,6 +3433,17 @@ export function verifyRuntimeExecution(input: RuntimeVerificationInput): Runtime
       "exit.finalSequence",
       "Exit finalSequence must equal the last accepted event sequence"
     );
+  }
+  verifyPendingInputContinuation(invocation.trigger, trusted.lifecycle, events, invocation.newContextEventRefs, errors);
+  for (const [index] of trusted.publicationReceipts.entries()) {
+    if (!usedReceiptIndexes.has(index)) {
+      addVerificationError(
+        errors,
+        "publication_receipt_unused",
+        `trusted.publicationReceipts[${index}]`,
+        "Every trusted application receipt must be consumed by exactly one applied runtime event"
+      );
+    }
   }
   if (
     exit.workspaceRef !== trusted.authority.workspaceRef ||
@@ -2312,31 +3496,43 @@ export function verifyRuntimeExecution(input: RuntimeVerificationInput): Runtime
     return { ok: false, errors };
   }
   if (exactExitReplay) {
+    const replayLifecycle = parseRuntimeDurableState(canonicalizeJson(trusted.lifecycle));
     return {
       ok: true,
       result: "idempotent_replay",
       state: exit.kind,
       finalSequence: exit.finalSequence,
       terminalEventCount,
-      nextLifecycle: trusted.lifecycle,
+      nextLifecycle: replayLifecycle,
     };
   }
 
-  const nextLifecycle: RuntimeDurableState = {
+  const finalEvent = events.at(-1);
+  const nextTerminal = finalEvent === undefined ? undefined : terminalBindingFromRuntimeEvent(finalEvent);
+  const nextPending = finalEvent === undefined ? undefined : pendingInputFromRuntimeEvent(finalEvent);
+  const nextLifecycleRaw: RuntimeDurableStateShape = {
+    protocol: PLANE_AGENT_RUNTIME_PROTOCOL,
+    stateVersion: RUNTIME_DURABLE_STATE_VERSION,
+    binding: trusted.lifecycle.binding,
     state: stateForExit(exit.kind),
     lastAcceptedSequence: Math.max(trusted.lifecycle.lastAcceptedSequence, ...newEvents.map((event) => event.sequence)),
     acceptedEvents: [...trusted.lifecycle.acceptedEvents, ...newEvents],
     acceptedExits: [
       ...trusted.lifecycle.acceptedExits,
       {
+        ...trusted.lifecycle.binding,
         invocationId: exit.invocationId,
         idempotencyKey: exit.idempotencyKey,
         finalSequence: exit.finalSequence,
         fingerprint: exitFingerprint,
         kind: exit.kind,
+        ...(nextTerminal === undefined ? {} : { terminalEventId: nextTerminal.eventId }),
       },
     ],
+    ...(nextTerminal === undefined ? {} : { terminal: nextTerminal }),
+    ...(exit.kind === "waiting_for_input" && nextPending !== undefined ? { pendingInput: nextPending } : {}),
   };
+  const nextLifecycle = parseRuntimeDurableState(nextLifecycleRaw);
   return {
     ok: true,
     result: "accepted",

@@ -168,7 +168,7 @@
     "contractDigests": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["runSnapshot", "invocationEnvelope", "runtimeEvent", "runtimeExit"],
+      "required": ["runSnapshot", "invocationEnvelope", "runtimeEvent", "runtimeExit", "runtimeDurableState"],
       "properties": {
         "runSnapshot": {
           "$ref": "#/$defs/contractDigest"
@@ -181,6 +181,9 @@
         },
         "runtimeExit": {
           "$ref": "#/$defs/contractDigest"
+        },
+        "runtimeDurableState": {
+          "$ref": "#/$defs/contractDigest"
         }
       }
     },
@@ -191,12 +194,14 @@
   "$defs": {
     "actorRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^actor:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "assignmentRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^assignment:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
@@ -226,22 +231,23 @@
     },
     "contentDigest": {
       "type": "string",
+      "minLength": 72,
       "maxLength": 72,
       "x-utf8ByteMax": 72,
-      "minLength": 72,
       "pattern": "^content:[a-f0-9]{64}$"
     },
     "contextRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^context:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "contractDigest": {
       "type": "string",
+      "minLength": 64,
       "maxLength": 64,
       "x-utf8ByteMax": 64,
-      "minLength": 64,
       "pattern": "^[a-f0-9]{64}$"
     },
     "nonNegativeInteger": {
@@ -251,18 +257,21 @@
     },
     "operationRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^operation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "profileVersionRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^profile-version:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "runId": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^run:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
@@ -292,12 +301,14 @@
     },
     "targetRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^target:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "workspaceRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^workspace:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"

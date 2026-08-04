@@ -1,77 +1,72 @@
+import byteConstraints from "./byte-constraints.json" with { type: "json" };
+
 const protocol = "plane.agent-runtime/v1";
 const draft = "https://json-schema.org/draft/2020-12/schema";
 
 const ref = (name) => ({ $ref: `#/$defs/${name}` });
-const namespacedPattern = (namespace) => `^${namespace}:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$`;
-const digestPattern = (namespace) => `^${namespace}:[a-f0-9]{64}$`;
-const stringWithBytes = (maxLength, xUtf8ByteMax, extra = {}) => ({
+const namespacedPattern = (namespace) =>
+  `^${namespace}:[A-Za-z0-9][A-Za-z0-9._~/-]{0,${byteConstraints.reference.identifierCharacterMaxLength - 1}}$`;
+const digestPattern = (namespace, constraint) => {
+  const prefixLength = `${namespace}:`.length;
+  const minimum = constraint.jsonSchemaMinLength - prefixLength;
+  const maximum = constraint.jsonSchemaMaxLength - prefixLength;
+  return `^${namespace}:[a-f0-9]{${minimum === maximum ? minimum : `${minimum},${maximum}`}}$`;
+};
+const hexPattern = (constraint) =>
+  `^[a-f0-9]{${constraint.jsonSchemaMinLength === constraint.jsonSchemaMaxLength ? constraint.jsonSchemaMinLength : `${constraint.jsonSchemaMinLength},${constraint.jsonSchemaMaxLength}`}}$`;
+const stringWithBytes = (constraint, extra = {}) => ({
   type: "string",
-  maxLength,
-  "x-utf8ByteMax": xUtf8ByteMax,
+  minLength: constraint.jsonSchemaMinLength,
+  maxLength: constraint.jsonSchemaMaxLength,
+  "x-utf8ByteMax": constraint.utf8ByteMax,
   ...extra,
 });
 
 const definitions = {
-  workspaceRef: stringWithBytes(128, 128, { pattern: namespacedPattern("workspace") }),
-  actorRef: stringWithBytes(128, 128, { pattern: namespacedPattern("actor") }),
-  assignmentRef: stringWithBytes(128, 128, { pattern: namespacedPattern("assignment") }),
-  profileVersionRef: stringWithBytes(128, 128, { pattern: namespacedPattern("profile-version") }),
-  runId: stringWithBytes(128, 128, { pattern: namespacedPattern("run") }),
-  invocationId: stringWithBytes(128, 128, { pattern: namespacedPattern("invocation") }),
-  targetRef: stringWithBytes(128, 128, { pattern: namespacedPattern("target") }),
-  contextRef: stringWithBytes(128, 128, { pattern: namespacedPattern("context") }),
-  operationRef: stringWithBytes(128, 128, { pattern: namespacedPattern("operation") }),
-  eventRef: stringWithBytes(128, 128, { pattern: namespacedPattern("event") }),
-  correlationId: stringWithBytes(128, 128, { pattern: namespacedPattern("correlation") }),
-  idempotencyKey: stringWithBytes(128, 128, { pattern: namespacedPattern("idempotency") }),
-  causationRef: stringWithBytes(128, 128, { pattern: namespacedPattern("causation") }),
-  cancellationRef: stringWithBytes(128, 128, { pattern: namespacedPattern("cancellation") }),
-  checkpointRef: stringWithBytes(128, 128, { pattern: namespacedPattern("checkpoint") }),
-  leaseId: stringWithBytes(128, 128, { pattern: namespacedPattern("lease") }),
-  operationAttemptRef: stringWithBytes(128, 128, { pattern: namespacedPattern("operation-attempt") }),
-  applicationServiceRef: stringWithBytes(128, 128, { pattern: namespacedPattern("application-service") }),
-  gatewayReceiptRef: stringWithBytes(128, 128, { pattern: namespacedPattern("gateway-receipt") }),
-  receiptRef: stringWithBytes(128, 128, { pattern: namespacedPattern("receipt") }),
-  auditReceiptRef: stringWithBytes(128, 128, { pattern: namespacedPattern("audit-receipt") }),
-  productEventRef: stringWithBytes(128, 128, { pattern: namespacedPattern("product-event") }),
-  conversationRef: stringWithBytes(128, 128, { pattern: namespacedPattern("conversation") }),
-  inputRequestRef: stringWithBytes(128, 128, { pattern: namespacedPattern("input-request") }),
-  artifactRef: stringWithBytes(128, 128, { pattern: namespacedPattern("artifact") }),
-  outcomeSubmissionRef: stringWithBytes(128, 128, { pattern: namespacedPattern("outcome-submission") }),
-  payloadRef: stringWithBytes(128, 128, { pattern: namespacedPattern("payload") }),
-  contractDigest: stringWithBytes(64, 64, { minLength: 64, pattern: "^[a-f0-9]{64}$" }),
-  contentDigest: stringWithBytes(72, 72, { minLength: 72, pattern: digestPattern("content") }),
-  runSnapshotContentDigest: {
-    type: "string",
-    minLength: 73,
-    maxLength: 73,
-    "x-utf8ByteMax": 73,
-    pattern: digestPattern("snapshot"),
-  },
-  boundedText: {
-    type: "string",
-    minLength: 1,
-    maxLength: 4096,
-    "x-utf8ByteMax": 4096,
-  },
-  boundedPrompt: {
-    type: "string",
-    minLength: 1,
-    maxLength: 32768,
-    "x-utf8ByteMax": 32768,
-  },
-  boundedToken: {
-    type: "string",
-    minLength: 1,
-    maxLength: 256,
-    "x-utf8ByteMax": 256,
-  },
-  timestamp: {
-    type: "string",
-    minLength: 1,
-    maxLength: 64,
-    "x-utf8ByteMax": 64,
-  },
+  workspaceRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("workspace") }),
+  actorRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("actor") }),
+  assignmentRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("assignment") }),
+  profileVersionRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("profile-version") }),
+  runId: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("run") }),
+  invocationId: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("invocation") }),
+  targetRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("target") }),
+  contextRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("context") }),
+  operationRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("operation") }),
+  eventRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("event") }),
+  correlationId: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("correlation") }),
+  idempotencyKey: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("idempotency") }),
+  causationRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("causation") }),
+  cancellationRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("cancellation") }),
+  checkpointRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("checkpoint") }),
+  leaseId: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("lease") }),
+  operationAttemptRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("operation-attempt") }),
+  applicationServiceRef: stringWithBytes(byteConstraints.reference, {
+    pattern: namespacedPattern("application-service"),
+  }),
+  gatewayReceiptRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("gateway-receipt") }),
+  receiptRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("receipt") }),
+  auditReceiptRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("audit-receipt") }),
+  productEventRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("product-event") }),
+  conversationRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("conversation") }),
+  inputRequestRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("input-request") }),
+  artifactRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("artifact") }),
+  outcomeSubmissionRef: stringWithBytes(byteConstraints.reference, {
+    pattern: namespacedPattern("outcome-submission"),
+  }),
+  payloadRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("payload") }),
+  contractDigest: stringWithBytes(byteConstraints.contractDigest, {
+    pattern: hexPattern(byteConstraints.contractDigest),
+  }),
+  contentDigest: stringWithBytes(byteConstraints.contentDigest, {
+    pattern: digestPattern("content", byteConstraints.contentDigest),
+  }),
+  runSnapshotContentDigest: stringWithBytes(byteConstraints.runSnapshotContentDigest, {
+    pattern: digestPattern("snapshot", byteConstraints.runSnapshotContentDigest),
+  }),
+  boundedText: stringWithBytes(byteConstraints.boundedText),
+  boundedPrompt: stringWithBytes(byteConstraints.boundedPrompt),
+  boundedToken: stringWithBytes(byteConstraints.boundedToken),
+  timestamp: stringWithBytes(byteConstraints.timestamp),
   nonNegativeInteger: {
     type: "integer",
     minimum: 0,
@@ -80,7 +75,7 @@ const definitions = {
   boundedByteCount: {
     type: "integer",
     minimum: 0,
-    maximum: 1048576,
+    maximum: byteConstraints.boundedByteCount.numericMax,
   },
   runtimeFailure: {
     type: "object",
@@ -209,6 +204,7 @@ definitions.conversationPublication = publicationDefinition("conversation", "con
 definitions.inputRequestPublication = publicationDefinition("input_request", "inputRequestRef");
 definitions.artifactPublication = publicationDefinition("artifact", "artifactRef");
 definitions.outcomeSubmissionPublication = publicationDefinition("outcome_submission", "outcomeSubmissionRef");
+definitions.humanInputAnswerPublication = publicationDefinition("human_input_answer", "productEventRef");
 const terminalPublicationDefinition = (productKind, includeCancellationRef = false) => ({
   type: "object",
   additionalProperties: false,
@@ -387,12 +383,13 @@ const runtimePolicy = {
 const contractDigests = {
   type: "object",
   additionalProperties: false,
-  required: ["runSnapshot", "invocationEnvelope", "runtimeEvent", "runtimeExit"],
+  required: ["runSnapshot", "invocationEnvelope", "runtimeEvent", "runtimeExit", "runtimeDurableState"],
   properties: {
     runSnapshot: ref("contractDigest"),
     invocationEnvelope: ref("contractDigest"),
     runtimeEvent: ref("contractDigest"),
     runtimeExit: ref("contractDigest"),
+    runtimeDurableState: ref("contractDigest"),
   },
 };
 
@@ -439,10 +436,21 @@ const invocationTrigger = {
     {
       type: "object",
       additionalProperties: false,
+      properties: {
+        kind: { const: "human_input" },
+        eventRef: ref("eventRef"),
+        pendingInputEventRef: ref("eventRef"),
+      },
+      required: ["kind", "eventRef", "pendingInputEventRef"],
+    },
+    {
+      type: "object",
+      additionalProperties: false,
       required: ["kind", "eventRef"],
       properties: {
-        kind: { enum: ["human_input", "recoverable_restart", "continuation"] },
+        kind: { enum: ["recoverable_restart", "continuation"] },
         eventRef: ref("eventRef"),
+        pendingInputEventRef: ref("eventRef"),
       },
     },
   ],
@@ -529,6 +537,17 @@ const eventBodies = [
       kind: { const: "input_request_observed" },
       question: ref("boundedText"),
       publication: ref("inputRequestPublication"),
+    },
+  },
+  {
+    type: "object",
+    additionalProperties: false,
+    required: ["kind", "inputRequestRef", "payload", "publication"],
+    properties: {
+      kind: { const: "human_input_answer_observed" },
+      inputRequestRef: ref("inputRequestRef"),
+      payload: ref("boundedPayload"),
+      publication: ref("humanInputAnswerPublication"),
     },
   },
   {
@@ -636,7 +655,7 @@ const runtimeEvent = objectSchema(
     observedAt: ref("timestamp"),
     body: { oneOf: eventBodies },
   },
-  { "x-serializedUtf8ByteMax": 1_048_576 }
+  { "x-serializedUtf8ByteMax": byteConstraints.serializedContract.utf8ByteMax }
 );
 
 const runtimeExitBaseProperties = {
@@ -694,11 +713,257 @@ const runtimeExit = objectSchema(
   }
 );
 
+const durableStateBinding = {
+  type: "object",
+  additionalProperties: false,
+  required: ["workspaceRef", "actorRef", "profileVersionRef", "runId", "snapshotContentDigest"],
+  properties: {
+    workspaceRef: ref("workspaceRef"),
+    actorRef: ref("actorRef"),
+    profileVersionRef: ref("profileVersionRef"),
+    runId: ref("runId"),
+    snapshotContentDigest: ref("runSnapshotContentDigest"),
+  },
+};
+
+const durableProductRef = {
+  oneOf: [
+    ref("conversationRef"),
+    ref("inputRequestRef"),
+    ref("artifactRef"),
+    ref("outcomeSubmissionRef"),
+    ref("productEventRef"),
+  ],
+};
+
+const durableProductBinding = {
+  oneOf: [
+    {
+      type: "object",
+      additionalProperties: false,
+      required: ["action", "productKind", "productRef", "operationAttemptRef"],
+      properties: {
+        action: { const: "proposal" },
+        productKind: {
+          enum: ["conversation", "input_request", "artifact", "outcome_submission", "human_input_answer"],
+        },
+        productRef: durableProductRef,
+        operationAttemptRef: ref("operationAttemptRef"),
+      },
+    },
+    {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "action",
+        "productKind",
+        "productRef",
+        "operationAttemptRef",
+        "operationRef",
+        "applicationServiceRef",
+        "gatewayReceiptRef",
+        "receiptRef",
+        "auditReceiptRef",
+        "productEventRef",
+      ],
+      properties: {
+        action: { const: "applied" },
+        productKind: {
+          enum: [
+            "conversation",
+            "input_request",
+            "artifact",
+            "outcome_submission",
+            "human_input_answer",
+            "run_failure",
+            "run_blocker",
+            "run_cancellation",
+          ],
+        },
+        productRef: durableProductRef,
+        operationAttemptRef: ref("operationAttemptRef"),
+        operationRef: ref("operationRef"),
+        applicationServiceRef: ref("applicationServiceRef"),
+        gatewayReceiptRef: ref("gatewayReceiptRef"),
+        receiptRef: ref("receiptRef"),
+        auditReceiptRef: ref("auditReceiptRef"),
+        productEventRef: ref("productEventRef"),
+        cancellationRef: ref("cancellationRef"),
+      },
+    },
+  ],
+};
+
+const durableAcceptedEvent = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "workspaceRef",
+    "actorRef",
+    "profileVersionRef",
+    "runId",
+    "snapshotContentDigest",
+    "invocationId",
+    "eventId",
+    "idempotencyKey",
+    "correlationId",
+    "causationRef",
+    "sequence",
+    "fingerprint",
+    "kind",
+  ],
+  properties: {
+    workspaceRef: ref("workspaceRef"),
+    actorRef: ref("actorRef"),
+    profileVersionRef: ref("profileVersionRef"),
+    runId: ref("runId"),
+    snapshotContentDigest: ref("runSnapshotContentDigest"),
+    invocationId: ref("invocationId"),
+    eventId: ref("eventRef"),
+    idempotencyKey: ref("idempotencyKey"),
+    correlationId: ref("correlationId"),
+    causationRef: ref("causationRef"),
+    sequence: ref("nonNegativeInteger"),
+    fingerprint: ref("contentDigest"),
+    kind: {
+      enum: [
+        "progress_observed",
+        "conversation_publication_observed",
+        "input_request_observed",
+        "human_input_answer_observed",
+        "artifact_observed",
+        "usage_observed",
+        "outcome_submission_observed",
+        "failure_observed",
+        "blocker_observed",
+        "cancellation_observed",
+        "transcript_evidence_observed",
+      ],
+    },
+    productBinding: durableProductBinding,
+  },
+};
+
+const durableAcceptedExit = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "workspaceRef",
+    "actorRef",
+    "profileVersionRef",
+    "runId",
+    "snapshotContentDigest",
+    "invocationId",
+    "idempotencyKey",
+    "finalSequence",
+    "fingerprint",
+    "kind",
+  ],
+  properties: {
+    workspaceRef: ref("workspaceRef"),
+    actorRef: ref("actorRef"),
+    profileVersionRef: ref("profileVersionRef"),
+    runId: ref("runId"),
+    snapshotContentDigest: ref("runSnapshotContentDigest"),
+    invocationId: ref("invocationId"),
+    idempotencyKey: ref("idempotencyKey"),
+    finalSequence: { type: "integer", minimum: 0 },
+    fingerprint: ref("contentDigest"),
+    kind: { enum: ["completed", "waiting_for_input", "failed", "blocked", "cancelled"] },
+    terminalEventId: ref("eventRef"),
+  },
+};
+
+const durableTerminalBinding = {
+  type: "object",
+  additionalProperties: false,
+  required: ["eventId", "invocationId", "correlationId", "causationRef", "productBinding"],
+  properties: {
+    eventId: ref("eventRef"),
+    invocationId: ref("invocationId"),
+    correlationId: ref("correlationId"),
+    causationRef: ref("causationRef"),
+    productBinding: durableProductBinding,
+  },
+};
+
+const durablePendingInput = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "eventId",
+    "invocationId",
+    "correlationId",
+    "causationRef",
+    "inputRequestRef",
+    "productEventRef",
+    "operationAttemptRef",
+    "operationRef",
+    "applicationServiceRef",
+    "gatewayReceiptRef",
+    "receiptRef",
+    "auditReceiptRef",
+    "questionDigest",
+  ],
+  properties: {
+    eventId: ref("eventRef"),
+    invocationId: ref("invocationId"),
+    correlationId: ref("correlationId"),
+    causationRef: ref("causationRef"),
+    inputRequestRef: ref("inputRequestRef"),
+    productEventRef: ref("productEventRef"),
+    operationAttemptRef: ref("operationAttemptRef"),
+    operationRef: ref("operationRef"),
+    applicationServiceRef: ref("applicationServiceRef"),
+    gatewayReceiptRef: ref("gatewayReceiptRef"),
+    receiptRef: ref("receiptRef"),
+    auditReceiptRef: ref("auditReceiptRef"),
+    questionDigest: ref("contentDigest"),
+  },
+};
+
+const runtimeDurableState = objectSchema(
+  "RuntimeDurableState",
+  ["protocol", "stateVersion", "binding", "state", "lastAcceptedSequence", "acceptedEvents", "acceptedExits"],
+  {
+    protocol: { const: protocol },
+    stateVersion: { const: "v1" },
+    binding: durableStateBinding,
+    state: {
+      enum: ["queued", "running", "waiting_for_input", "succeeded", "failed", "blocked", "cancelled"],
+    },
+    lastAcceptedSequence: { type: "integer", minimum: -1 },
+    acceptedEvents: { type: "array", maxItems: 4096, items: durableAcceptedEvent },
+    acceptedExits: { type: "array", maxItems: 256, items: durableAcceptedExit },
+    terminal: durableTerminalBinding,
+    pendingInput: durablePendingInput,
+  },
+  {
+    oneOf: [
+      {
+        properties: { state: { enum: ["queued", "running"] } },
+        not: { anyOf: [{ required: ["terminal"] }, { required: ["pendingInput"] }] },
+      },
+      {
+        properties: { state: { const: "waiting_for_input" } },
+        required: ["pendingInput"],
+        not: { required: ["terminal"] },
+      },
+      {
+        properties: { state: { enum: ["succeeded", "failed", "blocked", "cancelled"] } },
+        required: ["terminal"],
+        not: { required: ["pendingInput"] },
+      },
+    ],
+  }
+);
+
 export const schemas = {
   "run-snapshot": runSnapshot,
   "invocation-envelope": invocationEnvelope,
   "runtime-event": runtimeEvent,
   "runtime-exit": runtimeExit,
+  "runtime-durable-state": runtimeDurableState,
 };
 
 export { protocol };

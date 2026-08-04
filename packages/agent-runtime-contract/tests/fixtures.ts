@@ -213,6 +213,24 @@ export const appliedInputRequestBody = (requestId = "input-request-1"): RuntimeE
   },
 });
 
+export const appliedHumanInputAnswerBody = (requestId = "input-request-1"): RuntimeEventBody => ({
+  kind: "human_input_answer_observed",
+  inputRequestRef: createInputRequestRef(requestId),
+  payload: inlinePayload("The Plane-owned human answer."),
+  publication: {
+    action: "applied",
+    productKind: "human_input_answer",
+    productRef: createProductEventRef("product-event-answer"),
+    operationAttemptRef: createOperationAttemptRef("operation-attempt-answer"),
+    operationRef: createOperationRef("answer-input"),
+    applicationServiceRef: createApplicationServiceRef("answer-service"),
+    gatewayReceiptRef: createGatewayReceiptRef("gateway-answer"),
+    receiptRef: createReceiptRef("receipt-answer"),
+    auditReceiptRef: createAuditReceiptRef("audit-answer"),
+    productEventRef: createProductEventRef("product-event-answer"),
+  },
+});
+
 export const appliedOutcomeBody = (): RuntimeEventBody => ({
   kind: "outcome_submission_observed",
   payload: inlinePayload("The completed outcome."),

@@ -103,6 +103,7 @@
   "$defs": {
     "actorRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^actor:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
@@ -115,30 +116,35 @@
     },
     "causationRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^causation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "correlationId": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^correlation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "eventRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^event:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "idempotencyKey": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^idempotency:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "invocationId": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^invocation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
@@ -150,6 +156,7 @@
     },
     "runId": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^run:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
@@ -172,6 +179,7 @@
     },
     "workspaceRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^workspace:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"

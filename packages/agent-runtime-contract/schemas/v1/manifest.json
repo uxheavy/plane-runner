@@ -3,19 +3,23 @@
   "schemas": {
     "run-snapshot": {
       "filename": "run-snapshot.schema.json",
-      "sha256": "47887d4520561ae36a520c1d35c9de71148fb97f2df67c7adb054998243fa87c"
+      "sha256": "e538fe79ede53e6bb2e307600dbefea507e30b996c002c3dab32d543ca0e36a2"
     },
     "invocation-envelope": {
       "filename": "invocation-envelope.schema.json",
-      "sha256": "62bf1c5c7613de76151ce799a2af46d9c7b63aebd1ba241c32e5860bf8a68771"
+      "sha256": "da1b29ecbe18491fc5b6365187d171171d290573c5b8329af1fd38017dc63498"
     },
     "runtime-event": {
       "filename": "runtime-event.schema.json",
-      "sha256": "dcbab252968fbfca49b0e3d7dd2bec7d77bc92a57c6be628118c51f79611b35c"
+      "sha256": "3f7d3976927eba2f7ddb0ceef47b9e4721f0c3d0be4417ac7f7ff0fa804a36ab"
     },
     "runtime-exit": {
       "filename": "runtime-exit.schema.json",
-      "sha256": "7ff5313c01c91a406d70b11a4b0fd148d27e65f41ddbd190c74b8efbb2f93377"
+      "sha256": "055792eb1bf4931dafe19de456b15037522f0b5e8f6a0d2fedfe0e0d1d1d1c05"
+    },
+    "runtime-durable-state": {
+      "filename": "runtime-durable-state.schema.json",
+      "sha256": "ede9dbc54a481bbe88b4f22afb41e1ae1a9af7b394d9f082472b9d466136e797"
     }
   }
 }

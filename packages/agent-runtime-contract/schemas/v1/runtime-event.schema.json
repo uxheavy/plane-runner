@@ -109,6 +109,25 @@
         {
           "type": "object",
           "additionalProperties": false,
+          "required": ["kind", "inputRequestRef", "payload", "publication"],
+          "properties": {
+            "kind": {
+              "const": "human_input_answer_observed"
+            },
+            "inputRequestRef": {
+              "$ref": "#/$defs/inputRequestRef"
+            },
+            "payload": {
+              "$ref": "#/$defs/boundedPayload"
+            },
+            "publication": {
+              "$ref": "#/$defs/humanInputAnswerPublication"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
           "required": ["kind", "artifact", "publication"],
           "properties": {
             "kind": {
@@ -228,12 +247,14 @@
   "$defs": {
     "actorRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^actor:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "applicationServiceRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^application-service:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
@@ -311,6 +332,7 @@
     },
     "artifactRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^artifact:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
@@ -336,6 +358,7 @@
     },
     "auditReceiptRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^audit-receipt:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
@@ -503,21 +526,23 @@
     },
     "cancellationRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^cancellation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "causationRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^causation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "contentDigest": {
       "type": "string",
+      "minLength": 72,
       "maxLength": 72,
       "x-utf8ByteMax": 72,
-      "minLength": 72,
       "pattern": "^content:[a-f0-9]{64}$"
     },
     "conversationPublication": {
@@ -593,18 +618,21 @@
     },
     "conversationRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^conversation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "correlationId": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^correlation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "eventRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^event:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
@@ -660,12 +688,85 @@
     },
     "gatewayReceiptRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^gateway-receipt:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
+    "humanInputAnswerPublication": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "productKind", "productRef", "operationAttemptRef"],
+          "properties": {
+            "action": {
+              "const": "proposal"
+            },
+            "productKind": {
+              "const": "human_input_answer"
+            },
+            "productRef": {
+              "$ref": "#/$defs/productEventRef"
+            },
+            "operationAttemptRef": {
+              "$ref": "#/$defs/operationAttemptRef"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action",
+            "productKind",
+            "productRef",
+            "operationAttemptRef",
+            "operationRef",
+            "applicationServiceRef",
+            "gatewayReceiptRef",
+            "receiptRef",
+            "auditReceiptRef",
+            "productEventRef"
+          ],
+          "properties": {
+            "action": {
+              "const": "applied"
+            },
+            "productKind": {
+              "const": "human_input_answer"
+            },
+            "productRef": {
+              "$ref": "#/$defs/productEventRef"
+            },
+            "operationAttemptRef": {
+              "$ref": "#/$defs/operationAttemptRef"
+            },
+            "operationRef": {
+              "$ref": "#/$defs/operationRef"
+            },
+            "applicationServiceRef": {
+              "$ref": "#/$defs/applicationServiceRef"
+            },
+            "gatewayReceiptRef": {
+              "$ref": "#/$defs/gatewayReceiptRef"
+            },
+            "receiptRef": {
+              "$ref": "#/$defs/receiptRef"
+            },
+            "auditReceiptRef": {
+              "$ref": "#/$defs/auditReceiptRef"
+            },
+            "productEventRef": {
+              "$ref": "#/$defs/productEventRef"
+            }
+          }
+        }
+      ]
+    },
     "idempotencyKey": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^idempotency:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
@@ -743,12 +844,14 @@
     },
     "inputRequestRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^input-request:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "invocationId": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^invocation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
@@ -770,12 +873,14 @@
     },
     "operationAttemptRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^operation-attempt:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "operationRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^operation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
@@ -853,30 +958,35 @@
     },
     "outcomeSubmissionRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^outcome-submission:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "payloadRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^payload:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "productEventRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^product-event:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "receiptRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^receipt:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "runId": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^run:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
@@ -921,6 +1031,7 @@
     },
     "workspaceRef": {
       "type": "string",
+      "minLength": 1,
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^workspace:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
