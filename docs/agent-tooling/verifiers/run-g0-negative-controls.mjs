@@ -612,14 +612,92 @@ const omittedCanonicalAuthorityCases = [
   },
 ];
 
+const authorityBoundaryCases = [
+  {
+    name: "valid-reseal GOAL new unclassified semantic-purpose section",
+    mutate: (directory) =>
+      insertAfterHeading(
+        directory,
+        "docs/agent-tooling/GOAL.md",
+        "## Normative resource catalog and authority",
+        "### New unclassified authority section\nSemantic purpose: search"
+      ),
+    expected: "docs/agent-tooling/GOAL.md has an unclassified or stale Markdown section policy",
+    reseal: true,
+  },
+  {
+    name: "valid-reseal ownership role authority marker",
+    mutate: (directory) =>
+      replace(
+        directory,
+        "docs/agent-tooling/ownership-map.json",
+        '"role": "Root integrator and shared wiring owner"',
+        '"role": "Authoritative model-facing name: docs"'
+      ),
+    expected:
+      "docs/agent-tooling/ownership-map.json has a non-model-facing authority marker for retired name docs in /owners/0/role",
+    reseal: true,
+  },
+  {
+    name: "valid-reseal readiness semantic-purpose marker",
+    mutate: (directory) =>
+      replace(
+        directory,
+        "docs/agent-tooling/g0-readiness.json",
+        '"ownerRole": "root-integrator",\n      "reviewerRole": "sol-reviewer"',
+        '"ownerRole": "Semantic purpose: search",\n      "reviewerRole": "sol-reviewer"'
+      ),
+    expected:
+      "docs/agent-tooling/g0-readiness.json has a non-model-facing authority marker for retired name search in /clauses/0/ownerRole",
+    reseal: true,
+  },
+  {
+    name: "valid-reseal integration-lock schema-note marker",
+    mutate: (directory) =>
+      replace(
+        directory,
+        "docs/agent-tooling/integration-lock.g0.json",
+        '"description": "Generated operation and event JSON Schemas, catalog digest, and cross-repository compatibility bundle"',
+        '"description": "Schema note: execute"'
+      ),
+    expected:
+      "docs/agent-tooling/integration-lock.g0.json has a non-model-facing authority marker for retired name execute in /pendingInputs/0/description",
+    reseal: true,
+  },
+  {
+    name: "valid-reseal Markdown semantic-purpose marker",
+    mutate: (directory) =>
+      insertAfterHeading(directory, "docs/agent-tooling/README.md", "## G0 preflight", "Semantic purpose: search"),
+    expected:
+      "docs/agent-tooling/README.md has a non-model-facing authority marker for retired name search in G0 preflight",
+    reseal: true,
+  },
+  {
+    name: "valid-reseal Markdown model-facing-purpose marker",
+    mutate: (directory) =>
+      insertAfterHeading(directory, "docs/agent-tooling/README.md", "## G0 preflight", "Model-facing purpose: execute"),
+    expected:
+      "docs/agent-tooling/README.md has a non-model-facing authority marker for retired name execute in G0 preflight",
+    reseal: true,
+  },
+  {
+    name: "valid-reseal Markdown schema-note marker",
+    mutate: (directory) =>
+      insertAfterHeading(directory, "docs/agent-tooling/README.md", "## G0 preflight", "Schema note: docs"),
+    expected:
+      "docs/agent-tooling/README.md has a non-model-facing authority marker for retired name docs in G0 preflight",
+    reseal: true,
+  },
+];
+
 const policyCoverageCases = [
   {
-    name: "valid-reseal omitted product-requirements authority policy",
+    name: "valid-reseal omitted product-requirements section declaration",
     mutate: (directory) => {
       replace(
         directory,
         "docs/agent-tooling/verifiers/verify-g0-preflight.mjs",
-        '  "docs/agent-tooling/product-requirements.md": ["Required outcomes"],\n',
+        '        2,\n        "Required outcomes",\n        "authoritative/model-facing"\n      ],',
         ""
       );
       insertAfterHeading(
@@ -629,7 +707,7 @@ const policyCoverageCases = [
         "Authoritative model-facing name: search"
       );
     },
-    expected: "docs/agent-tooling/product-requirements.md has an unclassified authority section Required outcomes",
+    expected: "docs/agent-tooling/product-requirements.md has an unclassified or stale Markdown section policy",
     reseal: true,
   },
   {
@@ -638,10 +716,34 @@ const policyCoverageCases = [
       replace(
         directory,
         "docs/agent-tooling/verifiers/verify-g0-preflight.mjs",
-        '  "docs/agent-tooling/product-requirements.md": ["Required outcomes"],\n',
-        '  "docs/agent-tooling/product-requirements.md": ["Required outcomes"],\n  "docs/agent-tooling/not-sealed.md": ["root"],\n'
+        '  "docs/agent-tooling/WORKLOG.md": {\n',
+        '  "docs/agent-tooling/not-sealed.md": { preamble: "non-model-facing", headings: [] },\n  "docs/agent-tooling/WORKLOG.md": {\n'
       ),
-    expected: "retired-name Markdown authority policy names an ungoverned path",
+    expected: "retired-name Markdown section policy paths are missing or stale",
+    reseal: true,
+  },
+  {
+    name: "valid-reseal missing structured pointer subtree",
+    mutate: (directory) =>
+      replace(
+        directory,
+        "docs/agent-tooling/verifiers/verify-g0-preflight.mjs",
+        '  "docs/agent-tooling/g0-readiness.json": { authoritative: [], authoritativeSubtrees: [], nonModelFacingSubtrees: [[]] },',
+        '  "docs/agent-tooling/g0-readiness.json": { authoritative: [], authoritativeSubtrees: [], nonModelFacingSubtrees: [] },'
+      ),
+    expected: "docs/agent-tooling/g0-readiness.json has an unclassified structured authority pointer",
+    reseal: true,
+  },
+  {
+    name: "valid-reseal stale structured authority subtree",
+    mutate: (directory) =>
+      replace(
+        directory,
+        "docs/agent-tooling/verifiers/verify-g0-preflight.mjs",
+        '    authoritativeSubtrees: [["properties", "names", "items", "properties", "description"]],',
+        '    authoritativeSubtrees: [["properties", "names", "items", "properties", "missing"]],'
+      ),
+    expected: "model-facing-surface.schema.json has a stale structured authority declaration",
     reseal: true,
   },
 ];
@@ -655,6 +757,7 @@ cases.push(
   ...approvalManifestPermittedCases,
   ...manifestTableResealedCases,
   ...omittedCanonicalAuthorityCases,
+  ...authorityBoundaryCases,
   ...policyCoverageCases
 );
 

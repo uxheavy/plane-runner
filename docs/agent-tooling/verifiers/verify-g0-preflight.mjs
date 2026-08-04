@@ -136,24 +136,775 @@ const markdownPolicyPaths = [
   "docs/decisions/0010-plane-runtime-contract.md",
 ];
 
-const markdownAuthoritySections = {
-  "docs/agent-tooling/APPROVAL-MANIFEST.md": [
-    "Status",
-    "Outcome and authority",
-    "Product invariants",
-    "First supported semantic operation boundary",
-    "Frozen model-facing surface",
-    "Curated catalog overlay",
-    "Logical runtime, dispatch, publication, and event contracts",
-    "Frozen v1 execution, result, artifact, and audit policy",
-    "Delivery and gates",
-    "Required evidence before production",
-    "Implementation approval gate",
-  ],
-  "docs/agent-tooling/GOAL.md": ["Normative resource catalog and authority"],
-  "docs/agent-tooling/NON-UI-IMPLEMENTATION-OVERVIEW.md": ["Outcome", "Scope boundary"],
-  "docs/agent-tooling/product-requirements.md": ["Required outcomes"],
-  "docs/agent-tooling/prompts/release-planning-v1.md": ["Plane Release-Readiness Planning Acceptance Prompt v1"],
+const markdownSectionPolicy = {
+  "docs/agent-tooling/ADR-SYNTHESIS.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "Plane Agent ADR Synthesis", "non-model-facing"],
+      [2, "Status", "non-model-facing"],
+      [2, "Design workspace and source hierarchy", "non-model-facing"],
+      [2, "Cross-repository grounding", "non-model-facing"],
+      [2, "Grounded ownership", "non-model-facing"],
+      [2, "Architect arena", "non-model-facing"],
+      [2, "Synthesis decision", "non-model-facing"],
+      [2, "Verification record", "non-model-facing"],
+    ],
+  },
+  "docs/agent-tooling/APPROVAL-MANIFEST.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "Plane Agent Tooling: V1 Approval Manifest", "non-model-facing"],
+      [2, "Status", "authoritative/model-facing"],
+      [2, "Outcome and authority", "authoritative/model-facing"],
+      [2, "Product invariants", "authoritative/model-facing"],
+      [2, "First supported semantic operation boundary", "authoritative/model-facing"],
+      [2, "Frozen model-facing surface", "authoritative/model-facing"],
+      [2, "Curated catalog overlay", "authoritative/model-facing"],
+      [2, "Logical runtime, dispatch, publication, and event contracts", "authoritative/model-facing"],
+      [2, "Frozen v1 execution, result, artifact, and audit policy", "authoritative/model-facing"],
+      [2, "Delivery and gates", "authoritative/model-facing"],
+      [2, "Required evidence before production", "authoritative/model-facing"],
+      [2, "Implementation approval gate", "authoritative/model-facing"],
+    ],
+  },
+  "docs/agent-tooling/EVALUATION-FIXTURE-CONTRACT.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "Planning Evaluation Fixture Contract", "non-model-facing"],
+      [2, "Bound artifacts", "non-model-facing"],
+      [2, "Identity and time expansion", "non-model-facing"],
+      [2, "Predicate selection", "non-model-facing"],
+      [2, "Evidence binding", "non-model-facing"],
+      [2, "Deterministic scoring oracle", "non-model-facing"],
+      [2, "Qualification boundary", "non-model-facing"],
+    ],
+  },
+  "docs/agent-tooling/EVALUATION-SCENARIOS.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "Plane Agent Tooling v1 Evaluation Scenarios", "non-model-facing"],
+      [2, "Status and counting rules", "non-model-facing"],
+      [2, "Product evidence contracts", "non-model-facing"],
+      [3, "Live broad-planning contract", "non-model-facing"],
+      [3, "Additional live safety contract", "non-model-facing"],
+      [3, "Deterministic release contract", "non-model-facing"],
+      [2, "Scenario inventory", "non-model-facing"],
+      [2, "Coverage requirements", "non-model-facing"],
+    ],
+  },
+  "docs/agent-tooling/GATEWAY-WIRE.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "Plane Operation Gateway Wire Contract", "non-model-facing"],
+      [2, "Status", "non-model-facing"],
+      [2, "Boundary", "non-model-facing"],
+      [2, "Endpoints", "non-model-facing"],
+      [3, "Catalog discovery", "non-model-facing"],
+      [3, "Operation execution", "non-model-facing"],
+      [3, "Temporary artifact reads", "non-model-facing"],
+      [2, "Authentication and binding", "non-model-facing"],
+      [2, "Result envelope", "non-model-facing"],
+      [2, "HTTP behavior", "non-model-facing"],
+      [2, "Idempotency", "non-model-facing"],
+      [2, "Catalog and version negotiation", "non-model-facing"],
+      [2, "Official Python SDK adapter", "non-model-facing"],
+      [2, "Local Hermes callback", "non-model-facing"],
+      [2, "Required contract tests", "non-model-facing"],
+    ],
+  },
+  "docs/agent-tooling/GOAL.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "Durable Ultragoal: Complete the non-UI Plane Agent system", "non-model-facing"],
+      [2, "Active objective", "non-model-facing"],
+      [2, "Observable outcome and audience", "non-model-facing"],
+      [2, "Accepted product model", "non-model-facing"],
+      [2, "Normative invariants", "non-model-facing"],
+      [2, "Current baseline and evidence", "non-model-facing"],
+      [2, "Normative resource catalog and authority", "authoritative/model-facing"],
+      [3, "Repository authorities", "authoritative/model-facing"],
+      [3, "Canonical Plane Agent documents", "authoritative/model-facing"],
+      [3, "Source, catalog, fixture, and evidence authorities", "authoritative/model-facing"],
+      [2, "Integration gates (G0–G5)", "non-model-facing"],
+      [3, "G0 — Implementation contract frozen", "non-model-facing"],
+      [3, "G1 — Deterministic domain spine", "non-model-facing"],
+      [3, "G2 — Real single-agent vertical slice", "non-model-facing"],
+      [3, "G3 — Non-UI feature breadth complete", "non-model-facing"],
+      [3, "G4 — Production candidate verified", "non-model-facing"],
+      [3, "G5 — Controlled rollout complete", "non-model-facing"],
+      [2, "Durable phase plan", "non-model-facing"],
+      [3, "P0 — Durable contracts and approval baseline", "non-model-facing"],
+      [3, "P1 — Generated contracts, catalog, fixtures, and integration lock", "non-model-facing"],
+      [3, "P2 — Plane domain, lifecycle, and roles", "non-model-facing"],
+      [3, "P3 — Operation Gateway, security, idempotency, audit, and catalog foundation", "non-model-facing"],
+      [3, "P4 — Separate runtime service, Hermes adapter, and snapshot/invocation protocol", "non-model-facing"],
+      [3, "P5 — Restricted TypeScript composition and adaptive tool discovery", "non-model-facing"],
+      [3, "P6 — Private memory, skills, gardeners, and schedules", "non-model-facing"],
+      [3, "P7 — Dynamic delegation, chief-of-staff, HR, and evaluation", "non-model-facing"],
+      [3, "P8 — Full Plane action and MCP/SDK compatibility convergence", "non-model-facing"],
+      [3, "P9 — Reused settings, operations, observability, credentials, and runbooks", "non-model-facing"],
+      [3, "P10 — Deterministic/live evaluation, security, load, recovery, and rollback", "non-model-facing"],
+      [3, "P11 — Staged rollout, post-deploy proof, and GA completion", "non-model-facing"],
+      [2, "Skill-routing catalog", "non-model-facing"],
+      [2, "Delegation operating contract", "non-model-facing"],
+      [2, "Reuse and subtraction rules", "non-model-facing"],
+      [2, "Goal loop and durable state", "non-model-facing"],
+      [2, "Anti-cheating, approval, and safety gates", "non-model-facing"],
+      [2, "Blocker standard", "non-model-facing"],
+      [2, "Evidence contract", "non-model-facing"],
+      [2, "Completion proof", "non-model-facing"],
+    ],
+  },
+  "docs/agent-tooling/INTERFACE-DESIGN.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "Plane Operation Gateway Interface Design", "non-model-facing"],
+      [2, "Status", "non-model-facing"],
+      [2, "Design constraints", "non-model-facing"],
+      [2, "Design A: one deep operation seam", "non-model-facing"],
+      [2, "Design B: common-case semantic facade", "non-model-facing"],
+      [2, "Design C: durable command state machine", "non-model-facing"],
+      [2, "Design D: catalog, batch, and plan facade", "non-model-facing"],
+      [2, "Comparison", "non-model-facing"],
+      [2, "Accepted v1 core boundary", "non-model-facing"],
+      [2, "Proposed catalog descriptor", "non-model-facing"],
+      [2, "North Star", "non-model-facing"],
+    ],
+  },
+  "docs/agent-tooling/MCP-COMPATIBILITY.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "External MCP Compatibility Plan", "non-model-facing"],
+      [2, "Status", "non-model-facing"],
+      [2, "Compatibility unit", "non-model-facing"],
+      [2, "Reuse boundary", "non-model-facing"],
+      [2, "Accepted migration seam", "non-model-facing"],
+      [2, "Complete disposition", "non-model-facing"],
+      [2, "Gateway-backed adapter contract", "non-model-facing"],
+      [2, "Attachment adapter contract", "non-model-facing"],
+      [2, "Transport and authentication compatibility", "non-model-facing"],
+      [2, "Conformance tiers", "non-model-facing"],
+      [2, "Change policy", "non-model-facing"],
+      [2, "Required evidence", "non-model-facing"],
+    ],
+  },
+  "docs/agent-tooling/MCP-MAPPING-CONTRACT.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "External MCP Exact Mapping Contract", "non-model-facing"],
+      [2, "Status", "non-model-facing"],
+      [2, "Required content-addressed bundle", "non-model-facing"],
+      [2, "Independently generated control inventories", "non-model-facing"],
+      [2, "Required exact joins", "non-model-facing"],
+      [2, "Disposition-specific proof", "non-model-facing"],
+      [3, "MCP-D-001 shared SDK transport", "non-model-facing"],
+      [3, "MCP-D-002 local PQL", "non-model-facing"],
+      [3, "MCP-D-003 hardened attachments", "non-model-facing"],
+      [2, "Per-tool conformance", "non-model-facing"],
+      [2, "VM-022 mapping sensitivity controls", "non-model-facing"],
+    ],
+  },
+  "docs/agent-tooling/NON-UI-IMPLEMENTATION-OVERVIEW.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "Plane Agent non-UI implementation overview", "non-model-facing"],
+      [2, "Status", "non-model-facing"],
+      [2, "Outcome", "authoritative/model-facing"],
+      [2, "Scope boundary", "authoritative/model-facing"],
+      [2, "Working principles", "non-model-facing"],
+      [2, "How a traditional company would run it", "non-model-facing"],
+      [2, "Execution map", "non-model-facing"],
+      [2, "Lane summary", "non-model-facing"],
+      [2, "Integration gates", "non-model-facing"],
+      [3, "G0: Implementation contract frozen", "non-model-facing"],
+      [3, "G1: Deterministic domain spine", "non-model-facing"],
+      [3, "G2: Real single-agent vertical slice", "non-model-facing"],
+      [3, "G3: Non-UI feature breadth complete", "non-model-facing"],
+      [3, "G4: Production candidate verified", "non-model-facing"],
+      [3, "G5: Controlled rollout complete", "non-model-facing"],
+      [2, "Parallel delivery lanes", "non-model-facing"],
+      [3, "L0: Product, architecture, and contract control", "non-model-facing"],
+      [3, "L1: Verification and release engineering", "non-model-facing"],
+      [3, "L2: Plane agent domain and lifecycle", "non-model-facing"],
+      [3, "L3: Operation catalog, gateway, authorization, and audit", "non-model-facing"],
+      [3, "L4: Runtime service and Hermes kernel adapter", "non-model-facing"],
+      [3, "L5: Native tools, progressive discovery, and TypeScript isolation", "non-model-facing"],
+      [3, "L6: Private memory, skills, gardeners, and schedules", "non-model-facing"],
+      [3, "L7: Dynamic planning and delegation", "non-model-facing"],
+      [3, "L8: External MCP and SDK convergence", "non-model-facing"],
+      [3, "L9: Platform, security, reliability, and operations", "non-model-facing"],
+      [3, "L10: Minimal administration and settings", "non-model-facing"],
+      [3, "L11: Evaluation, production proof, and rollout", "non-model-facing"],
+      [2, "Reuse-first decision rule", "non-model-facing"],
+      [2, "Definition of finished", "non-model-facing"],
+    ],
+  },
+  "docs/agent-tooling/PILOT-CONTRACTS.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "Plane Agent Tooling Pilot Contracts", "non-model-facing"],
+      [2, "Status", "non-model-facing"],
+      [2, "Contract rules", "non-model-facing"],
+      [2, "Shared value shapes", "non-model-facing"],
+      [2, "Canonical result projections", "non-model-facing"],
+      [2, "Read operations", "non-model-facing"],
+      [3, "`plane.projects.resolve@1`", "non-model-facing"],
+      [3, "`plane.cycles.list_current@1`", "non-model-facing"],
+      [3, "`plane.work_items.search@1`", "non-model-facing"],
+      [3, "`plane.work_items.get@1`", "non-model-facing"],
+      [3, "`plane.project_members.list@1`", "non-model-facing"],
+      [2, "Mutation operations", "non-model-facing"],
+      [3, "`plane.work_items.create@1`", "non-model-facing"],
+      [3, "`plane.work_items.update@1`", "non-model-facing"],
+      [3, "`plane.comments.create@1`", "non-model-facing"],
+      [3, "`plane.release_plans.create@1`", "non-model-facing"],
+      [2, "Error codes", "non-model-facing"],
+      [2, "Source alignment and intentional differences", "non-model-facing"],
+      [2, "G1 generation inputs (not a G0 prerequisite)", "non-model-facing"],
+    ],
+  },
+  "docs/agent-tooling/README.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "Plane Agent Tooling Program", "non-model-facing"],
+      [2, "Status", "non-model-facing"],
+      [2, "Outcome", "non-model-facing"],
+      [2, "Documents", "non-model-facing"],
+      [2, "Source-of-truth rules", "non-model-facing"],
+      [2, "G0 preflight", "non-model-facing"],
+      [2, "Current next decisions", "non-model-facing"],
+    ],
+  },
+  "docs/agent-tooling/RELEASE-MANIFEST.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "Release Manifest: Plane Agent Tooling v1", "non-model-facing"],
+      [2, "Status", "non-model-facing"],
+      [2, "Release identity", "non-model-facing"],
+      [2, "Required workflows", "non-model-facing"],
+      [2, "Pilot operation inventory", "non-model-facing"],
+      [2, "Runtime pins", "non-model-facing"],
+      [2, "V1 execution and retention limits", "non-model-facing"],
+      [2, "Numeric release gates", "non-model-facing"],
+      [2, "Rollout requirements", "non-model-facing"],
+      [2, "Exceptions", "non-model-facing"],
+    ],
+  },
+  "docs/agent-tooling/REQUIREMENT-COVERAGE.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "Plane Agent Tooling Requirement Coverage", "non-model-facing"],
+      [2, "Authority", "non-model-facing"],
+      [2, "Sources", "non-model-facing"],
+      [2, "Outcome", "non-model-facing"],
+      [2, "Normative product invariants", "non-model-facing"],
+      [2, "Integration gates", "non-model-facing"],
+      [2, "P0–P11 phase and writable-surface join", "non-model-facing"],
+      [2, "Completion proof", "non-model-facing"],
+      [2, "Gate ownership rule", "non-model-facing"],
+    ],
+  },
+  "docs/agent-tooling/RESULT.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "Result", "non-model-facing"],
+      [2, "Implemented outcome", "non-model-facing"],
+      [2, "Repository state", "non-model-facing"],
+      [2, "Primary verifier", "non-model-facing"],
+      [2, "Mandatory live Hermes acceptance", "non-model-facing"],
+      [2, "Focused verification", "non-model-facing"],
+      [2, "Security and compatibility evidence", "non-model-facing"],
+      [2, "Evaluation and performance evidence", "non-model-facing"],
+      [2, "Provider and model evidence", "non-model-facing"],
+      [2, "Computer Use evidence", "non-model-facing"],
+      [2, "Rollout and production readback", "non-model-facing"],
+      [2, "Release and verifier manifests", "non-model-facing"],
+      [2, "Build and deployment provenance", "non-model-facing"],
+      [2, "Residual risks", "non-model-facing"],
+    ],
+  },
+  "docs/agent-tooling/RUNTIME-DESIGN.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "TypeScript Runtime and Isolate Design", "non-model-facing"],
+      [2, "Status", "non-model-facing"],
+      [2, "Options considered", "non-model-facing"],
+      [3, "Node.js permission model", "non-model-facing"],
+      [3, "Deno permission sandbox in the runtime-invocation container", "non-model-facing"],
+      [3, "Embedded QuickJS or WebAssembly runtime", "non-model-facing"],
+      [3, "Nested container or microVM per execution", "non-model-facing"],
+      [2, "Recommended v1 boundary", "non-model-facing"],
+      [2, "Module and seam placement", "non-model-facing"],
+      [2, "Package and import policy", "non-model-facing"],
+      [2, "Host callback authorization", "non-model-facing"],
+      [2, "Required security qualification", "non-model-facing"],
+      [2, "Source evidence", "non-model-facing"],
+    ],
+  },
+  "docs/agent-tooling/SAFETY-EVALUATION-DESIGN.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "Safety Evaluation and Trial Evidence Design", "non-model-facing"],
+      [2, "Status", "non-model-facing"],
+      [2, "Separate bundle", "non-model-facing"],
+      [2, "Trial result contract", "non-model-facing"],
+      [2, "Predicate model", "non-model-facing"],
+      [2, "Canonical result bytes and artifacts", "non-model-facing"],
+      [2, "Audit record classes", "non-model-facing"],
+      [2, "Frozen errors and HTTP mapping", "non-model-facing"],
+      [2, "Invocation retry state machine", "non-model-facing"],
+      [2, "Exact live scenario profiles", "non-model-facing"],
+      [3, "EV-011 — inaccessible control project", "non-model-facing"],
+      [3, "EV-012 — foreign existing UUID", "non-model-facing"],
+      [3, "EV-013 — revocation before dispatch", "non-model-facing"],
+      [3, "EV-014 — permission removal after preflight", "non-model-facing"],
+      [3, "EV-015 — autonomous broad write", "non-model-facing"],
+      [3, "EV-016 — exact replay", "non-model-facing"],
+      [3, "EV-017 — changed-input conflict", "non-model-facing"],
+      [3, "EV-018 — lost response after commit", "non-model-facing"],
+      [3, "EV-019 — atomic child failure", "non-model-facing"],
+      [3, "EV-020 — ambiguous dispatched mutation", "non-model-facing"],
+      [3, "EV-021 — oversized result", "non-model-facing"],
+      [3, "EV-022 — cumulative results", "non-model-facing"],
+      [3, "EV-023 — credential and process probes", "non-model-facing"],
+      [3, "EV-024 — DNS, public HTTP, and Plane network", "non-model-facing"],
+      [3, "EV-025 — loopback, link-local, and metadata", "non-model-facing"],
+      [3, "EV-026 — filesystem, subprocess, package, and module loading", "non-model-facing"],
+      [3, "EV-027 — callback binding", "non-model-facing"],
+      [3, "EV-028 — eight out-of-order reads", "non-model-facing"],
+      [3, "EV-029 — container death after commit", "non-model-facing"],
+      [3, "EV-030 — admitted dependency interruption", "non-model-facing"],
+      [2, "Sandbox anti-vacuity protocol", "non-model-facing"],
+      [2, "Remaining qualification boundary", "non-model-facing"],
+    ],
+  },
+  "docs/agent-tooling/VERIFICATION-MANIFEST.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "Verification Manifest: Plane Agent Tooling v1", "non-model-facing"],
+      [2, "Status and change control", "non-model-facing"],
+      [2, "Evidence contract", "non-model-facing"],
+      [2, "Verifier ownership and independence", "non-model-facing"],
+      [2, "Check inventory", "non-model-facing"],
+      [2, "Completion-criterion coverage", "non-model-facing"],
+      [2, "Mandatory live-project oracles", "non-model-facing"],
+      [2, "Extensive live-evaluation ledger", "non-model-facing"],
+      [2, "Negative-control qualification", "non-model-facing"],
+      [2, "Clean-checkout execution contract", "non-model-facing"],
+      [2, "Primary entry point", "non-model-facing"],
+    ],
+  },
+  "docs/agent-tooling/architecture.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "Target Architecture", "non-model-facing"],
+      [2, "System view", "non-model-facing"],
+      [2, "Supported operation contract", "non-model-facing"],
+      [2, "Plane Operation Gateway", "non-model-facing"],
+      [2, "Identity and credentials", "non-model-facing"],
+      [2, "Plane Agent domain ownership", "non-model-facing"],
+      [2, "Plane-native runtime profile", "authoritative/model-facing"],
+      [2, "Accepted Plane runtime contract", "non-model-facing"],
+      [2, "TypeScript composition surface", "non-model-facing"],
+      [2, "Autonomous execution and concurrency", "non-model-facing"],
+      [2, "Mutation safety", "non-model-facing"],
+      [2, "Results and artifacts", "non-model-facing"],
+      [2, "Audit and replay evidence", "non-model-facing"],
+      [2, "Versioning", "non-model-facing"],
+      [2, "Reuse from the Hermes kernel", "non-model-facing"],
+      [2, "Administration and release", "non-model-facing"],
+    ],
+  },
+  "docs/agent-tooling/decision-register.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "Decision Register", "non-model-facing"],
+      [2, "Accepted", "non-model-facing"],
+      [2, "Superseded", "non-model-facing"],
+      [2, "Frozen in controlling manifest pending approval", "non-model-facing"],
+      [2, "Open", "non-model-facing"],
+      [2, "Proposed", "non-model-facing"],
+    ],
+  },
+  "docs/agent-tooling/delivery-plan.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "Delivery Plan", "non-model-facing"],
+      [2, "Delivery strategy", "non-model-facing"],
+      [2, "Workstreams and gates", "non-model-facing"],
+      [3, "0. Program definition", "non-model-facing"],
+      [3, "1. Operation contract", "non-model-facing"],
+      [3, "2. Plane Operation Gateway", "non-model-facing"],
+      [3, "3. Plane Agent execution pilot", "non-model-facing"],
+      [3, "4. TypeScript Code Mode", "non-model-facing"],
+      [3, "5. Mutation reliability", "non-model-facing"],
+      [3, "6. Roles, private knowledge, schedules, and dynamic delegation", "non-model-facing"],
+      [3, "7. Evaluation and production hardening", "non-model-facing"],
+      [3, "8. Controlled rollout", "non-model-facing"],
+      [3, "9. External MCP convergence", "non-model-facing"],
+      [2, "First vertical slice", "non-model-facing"],
+      [2, "Production readiness checklist", "non-model-facing"],
+      [2, "Ownership model", "non-model-facing"],
+    ],
+  },
+  "docs/agent-tooling/inventories/plane-mcp-v0.2.11-dispositions.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "Plane MCP v0.2.11 Per-Tool Dispositions", "non-model-facing"],
+      [2, "Status", "non-model-facing"],
+      [2, "Invariants", "non-model-facing"],
+      [2, "Dispositions", "non-model-facing"],
+    ],
+  },
+  "docs/agent-tooling/product-requirements.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "Product Requirements", "non-model-facing"],
+      [2, "Problem", "non-model-facing"],
+      [2, "Users", "non-model-facing"],
+      [3, "Plane-native agents", "non-model-facing"],
+      [3, "External agents", "non-model-facing"],
+      [3, "Plane administrators and operators", "non-model-facing"],
+      [3, "Auditors", "non-model-facing"],
+      [2, "Required outcomes", "authoritative/model-facing"],
+      [2, "Agent model and roles", "non-model-facing"],
+      [2, "Non-goals", "non-model-facing"],
+      [2, "Product principles", "non-model-facing"],
+      [2, "Pilot options", "non-model-facing"],
+      [2, "Success measures", "non-model-facing"],
+    ],
+  },
+  "docs/agent-tooling/prompts/release-planning-v1.md": {
+    preamble: "non-model-facing",
+    headings: [[1, "Plane Release-Readiness Planning Acceptance Prompt v1", "authoritative/model-facing"]],
+  },
+  "docs/agent-tooling/SOURCE-INVENTORY.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "Source Inventory", "non-model-facing"],
+      [2, "Reviewed baseline", "non-model-facing"],
+      [2, "Current pinned source revisions", "non-model-facing"],
+      [2, "Plane gitlink evidence", "non-model-facing"],
+      [2, "Evidence boundary", "non-model-facing"],
+    ],
+  },
+  "docs/agent-tooling/WORKLOG.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "Worklog", "non-model-facing"],
+      [2, "Current state", "non-model-facing"],
+      [2, "2026-07-29 — Goal grounding", "non-model-facing"],
+      [3, "Evidence", "non-model-facing"],
+      [3, "Decisions carried forward", "non-model-facing"],
+      [3, "Next action", "non-model-facing"],
+      [2, "2026-07-29 — Live acceptance scope", "non-model-facing"],
+      [3, "Decision", "non-model-facing"],
+      [3, "Required proof", "non-model-facing"],
+      [2, "2026-07-29 — Model and evaluation requirements", "non-model-facing"],
+      [3, "Observed evidence", "non-model-facing"],
+      [3, "Requirements", "non-model-facing"],
+      [2, "2026-07-29 — Independent goal red-team", "non-model-facing"],
+      [3, "Corrections adopted", "non-model-facing"],
+      [2, "2026-07-29 — Source and interface inventory", "non-model-facing"],
+      [3, "Evidence", "non-model-facing"],
+      [3, "Proposed decision", "non-model-facing"],
+      [3, "Next action", "non-model-facing"],
+      [2, "2026-07-29 — Compatibility and verifier design", "non-model-facing"],
+      [3, "Proposed external MCP disposition", "non-model-facing"],
+      [3, "Verifier strengthening", "non-model-facing"],
+      [3, "Next action", "non-model-facing"],
+      [2, "2026-07-29 — Independent pre-freeze review", "non-model-facing"],
+      [3, "Verdict", "non-model-facing"],
+      [3, "Confirmed evidence", "non-model-facing"],
+      [3, "Freeze blockers to close", "non-model-facing"],
+      [3, "Progress after reviewed commit", "non-model-facing"],
+      [3, "Next action", "non-model-facing"],
+      [2, "2026-07-29 — Core gateway interface accepted", "non-model-facing"],
+      [3, "Decision", "non-model-facing"],
+      [3, "North Star", "non-model-facing"],
+      [3, "Still open", "non-model-facing"],
+      [2, "2026-07-29 — MCP reuse and release-plan write accepted", "non-model-facing"],
+      [3, "Official MCP boundary", "non-model-facing"],
+      [3, "Release-plan write boundary", "non-model-facing"],
+      [3, "Rationale", "non-model-facing"],
+      [3, "Next action", "non-model-facing"],
+      [2, "2026-07-29 — Official MCP gateway seam and forks", "non-model-facing"],
+      [3, "Decision", "non-model-facing"],
+      [3, "External repositories", "non-model-facing"],
+      [3, "Evidence", "non-model-facing"],
+      [3, "Consequence", "non-model-facing"],
+      [3, "Next action", "non-model-facing"],
+      [2, "2026-07-29 — Gateway wire transport accepted", "non-model-facing"],
+      [3, "Decision", "non-model-facing"],
+      [3, "Proposed wire contract", "non-model-facing"],
+      [3, "Still open", "non-model-facing"],
+      [3, "Next action", "non-model-facing"],
+      [2, "2026-07-29 — Pilot operation contracts proposed", "non-model-facing"],
+      [3, "Contract boundary", "non-model-facing"],
+      [3, "Source-driven differences", "non-model-facing"],
+      [3, "Verification", "non-model-facing"],
+      [3, "Still open", "non-model-facing"],
+      [3, "Next action", "non-model-facing"],
+      [2, "2026-07-29 — Hermes approval broker accepted", "non-model-facing"],
+      [3, "Decision", "non-model-facing"],
+      [3, "Reuse boundary", "non-model-facing"],
+      [3, "Still open", "non-model-facing"],
+      [3, "Next action", "non-model-facing"],
+      [2, "2026-07-29 — Autonomous default clarified", "non-model-facing"],
+      [3, "Correction", "non-model-facing"],
+      [3, "Consequence", "non-model-facing"],
+      [3, "Next action", "non-model-facing"],
+      [2, "2026-07-29 — Runtime operation approvals removed", "non-model-facing"],
+      [3, "Final correction", "non-model-facing"],
+      [3, "Superseded work", "non-model-facing"],
+      [3, "Consequence", "non-model-facing"],
+      [3, "Next action", "non-model-facing"],
+      [2, "2026-07-30 — Evaluation and MCP disposition inventories proposed", "non-model-facing"],
+      [3, "Evaluation contracts", "non-model-facing"],
+      [3, "External MCP compatibility", "non-model-facing"],
+      [3, "Contract corrections from Plane source review", "non-model-facing"],
+      [3, "Verification", "non-model-facing"],
+      [3, "Still open", "non-model-facing"],
+      [3, "Next action", "non-model-facing"],
+      [2, "2026-07-30 — Requirement-level verification coverage proposed", "non-model-facing"],
+      [3, "Coverage map", "non-model-facing"],
+      [3, "Verifier clarifications", "non-model-facing"],
+      [3, "Exact external MCP mapping", "non-model-facing"],
+      [3, "Verification state", "non-model-facing"],
+      [3, "Next action", "non-model-facing"],
+      [2, "2026-07-30 — Planning evaluation fixtures proposed", "non-model-facing"],
+      [3, "Candidate artifacts", "non-model-facing"],
+      [3, "Validation evidence", "non-model-facing"],
+      [3, "Qualification state", "non-model-facing"],
+      [3, "Next action", "non-model-facing"],
+      [2, "2026-07-30 — Safety evaluation evidence design proposed", "non-model-facing"],
+      [3, "Source-grounded trial design", "non-model-facing"],
+      [3, "Qualification state", "non-model-facing"],
+      [3, "Next action", "non-model-facing"],
+      [2, "2026-07-30 — Exact eager Hermes surface approved", "non-model-facing"],
+      [3, "User decision", "non-model-facing"],
+      [3, "Next action", "non-model-facing"],
+      [2, "2026-07-30 — Deno boundary corrected from current primary sources", "non-model-facing"],
+      [3, "Source correction", "non-model-facing"],
+      [3, "Qualification state", "non-model-facing"],
+      [2, "2026-07-30 — Plane effect cardinality traced", "non-model-facing"],
+      [3, "Source correction", "non-model-facing"],
+      [3, "Qualification state", "non-model-facing"],
+      [2, "2026-08-04 — Accepted contract reconciliation", "non-model-facing"],
+      [3, "Reconciliation", "non-model-facing"],
+      [2, "2026-08-04 — Durable non-UI ultragoal created", "non-model-facing"],
+      [3, "Evidence", "non-model-facing"],
+      [3, "Model and delegation policy", "non-model-facing"],
+      [3, "Active phase and next action", "non-model-facing"],
+      [2, "2026-08-04 — Independent review correction of durable Ultragoal", "non-model-facing"],
+      [3, "Corrections", "non-model-facing"],
+      [3, "Validation record", "non-model-facing"],
+      [2, "2026-08-04 — Sol Medium documentation correction", "non-model-facing"],
+      [3, "Correction and evidence", "non-model-facing"],
+      [2, "2026-08-04 — P0/G0 pre-approval reconciliation package", "non-model-facing"],
+      [3, "Scope and evidence", "non-model-facing"],
+      [3, "Contract and control changes", "non-model-facing"],
+      [3, "G0 structure added", "non-model-facing"],
+      [3, "Validation", "non-model-facing"],
+      [3, "Changed-file scope", "non-model-facing"],
+      [3, "Next action", "non-model-facing"],
+      [3, "Final pre-commit correction", "non-model-facing"],
+      [3, "Post-hook digest refresh", "non-model-facing"],
+      [2, "2026-08-04 — Fresh Sol Medium remediation evidence seal", "non-model-facing"],
+      [3, "Seal generation", "non-model-facing"],
+      [3, "Final validation matrix (executed before this entry was appended)", "non-model-facing"],
+      [2, "2026-08-04 — Second Sol Medium remediation correction", "non-model-facing"],
+      [3, "Evidence", "non-model-facing"],
+      [2, "2026-08-04 — Retired-name authority remediation", "non-model-facing"],
+      [3, "Evidence", "non-model-facing"],
+      [3, "Control-harness correction", "non-model-facing"],
+      [2, "2026-08-04 — Fresh Luna remediation: exact retired-token occurrence binding", "non-model-facing"],
+      [3, "Scope and checkpoint", "non-model-facing"],
+      [3, "Validation evidence", "non-model-facing"],
+      [2, "2026-08-04 — Fresh Luna remediation: clause-level historical marker consumption", "non-model-facing"],
+      [3, "Scope and design", "non-model-facing"],
+      [3, "Content checkpoint", "non-model-facing"],
+      [3, "Post-seal validation", "non-model-facing"],
+      [
+        2,
+        "2026-08-04 — Fresh Luna remediation: manifest table, sealed-inventory policy, and cleanup reliability",
+        "non-model-facing",
+      ],
+      [3, "Scope and design", "non-model-facing"],
+      [3, "Content checkpoint", "non-model-facing"],
+      [
+        2,
+        "2026-08-04 — Fresh Luna remediation: global retired-family matching and approval-manifest authority",
+        "non-model-facing",
+      ],
+      [3, "Scope and design", "non-model-facing"],
+      [3, "Content checkpoint", "non-model-facing"],
+      [3, "Post-seal validation", "non-model-facing"],
+      [2, "2026-08-04 — Fresh Luna remediation: final sealed validation", "non-model-facing"],
+      [2, "2026-08-04 — Fail-closed governed-source authority remediation", "non-model-facing"],
+      [3, "Scope and design", "non-model-facing"],
+      [3, "Exact control arithmetic", "non-model-facing"],
+      [3, "Post-seal validation", "non-model-facing"],
+    ],
+  },
+  "docs/decisions/0001-plane-agent-tooling-architecture.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [
+        1,
+        "ADR-0001: Shared Plane operation gateway with native Hermes tools and external MCP compatibility",
+        "non-model-facing",
+      ],
+      [2, "Status", "non-model-facing"],
+      [2, "Date", "non-model-facing"],
+      [2, "Context", "non-model-facing"],
+      [2, "Decision", "non-model-facing"],
+      [2, "Alternatives considered", "non-model-facing"],
+      [3, "Use MCP internally for Plane-native agents", "non-model-facing"],
+      [3, "Expose the complete catalog as eager tools", "non-model-facing"],
+      [3, "Project the public OpenAPI schema without curation", "non-model-facing"],
+      [3, "Mint run-bound or per-operation capability tokens", "non-model-facing"],
+      [3, "Pause and replay Code Mode after approval", "non-model-facing"],
+      [2, "Consequences", "non-model-facing"],
+    ],
+  },
+  "docs/decisions/0002-autonomous-agent-operations.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "ADR-0002: Plane agent operations execute autonomously within Plane authorization", "non-model-facing"],
+      [2, "Status", "non-model-facing"],
+      [2, "Date", "non-model-facing"],
+      [2, "Context", "non-model-facing"],
+      [2, "Decision", "non-model-facing"],
+      [2, "Consequences", "non-model-facing"],
+    ],
+  },
+  "docs/decisions/0003-plane-agent-native-product-boundary.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "ADR-0003: Plane Agent is a native Plane product", "non-model-facing"],
+      [2, "Status", "non-model-facing"],
+      [2, "Date", "non-model-facing"],
+      [2, "Context", "non-model-facing"],
+      [2, "Decision", "non-model-facing"],
+      [2, "Alternatives considered", "non-model-facing"],
+      [3, "Embed the Hermes product inside Plane", "non-model-facing"],
+      [3, "Keep Plane and Hermes as loosely integrated products", "non-model-facing"],
+      [2, "Consequences", "non-model-facing"],
+    ],
+  },
+  "docs/decisions/0004-fork-hermes-as-hidden-execution-kernel.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "ADR-0004: Fork Hermes as the hidden Plane Agent execution kernel", "non-model-facing"],
+      [2, "Status", "non-model-facing"],
+      [2, "Date", "non-model-facing"],
+      [2, "Context", "non-model-facing"],
+      [2, "Decision", "non-model-facing"],
+      [2, "Alternatives considered", "non-model-facing"],
+      [3, "Build a new agent runtime", "non-model-facing"],
+      [3, "Consume Hermes unchanged as an external service", "non-model-facing"],
+      [3, "Copy selected Hermes modules into Plane", "non-model-facing"],
+      [2, "Consequences", "non-model-facing"],
+    ],
+  },
+  "docs/decisions/0005-plane-owned-agent-profiles.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "ADR-0005: Plane owns one role-bearing Agent model", "non-model-facing"],
+      [2, "Status", "non-model-facing"],
+      [2, "Date", "non-model-facing"],
+      [2, "Context", "non-model-facing"],
+      [2, "Decision", "non-model-facing"],
+      [2, "Alternatives considered", "non-model-facing"],
+      [3, "Create a runtime implementation for each role", "non-model-facing"],
+      [3, "Use Hermes profiles as the source of truth", "non-model-facing"],
+      [3, "Encode roles only in free-form prompts", "non-model-facing"],
+      [2, "Consequences", "non-model-facing"],
+    ],
+  },
+  "docs/decisions/0006-assignment-and-run-lifecycle.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "ADR-0006: Plane owns assignment and run lifecycle", "non-model-facing"],
+      [2, "Status", "non-model-facing"],
+      [2, "Date", "non-model-facing"],
+      [2, "Context", "non-model-facing"],
+      [2, "Decision", "non-model-facing"],
+      [2, "Alternatives considered", "non-model-facing"],
+      [3, "Treat a Hermes session as the run or assignment", "non-model-facing"],
+      [3, "Use only work-item status", "non-model-facing"],
+      [3, "Let Hermes own run state", "non-model-facing"],
+      [2, "Consequences", "non-model-facing"],
+    ],
+  },
+  "docs/decisions/0007-adaptive-plane-tool-exposure.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "ADR-0007: Expose Plane-native tools adaptively", "non-model-facing"],
+      [2, "Status", "non-model-facing"],
+      [2, "Date", "non-model-facing"],
+      [2, "Context", "non-model-facing"],
+      [2, "Decision", "non-model-facing"],
+      [2, "Alternatives considered", "non-model-facing"],
+      [3, "Expose every Plane and Hermes tool eagerly", "non-model-facing"],
+      [3, "Give every profile a fixed closed tool list", "non-model-facing"],
+      [3, "Provide one generic read/write operation", "non-model-facing"],
+      [2, "Consequences", "non-model-facing"],
+    ],
+  },
+  "docs/decisions/0008-scoped-memory-and-context.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "ADR-0008: Keep Agent memory and skills private and governable", "non-model-facing"],
+      [2, "Status", "non-model-facing"],
+      [2, "Date", "non-model-facing"],
+      [2, "Context", "non-model-facing"],
+      [2, "Decision", "non-model-facing"],
+      [2, "Alternatives considered", "non-model-facing"],
+      [3, "One shared company memory document", "non-model-facing"],
+      [3, "Let every agent maintain private unstructured memory", "non-model-facing"],
+      [3, "Let gardeners copy knowledge between agents", "non-model-facing"],
+      [3, "Disable durable memory permanently", "non-model-facing"],
+      [2, "Consequences", "non-model-facing"],
+    ],
+  },
+  "docs/decisions/0009-workflows-and-agent-delegation.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "ADR-0009: Use dynamic planning and delegation, not saved workflows", "non-model-facing"],
+      [2, "Status", "non-model-facing"],
+      [2, "Date", "non-model-facing"],
+      [2, "Context", "non-model-facing"],
+      [2, "Decision", "non-model-facing"],
+      [2, "Alternatives considered", "non-model-facing"],
+      [3, "Add a saved workflow-definition product", "non-model-facing"],
+      [3, "Let every agent delegate freely", "non-model-facing"],
+      [3, "Encode all delegation only in skills", "non-model-facing"],
+      [2, "Consequences", "non-model-facing"],
+    ],
+  },
+  "docs/decisions/0010-plane-runtime-contract.md": {
+    preamble: "non-model-facing",
+    headings: [
+      [1, "ADR-0010: Use one versioned Plane runtime contract", "non-model-facing"],
+      [2, "Status", "non-model-facing"],
+      [2, "Date", "non-model-facing"],
+      [2, "Context", "non-model-facing"],
+      [2, "Decision", "non-model-facing"],
+      [3, "Runtime hierarchy", "non-model-facing"],
+      [3, "Run snapshot and invocation envelope", "non-model-facing"],
+      [3, "Events and exit", "non-model-facing"],
+      [3, "Isolation and compatibility", "non-model-facing"],
+      [2, "Alternatives considered", "non-model-facing"],
+      [3, "Expose `AIAgent` directly to Plane", "non-model-facing"],
+      [3, "Import the runtime adapter into the Plane API process", "non-model-facing"],
+      [3, "Make Hermes sessions the Plane run record", "non-model-facing"],
+      [3, "Use a multi-method start, stream, persist, and finalize protocol", "non-model-facing"],
+      [3, "Import Buzz ACP as the runtime protocol", "non-model-facing"],
+      [2, "Consequences", "non-model-facing"],
+    ],
+  },
 };
 
 const structuredPolicyPaths = [
@@ -186,42 +937,92 @@ const verifierPolicyPaths = [
   "docs/agent-tooling/verifiers/verify-g0-preflight.mjs",
 ];
 
+// `[]` is an explicit recursive pointer subtree: every reachable string pointer
+// not claimed by an authoritative pointer pattern is non-model-facing. The
+// verifier checks that every string is covered and every declared pointer is
+// live, so no structured path can fall back to ordinary evidence.
+const structuredAuthority = {
+  "docs/agent-tooling/NON-UI-IMPLEMENTATION-PLAN.json": {
+    authoritative: [],
+    authoritativeSubtrees: [],
+    nonModelFacingSubtrees: [[]],
+  },
+  "docs/agent-tooling/fixtures/planning-v1.json": {
+    authoritative: [],
+    authoritativeSubtrees: [],
+    nonModelFacingSubtrees: [[]],
+  },
+  "docs/agent-tooling/fixtures/planning-v1.predicates.json": {
+    authoritative: [["common", "*", "expected", "required", "*"]],
+    authoritativeSubtrees: [],
+    nonModelFacingSubtrees: [[]],
+  },
+  "docs/agent-tooling/fixtures/planning-v1.predicates.schema.json": {
+    authoritative: [],
+    authoritativeSubtrees: [],
+    nonModelFacingSubtrees: [[]],
+  },
+  "docs/agent-tooling/fixtures/planning-v1.schema.json": {
+    authoritative: [],
+    authoritativeSubtrees: [],
+    nonModelFacingSubtrees: [[]],
+  },
+  "docs/agent-tooling/g0-readiness.json": {
+    authoritative: [],
+    authoritativeSubtrees: [],
+    nonModelFacingSubtrees: [[]],
+  },
+  "docs/agent-tooling/g0-readiness.schema.json": {
+    authoritative: [],
+    authoritativeSubtrees: [],
+    nonModelFacingSubtrees: [[]],
+  },
+  "docs/agent-tooling/integration-lock.g0.json": {
+    authoritative: [],
+    authoritativeSubtrees: [],
+    nonModelFacingSubtrees: [[]],
+  },
+  "docs/agent-tooling/integration-lock.schema.json": {
+    authoritative: [],
+    authoritativeSubtrees: [],
+    nonModelFacingSubtrees: [[]],
+  },
+  "docs/agent-tooling/inventories/plane-mcp-v0.2.11.json": {
+    authoritative: [],
+    authoritativeSubtrees: [],
+    nonModelFacingSubtrees: [[]],
+  },
+  "docs/agent-tooling/model-facing-surface.json": {
+    authoritative: [
+      ["names", "*", "name"],
+      ["names", "*", "description"],
+    ],
+    authoritativeSubtrees: [],
+    nonModelFacingSubtrees: [[]],
+  },
+  "docs/agent-tooling/model-facing-surface.schema.json": {
+    authoritative: [],
+    authoritativeSubtrees: [["properties", "names", "items", "properties", "description"]],
+    nonModelFacingSubtrees: [[]],
+  },
+  "docs/agent-tooling/ownership-map.json": {
+    authoritative: [],
+    authoritativeSubtrees: [],
+    nonModelFacingSubtrees: [[]],
+  },
+  "docs/agent-tooling/ownership-map.schema.json": {
+    authoritative: [],
+    authoritativeSubtrees: [],
+    nonModelFacingSubtrees: [[]],
+  },
+};
+
 const retiredNameSourcePolicy = {
   markdownPaths: markdownPolicyPaths,
   structuredPaths: structuredPolicyPaths,
   verifierPaths: verifierPolicyPaths,
-  markdownAuthoritySections,
-  structuredAuthority: {
-    [paths.modelSurface]: {
-      authoritative: [
-        ["names", "*", "name"],
-        ["names", "*", "description"],
-      ],
-      nonModelFacing: [
-        ["$schema"],
-        ["schemaVersion"],
-        ["surfaceId"],
-        ["status"],
-        ["g0ContractPolicy", "*"],
-        ["names", "*", "kind"],
-        ["names", "*", "operationId"],
-        ["names", "*", "disclosure"],
-        ["retiredNames", "*"],
-        ["retiredNames", "*", "*"],
-      ],
-      capabilityRoots: [["names", "*"]],
-    },
-    [paths.modelSurfaceSchema]: {
-      authoritative: [["properties", "names", "items", "properties", "description", "description"]],
-      nonModelFacing: [],
-      capabilityRoots: [["properties", "names", "items", "properties", "description"]],
-    },
-    [paths.predicates]: {
-      authoritative: [["common", "*", "expected", "required", "*"]],
-      nonModelFacing: [],
-      capabilityRoots: [["common", "*", "expected", "required"]],
-    },
-  },
+  markdownSectionPolicy,
+  structuredAuthority,
 };
 
 function absolute(relativePath) {
@@ -338,13 +1139,35 @@ function checkMarkdownLinks() {
   }
 }
 
-function markdownSectionAtLine(source, lineStart) {
-  let section = "root";
-  for (const match of source.matchAll(/^#{1,6}\s+(.+?)\s*#*$/gm)) {
-    if (match.index > lineStart) break;
-    section = match[1];
-  }
-  return section;
+function markdownSectionPolicyFor(path, source) {
+  const policy = retiredNameSourcePolicy.markdownSectionPolicy[path];
+  assert(policy, `${path} has no Markdown section policy`);
+  assert(
+    new Set(["authoritative/model-facing", "non-model-facing"]).has(policy.preamble),
+    `${path} has an invalid Markdown preamble classification`
+  );
+  const headings = [...source.matchAll(/^(#{1,6})\s+(.+?)\s*#*$/gm)].map((match) => [match[1].length, match[2]]);
+  const declaredHeadings = policy.headings.map(([level, heading, classification]) => {
+    assert(
+      Number.isInteger(level) &&
+        typeof heading === "string" &&
+        new Set(["authoritative/model-facing", "non-model-facing"]).has(classification),
+      `${path} has an invalid Markdown section declaration`
+    );
+    return [level, heading];
+  });
+  assert(
+    JSON.stringify(headings) === JSON.stringify(declaredHeadings),
+    `${path} has an unclassified or stale Markdown section policy`
+  );
+  return {
+    preamble: policy.preamble,
+    headings: [...source.matchAll(/^(#{1,6})\s+(.+?)\s*#*$/gm)].map((match, index) => ({
+      start: match.index,
+      heading: match[2],
+      classification: policy.headings[index][2],
+    })),
+  };
 }
 
 function parseFrozenModelFacingTable(manifest) {
@@ -392,10 +1215,9 @@ function checkPolicyCoverage(lock) {
     "retired-name source policy must exactly cover sealed content and governed seal evidence paths"
   );
   assert(
-    Object.keys(retiredNameSourcePolicy.markdownAuthoritySections).every((path) =>
-      retiredNameSourcePolicy.markdownPaths.includes(path)
-    ),
-    "retired-name Markdown authority policy names an ungoverned path"
+    JSON.stringify(Object.keys(retiredNameSourcePolicy.markdownSectionPolicy).toSorted()) ===
+      JSON.stringify(retiredNameSourcePolicy.markdownPaths.toSorted()),
+    "retired-name Markdown section policy paths are missing or stale"
   );
   const expectedMarkdown = [
     ...canonicalMarkdown.map((path) =>
@@ -409,6 +1231,12 @@ function checkPolicyCoverage(lock) {
   assert(
     JSON.stringify(retiredNameSourcePolicy.markdownPaths.toSorted()) === JSON.stringify(expectedMarkdown),
     "retired-name Markdown policy does not exactly cover canonical Markdown and governed evidence"
+  );
+  for (const path of retiredNameSourcePolicy.markdownPaths) markdownSectionPolicyFor(path, read(path));
+  assert(
+    JSON.stringify(Object.keys(retiredNameSourcePolicy.structuredAuthority).toSorted()) ===
+      JSON.stringify(retiredNameSourcePolicy.structuredPaths.toSorted()),
+    "retired-name structured authority policy paths are missing or stale"
   );
 }
 
@@ -808,8 +1636,8 @@ function ordinaryPathRanges(line) {
   return rangesForPattern(line, /\bdocs\/[-A-Za-z0-9_./]+/g);
 }
 
-function hasAuthoritativeTextMarker(line) {
-  return /\bauthoritative\b|\bmodel[- ]facing\s+(?:name|description|purpose|schema|operation|alias|input|output|error)\b|\b(?:semantic purpose|input note|output note|error note|schema note)\b/i.test(
+function hasAuthorityMarker(line) {
+  return /\bauthoritative\s+(?:model[- ]facing|name|description|purpose|schema|operation|alias|input|output|error)\b|\bmodel[- ]facing\s+(?:name|description|purpose|schema|operation|alias|input|output|error)\b|\b(?:semantic purpose|input note|output note|error note|schema note)\b/i.test(
     line
   );
 }
@@ -836,7 +1664,7 @@ function retiredNameOccurrences(line, retiredNames) {
 
 function retiredNameViolations(line, retiredNames, { structured = false } = {}) {
   const occurrences = retiredNameOccurrences(line, retiredNames);
-  if (occurrences.length === 0 || (!structured && !hasAuthoritativeTextMarker(line))) return new Set();
+  if (occurrences.length === 0 || (!structured && !hasAuthorityMarker(line))) return new Set();
   const internalRanges = designatedInternalIdentifierRanges(line);
   const pathRanges = ordinaryPathRanges(line);
   const historical = classifyHistoricalOccurrences(line, occurrences);
@@ -859,35 +1687,70 @@ function pointerStartsWith(segments, pattern) {
 }
 
 function structuredFieldClassification(path, segments) {
-  const policy = retiredNameSourcePolicy.structuredAuthority[path] ?? {
-    authoritative: [],
-    nonModelFacing: [],
-    capabilityRoots: [],
-  };
-  if (policy.nonModelFacing.some((pattern) => pointerMatches(segments, pattern))) return "non-model-facing";
-  if (policy.authoritative.some((pattern) => pointerMatches(segments, pattern))) return "authoritative";
-  if (policy.capabilityRoots.some((pattern) => pointerStartsWith(segments, pattern))) return "unclassified";
-  return "ordinary-evidence";
+  const policy = retiredNameSourcePolicy.structuredAuthority[path];
+  assert(policy, `${path} has no structured authority policy`);
+  if (
+    policy.authoritative.some((pattern) => pointerMatches(segments, pattern)) ||
+    policy.authoritativeSubtrees.some((pattern) => pointerStartsWith(segments, pattern))
+  )
+    return "authoritative";
+  if (policy.nonModelFacingSubtrees.some((pattern) => pointerStartsWith(segments, pattern))) return "non-model-facing";
+  return "unclassified";
 }
 
 function jsonPointer(segments) {
   return `/${segments.map((segment) => String(segment).replaceAll("~", "~0").replaceAll("/", "~1")).join("/")}`;
 }
 
+function reachableStringPointers(value, segments = [], pointers = []) {
+  if (typeof value === "string") {
+    pointers.push(segments);
+    return pointers;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => reachableStringPointers(item, [...segments, String(index)], pointers));
+    return pointers;
+  }
+  if (value && typeof value === "object")
+    for (const [key, child] of Object.entries(value)) reachableStringPointers(child, [...segments, key], pointers);
+  return pointers;
+}
+
+function validateStructuredAuthorityPolicy() {
+  for (const path of structuredPolicyPaths) {
+    const policy = structuredAuthority[path];
+    assert(policy, `${path} has no structured authority policy`);
+    const pointers = reachableStringPointers(readJson(path));
+    assert(pointers.length > 0, `${path} has no reachable string pointers to classify`);
+    for (const pattern of policy.authoritative)
+      assert(
+        pointers.some((segments) => pointerMatches(segments, pattern)),
+        `${path} has a stale structured authority declaration ${jsonPointer(pattern)}`
+      );
+    for (const pattern of [...policy.authoritativeSubtrees, ...policy.nonModelFacingSubtrees])
+      assert(
+        pointers.some((segments) => pointerStartsWith(segments, pattern)),
+        `${path} has a stale structured authority declaration ${jsonPointer(pattern)}`
+      );
+    for (const segments of pointers)
+      assert(
+        structuredFieldClassification(path, segments) !== "unclassified",
+        `${path} has an unclassified structured authority pointer ${jsonPointer(segments)}`
+      );
+  }
+}
+
 function checkStructuredRetiredNames(path, value, retired, segments = []) {
   if (typeof value === "string") {
     const classification = structuredFieldClassification(path, segments);
-    if (classification === "unclassified") {
-      const violations = retiredNameViolations(value, retired, { structured: true });
-      if (
-        violations.size > 0 ||
-        /\bauthoritative\b.*\bmodel[- ]facing\b|\bmodel[- ]facing\b.*\bauthoritative\b/i.test(value)
-      )
-        throw new Error(`${path} has an unclassified authority pointer ${jsonPointer(segments)}`);
-    }
-    if (classification !== "authoritative") return;
-    for (const name of retiredNameViolations(value, retired, { structured: true }))
-      throw new Error(`${path} authoritatively uses retired name ${name} in ${jsonPointer(segments)}`);
+    if (classification === "authoritative")
+      for (const name of retiredNameViolations(value, retired, { structured: true }))
+        throw new Error(`${path} authoritatively uses retired name ${name} in ${jsonPointer(segments)}`);
+    if (classification === "non-model-facing")
+      for (const name of retiredNameViolations(value, retired))
+        throw new Error(
+          `${path} has a non-model-facing authority marker for retired name ${name} in ${jsonPointer(segments)}`
+        );
     return;
   }
   if (Array.isArray(value)) {
@@ -989,25 +1852,30 @@ function checkRetiredNames() {
   const surface = readJson(paths.modelSurface);
   const retired = [...surface.retiredNames.bare, ...surface.retiredNames.historicalPrefixed];
   checkPolicyCoverage(lock);
+  validateStructuredAuthorityPolicy();
 
   for (const path of retiredNameSourcePolicy.structuredPaths)
     checkStructuredRetiredNames(path, readJson(path), retired);
 
   for (const path of retiredNameSourcePolicy.markdownPaths) {
     const source = read(path);
+    const sectionPolicy = markdownSectionPolicyFor(path, source);
     let offset = 0;
+    let sectionIndex = -1;
     for (const line of source.split("\n")) {
-      const section = markdownSectionAtLine(source, offset);
+      while (
+        sectionIndex + 1 < sectionPolicy.headings.length &&
+        sectionPolicy.headings[sectionIndex + 1].start <= offset
+      )
+        sectionIndex += 1;
+      const section = sectionIndex === -1 ? "preamble" : sectionPolicy.headings[sectionIndex].heading;
+      const classification =
+        sectionIndex === -1 ? sectionPolicy.preamble : sectionPolicy.headings[sectionIndex].classification;
       const violations = retiredNameViolations(line, retired);
-      const authoritative = retiredNameSourcePolicy.markdownAuthoritySections[path]?.includes(section) ?? false;
-      if (authoritative) {
-        for (const name of violations) throw new Error(`${path} authoritatively uses retired name ${name}`);
-      } else if (
-        violations.size > 0 &&
-        /\bauthoritative\b.*\bmodel[- ]facing\b|\bmodel[- ]facing\b.*\bauthoritative\b/i.test(line)
-      ) {
-        throw new Error(`${path} has an unclassified authority section ${section}`);
-      }
+      for (const name of violations)
+        if (classification === "authoritative/model-facing")
+          throw new Error(`${path} authoritatively uses retired name ${name}`);
+        else throw new Error(`${path} has a non-model-facing authority marker for retired name ${name} in ${section}`);
       offset += line.length + 1;
     }
   }

@@ -814,3 +814,22 @@ Stage and commit this single documentation/contract/evidence-control checkpoint,
 - Both renderer checks, planning fixtures, all verifier Node syntax checks, and verifier OxLint — exit 0; OxLint reported 0 warnings and 0 errors.
 - `git diff --check 50de279ea15459addaac8dcc768ef215563c29e7..HEAD` — exit 0. The content commit is `8ebc418d25fc1ff197664f7e0772564d2bb0f1b3`; the separate seal-only commit's first parent is the content commit and its diff changes exactly `SOURCE-INVENTORY.md`, `WORKLOG.md`, `g0-readiness.json`, and `integration-lock.g0.json`.
 - `RESULT.md` remained byte-identical at SHA-256 `c7b6404f435ea1ce53c9b360ba2b8745096f1d3dd42d81de4bdbb55117c4bb87`; final topology was sealed and the worktree was clean.
+
+## 2026-08-04 — Fail-closed governed-source authority remediation
+
+### Scope and design
+
+- Replaced the narrower unclassified-authority rejection with one shared authority-marker predicate used by Markdown and structured retired-name detection and rejection. The grammar covers authoritative/model-facing name, description, purpose, schema, operation, alias, input, output, and error declarations plus semantic/input/output/error/schema note forms.
+- Added an explicit Markdown policy for every governed preamble and discovered heading/section. The verifier compares the declared level, heading text, order, and classification and rejects missing, stale, or unclassified declarations before retired-name scanning.
+- Added explicit structured policy records for every governed JSON path. Each record classifies authoritative pointers or a documented recursive non-model-facing subtree; every reachable string pointer and every declaration is checked for coverage and staleness. There is no ordinary-evidence fallback.
+- Preserved token-local historical, internal-identifier, and ordinary-path exceptions and global one-to-one retired-family matching. No Plane Agent product/runtime behavior, approval record, RESULT.md bytes, Hermes, or Buzz content changed.
+
+### Exact control arithmetic
+
+- Baseline matrix: 199 controls (198 negative/positive matrix cases plus one cleanup retry/backoff control).
+- Added 9 controls: one reproduced GOAL new-section semantic-purpose bypass, one reproduced ownership role-pointer bypass, two other structured-source marker controls, three Markdown authority-marker grammar controls, one missing structured-subtree policy control, and one stale structured-subtree declaration control.
+- New exact matrix total: 208 controls.
+
+### Post-seal validation
+
+- Recorded after the separate evidence-seal commit; the seal commit must change only SOURCE-INVENTORY.md, WORKLOG.md, g0-readiness.json, and integration-lock.g0.json.
