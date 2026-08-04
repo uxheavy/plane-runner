@@ -60,7 +60,7 @@
       "docs/agent-tooling/prompts/release-planning-v1.md": "9c6674acce0e060b8570a764f31c792297d718fd08d8559ca59d19c0dd4d89a1",
       "docs/agent-tooling/verifiers/render-non-ui-implementation-plan.mjs": "83b0ec4956af73a0fc49cac17ef5473e7f8b197e09ff1c6c404653888847c795",
       "docs/agent-tooling/verifiers/render-requirement-coverage.mjs": "5993661f3c05af46bae762bb59058f5a477a35b7d5649325fbba9d9200eae542",
-      "docs/agent-tooling/verifiers/run-g0-negative-controls.mjs": "118eb746505f797c3b2c970991697f7525a3266b0a2597d408983f2c582aa1cc",
+      "docs/agent-tooling/verifiers/run-g0-negative-controls.mjs": "a4887659e6a699c0a03125367d1a0808abc17c2d11b37cd8a1a84a249299b3af",
       "docs/agent-tooling/verifiers/seal-g0-evidence.mjs": "c66bb534ce85a0562a4b535ed1feba6aeaf99ebcd6d19d91d480e363743d497f",
       "docs/agent-tooling/verifiers/test-g0-approved-fixture.mjs": "e58ac31a3f41dc592a89fb90e57c6b9293a457ebe49204721d8eaa766140db4e",
       "docs/agent-tooling/verifiers/validate-ajv-2020.mjs": "d5cab3244bdb63e91522a861058b243bc49e056932f855a332812aad6f3df3ea",
@@ -78,7 +78,7 @@
       "docs/decisions/0008-scoped-memory-and-context.md": "4fba4c326c428af491bdef6dbd55f0b8a1cc22f5e04e2fc26f59c61fe4b22c10",
       "docs/decisions/0009-workflows-and-agent-delegation.md": "81b0e3a6b7665897f3cf461f3b647cfc2b8c4bef6e2d26f4a4908b6c5f9b4740",
       "docs/decisions/0010-plane-runtime-contract.md": "2d6bbdf50580602fd4da6df10715bbb6f77e65ed4a8167e2d7c34bb45d32537b",
-      "docs/agent-tooling/SOURCE-INVENTORY.md": "9e8fd8d030299210edc13c9d6c9f7a5e7b709fec0862abac826493d60a19427c"
+      "docs/agent-tooling/SOURCE-INVENTORY.md": "4c55850692f9c1053481bcd5b0f9c2b2763b7e03c1d3262c857677d7d18cdfa6"
     }
   },
   "clauses": [

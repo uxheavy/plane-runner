@@ -833,3 +833,11 @@ Stage and commit this single documentation/contract/evidence-control checkpoint,
 ### Post-seal validation
 
 - The separate seal generator bound the clean content commit `ec823d55ead3940fdebf9b5c604ae304ddfa119a` to 56 content paths and the exact four seal paths. Final verifier, fixture, negative-control, topology, and clean-status evidence is recorded below after the seal commit.
+- A follow-up content checkpoint `311525824cfb42a7d5073b0086f3d57061dc18ed` stabilized the formatter-safe mutation anchors for the policy-coverage controls; the new seal binds that checkpoint.
+- `node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode preflight` — exit 0; all checks passed and human approval remained pending by design.
+- `node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode g0` — exit 1 specifically for pending human approval; no implementation authorization was implied.
+- `node docs/agent-tooling/verifiers/test-g0-approved-fixture.mjs` — exit 0; the temporary approved fixture passed and the real pending approval record was unchanged.
+- `node docs/agent-tooling/verifiers/run-g0-negative-controls.mjs` — exit 0; exactly 208 controls passed, including the GOAL new-section semantic-purpose control for retired token `search`, the `ownership-map.json#/owners/0/role` authority-pointer bypass, structured-source marker controls, grammar variants, stale/missing policy controls, legitimate positives, and cleanup retry/backoff.
+- AJV/schema, ownership, requirement coverage, both renderer checks, planning fixtures, all verifier Node syntax checks, direct verifier OxLint, and `git diff --check` — exit 0.
+- Seal topology — `311525824cfb42a7d5073b0086f3d57061dc18ed` is the content commit; the separate seal commit changes exactly SOURCE-INVENTORY.md, WORKLOG.md, g0-readiness.json, and integration-lock.g0.json, with 56 content paths and 4 seal paths bound.
+- `RESULT.md` remains byte-identical at SHA-256 `c7b6404f435ea1ce53c9b360ba2b8745096f1d3dd42d81de4bdbb55117c4bb87`; final worktree status is clean.
