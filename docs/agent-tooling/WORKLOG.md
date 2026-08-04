@@ -848,5 +848,5 @@ Stage and commit this single documentation/contract/evidence-control checkpoint,
 - Baseline matrix: 208 controls (207 negative/positive matrix cases plus one cleanup retry/backoff control).
 - Added exactly 2 controls: one plain-token authoritative Markdown control and one schema-evolution unclassified-pointer control.
 - New exact matrix total: 210 controls.
-- Final content/remediation commit: `ee43b1f0bbd10f166aa2f29cd63441a0351f1eb4`.
+- Final content/remediation commit: `f95240ca5897bd13acf8c933fa054ae88ef034f0`.
 - The actual seal generator bound that clean content commit to 56 content paths and the exact four authorized seal paths. Final validation evidence follows after the separate seal commit.
