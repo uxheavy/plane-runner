@@ -1,15 +1,29 @@
 #!/bin/bash
-set -e
+set -eu
 
-# Production migrations and audit-role provisioning must use the migration
-# authority. Runtime processes never receive this credential.
-if [ "${PLANE_AUDIT_ENFORCE_ROLE_SEPARATION:-0}" = "1" ] || [ "${PLANE_DB_MIGRATION_MODE:-0}" = "1" ]; then
-  : "${DATABASE_MIGRATION_URL:?DATABASE_MIGRATION_URL is required for production migrations}"
-  export DATABASE_URL="${DATABASE_MIGRATION_URL}"
-  export PLANE_DB_MIGRATION_MODE=1
+# This entrypoint is a migration authority boundary. It must never inherit a
+# runtime database URL or decide its mode from a defaulted environment.
+if [ "${PLANE_DB_MIGRATION_MODE:-}" != "1" ]; then
+  echo "PLANE_DB_MIGRATION_MODE=1 is required for the migrator entrypoint" >&2
+  exit 64
+fi
+if [ -z "${DATABASE_MIGRATION_URL:-}" ]; then
+  echo "DATABASE_MIGRATION_URL is required for the migrator entrypoint" >&2
+  exit 64
+fi
+if [ -n "${DATABASE_RUNTIME_URL:-}" ]; then
+  echo "DATABASE_RUNTIME_URL must not be provided to the migrator entrypoint" >&2
+  exit 64
+fi
+if [ -n "${DATABASE_URL:-}" ] && [ "${DATABASE_URL}" != "${DATABASE_MIGRATION_URL}" ]; then
+  echo "DATABASE_URL must match DATABASE_MIGRATION_URL for the migrator entrypoint" >&2
+  exit 64
 fi
 
-python manage.py wait_for_db $1
-python manage.py bootstrap_operation_gateway_audit $1
+export DATABASE_URL="${DATABASE_MIGRATION_URL}"
+export PLANE_DB_MIGRATION_MODE=1
 
-python manage.py migrate $1
+python manage.py wait_for_db "${1:-}"
+python manage.py bootstrap_operation_gateway_audit "${1:-}"
+
+python manage.py migrate "${1:-}"

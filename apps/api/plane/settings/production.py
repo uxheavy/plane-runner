@@ -9,6 +9,9 @@
 # ruff: noqa: F403, F405
 
 import os
+import re
+import unicodedata
+from urllib.parse import unquote_to_bytes
 from urllib.parse import urlparse
 
 from django.core.exceptions import ImproperlyConfigured
@@ -18,8 +21,116 @@ from .common import *  # noqa
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = int(os.environ.get("DEBUG", 0)) == 1
 
+
+_MALFORMED_PERCENT_ESCAPE = re.compile(r"%(?![0-9a-fA-F]{2})")
+_MIGRATION_DATABASE_ENVIRONMENT_NAMES = frozenset(
+    {
+        # libpq connection, credential, service, and TLS aliases.
+        "PGHOST",
+        "PGHOSTADDR",
+        "PGPORT",
+        "PGDATABASE",
+        "PGUSER",
+        "PGPASSWORD",
+        "PGPASSFILE",
+        "PGSERVICE",
+        "PGSERVICEFILE",
+        "PGOPTIONS",
+        "PGSSLMODE",
+        "PGSSLCERT",
+        "PGSSLKEY",
+        "PGSSLROOTCERT",
+        "PGSSLCRL",
+        "PGSSLCRLDIR",
+        "PGREQUIRESSL",
+        "PGCONNECT_TIMEOUT",
+        "PGAPPNAME",
+        "PGCHANNELBIND",
+        "PGTARGETSESSIONATTRS",
+        "PGLOADBALANCEHOSTS",
+        # PostgreSQL image/bootstrap aliases.
+        "PGDATA",
+        "POSTGRES_HOST",
+        "POSTGRES_PORT",
+        "POSTGRES_DB",
+        "POSTGRES_USER",
+        "POSTGRES_PASSWORD",
+        "POSTGRES_INITDB_ARGS",
+        "POSTGRES_INITDB_WALDIR",
+        "POSTGRES_HOST_AUTH_METHOD",
+        "POSTGRES_READ_REPLICA_DB",
+        "POSTGRES_READ_REPLICA_USER",
+        "POSTGRES_READ_REPLICA_PASSWORD",
+        "POSTGRES_READ_REPLICA_HOST",
+        "POSTGRES_READ_REPLICA_PORT",
+        "DATABASE_READ_REPLICA_URL",
+        # Migrator-only Plane credentials.
+        "PLANE_AUDIT_RUNTIME_PASSWORD",
+    }
+)
+_MIGRATION_DATABASE_ENVIRONMENT_PREFIXES = (
+    "DATABASE_MIGRATION_",
+    "DATABASE_BOOTSTRAP_",
+    "DATABASE_MIGRATOR_",
+    "DATABASE_ADMIN_",
+    "DATABASE_SUPERUSER_",
+)
+
+
+def _is_migration_database_environment_name(name):
+    return name in _MIGRATION_DATABASE_ENVIRONMENT_NAMES or name.startswith(_MIGRATION_DATABASE_ENVIRONMENT_PREFIXES)
+
+
+def _decode_database_url_component(value):
+    if _MALFORMED_PERCENT_ESCAPE.search(value):
+        raise ImproperlyConfigured("Database URL contains malformed credential encoding")
+    try:
+        return unquote_to_bytes(value).decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ImproperlyConfigured("Database URL contains invalid credential encoding") from error
+
+
 def _database_url_user(value):
-    return urlparse(value).username if value else None
+    if not value:
+        return None
+    try:
+        parsed = urlparse(value)
+        username = parsed.username
+        password = parsed.password
+    except ValueError as error:
+        raise ImproperlyConfigured("Database URL contains invalid credential encoding") from error
+    if username is None:
+        return None
+    # Decode both credential components so malformed escapes cannot be hidden
+    # in a password while the username check is being performed. The password
+    # is deliberately discarded and never included in an error message.
+    decoded_username = _decode_database_url_component(username)
+    if password is not None:
+        _decode_database_url_component(password)
+    return decoded_username
+
+
+def _canonical_database_role(value):
+    if not value:
+        return None
+    return unicodedata.normalize("NFKC", value).casefold()
+
+
+def _database_url_uses_role(value, role):
+    return _canonical_database_role(_database_url_user(value)) == _canonical_database_role(role)
+
+
+def _database_role_matches(value, role):
+    return _canonical_database_role(value) == _canonical_database_role(role)
+
+
+def _reject_migration_environment_leakage():
+    leaked = sorted(name for name in os.environ if _is_migration_database_environment_name(name))
+    if leaked:
+        raise ImproperlyConfigured(
+            "Normal production processes must not receive migration database environment variables: "
+            + ", ".join(leaked)
+        )
 
 
 def _validate_production_database_boundary():
@@ -41,9 +152,14 @@ def _validate_production_database_boundary():
             )
         if os.environ.get("DATABASE_RUNTIME_URL"):
             raise ImproperlyConfigured("The one-shot migrator must not receive DATABASE_RUNTIME_URL")
+        migration_url_role = _database_url_user(migration_url)
+        if not migration_url_role:
+            raise ImproperlyConfigured("The migration database URL must declare the migration role")
         database_url = os.environ.get("DATABASE_URL")
-        if database_url and database_url != migration_url:
-            raise ImproperlyConfigured("The one-shot migrator DATABASE_URL must be DATABASE_MIGRATION_URL")
+        if database_url and not _database_url_uses_role(database_url, migration_url_role):
+            raise ImproperlyConfigured("The one-shot migrator DATABASE_URL must use the migration role")
+        if not _database_role_matches(DATABASES["default"].get("USER"), migration_url_role):
+            raise ImproperlyConfigured("The migration database settings must use the migration role")
         return
 
     if not PLANE_AUDIT_ENFORCE_ROLE_SEPARATION or DEBUG:
@@ -51,27 +167,22 @@ def _validate_production_database_boundary():
 
     if not os.environ.get("DATABASE_RUNTIME_URL"):
         raise ImproperlyConfigured("Production runtime requires DATABASE_RUNTIME_URL")
-    if "DATABASE_MIGRATION_URL" in os.environ:
-        raise ImproperlyConfigured("Normal production processes must not receive DATABASE_MIGRATION_URL")
-    migration_env = (
-        "PGHOST",
-        "PGDATABASE",
-        "POSTGRES_HOST",
-        "POSTGRES_PORT",
-        "POSTGRES_DB",
-        "POSTGRES_USER",
-        "POSTGRES_PASSWORD",
-    )
-    leaked_migration_env = [name for name in migration_env if name in os.environ]
-    if leaked_migration_env:
-        raise ImproperlyConfigured(
-            "Normal production processes must not receive migration POSTGRES variables: "
-            + ", ".join(leaked_migration_env)
-        )
+    _reject_migration_environment_leakage()
+
+    runtime_url_role = _database_url_user(DATABASE_RUNTIME_URL)
+    resolved_runtime_role = DATABASES["default"].get("USER")
+    if (
+        not runtime_url_role
+        or not resolved_runtime_role
+        or not _database_role_matches(runtime_url_role, resolved_runtime_role)
+    ):
+        raise ImproperlyConfigured("The runtime database URL must declare the resolved runtime role")
+    if not _database_role_matches(runtime_url_role, PLANE_AUDIT_RUNTIME_ROLE):
+        raise ImproperlyConfigured("The runtime database URL must use the configured runtime role")
 
     privileged_roles = {
-        PLANE_AUDIT_MIGRATION_ROLE,
-        PLANE_AUDIT_GOVERNANCE_ROLE,
+        _canonical_database_role(PLANE_AUDIT_MIGRATION_ROLE),
+        _canonical_database_role(PLANE_AUDIT_GOVERNANCE_ROLE),
         "postgres",
         "root",
     }
@@ -79,8 +190,13 @@ def _validate_production_database_boundary():
         ("DATABASE_RUNTIME_URL", DATABASE_RUNTIME_URL),
         ("DATABASE_URL", os.environ.get("DATABASE_URL")),
     ):
-        if _database_url_user(value) in privileged_roles:
+        if _canonical_database_role(_database_url_user(value)) in privileged_roles:
             raise ImproperlyConfigured(f"{name} must use the non-privileged runtime database role")
+    database_url_role = _database_url_user(os.environ.get("DATABASE_URL"))
+    if database_url_role and not _database_role_matches(database_url_role, runtime_url_role):
+        raise ImproperlyConfigured("DATABASE_URL must use the configured runtime database role")
+    if _canonical_database_role(resolved_runtime_role) in privileged_roles:
+        raise ImproperlyConfigured("The resolved production database must use the non-privileged runtime database role")
 
 
 _validate_production_database_boundary()

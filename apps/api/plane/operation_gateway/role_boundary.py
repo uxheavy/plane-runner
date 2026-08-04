@@ -102,6 +102,7 @@ def verify_audit_role_boundary() -> None:
                    has_function_privilege('public', 'operation_gateway_audit_append_only()'::regprocedure, 'EXECUTE'),
                    has_function_privilege(%s, 'operation_gateway_audit_append_only()'::regprocedure, 'EXECUTE'),
                    has_function_privilege(%s, 'operation_gateway_audit_append_only()'::regprocedure, 'EXECUTE'),
+                   has_function_privilege(%s, 'operation_gateway_audit_append_only()'::regprocedure, 'EXECUTE'),
                    has_schema_privilege(current_user, current_schema(), 'USAGE'),
                    has_schema_privilege(current_user, current_schema(), 'CREATE'),
                    has_table_privilege(current_user, 'operation_gateway_audit', 'SELECT'),
@@ -137,7 +138,7 @@ def verify_audit_role_boundary() -> None:
             ) AS table_info ON TRUE
             WHERE runtime.rolname = current_user
             """,
-            [migration_role, governance_role],
+            [runtime_role, migration_role, governance_role],
         )
         row = cursor.fetchone()
 
@@ -160,6 +161,7 @@ def verify_audit_role_boundary() -> None:
         function_source,
         public_can_execute,
         runtime_can_execute,
+        migration_can_execute,
         governance_can_execute,
         can_use_schema,
         can_create_in_schema,
@@ -190,7 +192,7 @@ def verify_audit_role_boundary() -> None:
         != EXPECTED_APPEND_ONLY_FUNCTION_DIGEST
     ):
         raise AuditRoleBoundaryError("The append-only trigger function body is not the protected implementation")
-    if public_can_execute or runtime_can_execute or not governance_can_execute:
+    if public_can_execute or runtime_can_execute or not migration_can_execute or not governance_can_execute:
         raise AuditRoleBoundaryError("The append-only trigger function has an invalid ACL")
     if schema_owner == runtime_role:
         raise AuditRoleBoundaryError("The audit schema is owned by the runtime role")

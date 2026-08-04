@@ -1105,6 +1105,44 @@ def test_separated_audit_boot_and_runtime_probes_cover_membership_and_trigger_po
             call_command("bootstrap_operation_gateway_audit")
 
             with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT has_function_privilege(%s, 'operation_gateway_audit_append_only()'::regprocedure, "
+                    "'EXECUTE'), "
+                    "has_function_privilege(%s, 'operation_gateway_audit_append_only()'::regprocedure, 'EXECUTE'), "
+                    "has_function_privilege(%s, 'operation_gateway_audit_append_only()'::regprocedure, 'EXECUTE'), "
+                    "has_function_privilege('public', 'operation_gateway_audit_append_only()'::regprocedure, "
+                    "'EXECUTE')",
+                    [runtime_role, migration_role, governance_role],
+                )
+                (
+                    runtime_can_execute,
+                    migration_can_execute,
+                    governance_can_execute,
+                    public_can_execute,
+                ) = cursor.fetchone()
+                assert runtime_can_execute is False
+                assert migration_can_execute is True
+                assert governance_can_execute is True
+                assert public_can_execute is False
+
+                cursor.execute(f'GRANT EXECUTE ON FUNCTION operation_gateway_audit_append_only() TO "{runtime_role}"')
+                cursor.execute(f'SET ROLE "{runtime_role}"')
+            with pytest.raises(AuditRoleBoundaryError, match="invalid ACL"):
+                verify_audit_role_boundary()
+            with connection.cursor() as cursor:
+                cursor.execute("RESET ROLE")
+                cursor.execute(
+                    f'REVOKE EXECUTE ON FUNCTION operation_gateway_audit_append_only() FROM "{runtime_role}"'
+                )
+                cursor.execute("GRANT EXECUTE ON FUNCTION operation_gateway_audit_append_only() TO PUBLIC")
+                cursor.execute(f'SET ROLE "{runtime_role}"')
+            with pytest.raises(AuditRoleBoundaryError, match="invalid ACL"):
+                verify_audit_role_boundary()
+            with connection.cursor() as cursor:
+                cursor.execute("RESET ROLE")
+                cursor.execute("REVOKE EXECUTE ON FUNCTION operation_gateway_audit_append_only() FROM PUBLIC")
+
+            with connection.cursor() as cursor:
                 cursor.execute(f'GRANT "{bridge_role}" TO "{runtime_role}"')
                 cursor.execute(f'GRANT "{governance_role}" TO "{bridge_role}"')
                 cursor.execute(f'SET ROLE "{runtime_role}"')
@@ -1184,6 +1222,9 @@ def test_separated_audit_boot_and_runtime_probes_cover_membership_and_trigger_po
     finally:
         with connection.cursor() as cursor:
             cursor.execute("RESET ROLE")
+            cursor.execute(
+                f'REVOKE EXECUTE ON FUNCTION operation_gateway_audit_append_only() FROM PUBLIC, "{runtime_role}"'
+            )
             cursor.execute(f'DROP ROLE IF EXISTS "{runtime_role}"')
             cursor.execute(f'DROP ROLE IF EXISTS "{bridge_role}"')
 
