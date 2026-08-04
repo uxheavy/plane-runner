@@ -37,6 +37,7 @@ const paths = {
   modelSurface: "docs/agent-tooling/model-facing-surface.json",
   plan: "docs/agent-tooling/NON-UI-IMPLEMENTATION-PLAN.json",
   overview: "docs/agent-tooling/NON-UI-IMPLEMENTATION-OVERVIEW.md",
+  productRequirements: "docs/agent-tooling/product-requirements.md",
   result: "docs/agent-tooling/RESULT.md",
   fixture: "docs/agent-tooling/fixtures/planning-v1.json",
   fixtureSchema: "docs/agent-tooling/fixtures/planning-v1.schema.json",
@@ -61,6 +62,7 @@ const canonicalMarkdown = [
   "VERIFICATION-MANIFEST.md",
   "REQUIREMENT-COVERAGE.md",
   "RESULT.md",
+  "product-requirements.md",
   "EVALUATION-FIXTURE-CONTRACT.md",
   "EVALUATION-SCENARIOS.md",
   "MCP-COMPATIBILITY.md",
@@ -90,78 +92,136 @@ const canonicalMarkdown = [
   ),
 ];
 
-// Every canonical Markdown source has an intentional retired-name policy. A
-// new source must be classified here before it can enter canonicalMarkdown;
-// no extension or path convention silently grants it an authority exemption.
-const canonicalMarkdownRetiredNamePolicies = {
-  "README.md": "non-model-facing",
-  "GOAL.md": "non-model-facing",
-  "APPROVAL-MANIFEST.md": "authoritative",
-  "SOURCE-INVENTORY.md": "non-model-facing",
-  "decision-register.md": "non-model-facing",
-  "delivery-plan.md": "non-model-facing",
-  "architecture.md": "non-model-facing",
-  "INTERFACE-DESIGN.md": "non-model-facing",
-  "RUNTIME-DESIGN.md": "non-model-facing",
-  "GATEWAY-WIRE.md": "non-model-facing",
-  "PILOT-CONTRACTS.md": "non-model-facing",
-  "RELEASE-MANIFEST.md": "non-model-facing",
-  "VERIFICATION-MANIFEST.md": "non-model-facing",
-  "REQUIREMENT-COVERAGE.md": "non-model-facing",
-  "RESULT.md": "non-model-facing",
-  "EVALUATION-FIXTURE-CONTRACT.md": "non-model-facing",
-  "EVALUATION-SCENARIOS.md": "non-model-facing",
-  "MCP-COMPATIBILITY.md": "non-model-facing",
-  "MCP-MAPPING-CONTRACT.md": "non-model-facing",
-  "SAFETY-EVALUATION-DESIGN.md": "non-model-facing",
-  "ADR-SYNTHESIS.md": "non-model-facing",
-  "NON-UI-IMPLEMENTATION-OVERVIEW.md": "authoritative",
-  "inventories/plane-mcp-v0.2.11-dispositions.md": "non-model-facing",
-  "prompts/release-planning-v1.md": "authoritative",
-  "../decisions/0001-plane-agent-tooling-architecture.md": "non-model-facing",
-  "../decisions/0002-autonomous-agent-operations.md": "non-model-facing",
-  "../decisions/0003-plane-agent-native-product-boundary.md": "non-model-facing",
-  "../decisions/0004-fork-hermes-as-hidden-execution-kernel.md": "non-model-facing",
-  "../decisions/0005-plane-owned-agent-profiles.md": "non-model-facing",
-  "../decisions/0006-assignment-and-run-lifecycle.md": "non-model-facing",
-  "../decisions/0007-adaptive-plane-tool-exposure.md": "non-model-facing",
-  "../decisions/0008-scoped-memory-and-context.md": "non-model-facing",
-  "../decisions/0009-workflows-and-agent-delegation.md": "non-model-facing",
-  "../decisions/0010-plane-runtime-contract.md": "non-model-facing",
+// The retired-name policy is deliberately narrower than a file allowlist. Its
+// governed paths are an explicit inventory, its Markdown authority uses exact
+// section headings, and its structured authority uses exact JSON-pointer
+// patterns. A path, section, or pointer that is not declared cannot silently
+// become model-facing; authority-shaped mutations fail closed instead.
+const markdownPolicyPaths = [
+  "docs/agent-tooling/ADR-SYNTHESIS.md",
+  "docs/agent-tooling/APPROVAL-MANIFEST.md",
+  "docs/agent-tooling/EVALUATION-FIXTURE-CONTRACT.md",
+  "docs/agent-tooling/EVALUATION-SCENARIOS.md",
+  "docs/agent-tooling/GATEWAY-WIRE.md",
+  "docs/agent-tooling/GOAL.md",
+  "docs/agent-tooling/INTERFACE-DESIGN.md",
+  "docs/agent-tooling/MCP-COMPATIBILITY.md",
+  "docs/agent-tooling/MCP-MAPPING-CONTRACT.md",
+  "docs/agent-tooling/NON-UI-IMPLEMENTATION-OVERVIEW.md",
+  "docs/agent-tooling/PILOT-CONTRACTS.md",
+  "docs/agent-tooling/README.md",
+  "docs/agent-tooling/RELEASE-MANIFEST.md",
+  "docs/agent-tooling/REQUIREMENT-COVERAGE.md",
+  "docs/agent-tooling/RESULT.md",
+  "docs/agent-tooling/RUNTIME-DESIGN.md",
+  "docs/agent-tooling/SAFETY-EVALUATION-DESIGN.md",
+  "docs/agent-tooling/VERIFICATION-MANIFEST.md",
+  "docs/agent-tooling/architecture.md",
+  "docs/agent-tooling/decision-register.md",
+  "docs/agent-tooling/delivery-plan.md",
+  "docs/agent-tooling/inventories/plane-mcp-v0.2.11-dispositions.md",
+  "docs/agent-tooling/product-requirements.md",
+  "docs/agent-tooling/prompts/release-planning-v1.md",
+  "docs/agent-tooling/SOURCE-INVENTORY.md",
+  "docs/agent-tooling/WORKLOG.md",
+  "docs/decisions/0001-plane-agent-tooling-architecture.md",
+  "docs/decisions/0002-autonomous-agent-operations.md",
+  "docs/decisions/0003-plane-agent-native-product-boundary.md",
+  "docs/decisions/0004-fork-hermes-as-hidden-execution-kernel.md",
+  "docs/decisions/0005-plane-owned-agent-profiles.md",
+  "docs/decisions/0006-assignment-and-run-lifecycle.md",
+  "docs/decisions/0007-adaptive-plane-tool-exposure.md",
+  "docs/decisions/0008-scoped-memory-and-context.md",
+  "docs/decisions/0009-workflows-and-agent-delegation.md",
+  "docs/decisions/0010-plane-runtime-contract.md",
+];
+
+const markdownAuthoritySections = {
+  "docs/agent-tooling/APPROVAL-MANIFEST.md": [
+    "Status",
+    "Outcome and authority",
+    "Product invariants",
+    "First supported semantic operation boundary",
+    "Frozen model-facing surface",
+    "Curated catalog overlay",
+    "Logical runtime, dispatch, publication, and event contracts",
+    "Frozen v1 execution, result, artifact, and audit policy",
+    "Delivery and gates",
+    "Required evidence before production",
+    "Implementation approval gate",
+  ],
+  "docs/agent-tooling/GOAL.md": ["Normative resource catalog and authority"],
+  "docs/agent-tooling/NON-UI-IMPLEMENTATION-OVERVIEW.md": ["Outcome", "Scope boundary"],
+  "docs/agent-tooling/product-requirements.md": ["Required outcomes"],
+  "docs/agent-tooling/prompts/release-planning-v1.md": ["Plane Release-Readiness Planning Acceptance Prompt v1"],
 };
 
-// Structured authority is explicit and fail-closed. The model-facing surface
-// is authoritative by default under each named operation; only these exact
-// JSON-pointer contexts are metadata or historical registries. Other
-// structured artifacts are evidence/configuration, except for the exact
-// predicate field that mirrors the model-facing name set.
-const structuredRetiredNamePolicies = {
-  [paths.modelSurface]: {
-    default: "unclassified",
-    authoritative: [
-      ["g0ContractPolicy", "*"],
-      ["names", "*", "*"],
-    ],
-    nonModelFacing: [
-      ["$schema"],
-      ["schemaVersion"],
-      ["surfaceId"],
-      ["status"],
-      ["names", "*", "operationId"],
-      ["retiredNames", "*"],
-      ["retiredNames", "*", "*"],
-    ],
+const structuredPolicyPaths = [
+  "docs/agent-tooling/NON-UI-IMPLEMENTATION-PLAN.json",
+  "docs/agent-tooling/fixtures/planning-v1.json",
+  "docs/agent-tooling/fixtures/planning-v1.predicates.json",
+  "docs/agent-tooling/fixtures/planning-v1.predicates.schema.json",
+  "docs/agent-tooling/fixtures/planning-v1.schema.json",
+  "docs/agent-tooling/g0-readiness.json",
+  "docs/agent-tooling/g0-readiness.schema.json",
+  "docs/agent-tooling/integration-lock.g0.json",
+  "docs/agent-tooling/integration-lock.schema.json",
+  "docs/agent-tooling/inventories/plane-mcp-v0.2.11.json",
+  "docs/agent-tooling/model-facing-surface.json",
+  "docs/agent-tooling/model-facing-surface.schema.json",
+  "docs/agent-tooling/ownership-map.json",
+  "docs/agent-tooling/ownership-map.schema.json",
+];
+
+const verifierPolicyPaths = [
+  "docs/agent-tooling/verifiers/render-non-ui-implementation-plan.mjs",
+  "docs/agent-tooling/verifiers/render-requirement-coverage.mjs",
+  "docs/agent-tooling/verifiers/run-g0-negative-controls.mjs",
+  "docs/agent-tooling/verifiers/seal-g0-evidence.mjs",
+  "docs/agent-tooling/verifiers/test-g0-approved-fixture.mjs",
+  "docs/agent-tooling/verifiers/validate-ajv-2020.mjs",
+  "docs/agent-tooling/verifiers/validate-ownership-map.mjs",
+  "docs/agent-tooling/verifiers/validate-planning-fixtures.mjs",
+  "docs/agent-tooling/verifiers/validate-requirement-coverage.mjs",
+  "docs/agent-tooling/verifiers/verify-g0-preflight.mjs",
+];
+
+const retiredNameSourcePolicy = {
+  markdownPaths: markdownPolicyPaths,
+  structuredPaths: structuredPolicyPaths,
+  verifierPaths: verifierPolicyPaths,
+  markdownAuthoritySections,
+  structuredAuthority: {
+    [paths.modelSurface]: {
+      authoritative: [
+        ["names", "*", "name"],
+        ["names", "*", "description"],
+      ],
+      nonModelFacing: [
+        ["$schema"],
+        ["schemaVersion"],
+        ["surfaceId"],
+        ["status"],
+        ["g0ContractPolicy", "*"],
+        ["names", "*", "kind"],
+        ["names", "*", "operationId"],
+        ["names", "*", "disclosure"],
+        ["retiredNames", "*"],
+        ["retiredNames", "*", "*"],
+      ],
+      capabilityRoots: [["names", "*"]],
+    },
+    [paths.modelSurfaceSchema]: {
+      authoritative: [["properties", "names", "items", "properties", "description", "description"]],
+      nonModelFacing: [],
+      capabilityRoots: [["properties", "names", "items", "properties", "description"]],
+    },
+    [paths.predicates]: {
+      authoritative: [["common", "*", "expected", "required", "*"]],
+      nonModelFacing: [],
+      capabilityRoots: [["common", "*", "expected", "required"]],
+    },
   },
-  [paths.predicates]: {
-    default: "non-model-facing",
-    authoritative: [["common", "*", "expected", "required", "*"]],
-    nonModelFacing: [],
-  },
-  [paths.fixture]: { default: "non-model-facing", authoritative: [], nonModelFacing: [] },
-  [paths.plan]: { default: "non-model-facing", authoritative: [], nonModelFacing: [] },
-  [paths.lock]: { default: "non-model-facing", authoritative: [], nonModelFacing: [] },
-  [paths.readiness]: { default: "non-model-facing", authoritative: [], nonModelFacing: [] },
-  [paths.ownershipMap]: { default: "non-model-facing", authoritative: [], nonModelFacing: [] },
 };
 
 function absolute(relativePath) {
@@ -276,6 +336,80 @@ function checkMarkdownLinks() {
       throw new Error(`${path} contains a non-portable absolute path ${candidate}`);
     }
   }
+}
+
+function markdownSectionAtLine(source, lineStart) {
+  let section = "root";
+  for (const match of source.matchAll(/^#{1,6}\s+(.+?)\s*#*$/gm)) {
+    if (match.index > lineStart) break;
+    section = match[1];
+  }
+  return section;
+}
+
+function parseFrozenModelFacingTable(manifest) {
+  const heading = "## Frozen model-facing surface";
+  const headingStart = manifest.indexOf(heading);
+  assert(headingStart >= 0, "manifest is missing the Frozen model-facing surface section");
+  const sectionEnd = manifest.indexOf("\n## ", headingStart + heading.length);
+  const section = manifest.slice(headingStart, sectionEnd === -1 ? manifest.length : sectionEnd);
+  const lines = section.split("\n");
+  const headerIndexes = lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => /^\|.*\|$/.test(line))
+    .filter(({ line }) => line.split("|")[1]?.trim() === "Model-facing name")
+    .map(({ index }) => index);
+  assert(headerIndexes.length === 1, "manifest frozen model-facing table must have exactly one name header");
+  const headerIndex = headerIndexes[0];
+  assert(
+    /^\|(?:\s*:?-{3,}:?\s*\|){4}$/.test(lines[headerIndex + 1] ?? ""),
+    "manifest frozen model-facing table has an invalid separator"
+  );
+  const rows = [];
+  for (let index = headerIndex + 2; index < lines.length && /^\|.*\|$/.test(lines[index]); index += 1) {
+    const cells = lines[index]
+      .trim()
+      .slice(1, -1)
+      .split("|")
+      .map((cell) => cell.trim());
+    assert(cells.length === 4, "manifest frozen model-facing table row must have four columns");
+    rows.push(cells[0].replace(/^`|`$/g, ""));
+  }
+  assert(rows.length > 0, "manifest frozen model-facing table has no data rows");
+  return rows;
+}
+
+function checkPolicyCoverage(lock) {
+  const governed = [
+    ...retiredNameSourcePolicy.markdownPaths,
+    ...retiredNameSourcePolicy.structuredPaths,
+    ...retiredNameSourcePolicy.verifierPaths,
+  ];
+  assert(new Set(governed).size === governed.length, "retired-name source policy contains duplicate paths");
+  const sealed = [...new Set([...lock.seal.contentPaths, ...lock.seal.sealEvidencePaths])].toSorted();
+  assert(
+    JSON.stringify(governed.toSorted()) === JSON.stringify(sealed),
+    "retired-name source policy must exactly cover sealed content and governed seal evidence paths"
+  );
+  assert(
+    Object.keys(retiredNameSourcePolicy.markdownAuthoritySections).every((path) =>
+      retiredNameSourcePolicy.markdownPaths.includes(path)
+    ),
+    "retired-name Markdown authority policy names an ungoverned path"
+  );
+  const expectedMarkdown = [
+    ...canonicalMarkdown.map((path) =>
+      path.startsWith("../") ? `docs/${path.slice(3)}` : `docs/agent-tooling/${path}`
+    ),
+    "docs/agent-tooling/SOURCE-INVENTORY.md",
+    "docs/agent-tooling/WORKLOG.md",
+  ]
+    .filter((path, index, all) => all.indexOf(path) === index)
+    .toSorted();
+  assert(
+    JSON.stringify(retiredNameSourcePolicy.markdownPaths.toSorted()) === JSON.stringify(expectedMarkdown),
+    "retired-name Markdown policy does not exactly cover canonical Markdown and governed evidence"
+  );
 }
 
 function checkAdrRegister() {
@@ -575,6 +709,10 @@ function checkModelFacingSurface() {
       surface.g0ContractPolicy.physicalTransportGate.includes("later"),
     "model surface has an invalid G0/G1 policy"
   );
+  assert(
+    JSON.stringify(parseFrozenModelFacingTable(read(paths.manifest))) === JSON.stringify(expected),
+    "frozen manifest model-facing table differs from the exact ordered model-facing surface"
+  );
 }
 
 function escapeRegExp(value) {
@@ -716,12 +854,20 @@ function pointerMatches(segments, pattern) {
   return segments.length === pattern.length && pattern.every((part, index) => part === "*" || part === segments[index]);
 }
 
+function pointerStartsWith(segments, pattern) {
+  return segments.length >= pattern.length && pattern.every((part, index) => part === "*" || part === segments[index]);
+}
+
 function structuredFieldClassification(path, segments) {
-  const policy = structuredRetiredNamePolicies[path];
-  assert(policy, `no structured retired-name authority policy exists for ${path}`);
+  const policy = retiredNameSourcePolicy.structuredAuthority[path] ?? {
+    authoritative: [],
+    nonModelFacing: [],
+    capabilityRoots: [],
+  };
   if (policy.nonModelFacing.some((pattern) => pointerMatches(segments, pattern))) return "non-model-facing";
   if (policy.authoritative.some((pattern) => pointerMatches(segments, pattern))) return "authoritative";
-  return policy.default;
+  if (policy.capabilityRoots.some((pattern) => pointerStartsWith(segments, pattern))) return "unclassified";
+  return "ordinary-evidence";
 }
 
 function jsonPointer(segments) {
@@ -731,8 +877,14 @@ function jsonPointer(segments) {
 function checkStructuredRetiredNames(path, value, retired, segments = []) {
   if (typeof value === "string") {
     const classification = structuredFieldClassification(path, segments);
-    if (classification === "unclassified")
-      throw new Error(`${path} has an unclassified authority pointer ${jsonPointer(segments)}`);
+    if (classification === "unclassified") {
+      const violations = retiredNameViolations(value, retired, { structured: true });
+      if (
+        violations.size > 0 ||
+        /\bauthoritative\b.*\bmodel[- ]facing\b|\bmodel[- ]facing\b.*\bauthoritative\b/i.test(value)
+      )
+        throw new Error(`${path} has an unclassified authority pointer ${jsonPointer(segments)}`);
+    }
     if (classification !== "authoritative") return;
     for (const name of retiredNameViolations(value, retired, { structured: true }))
       throw new Error(`${path} authoritatively uses retired name ${name} in ${jsonPointer(segments)}`);
@@ -836,28 +988,27 @@ function checkStructuredModelFacingFields() {
 function checkRetiredNames() {
   const surface = readJson(paths.modelSurface);
   const retired = [...surface.retiredNames.bare, ...surface.retiredNames.historicalPrefixed];
-  const configuredMarkdownPaths = Object.keys(canonicalMarkdownRetiredNamePolicies).toSorted();
-  const expectedMarkdownPaths = [...canonicalMarkdown].toSorted();
-  assert(
-    JSON.stringify(configuredMarkdownPaths) === JSON.stringify(expectedMarkdownPaths),
-    "canonical Markdown retired-name policy is not an exact explicit classification"
-  );
-  assert(
-    Object.values(canonicalMarkdownRetiredNamePolicies).every(
-      (policy) => policy === "authoritative" || policy === "non-model-facing"
-    ),
-    "canonical Markdown retired-name policy contains an invalid classification"
-  );
+  checkPolicyCoverage(lock);
 
-  for (const path of Object.keys(structuredRetiredNamePolicies))
+  for (const path of retiredNameSourcePolicy.structuredPaths)
     checkStructuredRetiredNames(path, readJson(path), retired);
 
-  for (const [path, policy] of Object.entries(canonicalMarkdownRetiredNamePolicies)) {
-    if (policy !== "authoritative") continue;
-    for (const line of read(`docs/agent-tooling/${path}`).split("\n")) {
+  for (const path of retiredNameSourcePolicy.markdownPaths) {
+    const source = read(path);
+    let offset = 0;
+    for (const line of source.split("\n")) {
+      const section = markdownSectionAtLine(source, offset);
       const violations = retiredNameViolations(line, retired);
-      for (const name of violations)
-        throw new Error(`docs/agent-tooling/${path} authoritatively uses retired name ${name}`);
+      const authoritative = retiredNameSourcePolicy.markdownAuthoritySections[path]?.includes(section) ?? false;
+      if (authoritative) {
+        for (const name of violations) throw new Error(`${path} authoritatively uses retired name ${name}`);
+      } else if (
+        violations.size > 0 &&
+        /\bauthoritative\b.*\bmodel[- ]facing\b|\bmodel[- ]facing\b.*\bauthoritative\b/i.test(line)
+      ) {
+        throw new Error(`${path} has an unclassified authority section ${section}`);
+      }
+      offset += line.length + 1;
     }
   }
   const required =

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
@@ -45,6 +45,28 @@ function sha256(value) {
 function append(directory, path, text) {
   const target = join(directory, path);
   writeFileSync(target, `${readFileSync(target, "utf8")}${text}`);
+}
+
+function insertAfterHeading(directory, path, heading, text) {
+  replace(directory, path, `${heading}\n`, `${heading}\n\n${text}\n`);
+}
+
+function replaceManifestModelFacingName(directory, name) {
+  const path = "docs/agent-tooling/APPROVAL-MANIFEST.md";
+  const source = readFileSync(join(directory, path), "utf8");
+  const updated = source.replace(/(\|\s*)`search_catalog`(?=\s*\|)/, `$1\`${name}\``);
+  if (updated === source) throw new Error("manifest search_catalog row anchor missing");
+  writeFileSync(join(directory, path), updated);
+}
+
+function insertModelSurfaceSchemaDescription(directory, name) {
+  const path = "docs/agent-tooling/model-facing-surface.schema.json";
+  replace(
+    directory,
+    path,
+    '"description": { "type": "string", "minLength": 1 },',
+    `"description": { "type": "string", "minLength": 1, "description": "Authoritative model-facing name: ${name}" },`
+  );
 }
 
 function replace(directory, path, from, to) {
@@ -98,9 +120,69 @@ function createTemporaryCheckout() {
   // Keep dependencies outside the checkout so a resealed control is clean
   // when the verifier checks its own clean-worktree invariant.
   symlinkSync(join(repositoryRoot, "node_modules"), join(temporaryParent, "node_modules"), "dir");
-  run(repositoryRoot, ["git", "clone", "--local", "--no-hardlinks", repositoryRoot, temporaryRoot]);
+  run(repositoryRoot, [
+    "git",
+    "-c",
+    "maintenance.auto=false",
+    "-c",
+    "gc.auto=0",
+    "clone",
+    "--local",
+    "--no-hardlinks",
+    repositoryRoot,
+    temporaryRoot,
+  ]);
+  run(temporaryRoot, ["git", "config", "maintenance.auto", "false"]);
+  run(temporaryRoot, ["git", "config", "gc.auto", "0"]);
   run(temporaryRoot, ["git", "remote", "add", "upstream", "https://github.com/uxheavy/plane-runner.git"]);
   return { temporaryParent, temporaryRoot };
+}
+
+async function cleanupTemporaryCheckout(temporaryParent, label, remove = rmSync) {
+  const backoffMilliseconds = [0, 50, 150, 350, 700];
+  async function attemptCleanup(attempt, lastError) {
+    try {
+      remove(temporaryParent, { recursive: true, force: true });
+      if (!existsSync(temporaryParent)) return;
+      lastError = new Error("temporary checkout still exists after recursive cleanup");
+    } catch (error) {
+      lastError = error;
+    }
+    if (attempt < backoffMilliseconds.length - 1) {
+      await new Promise((done) => setTimeout(done, backoffMilliseconds[attempt + 1]));
+      return attemptCleanup(attempt + 1, lastError);
+    }
+    throw new Error(
+      `temporary checkout cleanup failed for ${label} after ${backoffMilliseconds.length} attempts: ${
+        lastError instanceof Error ? lastError.message : String(lastError)
+      }`
+    );
+  }
+  return attemptCleanup(0, undefined);
+}
+
+async function runTemporaryCase(testCase, execute) {
+  const { temporaryParent, temporaryRoot } = createTemporaryCheckout();
+  let assertionError;
+  try {
+    execute(temporaryRoot);
+  } catch (error) {
+    assertionError = error;
+  }
+  let cleanupError;
+  try {
+    await cleanupTemporaryCheckout(temporaryParent, testCase.name);
+  } catch (error) {
+    cleanupError = error;
+  }
+  if (assertionError && cleanupError)
+    throw new Error(
+      `control assertion failure: ${assertionError instanceof Error ? assertionError.message : String(assertionError)}; ${
+        cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
+      }`
+    );
+  if (assertionError) throw assertionError;
+  if (cleanupError) throw cleanupError;
 }
 
 function createApprovedChain(directory) {
@@ -489,13 +571,91 @@ const approvalManifestPermittedCases = retiredNames.flatMap((name) => [
   },
 ]);
 
+const manifestTableResealedCases = retiredNames.map((name) => ({
+  name: `valid-reseal frozen manifest table retired row ${name}`,
+  mutate: (directory) => replaceManifestModelFacingName(directory, name),
+  expected: "frozen manifest model-facing table differs from the exact ordered model-facing surface",
+  reseal: true,
+}));
+
+const omittedCanonicalAuthorityCases = [
+  {
+    name: "valid-reseal GOAL authoritative section",
+    mutate: (directory) =>
+      insertAfterHeading(
+        directory,
+        "docs/agent-tooling/GOAL.md",
+        "## Normative resource catalog and authority",
+        "Authoritative model-facing name: docs"
+      ),
+    expected: "docs/agent-tooling/GOAL.md authoritatively uses retired name docs",
+    reseal: true,
+  },
+  {
+    name: "valid-reseal product-requirements authoritative search",
+    mutate: (directory) =>
+      insertAfterHeading(
+        directory,
+        "docs/agent-tooling/product-requirements.md",
+        "## Required outcomes",
+        "Authoritative model-facing name: search"
+      ),
+    expected: "docs/agent-tooling/product-requirements.md authoritatively uses retired name search",
+    reseal: true,
+  },
+  {
+    name: "valid-reseal model-surface-schema description execute",
+    mutate: (directory) => insertModelSurfaceSchemaDescription(directory, "execute"),
+    expected:
+      "docs/agent-tooling/model-facing-surface.schema.json authoritatively uses retired name execute in /properties/names/items/properties/description/description",
+    reseal: true,
+  },
+];
+
+const policyCoverageCases = [
+  {
+    name: "valid-reseal omitted product-requirements authority policy",
+    mutate: (directory) => {
+      replace(
+        directory,
+        "docs/agent-tooling/verifiers/verify-g0-preflight.mjs",
+        '  "docs/agent-tooling/product-requirements.md": ["Required outcomes"],\n',
+        ""
+      );
+      insertAfterHeading(
+        directory,
+        "docs/agent-tooling/product-requirements.md",
+        "## Required outcomes",
+        "Authoritative model-facing name: search"
+      );
+    },
+    expected: "docs/agent-tooling/product-requirements.md has an unclassified authority section Required outcomes",
+    reseal: true,
+  },
+  {
+    name: "valid-reseal drifted authority policy path",
+    mutate: (directory) =>
+      replace(
+        directory,
+        "docs/agent-tooling/verifiers/verify-g0-preflight.mjs",
+        '  "docs/agent-tooling/product-requirements.md": ["Required outcomes"],\n',
+        '  "docs/agent-tooling/product-requirements.md": ["Required outcomes"],\n  "docs/agent-tooling/not-sealed.md": ["root"],\n'
+      ),
+    expected: "retired-name Markdown authority policy names an ungoverned path",
+    reseal: true,
+  },
+];
+
 cases.push(
   ...resealedAdversarialCases,
   ...existingResealedPositiveCases,
   ...resealedPositiveCases,
   ...crossFamilyResealedCases,
   ...approvalManifestAuthoritativeCases,
-  ...approvalManifestPermittedCases
+  ...approvalManifestPermittedCases,
+  ...manifestTableResealedCases,
+  ...omittedCanonicalAuthorityCases,
+  ...policyCoverageCases
 );
 
 function runPreflight(directory, testCase, { allowDirty = false } = {}) {
@@ -509,23 +669,19 @@ function runPreflight(directory, testCase, { allowDirty = false } = {}) {
   return result;
 }
 
-function runCase(testCase) {
-  const { temporaryParent, temporaryRoot } = createTemporaryCheckout();
-  try {
+async function runCase(testCase) {
+  await runTemporaryCase(testCase, (temporaryRoot) => {
     if (testCase.allowDirty !== false) writeFileSync(join(temporaryRoot, ".g0-negative-control"), `${testCase.name}\n`);
     testCase.mutate(temporaryRoot);
     runPreflight(temporaryRoot, testCase, { allowDirty: testCase.allowDirty !== false });
     console.log(
       `${testCase.expectSuccess ? "PASS" : "PASS"}: ${testCase.name} ${testCase.expectSuccess ? "accepted" : `rejected for ${testCase.expected}`}`
     );
-  } finally {
-    rmSync(temporaryParent, { recursive: true, force: true });
-  }
+  });
 }
 
-function runResealedCase(testCase) {
-  const { temporaryParent, temporaryRoot } = createTemporaryCheckout();
-  try {
+async function runResealedCase(testCase) {
+  await runTemporaryCase(testCase, (temporaryRoot) => {
     testCase.mutate(temporaryRoot);
     if (testCase.refreshPromptDigest) refreshPromptDigest(temporaryRoot);
     run(temporaryRoot, ["git", "add", "--all"]);
@@ -542,10 +698,28 @@ function runResealedCase(testCase) {
     console.log(
       `${testCase.expectSuccess ? "PASS" : "PASS"}: ${testCase.name} ${testCase.expectSuccess ? "accepted" : `rejected for ${testCase.expected}`}`
     );
-  } finally {
-    rmSync(temporaryParent, { recursive: true, force: true });
-  }
+  });
 }
 
-for (const testCase of cases) (testCase.reseal ? runResealedCase : runCase)(testCase);
-console.log(`PASS: ${cases.length} G0 negative controls exercised`);
+async function runCleanupRetryControl() {
+  const temporaryParent = mkdtempSync(join(tmpdir(), "plane-g0-cleanup-control-"));
+  let attempts = 0;
+  await cleanupTemporaryCheckout(temporaryParent, "cleanup retry/backoff control", (target, options) => {
+    attempts += 1;
+    if (attempts === 1) {
+      const error = new Error("simulated ENOTEMPTY");
+      error.code = "ENOTEMPTY";
+      throw error;
+    }
+    rmSync(target, options);
+  });
+  if (attempts !== 2) throw new Error(`cleanup retry control expected two attempts, observed ${attempts}`);
+  console.log("PASS: cleanup retry/backoff control accepted");
+}
+
+await cases.reduce(
+  (previous, testCase) => previous.then(() => (testCase.reseal ? runResealedCase : runCase)(testCase)),
+  Promise.resolve()
+);
+await runCleanupRetryControl();
+console.log(`PASS: ${cases.length + 1} G0 negative and harness controls exercised`);
