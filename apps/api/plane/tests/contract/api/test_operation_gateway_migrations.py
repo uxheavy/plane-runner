@@ -1,4 +1,5 @@
 import uuid
+from datetime import timedelta
 
 import pytest
 from django.db import connection
@@ -198,7 +199,7 @@ def test_historical_invocation_backfill_is_deterministic_across_directions():
         ("outcome_unknown", True, {"state": "outcome_unknown"}, None),
     ]
     for index, (state, dispatch_started, delivery_result, lease_until) in enumerate(state_rows):
-        NewPublication.objects.create(
+        publication = NewPublication.objects.create(
             id=uuid.uuid4(),
             idempotency=roundtrip_record,
             invocation_id=roundtrip_record.invocation_id,
@@ -214,6 +215,13 @@ def test_historical_invocation_backfill_is_deterministic_across_directions():
             lease_until=lease_until,
             published_at=now if state == "succeeded" else None,
         )
+        created_at = now - timedelta(days=index + 1)
+        updated_at = now - timedelta(hours=index + 1)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE operation_gateway_publication SET created_at = %s, updated_at = %s WHERE id = %s",
+                [created_at, updated_at, publication.id],
+            )
 
     def publication_snapshot(model, record_id):
         return [
@@ -221,6 +229,7 @@ def test_historical_invocation_backfill_is_deterministic_across_directions():
                 str(row.id),
                 str(row.idempotency_id),
                 str(row.invocation_id),
+                row.kind,
                 str(row.target_id),
                 row.publication_key,
                 row.payload,
@@ -231,6 +240,8 @@ def test_historical_invocation_backfill_is_deterministic_across_directions():
                 row.dispatch_started,
                 row.lease_until.isoformat() if row.lease_until else None,
                 row.published_at.isoformat() if row.published_at else None,
+                row.created_at.isoformat(),
+                row.updated_at.isoformat(),
             )
             for row in model.objects.filter(idempotency_id=record_id, kind="webhook").order_by("id")
         ]
@@ -242,6 +253,24 @@ def test_historical_invocation_backfill_is_deterministic_across_directions():
     assert reverse_row.state == "failed"
     assert reverse_row.payload["__plane_0126_reverse__"]["version"] == 1
     assert len(reverse_row.payload["__plane_0126_reverse__"]["rows"]) == len(state_rows)
+    assert {
+        "id",
+        "idempotency_id",
+        "invocation_id",
+        "kind",
+        "target_id",
+        "publication_key",
+        "payload",
+        "state",
+        "attempts",
+        "last_error",
+        "delivery_result",
+        "dispatch_started",
+        "lease_until",
+        "published_at",
+        "created_at",
+        "updated_at",
+    } <= set(reverse_row.payload["__plane_0126_reverse__"]["rows"][0])
     _, roundtrip_apps = _migrate_and_reload(HEAD_MIGRATION)
     RoundtripPublication = roundtrip_apps.get_model("db", "OperationGatewayPublication")
     assert publication_snapshot(RoundtripPublication, roundtrip_record.pk) == before_roundtrip

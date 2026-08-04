@@ -3,7 +3,7 @@
 import copy
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from django.conf import settings
 from django.db import migrations, models
@@ -81,7 +81,7 @@ def split_legacy_webhook_intents(apps, schema_editor):
         payload = publication.payload if isinstance(publication.payload, dict) else {}
         marker = payload.get(REVERSE_MARKER)
         if isinstance(marker, dict) and marker.get("version") == 1:
-            _restore_reversed_webhook_rows(Publication, publication, marker)
+            _restore_reversed_webhook_rows(Publication, publication, marker, schema_editor)
             continue
         targets = list(
             Webhook.objects.filter(
@@ -249,11 +249,20 @@ def _legacy_state(publication) -> str:
     return "failed"
 
 
+def _serialize_datetime(value):
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
 def _serialize_webhook_publication(publication) -> dict:
     return {
         "id": str(publication.id),
         "idempotency_id": str(publication.idempotency_id),
         "invocation_id": str(publication.invocation_id),
+        "kind": publication.kind,
         "target_id": str(publication.target_id) if publication.target_id else None,
         "publication_key": publication.publication_key,
         "payload": copy.deepcopy(publication.payload) if isinstance(publication.payload, dict) else {},
@@ -262,16 +271,20 @@ def _serialize_webhook_publication(publication) -> dict:
         "last_error": publication.last_error,
         "delivery_result": publication.delivery_result,
         "dispatch_started": publication.dispatch_started,
-        "lease_until": publication.lease_until.isoformat() if publication.lease_until else None,
-        "published_at": publication.published_at.isoformat() if publication.published_at else None,
+        "lease_until": _serialize_datetime(publication.lease_until),
+        "published_at": _serialize_datetime(publication.published_at),
+        "created_at": _serialize_datetime(publication.created_at),
+        "updated_at": _serialize_datetime(publication.updated_at),
     }
 
 
 def _parse_datetime(value):
-    return datetime.fromisoformat(value) if isinstance(value, str) else value
+    if not isinstance(value, str):
+        return value
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
-def _restore_reversed_webhook_rows(Publication, legacy_publication, marker: dict) -> None:
+def _restore_reversed_webhook_rows(Publication, legacy_publication, marker: dict, schema_editor) -> None:
     rows = marker.get("rows")
     if not isinstance(rows, list) or not rows:
         raise RuntimeError("Invalid 0126 reverse marker for webhook publication")
@@ -279,10 +292,14 @@ def _restore_reversed_webhook_rows(Publication, legacy_publication, marker: dict
         if not isinstance(row, dict):
             raise RuntimeError("Invalid 0126 reverse marker row")
         target_id = row.get("target_id")
+        created_at = _parse_datetime(row.get("created_at"))
+        updated_at = _parse_datetime(row.get("updated_at"))
+        if created_at is None or updated_at is None:
+            raise RuntimeError("Invalid 0126 reverse marker row timestamps")
         defaults = {
-            "idempotency_id": legacy_publication.idempotency_id,
+            "idempotency_id": uuid.UUID(row["idempotency_id"]),
             "invocation_id": uuid.UUID(row["invocation_id"]),
-            "kind": "webhook",
+            "kind": row.get("kind", "webhook"),
             "target_id": uuid.UUID(target_id) if target_id else None,
             "publication_key": row["publication_key"],
             "payload": row.get("payload") if isinstance(row.get("payload"), dict) else {},
@@ -300,8 +317,26 @@ def _restore_reversed_webhook_rows(Publication, legacy_publication, marker: dict
             for field, value in defaults.items():
                 setattr(restored, field, value)
             restored.save()
+            restored_id = restored.id
         else:
-            Publication.objects.create(id=uuid.UUID(row["id"]), **defaults)
+            restored_id = Publication.objects.create(id=uuid.UUID(row["id"]), **defaults).id
+        _restore_publication_timestamps(
+            schema_editor,
+            restored_id,
+            created_at,
+            updated_at,
+        )
+
+
+def _restore_publication_timestamps(schema_editor, publication_id, created_at, updated_at) -> None:
+    table_name = schema_editor.quote_name("operation_gateway_publication")
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute(
+            f"UPDATE {table_name} SET created_at = %s, updated_at = %s WHERE id = %s",
+            [created_at, updated_at, publication_id],
+        )
+        if cursor.rowcount != 1:
+            raise RuntimeError(f"Publication {publication_id} was not restored")
 
 
 def _role_identifier(connection, value: str) -> str:

@@ -52,12 +52,9 @@ x-app-env: &app-env
   CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
   GUNICORN_WORKERS: 1
   USE_MINIO: ${USE_MINIO:-1}
-  DATABASE_URL: ${DATABASE_URL:-postgresql://plane_runtime:change-this-runtime-password@plane-db/plane}
-  DATABASE_RUNTIME_URL: ${DATABASE_RUNTIME_URL:-postgresql://plane_runtime:change-this-runtime-password@plane-db/plane}
   PLANE_AUDIT_RUNTIME_ROLE: ${PLANE_AUDIT_RUNTIME_ROLE:-plane_runtime}
   PLANE_AUDIT_GOVERNANCE_ROLE: ${PLANE_AUDIT_GOVERNANCE_ROLE:-plane_audit_owner}
   PLANE_AUDIT_MIGRATION_ROLE: ${PLANE_AUDIT_MIGRATION_ROLE:-plane_migrator}
-  PLANE_AUDIT_RUNTIME_PASSWORD: ${PLANE_AUDIT_RUNTIME_PASSWORD:-change-this-runtime-password}
   PLANE_AUDIT_ENFORCE_ROLE_SEPARATION: ${PLANE_AUDIT_ENFORCE_ROLE_SEPARATION:-1}
   SECRET_KEY: ${SECRET_KEY}
   AMQP_URL: ${AMQP_URL:-amqp://plane:plane@plane-mq:5672/plane}
@@ -66,6 +63,22 @@ x-app-env: &app-env
   LIVE_SERVER_SECRET_KEY: ${LIVE_SERVER_SECRET_KEY}
   WEBHOOK_ALLOWED_IPS: ${WEBHOOK_ALLOWED_IPS:-}
   WEBHOOK_ALLOWED_HOSTS: ${WEBHOOK_ALLOWED_HOSTS:-}
+
+x-runtime-db-env: &runtime-db-env
+  DATABASE_URL: ${DATABASE_URL:-postgresql://plane_runtime:change-this-runtime-password@plane-db/plane}
+  DATABASE_RUNTIME_URL: ${DATABASE_RUNTIME_URL:-postgresql://plane_runtime:change-this-runtime-password@plane-db/plane}
+
+x-migration-db-env: &migration-db-env
+  DATABASE_URL: ${DATABASE_MIGRATION_URL:-postgresql://plane_migrator:change-this-migration-password@plane-db/plane}
+  DATABASE_MIGRATION_URL: ${DATABASE_MIGRATION_URL:-postgresql://plane_migrator:change-this-migration-password@plane-db/plane}
+  PLANE_AUDIT_RUNTIME_PASSWORD: ${PLANE_AUDIT_RUNTIME_PASSWORD:-change-this-runtime-password}
+  PLANE_DB_MIGRATION_MODE: "1"
+  PGHOST: ${PGHOST:-plane-db}
+  PGDATABASE: ${PGDATABASE:-plane}
+  POSTGRES_USER: ${POSTGRES_USER:-plane_migrator}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-this-migration-password}
+  POSTGRES_DB: ${POSTGRES_DB:-plane}
+  POSTGRES_PORT: ${POSTGRES_PORT:-5432}
 
 services:
   web:
@@ -121,7 +134,7 @@ services:
     volumes:
       - logs_api:/code/plane/logs
     environment:
-      <<: [*app-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
+      <<: [*app-env, *runtime-db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
     depends_on:
       - plane-db
       - plane-redis
@@ -137,7 +150,7 @@ services:
     volumes:
       - logs_worker:/code/plane/logs
     environment:
-      <<: [*app-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
+      <<: [*app-env, *runtime-db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
     depends_on:
       - api
       - plane-db
@@ -154,7 +167,7 @@ services:
     volumes:
       - logs_beat-worker:/code/plane/logs
     environment:
-      <<: [*app-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
+      <<: [*app-env, *runtime-db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
     depends_on:
       - api
       - plane-db
@@ -171,9 +184,7 @@ services:
     volumes:
       - logs_migrator:/code/plane/logs
     environment:
-      <<: [*app-env, *db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
-      DATABASE_MIGRATION_URL: ${DATABASE_MIGRATION_URL:-postgresql://plane_migrator:change-this-migration-password@plane-db/plane}
-      PLANE_DB_MIGRATION_MODE: "1"
+      <<: [*app-env, *migration-db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
     depends_on:
       - plane-db
       - plane-redis
