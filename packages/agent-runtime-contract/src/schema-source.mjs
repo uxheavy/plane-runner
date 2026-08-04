@@ -4,60 +4,73 @@ const draft = "https://json-schema.org/draft/2020-12/schema";
 const ref = (name) => ({ $ref: `#/$defs/${name}` });
 const namespacedPattern = (namespace) => `^${namespace}:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$`;
 const digestPattern = (namespace) => `^${namespace}:[a-f0-9]{64}$`;
+const stringWithBytes = (maxLength, xUtf8ByteMax, extra = {}) => ({
+  type: "string",
+  maxLength,
+  "x-utf8ByteMax": xUtf8ByteMax,
+  ...extra,
+});
 
 const definitions = {
-  workspaceRef: { type: "string", maxLength: 128, pattern: namespacedPattern("workspace") },
-  actorRef: { type: "string", maxLength: 128, pattern: namespacedPattern("actor") },
-  assignmentRef: { type: "string", maxLength: 128, pattern: namespacedPattern("assignment") },
-  profileVersionRef: { type: "string", maxLength: 128, pattern: namespacedPattern("profile-version") },
-  runId: { type: "string", maxLength: 128, pattern: namespacedPattern("run") },
-  invocationId: { type: "string", maxLength: 128, pattern: namespacedPattern("invocation") },
-  targetRef: { type: "string", maxLength: 128, pattern: namespacedPattern("target") },
-  contextRef: { type: "string", maxLength: 128, pattern: namespacedPattern("context") },
-  operationRef: { type: "string", maxLength: 128, pattern: namespacedPattern("operation") },
-  eventRef: { type: "string", maxLength: 128, pattern: namespacedPattern("event") },
-  correlationId: { type: "string", maxLength: 128, pattern: namespacedPattern("correlation") },
-  idempotencyKey: { type: "string", maxLength: 128, pattern: namespacedPattern("idempotency") },
-  causationRef: { type: "string", maxLength: 128, pattern: namespacedPattern("causation") },
-  cancellationRef: { type: "string", maxLength: 128, pattern: namespacedPattern("cancellation") },
-  checkpointRef: { type: "string", maxLength: 128, pattern: namespacedPattern("checkpoint") },
-  leaseId: { type: "string", maxLength: 128, pattern: namespacedPattern("lease") },
-  operationAttemptRef: { type: "string", maxLength: 128, pattern: namespacedPattern("operation-attempt") },
-  receiptRef: { type: "string", maxLength: 128, pattern: namespacedPattern("receipt") },
-  auditReceiptRef: { type: "string", maxLength: 128, pattern: namespacedPattern("audit-receipt") },
-  productEventRef: { type: "string", maxLength: 128, pattern: namespacedPattern("product-event") },
-  conversationRef: { type: "string", maxLength: 128, pattern: namespacedPattern("conversation") },
-  inputRequestRef: { type: "string", maxLength: 128, pattern: namespacedPattern("input-request") },
-  artifactRef: { type: "string", maxLength: 128, pattern: namespacedPattern("artifact") },
-  outcomeSubmissionRef: { type: "string", maxLength: 128, pattern: namespacedPattern("outcome-submission") },
-  payloadRef: { type: "string", maxLength: 128, pattern: namespacedPattern("payload") },
-  contractDigest: { type: "string", minLength: 64, maxLength: 64, pattern: "^[a-f0-9]{64}$" },
-  contentDigest: { type: "string", minLength: 72, maxLength: 72, pattern: digestPattern("content") },
+  workspaceRef: stringWithBytes(128, 128, { pattern: namespacedPattern("workspace") }),
+  actorRef: stringWithBytes(128, 128, { pattern: namespacedPattern("actor") }),
+  assignmentRef: stringWithBytes(128, 128, { pattern: namespacedPattern("assignment") }),
+  profileVersionRef: stringWithBytes(128, 128, { pattern: namespacedPattern("profile-version") }),
+  runId: stringWithBytes(128, 128, { pattern: namespacedPattern("run") }),
+  invocationId: stringWithBytes(128, 128, { pattern: namespacedPattern("invocation") }),
+  targetRef: stringWithBytes(128, 128, { pattern: namespacedPattern("target") }),
+  contextRef: stringWithBytes(128, 128, { pattern: namespacedPattern("context") }),
+  operationRef: stringWithBytes(128, 128, { pattern: namespacedPattern("operation") }),
+  eventRef: stringWithBytes(128, 128, { pattern: namespacedPattern("event") }),
+  correlationId: stringWithBytes(128, 128, { pattern: namespacedPattern("correlation") }),
+  idempotencyKey: stringWithBytes(128, 128, { pattern: namespacedPattern("idempotency") }),
+  causationRef: stringWithBytes(128, 128, { pattern: namespacedPattern("causation") }),
+  cancellationRef: stringWithBytes(128, 128, { pattern: namespacedPattern("cancellation") }),
+  checkpointRef: stringWithBytes(128, 128, { pattern: namespacedPattern("checkpoint") }),
+  leaseId: stringWithBytes(128, 128, { pattern: namespacedPattern("lease") }),
+  operationAttemptRef: stringWithBytes(128, 128, { pattern: namespacedPattern("operation-attempt") }),
+  applicationServiceRef: stringWithBytes(128, 128, { pattern: namespacedPattern("application-service") }),
+  gatewayReceiptRef: stringWithBytes(128, 128, { pattern: namespacedPattern("gateway-receipt") }),
+  receiptRef: stringWithBytes(128, 128, { pattern: namespacedPattern("receipt") }),
+  auditReceiptRef: stringWithBytes(128, 128, { pattern: namespacedPattern("audit-receipt") }),
+  productEventRef: stringWithBytes(128, 128, { pattern: namespacedPattern("product-event") }),
+  conversationRef: stringWithBytes(128, 128, { pattern: namespacedPattern("conversation") }),
+  inputRequestRef: stringWithBytes(128, 128, { pattern: namespacedPattern("input-request") }),
+  artifactRef: stringWithBytes(128, 128, { pattern: namespacedPattern("artifact") }),
+  outcomeSubmissionRef: stringWithBytes(128, 128, { pattern: namespacedPattern("outcome-submission") }),
+  payloadRef: stringWithBytes(128, 128, { pattern: namespacedPattern("payload") }),
+  contractDigest: stringWithBytes(64, 64, { minLength: 64, pattern: "^[a-f0-9]{64}$" }),
+  contentDigest: stringWithBytes(72, 72, { minLength: 72, pattern: digestPattern("content") }),
   runSnapshotContentDigest: {
     type: "string",
     minLength: 73,
     maxLength: 73,
+    "x-utf8ByteMax": 73,
     pattern: digestPattern("snapshot"),
   },
   boundedText: {
     type: "string",
     minLength: 1,
     maxLength: 4096,
+    "x-utf8ByteMax": 4096,
   },
   boundedPrompt: {
     type: "string",
     minLength: 1,
     maxLength: 32768,
+    "x-utf8ByteMax": 32768,
   },
   boundedToken: {
     type: "string",
     minLength: 1,
     maxLength: 256,
+    "x-utf8ByteMax": 256,
   },
   timestamp: {
     type: "string",
     minLength: 1,
     maxLength: 64,
+    "x-utf8ByteMax": 64,
   },
   nonNegativeInteger: {
     type: "integer",
@@ -169,6 +182,9 @@ const publicationDefinition = (productKind, productRef) => ({
         "productKind",
         "productRef",
         "operationAttemptRef",
+        "operationRef",
+        "applicationServiceRef",
+        "gatewayReceiptRef",
         "receiptRef",
         "auditReceiptRef",
         "productEventRef",
@@ -178,6 +194,9 @@ const publicationDefinition = (productKind, productRef) => ({
         productKind: { const: productKind },
         productRef: ref(productRef),
         operationAttemptRef: ref("operationAttemptRef"),
+        operationRef: ref("operationRef"),
+        applicationServiceRef: ref("applicationServiceRef"),
+        gatewayReceiptRef: ref("gatewayReceiptRef"),
         receiptRef: ref("receiptRef"),
         auditReceiptRef: ref("auditReceiptRef"),
         productEventRef: ref("productEventRef"),
@@ -190,6 +209,40 @@ definitions.conversationPublication = publicationDefinition("conversation", "con
 definitions.inputRequestPublication = publicationDefinition("input_request", "inputRequestRef");
 definitions.artifactPublication = publicationDefinition("artifact", "artifactRef");
 definitions.outcomeSubmissionPublication = publicationDefinition("outcome_submission", "outcomeSubmissionRef");
+const terminalPublicationDefinition = (productKind, includeCancellationRef = false) => ({
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "action",
+    "productKind",
+    "productRef",
+    "operationAttemptRef",
+    "operationRef",
+    "applicationServiceRef",
+    "gatewayReceiptRef",
+    "receiptRef",
+    "auditReceiptRef",
+    "productEventRef",
+    ...(includeCancellationRef ? ["cancellationRef"] : []),
+  ],
+  properties: {
+    action: { const: "applied" },
+    productKind: { const: productKind },
+    productRef: ref("productEventRef"),
+    operationAttemptRef: ref("operationAttemptRef"),
+    operationRef: ref("operationRef"),
+    applicationServiceRef: ref("applicationServiceRef"),
+    gatewayReceiptRef: ref("gatewayReceiptRef"),
+    receiptRef: ref("receiptRef"),
+    auditReceiptRef: ref("auditReceiptRef"),
+    productEventRef: ref("productEventRef"),
+    ...(includeCancellationRef ? { cancellationRef: ref("cancellationRef") } : {}),
+  },
+  "x-equalProperties": [["productRef", "productEventRef"]],
+});
+definitions.failurePublication = terminalPublicationDefinition("run_failure");
+definitions.blockerPublication = terminalPublicationDefinition("run_blocker");
+definitions.cancellationPublication = terminalPublicationDefinition("run_cancellation", true);
 
 const objectSchema = (name, required, properties, extra = {}) => {
   const root = {
@@ -515,7 +568,7 @@ const eventBodies = [
     properties: {
       kind: { const: "failure_observed" },
       failure: ref("runtimeFailure"),
-      publication: ref("observationPublication"),
+      publication: ref("failurePublication"),
     },
   },
   {
@@ -525,17 +578,18 @@ const eventBodies = [
     properties: {
       kind: { const: "blocker_observed" },
       reason: ref("boundedText"),
-      publication: ref("observationPublication"),
+      publication: ref("blockerPublication"),
     },
   },
   {
     type: "object",
     additionalProperties: false,
-    required: ["kind", "reason", "publication"],
+    required: ["kind", "reason", "cancellationRef", "publication"],
     properties: {
       kind: { const: "cancellation_observed" },
       reason: ref("boundedText"),
-      publication: ref("observationPublication"),
+      cancellationRef: ref("cancellationRef"),
+      publication: ref("cancellationPublication"),
     },
   },
   {
@@ -581,7 +635,8 @@ const runtimeEvent = objectSchema(
     causationRef: ref("causationRef"),
     observedAt: ref("timestamp"),
     body: { oneOf: eventBodies },
-  }
+  },
+  { "x-serializedUtf8ByteMax": 1_048_576 }
 );
 
 const runtimeExitBaseProperties = {

@@ -104,36 +104,43 @@
     "actorRef": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^actor:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "boundedText": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 4096
+      "maxLength": 4096,
+      "x-utf8ByteMax": 4096
     },
     "causationRef": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^causation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "correlationId": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^correlation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "eventRef": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^event:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "idempotencyKey": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^idempotency:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "invocationId": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^invocation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "nonNegativeInteger": {
@@ -144,6 +151,7 @@
     "runId": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^run:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "runtimeFailure": {
@@ -165,6 +173,7 @@
     "workspaceRef": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^workspace:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     }
   }

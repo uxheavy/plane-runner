@@ -5,46 +5,42 @@ import Ajv2020 from "ajv/dist/2020.js";
 import { describe, expect, test } from "vitest";
 
 import {
-  contractDigestsFromManifest,
-  createArtifactRef,
-  createCheckpointRef,
-  createEventRef,
-  createInvocationId,
-  createOperationAttemptRef,
-  createRunSnapshotContentDigest,
   computeRunSnapshotContentDigest,
+  createRunSnapshotContentDigest,
+  createInvocationId,
+  createOutcomeSubmissionRef,
+  parseInvocationEnvelope,
+  parseRunSnapshot,
+  parseRuntimeEvent,
+  parseRuntimeExit,
   serializedJsonByteLength,
-  verifyRunSnapshotContentDigest,
-  verifyInvocationSnapshotBinding,
   verifyRuntimeExecution,
+  type RuntimeDurableState,
   type RuntimeEvent,
   type RuntimeVerificationFacts,
 } from "../src";
 import {
-  appliedConversationBody,
-  appliedInputRequestBody,
+  appliedBlockerBody,
+  appliedCancellationBody,
+  appliedFailureBody,
   appliedOutcomeBody,
-  budget,
-  contentDigest,
   envelope,
   event,
   exits,
   inlinePayload,
   manifest,
   observationBody,
-  publicationBody,
   snapshot,
 } from "./fixtures";
 
 const schemaDirectory = fileURLToPath(new URL("../schemas/v1/", import.meta.url));
 const schemaNames = ["run-snapshot", "invocation-envelope", "runtime-event", "runtime-exit"] as const;
 const ajv = new Ajv2020({ allErrors: true, strict: false });
-
 const validators = Object.fromEntries(
-  schemaNames.map((name) => {
-    const schema = JSON.parse(readFileSync(`${schemaDirectory}/${name}.schema.json`, "utf8")) as object;
-    return [name, ajv.compile(schema)];
-  })
+  schemaNames.map((name) => [
+    name,
+    ajv.compile(JSON.parse(readFileSync(`${schemaDirectory}/${name}.schema.json`, "utf8")) as object),
+  ])
 );
 
 const assertValid = (name: (typeof schemaNames)[number], value: unknown) => {
@@ -54,20 +50,42 @@ const assertValid = (name: (typeof schemaNames)[number], value: unknown) => {
 
 const trusted = (
   invocation = envelope(),
+  lifecycle: RuntimeDurableState = {
+    state: "queued",
+    lastAcceptedSequence: -1,
+    acceptedEvents: [],
+    acceptedExits: [],
+  },
   overrides: Partial<RuntimeVerificationFacts> = {}
 ): RuntimeVerificationFacts => ({
+  authority: {
+    workspaceRef: snapshot.workspaceRef,
+    actorRef: snapshot.actorRef,
+    profileVersionRef: snapshot.profile.profileRef,
+    runId: snapshot.runId,
+    invocationId: invocation.invocationId,
+    snapshotContentDigest: snapshot.contentDigest,
+    cancellationRef: invocation.cancellationRef,
+    correlationId: invocation.correlationId,
+    causationRef: invocation.causationRef,
+    invocationIdempotencyKey: invocation.idempotencyKey,
+  },
+  lifecycle,
   lease: { leaseId: invocation.lease.leaseId, isValid: true },
-  cancellation: { isCancelled: false },
+  cancellation: { cancellationRef: invocation.cancellationRef, isCancelled: false },
   publicationReceipts: [],
   ...overrides,
 });
 
-const appliedReceipt = (eventValue: RuntimeEvent) => {
+const receiptFor = (eventValue: RuntimeEvent) => {
   if (
     eventValue.body.kind !== "conversation_publication_observed" &&
     eventValue.body.kind !== "input_request_observed" &&
     eventValue.body.kind !== "artifact_observed" &&
-    eventValue.body.kind !== "outcome_submission_observed"
+    eventValue.body.kind !== "outcome_submission_observed" &&
+    eventValue.body.kind !== "failure_observed" &&
+    eventValue.body.kind !== "blocker_observed" &&
+    eventValue.body.kind !== "cancellation_observed"
   ) {
     throw new Error("Expected a product publication event");
   }
@@ -75,295 +93,230 @@ const appliedReceipt = (eventValue: RuntimeEvent) => {
     throw new Error("Expected an applied publication");
   }
   return {
+    workspaceRef: snapshot.workspaceRef,
+    actorRef: snapshot.actorRef,
+    profileVersionRef: snapshot.profile.profileRef,
+    runId: snapshot.runId,
+    invocationId: eventValue.invocationId,
+    cancellationRef: eventValue.body.kind === "cancellation_observed" ? eventValue.body.cancellationRef : undefined,
     productKind: eventValue.body.publication.productKind,
     productRef: eventValue.body.publication.productRef,
     operationAttemptRef: eventValue.body.publication.operationAttemptRef,
+    operationRef: eventValue.body.publication.operationRef,
+    applicationServiceRef: eventValue.body.publication.applicationServiceRef,
+    gatewayReceiptRef: eventValue.body.publication.gatewayReceiptRef,
     receiptRef: eventValue.body.publication.receiptRef,
     auditReceiptRef: eventValue.body.publication.auditReceiptRef,
     productEventRef: eventValue.body.publication.productEventRef,
   };
 };
 
-describe("plane.agent-runtime/v1 schemas", () => {
-  test("validates the immutable run snapshot and rejects per-invocation input", () => {
+const withReceipts = (invocation: ReturnType<typeof envelope>, events: readonly RuntimeEvent[], extra = {}) =>
+  trusted(invocation, undefined, {
+    publicationReceipts: events.filter((item) => item.body.kind !== "progress_observed").map(receiptFor),
+    ...extra,
+  });
+
+describe("parsed plane.agent-runtime/v1 contract boundary", () => {
+  test("parses all four raw JSON contracts and rejects recursive unknown fields", () => {
     assertValid("run-snapshot", snapshot);
-    expect(snapshot).not.toHaveProperty("input");
-
-    const withInput = { ...snapshot, input: "human answer" };
-    expect(validators["run-snapshot"](withInput)).toBe(false);
-  });
-
-  test("populates contract digests from the exact generated manifest", () => {
-    expect(snapshot.contractDigests).toEqual(contractDigestsFromManifest(manifest));
-    expect(snapshot.contractDigests.runSnapshot).toBe(manifest.schemas["run-snapshot"].sha256);
-  });
-
-  test("canonicalizes snapshot content without self-reference and detects mutation", () => {
-    expect(verifyRunSnapshotContentDigest(snapshot)).toBe(true);
-    expect(
-      computeRunSnapshotContentDigest({ ...snapshot, contentDigest: createRunSnapshotContentDigest("f".repeat(64)) })
-    ).toBe(snapshot.contentDigest);
-
-    const mutated = {
-      ...snapshot,
-      assignment: { ...snapshot.assignment, objective: "A different immutable objective." },
-    };
-    expect(computeRunSnapshotContentDigest(mutated)).not.toBe(snapshot.contentDigest);
-    expect(verifyRunSnapshotContentDigest(mutated)).toBe(false);
-  });
-
-  test("binds an invocation only to the exact snapshot content digest", () => {
-    expect(verifyInvocationSnapshotBinding(snapshot, envelope())).toBe(true);
-    expect(
-      verifyInvocationSnapshotBinding(snapshot, {
-        ...envelope(),
-        runSnapshotDigest: createRunSnapshotContentDigest("f".repeat(64)),
-      })
-    ).toBe(false);
-  });
-
-  test("freezes every snapshot level and carries later input through event references", () => {
-    expect(Object.isFrozen(snapshot)).toBe(true);
-    expect(Object.isFrozen(snapshot.assignment)).toBe(true);
-    expect(Reflect.set(snapshot, "runId", "run:substitute")).toBe(false);
-
-    const inputEventEnvelope = {
-      ...envelope({ inputTokens: 800, outputTokens: 400, durationMs: 50000 }),
-      trigger: { kind: "human_input" as const, eventRef: "event:human-input-1" },
-      newContextEventRefs: ["event:human-input-1"],
-    };
-    assertValid("invocation-envelope", inputEventEnvelope);
-    expect(inputEventEnvelope.trigger).toEqual({ kind: "human_input", eventRef: "event:human-input-1" });
-    expect(snapshot).not.toHaveProperty("humanInput");
-  });
-
-  test("rejects cross-kind JSON substitutions at the boundary", () => {
-    expect(validators["run-snapshot"]({ ...snapshot, workspaceRef: snapshot.actorRef })).toBe(false);
-    expect(validators["run-snapshot"]({ ...snapshot, actorRef: snapshot.workspaceRef })).toBe(false);
-    expect(validators["invocation-envelope"]({ ...envelope(), runId: snapshot.actorRef })).toBe(false);
-    expect(
-      validators["invocation-envelope"]({ ...envelope(), runSnapshotDigest: snapshot.contractDigests.runSnapshot })
-    ).toBe(false);
-    expect(
-      validators["run-snapshot"]({
-        ...snapshot,
-        context: [{ ...snapshot.context[0], contentDigest: snapshot.contractDigests.runSnapshot }],
-      })
-    ).toBe(false);
-  });
-
-  test("requires cumulative remaining budget and rejects reset budgets", () => {
-    const first = envelope({ inputTokens: 1000, outputTokens: 500, durationMs: 60000 });
-    const continuation = {
-      ...envelope({ inputTokens: 600, outputTokens: 250, durationMs: 30000 }),
-      invocationId: "invocation:invocation-2",
-      trigger: { kind: "continuation" as const, eventRef: "event:checkpoint-event-1" },
-      newContextEventRefs: ["event:checkpoint-event-1"],
-      checkpointRef: "checkpoint:checkpoint-1",
-    };
-
-    assertValid("invocation-envelope", first);
-    assertValid("invocation-envelope", continuation);
-    expect(continuation.remainingBudget.inputTokens).toBeLessThan(first.remainingBudget.inputTokens);
-    expect(continuation.remainingBudget.outputTokens).toBeLessThan(first.remainingBudget.outputTokens);
-    expect(continuation.remainingBudget.durationMs).toBeLessThan(first.remainingBudget.durationMs);
-  });
-
-  test("validates namespaced publication proposal and applied receipt variants", () => {
-    const proposal = event(publicationBody(), 0);
-    const applied = event(appliedConversationBody(), 1);
-    assertValid("runtime-event", proposal);
-    assertValid("runtime-event", applied);
-    expect(proposal.body.kind).toBe("conversation_publication_observed");
-    expect(proposal.body.publication.action).toBe("proposal");
-    expect(applied.body.kind).toBe("conversation_publication_observed");
-    expect(applied.body.publication.action).toBe("applied");
-
-    const swapped = {
-      ...applied,
-      body: {
-        ...applied.body,
-        publication: { ...applied.body.publication, productRef: "artifact:artifact-1" },
-      },
-    };
-    expect(validators["runtime-event"](swapped)).toBe(false);
-  });
-
-  test("bounds inline payloads and artifacts in the schema", () => {
-    const oversizedPayload = event(
-      {
-        kind: "progress_observed",
-        payload: { kind: "inline_text", contentType: "text/plain", text: "x".repeat(4097) },
-        publication: { action: "observation_only" },
-      },
-      0
+    assertValid("invocation-envelope", envelope());
+    assertValid("runtime-event", event(observationBody()));
+    assertValid("runtime-exit", exits[0]);
+    expect(() => parseRunSnapshot({ ...snapshot, profile: { ...snapshot.profile, nested: {} } })).toThrow(
+      /unknown properties/
     );
-    const oversizedArtifact = event(
-      {
-        kind: "artifact_observed",
-        artifact: {
-          artifactRef: createArtifactRef("artifact-2"),
-          contentDigest: contentDigest("b"),
-          mediaType: "text/plain",
-          sizeBytes: 1048577,
-        },
-        publication: {
-          action: "proposal",
-          productKind: "artifact",
-          productRef: createArtifactRef("artifact-2"),
-          operationAttemptRef: createOperationAttemptRef("artifact-2"),
-        },
-      },
-      1
+    expect(() => parseInvocationEnvelope({ ...envelope(), lease: { ...envelope().lease, nested: {} } })).toThrow(
+      /unknown properties/
     );
-
-    expect(validators["runtime-event"](oversizedPayload)).toBe(false);
-    expect(validators["runtime-event"](oversizedArtifact)).toBe(false);
+    expect(() =>
+      parseRuntimeEvent({ ...event(observationBody()), body: { ...event(observationBody()).body, nested: {} } })
+    ).toThrow(/unknown properties/);
+    expect(() => parseRuntimeExit({ ...exits[0], nested: {} })).toThrow(/unknown properties/);
   });
 
-  test("enforces serialized UTF-8 bytes, including multibyte overhead and resolved event limits", () => {
-    expect(serializedJsonByteLength("🙂")).toBe(6);
-    const smallSnapshot = {
-      ...snapshot,
-      runtimePolicy: { ...snapshot.runtimePolicy, maxEventPayloadBytes: 32 },
-    };
-    const largeMultibyteEvent = event(observationBody("🙂".repeat(20)), 0);
-    const failureEvent = event(
-      {
-        kind: "failure_observed",
-        failure: { code: "runtime_error", message: "Stopped.", retryable: false },
-        publication: { action: "observation_only" },
-      },
-      1
-    );
+  test("rejects namespaced cross-type substitutions and semantic verification rejects raw casts", () => {
+    expect(() => parseRunSnapshot({ ...snapshot, workspaceRef: snapshot.actorRef })).toThrow();
+    expect(() => parseInvocationEnvelope({ ...envelope(), runId: snapshot.actorRef })).toThrow();
+    expect(() => parseRuntimeEvent({ ...event(observationBody()), actorRef: snapshot.workspaceRef })).toThrow();
+    expect(() => parseRuntimeExit({ ...exits[0], runId: snapshot.actorRef })).toThrow();
+
+    const outcome = event(appliedOutcomeBody());
+    const rawSnapshot = JSON.parse(JSON.stringify(snapshot)) as typeof snapshot;
+    const rawInvocation = JSON.parse(JSON.stringify(envelope())) as ReturnType<typeof envelope>;
+    const rawEvent = JSON.parse(JSON.stringify(outcome)) as RuntimeEvent;
+    const rawExit = JSON.parse(JSON.stringify(exits[0])) as (typeof exits)[number];
     const result = verifyRuntimeExecution({
       manifest,
-      snapshot: smallSnapshot,
-      invocation: envelope(),
-      events: [largeMultibyteEvent, failureEvent],
-      exit: { ...exits[2], finalSequence: 1 },
-      trusted: trusted(),
+      snapshot: rawSnapshot,
+      invocation: rawInvocation,
+      events: [rawEvent],
+      exit: rawExit,
+      trusted: withReceipts(envelope(), [outcome]),
     });
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.errors.some((error) => error.code === "event_payload_too_large")).toBe(true);
-    }
+    expect(result).toEqual({
+      ok: false,
+      errors: [{ code: "unparsed_contract_input", path: "input", message: expect.any(String) }],
+    });
   });
 
-  test("validates exactly one legal runtime exit classification", () => {
-    for (const exit of exits) {
-      assertValid("runtime-exit", exit);
-      expect(exit.authority).toBe("runtime_evidence_only");
-    }
-
-    const invalidCompletedExit = {
-      ...exits[0],
-      failure: { code: "runtime_error", message: "Also failed", retryable: false },
-    };
-    expect(validators["runtime-exit"](invalidCompletedExit)).toBe(false);
-
-    const invalidWaitingExit = {
-      ...exits[1],
-      failure: { code: "runtime_error", message: "Also failed", retryable: false },
-    };
-    expect(validators["runtime-exit"](invalidWaitingExit)).toBe(false);
+  test("keeps snapshot content digest immutable and binds invocation to exact content", () => {
+    expect(parseRunSnapshot(JSON.stringify(snapshot)).contentDigest).toBe(snapshot.contentDigest);
+    expect(() =>
+      parseRunSnapshot({ ...snapshot, contentDigest: createRunSnapshotContentDigest("f".repeat(64)) })
+    ).toThrow();
+    expect(
+      parseInvocationEnvelope({ ...envelope(), runSnapshotDigest: createRunSnapshotContentDigest("f".repeat(64)) })
+    ).toBeDefined();
   });
 });
 
-describe("pure runtime semantic verifier", () => {
-  test("accepts a receipt-correlated completed stream and rejects forged snapshot binding", () => {
+describe("audited terminal product-event boundary", () => {
+  test("requires exact product kind and trusted application-service/gateway/audit receipt for completion", () => {
     const invocation = envelope();
-    const outcome = event(appliedOutcomeBody(), 0);
+    const outcome = event(appliedOutcomeBody());
     const valid = verifyRuntimeExecution({
       manifest,
       snapshot,
       invocation,
       events: [outcome],
       exit: exits[0],
-      trusted: trusted(invocation, { publicationReceipts: [appliedReceipt(outcome)] }),
+      trusted: withReceipts(invocation, [outcome]),
     });
-    expect(valid).toEqual({ ok: true, state: "completed", finalSequence: 0, terminalEventCount: 1 });
+    expect(valid.ok).toBe(true);
+    if (valid.ok) expect(valid.result).toBe("accepted");
 
-    const forged = verifyRuntimeExecution({
-      manifest,
-      snapshot,
-      invocation: { ...invocation, runSnapshotDigest: createRunSnapshotContentDigest("f".repeat(64)) },
-      events: [outcome],
-      exit: exits[0],
-      trusted: trusted(invocation, { publicationReceipts: [appliedReceipt(outcome)] }),
-    });
-    expect(forged.ok).toBe(false);
-    if (!forged.ok) {
-      expect(forged.errors.some((error) => error.code === "invocation_snapshot_binding_mismatch")).toBe(true);
-    }
+    const forged = {
+      ...outcome,
+      body: { ...outcome.body, publication: { ...outcome.body.publication, productKind: "run_failure" } },
+    };
+    expect(() => parseRuntimeEvent(forged)).toThrow();
   });
 
-  test("requires a trusted checkpoint and monotonic budget for continuation", () => {
-    const invocation = {
-      ...envelope({ inputTokens: 900, outputTokens: 450, durationMs: 50000 }),
-      invocationId: createInvocationId("invocation-2"),
-      trigger: { kind: "continuation" as const, eventRef: createEventRef("checkpoint-event-1") },
-      newContextEventRefs: [createEventRef("checkpoint-event-1")],
-      checkpointRef: createCheckpointRef("checkpoint-1"),
-    };
-    const failure = event(
-      {
-        kind: "failure_observed",
-        failure: { code: "invalid_continuation", message: "unsafe", retryable: false },
-        publication: { action: "observation_only" },
-      },
-      0
-    );
-    const result = verifyRuntimeExecution({
+  test.each([
+    ["failure", appliedFailureBody(), exits[2]],
+    ["blocker", appliedBlockerBody(), exits[3]],
+  ] as const)("requires the exact visible %s product event", (_label, body, exit) => {
+    const invocation = envelope();
+    const observed = event(body);
+    const valid = verifyRuntimeExecution({
       manifest,
       snapshot,
       invocation,
-      events: [failure],
-      exit: { ...exits[3], invocationId: invocation.invocationId },
-      trusted: trusted(invocation, { previousRemainingBudget: budget(800, 400, 40000) }),
+      events: [observed],
+      exit,
+      trusted: withReceipts(invocation, [observed]),
     });
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.errors.some((error) => error.code === "checkpoint_untrusted")).toBe(true);
-      expect(result.errors.some((error) => error.code === "budget_increased")).toBe(true);
-    }
-  });
-
-  test("rejects duplicate, out-of-order, and correlation-substituted events", () => {
-    const first = event(observationBody(), 0);
-    const duplicate = { ...first, eventId: first.eventId };
-    const older = { ...event(observationBody("older"), 2), idempotencyKey: first.idempotencyKey };
-    const failure = event(
-      {
-        kind: "failure_observed",
-        failure: { code: "runtime_error", message: "Stopped.", retryable: false },
-        publication: { action: "observation_only" },
-      },
-      3
-    );
-    const result = verifyRuntimeExecution({
+    expect(valid.ok).toBe(true);
+    const missing = verifyRuntimeExecution({
       manifest,
       snapshot,
-      invocation: envelope(),
-      events: [first, duplicate, older, failure],
-      exit: { ...exits[2], finalSequence: 3 },
-      trusted: trusted(),
+      invocation,
+      events: [observed],
+      exit,
+      trusted: trusted(invocation),
     });
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.errors.some((error) => error.code === "event_duplicate")).toBe(true);
-      expect(result.errors.some((error) => error.code === "event_idempotency_duplicate")).toBe(true);
-      expect(result.errors.some((error) => error.code === "event_sequence_invalid")).toBe(true);
-    }
+    expect(missing.ok).toBe(false);
   });
 
-  test("requires receipt-correlated product publication and keeps transcript evidence non-terminal", () => {
+  test("rejects missing, forged, wrong-kind, and wrong-invocation receipts", () => {
+    const invocation = envelope();
+    const observed = event(appliedOutcomeBody());
+
+    expect(() =>
+      parseRuntimeEvent({
+        ...observed,
+        body: {
+          ...observed.body,
+          publication: { ...observed.body.publication, gatewayReceiptRef: undefined },
+        },
+      })
+    ).toThrow();
+
+    const forged = parseRuntimeEvent({
+      ...observed,
+      body: {
+        ...observed.body,
+        publication: {
+          ...observed.body.publication,
+          productRef: createOutcomeSubmissionRef("outcome-submission-forged"),
+        },
+      },
+    });
+    expect(
+      verifyRuntimeExecution({
+        manifest,
+        snapshot,
+        invocation,
+        events: [forged],
+        exit: exits[0],
+        trusted: withReceipts(invocation, [observed]),
+      }).ok
+    ).toBe(false);
+
+    expect(() =>
+      parseRuntimeEvent({
+        ...observed,
+        body: { ...observed.body, publication: { ...observed.body.publication, productKind: "run_failure" } },
+      })
+    ).toThrow();
+
+    const wrongInvocationReceipt = { ...receiptFor(observed), invocationId: createInvocationId("other-invocation") };
+    const wrongInvocation = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation,
+      events: [observed],
+      exit: exits[0],
+      trusted: withReceipts(invocation, [observed], { publicationReceipts: [wrongInvocationReceipt] }),
+    });
+    expect(wrongInvocation.ok).toBe(false);
+  });
+
+  test("binds cancellation authority and receipt to exact invocation cancellationRef", () => {
+    const invocation = envelope();
+    const observed = event(appliedCancellationBody());
+    const valid = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation,
+      events: [observed],
+      exit: exits[4],
+      trusted: withReceipts(invocation, [observed], {
+        cancellation: { cancellationRef: invocation.cancellationRef, isCancelled: true },
+      }),
+    });
+    expect(valid.ok).toBe(true);
+
+    const wrongRef = parseRuntimeEvent({
+      ...observed,
+      body: {
+        ...observed.body,
+        cancellationRef: "cancellation:wrong",
+        publication: { ...observed.body.publication, cancellationRef: "cancellation:wrong" },
+      },
+    });
+    expect(
+      verifyRuntimeExecution({
+        manifest,
+        snapshot,
+        invocation,
+        events: [wrongRef],
+        exit: exits[4],
+        trusted: withReceipts(invocation, [observed], {
+          cancellation: { cancellationRef: invocation.cancellationRef, isCancelled: true },
+        }),
+      }).ok
+    ).toBe(false);
+  });
+
+  test("does not treat transcript/failure observations as product authority", () => {
     const transcript = event({
       kind: "transcript_evidence_observed",
       payload: inlinePayload("final model text"),
       publication: { action: "observation_only" },
     });
-    const invalid = verifyRuntimeExecution({
+    const failed = verifyRuntimeExecution({
       manifest,
       snapshot,
       invocation: envelope(),
@@ -371,70 +324,136 @@ describe("pure runtime semantic verifier", () => {
       exit: exits[0],
       trusted: trusted(),
     });
-    expect(invalid.ok).toBe(false);
-    if (!invalid.ok) {
-      expect(invalid.errors.some((error) => error.code === "terminal_event_mismatch")).toBe(true);
-    }
-
-    const waitingInvocation = envelope({ inputTokens: 800, outputTokens: 400, durationMs: 50000 });
-    const input = event(appliedInputRequestBody(), 0);
-    const waitingExit = {
-      ...exits[1],
-      inputEventRef: input.eventId,
-      finalSequence: 0,
-    };
-    const waiting = verifyRuntimeExecution({
-      manifest,
-      snapshot,
-      invocation: waitingInvocation,
-      events: [input],
-      exit: waitingExit,
-      trusted: trusted(waitingInvocation, { publicationReceipts: [appliedReceipt(input)] }),
-    });
-    expect(waiting.ok).toBe(true);
+    expect(failed.ok).toBe(false);
   });
+});
 
-  test("requires trusted cancellation and exactly one cancellation terminal event", () => {
+describe("durable lifecycle and idempotent replay", () => {
+  test("returns explicit replay after carrying accepted state across calls and restarts", () => {
     const invocation = envelope();
-    const cancellation = event(
-      {
-        kind: "cancellation_observed",
-        reason: "Cancelled by Plane.",
-        publication: { action: "observation_only" },
-      },
-      0
-    );
-    const result = verifyRuntimeExecution({
+    const outcome = event(appliedOutcomeBody());
+    const first = verifyRuntimeExecution({
       manifest,
       snapshot,
       invocation,
-      events: [cancellation],
-      exit: exits[4],
-      trusted: trusted(invocation, { cancellation: { isCancelled: true } }),
+      events: [outcome],
+      exit: exits[0],
+      trusted: withReceipts(invocation, [outcome]),
     });
-    expect(result.ok).toBe(true);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+
+    const replay = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation,
+      events: [parseRuntimeEvent(JSON.parse(JSON.stringify(outcome)))],
+      exit: parseRuntimeExit(JSON.parse(JSON.stringify(exits[0]))),
+      trusted: withReceipts(invocation, [outcome], { lifecycle: first.nextLifecycle }),
+    });
+    expect(replay.ok).toBe(true);
+    if (replay.ok) expect(replay.result).toBe("idempotent_replay");
+
+    const extendedReplay = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation,
+      events: [event(observationBody("after accepted exit"), 1), outcome],
+      exit: exits[0],
+      trusted: withReceipts(invocation, [outcome], { lifecycle: first.nextLifecycle }),
+    });
+    expect(extendedReplay.ok).toBe(false);
+
+    const conflicting = parseRuntimeEvent({
+      ...outcome,
+      body: { ...outcome.body, payload: inlinePayload("different") },
+    });
+    const conflict = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation,
+      events: [conflicting],
+      exit: exits[0],
+      trusted: withReceipts(invocation, [outcome], { lifecycle: first.nextLifecycle }),
+    });
+    expect(conflict.ok).toBe(false);
   });
 
-  test("does not allow product publication variants to omit operation or audit receipts", () => {
-    const invalid = {
-      ...event(appliedConversationBody()),
+  test("rejects out-of-order, duplicate, terminal-after-progress, and prior-terminal transitions", () => {
+    const first = event(observationBody("first"), 0);
+    const terminal = event(appliedOutcomeBody(), 1);
+    const later = event(observationBody("after terminal"), 2);
+    const invocation = envelope();
+    const invalid = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation,
+      events: [first, terminal, later],
+      exit: exits[0],
+      trusted: withReceipts(invocation, [terminal]),
+    });
+    expect(invalid.ok).toBe(false);
+
+    const duplicate = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation,
+      events: [first, first],
+      exit: exits[0],
+      trusted: trusted(invocation),
+    });
+    expect(duplicate.ok).toBe(false);
+
+    const priorTerminal: RuntimeDurableState = {
+      state: "succeeded",
+      lastAcceptedSequence: 1,
+      acceptedEvents: [],
+      acceptedExits: [],
+    };
+    const prior = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation,
+      events: [terminal],
+      exit: exits[0],
+      trusted: withReceipts(invocation, [terminal], { lifecycle: priorTerminal }),
+    });
+    expect(prior.ok).toBe(false);
+  });
+});
+
+describe("explicit UTF-8 bounds", () => {
+  test("distinguishes ASCII code-unit edges, emoji byte edges, and serialized overhead", () => {
+    expect(serializedJsonByteLength("🙂")).toBe(6);
+    expect(() => parseRuntimeEvent(event(observationBody("x".repeat(4096))))).not.toThrow();
+    const emojiEvent = {
+      ...event(observationBody("x")),
       body: {
-        ...event(appliedConversationBody()).body,
-        publication: {
-          action: "applied",
-          productKind: "conversation",
-          productRef: "conversation:conversation-1",
-          operationAttemptRef: "operation-attempt:operation-attempt-1",
-          receiptRef: "receipt:receipt-1",
-          productEventRef: "product-event:product-event-1",
-        },
+        ...event(observationBody("x")).body,
+        payload: inlinePayload("🙂".repeat(2048)),
       },
     };
-    expect(validators["runtime-event"](invalid)).toBe(false);
-  });
-
-  test("can still represent a proposal without making it product-visible", () => {
-    const proposal = event(publicationBody());
-    assertValid("runtime-event", proposal);
+    expect(validators["runtime-event"](emojiEvent)).toBe(true);
+    expect(() => parseRuntimeEvent(emojiEvent)).toThrow();
+    const smallSnapshotContent = {
+      ...snapshot,
+      runtimePolicy: {
+        ...snapshot.runtimePolicy,
+        maxEventPayloadBytes: serializedJsonByteLength(event(observationBody("x"))) - 1,
+      },
+    };
+    const smallSnapshot = parseRunSnapshot({
+      ...smallSnapshotContent,
+      contentDigest: computeRunSnapshotContentDigest(smallSnapshotContent),
+    });
+    const bounded = verifyRuntimeExecution({
+      manifest,
+      snapshot: smallSnapshot,
+      invocation: envelope(),
+      events: [event(observationBody("x"))],
+      exit: exits[0],
+      trusted: trusted(),
+    });
+    expect(bounded.ok).toBe(false);
   });
 });

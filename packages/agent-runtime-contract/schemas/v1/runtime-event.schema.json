@@ -166,7 +166,7 @@
               "$ref": "#/$defs/runtimeFailure"
             },
             "publication": {
-              "$ref": "#/$defs/observationPublication"
+              "$ref": "#/$defs/failurePublication"
             }
           }
         },
@@ -182,14 +182,14 @@
               "$ref": "#/$defs/boundedText"
             },
             "publication": {
-              "$ref": "#/$defs/observationPublication"
+              "$ref": "#/$defs/blockerPublication"
             }
           }
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "reason", "publication"],
+          "required": ["kind", "reason", "cancellationRef", "publication"],
           "properties": {
             "kind": {
               "const": "cancellation_observed"
@@ -197,8 +197,11 @@
             "reason": {
               "$ref": "#/$defs/boundedText"
             },
+            "cancellationRef": {
+              "$ref": "#/$defs/cancellationRef"
+            },
             "publication": {
-              "$ref": "#/$defs/observationPublication"
+              "$ref": "#/$defs/cancellationPublication"
             }
           }
         },
@@ -221,11 +224,19 @@
       ]
     }
   },
+  "x-serializedUtf8ByteMax": 1048576,
   "$defs": {
     "actorRef": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^actor:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "applicationServiceRef": {
+      "type": "string",
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^application-service:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "artifactPublication": {
       "oneOf": [
@@ -256,6 +267,9 @@
             "productKind",
             "productRef",
             "operationAttemptRef",
+            "operationRef",
+            "applicationServiceRef",
+            "gatewayReceiptRef",
             "receiptRef",
             "auditReceiptRef",
             "productEventRef"
@@ -273,6 +287,15 @@
             "operationAttemptRef": {
               "$ref": "#/$defs/operationAttemptRef"
             },
+            "operationRef": {
+              "$ref": "#/$defs/operationRef"
+            },
+            "applicationServiceRef": {
+              "$ref": "#/$defs/applicationServiceRef"
+            },
+            "gatewayReceiptRef": {
+              "$ref": "#/$defs/gatewayReceiptRef"
+            },
             "receiptRef": {
               "$ref": "#/$defs/receiptRef"
             },
@@ -289,6 +312,7 @@
     "artifactRef": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^artifact:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "artifactReference": {
@@ -313,7 +337,57 @@
     "auditReceiptRef": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^audit-receipt:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "blockerPublication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "productKind",
+        "productRef",
+        "operationAttemptRef",
+        "operationRef",
+        "applicationServiceRef",
+        "gatewayReceiptRef",
+        "receiptRef",
+        "auditReceiptRef",
+        "productEventRef"
+      ],
+      "properties": {
+        "action": {
+          "const": "applied"
+        },
+        "productKind": {
+          "const": "run_blocker"
+        },
+        "productRef": {
+          "$ref": "#/$defs/productEventRef"
+        },
+        "operationAttemptRef": {
+          "$ref": "#/$defs/operationAttemptRef"
+        },
+        "operationRef": {
+          "$ref": "#/$defs/operationRef"
+        },
+        "applicationServiceRef": {
+          "$ref": "#/$defs/applicationServiceRef"
+        },
+        "gatewayReceiptRef": {
+          "$ref": "#/$defs/gatewayReceiptRef"
+        },
+        "receiptRef": {
+          "$ref": "#/$defs/receiptRef"
+        },
+        "auditReceiptRef": {
+          "$ref": "#/$defs/auditReceiptRef"
+        },
+        "productEventRef": {
+          "$ref": "#/$defs/productEventRef"
+        }
+      },
+      "x-equalProperties": [["productRef", "productEventRef"]]
     },
     "boundedByteCount": {
       "type": "integer",
@@ -365,22 +439,85 @@
     "boundedText": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 4096
+      "maxLength": 4096,
+      "x-utf8ByteMax": 4096
     },
     "boundedToken": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 256
+      "maxLength": 256,
+      "x-utf8ByteMax": 256
+    },
+    "cancellationPublication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "productKind",
+        "productRef",
+        "operationAttemptRef",
+        "operationRef",
+        "applicationServiceRef",
+        "gatewayReceiptRef",
+        "receiptRef",
+        "auditReceiptRef",
+        "productEventRef",
+        "cancellationRef"
+      ],
+      "properties": {
+        "action": {
+          "const": "applied"
+        },
+        "productKind": {
+          "const": "run_cancellation"
+        },
+        "productRef": {
+          "$ref": "#/$defs/productEventRef"
+        },
+        "operationAttemptRef": {
+          "$ref": "#/$defs/operationAttemptRef"
+        },
+        "operationRef": {
+          "$ref": "#/$defs/operationRef"
+        },
+        "applicationServiceRef": {
+          "$ref": "#/$defs/applicationServiceRef"
+        },
+        "gatewayReceiptRef": {
+          "$ref": "#/$defs/gatewayReceiptRef"
+        },
+        "receiptRef": {
+          "$ref": "#/$defs/receiptRef"
+        },
+        "auditReceiptRef": {
+          "$ref": "#/$defs/auditReceiptRef"
+        },
+        "productEventRef": {
+          "$ref": "#/$defs/productEventRef"
+        },
+        "cancellationRef": {
+          "$ref": "#/$defs/cancellationRef"
+        }
+      },
+      "x-equalProperties": [["productRef", "productEventRef"]]
+    },
+    "cancellationRef": {
+      "type": "string",
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^cancellation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "causationRef": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^causation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "contentDigest": {
       "type": "string",
-      "minLength": 72,
       "maxLength": 72,
+      "x-utf8ByteMax": 72,
+      "minLength": 72,
       "pattern": "^content:[a-f0-9]{64}$"
     },
     "conversationPublication": {
@@ -412,6 +549,9 @@
             "productKind",
             "productRef",
             "operationAttemptRef",
+            "operationRef",
+            "applicationServiceRef",
+            "gatewayReceiptRef",
             "receiptRef",
             "auditReceiptRef",
             "productEventRef"
@@ -429,6 +569,15 @@
             "operationAttemptRef": {
               "$ref": "#/$defs/operationAttemptRef"
             },
+            "operationRef": {
+              "$ref": "#/$defs/operationRef"
+            },
+            "applicationServiceRef": {
+              "$ref": "#/$defs/applicationServiceRef"
+            },
+            "gatewayReceiptRef": {
+              "$ref": "#/$defs/gatewayReceiptRef"
+            },
             "receiptRef": {
               "$ref": "#/$defs/receiptRef"
             },
@@ -445,21 +594,80 @@
     "conversationRef": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^conversation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "correlationId": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^correlation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "eventRef": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^event:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "failurePublication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "productKind",
+        "productRef",
+        "operationAttemptRef",
+        "operationRef",
+        "applicationServiceRef",
+        "gatewayReceiptRef",
+        "receiptRef",
+        "auditReceiptRef",
+        "productEventRef"
+      ],
+      "properties": {
+        "action": {
+          "const": "applied"
+        },
+        "productKind": {
+          "const": "run_failure"
+        },
+        "productRef": {
+          "$ref": "#/$defs/productEventRef"
+        },
+        "operationAttemptRef": {
+          "$ref": "#/$defs/operationAttemptRef"
+        },
+        "operationRef": {
+          "$ref": "#/$defs/operationRef"
+        },
+        "applicationServiceRef": {
+          "$ref": "#/$defs/applicationServiceRef"
+        },
+        "gatewayReceiptRef": {
+          "$ref": "#/$defs/gatewayReceiptRef"
+        },
+        "receiptRef": {
+          "$ref": "#/$defs/receiptRef"
+        },
+        "auditReceiptRef": {
+          "$ref": "#/$defs/auditReceiptRef"
+        },
+        "productEventRef": {
+          "$ref": "#/$defs/productEventRef"
+        }
+      },
+      "x-equalProperties": [["productRef", "productEventRef"]]
+    },
+    "gatewayReceiptRef": {
+      "type": "string",
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^gateway-receipt:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "idempotencyKey": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^idempotency:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "inputRequestPublication": {
@@ -491,6 +699,9 @@
             "productKind",
             "productRef",
             "operationAttemptRef",
+            "operationRef",
+            "applicationServiceRef",
+            "gatewayReceiptRef",
             "receiptRef",
             "auditReceiptRef",
             "productEventRef"
@@ -508,6 +719,15 @@
             "operationAttemptRef": {
               "$ref": "#/$defs/operationAttemptRef"
             },
+            "operationRef": {
+              "$ref": "#/$defs/operationRef"
+            },
+            "applicationServiceRef": {
+              "$ref": "#/$defs/applicationServiceRef"
+            },
+            "gatewayReceiptRef": {
+              "$ref": "#/$defs/gatewayReceiptRef"
+            },
             "receiptRef": {
               "$ref": "#/$defs/receiptRef"
             },
@@ -524,11 +744,13 @@
     "inputRequestRef": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^input-request:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "invocationId": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^invocation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "nonNegativeInteger": {
@@ -549,7 +771,14 @@
     "operationAttemptRef": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^operation-attempt:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "operationRef": {
+      "type": "string",
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^operation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "outcomeSubmissionPublication": {
       "oneOf": [
@@ -580,6 +809,9 @@
             "productKind",
             "productRef",
             "operationAttemptRef",
+            "operationRef",
+            "applicationServiceRef",
+            "gatewayReceiptRef",
             "receiptRef",
             "auditReceiptRef",
             "productEventRef"
@@ -597,6 +829,15 @@
             "operationAttemptRef": {
               "$ref": "#/$defs/operationAttemptRef"
             },
+            "operationRef": {
+              "$ref": "#/$defs/operationRef"
+            },
+            "applicationServiceRef": {
+              "$ref": "#/$defs/applicationServiceRef"
+            },
+            "gatewayReceiptRef": {
+              "$ref": "#/$defs/gatewayReceiptRef"
+            },
             "receiptRef": {
               "$ref": "#/$defs/receiptRef"
             },
@@ -613,26 +854,31 @@
     "outcomeSubmissionRef": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^outcome-submission:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "payloadRef": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^payload:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "productEventRef": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^product-event:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "receiptRef": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^receipt:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "runId": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^run:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "runtimeFailure": {
@@ -670,11 +916,13 @@
     "timestamp": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 64
+      "maxLength": 64,
+      "x-utf8ByteMax": 64
     },
     "workspaceRef": {
       "type": "string",
       "maxLength": 128,
+      "x-utf8ByteMax": 128,
       "pattern": "^workspace:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     }
   }

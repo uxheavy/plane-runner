@@ -3,19 +3,19 @@
   "schemas": {
     "run-snapshot": {
       "filename": "run-snapshot.schema.json",
-      "sha256": "a6ff0f5ab9656092142737fb631bbf0236a38de137334572cbfd1528f37a8391"
+      "sha256": "47887d4520561ae36a520c1d35c9de71148fb97f2df67c7adb054998243fa87c"
     },
     "invocation-envelope": {
       "filename": "invocation-envelope.schema.json",
-      "sha256": "acf9d99002db9b8546486f52fe40d98d447bbd9a211aa500f351418bde7647e9"
+      "sha256": "62bf1c5c7613de76151ce799a2af46d9c7b63aebd1ba241c32e5860bf8a68771"
     },
     "runtime-event": {
       "filename": "runtime-event.schema.json",
-      "sha256": "89a3333890ae73a068e4b6a729e20c1cfe2ea6d03561ff55505a9bbadd6a32a5"
+      "sha256": "dcbab252968fbfca49b0e3d7dd2bec7d77bc92a57c6be628118c51f79611b35c"
     },
     "runtime-exit": {
       "filename": "runtime-exit.schema.json",
-      "sha256": "ed3b996f70b468c250990803e5883e8aaba1e9d57778142a4f2915cf2d6bc653"
+      "sha256": "7ff5313c01c91a406d70b11a4b0fd148d27e65f41ddbd190c74b8efbb2f93377"
     }
   }
 }

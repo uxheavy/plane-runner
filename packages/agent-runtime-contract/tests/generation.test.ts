@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, test } from "vitest";
 
 const schemaDirectory = fileURLToPath(new URL("../schemas/v1/", import.meta.url));
 const generatorPath = fileURLToPath(new URL("../scripts/generate-schemas.mjs", import.meta.url));
+const schemaSourcePath = fileURLToPath(new URL("../src/schema-source.mjs", import.meta.url));
 
 describe("generated contract artifacts", () => {
   test("fails when schema source drifts from checked-in artifacts", () => {
@@ -17,6 +18,28 @@ describe("generated contract artifacts", () => {
         stdio: "pipe",
       })
     ).not.toThrow();
+  });
+
+  test("detects a source-only drift and restores the source after the probe", () => {
+    const originalSource = readFileSync(schemaSourcePath, "utf8");
+    const driftedSource = originalSource.replace(
+      'const protocol = "plane.agent-runtime/v1";',
+      'const protocol = "plane.agent-runtime/v1-drift";'
+    );
+    expect(driftedSource).not.toBe(originalSource);
+    writeFileSync(schemaSourcePath, driftedSource, "utf8");
+
+    try {
+      expect(() =>
+        execFileSync(process.execPath, [generatorPath, "--check"], {
+          cwd: fileURLToPath(new URL("..", import.meta.url)),
+          env: process.env,
+          stdio: "pipe",
+        })
+      ).toThrow();
+    } finally {
+      writeFileSync(schemaSourcePath, originalSource, "utf8");
+    }
   });
 
   test("manifest digests match the exact generated schema bytes", () => {
