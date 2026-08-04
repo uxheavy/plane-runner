@@ -33,7 +33,7 @@ class OperationGatewayIdempotency(models.Model):
 
     id = models.UUIDField(default=uuid.uuid4, primary_key=True, editable=False)
     request_id = models.UUIDField(default=uuid.uuid4, editable=False)
-    invocation_id = models.UUIDField(default=uuid.uuid4, editable=False)
+    invocation_id = models.UUIDField(editable=False)
     operation_id = models.CharField(max_length=128)
     workspace_id = models.UUIDField(null=True, editable=False)
     workspace_slug = models.CharField(max_length=255)
@@ -78,7 +78,7 @@ class OperationGatewayAudit(models.Model):
         REPLAY = "replay", "Replay"
 
     id = models.UUIDField(default=uuid.uuid4, primary_key=True, editable=False)
-    invocation_id = models.UUIDField(default=uuid.uuid4, editable=False)
+    invocation_id = models.UUIDField(editable=False)
     phase = models.CharField(max_length=16, choices=Phase.choices)
     outcome = models.CharField(max_length=32, choices=Outcome.choices)
     request_id = models.UUIDField()
@@ -96,6 +96,8 @@ class OperationGatewayAudit(models.Model):
     class Meta:
         db_table = "operation_gateway_audit"
         ordering = ("created_at", "id")
+        base_manager_name = "objects"
+        default_manager_name = "objects"
         indexes = [
             models.Index(fields=("workspace_id", "created_at"), name="op_gateway_audit_workspace_id"),
             models.Index(fields=("workspace_slug", "created_at"), name="op_gateway_audit_workspace"),
@@ -111,3 +113,52 @@ class OperationGatewayAudit(models.Model):
 
     def delete(self, *args, **kwargs):
         raise ValueError("Operation gateway audit records are append-only")
+
+
+class OperationGatewayPublication(models.Model):
+    """One durable, independently retryable product publication intent."""
+
+    class Kind(models.TextChoices):
+        ACTIVITY = "activity", "Activity"
+        NOTIFICATION = "notification", "Notification"
+        WEBHOOK = "webhook", "Webhook"
+
+    class State(models.TextChoices):
+        PENDING = "pending", "Pending"
+        RUNNING = "running", "Running"
+        SUCCEEDED = "succeeded", "Succeeded"
+        FAILED = "failed", "Failed"
+
+    id = models.UUIDField(default=uuid.uuid4, primary_key=True, editable=False)
+    idempotency = models.ForeignKey(
+        OperationGatewayIdempotency,
+        on_delete=models.PROTECT,
+        related_name="publications",
+    )
+    invocation_id = models.UUIDField(editable=False)
+    kind = models.CharField(max_length=32, choices=Kind.choices)
+    publication_key = models.CharField(max_length=160, unique=True, editable=False)
+    payload = models.JSONField(default=dict)
+    state = models.CharField(max_length=16, choices=State.choices, default=State.PENDING)
+    attempts = models.PositiveIntegerField(default=0)
+    last_error = models.CharField(max_length=255, blank=True, default="")
+    lease_until = models.DateTimeField(null=True, blank=True)
+    published_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "operation_gateway_publication"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("idempotency", "kind"),
+                name="operation_gateway_publication_kind",
+            )
+        ]
+        indexes = [
+            models.Index(fields=("state", "lease_until"), name="op_gateway_pub_dispatch"),
+            models.Index(fields=("idempotency", "created_at"), name="op_gateway_pub_attempt"),
+        ]
+
+    def __str__(self):
+        return self.publication_key

@@ -4,7 +4,7 @@
 
 from .analytic import AnalyticView
 from .api import APIActivityLog, APIToken
-from .operation_gateway import OperationGatewayAudit, OperationGatewayIdempotency
+from .operation_gateway import OperationGatewayAudit, OperationGatewayIdempotency, OperationGatewayPublication
 from .asset import FileAsset
 from .base import BaseModel
 from .cycle import Cycle, CycleIssue, CycleUserProperties

@@ -10,12 +10,20 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
 
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import DatabaseError, IntegrityError, transaction
 from django.utils import timezone
 
 from plane.api.views.issue import IssueDetailAPIEndpoint
+from plane.api.serializers import IssueSerializer
 from plane.app.permissions import ProjectEntityPermission
-from plane.db.models import Issue, OperationGatewayAudit, OperationGatewayIdempotency, Workspace
+from plane.db.models import (
+    Issue,
+    OperationGatewayAudit,
+    OperationGatewayIdempotency,
+    OperationGatewayPublication,
+    Workspace,
+)
 
 from .catalog import OperationDescriptor, get_operation
 from .contracts import (
@@ -31,7 +39,12 @@ from .contracts import (
     WorkItemRenameInputSerializer,
     canonical_json,
 )
-from .work_items import WorkItemPublicationFailure, WorkItemRenameFailure, WorkItemRenameService
+from .publications import (
+    create_publication_intents,
+    dispatch_publication_once,
+    schedule_publications_on_commit,
+)
+from .work_items import WorkItemRenameFailure, WorkItemRenameOutcome, WorkItemRenameService
 
 READ_RESULT_FIELDS = ("id", "name", "sequence_id", "priority", "state", "project", "workspace")
 
@@ -205,60 +218,67 @@ class OperationGateway:
         )
 
     def reconcile(self, idempotency_id: uuid.UUID) -> tuple[GatewayEnvelope, int]:
-        """Reconcile a committed rename without applying or publishing it again."""
+        """Restore and dispatch every publication before resolving the operation."""
 
         with transaction.atomic():
             record = OperationGatewayIdempotency.objects.select_for_update().get(pk=idempotency_id)
             descriptor = get_operation(record.operation_id)
             if descriptor is None:
                 return self._direct_unknown(record)
-            if record.state == OperationGatewayIdempotency.State.SUCCEEDED:
-                return self._success_envelope(
-                    record,
-                    descriptor,
-                    record.workspace_slug,
-                    str(record.caller_id),
-                    record.audit_receipt,
-                    record.result or {},
-                    True,
-                ), 200
-            if descriptor.operation_id != "work_item.rename" or not record.workspace_id:
+            if descriptor.operation_id != "work_item.rename" or not record.workspace_id or record.result is None:
                 return self._reconcile_unknown_locked(record, descriptor)
-
             input_data = record.request_input or {}
-            issue_id = input_data.get("issue_id")
-            project_id = input_data.get("project_id")
-            name = input_data.get("name")
             issue = Issue.objects.filter(
                 workspace_id=record.workspace_id,
-                project_id=project_id,
-                pk=issue_id,
-            ).only("id", "name").first()
-            if record.result is not None and issue is not None and issue.name == name:
-                invocation_id = uuid.uuid4()
-                audit = self._write_invocation_pair(
-                    record=record,
-                    correlation_id=record.correlation_id,
-                    request_digest=record.request_digest,
-                    invocation_id=invocation_id,
+                project_id=input_data.get("project_id"),
+                pk=input_data.get("issue_id"),
+            ).first()
+            if issue is None or issue.name != input_data.get("name"):
+                return self._reconcile_unknown_locked(record, descriptor)
+            self._restore_publications(record, issue)
+            publications = list(record.publications.all())
+
+        for publication in publications:
+            try:
+                dispatch_publication_once(str(publication.id))
+            except Exception:
+                # The intent remains durable and independently retryable.
+                continue
+
+        with transaction.atomic():
+            record = OperationGatewayIdempotency.objects.select_for_update().get(pk=idempotency_id)
+            descriptor = get_operation(record.operation_id)
+            publications = list(record.publications.all())
+            if not publications or any(
+                publication.state != OperationGatewayPublication.State.SUCCEEDED
+                for publication in publications
+            ):
+                return self._reconcile_unknown_locked(record, descriptor)
+            audit_id = record.audit_receipt
+            if record.state != OperationGatewayIdempotency.State.SUCCEEDED:
+                audit = self._write_audit(
+                    phase=OperationGatewayAudit.Phase.OUTCOME,
                     outcome=OperationGatewayAudit.Outcome.SUCCESS,
+                    descriptor=descriptor,
+                    record=record,
                     result=record.result,
+                    error=None,
                 )
                 record.state = OperationGatewayIdempotency.State.SUCCEEDED
                 record.retryable = False
                 record.error = None
                 record.audit_receipt = audit.id
                 record.save(update_fields=["state", "retryable", "error", "audit_receipt", "updated_at"])
-                return self._success_envelope(
-                    record,
-                    descriptor,
-                    record.workspace_slug,
-                    str(record.caller_id),
-                    audit.id,
-                    record.result,
-                    True,
-                ), 200
-            return self._reconcile_unknown_locked(record, descriptor)
+                audit_id = audit.id
+            return self._success_envelope(
+                record,
+                descriptor,
+                record.workspace_slug,
+                str(record.caller_id),
+                audit_id,
+                record.result,
+                True,
+            ), 200
 
     def _begin_attempt(
         self,
@@ -296,6 +316,45 @@ class OperationGateway:
                         allow_running_unknown=True,
                     )
                 time.sleep(0.01)
+
+    def _restore_publications(self, record: OperationGatewayIdempotency, issue: Issue) -> None:
+        """Rebuild missing post-commit intents from the durable terminal receipt."""
+
+        input_data = record.request_input or {}
+        current_instance = json.dumps(IssueSerializer(issue).data, cls=DjangoJSONEncoder)
+        requested_data = json.dumps({"name": input_data.get("name")}, cls=DjangoJSONEncoder)
+        payload = {
+            "activity": {
+                "type": "issue.activity.updated",
+                "requested_data": requested_data,
+                "actor_id": str(record.caller_id),
+                "issue_id": str(issue.id),
+                "project_id": str(issue.project_id),
+                "current_instance": current_instance,
+                "epoch": record.updated_at.timestamp(),
+                "origin": None,
+                "expected": False,
+            },
+            "notification": {
+                "type": "issue.activity.updated",
+                "issue_id": str(issue.id),
+                "project_id": str(issue.project_id),
+                "actor_id": str(record.caller_id),
+                "subscriber": True,
+                "requested_data": requested_data,
+                "current_instance": current_instance,
+            },
+            "webhook": {
+                "model_name": "issue",
+                "model_id": str(issue.id),
+                "requested_data": {"name": input_data.get("name")},
+                "current_instance": current_instance,
+                "actor_id": str(record.caller_id),
+                "slug": record.workspace_slug,
+                "origin": None,
+            },
+        }
+        create_publication_intents(record, payload)
 
     def _begin_attempt_once(
         self,
@@ -357,11 +416,13 @@ class OperationGateway:
                 return AttemptDecision(workspace=workspace, record=record)
 
             if record.request_digest != request_digest:
+                conflict_request_id = uuid.uuid4()
                 audit = self._write_invocation_pair(
                     record=record,
                     correlation_id=correlation_id,
                     request_digest=request_digest,
                     invocation_id=uuid.uuid4(),
+                    request_id=conflict_request_id,
                     outcome=OperationGatewayAudit.Outcome.DENIED,
                     error=GatewayFailure("IDEMPOTENCY_CONFLICT", 409, False),
                 )
@@ -372,7 +433,7 @@ class OperationGateway:
                         operation_id=descriptor.operation_id,
                         workspace_slug=workspace.slug,
                         caller_id=caller_id,
-                        request_id=uuid.uuid4(),
+                        request_id=conflict_request_id,
                         idempotency_key=idempotency_key,
                         correlation_id=correlation_id,
                         audit_receipt=audit.id,
@@ -506,7 +567,7 @@ class OperationGateway:
                 if authorization_failure is not None:
                     raise authorization_failure
 
-                status_code, raw_result = self._dispatch(
+                status_code, raw_result, publication_payload = self._dispatch(
                     request=request,
                     workspace=workspace,
                     descriptor=descriptor,
@@ -519,9 +580,17 @@ class OperationGateway:
                         False,
                     )
                 result = self._bound_result(raw_result, max_bytes=min(descriptor.max_result_bytes, MAX_RESULT_BYTES))
-                return self._finish_success(record, descriptor, workspace.slug, caller_id, result), 200
-        except WorkItemPublicationFailure:
-            return self._mark_outcome_unknown(record, descriptor, workspace.slug, caller_id, request_digest)
+                return (
+                    self._finish_success(
+                        record,
+                        descriptor,
+                        workspace.slug,
+                        caller_id,
+                        result,
+                        publication_payload=publication_payload,
+                    ),
+                    200,
+                )
         except GatewayFailure as failure:
             return self._persist_failure(record, descriptor, workspace.slug, caller_id, request_digest, failure)
         except Issue.DoesNotExist:
@@ -595,7 +664,7 @@ class OperationGateway:
         workspace: Workspace,
         descriptor: OperationDescriptor,
         parsed_input: dict[str, Any],
-    ) -> tuple[int, dict[str, Any]]:
+    ) -> tuple[int, dict[str, Any], dict[str, Any] | None]:
         project_id = str(parsed_input["project_id"])
         issue_id = str(parsed_input["issue_id"])
         if descriptor.operation_id == "work_item.read":
@@ -604,10 +673,10 @@ class OperationGateway:
             view.request = service_request
             view.kwargs = {"slug": workspace.slug, "project_id": project_id}
             response = view.get(service_request, slug=workspace.slug, project_id=project_id, pk=issue_id)
-            return response.status_code, response.data
+            return response.status_code, response.data, None
 
         try:
-            result = WorkItemRenameService().rename(
+            outcome = WorkItemRenameService().rename(
                 request=request,
                 workspace=workspace,
                 project_id=project_id,
@@ -616,7 +685,9 @@ class OperationGateway:
             )
         except WorkItemRenameFailure as failure:
             raise GatewayFailure(failure.code, failure.http_status, failure.retryable) from None
-        return 200, result
+        if not isinstance(outcome, WorkItemRenameOutcome):
+            raise GatewayFailure("UPSTREAM_FAILURE", 503, True)
+        return 200, outcome.result, outcome.publication_payload
 
     def _bound_result(self, raw_result: dict[str, Any], *, max_bytes: int) -> dict[str, Any]:
         bounded = {field: raw_result.get(field) for field in READ_RESULT_FIELDS if field in raw_result}
@@ -632,7 +703,9 @@ class OperationGateway:
         workspace_slug: str,
         caller_id: str,
         result: dict[str, Any],
+        publication_payload: dict[str, Any] | None = None,
     ) -> GatewaySuccessEnvelope:
+        create_publication_intents(record, publication_payload)
         audit = self._write_audit(
             phase=OperationGatewayAudit.Phase.OUTCOME,
             outcome=OperationGatewayAudit.Outcome.SUCCESS,
@@ -647,6 +720,8 @@ class OperationGateway:
         record.retryable = False
         record.audit_receipt = audit.id
         record.save(update_fields=["state", "result", "error", "retryable", "audit_receipt", "updated_at"])
+        if publication_payload:
+            schedule_publications_on_commit(record)
         return self._success_envelope(record, descriptor, workspace_slug, caller_id, audit.id, result, False)
 
     def _persist_failure(
@@ -833,6 +908,7 @@ class OperationGateway:
         correlation_id: str,
         request_digest: str,
         invocation_id: uuid.UUID,
+        request_id: uuid.UUID | None = None,
         outcome: str,
         result: dict[str, Any] | None = None,
         error: GatewayError | GatewayFailure | None = None,
@@ -840,7 +916,7 @@ class OperationGateway:
         error_value = self._error(error.code, error.retryable) if isinstance(error, GatewayFailure) else error
         fields = {
             "invocation_id": invocation_id,
-            "request_id": record.request_id,
+            "request_id": request_id or record.request_id,
             "operation_id": record.operation_id,
             "workspace_id": record.workspace_id,
             "workspace_slug": record.workspace_slug,

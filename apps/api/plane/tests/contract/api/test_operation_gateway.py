@@ -1,26 +1,34 @@
 import json
 import threading
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
 import pytest
-from django.db import close_old_connections
+from django.db import DatabaseError, close_old_connections, connection, transaction
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from plane.bgtasks.issue_activities_task import issue_activity
 from plane.db.models import (
     APIToken,
     Issue,
+    IssueActivity,
+    IssueSubscriber,
+    Notification,
     OperationGatewayAudit,
     OperationGatewayIdempotency,
+    OperationGatewayPublication,
     Project,
     ProjectMember,
     State,
     User,
+    UserNotificationPreference,
     Workspace,
 )
 from plane.operation_gateway.contracts import MAX_RESULT_BYTES
 from plane.operation_gateway.gateway import OperationGateway
+from plane.operation_gateway.publications import dispatch_publication_once
 from plane.operation_gateway.work_items import WorkItemRenameFailure, WorkItemRenameService
 
 
@@ -72,6 +80,11 @@ def client_for_user(user):
     token = APIToken.objects.create(user=user, label="Gateway test token", token=f"gateway-{user.id}")
     client.credentials(HTTP_X_API_KEY=token.token)
     return client
+
+
+def drain_publications(record):
+    for publication in record.publications.order_by("kind"):
+        dispatch_publication_once(str(publication.id))
 
 
 @pytest.mark.contract
@@ -162,20 +175,19 @@ def test_mutation_replay_is_stable_and_does_not_repeat_plane_service(
         key="replay-1",
         input_data={"name": "Renamed Once"},
     )
-    with (
-        patch("plane.operation_gateway.work_items.issue_activity") as issue_activity,
-        patch("plane.operation_gateway.work_items.model_activity") as model_activity,
-    ):
-        first = api_key_client.post("/api/v1/operations/", payload, format="json")
-        second = api_key_client.post("/api/v1/operations/", payload, format="json")
+    first = api_key_client.post("/api/v1/operations/", payload, format="json")
+    record = OperationGatewayIdempotency.objects.get(idempotency_key="replay-1")
+    drain_publications(record)
+    second = api_key_client.post("/api/v1/operations/", payload, format="json")
 
     assert first.status_code == status.HTTP_200_OK
     assert second.status_code == status.HTTP_200_OK
     assert first.json()["request_id"] == second.json()["request_id"]
     assert first.json()["result"] == second.json()["result"]
     assert second.json()["idempotency"]["replayed"] is True
-    assert issue_activity.delay.call_count == 1
-    assert model_activity.delay.call_count == 1
+    assert record.publications.count() == 3
+    assert record.publications.filter(state=OperationGatewayPublication.State.SUCCEEDED).count() == 3
+    assert IssueActivity.objects.filter(issue_id=gateway_issue.id, field="name").count() == 1
     gateway_issue.refresh_from_db()
     assert gateway_issue.name == "Renamed Once"
     assert OperationGatewayAudit.objects.filter(idempotency_key="replay-1").count() == 4
@@ -198,26 +210,31 @@ def test_conflicting_key_denies_without_replaying_mutation(api_key_client, works
         input_data={"name": "First Name"},
     )
     second_payload = {**first_payload, "input": {**first_payload["input"], "name": "Second Name"}}
-    with (
-        patch("plane.operation_gateway.work_items.issue_activity") as issue_activity,
-        patch("plane.operation_gateway.work_items.model_activity") as model_activity,
-    ):
-        first = api_key_client.post("/api/v1/operations/", first_payload, format="json")
-        second = api_key_client.post("/api/v1/operations/", second_payload, format="json")
+    first = api_key_client.post("/api/v1/operations/", first_payload, format="json")
+    first_record = OperationGatewayIdempotency.objects.get(idempotency_key="conflict-1")
+    drain_publications(first_record)
+    second = api_key_client.post("/api/v1/operations/", second_payload, format="json")
 
     assert first.status_code == status.HTTP_200_OK
     assert second.status_code == status.HTTP_409_CONFLICT
     assert second.json()["error"]["code"] == "IDEMPOTENCY_CONFLICT"
-    assert issue_activity.delay.call_count == 1
-    assert model_activity.delay.call_count == 1
     gateway_issue.refresh_from_db()
     assert gateway_issue.name == "First Name"
     assert OperationGatewayAudit.objects.filter(idempotency_key="conflict-1").count() == 4
+    conflict_audits = OperationGatewayAudit.objects.filter(
+        idempotency_key="conflict-1",
+        outcome=OperationGatewayAudit.Outcome.DENIED,
+    )
+    assert conflict_audits.count() == 1
+    assert conflict_audits.first().request_id == uuid.UUID(second.json()["request_id"])
+    assert str(conflict_audits.first().request_id) != first.json()["request_id"]
 
 
 @pytest.mark.contract
 @pytest.mark.django_db(transaction=True)
-def test_outcome_unknown_is_never_blindly_replayed(api_key_client, workspace, gateway_project, gateway_issue):
+def test_post_commit_dispatch_loss_is_recovered_from_durable_publications(
+    api_key_client, workspace, gateway_project, gateway_issue
+):
     payload = gateway_body(
         workspace,
         gateway_project,
@@ -226,22 +243,18 @@ def test_outcome_unknown_is_never_blindly_replayed(api_key_client, workspace, ga
         key="unknown-1",
         input_data={"name": "Possibly Renamed"},
     )
-    with (
-        patch("plane.operation_gateway.work_items.issue_activity") as issue_activity,
-        patch("plane.operation_gateway.work_items.model_activity") as model_activity,
-    ):
-        model_activity.delay.side_effect = RuntimeError("broker unavailable")
+    with patch("plane.operation_gateway.publications.schedule_publications") as schedule:
         first = api_key_client.post("/api/v1/operations/", payload, format="json")
-        second = api_key_client.post("/api/v1/operations/", payload, format="json")
+        schedule.assert_called_once()
+    record = OperationGatewayIdempotency.objects.get(idempotency_key="unknown-1")
 
-    assert first.status_code == status.HTTP_409_CONFLICT
-    assert first.json()["error"]["code"] == "OUTCOME_UNKNOWN"
-    assert second.status_code == status.HTTP_409_CONFLICT
-    assert second.json()["error"]["code"] == "OUTCOME_UNKNOWN"
-    assert second.json()["idempotency"]["replayed"] is True
-    assert issue_activity.delay.call_count == 1
-    assert model_activity.delay.call_count == 1
-    assert OperationGatewayIdempotency.objects.get(idempotency_key="unknown-1").state == "outcome_unknown"
+    assert first.status_code == status.HTTP_200_OK
+    assert record.state == OperationGatewayIdempotency.State.SUCCEEDED
+    assert record.publications.filter(state=OperationGatewayPublication.State.PENDING).count() == 3
+    reconciled, reconcile_status = OperationGateway().reconcile(record.id)
+    assert reconcile_status == status.HTTP_200_OK
+    assert reconciled["ok"] is True
+    assert record.publications.filter(state=OperationGatewayPublication.State.SUCCEEDED).count() == 3
 
 
 @pytest.mark.contract
@@ -425,8 +438,6 @@ def test_retryable_precommit_failure_reopens_only_after_rollback(
 
     with (
         patch.object(WorkItemRenameService, "rename", autospec=True, side_effect=fail_once),
-        patch("plane.operation_gateway.work_items.issue_activity") as issue_activity,
-        patch("plane.operation_gateway.work_items.model_activity") as model_activity,
     ):
         first = api_key_client.post("/api/v1/operations/", payload, format="json")
         gateway_issue.refresh_from_db()
@@ -437,11 +448,10 @@ def test_retryable_precommit_failure_reopens_only_after_rollback(
     assert second.status_code == status.HTTP_200_OK
     gateway_issue.refresh_from_db()
     assert gateway_issue.name == "Retry Me"
-    assert issue_activity.delay.call_count == 1
-    assert model_activity.delay.call_count == 1
     record = OperationGatewayIdempotency.objects.get(idempotency_key="retryable-precommit")
     assert record.state == OperationGatewayIdempotency.State.SUCCEEDED
     assert record.retryable is False
+    assert record.publications.count() == 3
     assert list(
         OperationGatewayAudit.objects.filter(idempotency_key="retryable-precommit")
         .order_by("created_at", "id")
@@ -451,7 +461,7 @@ def test_retryable_precommit_failure_reopens_only_after_rollback(
 
 @pytest.mark.contract
 @pytest.mark.django_db(transaction=True)
-def test_post_commit_publication_failure_is_unknown_and_reconciles_without_republish(
+def test_publication_worker_crash_rolls_back_effect_and_retry_is_idempotent(
     api_key_client, workspace, gateway_project, gateway_issue
 ):
     payload = gateway_body(
@@ -459,30 +469,80 @@ def test_post_commit_publication_failure_is_unknown_and_reconciles_without_repub
         gateway_project,
         gateway_issue,
         operation_id="work_item.rename",
-        key="post-commit-unknown",
+        key="worker-crash",
         input_data={"name": "Committed Name"},
     )
-    with (
-        patch("plane.operation_gateway.work_items.issue_activity") as issue_activity,
-        patch("plane.operation_gateway.work_items.model_activity") as model_activity,
-    ):
-        issue_activity.delay.side_effect = RuntimeError("broker secret must not escape")
-        first = api_key_client.post("/api/v1/operations/", payload, format="json")
-        record = OperationGatewayIdempotency.objects.get(idempotency_key="post-commit-unknown")
-        reconciled, reconcile_status = OperationGateway().reconcile(record.id)
-        second = api_key_client.post("/api/v1/operations/", payload, format="json")
+    first = api_key_client.post("/api/v1/operations/", payload, format="json")
+    record = OperationGatewayIdempotency.objects.get(idempotency_key="worker-crash")
+    activity = record.publications.get(kind=OperationGatewayPublication.Kind.ACTIVITY)
+    real_run = issue_activity.run
 
-    assert first.status_code == status.HTTP_409_CONFLICT
-    assert first.json()["error"]["code"] == "OUTCOME_UNKNOWN"
-    assert "broker secret" not in json.dumps(first.json())
+    def effect_then_die(**kwargs):
+        real_run(**kwargs)
+        raise RuntimeError("worker died after effect before receipt")
+
+    with patch("plane.operation_gateway.publications.issue_activity.run", side_effect=effect_then_die):
+        with pytest.raises(RuntimeError):
+            dispatch_publication_once(str(activity.id))
+
+    activity.refresh_from_db()
+    assert activity.state == OperationGatewayPublication.State.PENDING
+    assert IssueActivity.objects.filter(issue_id=gateway_issue.id, field="name").count() == 0
+    dispatch_publication_once(str(activity.id))
+    assert IssueActivity.objects.filter(issue_id=gateway_issue.id, field="name").count() == 1
+    dispatch_publication_once(str(activity.id))
+    assert IssueActivity.objects.filter(issue_id=gateway_issue.id, field="name").count() == 1
     gateway_issue.refresh_from_db()
     assert gateway_issue.name == "Committed Name"
-    assert reconcile_status == status.HTTP_200_OK
-    assert reconciled["ok"] is True
-    assert second.status_code == status.HTTP_200_OK
-    assert issue_activity.delay.call_count == 1
-    assert model_activity.delay.call_count == 0
-    assert OperationGatewayIdempotency.objects.get(id=record.id).state == OperationGatewayIdempotency.State.SUCCEEDED
+    assert first.status_code == status.HTTP_200_OK
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_notification_publication_retries_without_duplicate_notifications(
+    api_key_client, workspace, gateway_project, gateway_issue, create_user
+):
+    receiver = User.objects.create(email="gateway-receiver@plane.so", username="gateway-receiver")
+    ProjectMember.objects.create(project=gateway_project, member=receiver, role=20, is_active=True)
+    IssueSubscriber.objects.create(
+        project=gateway_project,
+        workspace=workspace,
+        issue=gateway_issue,
+        subscriber=receiver,
+    )
+    UserNotificationPreference.objects.create(user=receiver)
+    state = State.objects.create(
+        name="Backlog",
+        color="#000000",
+        group="backlog",
+        default=True,
+        project=gateway_project,
+        workspace=workspace,
+        created_by=create_user,
+    )
+    gateway_issue.state = state
+    gateway_issue.save(update_fields=["state"])
+
+    response = api_key_client.post(
+        "/api/v1/operations/",
+        gateway_body(
+            workspace,
+            gateway_project,
+            gateway_issue,
+            operation_id="work_item.rename",
+            key="notification-retry",
+            input_data={"name": "Notified Rename"},
+        ),
+        format="json",
+    )
+    record = OperationGatewayIdempotency.objects.get(idempotency_key="notification-retry")
+    drain_publications(record)
+    count_after_first = Notification.objects.filter(entity_identifier=gateway_issue.id).count()
+    drain_publications(record)
+
+    assert response.status_code == status.HTTP_200_OK
+    assert count_after_first == 1
+    assert Notification.objects.filter(entity_identifier=gateway_issue.id).count() == 1
 
 
 @pytest.mark.contract
@@ -513,6 +573,42 @@ def test_audit_queryset_and_bulk_mutations_are_blocked(api_key_client, workspace
         audit.save(update_fields=["error_code"])
     with pytest.raises(ValueError, match="append-only"):
         audit.delete()
+    with pytest.raises(ValueError, match="append-only"):
+        OperationGatewayAudit._base_manager.filter(pk=audit.pk).update(error_code="tamper")
+    with pytest.raises(ValueError, match="append-only"):
+        OperationGatewayAudit._base_manager.filter(pk=audit.pk).delete()
+    with pytest.raises(ValueError, match="append-only"):
+        OperationGatewayAudit._base_manager.bulk_update([audit], ["error_code"])
+
+    with pytest.raises(DatabaseError, match="append-only"):
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE operation_gateway_audit SET error_code = %s WHERE id = %s",
+                    ["tamper", str(audit.pk)],
+                )
+    with pytest.raises(DatabaseError, match="append-only"):
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM operation_gateway_audit WHERE id = %s",
+                    [str(audit.pk)],
+                )
+
+    inserted = OperationGatewayAudit.objects.create(
+        invocation_id=uuid.uuid4(),
+        phase=OperationGatewayAudit.Phase.INTENT,
+        outcome=OperationGatewayAudit.Outcome.INTENT,
+        request_id=uuid.uuid4(),
+        operation_id="work_item.read",
+        workspace_id=workspace.id,
+        workspace_slug=workspace.slug,
+        caller_id=audit.caller_id,
+        idempotency_key="append-only-insert",
+        correlation_id="append-only-correlation",
+        request_digest="0" * 64,
+    )
+    assert OperationGatewayAudit._base_manager.get(pk=inserted.pk).pk == inserted.pk
 
 
 @pytest.mark.contract
@@ -547,34 +643,38 @@ def test_same_key_isolated_by_stable_workspace_uuid(
         created_by=create_user,
     )
 
-    with (
-        patch("plane.operation_gateway.work_items.issue_activity"),
-        patch("plane.operation_gateway.work_items.model_activity"),
-    ):
-        first = api_key_client.post(
-            "/api/v1/operations/",
-            gateway_body(
-                workspace,
-                gateway_project,
-                gateway_issue,
-                operation_id="work_item.rename",
-                key="same-tenant-key",
-                input_data={"name": "First Tenant Name"},
-            ),
-            format="json",
-        )
-        second = api_key_client.post(
-            "/api/v1/operations/",
-            gateway_body(
-                second_workspace,
-                second_project,
-                second_issue,
-                operation_id="work_item.rename",
-                key="same-tenant-key",
-                input_data={"name": "Second Tenant Name"},
-            ),
-            format="json",
-        )
+    first = api_key_client.post(
+        "/api/v1/operations/",
+        gateway_body(
+            workspace,
+            gateway_project,
+            gateway_issue,
+            operation_id="work_item.rename",
+            key="same-tenant-key",
+            input_data={"name": "First Tenant Name"},
+        ),
+        format="json",
+    )
+    first_record = OperationGatewayIdempotency.objects.get(
+        idempotency_key="same-tenant-key", workspace_id=workspace.id
+    )
+    drain_publications(first_record)
+    second = api_key_client.post(
+        "/api/v1/operations/",
+        gateway_body(
+            second_workspace,
+            second_project,
+            second_issue,
+            operation_id="work_item.rename",
+            key="same-tenant-key",
+            input_data={"name": "Second Tenant Name"},
+        ),
+        format="json",
+    )
+    second_record = OperationGatewayIdempotency.objects.get(
+        idempotency_key="same-tenant-key", workspace_id=second_workspace.id
+    )
+    drain_publications(second_record)
 
     assert first.status_code == status.HTTP_200_OK
     assert second.status_code == status.HTTP_200_OK
@@ -620,8 +720,6 @@ def test_concurrent_first_use_applies_and_publishes_once(api_token, workspace, g
 
     with (
         patch.object(WorkItemRenameService, "rename", autospec=True, side_effect=blocked_rename) as rename,
-        patch("plane.operation_gateway.work_items.issue_activity") as issue_activity,
-        patch("plane.operation_gateway.work_items.model_activity") as model_activity,
         ThreadPoolExecutor(max_workers=2) as executor,
     ):
         first_future = executor.submit(invoke)
@@ -635,7 +733,7 @@ def test_concurrent_first_use_applies_and_publishes_once(api_token, workspace, g
     assert second.status_code == status.HTTP_200_OK
     assert {first.json()["idempotency"]["replayed"], second.json()["idempotency"]["replayed"]} == {False, True}
     assert rename.call_count == 1
-    assert issue_activity.delay.call_count == 1
-    assert model_activity.delay.call_count == 1
     gateway_issue.refresh_from_db()
     assert gateway_issue.name == "One Concurrent Rename"
+    record = OperationGatewayIdempotency.objects.get(idempotency_key="concurrent-first-use")
+    assert record.publications.count() == 3

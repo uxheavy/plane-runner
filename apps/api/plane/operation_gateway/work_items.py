@@ -1,18 +1,16 @@
-"""Gateway-owned semantic work-item operations and commit-safe publications."""
+"""Gateway-owned semantic work-item operations."""
 
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Any
 
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
 from plane.api.serializers import IssueSerializer
-from plane.bgtasks.issue_activities_task import issue_activity
-from plane.bgtasks.webhook_task import model_activity
 from plane.db.models import Issue, Project, Workspace
 from plane.utils.host import base_host
 
@@ -27,12 +25,14 @@ class WorkItemRenameFailure(Exception):
         self.retryable = retryable
 
 
-class WorkItemPublicationFailure(Exception):
-    """A commit callback could not publish a durable Plane projection."""
+@dataclass(frozen=True)
+class WorkItemRenameOutcome:
+    result: dict[str, Any]
+    publication_payload: dict[str, Any]
 
 
 class WorkItemRenameService:
-    """Apply one validated rename and publish its existing Plane projections on commit."""
+    """Apply one validated rename through Plane's existing issue serializer."""
 
     def rename(
         self,
@@ -42,7 +42,7 @@ class WorkItemRenameService:
         project_id: str,
         issue_id: str,
         name: str,
-    ) -> dict[str, Any]:
+    ) -> WorkItemRenameOutcome:
         issue = (
             Issue.objects.select_for_update()
             .filter(workspace_id=workspace.id, project_id=project_id, pk=issue_id)
@@ -53,7 +53,8 @@ class WorkItemRenameService:
             # The gateway deliberately does not reveal whether a Plane object exists.
             raise WorkItemRenameFailure("OPERATION_REJECTED", 400, False)
 
-        current_instance = json.dumps(IssueSerializer(issue).data, cls=DjangoJSONEncoder)
+        current_instance_data = json.loads(json.dumps(IssueSerializer(issue).data, cls=DjangoJSONEncoder))
+        current_instance = json.dumps(current_instance_data, cls=DjangoJSONEncoder)
         requested_data = {"name": name}
         serializer = IssueSerializer(
             issue,
@@ -75,40 +76,41 @@ class WorkItemRenameService:
         issue_id_string = str(issue.id)
         project_id_string = str(project.id)
         requested_json = json.dumps(requested_data, cls=DjangoJSONEncoder)
+        # Keep the value stable in the durable payload while retaining enough
+        # precision to distinguish two same-second gateway mutations.
+        epoch = timezone.now().timestamp()
 
-        # These callbacks run only after the transaction containing both the
-        # issue write and the gateway receipt has committed. A broker failure
-        # therefore becomes outcome_unknown instead of a replayable mutation.
-        def publish_issue_activity() -> None:
-            try:
-                issue_activity.delay(
-                    type="issue.activity.updated",
-                    requested_data=requested_json,
-                    actor_id=actor_id,
-                    issue_id=issue_id_string,
-                    project_id=project_id_string,
-                    current_instance=current_instance,
-                    epoch=int(timezone.now().timestamp()),
-                    notification=True,
-                    origin=origin,
-                )
-            except Exception:
-                raise WorkItemPublicationFailure from None
-
-        def publish_model_activity() -> None:
-            try:
-                model_activity.delay(
-                    model_name="issue",
-                    model_id=issue_id_string,
-                    requested_data=requested_data,
-                    current_instance=current_instance,
-                    actor_id=request.user.id,
-                    slug=workspace.slug,
-                    origin=origin,
-                )
-            except Exception:
-                raise WorkItemPublicationFailure from None
-
-        transaction.on_commit(publish_issue_activity)
-        transaction.on_commit(publish_model_activity)
-        return serialized_result
+        return WorkItemRenameOutcome(
+            result=serialized_result,
+            publication_payload={
+                "activity": {
+                    "type": "issue.activity.updated",
+                    "requested_data": requested_json,
+                    "actor_id": actor_id,
+                    "issue_id": issue_id_string,
+                    "project_id": project_id_string,
+                    "current_instance": current_instance,
+                    "epoch": epoch,
+                    "origin": origin,
+                    "expected": current_instance_data.get("name") != name,
+                },
+                "notification": {
+                    "type": "issue.activity.updated",
+                    "issue_id": issue_id_string,
+                    "project_id": project_id_string,
+                    "actor_id": actor_id,
+                    "subscriber": True,
+                    "requested_data": requested_json,
+                    "current_instance": current_instance,
+                },
+                "webhook": {
+                    "model_name": "issue",
+                    "model_id": issue_id_string,
+                    "requested_data": requested_data,
+                    "current_instance": current_instance,
+                    "actor_id": actor_id,
+                    "slug": workspace.slug,
+                    "origin": origin,
+                },
+            },
+        )
