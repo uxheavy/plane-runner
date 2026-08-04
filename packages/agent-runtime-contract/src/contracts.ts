@@ -111,14 +111,15 @@ function makeNamespacedRef<Tag extends RefTag>(tag: Tag, namespace: string, valu
   if (typeof value !== "string") {
     throw new ContractParseError("reference", "invalid contract reference");
   }
-  if (value.length > REF_IDENTIFIER_MAX_LENGTH) {
+  const maximumSuffixLength = Math.min(REF_IDENTIFIER_MAX_LENGTH, MAX_REF_LENGTH - namespace.length - 1);
+  if (value.length > maximumSuffixLength) {
     throw new ContractParseError("reference", "invalid contract reference");
   }
   if (!REF_SUFFIX_PATTERN.test(value)) {
     throw new ContractParseError("reference", "invalid contract reference");
   }
 
-  const namespaced = `${namespace}:${value}`;
+  const namespaced = namespace.concat(":", value);
   if (namespaced.length > MAX_REF_LENGTH || utf8ByteLengthUpTo(namespaced, MAX_REF_LENGTH) > MAX_REF_LENGTH) {
     throw new ContractParseError("reference", "invalid contract reference");
   }
@@ -128,9 +129,11 @@ function makeNamespacedRef<Tag extends RefTag>(tag: Tag, namespace: string, valu
 
 function parseNamespacedRef<Tag extends RefTag>(tag: Tag, namespace: string, value: unknown): OpaqueRef<Tag> {
   void tag;
+  const maximumSuffixLength = Math.min(REF_IDENTIFIER_MAX_LENGTH, MAX_REF_LENGTH - namespace.length - 1);
+  const maximumReferenceLength = namespace.length + 1 + maximumSuffixLength;
   if (
     typeof value !== "string" ||
-    value.length > MAX_REF_LENGTH ||
+    value.length > maximumReferenceLength ||
     utf8ByteLengthUpTo(value, MAX_REF_LENGTH) > MAX_REF_LENGTH ||
     !NAMESPACED_REF_PATTERN.test(value)
   ) {

@@ -22,18 +22,18 @@ const schemaDefinitions = {
   "runtime-durable-state": runtimeDurableStateSchema,
 } as const;
 
-const RUNTIME_SCHEMA_NAMES = [
-  "run-snapshot",
-  "invocation-envelope",
-  "runtime-event",
-  "runtime-exit",
-  "runtime-durable-state",
-] as const;
+export type RuntimeSchemaName = keyof typeof schemaDefinitions;
+
+type RuntimeSchemaPropertyMap = {
+  [Name in RuntimeSchemaName]: readonly string[];
+};
+
+const RUNTIME_SCHEMA_NAMES = Object.freeze(Object.keys(schemaDefinitions) as RuntimeSchemaName[]);
 const RUNTIME_SCHEMA_NAME_MAX_LENGTH = RUNTIME_SCHEMA_NAMES.reduce(
   (maximum, name) => Math.max(maximum, name.length),
   0
 );
-const RUNTIME_SCHEMA_NAME_SET = new Set<keyof typeof schemaDefinitions>(RUNTIME_SCHEMA_NAMES);
+const RUNTIME_SCHEMA_NAME_SET: ReadonlySet<RuntimeSchemaName> = new Set(RUNTIME_SCHEMA_NAMES);
 
 const requiredProperties = {
   "run-snapshot": [
@@ -106,7 +106,7 @@ const requiredProperties = {
     "acceptedHumanInputAnswers",
     "acceptedExits",
   ],
-} as const;
+} as const satisfies RuntimeSchemaPropertyMap;
 
 const optionalProperties = {
   "run-snapshot": [],
@@ -114,9 +114,30 @@ const optionalProperties = {
   "runtime-event": [],
   "runtime-exit": ["inputEventRef", "failure"],
   "runtime-durable-state": ["previousRevision", "previousStateDigest", "terminal", "pendingInput"],
-} as const;
+} as const satisfies RuntimeSchemaPropertyMap;
 
-export type RuntimeSchemaName = keyof typeof schemaDefinitions;
+function hasExactSchemaKeys(value: object): boolean {
+  const keys = Object.keys(value);
+  return (
+    keys.length === RUNTIME_SCHEMA_NAMES.length &&
+    keys.every((name) => RUNTIME_SCHEMA_NAME_SET.has(name as RuntimeSchemaName))
+  );
+}
+
+function assertRuntimeSchemaValidatorClosure(): void {
+  const definitionNames = Object.keys(schemaDefinitions);
+  const definitionsMatchNames =
+    definitionNames.length === RUNTIME_SCHEMA_NAMES.length &&
+    RUNTIME_SCHEMA_NAME_SET.size === RUNTIME_SCHEMA_NAMES.length &&
+    RUNTIME_SCHEMA_NAMES.every((name) => Object.hasOwn(schemaDefinitions, name)) &&
+    definitionNames.every((name) => RUNTIME_SCHEMA_NAME_SET.has(name as RuntimeSchemaName));
+
+  if (!definitionsMatchNames || !hasExactSchemaKeys(requiredProperties) || !hasExactSchemaKeys(optionalProperties)) {
+    throw new Error("runtime schema validator closure diverged from generated schema definitions");
+  }
+}
+
+assertRuntimeSchemaValidatorClosure();
 
 export type SafeValidationError = Readonly<{
   instancePath: "";

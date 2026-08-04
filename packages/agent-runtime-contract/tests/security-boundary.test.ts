@@ -7,15 +7,43 @@ import { describe, expect, test, vi } from "vitest";
 import {
   canonicalJsonEquals,
   canonicalizeJson,
+  createActorRef,
+  createApplicationServiceRef,
+  createArtifactRef,
+  createAssignmentRef,
+  createAuditReceiptRef,
+  createAuthorizationReceiptRef,
+  createCancellationRef,
   createContentDigest,
   createContractDigest,
+  createContextRef,
+  createCorrelationId,
+  createOperationAttemptRef,
+  createOutcomeSubmissionRef,
+  createProfileVersionRef,
   createRunSnapshotContentDigest,
+  createRunId,
   createRuntimeSchemaValidator,
+  createTargetRef,
+  createWorkspaceRef,
   parseContentDigest,
+  parseActorRef,
+  parseApplicationServiceRef,
+  parseArtifactRef,
+  parseAssignmentRef,
+  parseAuditReceiptRef,
+  parseAuthorizationReceiptRef,
+  parseCancellationRef,
+  parseContextRef,
+  parseCorrelationId,
   parseContractDigest,
+  parseOperationAttemptRef,
+  parseOutcomeSubmissionRef,
+  parseProfileVersionRef,
   parseRunSnapshotContentDigest,
   parseRuntimeEvent,
-  createWorkspaceRef,
+  parseRunId,
+  parseTargetRef,
   parseWorkspaceRef,
   serializedJsonByteLength,
   validateRuntimeSchema,
@@ -230,6 +258,105 @@ describe("serialized runtime-contract boundary", () => {
     }
   });
 
+  const assertMinimalImpossibleNamespaceSuffixes = (): void => {
+    const namespaceCases: readonly {
+      namespace: string;
+      create: (value: string) => unknown;
+      parse: (value: unknown) => unknown;
+    }[] = [
+      { namespace: "run", create: createRunId, parse: parseRunId },
+      { namespace: "actor", create: createActorRef, parse: parseActorRef },
+      { namespace: "target", create: createTargetRef, parse: parseTargetRef },
+      { namespace: "context", create: createContextRef, parse: parseContextRef },
+      { namespace: "artifact", create: createArtifactRef, parse: parseArtifactRef },
+      { namespace: "workspace", create: createWorkspaceRef, parse: parseWorkspaceRef },
+      { namespace: "assignment", create: createAssignmentRef, parse: parseAssignmentRef },
+      { namespace: "correlation", create: createCorrelationId, parse: parseCorrelationId },
+      { namespace: "cancellation", create: createCancellationRef, parse: parseCancellationRef },
+      { namespace: "audit-receipt", create: createAuditReceiptRef, parse: parseAuditReceiptRef },
+      { namespace: "profile-version", create: createProfileVersionRef, parse: parseProfileVersionRef },
+      { namespace: "operation-attempt", create: createOperationAttemptRef, parse: parseOperationAttemptRef },
+      { namespace: "outcome-submission", create: createOutcomeSubmissionRef, parse: parseOutcomeSubmissionRef },
+      { namespace: "application-service", create: createApplicationServiceRef, parse: parseApplicationServiceRef },
+      {
+        namespace: "authorization-receipt",
+        create: createAuthorizationReceiptRef,
+        parse: parseAuthorizationReceiptRef,
+      },
+    ];
+    const originalRegexTest = RegExp.prototype.test;
+    const regex = vi.spyOn(RegExp.prototype, "test");
+    const concat = vi.spyOn(String.prototype, "concat");
+    const charCodeAt = vi.spyOn(String.prototype, "charCodeAt");
+    const startsWith = vi.spyOn(String.prototype, "startsWith");
+    const normalize = vi.spyOn(String.prototype, "normalize");
+    const slice = vi.spyOn(String.prototype, "slice");
+    let hostileSuffix = "";
+    let hostileInput = "";
+    let hostileRegexCalls = 0;
+    regex.mockImplementation(function (this: RegExp, value: string) {
+      if (value === hostileSuffix || value === hostileInput) hostileRegexCalls += 1;
+      return originalRegexTest.call(this, value);
+    });
+    try {
+      expect(createContextRef("a".repeat(120))).toHaveLength(128);
+      expect(parseContextRef(`context:${"a".repeat(120)}`)).toHaveLength(128);
+      expect(regex).toHaveBeenCalled();
+      expect(concat).toHaveBeenCalled();
+      expect(charCodeAt).toHaveBeenCalled();
+      expect(startsWith).toHaveBeenCalled();
+
+      const assertNoHostileWork = (operation: () => unknown): void => {
+        regex.mockClear();
+        concat.mockClear();
+        charCodeAt.mockClear();
+        startsWith.mockClear();
+        normalize.mockClear();
+        slice.mockClear();
+        hostileRegexCalls = 0;
+
+        let rejected = false;
+        try {
+          operation();
+        } catch {
+          rejected = true;
+        }
+        const pathCalls = {
+          hostileRegex: hostileRegexCalls,
+          concat: concat.mock.calls.length,
+          charCodeAt: charCodeAt.mock.calls.length,
+          startsWith: startsWith.mock.calls.length,
+          normalize: normalize.mock.calls.length,
+          slice: slice.mock.calls.length,
+        };
+        expect(rejected).toBe(true);
+        expect(pathCalls).toEqual({
+          hostileRegex: 0,
+          concat: 0,
+          charCodeAt: 0,
+          startsWith: 0,
+          normalize: 0,
+          slice: 0,
+        });
+      };
+
+      for (const { namespace, create, parse } of namespaceCases) {
+        const maximumSuffixLength = Math.min(120, 128 - namespace.length - 1);
+        hostileSuffix = "a".repeat(maximumSuffixLength + 1);
+        hostileInput = `${namespace}:${hostileSuffix}`;
+        assertNoHostileWork(() => create(hostileSuffix));
+        assertNoHostileWork(() => parse(hostileInput));
+      }
+    } finally {
+      regex.mockRestore();
+      concat.mockRestore();
+      charCodeAt.mockRestore();
+      startsWith.mockRestore();
+      normalize.mockRestore();
+      slice.mockRestore();
+    }
+  };
+
   test("rejects oversized digest and reference values before proportional scans", () => {
     const oversized = "a".repeat(1_000_000);
     const oversizedContent = `content:${oversized}`;
@@ -257,6 +384,7 @@ describe("serialized runtime-contract boundary", () => {
     } finally {
       charCodeAt.mockRestore();
     }
+    assertMinimalImpossibleNamespaceSuffixes();
   });
 
   test("keeps multibyte digest scans within the private digest maximum", () => {
