@@ -713,3 +713,25 @@ Stage and commit this single documentation/contract/evidence-control checkpoint,
 - Prompt-mutating reseals also refresh the fixture-contract row for the changed planning verifier, so valid reseal failures are isolated to retired-name authority. Final content checkpoint: `5e066fb672feac2348ff7209d49af5b2768fbaa5`.
 - The ordinary path/prose positive uses `README.md`, a non-generated canonical document, so the resealed control exercises token-local context without bypassing generated-artifact freshness. Final content checkpoint: `b7557a0a1db873de08cb37bbd6499a894746e117`.
 - OxLint found and the content checkpoint corrected one unnecessary slash escape in the ordinary-path regex; node syntax, OxLint, and `git diff --check` pass before this final seal. Final content checkpoint: `172eade95008055d7256093c1f459e048bfd3bf1`.
+
+## 2026-08-04 — Fresh Luna remediation: exact retired-token occurrence binding
+
+### Scope and checkpoint
+
+- Replaced the proximity-based historical exemption in `verify-g0-preflight.mjs` with same-clause nearest-occurrence binding. A historical/rejected/retired marker can bind only the specifically marked retired token occurrence; a later occurrence in the same clause remains authoritative.
+- Added one real valid-reseal compact same-clause control for each of the 11 retired-name families to `run-g0-negative-controls.mjs`. The exact compact form is `Rejected <retired-token> authoritative model-facing name <retired-token>`; the table control asserts the first occurrence is allowed and the later occurrence is rejected.
+- Content/remediation commit: `6dae0eb97b27945d1f0830b5c13dadab2c03fc15`.
+- Ran the actual seal generator from that clean content commit; it bound 56 content paths and the four authorized seal paths. Full post-seal validation follows the separate seal-only commit.
+
+### Validation evidence
+
+- `node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode preflight` — exit 0; all checks pass and human approval remains pending by design.
+- `node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode g0` — exit 1 only for the expected pending human approval; all non-approval checks pass.
+- `node docs/agent-tooling/verifiers/test-g0-approved-fixture.mjs` — exit 0; temporary approved state passed and the real pending record was unchanged.
+- `node docs/agent-tooling/verifiers/run-g0-negative-controls.mjs` — exit 0; 94 controls passed: all 83 prior controls plus 11 compact same-clause real valid-reseal controls, one for each retired-name family.
+- `node docs/agent-tooling/verifiers/validate-ajv-2020.mjs` — exit 0; 6 schema/instance pairs.
+- `node docs/agent-tooling/verifiers/validate-ownership-map.mjs` — exit 0; 15 writable surfaces, 12 plan-lane joins, and no cross-owner overlaps.
+- `node docs/agent-tooling/verifiers/validate-requirement-coverage.mjs`, both renderer `--check` commands, and `node docs/agent-tooling/verifiers/validate-planning-fixtures.mjs` — all exit 0.
+- `for file in docs/agent-tooling/verifiers/*.mjs; do node --check "$file" || exit 1; done` — exit 0; `./node_modules/.bin/oxlint --deny-warnings docs/agent-tooling/verifiers/*.mjs` — exit 0 with 0 warnings and 0 errors.
+- `git diff --check` across the seal range — exit 0. `RESULT.md` remains byte-identical at SHA-256 `c7b6404f435ea1ce53c9b360ba2b8745096f1d3dd42d81de4bdbb55117c4bb87`.
+- The seal commit changes exactly `SOURCE-INVENTORY.md`, `WORKLOG.md`, `g0-readiness.json`, and `integration-lock.g0.json`; its first parent is the content commit above. Final commit SHAs are reported from git after the evidence amendment.
