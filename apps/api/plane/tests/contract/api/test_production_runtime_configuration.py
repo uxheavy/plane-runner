@@ -1,3 +1,4 @@
+import ast
 import json
 import os
 import shutil
@@ -12,6 +13,33 @@ API_ROOT = Path(__file__).resolve().parents[4]
 REPOSITORY_ROOT = API_ROOT.parents[1]
 COMPOSE_FILE = REPOSITORY_ROOT / "deployments/cli/community/docker-compose.yml"
 MIGRATOR_ENTRYPOINT = API_ROOT / "bin/docker-entrypoint-migrator.sh"
+
+
+def _canonical_environment_names() -> tuple[str, ...]:
+    tree = ast.parse((API_ROOT / "plane/settings/production.py").read_text())
+    assignments = {
+        target.id: node.value
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        for target in node.targets
+        if isinstance(target, ast.Name)
+    }
+
+    def evaluate(name: str) -> set[str]:
+        value = assignments[name]
+        if isinstance(value, ast.Call):
+            value = value.args[0]
+        names: set[str] = set()
+        for element in value.elts:
+            if isinstance(element, ast.Starred):
+                names.update(evaluate(element.value.id))
+            else:
+                names.add(ast.literal_eval(element))
+        return names
+
+    return tuple(sorted(evaluate("_MIGRATION_DATABASE_ENVIRONMENT_NAMES_V1")))
+
+
 MIGRATION_POSTGRES_VARS = (
     "PGHOST",
     "PGDATABASE",
@@ -21,39 +49,7 @@ MIGRATION_POSTGRES_VARS = (
     "POSTGRES_PASSWORD",
 )
 MIGRATION_ENV_VARS = (
-    *MIGRATION_POSTGRES_VARS,
-    "POSTGRES_HOST",
-    "PGHOSTADDR",
-    "PGPORT",
-    "PGUSER",
-    "PGPASSWORD",
-    "PGPASSFILE",
-    "PGSERVICE",
-    "PGSERVICEFILE",
-    "PGOPTIONS",
-    "PGSSLMODE",
-    "PGSSLCERT",
-    "PGSSLKEY",
-    "PGSSLROOTCERT",
-    "PGSSLCRL",
-    "PGSSLCRLDIR",
-    "PGREQUIRESSL",
-    "PGCONNECT_TIMEOUT",
-    "PGAPPNAME",
-    "PGCHANNELBIND",
-    "PGTARGETSESSIONATTRS",
-    "PGLOADBALANCEHOSTS",
-    "PGDATA",
-    "POSTGRES_INITDB_ARGS",
-    "POSTGRES_INITDB_WALDIR",
-    "POSTGRES_HOST_AUTH_METHOD",
-    "POSTGRES_READ_REPLICA_DB",
-    "POSTGRES_READ_REPLICA_USER",
-    "POSTGRES_READ_REPLICA_PASSWORD",
-    "POSTGRES_READ_REPLICA_HOST",
-    "POSTGRES_READ_REPLICA_PORT",
-    "DATABASE_READ_REPLICA_URL",
-    "PLANE_AUDIT_RUNTIME_PASSWORD",
+    *_canonical_environment_names(),
     "DATABASE_MIGRATION_URL",
 )
 MIGRATION_DATABASE_PREFIXES = (
@@ -230,6 +226,8 @@ def test_normal_runtime_rejects_privileged_database_url_without_migration_secret
         "postgresql://plane%5Fmigrator:runtime@db/plane",
         "postgresql://PLANE_MIGRATOR:runtime@db/plane",
         "postgresql://plane%EF%BC%BFmigrator:runtime@db/plane",
+        "postgresql://PLANE_RUNTIME:runtime@db/plane",
+        "postgresql://plane%EF%BC%BFruntime:runtime@db/plane",
         "postgresql://plane%ZZ:runtime@db/plane",
         "postgresql://plane_runtime:pass%ZZ@db/plane",
     ),
@@ -243,6 +241,21 @@ def test_normal_runtime_rejects_encoded_ambiguous_or_malformed_database_roles(da
     assert result.returncode != 0
     assert "plane_migrator" not in result.stderr
     assert "postgresql://" not in result.stderr
+
+
+@pytest.mark.contract
+def test_normal_runtime_accepts_percent_encoded_exact_role_and_delimited_password():
+    environment = _settings_environment()
+    environment.update(
+        {
+            "DATABASE_RUNTIME_URL": "postgresql://plane%5Fruntime:p%40ss%3Awith%2Fdelimiters@db/plane",
+        }
+    )
+
+    result = _boot_settings(environment)
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "plane_runtime"
 
 
 @pytest.mark.contract
@@ -341,6 +354,49 @@ def test_migration_settings_compare_roles_without_comparing_passwords():
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "plane_migrator"
+
+
+@pytest.mark.contract
+def test_migration_settings_require_exact_configured_migration_role():
+    environment = _settings_environment()
+    environment.update(
+        {
+            "PLANE_DB_MIGRATION_MODE": "1",
+            "DATABASE_URL": "postgresql://PLANE_MIGRATOR:legacy-secret@db/plane",
+            "DATABASE_MIGRATION_URL": "postgresql://plane_migrator:migration@db/plane",
+            "PGHOST": "db",
+            "PGDATABASE": "plane",
+            "POSTGRES_PORT": "5432",
+            "POSTGRES_DB": "plane",
+            "POSTGRES_USER": "plane_migrator",
+            "POSTGRES_PASSWORD": "migration",
+        }
+    )
+
+    result = _boot_settings(environment)
+
+    assert result.returncode != 0
+    assert "one-shot migrator DATABASE_URL" in result.stderr
+    assert "postgresql://" not in result.stderr
+
+
+@pytest.mark.contract
+def test_runtime_denylist_is_generated_from_the_versioned_canonical_inventory():
+    required = {
+        "PGCHANNELBINDING",
+        "PGGSSENCMODE",
+        "PGGSSLIB",
+        "PGKRBSRVNAME",
+        "PGREQUIREPEER",
+        "PGSSLCOMPRESSION",
+        "PGSSLMINPROTOCOLVERSION",
+        "PGSSLMAXPROTOCOLVERSION",
+        "PGSSLSNI",
+        "PGCLIENTENCODING",
+    }
+
+    assert required <= set(_canonical_environment_names())
+    assert "PGCHANNELBIND" in _canonical_environment_names()
 
 
 @pytest.mark.contract

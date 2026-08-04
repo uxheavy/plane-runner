@@ -201,9 +201,9 @@ def test_terminal_failure_replay_returns_fresh_receipt(api_key_client, workspace
     replay_audit = OperationGatewayAudit.objects.get(id=second.json()["audit_receipt"])
     assert replay_audit.outcome == OperationGatewayAudit.Outcome.REPLAY
     assert replay_audit.request_id == uuid.UUID(second.json()["request_id"])
-    assert replay_audit.invocation_id != OperationGatewayAudit.objects.get(
-        id=first.json()["audit_receipt"]
-    ).invocation_id
+    assert (
+        replay_audit.invocation_id != OperationGatewayAudit.objects.get(id=first.json()["audit_receipt"]).invocation_id
+    )
 
 
 @pytest.mark.contract
@@ -525,9 +525,7 @@ def test_webhook_success_before_worker_death_becomes_unknown_without_replay(
 
 @pytest.mark.contract
 @pytest.mark.django_db(transaction=True)
-def test_webhook_adapter_records_stable_key_headers_and_definite_failure(
-    workspace, create_user
-):
+def test_webhook_adapter_records_stable_key_headers_and_definite_failure(workspace, create_user):
     webhook = Webhook.objects.create(
         workspace=workspace,
         url="https://hooks-definite.example.com/plane",
@@ -572,6 +570,7 @@ def test_webhook_adapter_records_stable_key_headers_and_definite_failure(
     class ServerErrorResponse:
         status_code = 503
         headers = {}
+
         def iter_content(self, chunk_size):
             yield b"temporarily unavailable"
 
@@ -713,9 +712,7 @@ def test_unauthenticated_request_uses_bounded_gateway_envelope(api_client, works
 
 @pytest.mark.contract
 @pytest.mark.django_db(transaction=True)
-def test_authenticated_throttle_uses_bounded_audit_envelope(
-    api_key_client, workspace, gateway_project, gateway_issue
-):
+def test_authenticated_throttle_uses_bounded_audit_envelope(api_key_client, workspace, gateway_project, gateway_issue):
     class AlwaysThrottled:
         def allow_request(self, request, view):
             return False
@@ -880,18 +877,22 @@ def test_notification_publication_retries_without_duplicate_notifications(
     assert count_after_first == 1
     assert Notification.objects.filter(entity_identifier=gateway_issue.id).count() == 1
     assert (
-        Notification.objects.filter(entity_identifier=gateway_issue.id)
+        Notification.objects.filter(entity_identifier=gateway_issue.id).exclude(idempotency_key__isnull=True).count()
+        == 1
+    )
+    assert (
+        EmailNotificationLog.objects.filter(entity_identifier=gateway_issue.id)
         .exclude(idempotency_key__isnull=True)
         .count()
         == 1
     )
-    assert EmailNotificationLog.objects.filter(entity_identifier=gateway_issue.id).exclude(
-        idempotency_key__isnull=True
-    ).count() == 1
-    assert OperationGatewayPublication.objects.get(
-        idempotency__idempotency_key="notification-retry",
-        kind=OperationGatewayPublication.Kind.NOTIFICATION,
-    ).state == OperationGatewayPublication.State.SUCCEEDED
+    assert (
+        OperationGatewayPublication.objects.get(
+            idempotency__idempotency_key="notification-retry",
+            kind=OperationGatewayPublication.Kind.NOTIFICATION,
+        ).state
+        == OperationGatewayPublication.State.SUCCEEDED
+    )
 
 
 @pytest.mark.contract
@@ -1011,9 +1012,7 @@ def test_postgres_audit_runtime_role_cannot_govern_or_bypass_trigger():
     runtime_role = f"gateway_runtime_{uuid.uuid4().hex[:10]}"
     with connection.cursor() as cursor:
         cursor.execute(f'CREATE ROLE "{runtime_role}" NOLOGIN')
-        cursor.execute(
-            f'GRANT SELECT, INSERT ON operation_gateway_audit TO "{runtime_role}"'
-        )
+        cursor.execute(f'GRANT SELECT, INSERT ON operation_gateway_audit TO "{runtime_role}"')
         cursor.execute(f'REVOKE UPDATE, DELETE, TRUNCATE, TRIGGER ON operation_gateway_audit FROM "{runtime_role}"')
         cursor.execute(
             "SELECT tableowner, has_table_privilege(%s, 'operation_gateway_audit', 'SELECT'), "
@@ -1072,7 +1071,7 @@ def test_separated_audit_boot_and_runtime_probes_cover_membership_and_trigger_po
     migration_role = settings.PLANE_AUDIT_MIGRATION_ROLE
 
     with connection.cursor() as cursor:
-        cursor.execute(f'CREATE ROLE "{runtime_role}" LOGIN NOINHERIT PASSWORD \'probe\'')
+        cursor.execute(f"CREATE ROLE \"{runtime_role}\" LOGIN NOINHERIT PASSWORD 'probe'")
         cursor.execute(f'CREATE ROLE "{bridge_role}" NOLOGIN NOINHERIT')
         cursor.execute(f'GRANT SELECT, INSERT ON operation_gateway_audit TO "{runtime_role}"')
 
@@ -1096,6 +1095,7 @@ def test_separated_audit_boot_and_runtime_probes_cover_membership_and_trigger_po
         assert trigger_enabled == "O"
         assert "BEFORE UPDATE OR DELETE" in trigger_definition or "BEFORE DELETE OR UPDATE" in trigger_definition
 
+    sequence_name = None
     try:
         with override_settings(
             PLANE_AUDIT_ENFORCE_ROLE_SEPARATION=True,
@@ -1125,6 +1125,118 @@ def test_separated_audit_boot_and_runtime_probes_cover_membership_and_trigger_po
                 assert governance_can_execute is True
                 assert public_can_execute is False
 
+            for privilege in ("SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"):
+                with connection.cursor() as cursor:
+                    cursor.execute(f"GRANT {privilege} ON TABLE operation_gateway_audit TO PUBLIC")
+                    cursor.execute(f'SET ROLE "{runtime_role}"')
+                with pytest.raises(AuditRoleBoundaryError, match="audit table|PUBLIC"):
+                    verify_audit_role_boundary()
+                with connection.cursor() as cursor:
+                    cursor.execute("RESET ROLE")
+                    cursor.execute(f"REVOKE {privilege} ON TABLE operation_gateway_audit FROM PUBLIC")
+
+            with connection.cursor() as cursor:
+                cursor.execute(f'GRANT SELECT ON TABLE operation_gateway_audit TO "{bridge_role}"')
+                cursor.execute(f'SET ROLE "{runtime_role}"')
+            with pytest.raises(AuditRoleBoundaryError, match="audit table"):
+                verify_audit_role_boundary()
+            with connection.cursor() as cursor:
+                cursor.execute("RESET ROLE")
+                cursor.execute(f'REVOKE SELECT ON TABLE operation_gateway_audit FROM "{bridge_role}"')
+
+            for privilege in ("USAGE", "CREATE"):
+                with connection.cursor() as cursor:
+                    cursor.execute(f"GRANT {privilege} ON SCHEMA public TO PUBLIC")
+                    cursor.execute(f'SET ROLE "{runtime_role}"')
+                with pytest.raises(AuditRoleBoundaryError, match="audit schema|PUBLIC"):
+                    verify_audit_role_boundary()
+                with connection.cursor() as cursor:
+                    cursor.execute("RESET ROLE")
+                    cursor.execute(f"REVOKE {privilege} ON SCHEMA public FROM PUBLIC")
+
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f'ALTER DEFAULT PRIVILEGES FOR ROLE "{migration_role}" IN SCHEMA public '
+                    f'GRANT SELECT ON TABLES TO "{bridge_role}"'
+                )
+                cursor.execute(f'SET ROLE "{runtime_role}"')
+            with pytest.raises(AuditRoleBoundaryError, match="default privileges"):
+                verify_audit_role_boundary()
+            with connection.cursor() as cursor:
+                cursor.execute("RESET ROLE")
+                cursor.execute(
+                    f'ALTER DEFAULT PRIVILEGES FOR ROLE "{migration_role}" IN SCHEMA public '
+                    f'REVOKE SELECT ON TABLES FROM "{bridge_role}"'
+                )
+
+            sequence_name = f"operation_gateway_audit_acl_{uuid.uuid4().hex[:10]}_seq"
+            with connection.cursor() as cursor:
+                cursor.execute(f'CREATE SEQUENCE "{sequence_name}"')
+                cursor.execute(f'ALTER SEQUENCE "{sequence_name}" OWNER TO "{governance_role}"')
+                cursor.execute(f'GRANT USAGE ON SEQUENCE "{sequence_name}" TO PUBLIC')
+                cursor.execute(f'SET ROLE "{runtime_role}"')
+            with pytest.raises(AuditRoleBoundaryError, match="audit sequence|PUBLIC"):
+                verify_audit_role_boundary()
+            with connection.cursor() as cursor:
+                cursor.execute("RESET ROLE")
+                cursor.execute(f'DROP SEQUENCE "{sequence_name}"')
+
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f'ALTER DEFAULT PRIVILEGES FOR ROLE "{migration_role}" IN SCHEMA public '
+                    "GRANT SELECT ON TABLES TO PUBLIC"
+                )
+                cursor.execute(f'SET ROLE "{runtime_role}"')
+            with pytest.raises(AuditRoleBoundaryError, match="default privileges|PUBLIC"):
+                verify_audit_role_boundary()
+            with connection.cursor() as cursor:
+                cursor.execute("RESET ROLE")
+                cursor.execute(
+                    f'ALTER DEFAULT PRIVILEGES FOR ROLE "{migration_role}" IN SCHEMA public '
+                    "REVOKE SELECT ON TABLES FROM PUBLIC"
+                )
+
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f'ALTER DEFAULT PRIVILEGES FOR ROLE "{bridge_role}" IN SCHEMA public '
+                    "GRANT SELECT ON TABLES TO PUBLIC"
+                )
+                cursor.execute(f'SET ROLE "{runtime_role}"')
+            with pytest.raises(AuditRoleBoundaryError, match="default privileges"):
+                verify_audit_role_boundary()
+            with connection.cursor() as cursor:
+                cursor.execute("RESET ROLE")
+                cursor.execute(
+                    f'ALTER DEFAULT PRIVILEGES FOR ROLE "{bridge_role}" IN SCHEMA public '
+                    "REVOKE SELECT ON TABLES FROM PUBLIC"
+                )
+
+            with connection.cursor() as cursor:
+                cursor.execute(f'ALTER TABLE operation_gateway_audit OWNER TO "{runtime_role}"')
+                cursor.execute(f'SET ROLE "{runtime_role}"')
+            with pytest.raises(AuditRoleBoundaryError, match="owned by the governed audit role"):
+                verify_audit_role_boundary()
+            with connection.cursor() as cursor:
+                cursor.execute("RESET ROLE")
+                cursor.execute(f'ALTER TABLE operation_gateway_audit OWNER TO "{governance_role}"')
+                cursor.execute(
+                    f'GRANT SELECT, INSERT ON operation_gateway_audit TO "{runtime_role}", "{migration_role}"'
+                )
+
+            with connection.cursor() as cursor:
+                cursor.execute(f'ALTER FUNCTION operation_gateway_audit_append_only() OWNER TO "{runtime_role}"')
+                cursor.execute(f'SET ROLE "{runtime_role}"')
+            with pytest.raises(AuditRoleBoundaryError, match="trigger function is not owned"):
+                verify_audit_role_boundary()
+            with connection.cursor() as cursor:
+                cursor.execute("RESET ROLE")
+                cursor.execute(f'ALTER FUNCTION operation_gateway_audit_append_only() OWNER TO "{governance_role}"')
+                cursor.execute(
+                    f"GRANT EXECUTE ON FUNCTION operation_gateway_audit_append_only() "
+                    f'TO "{migration_role}", "{governance_role}"'
+                )
+
+            with connection.cursor() as cursor:
                 cursor.execute(f'GRANT EXECUTE ON FUNCTION operation_gateway_audit_append_only() TO "{runtime_role}"')
                 cursor.execute(f'SET ROLE "{runtime_role}"')
             with pytest.raises(AuditRoleBoundaryError, match="invalid ACL"):
@@ -1222,6 +1334,18 @@ def test_separated_audit_boot_and_runtime_probes_cover_membership_and_trigger_po
     finally:
         with connection.cursor() as cursor:
             cursor.execute("RESET ROLE")
+            if sequence_name:
+                cursor.execute(f'DROP SEQUENCE IF EXISTS "{sequence_name}"')
+            cursor.execute(f'ALTER TABLE operation_gateway_audit OWNER TO "{governance_role}"')
+            cursor.execute(f'ALTER FUNCTION operation_gateway_audit_append_only() OWNER TO "{governance_role}"')
+            cursor.execute("REVOKE ALL ON SCHEMA public FROM PUBLIC")
+            cursor.execute(
+                f'ALTER DEFAULT PRIVILEGES FOR ROLE "{migration_role}" IN SCHEMA public '
+                "REVOKE ALL ON TABLES FROM PUBLIC"
+            )
+            cursor.execute(
+                f'ALTER DEFAULT PRIVILEGES FOR ROLE "{bridge_role}" IN SCHEMA public REVOKE ALL ON TABLES FROM PUBLIC'
+            )
             cursor.execute(
                 f'REVOKE EXECUTE ON FUNCTION operation_gateway_audit_append_only() FROM PUBLIC, "{runtime_role}"'
             )
@@ -1334,9 +1458,7 @@ def test_same_key_isolated_by_stable_workspace_uuid(
         ),
         format="json",
     )
-    first_record = OperationGatewayIdempotency.objects.get(
-        idempotency_key="same-tenant-key", workspace_id=workspace.id
-    )
+    first_record = OperationGatewayIdempotency.objects.get(idempotency_key="same-tenant-key", workspace_id=workspace.id)
     drain_publications(first_record)
     second = api_key_client.post(
         "/api/v1/operations/",
@@ -1359,8 +1481,7 @@ def test_same_key_isolated_by_stable_workspace_uuid(
     assert second.status_code == status.HTTP_200_OK
     assert OperationGatewayIdempotency.objects.filter(idempotency_key="same-tenant-key").count() == 2
     assert {
-        record.workspace_id
-        for record in OperationGatewayIdempotency.objects.filter(idempotency_key="same-tenant-key")
+        record.workspace_id for record in OperationGatewayIdempotency.objects.filter(idempotency_key="same-tenant-key")
     } == {workspace.id, second_workspace.id}
     gateway_issue.refresh_from_db()
     second_issue.refresh_from_db()

@@ -23,31 +23,56 @@ DEBUG = int(os.environ.get("DEBUG", 0)) == 1
 
 
 _MALFORMED_PERCENT_ESCAPE = re.compile(r"%(?![0-9a-fA-F]{2})")
-_MIGRATION_DATABASE_ENVIRONMENT_NAMES = frozenset(
+
+# Keep this private, versioned inventory in lockstep with the PostgreSQL/libpq
+# baseline. These names can select connection authority, credentials, client
+# security behavior, or session behavior and must never be inherited by a
+# normal runtime process. The legacy PGCHANNELBIND spelling is included only
+# so callers cannot use the old typo as an unreviewed alias.
+_LIBPQ_CONNECTION_ENVIRONMENT_NAMES_V1 = frozenset(
     {
-        # libpq connection, credential, service, and TLS aliases.
+        "PGAPPNAME",
+        "PGCHANNELBINDING",
+        "PGCHANNELBIND",
+        "PGCLIENTENCODING",
+        "PGCONNECT_TIMEOUT",
+        "PGDATABASE",
+        "PGDATESTYLE",
+        "PGGEQO",
+        "PGGSSENCMODE",
+        "PGGSSLIB",
         "PGHOST",
         "PGHOSTADDR",
-        "PGPORT",
-        "PGDATABASE",
-        "PGUSER",
-        "PGPASSWORD",
+        "PGKRBSRVNAME",
+        "PGLOADBALANCEHOSTS",
+        "PGLOCALEDIR",
+        "PGOPTIONS",
         "PGPASSFILE",
+        "PGPASSWORD",
+        "PGPORT",
+        "PGREQUIREPEER",
+        "PGREQUIRESSL",
         "PGSERVICE",
         "PGSERVICEFILE",
-        "PGOPTIONS",
-        "PGSSLMODE",
         "PGSSLCERT",
-        "PGSSLKEY",
-        "PGSSLROOTCERT",
+        "PGSSLCOMPRESSION",
         "PGSSLCRL",
         "PGSSLCRLDIR",
-        "PGREQUIRESSL",
-        "PGCONNECT_TIMEOUT",
-        "PGAPPNAME",
-        "PGCHANNELBIND",
+        "PGSSLKEY",
+        "PGSSLMAXPROTOCOLVERSION",
+        "PGSSLMINPROTOCOLVERSION",
+        "PGSSLMODE",
+        "PGSSLROOTCERT",
+        "PGSSLSNI",
+        "PGSYSCONFDIR",
         "PGTARGETSESSIONATTRS",
-        "PGLOADBALANCEHOSTS",
+        "PGTZ",
+        "PGUSER",
+    }
+)
+_MIGRATION_DATABASE_ENVIRONMENT_NAMES_V1 = frozenset(
+    {
+        *_LIBPQ_CONNECTION_ENVIRONMENT_NAMES_V1,
         # PostgreSQL image/bootstrap aliases.
         "PGDATA",
         "POSTGRES_HOST",
@@ -78,7 +103,7 @@ _MIGRATION_DATABASE_ENVIRONMENT_PREFIXES = (
 
 
 def _is_migration_database_environment_name(name):
-    return name in _MIGRATION_DATABASE_ENVIRONMENT_NAMES or name.startswith(_MIGRATION_DATABASE_ENVIRONMENT_PREFIXES)
+    return name in _MIGRATION_DATABASE_ENVIRONMENT_NAMES_V1 or name.startswith(_MIGRATION_DATABASE_ENVIRONMENT_PREFIXES)
 
 
 def _decode_database_url_component(value):
@@ -116,12 +141,27 @@ def _canonical_database_role(value):
     return unicodedata.normalize("NFKC", value).casefold()
 
 
-def _database_url_uses_role(value, role):
-    return _canonical_database_role(_database_url_user(value)) == _canonical_database_role(role)
+_PRIVILEGED_DATABASE_ROLE_NAMES = frozenset(
+    {
+        "plane_audit_owner",
+        "plane_migrator",
+        "plane_runtime",
+        "postgres",
+        "root",
+    }
+)
+
+
+def _reject_confusable_privileged_role(value):
+    """Reject normalized aliases without using normalization as identity."""
+
+    normalized = _canonical_database_role(value)
+    if value and value != normalized and normalized in _PRIVILEGED_DATABASE_ROLE_NAMES:
+        raise ImproperlyConfigured("A database role is a PostgreSQL-distinct confusable privileged role")
 
 
 def _database_role_matches(value, role):
-    return _canonical_database_role(value) == _canonical_database_role(role)
+    return value is not None and role is not None and value == role
 
 
 def _reject_migration_environment_leakage():
@@ -147,18 +187,23 @@ def _validate_production_database_boundary():
         )
         missing = [name for name in required_migration_env if not os.environ.get(name)]
         if missing:
-            raise ImproperlyConfigured(
-                "Production migration mode requires " + ", ".join(missing)
-            )
+            raise ImproperlyConfigured("Production migration mode requires " + ", ".join(missing))
         if os.environ.get("DATABASE_RUNTIME_URL"):
             raise ImproperlyConfigured("The one-shot migrator must not receive DATABASE_RUNTIME_URL")
         migration_url_role = _database_url_user(migration_url)
         if not migration_url_role:
             raise ImproperlyConfigured("The migration database URL must declare the migration role")
+        _reject_confusable_privileged_role(migration_url_role)
+        _reject_confusable_privileged_role(DATABASES["default"].get("USER"))
+        _reject_confusable_privileged_role(PLANE_AUDIT_MIGRATION_ROLE)
         database_url = os.environ.get("DATABASE_URL")
-        if database_url and not _database_url_uses_role(database_url, migration_url_role):
+        database_url_role = _database_url_user(database_url)
+        if database_url and not _database_role_matches(database_url_role, migration_url_role):
             raise ImproperlyConfigured("The one-shot migrator DATABASE_URL must use the migration role")
-        if not _database_role_matches(DATABASES["default"].get("USER"), migration_url_role):
+        migration_settings_match = _database_role_matches(
+            DATABASES["default"].get("USER"), migration_url_role
+        ) and _database_role_matches(migration_url_role, PLANE_AUDIT_MIGRATION_ROLE)
+        if not migration_settings_match:
             raise ImproperlyConfigured("The migration database settings must use the migration role")
         return
 
@@ -171,18 +216,20 @@ def _validate_production_database_boundary():
 
     runtime_url_role = _database_url_user(DATABASE_RUNTIME_URL)
     resolved_runtime_role = DATABASES["default"].get("USER")
+    _reject_confusable_privileged_role(runtime_url_role)
+    _reject_confusable_privileged_role(resolved_runtime_role)
+    _reject_confusable_privileged_role(PLANE_AUDIT_RUNTIME_ROLE)
     if (
         not runtime_url_role
         or not resolved_runtime_role
         or not _database_role_matches(runtime_url_role, resolved_runtime_role)
+        or not _database_role_matches(runtime_url_role, PLANE_AUDIT_RUNTIME_ROLE)
     ):
         raise ImproperlyConfigured("The runtime database URL must declare the resolved runtime role")
-    if not _database_role_matches(runtime_url_role, PLANE_AUDIT_RUNTIME_ROLE):
-        raise ImproperlyConfigured("The runtime database URL must use the configured runtime role")
 
     privileged_roles = {
-        _canonical_database_role(PLANE_AUDIT_MIGRATION_ROLE),
-        _canonical_database_role(PLANE_AUDIT_GOVERNANCE_ROLE),
+        PLANE_AUDIT_MIGRATION_ROLE,
+        PLANE_AUDIT_GOVERNANCE_ROLE,
         "postgres",
         "root",
     }
@@ -190,12 +237,14 @@ def _validate_production_database_boundary():
         ("DATABASE_RUNTIME_URL", DATABASE_RUNTIME_URL),
         ("DATABASE_URL", os.environ.get("DATABASE_URL")),
     ):
-        if _canonical_database_role(_database_url_user(value)) in privileged_roles:
+        if _canonical_database_role(_database_url_user(value)) in {
+            _canonical_database_role(role) for role in privileged_roles
+        }:
             raise ImproperlyConfigured(f"{name} must use the non-privileged runtime database role")
     database_url_role = _database_url_user(os.environ.get("DATABASE_URL"))
     if database_url_role and not _database_role_matches(database_url_role, runtime_url_role):
         raise ImproperlyConfigured("DATABASE_URL must use the configured runtime database role")
-    if _canonical_database_role(resolved_runtime_role) in privileged_roles:
+    if _canonical_database_role(resolved_runtime_role) in {_canonical_database_role(role) for role in privileged_roles}:
         raise ImproperlyConfigured("The resolved production database must use the non-privileged runtime database role")
 
 

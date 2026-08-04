@@ -71,6 +71,32 @@ def _role_reachable(cursor: Any, member: str, target: str) -> bool:
     return bool(cursor.fetchone()[0])
 
 
+_TABLE_PRIVILEGES = frozenset({"DELETE", "INSERT", "REFERENCES", "SELECT", "TRIGGER", "TRUNCATE", "UPDATE"})
+_SEQUENCE_PRIVILEGES = frozenset({"SELECT", "UPDATE", "USAGE"})
+
+
+def _fetch_acl_entries(cursor: Any, query: str, params: list[Any] | None = None) -> list[tuple[Any, ...]]:
+    cursor.execute(query, params or [])
+    return cursor.fetchall()
+
+
+def _validate_acl_allowlist(
+    label: str,
+    entries: list[tuple[Any, ...]],
+    allowed_privileges: dict[str, frozenset[str]],
+    owner_roles: frozenset[str] = frozenset(),
+) -> None:
+    for grantee, privilege, is_grantable in entries:
+        if grantee == "PUBLIC":
+            raise AuditRoleBoundaryError(f"The {label} grants {privilege} to PUBLIC")
+        if (
+            grantee not in allowed_privileges
+            or privilege not in allowed_privileges[grantee]
+            or (is_grantable and grantee not in owner_roles)
+        ):
+            raise AuditRoleBoundaryError(f"The {label} has an invalid ACL")
+
+
 def verify_audit_role_boundary() -> None:
     """Verify production's complete non-owner, non-superuser audit contract."""
 
@@ -94,9 +120,15 @@ def verify_audit_role_boundary() -> None:
             SELECT current_user, runtime.rolsuper, runtime.rolcreaterole,
                    runtime.rolcreatedb, runtime.rolbypassrls,
                    runtime.rolcanlogin, runtime.rolinherit,
-                   table_info.tableowner, table_info.function_owner,
-                   table_info.schema_owner,
-                   table_info.function_security_definer,
+                       table_info.tableowner, table_info.function_owner,
+                       table_info.schema_owner,
+                       (
+                           SELECT schema_owner_role.rolname
+                           FROM pg_database AS database_info
+                           JOIN pg_roles AS schema_owner_role ON schema_owner_role.oid = database_info.datdba
+                           WHERE database_info.datname = current_database()
+                       ) AS database_owner,
+                       table_info.function_security_definer,
                    table_info.function_config,
                    table_info.function_source,
                    has_function_privilege('public', 'operation_gateway_audit_append_only()'::regprocedure, 'EXECUTE'),
@@ -156,6 +188,7 @@ def verify_audit_role_boundary() -> None:
         table_owner,
         function_owner,
         schema_owner,
+        database_owner,
         function_security_definer,
         function_config,
         function_source,
@@ -212,18 +245,163 @@ def verify_audit_role_boundary() -> None:
         raise AuditRoleBoundaryError("The audit runtime role has an invalid table privilege set")
 
     with connection.cursor() as cursor:
+        table_acl_entries = _fetch_acl_entries(
+            cursor,
+            """
+            SELECT CASE WHEN exploded.grantee = 0 THEN 'PUBLIC' ELSE grantee.rolname END,
+                   exploded.privilege_type, exploded.is_grantable
+            FROM pg_class AS audit_table
+            JOIN pg_namespace AS audit_schema ON audit_schema.oid = audit_table.relnamespace
+            JOIN LATERAL aclexplode(
+                COALESCE(audit_table.relacl, acldefault('r', audit_table.relowner))
+            ) AS exploded ON TRUE
+            LEFT JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
+            WHERE audit_schema.nspname = current_schema()
+              AND audit_table.relname = 'operation_gateway_audit'
+              AND audit_table.relkind = 'r'
+            """,
+        )
+        _validate_acl_allowlist(
+            "audit table",
+            table_acl_entries,
+            {
+                table_owner: _TABLE_PRIVILEGES,
+                runtime_role: frozenset({"INSERT", "SELECT"}),
+                migration_role: frozenset({"INSERT", "SELECT"}),
+            },
+            frozenset({table_owner}),
+        )
+
+        function_acl_entries = _fetch_acl_entries(
+            cursor,
+            """
+            SELECT CASE WHEN exploded.grantee = 0 THEN 'PUBLIC' ELSE grantee.rolname END,
+                   exploded.privilege_type, exploded.is_grantable
+            FROM pg_proc AS audit_function
+            JOIN LATERAL aclexplode(
+                COALESCE(audit_function.proacl, acldefault('f', audit_function.proowner))
+            ) AS exploded ON TRUE
+            LEFT JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
+            WHERE audit_function.oid = to_regprocedure('operation_gateway_audit_append_only()')
+            """,
+        )
+        _validate_acl_allowlist(
+            "append-only trigger function",
+            function_acl_entries,
+            {
+                function_owner: frozenset({"EXECUTE"}),
+                migration_role: frozenset({"EXECUTE"}),
+                governance_role: frozenset({"EXECUTE"}),
+            },
+            frozenset({function_owner}),
+        )
+
+        schema_acl_entries = _fetch_acl_entries(
+            cursor,
+            """
+            SELECT CASE WHEN exploded.grantee = 0 THEN 'PUBLIC' ELSE grantee.rolname END,
+                   exploded.privilege_type, exploded.is_grantable
+            FROM pg_namespace AS audit_schema
+            JOIN LATERAL aclexplode(
+                COALESCE(audit_schema.nspacl, acldefault('n', audit_schema.nspowner))
+            ) AS exploded ON TRUE
+            LEFT JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
+            WHERE audit_schema.nspname = current_schema()
+            """,
+        )
+        _validate_acl_allowlist(
+            "audit schema",
+            schema_acl_entries,
+            {
+                schema_owner: frozenset({"CREATE", "USAGE"}),
+                runtime_role: frozenset({"USAGE"}),
+                migration_role: frozenset({"CREATE", "USAGE"}),
+                governance_role: frozenset({"USAGE"}),
+            },
+            frozenset({schema_owner}),
+        )
+
+        sequence_acl_entries = _fetch_acl_entries(
+            cursor,
+            """
+            SELECT audit_sequence.relname,
+                   sequence_owner.rolname,
+                   CASE WHEN exploded.grantee = 0 THEN 'PUBLIC' ELSE grantee.rolname END,
+                   exploded.privilege_type, exploded.is_grantable
+            FROM pg_class AS audit_sequence
+            JOIN pg_namespace AS audit_schema ON audit_schema.oid = audit_sequence.relnamespace
+            JOIN pg_roles AS sequence_owner ON sequence_owner.oid = audit_sequence.relowner
+            JOIN LATERAL aclexplode(
+                COALESCE(audit_sequence.relacl, acldefault('S', audit_sequence.relowner))
+            ) AS exploded ON TRUE
+            LEFT JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
+            WHERE audit_schema.nspname = current_schema()
+              AND audit_sequence.relkind = 'S'
+              AND audit_sequence.relname LIKE 'operation_gateway_audit%%'
+            """,
+        )
+        sequence_entries_by_name: dict[str, list[tuple[Any, ...]]] = {}
+        for sequence_name, sequence_owner, grantee, privilege, is_grantable in sequence_acl_entries:
+            sequence_entries_by_name.setdefault(sequence_name, []).append(
+                (sequence_owner, grantee, privilege, is_grantable)
+            )
+        for sequence_name, entries in sequence_entries_by_name.items():
+            sequence_owner = entries[0][0]
+            if sequence_owner not in {database_owner, migration_role, governance_role}:
+                raise AuditRoleBoundaryError(f"The audit sequence {sequence_name} has an invalid owner")
+            _validate_acl_allowlist(
+                f"audit sequence {sequence_name}",
+                [(grantee, privilege, is_grantable) for _, grantee, privilege, is_grantable in entries],
+                {
+                    sequence_owner: _SEQUENCE_PRIVILEGES,
+                    database_owner: _SEQUENCE_PRIVILEGES,
+                    runtime_role: _SEQUENCE_PRIVILEGES,
+                    migration_role: _SEQUENCE_PRIVILEGES,
+                    governance_role: _SEQUENCE_PRIVILEGES,
+                },
+                frozenset({sequence_owner}),
+            )
+
+        default_acl_entries = _fetch_acl_entries(
+            cursor,
+            """
+            SELECT defaults.defaclobjtype,
+                   default_owner.rolname,
+                   CASE WHEN exploded.grantee = 0 THEN 'PUBLIC' ELSE grantee.rolname END,
+                   exploded.privilege_type, exploded.is_grantable
+            FROM pg_default_acl AS defaults
+            JOIN pg_roles AS default_owner ON default_owner.oid = defaults.defaclrole
+            JOIN LATERAL aclexplode(defaults.defaclacl) AS exploded ON TRUE
+            LEFT JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
+            WHERE defaults.defaclobjtype IN ('r', 'S', 'f')
+              AND (
+                  defaults.defaclnamespace = 0
+                  OR defaults.defaclnamespace = (SELECT oid FROM pg_namespace WHERE nspname = current_schema())
+              )
+            """,
+        )
+        default_privileges = {
+            "r": frozenset({"DELETE", "INSERT", "SELECT", "UPDATE"}),
+            "S": _SEQUENCE_PRIVILEGES,
+            "f": frozenset({"EXECUTE"}),
+        }
+        for object_type, default_owner, grantee, privilege, is_grantable in default_acl_entries:
+            if default_owner not in {migration_role, governance_role}:
+                raise AuditRoleBoundaryError("The audit default privileges have an unapproved owner")
+            _validate_acl_allowlist(
+                f"audit default privileges for {object_type}",
+                [(grantee, privilege, is_grantable)],
+                {runtime_role: default_privileges[object_type]},
+            )
+
         for target_role in (governance_role, migration_role):
             if _role_reachable(cursor, runtime_role, target_role):
-                raise AuditRoleBoundaryError(
-                    f"The audit runtime role can reach the protected role {target_role}"
-                )
+                raise AuditRoleBoundaryError(f"The audit runtime role can reach the protected role {target_role}")
             # PostgreSQL 15 exposes SET ROLE reachability through the USAGE
             # role privilege; newer versions also document it as SET.
             cursor.execute("SELECT pg_has_role(%s, %s, 'USAGE')", [runtime_role, target_role])
             if cursor.fetchone()[0]:
-                raise AuditRoleBoundaryError(
-                    f"The audit runtime role can SET ROLE to the protected role {target_role}"
-                )
+                raise AuditRoleBoundaryError(f"The audit runtime role can SET ROLE to the protected role {target_role}")
 
         cursor.execute(
             """
@@ -249,10 +427,7 @@ def verify_audit_role_boundary() -> None:
     if (
         trigger_names != expected_trigger_names
         or any(row[1] != "O" for row in trigger_rows)
-        or not (
-            "before update or delete" in row_trigger_def
-            or "before delete or update" in row_trigger_def
-        )
+        or not ("before update or delete" in row_trigger_def or "before delete or update" in row_trigger_def)
         or "for each row" not in row_trigger_def
         or "before truncate" not in truncate_trigger_def
         or "for each statement" not in truncate_trigger_def

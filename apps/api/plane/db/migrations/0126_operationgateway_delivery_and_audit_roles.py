@@ -88,7 +88,9 @@ def split_legacy_webhook_intents(apps, schema_editor):
                 workspace_id=publication.idempotency.workspace_id,
                 is_active=True,
                 issue=True,
-            ).order_by("id").values_list("id", flat=True)
+            )
+            .order_by("id")
+            .values_list("id", flat=True)
         )
         was_ambiguous = publication.state in ("running", "succeeded")
         state = "outcome_unknown" if was_ambiguous else publication.state
@@ -375,9 +377,7 @@ def configure_audit_role_boundary(apps, schema_editor):
         existing_roles = {row[0] for row in cursor.fetchall()}
         missing_roles = {runtime_role, governance_role, migration_role} - existing_roles
         if missing_roles:
-            raise RuntimeError(
-                "Operation Gateway audit roles are missing; run bootstrap_operation_gateway_audit first"
-            )
+            raise RuntimeError("Operation Gateway audit roles are missing; run bootstrap_operation_gateway_audit first")
         cursor.execute("SELECT current_schema()")
         schema_ident = connection.ops.quote_name(cursor.fetchone()[0])
 
@@ -394,18 +394,15 @@ def configure_audit_role_boundary(apps, schema_editor):
         # schema-creation responsibility.
         cursor.execute(f"GRANT USAGE, CREATE ON SCHEMA {schema_ident} TO {governance_ident}")
         cursor.execute(f"ALTER TABLE operation_gateway_audit OWNER TO {governance_ident}")
-        cursor.execute(
-            f"ALTER FUNCTION operation_gateway_audit_append_only() OWNER TO {governance_ident}"
-        )
+        cursor.execute(f"ALTER FUNCTION operation_gateway_audit_append_only() OWNER TO {governance_ident}")
         cursor.execute(f"REVOKE CREATE ON SCHEMA {schema_ident} FROM {governance_ident}")
-        cursor.execute(
-            "ALTER FUNCTION operation_gateway_audit_append_only() SECURITY DEFINER"
-        )
-        cursor.execute(
-            "ALTER FUNCTION operation_gateway_audit_append_only() SET search_path = pg_catalog"
-        )
+        cursor.execute("ALTER FUNCTION operation_gateway_audit_append_only() SECURITY DEFINER")
+        cursor.execute("ALTER FUNCTION operation_gateway_audit_append_only() SET search_path = pg_catalog")
         cursor.execute(f"GRANT USAGE ON SCHEMA {schema_ident} TO {runtime_ident}")
         cursor.execute(f"REVOKE CREATE ON SCHEMA {schema_ident} FROM {runtime_ident}")
+        cursor.execute(f"REVOKE ALL ON SCHEMA {schema_ident} FROM PUBLIC")
+        cursor.execute(f"GRANT USAGE, CREATE ON SCHEMA {schema_ident} TO {migration_ident}")
+        cursor.execute(f"GRANT USAGE ON SCHEMA {schema_ident} TO {governance_ident}")
 
         # The runtime role needs ordinary Plane ORM access to the application
         # schema. Keep this grant explicit rather than using ALL so it cannot
@@ -427,6 +424,11 @@ def configure_audit_role_boundary(apps, schema_editor):
             f"ALTER DEFAULT PRIVILEGES FOR ROLE {migration_ident} IN SCHEMA {schema_ident} "
             f"GRANT EXECUTE ON FUNCTIONS TO {runtime_ident}"
         )
+        for object_type in ("TABLES", "SEQUENCES", "FUNCTIONS"):
+            cursor.execute(
+                f"ALTER DEFAULT PRIVILEGES FOR ROLE {migration_ident} IN SCHEMA {schema_ident} "
+                f"REVOKE ALL ON {object_type} FROM PUBLIC"
+            )
 
         # Audit storage is stricter than the ordinary application schema.
         cursor.execute("REVOKE ALL ON TABLE operation_gateway_audit FROM PUBLIC")
@@ -439,12 +441,8 @@ def configure_audit_role_boundary(apps, schema_editor):
             f"REVOKE UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON TABLE operation_gateway_audit "
             f"FROM {runtime_ident}"
         )
-        cursor.execute(
-            f"REVOKE ALL ON FUNCTION operation_gateway_audit_append_only() FROM PUBLIC, {runtime_ident}"
-        )
-        cursor.execute(
-            f"GRANT EXECUTE ON FUNCTION operation_gateway_audit_append_only() TO {governance_ident}"
-        )
+        cursor.execute(f"REVOKE ALL ON FUNCTION operation_gateway_audit_append_only() FROM PUBLIC, {runtime_ident}")
+        cursor.execute(f"GRANT EXECUTE ON FUNCTION operation_gateway_audit_append_only() TO {governance_ident}")
 
         cursor.execute(
             """
@@ -494,6 +492,7 @@ def unconfigure_audit_role_boundary(apps, schema_editor):
         )
         cursor.execute(f"REVOKE ALL ON TABLE operation_gateway_audit FROM {runtime_ident}")
         cursor.execute(f"REVOKE USAGE, CREATE ON SCHEMA {schema_ident} FROM {runtime_ident}")
+        cursor.execute(f"GRANT USAGE, CREATE ON SCHEMA {schema_ident} TO PUBLIC")
         cursor.execute(
             """
             SELECT c.relname
