@@ -5,9 +5,27 @@ import uuid
 from django.db import models
 
 
+class AppendOnlyAuditQuerySet(models.QuerySet):
+    """Prevent every ORM mutation path, not only instance mutation methods."""
+
+    def update(self, **kwargs):
+        raise ValueError("Operation gateway audit records are append-only")
+
+    def delete(self):
+        raise ValueError("Operation gateway audit records are append-only")
+
+    def bulk_update(self, objs, fields, batch_size=None):
+        raise ValueError("Operation gateway audit records are append-only")
+
+
+class AppendOnlyAuditManager(models.Manager.from_queryset(AppendOnlyAuditQuerySet)):
+    pass
+
+
 class OperationGatewayIdempotency(models.Model):
     class State(models.TextChoices):
         PENDING = "pending", "Pending"
+        RUNNING = "running", "Running"
         SUCCEEDED = "succeeded", "Succeeded"
         DENIED = "denied", "Denied"
         FAILED_PRECOMMIT = "failed_precommit", "Failed before commit"
@@ -15,13 +33,17 @@ class OperationGatewayIdempotency(models.Model):
 
     id = models.UUIDField(default=uuid.uuid4, primary_key=True, editable=False)
     request_id = models.UUIDField(default=uuid.uuid4, editable=False)
+    invocation_id = models.UUIDField(default=uuid.uuid4, editable=False)
     operation_id = models.CharField(max_length=128)
+    workspace_id = models.UUIDField(null=True, editable=False)
     workspace_slug = models.CharField(max_length=255)
     caller_id = models.UUIDField()
     idempotency_key = models.CharField(max_length=128)
     correlation_id = models.CharField(max_length=128)
     request_digest = models.CharField(max_length=64)
     state = models.CharField(max_length=32, choices=State.choices)
+    request_input = models.JSONField(default=dict)
+    retryable = models.BooleanField(default=False)
     result = models.JSONField(null=True, blank=True)
     error = models.JSONField(null=True, blank=True)
     audit_receipt = models.UUIDField(null=True, blank=True)
@@ -32,11 +54,12 @@ class OperationGatewayIdempotency(models.Model):
         db_table = "operation_gateway_idempotency"
         constraints = [
             models.UniqueConstraint(
-                fields=("workspace_slug", "caller_id", "idempotency_key"),
+                fields=("workspace_id", "caller_id", "operation_id", "idempotency_key"),
                 name="operation_gateway_idempotency_key",
             )
         ]
         indexes = [
+            models.Index(fields=("workspace_id", "created_at"), name="op_gateway_workspace_created"),
             models.Index(fields=("caller_id", "created_at"), name="op_gateway_caller_created"),
         ]
 
@@ -52,12 +75,15 @@ class OperationGatewayAudit(models.Model):
         DENIED = "denied", "Denied"
         FAILURE = "failure", "Failure"
         OUTCOME_UNKNOWN = "outcome_unknown", "Outcome unknown"
+        REPLAY = "replay", "Replay"
 
     id = models.UUIDField(default=uuid.uuid4, primary_key=True, editable=False)
+    invocation_id = models.UUIDField(default=uuid.uuid4, editable=False)
     phase = models.CharField(max_length=16, choices=Phase.choices)
     outcome = models.CharField(max_length=32, choices=Outcome.choices)
     request_id = models.UUIDField()
     operation_id = models.CharField(max_length=128)
+    workspace_id = models.UUIDField(null=True)
     workspace_slug = models.CharField(max_length=255)
     caller_id = models.UUIDField()
     idempotency_key = models.CharField(max_length=128)
@@ -71,9 +97,12 @@ class OperationGatewayAudit(models.Model):
         db_table = "operation_gateway_audit"
         ordering = ("created_at", "id")
         indexes = [
+            models.Index(fields=("workspace_id", "created_at"), name="op_gateway_audit_workspace_id"),
             models.Index(fields=("workspace_slug", "created_at"), name="op_gateway_audit_workspace"),
             models.Index(fields=("caller_id", "created_at"), name="op_gateway_audit_caller"),
         ]
+
+    objects = AppendOnlyAuditManager()
 
     def save(self, *args, **kwargs):
         if not self._state.adding:

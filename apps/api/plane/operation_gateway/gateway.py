@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 import uuid
+from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any
 
-from django.db import transaction
+from django.db import DatabaseError, IntegrityError, transaction
+from django.utils import timezone
 
 from plane.api.views.issue import IssueDetailAPIEndpoint
 from plane.app.permissions import ProjectEntityPermission
@@ -19,28 +23,62 @@ from .contracts import (
     GatewayEnvelope,
     GatewayFailureEnvelope,
     GatewaySuccessEnvelope,
+    MAX_INPUT_BYTES,
+    MAX_RESPONSE_BYTES,
     MAX_RESULT_BYTES,
     SCHEMA_VERSION,
     WorkItemReadInputSerializer,
     WorkItemRenameInputSerializer,
     canonical_json,
 )
+from .work_items import WorkItemPublicationFailure, WorkItemRenameFailure, WorkItemRenameService
 
 READ_RESULT_FIELDS = ("id", "name", "sequence_id", "priority", "state", "project", "workspace")
 
+ERROR_MESSAGES = {
+    "AUTHENTICATION_REQUIRED": "Authentication is required for this operation.",
+    "AUTHORIZATION_UNAVAILABLE": "Authorization could not be evaluated.",
+    "IDEMPOTENCY_CONFLICT": "The idempotency key was already used for another request.",
+    "INTERNAL_ERROR": "The operation could not be completed.",
+    "NOT_AUTHORIZED": "Operation is not authorized for this caller.",
+    "OPERATION_REJECTED": "The operation could not be completed.",
+    "OPERATION_UNAVAILABLE": "The operation could not be completed.",
+    "OUTCOME_UNKNOWN": "The operation outcome cannot be safely determined.",
+    "PLANE_CONFLICT": "Plane rejected the operation.",
+    "PLANE_VALIDATION_ERROR": "Plane rejected the operation.",
+    "REQUEST_TOO_LARGE": "The operation request exceeds its size limit.",
+    "RESULT_TOO_LARGE": "The operation result exceeded its limit.",
+    "THROTTLED": "Too many operation requests.",
+    "UNKNOWN_OPERATION": "Operation is not available.",
+    "UPSTREAM_FAILURE": "The operation could not be completed.",
+    "VALIDATION_ERROR": "Operation request is invalid.",
+}
+
 
 class GatewayFailure(Exception):
-    def __init__(self, code: str, message: str, http_status: int, retryable: bool, ambiguous: bool = False):
-        super().__init__(message)
+    """A bounded failure that is safe to expose through the gateway contract."""
+
+    def __init__(self, code: str, http_status: int, retryable: bool, ambiguous: bool = False):
+        super().__init__(code)
         self.code = code
-        self.message = message
         self.http_status = http_status
         self.retryable = retryable
         self.ambiguous = ambiguous
 
 
+class RetryRunningAttempt(Exception):
+    """The first-use row is fresh; let its owner finish before replaying."""
+
+
+@dataclass(frozen=True)
+class AttemptDecision:
+    workspace: Workspace
+    record: OperationGatewayIdempotency | None
+    response: tuple[GatewayEnvelope, int] | None = None
+
+
 class GatewayServiceRequest:
-    """Minimal request adapter required by the existing issue API service."""
+    """Minimal request adapter required by the existing read and permission code."""
 
     def __init__(self, request: Any, *, method: str, data: dict[str, Any] | None = None):
         self.user = request.user
@@ -54,214 +92,486 @@ class OperationGateway:
     """One deep application boundary for the initial gateway vertical slice."""
 
     def execute(self, request: Any, envelope: dict[str, Any]) -> tuple[GatewayEnvelope, int]:
-        descriptor = get_operation(envelope["operation_id"])
         caller_id = str(request.user.id)
+        operation_id = envelope["operation_id"]
+        workspace_slug = envelope["workspace_slug"]
+        descriptor = get_operation(operation_id)
         if descriptor is None:
-            return self._failure_without_receipt(
-                operation_id=envelope["operation_id"],
-                workspace_slug=envelope["workspace_slug"],
+            return self._record_unkeyed_failure(
+                operation_id=operation_id,
+                workspace_slug=workspace_slug,
                 idempotency_key=envelope["idempotency_key"],
                 correlation_id=envelope["correlation_id"],
                 caller_id=caller_id,
-                failure=GatewayFailure("UNKNOWN_OPERATION", "Operation is not available.", 404, False),
+                workspace_id=self._workspace_id(workspace_slug),
+                request_digest=self._digest_for_raw(envelope),
+                failure=GatewayFailure("UNKNOWN_OPERATION", 404, False),
             )
 
         parsed_input, input_failure = self._parse_operation_input(descriptor, envelope["input"])
         if input_failure is not None:
-            return self._failure_without_receipt(
+            return self._record_unkeyed_failure(
                 operation_id=descriptor.operation_id,
-                workspace_slug=envelope["workspace_slug"],
+                workspace_slug=workspace_slug,
                 idempotency_key=envelope["idempotency_key"],
                 correlation_id=envelope["correlation_id"],
                 caller_id=caller_id,
+                workspace_id=self._workspace_id(workspace_slug),
+                request_digest=self._digest_for_raw(envelope),
                 failure=input_failure,
             )
 
-        request_digest = self._request_digest(descriptor, envelope["workspace_slug"], parsed_input)
-        return self._execute_idempotent(
-            request=request,
+        workspace = Workspace.objects.filter(slug=workspace_slug).first()
+        if workspace is None:
+            return self._record_unkeyed_failure(
+                operation_id=descriptor.operation_id,
+                workspace_slug=workspace_slug,
+                idempotency_key=envelope["idempotency_key"],
+                correlation_id=envelope["correlation_id"],
+                caller_id=caller_id,
+                workspace_id=None,
+                request_digest=self._digest_for_raw(envelope),
+                failure=GatewayFailure("OPERATION_REJECTED", 400, False),
+            )
+
+        request_digest = self._request_digest(
+            workspace_id=workspace.id,
+            caller_id=caller_id,
             descriptor=descriptor,
-            workspace_slug=envelope["workspace_slug"],
+            idempotency_key=envelope["idempotency_key"],
+            parsed_input=parsed_input,
+        )
+        decision = self._begin_attempt(
+            workspace=workspace,
+            descriptor=descriptor,
             idempotency_key=envelope["idempotency_key"],
             correlation_id=envelope["correlation_id"],
             caller_id=caller_id,
             request_digest=request_digest,
             parsed_input=parsed_input,
         )
+        if decision.response is not None:
+            return decision.response
+        return self._run_attempt(
+            request=request,
+            workspace=workspace,
+            descriptor=descriptor,
+            record=decision.record,
+            parsed_input=parsed_input,
+            request_digest=request_digest,
+            caller_id=caller_id,
+        )
 
-    def _execute_idempotent(
+    def unauthenticated_response(self, raw_data: Any, *, code: str = "AUTHENTICATION_REQUIRED", status_code: int = 401):
+        data = raw_data if isinstance(raw_data, dict) else {}
+        return self._direct_failure_envelope(
+            operation_id=self._wire_text(data.get("operation_id"), "unknown", 128),
+            workspace_slug=self._wire_text(data.get("workspace_slug"), "unknown", 255),
+            caller_id="anonymous",
+            request_id=uuid.uuid4(),
+            idempotency_key=self._wire_text(data.get("idempotency_key"), "unbound", 128),
+            correlation_id=self._wire_text(data.get("correlation_id"), str(uuid.uuid4()), 128),
+            audit_receipt=None,
+            error=GatewayFailure(code, status_code, False),
+            replayed=False,
+            status_code=status_code,
+        )
+
+    def record_invalid_request(
+        self,
+        request: Any,
+        raw_data: Any,
+        *,
+        code: str = "VALIDATION_ERROR",
+        status_code: int | None = None,
+    ):
+        """Persist an authenticated malformed attempt before returning its bounded error."""
+
+        data = raw_data if isinstance(raw_data, dict) else {}
+        operation_id = self._wire_text(data.get("operation_id"), "unknown", 128)
+        workspace_slug = self._wire_text(data.get("workspace_slug"), "unknown", 255)
+        idempotency_key = self._wire_text(data.get("idempotency_key"), "unbound", 128)
+        correlation_id = self._wire_text(data.get("correlation_id"), str(uuid.uuid4()), 128)
+        workspace_id = self._workspace_id(workspace_slug)
+        return self._record_unkeyed_failure(
+            operation_id=operation_id,
+            workspace_slug=workspace_slug,
+            idempotency_key=idempotency_key,
+            correlation_id=correlation_id,
+            caller_id=str(request.user.id),
+            workspace_id=workspace_id,
+            request_digest=self._digest_for_raw(raw_data),
+            failure=GatewayFailure(code, status_code or (413 if code == "REQUEST_TOO_LARGE" else 400), False),
+        )
+
+    def reconcile(self, idempotency_id: uuid.UUID) -> tuple[GatewayEnvelope, int]:
+        """Reconcile a committed rename without applying or publishing it again."""
+
+        with transaction.atomic():
+            record = OperationGatewayIdempotency.objects.select_for_update().get(pk=idempotency_id)
+            descriptor = get_operation(record.operation_id)
+            if descriptor is None:
+                return self._direct_unknown(record)
+            if record.state == OperationGatewayIdempotency.State.SUCCEEDED:
+                return self._success_envelope(
+                    record,
+                    descriptor,
+                    record.workspace_slug,
+                    str(record.caller_id),
+                    record.audit_receipt,
+                    record.result or {},
+                    True,
+                ), 200
+            if descriptor.operation_id != "work_item.rename" or not record.workspace_id:
+                return self._reconcile_unknown_locked(record, descriptor)
+
+            input_data = record.request_input or {}
+            issue_id = input_data.get("issue_id")
+            project_id = input_data.get("project_id")
+            name = input_data.get("name")
+            issue = Issue.objects.filter(
+                workspace_id=record.workspace_id,
+                project_id=project_id,
+                pk=issue_id,
+            ).only("id", "name").first()
+            if record.result is not None and issue is not None and issue.name == name:
+                invocation_id = uuid.uuid4()
+                audit = self._write_invocation_pair(
+                    record=record,
+                    correlation_id=record.correlation_id,
+                    request_digest=record.request_digest,
+                    invocation_id=invocation_id,
+                    outcome=OperationGatewayAudit.Outcome.SUCCESS,
+                    result=record.result,
+                )
+                record.state = OperationGatewayIdempotency.State.SUCCEEDED
+                record.retryable = False
+                record.error = None
+                record.audit_receipt = audit.id
+                record.save(update_fields=["state", "retryable", "error", "audit_receipt", "updated_at"])
+                return self._success_envelope(
+                    record,
+                    descriptor,
+                    record.workspace_slug,
+                    str(record.caller_id),
+                    audit.id,
+                    record.result,
+                    True,
+                ), 200
+            return self._reconcile_unknown_locked(record, descriptor)
+
+    def _begin_attempt(
         self,
         *,
-        request: Any,
+        workspace: Workspace,
         descriptor: OperationDescriptor,
-        workspace_slug: str,
         idempotency_key: str,
         correlation_id: str,
         caller_id: str,
         request_digest: str,
         parsed_input: dict[str, Any],
-    ) -> tuple[GatewayEnvelope, int]:
-        with transaction.atomic():
-            record, created = OperationGatewayIdempotency.objects.select_for_update().get_or_create(
-                workspace_slug=workspace_slug,
-                caller_id=caller_id,
-                idempotency_key=idempotency_key,
-                defaults={
-                    "request_id": uuid.uuid4(),
-                    "operation_id": descriptor.operation_id,
-                    "request_digest": request_digest,
-                    "correlation_id": correlation_id,
-                    "state": OperationGatewayIdempotency.State.PENDING,
-                },
-            )
-
-            if not created and record.request_digest != request_digest:
-                return self._finish_conflict(
+    ) -> AttemptDecision:
+        deadline = time.monotonic() + 30
+        while True:
+            try:
+                return self._begin_attempt_once(
+                    workspace=workspace,
                     descriptor=descriptor,
-                    workspace_slug=workspace_slug,
                     idempotency_key=idempotency_key,
                     correlation_id=correlation_id,
                     caller_id=caller_id,
                     request_digest=request_digest,
+                    parsed_input=parsed_input,
+                )
+            except RetryRunningAttempt:
+                if time.monotonic() >= deadline:
+                    return self._begin_attempt_once(
+                        workspace=workspace,
+                        descriptor=descriptor,
+                        idempotency_key=idempotency_key,
+                        correlation_id=correlation_id,
+                        caller_id=caller_id,
+                        request_digest=request_digest,
+                        parsed_input=parsed_input,
+                        allow_running_unknown=True,
+                    )
+                time.sleep(0.01)
+
+    def _begin_attempt_once(
+        self,
+        *,
+        workspace: Workspace,
+        descriptor: OperationDescriptor,
+        idempotency_key: str,
+        correlation_id: str,
+        caller_id: str,
+        request_digest: str,
+        parsed_input: dict[str, Any],
+        allow_running_unknown: bool = False,
+    ) -> AttemptDecision:
+        with transaction.atomic():
+            query = OperationGatewayIdempotency.objects.select_for_update()
+            try:
+                record = query.get(
+                    workspace_id=workspace.id,
+                    caller_id=caller_id,
+                    operation_id=descriptor.operation_id,
+                    idempotency_key=idempotency_key,
+                )
+                created = False
+            except OperationGatewayIdempotency.DoesNotExist:
+                try:
+                    with transaction.atomic():
+                        record = OperationGatewayIdempotency.objects.create(
+                            request_id=uuid.uuid4(),
+                            invocation_id=uuid.uuid4(),
+                            operation_id=descriptor.operation_id,
+                            workspace_id=workspace.id,
+                            workspace_slug=workspace.slug,
+                            caller_id=caller_id,
+                            idempotency_key=idempotency_key,
+                            correlation_id=correlation_id,
+                            request_digest=request_digest,
+                            state=OperationGatewayIdempotency.State.RUNNING,
+                            request_input=parsed_input,
+                        )
+                    created = True
+                except IntegrityError:
+                    record = query.get(
+                        workspace_id=workspace.id,
+                        caller_id=caller_id,
+                        operation_id=descriptor.operation_id,
+                        idempotency_key=idempotency_key,
+                    )
+                    created = False
+
+            if created:
+                self._write_audit(
+                    phase=OperationGatewayAudit.Phase.INTENT,
+                    outcome=OperationGatewayAudit.Outcome.INTENT,
+                    descriptor=descriptor,
+                    record=record,
+                    result=None,
+                    error=None,
+                )
+                return AttemptDecision(workspace=workspace, record=record)
+
+            if record.request_digest != request_digest:
+                audit = self._write_invocation_pair(
+                    record=record,
+                    correlation_id=correlation_id,
+                    request_digest=request_digest,
+                    invocation_id=uuid.uuid4(),
+                    outcome=OperationGatewayAudit.Outcome.DENIED,
+                    error=GatewayFailure("IDEMPOTENCY_CONFLICT", 409, False),
+                )
+                return AttemptDecision(
+                    workspace=workspace,
+                    record=None,
+                    response=self._direct_failure_envelope(
+                        operation_id=descriptor.operation_id,
+                        workspace_slug=workspace.slug,
+                        caller_id=caller_id,
+                        request_id=uuid.uuid4(),
+                        idempotency_key=idempotency_key,
+                        correlation_id=correlation_id,
+                        audit_receipt=audit.id,
+                        error=GatewayFailure("IDEMPOTENCY_CONFLICT", 409, False),
+                        replayed=False,
+                        status_code=409,
+                    ),
                 )
 
-            if not created:
-                replay = self._replay_terminal(record, descriptor, workspace_slug, caller_id)
-                if replay is not None:
-                    return replay
+            if record.state in (
+                OperationGatewayIdempotency.State.RUNNING,
+                OperationGatewayIdempotency.State.PENDING,
+            ):
+                if (
+                    record.state == OperationGatewayIdempotency.State.RUNNING
+                    and not allow_running_unknown
+                    and record.updated_at > timezone.now() - timedelta(seconds=30)
+                ):
+                    raise RetryRunningAttempt
+                audit = self._write_invocation_pair(
+                    record=record,
+                    correlation_id=correlation_id,
+                    request_digest=request_digest,
+                    invocation_id=uuid.uuid4(),
+                    outcome=OperationGatewayAudit.Outcome.OUTCOME_UNKNOWN,
+                    error=GatewayFailure("OUTCOME_UNKNOWN", 409, False),
+                )
+                error = self._error("OUTCOME_UNKNOWN", False)
+                return AttemptDecision(
+                    workspace=workspace,
+                    record=None,
+                    response=(
+                        self._failure_envelope(
+                            record,
+                            descriptor,
+                            workspace.slug,
+                            caller_id,
+                            audit.id,
+                            error,
+                            True,
+                        ),
+                        409,
+                    ),
+                )
 
-                if record.state == OperationGatewayIdempotency.State.PENDING:
-                    return self._finish_outcome_unknown(record, descriptor, workspace_slug, caller_id)
-
-                # A known pre-commit failure may retry under the same key.
+            if (
+                record.state == OperationGatewayIdempotency.State.FAILED_PRECOMMIT
+                and record.retryable
+            ):
                 record.request_id = uuid.uuid4()
+                record.invocation_id = uuid.uuid4()
                 record.correlation_id = correlation_id
-                record.state = OperationGatewayIdempotency.State.PENDING
+                record.request_digest = request_digest
+                record.request_input = parsed_input
+                record.state = OperationGatewayIdempotency.State.RUNNING
                 record.result = None
                 record.error = None
                 record.audit_receipt = None
+                record.retryable = False
                 record.save(
                     update_fields=[
                         "request_id",
+                        "invocation_id",
                         "correlation_id",
+                        "request_digest",
+                        "request_input",
                         "state",
                         "result",
                         "error",
                         "audit_receipt",
+                        "retryable",
                         "updated_at",
                     ]
                 )
+                self._write_audit(
+                    phase=OperationGatewayAudit.Phase.INTENT,
+                    outcome=OperationGatewayAudit.Outcome.INTENT,
+                    descriptor=descriptor,
+                    record=record,
+                    result=None,
+                    error=None,
+                )
+                return AttemptDecision(workspace=workspace, record=record)
 
-            self._write_audit(
-                phase=OperationGatewayAudit.Phase.INTENT,
-                outcome=OperationGatewayAudit.Outcome.INTENT,
-                descriptor=descriptor,
+            replay_audit = self._write_invocation_pair(
                 record=record,
-                workspace_slug=workspace_slug,
-                caller_id=caller_id,
+                correlation_id=correlation_id,
                 request_digest=request_digest,
+                invocation_id=uuid.uuid4(),
+                outcome=OperationGatewayAudit.Outcome.REPLAY,
+                result=record.result,
+                error=self._failure_from_record(record),
+            )
+            return AttemptDecision(
+                workspace=workspace,
+                record=None,
+                response=self._replay_terminal(record, descriptor, workspace.slug, caller_id, replay_audit.id),
             )
 
-            authorization_failure = self._authorize(request, descriptor, parsed_input, workspace_slug)
-            if authorization_failure is not None:
-                return self._finish_failure(
-                    record=record,
-                    descriptor=descriptor,
-                    workspace_slug=workspace_slug,
-                    caller_id=caller_id,
-                    request_digest=request_digest,
-                    failure=authorization_failure,
-                )
+    def _run_attempt(
+        self,
+        *,
+        request: Any,
+        workspace: Workspace,
+        descriptor: OperationDescriptor,
+        record: OperationGatewayIdempotency | None,
+        parsed_input: dict[str, Any],
+        request_digest: str,
+        caller_id: str,
+    ) -> tuple[GatewayEnvelope, int]:
+        if record is None:
+            raise RuntimeError("Gateway execution requires an idempotency record")
+        try:
+            with transaction.atomic():
+                record = OperationGatewayIdempotency.objects.select_for_update().get(pk=record.id)
+                if record.state not in (
+                    OperationGatewayIdempotency.State.RUNNING,
+                    OperationGatewayIdempotency.State.PENDING,
+                ):
+                    error = self._error("OUTCOME_UNKNOWN", False)
+                    return self._failure_envelope(
+                        record,
+                        descriptor,
+                        workspace.slug,
+                        caller_id,
+                        record.audit_receipt,
+                        error,
+                        True,
+                    ), 409
+                authorization_failure = self._authorize(request, descriptor, parsed_input, workspace.slug)
+                if authorization_failure is not None:
+                    raise authorization_failure
 
-            try:
-                with transaction.atomic():
-                    status_code, raw_result = self._dispatch(
-                        request=request,
-                        descriptor=descriptor,
-                        workspace_slug=workspace_slug,
-                        parsed_input=parsed_input,
-                    )
-                    if status_code >= 400:
-                        failure = GatewayFailure(
-                            "PLANE_CONFLICT" if status_code == 409 else "PLANE_VALIDATION_ERROR",
-                            "Plane rejected the operation.",
-                            409 if status_code == 409 else 400,
-                            False,
-                        )
-                        return self._finish_failure(
-                            record=record,
-                            descriptor=descriptor,
-                            workspace_slug=workspace_slug,
-                            caller_id=caller_id,
-                            request_digest=request_digest,
-                            failure=failure,
-                        )
-                    result = self._bound_result(
-                        raw_result,
-                        max_bytes=min(descriptor.max_result_bytes, MAX_RESULT_BYTES),
-                        ambiguous=descriptor.kind == "mutation",
-                    )
-            except Issue.DoesNotExist:
-                return self._finish_failure(
-                    record=record,
+                status_code, raw_result = self._dispatch(
+                    request=request,
+                    workspace=workspace,
                     descriptor=descriptor,
-                    workspace_slug=workspace_slug,
-                    caller_id=caller_id,
-                    request_digest=request_digest,
-                    failure=GatewayFailure("NOT_FOUND", "The requested Plane object was not found.", 404, False),
+                    parsed_input=parsed_input,
                 )
-            except GatewayFailure as failure:
-                return self._finish_failure(
-                    record=record,
-                    descriptor=descriptor,
-                    workspace_slug=workspace_slug,
-                    caller_id=caller_id,
-                    request_digest=request_digest,
-                    failure=failure,
-                )
-            except Exception:
-                # A mutation may have crossed a side-effect boundary before an
-                # adapter exception. It is never blindly replayed.
-                return self._finish_failure(
-                    record=record,
-                    descriptor=descriptor,
-                    workspace_slug=workspace_slug,
-                    caller_id=caller_id,
-                    request_digest=request_digest,
-                    failure=GatewayFailure(
-                        "UPSTREAM_FAILURE",
-                        "The operation outcome cannot be safely determined."
-                        if descriptor.kind == "mutation"
-                        else "Plane could not complete the operation.",
-                        409 if descriptor.kind == "mutation" else 500,
+                if status_code >= 400:
+                    raise GatewayFailure(
+                        "PLANE_CONFLICT" if status_code == 409 else "PLANE_VALIDATION_ERROR",
+                        409 if status_code == 409 else 400,
                         False,
-                        ambiguous=descriptor.kind == "mutation",
-                    ),
-                )
-
-            return self._finish_success(
-                record=record,
-                descriptor=descriptor,
-                workspace_slug=workspace_slug,
-                caller_id=caller_id,
-                request_digest=request_digest,
-                result=result,
+                    )
+                result = self._bound_result(raw_result, max_bytes=min(descriptor.max_result_bytes, MAX_RESULT_BYTES))
+                return self._finish_success(record, descriptor, workspace.slug, caller_id, result), 200
+        except WorkItemPublicationFailure:
+            return self._mark_outcome_unknown(record, descriptor, workspace.slug, caller_id, request_digest)
+        except GatewayFailure as failure:
+            return self._persist_failure(record, descriptor, workspace.slug, caller_id, request_digest, failure)
+        except Issue.DoesNotExist:
+            return self._persist_failure(
+                record,
+                descriptor,
+                workspace.slug,
+                caller_id,
+                request_digest,
+                GatewayFailure("OPERATION_REJECTED", 400, False),
+            )
+        except DatabaseError:
+            return self._persist_failure(
+                record,
+                descriptor,
+                workspace.slug,
+                caller_id,
+                request_digest,
+                GatewayFailure("UPSTREAM_FAILURE", 503, True, ambiguous=descriptor.kind == "mutation"),
+            )
+        except Exception:
+            return self._persist_failure(
+                record,
+                descriptor,
+                workspace.slug,
+                caller_id,
+                request_digest,
+                GatewayFailure("UPSTREAM_FAILURE", 503, True),
             )
 
     def _parse_operation_input(
         self, descriptor: OperationDescriptor, value: dict[str, Any]
     ) -> tuple[dict[str, Any], GatewayFailure | None]:
-        if descriptor.operation_id == "work_item.read":
-            serializer_class = WorkItemReadInputSerializer
-        else:
-            serializer_class = WorkItemRenameInputSerializer
+        serializer_class = (
+            WorkItemReadInputSerializer
+            if descriptor.operation_id == "work_item.read"
+            else WorkItemRenameInputSerializer
+        )
         serializer = serializer_class(data=value)
         if not serializer.is_valid():
-            return {}, GatewayFailure("VALIDATION_ERROR", "Operation input is invalid.", 400, False)
-        return serializer.validated_data, None
+            return {}, GatewayFailure("VALIDATION_ERROR", 400, False)
+        # Keep the canonical parsed contract JSON-safe for durable reconciliation.
+        return json.loads(canonical_json(serializer.validated_data)), None
 
     def _authorize(
-        self, request: Any, descriptor: OperationDescriptor, parsed_input: dict[str, Any], workspace_slug: str
+        self,
+        request: Any,
+        descriptor: OperationDescriptor,
+        parsed_input: dict[str, Any],
+        workspace_slug: str,
     ) -> GatewayFailure | None:
         service_request = GatewayServiceRequest(
             request,
@@ -273,17 +583,17 @@ class OperationGateway:
         try:
             allowed = ProjectEntityPermission().has_permission(service_request, view)
         except Exception:
-            return GatewayFailure("AUTHORIZATION_UNAVAILABLE", "Authorization could not be evaluated.", 503, True)
+            return GatewayFailure("AUTHORIZATION_UNAVAILABLE", 503, True)
         if not allowed:
-            return GatewayFailure("NOT_AUTHORIZED", "Operation is not authorized for this caller.", 403, False)
+            return GatewayFailure("NOT_AUTHORIZED", 403, False)
         return None
 
     def _dispatch(
         self,
         *,
         request: Any,
+        workspace: Workspace,
         descriptor: OperationDescriptor,
-        workspace_slug: str,
         parsed_input: dict[str, Any],
     ) -> tuple[int, dict[str, Any]]:
         project_id = str(parsed_input["project_id"])
@@ -292,53 +602,55 @@ class OperationGateway:
             service_request = GatewayServiceRequest(request, method="GET")
             view = IssueDetailAPIEndpoint()
             view.request = service_request
-            view.kwargs = {"slug": workspace_slug, "project_id": project_id}
-            response = view.get(service_request, slug=workspace_slug, project_id=project_id, pk=issue_id)
-        else:
-            service_request = GatewayServiceRequest(request, method="PATCH", data={"name": parsed_input["name"]})
-            view = IssueDetailAPIEndpoint()
-            view.request = service_request
-            view.kwargs = {"slug": workspace_slug, "project_id": project_id}
-            response = view.patch(service_request, slug=workspace_slug, project_id=project_id, pk=issue_id)
-        return response.status_code, response.data
+            view.kwargs = {"slug": workspace.slug, "project_id": project_id}
+            response = view.get(service_request, slug=workspace.slug, project_id=project_id, pk=issue_id)
+            return response.status_code, response.data
 
-    def _bound_result(self, raw_result: dict[str, Any], *, max_bytes: int, ambiguous: bool) -> dict[str, Any]:
+        try:
+            result = WorkItemRenameService().rename(
+                request=request,
+                workspace=workspace,
+                project_id=project_id,
+                issue_id=issue_id,
+                name=parsed_input["name"],
+            )
+        except WorkItemRenameFailure as failure:
+            raise GatewayFailure(failure.code, failure.http_status, failure.retryable) from None
+        return 200, result
+
+    def _bound_result(self, raw_result: dict[str, Any], *, max_bytes: int) -> dict[str, Any]:
         bounded = {field: raw_result.get(field) for field in READ_RESULT_FIELDS if field in raw_result}
         result = json.loads(canonical_json({"work_item": bounded}))
         if len(canonical_json(result).encode("utf-8")) > max_bytes:
-            raise GatewayFailure("RESULT_TOO_LARGE", "The operation result exceeded its limit.", 409, False, ambiguous)
+            raise GatewayFailure("RESULT_TOO_LARGE", 409, False)
         return result
 
     def _finish_success(
         self,
-        *,
         record: OperationGatewayIdempotency,
         descriptor: OperationDescriptor,
         workspace_slug: str,
         caller_id: str,
-        request_digest: str,
         result: dict[str, Any],
-    ) -> tuple[GatewaySuccessEnvelope, int]:
+    ) -> GatewaySuccessEnvelope:
         audit = self._write_audit(
             phase=OperationGatewayAudit.Phase.OUTCOME,
             outcome=OperationGatewayAudit.Outcome.SUCCESS,
             descriptor=descriptor,
             record=record,
-            workspace_slug=workspace_slug,
-            caller_id=caller_id,
-            request_digest=request_digest,
             result=result,
+            error=None,
         )
         record.state = OperationGatewayIdempotency.State.SUCCEEDED
         record.result = result
         record.error = None
+        record.retryable = False
         record.audit_receipt = audit.id
-        record.save(update_fields=["state", "result", "error", "audit_receipt", "updated_at"])
-        return self._success_envelope(record, descriptor, workspace_slug, caller_id, audit.id, result, False), 200
+        record.save(update_fields=["state", "result", "error", "retryable", "audit_receipt", "updated_at"])
+        return self._success_envelope(record, descriptor, workspace_slug, caller_id, audit.id, result, False)
 
-    def _finish_failure(
+    def _persist_failure(
         self,
-        *,
         record: OperationGatewayIdempotency,
         descriptor: OperationDescriptor,
         workspace_slug: str,
@@ -346,8 +658,42 @@ class OperationGateway:
         request_digest: str,
         failure: GatewayFailure,
     ) -> tuple[GatewayFailureEnvelope, int]:
-        is_denied = failure.code == "NOT_AUTHORIZED"
+        with transaction.atomic():
+            locked = OperationGatewayIdempotency.objects.select_for_update().get(pk=record.id)
+            if locked.invocation_id != record.invocation_id or locked.state not in (
+                OperationGatewayIdempotency.State.RUNNING,
+                OperationGatewayIdempotency.State.PENDING,
+            ):
+                error = self._error("OUTCOME_UNKNOWN", False)
+                return self._failure_envelope(
+                    locked,
+                    descriptor,
+                    workspace_slug,
+                    caller_id,
+                    locked.audit_receipt,
+                    error,
+                    True,
+                ), 409
+            return self._finish_failure(
+                locked,
+                descriptor,
+                workspace_slug,
+                caller_id,
+                request_digest,
+                failure,
+            )
+
+    def _finish_failure(
+        self,
+        record: OperationGatewayIdempotency,
+        descriptor: OperationDescriptor,
+        workspace_slug: str,
+        caller_id: str,
+        request_digest: str,
+        failure: GatewayFailure,
+    ) -> tuple[GatewayFailureEnvelope, int]:
         outcome_unknown = failure.ambiguous
+        is_denied = failure.code == "NOT_AUTHORIZED"
         state = (
             OperationGatewayIdempotency.State.DENIED
             if is_denied
@@ -355,10 +701,10 @@ class OperationGateway:
             if outcome_unknown
             else OperationGatewayIdempotency.State.FAILED_PRECOMMIT
         )
-        code = "OUTCOME_UNKNOWN" if outcome_unknown else failure.code
-        message = "The operation outcome cannot be safely determined." if outcome_unknown else failure.message
-        status_code = 409 if outcome_unknown else failure.http_status
-        error: GatewayError = {"code": code, "message": message, "retryable": failure.retryable and not outcome_unknown}
+        error = self._error(
+            "OUTCOME_UNKNOWN" if outcome_unknown else failure.code,
+            failure.retryable and not outcome_unknown,
+        )
         audit = self._write_audit(
             phase=OperationGatewayAudit.Phase.OUTCOME,
             outcome=(
@@ -370,159 +716,89 @@ class OperationGateway:
             ),
             descriptor=descriptor,
             record=record,
-            workspace_slug=workspace_slug,
-            caller_id=caller_id,
-            request_digest=request_digest,
+            result=None,
             error=error,
         )
         record.state = state
-        record.result = None
+        record.result = None if not outcome_unknown else record.result
         record.error = error
+        record.retryable = failure.retryable and not outcome_unknown
         record.audit_receipt = audit.id
-        record.save(update_fields=["state", "result", "error", "audit_receipt", "updated_at"])
-        return (
-            self._failure_envelope(record, descriptor, workspace_slug, caller_id, audit.id, error, False),
-            status_code,
+        record.save(update_fields=["state", "result", "error", "retryable", "audit_receipt", "updated_at"])
+        return self._failure_envelope(record, descriptor, workspace_slug, caller_id, audit.id, error, False), (
+            409 if outcome_unknown else failure.http_status
         )
 
-    def _finish_conflict(
+    def _mark_outcome_unknown(
         self,
-        *,
+        record: OperationGatewayIdempotency,
         descriptor: OperationDescriptor,
         workspace_slug: str,
-        idempotency_key: str,
-        correlation_id: str,
         caller_id: str,
         request_digest: str,
     ) -> tuple[GatewayFailureEnvelope, int]:
-        request_id = uuid.uuid4()
-        OperationGatewayAudit.objects.create(
-            phase=OperationGatewayAudit.Phase.INTENT,
-            outcome=OperationGatewayAudit.Outcome.INTENT,
-            request_id=request_id,
-            operation_id=descriptor.operation_id,
-            workspace_slug=workspace_slug,
-            caller_id=caller_id,
-            idempotency_key=idempotency_key,
-            correlation_id=correlation_id,
-            request_digest=request_digest,
-        )
-        outcome_audit = OperationGatewayAudit.objects.create(
-            phase=OperationGatewayAudit.Phase.OUTCOME,
-            outcome=OperationGatewayAudit.Outcome.DENIED,
-            request_id=request_id,
-            operation_id=descriptor.operation_id,
-            workspace_slug=workspace_slug,
-            caller_id=caller_id,
-            idempotency_key=idempotency_key,
-            correlation_id=correlation_id,
-            request_digest=request_digest,
-            error_code="IDEMPOTENCY_CONFLICT",
-        )
-        error: GatewayError = {
-            "code": "IDEMPOTENCY_CONFLICT",
-            "message": "The idempotency key was already used for another request.",
-            "retryable": False,
-        }
-        envelope = self._envelope_base(
-            descriptor.operation_id,
-            workspace_slug,
-            caller_id,
-            request_id,
-            idempotency_key,
-            correlation_id,
-            str(outcome_audit.id),
-            False,
-            False,
-        )
-        envelope.update({"ok": False, "error": error})
-        return envelope, 409
+        with transaction.atomic():
+            locked = OperationGatewayIdempotency.objects.select_for_update().get(pk=record.id)
+            error = self._error("OUTCOME_UNKNOWN", False)
+            if locked.state == OperationGatewayIdempotency.State.OUTCOME_UNKNOWN:
+                return self._failure_envelope(
+                    locked,
+                    descriptor,
+                    workspace_slug,
+                    caller_id,
+                    locked.audit_receipt,
+                    error,
+                    True,
+                ), 409
+            audit = self._write_audit(
+                phase=OperationGatewayAudit.Phase.OUTCOME,
+                outcome=OperationGatewayAudit.Outcome.OUTCOME_UNKNOWN,
+                descriptor=descriptor,
+                record=locked,
+                result=locked.result,
+                error=error,
+            )
+            locked.state = OperationGatewayIdempotency.State.OUTCOME_UNKNOWN
+            locked.error = error
+            locked.retryable = False
+            locked.audit_receipt = audit.id
+            locked.save(update_fields=["state", "error", "retryable", "audit_receipt", "updated_at"])
+            return self._failure_envelope(locked, descriptor, workspace_slug, caller_id, audit.id, error, False), 409
 
-    def _replay_terminal(
+    def _reconcile_unknown_locked(
         self,
         record: OperationGatewayIdempotency,
         descriptor: OperationDescriptor,
-        workspace_slug: str,
-        caller_id: str,
-    ) -> tuple[GatewayEnvelope, int] | None:
-        if record.state == OperationGatewayIdempotency.State.SUCCEEDED and record.result is not None:
-            return (
-                self._success_envelope(
-                    record,
-                    descriptor,
-                    workspace_slug,
-                    caller_id,
-                    record.audit_receipt,
-                    record.result,
-                    True,
-                ),
-                200,
-            )
-        if record.state == OperationGatewayIdempotency.State.DENIED:
-            return (
-                self._failure_envelope(
-                    record,
-                    descriptor,
-                    workspace_slug,
-                    caller_id,
-                    record.audit_receipt,
-                    record.error
-                    or {
-                        "code": "NOT_AUTHORIZED",
-                        "message": "Operation is not authorized for this caller.",
-                        "retryable": False,
-                    },
-                    True,
-                ),
-                403,
-            )
-        if record.state == OperationGatewayIdempotency.State.OUTCOME_UNKNOWN:
-            return (
-                self._failure_envelope(
-                    record,
-                    descriptor,
-                    workspace_slug,
-                    caller_id,
-                    record.audit_receipt,
-                    record.error
-                    or {
-                        "code": "OUTCOME_UNKNOWN",
-                        "message": "The operation outcome cannot be safely determined.",
-                        "retryable": False,
-                    },
-                    True,
-                ),
-                409,
-            )
-        return None
-
-    def _finish_outcome_unknown(
-        self,
-        record: OperationGatewayIdempotency,
-        descriptor: OperationDescriptor,
-        workspace_slug: str,
-        caller_id: str,
     ) -> tuple[GatewayFailureEnvelope, int]:
-        error: GatewayError = {
-            "code": "OUTCOME_UNKNOWN",
-            "message": "The operation outcome cannot be safely determined.",
-            "retryable": False,
-        }
-        audit = self._write_audit(
-            phase=OperationGatewayAudit.Phase.OUTCOME,
-            outcome=OperationGatewayAudit.Outcome.OUTCOME_UNKNOWN,
-            descriptor=descriptor,
+        error = self._error("OUTCOME_UNKNOWN", False)
+        invocation_id = uuid.uuid4()
+        audit = self._write_invocation_pair(
             record=record,
-            workspace_slug=workspace_slug,
-            caller_id=caller_id,
+            correlation_id=record.correlation_id,
             request_digest=record.request_digest,
+            invocation_id=invocation_id,
+            outcome=OperationGatewayAudit.Outcome.OUTCOME_UNKNOWN,
+            result=record.result,
             error=error,
         )
-        record.state = OperationGatewayIdempotency.State.OUTCOME_UNKNOWN
-        record.error = error
-        record.audit_receipt = audit.id
-        record.save(update_fields=["state", "error", "audit_receipt", "updated_at"])
-        return self._failure_envelope(record, descriptor, workspace_slug, caller_id, audit.id, error, True), 409
+        if record.state in (
+            OperationGatewayIdempotency.State.RUNNING,
+            OperationGatewayIdempotency.State.PENDING,
+        ):
+            record.state = OperationGatewayIdempotency.State.OUTCOME_UNKNOWN
+            record.error = error
+            record.retryable = False
+            record.audit_receipt = audit.id
+            record.save(update_fields=["state", "error", "retryable", "audit_receipt", "updated_at"])
+        return self._failure_envelope(
+            record,
+            descriptor,
+            record.workspace_slug,
+            str(record.caller_id),
+            audit.id,
+            error,
+            True,
+        ), 409
 
     def _write_audit(
         self,
@@ -531,36 +807,172 @@ class OperationGateway:
         outcome: str,
         descriptor: OperationDescriptor,
         record: OperationGatewayIdempotency,
-        workspace_slug: str,
-        caller_id: str,
-        request_digest: str,
-        result: dict[str, Any] | None = None,
-        error: GatewayError | None = None,
+        result: dict[str, Any] | None,
+        error: GatewayError | None,
     ) -> OperationGatewayAudit:
         return OperationGatewayAudit.objects.create(
+            invocation_id=record.invocation_id,
             phase=phase,
             outcome=outcome,
             request_id=record.request_id,
             operation_id=descriptor.operation_id,
-            workspace_slug=workspace_slug,
-            caller_id=caller_id,
+            workspace_id=record.workspace_id,
+            workspace_slug=record.workspace_slug,
+            caller_id=record.caller_id,
             idempotency_key=record.idempotency_key,
             correlation_id=record.correlation_id,
-            request_digest=request_digest,
+            request_digest=record.request_digest,
             result=result,
             error_code=error["code"] if error else None,
         )
 
-    def _request_digest(
-        self, descriptor: OperationDescriptor, workspace_slug: str, parsed_input: dict[str, Any]
-    ) -> str:
-        payload = {
-            "schema_version": SCHEMA_VERSION,
-            "operation_id": descriptor.operation_id,
-            "workspace_slug": workspace_slug,
-            "input": parsed_input,
+    def _write_invocation_pair(
+        self,
+        *,
+        record: OperationGatewayIdempotency,
+        correlation_id: str,
+        request_digest: str,
+        invocation_id: uuid.UUID,
+        outcome: str,
+        result: dict[str, Any] | None = None,
+        error: GatewayError | GatewayFailure | None = None,
+    ) -> OperationGatewayAudit:
+        error_value = self._error(error.code, error.retryable) if isinstance(error, GatewayFailure) else error
+        fields = {
+            "invocation_id": invocation_id,
+            "request_id": record.request_id,
+            "operation_id": record.operation_id,
+            "workspace_id": record.workspace_id,
+            "workspace_slug": record.workspace_slug,
+            "caller_id": record.caller_id,
+            "idempotency_key": record.idempotency_key,
+            "correlation_id": correlation_id,
+            "request_digest": request_digest,
         }
-        return hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
+        OperationGatewayAudit.objects.create(
+            **fields,
+            phase=OperationGatewayAudit.Phase.INTENT,
+            outcome=OperationGatewayAudit.Outcome.INTENT,
+        )
+        return OperationGatewayAudit.objects.create(
+            **fields,
+            phase=OperationGatewayAudit.Phase.OUTCOME,
+            outcome=outcome,
+            result=result,
+            error_code=error_value["code"] if error_value else None,
+        )
+
+    def _record_unkeyed_failure(
+        self,
+        *,
+        operation_id: str,
+        workspace_slug: str,
+        idempotency_key: str,
+        correlation_id: str,
+        caller_id: str,
+        workspace_id: uuid.UUID | None,
+        request_digest: str,
+        failure: GatewayFailure,
+    ) -> tuple[GatewayFailureEnvelope, int]:
+        request_id = uuid.uuid4()
+        invocation_id = uuid.uuid4()
+        fields = {
+            "invocation_id": invocation_id,
+            "request_id": request_id,
+            "operation_id": self._wire_text(operation_id, "unknown", 128),
+            "workspace_id": workspace_id,
+            "workspace_slug": self._wire_text(workspace_slug, "unknown", 255),
+            "caller_id": uuid.UUID(caller_id),
+            "idempotency_key": self._wire_text(idempotency_key, "unbound", 128),
+            "correlation_id": self._wire_text(correlation_id, str(uuid.uuid4()), 128),
+            "request_digest": request_digest,
+        }
+        with transaction.atomic():
+            OperationGatewayAudit.objects.create(
+                **fields,
+                phase=OperationGatewayAudit.Phase.INTENT,
+                outcome=OperationGatewayAudit.Outcome.INTENT,
+            )
+        error = self._error(failure.code, failure.retryable)
+        with transaction.atomic():
+            outcome_audit = OperationGatewayAudit.objects.create(
+                **fields,
+                phase=OperationGatewayAudit.Phase.OUTCOME,
+                outcome=(
+                    OperationGatewayAudit.Outcome.DENIED
+                    if failure.code == "NOT_AUTHORIZED"
+                    else OperationGatewayAudit.Outcome.FAILURE
+                ),
+                error_code=error["code"],
+            )
+        return self._direct_failure_envelope(
+            operation_id=fields["operation_id"],
+            workspace_slug=fields["workspace_slug"],
+            caller_id=caller_id,
+            request_id=request_id,
+            idempotency_key=fields["idempotency_key"],
+            correlation_id=fields["correlation_id"],
+            audit_receipt=outcome_audit.id,
+            error=failure,
+            replayed=False,
+            status_code=failure.http_status,
+        )
+
+    def _replay_terminal(
+        self,
+        record: OperationGatewayIdempotency,
+        descriptor: OperationDescriptor,
+        workspace_slug: str,
+        caller_id: str,
+        audit_receipt: uuid.UUID,
+    ) -> tuple[GatewayEnvelope, int]:
+        if record.state == OperationGatewayIdempotency.State.SUCCEEDED and record.result is not None:
+            return self._success_envelope(
+                record,
+                descriptor,
+                workspace_slug,
+                caller_id,
+                record.audit_receipt,
+                record.result,
+                True,
+            ), 200
+        failure = self._failure_from_record(record) or GatewayFailure("UPSTREAM_FAILURE", 503, False)
+        status_code = (
+            403
+            if record.state == OperationGatewayIdempotency.State.DENIED
+            else self._status_for_code(failure.code)
+        )
+        return self._failure_envelope(
+            record,
+            descriptor,
+            workspace_slug,
+            caller_id,
+            record.audit_receipt or audit_receipt,
+            self._error(failure.code, record.retryable),
+            True,
+        ), status_code
+
+    def _direct_unknown(self, record: OperationGatewayIdempotency) -> tuple[GatewayFailureEnvelope, int]:
+        return self._direct_failure_envelope(
+            operation_id=record.operation_id,
+            workspace_slug=record.workspace_slug,
+            caller_id=str(record.caller_id),
+            request_id=record.request_id,
+            idempotency_key=record.idempotency_key,
+            correlation_id=record.correlation_id,
+            audit_receipt=record.audit_receipt,
+            error=GatewayFailure("OUTCOME_UNKNOWN", 409, False),
+            replayed=True,
+            status_code=409,
+        )
+
+    def _failure_from_record(self, record: OperationGatewayIdempotency) -> GatewayFailure | None:
+        if not isinstance(record.error, dict):
+            return None
+        code = record.error.get("code")
+        if not isinstance(code, str) or code not in ERROR_MESSAGES:
+            return GatewayFailure("UPSTREAM_FAILURE", 503, False)
+        return GatewayFailure(code, self._status_for_code(code), bool(record.retryable))
 
     def _success_envelope(
         self,
@@ -579,12 +991,12 @@ class OperationGateway:
             record.request_id,
             record.idempotency_key,
             record.correlation_id,
-            str(audit_receipt),
+            str(audit_receipt) if audit_receipt else None,
             replayed,
-            True,
+            record.workspace_id,
         )
         envelope.update({"ok": True, "result": result})
-        return envelope
+        return self._bounded_response(envelope)
 
     def _failure_envelope(
         self,
@@ -605,35 +1017,38 @@ class OperationGateway:
             record.correlation_id,
             str(audit_receipt) if audit_receipt else None,
             replayed,
-            False,
+            None,
         )
-        envelope.update({"ok": False, "error": error})
-        return envelope
+        envelope.update({"ok": False, "error": self._error(error["code"], error["retryable"])})
+        return self._bounded_response(envelope)
 
-    def _failure_without_receipt(
+    def _direct_failure_envelope(
         self,
         *,
         operation_id: str,
         workspace_slug: str,
+        caller_id: str,
+        request_id: uuid.UUID,
         idempotency_key: str,
         correlation_id: str,
-        caller_id: str,
-        failure: GatewayFailure,
+        audit_receipt: uuid.UUID | None,
+        error: GatewayFailure,
+        replayed: bool,
+        status_code: int,
     ) -> tuple[GatewayFailureEnvelope, int]:
-        error: GatewayError = {"code": failure.code, "message": failure.message, "retryable": failure.retryable}
         envelope = self._envelope_base(
             operation_id,
             workspace_slug,
             caller_id,
-            uuid.uuid4(),
+            request_id,
             idempotency_key,
             correlation_id,
+            str(audit_receipt) if audit_receipt else None,
+            replayed,
             None,
-            False,
-            False,
         )
-        envelope.update({"ok": False, "error": error})
-        return envelope, failure.http_status
+        envelope.update({"ok": False, "error": self._error(error.code, error.retryable)})
+        return self._bounded_response(envelope), status_code
 
     def _envelope_base(
         self,
@@ -645,19 +1060,87 @@ class OperationGateway:
         correlation_id: str,
         audit_receipt: str | None,
         replayed: bool,
-        include_workspace_id: bool,
+        workspace_id: uuid.UUID | None,
     ) -> dict[str, Any]:
-        workspace_id = None
-        if include_workspace_id:
-            workspace = Workspace.objects.filter(slug=workspace_slug).only("id").first()
-            workspace_id = str(workspace.id) if workspace else None
+        workspace: dict[str, str] = {"slug": self._wire_text(workspace_slug, "unknown", 255)}
+        if workspace_id is not None:
+            workspace["id"] = str(workspace_id)
         return {
             "schema_version": SCHEMA_VERSION,
-            "operation_id": operation_id,
+            "operation_id": self._wire_text(operation_id, "unknown", 128),
             "request_id": str(request_id),
-            "caller": {"type": "user", "id": caller_id},
-            "workspace": {"slug": workspace_slug, "id": workspace_id},
-            "idempotency": {"key": idempotency_key, "replayed": replayed},
-            "correlation_id": correlation_id,
+            "caller": {"type": "user", "id": self._wire_text(caller_id, "unknown", 64)},
+            "workspace": workspace,
+            "idempotency": {
+                "key": self._wire_text(idempotency_key, "unbound", 128),
+                "replayed": replayed,
+            },
+            "correlation_id": self._wire_text(correlation_id, str(uuid.uuid4()), 128),
             "audit_receipt": audit_receipt,
         }
+
+    def _bounded_response(self, envelope: dict[str, Any]):
+        if len(canonical_json(envelope).encode("utf-8")) <= MAX_RESPONSE_BYTES:
+            return envelope
+        bounded = dict(envelope)
+        bounded["result"] = {"work_item": {}}
+        bounded["error"] = self._error("RESULT_TOO_LARGE", False)
+        bounded["ok"] = False
+        return bounded
+
+    @staticmethod
+    def _error(code: str, retryable: bool) -> GatewayError:
+        safe_code = code if code in ERROR_MESSAGES else "INTERNAL_ERROR"
+        return {"code": safe_code, "message": ERROR_MESSAGES[safe_code], "retryable": retryable}
+
+    @staticmethod
+    def _status_for_code(code: str) -> int:
+        return {
+            "NOT_AUTHORIZED": 403,
+            "AUTHORIZATION_UNAVAILABLE": 503,
+            "IDEMPOTENCY_CONFLICT": 409,
+            "OUTCOME_UNKNOWN": 409,
+            "RESULT_TOO_LARGE": 409,
+            "UNKNOWN_OPERATION": 404,
+            "UPSTREAM_FAILURE": 503,
+        }.get(code, 400)
+
+    @staticmethod
+    def _workspace_id(workspace_slug: str) -> uuid.UUID | None:
+        if not isinstance(workspace_slug, str):
+            return None
+        workspace = Workspace.objects.filter(slug=workspace_slug).only("id").first()
+        return workspace.id if workspace else None
+
+    @staticmethod
+    def _request_digest(
+        *,
+        workspace_id: uuid.UUID,
+        caller_id: str,
+        descriptor: OperationDescriptor,
+        idempotency_key: str,
+        parsed_input: dict[str, Any],
+    ) -> str:
+        payload = {
+            "schema_version": SCHEMA_VERSION,
+            "workspace_id": str(workspace_id),
+            "caller_id": caller_id,
+            "operation_id": descriptor.operation_id,
+            "idempotency_key": idempotency_key,
+            "input": parsed_input,
+        }
+        return hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _digest_for_raw(value: Any) -> str:
+        try:
+            encoded = canonical_json(value)
+        except (TypeError, ValueError):
+            encoded = str(value)[:MAX_INPUT_BYTES]
+        return hashlib.sha256(encoded.encode("utf-8")[:MAX_INPUT_BYTES]).hexdigest()
+
+    @staticmethod
+    def _wire_text(value: Any, fallback: str, max_length: int) -> str:
+        if not isinstance(value, str) or not value.strip():
+            return fallback
+        return value.strip()[:max_length]
