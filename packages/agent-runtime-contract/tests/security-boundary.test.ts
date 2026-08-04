@@ -2,167 +2,178 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
-import Ajv2020 from "ajv/dist/2020.js";
 import { describe, expect, test } from "vitest";
 
 import {
-  CANONICAL_JSON_LIMITS,
+  MAX_SERIALIZED_JSON_BYTES,
   ContractParseError,
-  canonicalJsonEquals,
   createRuntimeSchemaValidator,
   parseRuntimeEvent,
   serializedJsonByteLength,
+  type ContractJsonInput,
+  verifyRuntimeExecution,
 } from "../src";
-import runtimeEventSchema from "../schemas/v1/runtime-event.schema.json" with { type: "json" };
-import { appliedFailureBody, event, observationBody } from "./fixtures";
+import { event, observationBody } from "./fixtures";
 
+const packageRequire = createRequire(import.meta.url);
 const packageManifest = JSON.parse(
   readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8")
 ) as { exports: Record<string, string> };
-const packageRequire = createRequire(import.meta.url);
+const wire = (value: unknown): string => JSON.stringify(value);
+const unsafe = (value: unknown): ContractJsonInput => value as ContractJsonInput;
 
-describe("schema-validation boundary remediation reproductions", () => {
-  test("rejects inherited prototypes", () => {
+describe("serialized runtime-contract boundary", () => {
+  test("rejects a live Proxy without executing any trap", () => {
     const valid = event(observationBody());
-    const inherited = Object.create(valid) as Record<string, unknown>;
-    Object.defineProperties(inherited, Object.getOwnPropertyDescriptors(valid));
-
-    expect(() => parseRuntimeEvent(inherited)).toThrow(ContractParseError);
-  });
-
-  test("never invokes accessors", () => {
-    const valid = event(observationBody());
-    const getter = { ...valid } as Record<string, unknown>;
-    Object.defineProperty(getter, "observedAt", {
-      enumerable: true,
+    let traps = 0;
+    const proxy = new Proxy(valid, {
       get() {
-        throw new Error("getter invoked");
+        traps += 1;
+        throw new Error("get trap executed");
+      },
+      getPrototypeOf() {
+        traps += 1;
+        throw new Error("prototype trap executed");
+      },
+      ownKeys() {
+        traps += 1;
+        throw new Error("ownKeys trap executed");
       },
     });
-    expect(() => parseRuntimeEvent(getter)).toThrow(ContractParseError);
+
+    expect(() => parseRuntimeEvent(unsafe(proxy))).toThrow(ContractParseError);
+    expect(createRuntimeSchemaValidator().validate("runtime-event", unsafe(proxy))).toBe(false);
+    expect(traps).toBe(0);
   });
 
-  test("does not expose raw schemas as an ordinary package subpath", () => {
+  test("rejects throwing getters without reading them", () => {
+    let reads = 0;
+    const value = {};
+    Object.defineProperty(value, "body", {
+      enumerable: true,
+      get() {
+        reads += 1;
+        throw new Error("getter executed");
+      },
+    });
+    expect(() => parseRuntimeEvent(unsafe(value))).toThrow(ContractParseError);
+    expect(reads).toBe(0);
+  });
+
+  test("reads byte length through typed-array internals instead of caller getters", () => {
+    const bytes = new TextEncoder().encode(wire(event(observationBody())));
+    let reads = 0;
+    Object.defineProperty(bytes, "byteLength", {
+      get() {
+        reads += 1;
+        throw new Error("byteLength getter executed");
+      },
+    });
+    expect(parseRuntimeEvent(bytes)).toEqual(event(observationBody()));
+    expect(reads).toBe(0);
+  });
+
+  test("does not export the old live-object normalizer or configurable limits", async () => {
+    const source = await import("../src/index");
+    expect("normalizeJsonValue" in source).toBe(false);
+    expect("CANONICAL_JSON_LIMITS" in source).toBe(false);
+    expect("isCanonicalJsonUtf8ByteLengthAtMost" in source).toBe(false);
+    expect("utf8ByteLengthAtMost" in source).toBe(false);
+    expect("freezeRunSnapshot" in source).toBe(false);
+    expect("verifyRunSnapshotContentDigest" in source).toBe(false);
+    expect("verifyInvocationSnapshotBinding" in source).toBe(false);
+  });
+
+  test("enforces the serialized byte cap before JSON.parse and accepts bytes", () => {
+    const validWire = wire(event(observationBody()));
+    expect(parseRuntimeEvent(new TextEncoder().encode(validWire))).toEqual(event(observationBody()));
+    expect(() => parseRuntimeEvent(" ".repeat(MAX_SERIALIZED_JSON_BYTES + 1))).toThrow(/maximum UTF-8 byte size/);
+  });
+
+  test("terminates deep input iteratively and rejects wide input before deep work", () => {
+    let deep = "0";
+    for (let index = 0; index < 20_000; index += 1) deep = `[${deep}]`;
+    expect(() => serializedJsonByteLength(deep)).toThrow(/depth_exceeded/);
+    expect(() => parseRuntimeEvent(deep)).toThrow(ContractParseError);
+
+    const wide = `{${Array.from({ length: 5000 }, (_, index) => `"p${index}":0`).join(",")}}`;
+    expect(() => parseRuntimeEvent(wide)).toThrow(ContractParseError);
+    expect(() => serializedJsonByteLength(wide)).toThrow(/collection_size_exceeded/);
+  });
+
+  test("rejects an invalid envelope without inspecting a nested live object", () => {
+    let traps = 0;
+    const nested = new Proxy(
+      {},
+      {
+        get() {
+          traps += 1;
+          throw new Error("nested getter executed");
+        },
+        ownKeys() {
+          traps += 1;
+          throw new Error("nested ownKeys executed");
+        },
+      }
+    );
+    expect(() => parseRuntimeEvent(unsafe({ junk: nested }))).toThrow(ContractParseError);
+    expect(traps).toBe(0);
+  });
+
+  test("sanitizes attacker-controlled keys and Ajv params", () => {
+    const valid = event(observationBody());
+    const validator = createRuntimeSchemaValidator();
+    const withSecret = { ...valid, TOP_SECRET: "do not expose" };
+    expect(() => parseRuntimeEvent(wire(withSecret))).toThrow(ContractParseError);
+    try {
+      parseRuntimeEvent(wire(withSecret));
+    } catch (error) {
+      expect(String(error)).not.toContain("TOP_SECRET");
+      expect(error).toMatchObject({ path: "RuntimeEvent" });
+    }
+    const withAjvSecret = { ...valid, ATTACKER_SECRET: "do not expose" };
+    expect(validator.validate("runtime-event", wire(withAjvSecret))).toBe(false);
+    expect(JSON.stringify(validator.errors("runtime-event"))).not.toContain("ATTACKER_SECRET");
+    expect(JSON.stringify(validator.errors("runtime-event"))).not.toContain("additionalProperty");
+  });
+
+  test("returns independent immutable validation errors across interleaved calls", () => {
+    const validator = createRuntimeSchemaValidator();
+    expect(validator.validate("runtime-event", wire({ protocol: "wrong" }))).toBe(false);
+    const first = validator.errors("runtime-event");
+    expect(first).not.toBeNull();
+    expect(Object.isFrozen(first)).toBe(true);
+    expect(validator.validate("runtime-exit", wire({ protocol: "wrong" }))).toBe(false);
+    const second = validator.errors("runtime-exit");
+    expect(second).not.toBe(first);
+    expect(Object.isFrozen(second)).toBe(true);
+    expect(JSON.stringify(first)).not.toContain("runtime-exit");
+    expect(() => {
+      if (first !== null) (first[0] as { message: string }).message = "mutated";
+    }).toThrow();
+    expect(validator.errors("runtime-event")?.[0]?.message).not.toBe("mutated");
+  });
+
+  test("bounds verification input arrays and error accumulation", () => {
+    const oversized = wire({
+      manifest: {},
+      snapshot: {},
+      invocation: {},
+      events: Array.from({ length: 5000 }, () => ({})),
+      exit: {},
+      trusted: {},
+    });
+    const result = verifyRuntimeExecution(oversized);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.length).toBeLessThanOrEqual(256);
+  });
+
+  test("keeps raw schemas inaccessible through package exports", async () => {
     expect(packageManifest.exports).not.toHaveProperty("./schemas/v1/*");
     expect(packageRequire.resolve("@plane/agent-runtime-contract")).toMatch(/dist\/index\.mjs$/);
-    expect(() => packageRequire.resolve("@plane/agent-runtime-contract/schemas/v1/runtime-event.schema.json")).toThrow(
-      /exports/
-    );
-  });
-
-  test("supported validation rejects violations that ordinary Ajv would accept directly", () => {
-    const plainAjv = new Ajv2020({ strict: false });
-    const plainValidate = plainAjv.compile(runtimeEventSchema);
-    const supportedValidator = createRuntimeSchemaValidator();
-
-    const overByteEvent = {
-      ...event(observationBody()),
-      body: {
-        ...event(observationBody()).body,
-        payload: { kind: "inline_text", contentType: "text/plain", text: "é".repeat(2049) },
-        publication: { action: "observation_only" },
-        kind: "progress_observed",
-      },
-    };
-    // The generated transport artifact is intentionally not self-authoritative;
-    // this remains true only for direct filesystem access, not a package API.
-    expect(plainValidate(overByteEvent)).toBe(true);
-    expect(supportedValidator.validate("runtime-event", overByteEvent)).toBe(false);
-
-    const mismatchedEqualityEvent = {
-      ...event(appliedFailureBody()),
-      body: {
-        ...event(appliedFailureBody()).body,
-        publication: {
-          ...event(appliedFailureBody()).body.publication,
-          productRef: "product-event:other",
-        },
-      },
-    };
-    expect(plainValidate(mismatchedEqualityEvent)).toBe(true);
-    expect(supportedValidator.validate("runtime-event", mismatchedEqualityEvent)).toBe(false);
-    expect(() => new Ajv2020({ strict: true }).compile(runtimeEventSchema)).toThrow();
-  });
-
-  test("normalizes null-prototype JSON and rejects unsafe object shapes", () => {
-    const valid = event(observationBody());
-    const nullPrototype = Object.assign(Object.create(null), valid);
-    expect(() => parseRuntimeEvent(nullPrototype)).not.toThrow();
-
-    const pollution = { ...valid } as Record<string, unknown>;
-    Object.defineProperty(pollution, "__proto__", { enumerable: true, value: {} });
-    expect(() => parseRuntimeEvent(pollution)).toThrow(ContractParseError);
-
-    const inherited = Object.create({ observedAt: valid.observedAt }) as Record<string, unknown>;
-    Object.defineProperties(inherited, Object.getOwnPropertyDescriptors(valid));
-    expect(() => parseRuntimeEvent(inherited)).toThrow(ContractParseError);
-    expect(() => parseRuntimeEvent([])).toThrow(ContractParseError);
-    expect(() => parseRuntimeEvent(new Date())).toThrow(ContractParseError);
-    expect(() => parseRuntimeEvent(new Map())).toThrow(ContractParseError);
-    expect(() => parseRuntimeEvent(new Set())).toThrow(ContractParseError);
-  });
-
-  test("rejects accessors, sparse arrays, cycles, and unsupported scalar values deterministically", () => {
-    const valid = event(observationBody());
-    const getter = { ...valid } as Record<string, unknown>;
-    Object.defineProperty(getter, "observedAt", {
-      enumerable: true,
-      get() {
-        throw new Error("secret-getter-input");
-      },
-    });
-    expect(() => parseRuntimeEvent(getter)).toThrow(ContractParseError);
-
-    const validator = createRuntimeSchemaValidator();
-    expect(validator.validate("runtime-event", getter)).toBe(false);
-    expect(validator.errors("runtime-event")).toEqual([
-      {
-        instancePath: "",
-        schemaPath: "#",
-        keyword: "x-plane-safe-json",
-        params: { reason: "unsupported_or_unbounded_input" },
-        message: "must be bounded plain JSON data",
-      },
-    ]);
-    expect(JSON.stringify(validator.errors("runtime-event"))).not.toContain("secret-getter-input");
-
-    const sparse: unknown[] = [];
-    sparse.length = 1;
-    expect(() => parseRuntimeEvent(sparse)).toThrow(ContractParseError);
-
-    const cyclic = { ...valid } as Record<string, unknown>;
-    cyclic.body = cyclic;
-    expect(() => parseRuntimeEvent(cyclic)).toThrow(/cyclic JSON value/);
-
-    for (const unsupported of [undefined, 1n, Symbol("unsupported"), () => undefined]) {
-      expect(() => parseRuntimeEvent(unsupported)).toThrow(ContractParseError);
-    }
-  });
-
-  test("bounds depth, node count, strings, and canonical work before materializing output", () => {
-    let deep: unknown = 0;
-    for (let index = 0; index <= CANONICAL_JSON_LIMITS.maxDepth; index += 1) {
-      deep = [deep];
-    }
-    expect(() => serializedJsonByteLength(deep)).toThrow(/depth_exceeded/);
-
-    const manyNodes = Object.fromEntries(
-      Array.from({ length: CANONICAL_JSON_LIMITS.maxCollectionItems }, (_, index) => [index, [0, 0]])
-    );
-    expect(() => serializedJsonByteLength(manyNodes)).toThrow(/node_count_exceeded/);
-
-    const huge = "x".repeat(CANONICAL_JSON_LIMITS.maxStringBytes + 1);
-    expect(() => serializedJsonByteLength(huge)).toThrow(/string_bytes_exceeded/);
-
-    const oversizedCanonical = "x".repeat(CANONICAL_JSON_LIMITS.maxCanonicalBytes);
-    expect(() => serializedJsonByteLength(oversizedCanonical)).toThrow(/serialized_bytes_exceeded/);
-  });
-
-  test("uses exact own-property equality with bounded normalization", () => {
-    expect(canonicalJsonEquals({ a: 1, b: ["x", true] }, { b: ["x", true], a: 1 })).toBe(true);
-    expect(canonicalJsonEquals(Object.assign(Object.create(null), { a: 1 }), { a: 2 })).toBe(false);
-
-    const inherited = Object.create({ a: 1 });
-    expect(() => canonicalJsonEquals(inherited, { a: 1 })).toThrow(/unsupported_prototype/);
+    const schemaSubpath = "@plane/agent-runtime-contract/schemas/v1/runtime-event.schema.json";
+    expect(() => packageRequire.resolve(schemaSubpath)).toThrow(/exports/);
+    expect(() => packageRequire(schemaSubpath)).toThrow(/exports/);
+    await expect(import(schemaSubpath)).rejects.toThrow(/exports/);
   });
 });

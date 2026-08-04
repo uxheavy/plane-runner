@@ -28,14 +28,14 @@ import {
   createProfileVersionRef,
   createReceiptRef,
   createRunId,
-  createRunSnapshot,
+  createRunSnapshot as createRunSnapshotWire,
   createTargetRef,
   createWorkspaceRef,
-  computeTrustedHumanInputAnswerDigest,
-  parseContractManifest,
-  parseInvocationEnvelope,
-  parseRuntimeEvent,
-  parseRuntimeExit,
+  computeTrustedHumanInputAnswerDigest as computeTrustedHumanInputAnswerDigestWire,
+  parseContractManifest as parseContractManifestWire,
+  parseInvocationEnvelope as parseInvocationEnvelopeWire,
+  parseRuntimeEvent as parseRuntimeEventWire,
+  parseRuntimeExit as parseRuntimeExitWire,
   type BoundedPayload,
   type ContractDigest,
   type ContractManifest,
@@ -48,10 +48,20 @@ import {
   type TrustedHumanInputAnswer,
 } from "../src";
 
+const toWire = (value: unknown): string | Uint8Array =>
+  typeof value === "string" || value instanceof Uint8Array ? value : JSON.stringify(value);
+const createRunSnapshot = (input: unknown, manifestValue: unknown) =>
+  createRunSnapshotWire(toWire(input), toWire(manifestValue));
+const parseInvocationEnvelope = (value: unknown) => parseInvocationEnvelopeWire(toWire(value));
+const parseRuntimeEvent = (value: unknown) => parseRuntimeEventWire(toWire(value));
+const parseRuntimeExit = (value: unknown) => parseRuntimeExitWire(toWire(value));
+const computeTrustedHumanInputAnswerDigest = (value: unknown) =>
+  computeTrustedHumanInputAnswerDigestWire(toWire(value));
+
 const manifestDirectory = fileURLToPath(new URL("../schemas/v1/", import.meta.url));
 
-export const manifest: ContractManifest = parseContractManifest(
-  JSON.parse(readFileSync(`${manifestDirectory}/manifest.json`, "utf8"))
+export const manifest: ContractManifest = parseContractManifestWire(
+  readFileSync(`${manifestDirectory}/manifest.json`, "utf8")
 );
 
 export const digest = (character = "a"): ContractDigest => createContractDigest(character.repeat(64));

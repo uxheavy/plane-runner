@@ -1,15 +1,15 @@
 import { describe, expect, test } from "vitest";
 
 import {
-  computeRunSnapshotContentDigest,
-  computeRuntimeDurableStateDigest,
-  computeTrustedHumanInputAnswerDigest,
+  computeRunSnapshotContentDigest as computeRunSnapshotContentDigestWire,
+  computeRuntimeDurableStateDigest as computeRuntimeDurableStateDigestWire,
+  computeTrustedHumanInputAnswerDigest as computeTrustedHumanInputAnswerDigestWire,
   createRuntimeSchemaValidator,
   createActorRef,
   createApplicationServiceRef,
   createAuditReceiptRef,
   createAuthorizationReceiptRef,
-  createInitialRuntimeDurableState,
+  createInitialRuntimeDurableState as createInitialRuntimeDurableStateWire,
   createContentDigest,
   createContractDigest,
   createRunSnapshotContentDigest,
@@ -29,14 +29,14 @@ import {
   createWorkspaceRef,
   MAX_SERIALIZED_JSON_BYTES,
   createOutcomeSubmissionRef,
-  parseInvocationEnvelope,
-  parseRunSnapshot,
-  parseRuntimeEvent,
-  parseRuntimeExit,
-  parseRuntimeDurableState,
-  serializedJsonByteLength,
+  parseInvocationEnvelope as parseInvocationEnvelopeWire,
+  parseRunSnapshot as parseRunSnapshotWire,
+  parseRuntimeEvent as parseRuntimeEventWire,
+  parseRuntimeExit as parseRuntimeExitWire,
+  parseRuntimeDurableState as parseRuntimeDurableStateWire,
+  serializedJsonByteLength as serializedJsonByteLengthWire,
   UTF8_BYTE_LIMITS,
-  verifyRuntimeExecution,
+  verifyRuntimeExecution as verifyRuntimeExecutionWire,
   type RuntimeDurableState,
   type RuntimeEvent,
   type RuntimeEventBody,
@@ -70,6 +70,22 @@ import {
   trustedHumanInputAnswer,
 } from "./fixtures";
 
+const toWire = (value: unknown): string | Uint8Array =>
+  typeof value === "string" || value instanceof Uint8Array ? value : JSON.stringify(value);
+const parseInvocationEnvelope = (value: unknown) => parseInvocationEnvelopeWire(toWire(value));
+const parseRunSnapshot = (value: unknown) => parseRunSnapshotWire(toWire(value));
+const parseRuntimeEvent = (value: unknown) => parseRuntimeEventWire(toWire(value));
+const parseRuntimeExit = (value: unknown) => parseRuntimeExitWire(toWire(value));
+const parseRuntimeDurableState = (value: unknown) => parseRuntimeDurableStateWire(toWire(value));
+const createInitialRuntimeDurableState = (value: unknown) => createInitialRuntimeDurableStateWire(toWire(value));
+const computeRunSnapshotContentDigest = (value: unknown) => computeRunSnapshotContentDigestWire(toWire(value));
+const computeRuntimeDurableStateDigest = (value: unknown) => computeRuntimeDurableStateDigestWire(toWire(value));
+const computeTrustedHumanInputAnswerDigest = (value: unknown) =>
+  computeTrustedHumanInputAnswerDigestWire(toWire(value));
+const serializedJsonByteLength = (value: unknown) =>
+  serializedJsonByteLengthWire(value instanceof Uint8Array ? value : JSON.stringify(value));
+const verifyRuntimeExecution = (value: unknown) => verifyRuntimeExecutionWire(toWire(value));
+
 const schemaNames = [
   "run-snapshot",
   "invocation-envelope",
@@ -79,7 +95,7 @@ const schemaNames = [
 ] as const;
 const schemaValidator = createRuntimeSchemaValidator();
 const validators = Object.fromEntries(
-  schemaNames.map((name) => [name, (value: unknown) => schemaValidator.validate(name, value)])
+  schemaNames.map((name) => [name, (value: unknown) => schemaValidator.validate(name, toWire(value))])
 ) as Record<(typeof schemaNames)[number], (value: unknown) => boolean>;
 
 const assertValid = (name: (typeof schemaNames)[number], value: unknown) => {
@@ -252,51 +268,38 @@ describe("parsed plane.agent-runtime/v1 contract boundary", () => {
     expect(() => parseRuntimeExit({ ...exits[0], nested: {} })).toThrow(/unknown properties/);
   });
 
-  test("accepts only the exact parser output for every contract kind", () => {
+  test("accepts serialized contracts and rejects live objects at the public verifier boundary", () => {
     const outcome = event(appliedOutcomeBody());
-    const parsed = {
-      snapshot,
-      invocation: envelope(),
-      event: outcome,
-      exit: exits[0],
-    };
     const base = {
       manifest,
-      snapshot: parsed.snapshot,
-      invocation: parsed.invocation,
-      events: [parsed.event],
-      exit: parsed.exit,
-      trusted: withReceipts(parsed.invocation, [parsed.event]),
+      snapshot,
+      invocation: envelope(),
+      events: [outcome],
+      exit: exits[0],
+      trusted: withReceipts(envelope(), [outcome]),
     };
-    const attempts: Array<[string, unknown, keyof typeof base]> = [
-      ["spread", { ...parsed.snapshot }, "snapshot"],
-      ["json", JSON.parse(JSON.stringify(parsed.invocation)), "invocation"],
-      ["prototype", [Object.create(Object.getPrototypeOf(parsed.event))], "events"],
-      ["proxy", new Proxy(parsed.exit, {}), "exit"],
-      ["wrong-kind", parsed.snapshot, "invocation"],
-    ];
-    for (const [label, value, field] of attempts) {
-      const input = { ...base, [field]: value } as typeof base;
-      const result = verifyRuntimeExecution(input);
-      expect(result.ok, label).toBe(false);
-      if (!result.ok) expect(result.errors[0]?.code, label).toMatch(/unparsed_contract_input/);
-    }
-    const durableAttempts: Array<[string, unknown]> = [
-      ["durable-proxy", new Proxy(base.trusted.lifecycle, {})],
-      ["durable-wrong-kind", parsed.snapshot],
-      ["durable-spread", { ...base.trusted.lifecycle }],
-    ];
-    for (const [label, lifecycle] of durableAttempts) {
-      const result = verifyRuntimeExecution({
-        ...base,
-        trusted: { ...base.trusted, lifecycle: lifecycle as RuntimeDurableState },
-      });
-      expect(result.ok, label).toBe(false);
-      if (!result.ok) expect(result.errors[0]?.code, label).toBe("unparsed_durable_state");
-    }
+    expect(verifyRuntimeExecution(JSON.stringify(base)).ok).toBe(true);
+
+    let traps = 0;
+    const liveInput = new Proxy(base, {
+      get() {
+        traps += 1;
+        throw new Error("live verifier input was inspected");
+      },
+      ownKeys() {
+        traps += 1;
+        throw new Error("live verifier input keys were inspected");
+      },
+    });
+    const rejected = verifyRuntimeExecutionWire(liveInput as never);
+    expect(rejected).toEqual({
+      ok: false,
+      errors: [{ code: "unparsed_contract_input", path: "input", message: expect.any(String) }],
+    });
+    expect(traps).toBe(0);
   });
 
-  test("rejects namespaced cross-type substitutions and semantic verification rejects raw casts", () => {
+  test("rejects namespaced cross-type substitutions and reparses serialized verifier input", () => {
     expect(() => parseRunSnapshot({ ...snapshot, workspaceRef: snapshot.actorRef })).toThrow();
     expect(() => parseInvocationEnvelope({ ...envelope(), runId: snapshot.actorRef })).toThrow();
     expect(() => parseRuntimeEvent({ ...event(observationBody()), actorRef: snapshot.workspaceRef })).toThrow();
@@ -315,10 +318,7 @@ describe("parsed plane.agent-runtime/v1 contract boundary", () => {
       exit: rawExit,
       trusted: withReceipts(envelope(), [outcome]),
     });
-    expect(result).toEqual({
-      ok: false,
-      errors: [{ code: "unparsed_contract_input", path: "input", message: expect.any(String) }],
-    });
+    expect(result.ok).toBe(true);
   });
 
   test("keeps snapshot content digest immutable and binds invocation to exact content", () => {
@@ -531,12 +531,12 @@ describe("parser and generated-schema compatibility matrix", () => {
     ["run_cancellation", appliedCancellationBody(), appliedArtifactBody()],
   ] as const)("couples %s history kind to its applied product binding", (_name, body, alternateBody) => {
     const valid = durableStateWithAppliedEvent(body);
-    expect(schemaValidator.validate("runtime-durable-state", valid)).toBe(true);
+    expect(schemaValidator.validate("runtime-durable-state", toWire(valid))).toBe(true);
     expect(() => parseRuntimeDurableState(valid)).not.toThrow();
 
     const alternatePublication = event(alternateBody).body.publication;
     const mismatched = durableStateWithAppliedEvent(body, alternatePublication);
-    expect(schemaValidator.validate("runtime-durable-state", mismatched)).toBe(false);
+    expect(schemaValidator.validate("runtime-durable-state", toWire(mismatched))).toBe(false);
     expect(() => parseRuntimeDurableState(mismatched)).toThrow(/must match the accepted event kind/);
   });
 
@@ -548,7 +548,7 @@ describe("parser and generated-schema compatibility matrix", () => {
         ...publication,
         productEventRef: createProductEventRef("different-terminal-event"),
       });
-      expect(schemaValidator.validate("runtime-durable-state", mismatched)).toBe(false);
+      expect(schemaValidator.validate("runtime-durable-state", toWire(mismatched))).toBe(false);
       expect(() => parseRuntimeDurableState(mismatched)).toThrow(/must identify the terminal product/);
     }
   );
@@ -845,7 +845,7 @@ describe("durable lifecycle and idempotent replay", () => {
       trusted: withReceipts(initialInvocation, [request], { lifecycle: mutableCopy }),
     });
     expect(rejectedUnparsedState.ok).toBe(false);
-    if (!rejectedUnparsedState.ok) expect(rejectedUnparsedState.errors[0]?.code).toBe("unparsed_durable_state");
+    if (!rejectedUnparsedState.ok) expect(rejectedUnparsedState.errors[0]?.code).toBe("pending_input_mismatch");
 
     expect(() =>
       parseRuntimeDurableState({
@@ -1910,9 +1910,9 @@ describe("explicit UTF-8 bounds", () => {
 
     const exactSerializedAscii = "x".repeat(MAX_SERIALIZED_JSON_BYTES - 2);
     expect(serializedJsonByteLength(exactSerializedAscii)).toBe(MAX_SERIALIZED_JSON_BYTES);
-    expect(serializedJsonByteLength(exactSerializedAscii + "x")).toBe(MAX_SERIALIZED_JSON_BYTES + 1);
+    expect(() => serializedJsonByteLength(exactSerializedAscii + "x")).toThrow(/maximum UTF-8 byte size/);
     const exactSerializedEmoji = "🙂".repeat(MAX_SERIALIZED_JSON_BYTES / 4 - 1);
     expect(serializedJsonByteLength(exactSerializedEmoji)).toBe(MAX_SERIALIZED_JSON_BYTES - 2);
-    expect(serializedJsonByteLength(exactSerializedEmoji + "🙂")).toBe(MAX_SERIALIZED_JSON_BYTES + 2);
+    expect(() => serializedJsonByteLength(exactSerializedEmoji + "🙂")).toThrow(/maximum UTF-8 byte size/);
   });
 });

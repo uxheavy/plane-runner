@@ -1,43 +1,12 @@
 import { createHash } from "node:crypto";
 
 import byteConstraints from "./byte-constraints.json" with { type: "json" };
+import { copyUint8Array, uint8ArrayByteLength, utf8ByteLengthUpTo } from "./internal-byte-utils";
 
 export const PLANE_AGENT_RUNTIME_PROTOCOL = "plane.agent-runtime/v1" as const;
 
 const MAX_REF_LENGTH = byteConstraints.reference.jsonSchemaMaxLength;
 const REF_IDENTIFIER_MAX_LENGTH = byteConstraints.reference.identifierCharacterMaxLength;
-const utf8ByteLengthUpTo = (value: string, limit = Number.MAX_SAFE_INTEGER): number => {
-  let bytes = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    const codeUnit = value.charCodeAt(index);
-    let increment: number;
-    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
-      const next = value.charCodeAt(index + 1);
-      if (next >= 0xdc00 && next <= 0xdfff) {
-        increment = 4;
-        index += 1;
-      } else {
-        increment = 3;
-      }
-    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
-      increment = 3;
-    } else if (codeUnit <= 0x7f) {
-      increment = 1;
-    } else if (codeUnit <= 0x7ff) {
-      increment = 2;
-    } else {
-      increment = 3;
-    }
-    bytes += increment;
-    if (bytes > limit) {
-      return limit + 1;
-    }
-  }
-  return bytes;
-};
-
-export const utf8ByteLengthAtMost = (value: string, limit: number): boolean =>
-  utf8ByteLengthUpTo(value, limit) <= limit;
 declare const validatedContractBrand: unique symbol;
 
 export type PlaneAgentRuntimeProtocol = typeof PLANE_AGENT_RUNTIME_PROTOCOL;
@@ -127,6 +96,9 @@ type RefTag = string;
 
 function makeNamespacedRef<Tag extends RefTag>(tag: Tag, namespace: string, value: string): OpaqueRef<Tag> {
   void tag;
+  if (typeof value !== "string") {
+    throw new TypeError(`${namespace} references must be strings`);
+  }
   if (!REF_SUFFIX_PATTERN.test(value)) {
     throw new TypeError(
       `${namespace} references must contain a 1-${REF_IDENTIFIER_MAX_LENGTH} character identifier suffix`
@@ -272,6 +244,9 @@ function makeDigest<Tag extends RefTag>(
   constraint: typeof byteConstraints.contentDigest
 ): OpaqueRef<Tag> {
   void tag;
+  if (typeof value !== "string") {
+    throw new TypeError(`${namespace} digests must be strings`);
+  }
   const bounds = namespacedDigestBounds(namespace, constraint);
   const bytes = utf8ByteLengthUpTo(value);
   if (
@@ -300,6 +275,9 @@ function parseNamespacedDigest<Tag extends RefTag>(
 }
 
 export function createContractDigest(value: string): ContractDigest {
+  if (typeof value !== "string") {
+    throw new TypeError("Contract digests must be strings");
+  }
   const bytes = utf8ByteLengthUpTo(value);
   if (
     bytes < byteConstraints.contractDigest.utf8ByteMin ||
@@ -342,10 +320,6 @@ function deepFreeze<T>(value: T): T {
   }
 
   return value;
-}
-
-export function freezeRunSnapshot(snapshot: RunSnapshot): RunSnapshot {
-  return deepFreeze(snapshot);
 }
 
 export type BoundedText = string;
@@ -434,7 +408,7 @@ export type ContractManifest = Readonly<{
   schemas: Readonly<Record<ContractSchemaName, Readonly<{ filename: string; sha256: ContractDigest }>>>;
 }>;
 
-export function contractDigestsFromManifest(manifest: ContractManifest): ContractDigests {
+function contractDigestsFromManifest(manifest: ContractManifest): ContractDigests {
   return {
     runSnapshot: manifest.schemas["run-snapshot"].sha256,
     invocationEnvelope: manifest.schemas["invocation-envelope"].sha256,
@@ -457,13 +431,13 @@ function parseManifestEntry(value: unknown, name: ContractSchemaName) {
   return { filename: object.filename, sha256: parseContractDigest(object.sha256) };
 }
 
-export function parseContractManifest(value: unknown): ContractManifest {
-  const object = requireRecord(parseRawJson(value, "ContractManifest"), "ContractManifest", ["protocol", "schemas"]);
+function parseContractManifestObject(value: unknown): ContractManifest {
+  const object = requireRecord(parseOwnedJson(value, "ContractManifest"), "ContractManifest", ["protocol", "schemas"]);
   if (object.protocol !== PLANE_AGENT_RUNTIME_PROTOCOL) {
     throw new TypeError("Invalid Plane Agent runtime contract manifest");
   }
   const schemas = requireRecord(object.schemas, "ContractManifest.schemas", CONTRACT_SCHEMA_NAMES);
-  return {
+  return deepFreeze({
     protocol: PLANE_AGENT_RUNTIME_PROTOCOL,
     schemas: {
       "run-snapshot": parseManifestEntry(schemas["run-snapshot"], "run-snapshot"),
@@ -472,7 +446,50 @@ export function parseContractManifest(value: unknown): ContractManifest {
       "runtime-exit": parseManifestEntry(schemas["runtime-exit"], "runtime-exit"),
       "runtime-durable-state": parseManifestEntry(schemas["runtime-durable-state"], "runtime-durable-state"),
     },
-  };
+  });
+}
+
+export type ContractJsonInput = string | Uint8Array;
+
+const isUint8Array = (value: unknown): value is Uint8Array => ArrayBuffer.isView(value) && value instanceof Uint8Array;
+
+function parseSerializedJson(value: unknown, path: string): unknown {
+  let text: string;
+  if (typeof value === "string") {
+    if (utf8ByteLengthUpTo(value, MAX_SERIALIZED_JSON_BYTES) > MAX_SERIALIZED_JSON_BYTES) {
+      throw new ContractParseError(
+        path,
+        "serialized input exceeds the maximum UTF-8 byte size",
+        "serialized_input_too_large"
+      );
+    }
+    text = value;
+  } else if (isUint8Array(value)) {
+    if (uint8ArrayByteLength(value) > MAX_SERIALIZED_JSON_BYTES) {
+      throw new ContractParseError(
+        path,
+        "serialized input exceeds the maximum UTF-8 byte size",
+        "serialized_input_too_large"
+      );
+    }
+    try {
+      text = new TextDecoder("utf-8", { fatal: true }).decode(copyUint8Array(value));
+    } catch {
+      throw new ContractParseError(path, "serialized input must be valid UTF-8 JSON", "invalid_serialized_input");
+    }
+  } else {
+    throw new ContractParseError(path, "input must be serialized JSON text or UTF-8 bytes", "unsupported_live_input");
+  }
+
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new ContractParseError(path, "serialized input must be valid JSON", "invalid_serialized_input");
+  }
+}
+
+export function parseContractManifest(value: ContractJsonInput): ContractManifest {
+  return parseContractManifestObject(parseSerializedJson(value, "ContractManifest"));
 }
 
 type RunSnapshotShape = Readonly<{
@@ -502,14 +519,22 @@ function withoutSnapshotContentDigest(snapshot: RunSnapshot | RunSnapshotContent
   return snapshot;
 }
 
-export function canonicalizeJson(value: unknown): string {
+function canonicalizeOwnedJson(value: unknown): string {
   const normalized = normalizeJsonValue(value);
   measureNormalizedJsonUtf8Bytes(normalized, CANONICAL_JSON_LIMITS.maxCanonicalBytes);
   return writeCanonicalJson(normalized);
 }
 
-export function serializedJsonByteLength(value: unknown): number {
+export function canonicalizeJson(value: ContractJsonInput): string {
+  return canonicalizeOwnedJson(parseSerializedJson(value, "canonicalJson"));
+}
+
+function serializedOwnedJsonByteLength(value: unknown): number {
   return measureCanonicalJsonUtf8Bytes(value);
+}
+
+export function serializedJsonByteLength(value: ContractJsonInput): number {
+  return serializedOwnedJsonByteLength(parseSerializedJson(value, "serializedJson"));
 }
 
 export const UTF8_BYTE_LIMITS = {
@@ -524,7 +549,7 @@ export const UTF8_BYTE_LIMITS = {
 export const MAX_SERIALIZED_JSON_BYTES = UTF8_BYTE_LIMITS.serializedContract;
 const MAX_BOUNDED_BYTE_COUNT = byteConstraints.boundedByteCount.numericMax;
 
-export type CanonicalJsonLimits = Readonly<{
+type CanonicalJsonLimits = Readonly<{
   maxDepth: number;
   maxNodes: number;
   maxStringBytes: number;
@@ -533,7 +558,7 @@ export type CanonicalJsonLimits = Readonly<{
   maxCanonicalBytes: number;
 }>;
 
-export const CANONICAL_JSON_LIMITS: CanonicalJsonLimits = Object.freeze({
+const CANONICAL_JSON_LIMITS: CanonicalJsonLimits = Object.freeze({
   maxDepth: 64,
   maxNodes: 10_000,
   maxStringBytes: 16 * 1024 * 1024,
@@ -567,40 +592,6 @@ class SafeJsonError extends TypeError {
   }
 }
 
-const safeJsonErrorMessage = (error: unknown): string => {
-  if (!(error instanceof SafeJsonError)) {
-    return "contains unsupported JSON data";
-  }
-  switch (error.code) {
-    case "depth_exceeded":
-      return "exceeds the maximum JSON depth";
-    case "node_count_exceeded":
-      return "exceeds the maximum JSON node count";
-    case "string_bytes_exceeded":
-      return "exceeds the maximum accumulated UTF-8 string bytes";
-    case "collection_size_exceeded":
-      return "exceeds the maximum JSON collection size";
-    case "work_exceeded":
-      return "exceeds the maximum JSON validation work";
-    case "cycle_detected":
-      return "contains a cyclic JSON value";
-    case "unsupported_prototype":
-      return "must contain only plain JSON objects and arrays";
-    case "unsupported_accessor":
-      return "must not contain accessors";
-    case "unsupported_symbol_key":
-      return "must not contain symbol keys";
-    case "unsupported_non_enumerable":
-      return "must not contain non-enumerable properties";
-    case "sparse_array":
-      return "must not contain sparse arrays";
-    case "serialized_bytes_exceeded":
-      return "exceeds the configured canonical UTF-8 byte limit";
-    case "unsupported_value":
-      return "contains an unsupported JSON value";
-  }
-};
-
 type NormalizationState = {
   readonly limits: CanonicalJsonLimits;
   nodes: number;
@@ -631,141 +622,146 @@ const isCanonicalArrayIndex = (key: string, length: number): boolean => {
   return Number.isSafeInteger(index) && index < length;
 };
 
-function normalizeJsonValueInternal(value: unknown, depth: number, state: NormalizationState): unknown {
-  if (depth > state.limits.maxDepth) {
-    throw new SafeJsonError("depth_exceeded");
-  }
-  countNormalizationNode(state);
-
-  if (value === null) {
-    return null;
-  }
-  if (typeof value === "string") {
-    const bytes = utf8ByteLengthUpTo(value, state.limits.maxStringBytes);
-    if (bytes > state.limits.maxStringBytes) {
-      throw new SafeJsonError("string_bytes_exceeded");
-    }
-    state.stringBytes += bytes;
-    if (state.stringBytes > state.limits.maxStringBytes) {
-      throw new SafeJsonError("string_bytes_exceeded");
-    }
-    spendNormalizationWork(state, bytes + 1);
-    return value;
-  }
-  if (typeof value === "boolean") {
-    return value;
-  }
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) {
-      throw new SafeJsonError("unsupported_value");
-    }
-    spendNormalizationWork(state, 8);
-    return value;
-  }
-  if (typeof value !== "object") {
-    throw new SafeJsonError("unsupported_value");
-  }
-
-  if (state.active.has(value)) {
-    throw new SafeJsonError("cycle_detected");
-  }
-  state.active.add(value);
-  try {
-    if (Array.isArray(value)) {
-      if (Object.getPrototypeOf(value) !== Array.prototype) {
-        throw new SafeJsonError("unsupported_prototype");
-      }
-      const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
-      if (lengthDescriptor === undefined || !("value" in lengthDescriptor)) {
-        throw new SafeJsonError("sparse_array");
-      }
-      const length = lengthDescriptor.value;
-      if (!Number.isSafeInteger(length) || length < 0 || length > state.limits.maxCollectionItems) {
-        throw new SafeJsonError("collection_size_exceeded");
-      }
-      const keys = Reflect.ownKeys(value);
-      if (keys.length - 1 > state.limits.maxCollectionItems) {
-        throw new SafeJsonError("collection_size_exceeded");
-      }
-      for (const key of keys) {
-        if (typeof key !== "string") {
-          throw new SafeJsonError("unsupported_symbol_key");
-        }
-        if (key !== "length" && !isCanonicalArrayIndex(key, length)) {
-          throw new SafeJsonError("unsupported_value");
-        }
-      }
-      const normalized: unknown[] = [];
-      for (let index = 0; index < length; index += 1) {
-        const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-        if (descriptor === undefined) {
-          throw new SafeJsonError("sparse_array");
-        }
-        if (!("value" in descriptor)) {
-          throw new SafeJsonError("unsupported_accessor");
-        }
-        if (!descriptor.enumerable) {
-          throw new SafeJsonError("unsupported_non_enumerable");
-        }
-        normalized.push(normalizeJsonValueInternal(descriptor.value, depth + 1, state));
-      }
-      return normalized;
-    }
-
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) {
-      throw new SafeJsonError("unsupported_prototype");
-    }
-    const keys = Reflect.ownKeys(value);
-    if (keys.length > state.limits.maxCollectionItems) {
-      throw new SafeJsonError("collection_size_exceeded");
-    }
-    const normalized = Object.create(null) as Record<string, unknown>;
-    for (const key of keys) {
-      if (typeof key !== "string") {
-        throw new SafeJsonError("unsupported_symbol_key");
-      }
-      const keyBytes = utf8ByteLengthUpTo(key, state.limits.maxStringBytes);
-      if (keyBytes > state.limits.maxStringBytes) {
-        throw new SafeJsonError("string_bytes_exceeded");
-      }
-      state.stringBytes += keyBytes;
-      if (state.stringBytes > state.limits.maxStringBytes) {
-        throw new SafeJsonError("string_bytes_exceeded");
-      }
-      spendNormalizationWork(state, keyBytes + 1);
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (descriptor === undefined) {
-        throw new SafeJsonError("unsupported_value");
-      }
-      if (!("value" in descriptor)) {
-        throw new SafeJsonError("unsupported_accessor");
-      }
-      if (!descriptor.enumerable) {
-        throw new SafeJsonError("unsupported_non_enumerable");
-      }
-      Object.defineProperty(normalized, key, {
-        configurable: true,
-        enumerable: true,
-        value: normalizeJsonValueInternal(descriptor.value, depth + 1, state),
-        writable: true,
-      });
-    }
-    return normalized;
-  } finally {
-    state.active.delete(value);
-  }
-}
-
-export function normalizeJsonValue(value: unknown, overrides: Partial<CanonicalJsonLimits> = {}): unknown {
-  const limits = { ...CANONICAL_JSON_LIMITS, ...overrides };
-  return normalizeJsonValueInternal(value, 0, {
+function normalizeJsonValue(value: unknown): unknown {
+  const limits = CANONICAL_JSON_LIMITS;
+  const state: NormalizationState = {
     limits,
     nodes: 0,
     stringBytes: 0,
     work: 0,
     active: new WeakSet<object>(),
+  };
+  type Frame = {
+    source: object;
+    target: unknown[] | Record<string, unknown>;
+    keys: string[];
+    index: number;
+    depth: number;
+    isArray: boolean;
+  };
+  const frames: Frame[] = [];
+  let result: unknown;
+
+  const normalizeScalar = (candidate: unknown): unknown => {
+    countNormalizationNode(state);
+    if (candidate === null || typeof candidate === "boolean") return candidate;
+    if (typeof candidate === "string") {
+      const bytes = utf8ByteLengthUpTo(candidate, limits.maxStringBytes);
+      if (bytes > limits.maxStringBytes) throw new SafeJsonError("string_bytes_exceeded");
+      state.stringBytes += bytes;
+      if (state.stringBytes > limits.maxStringBytes) throw new SafeJsonError("string_bytes_exceeded");
+      spendNormalizationWork(state, bytes + 1);
+      return candidate;
+    }
+    if (typeof candidate === "number") {
+      if (!Number.isFinite(candidate)) throw new SafeJsonError("unsupported_value");
+      spendNormalizationWork(state, 8);
+      return candidate;
+    }
+    throw new SafeJsonError("unsupported_value");
+  };
+
+  const push = (candidate: unknown, depth: number, assign: (value: unknown) => void): void => {
+    if (depth > limits.maxDepth) throw new SafeJsonError("depth_exceeded");
+    if (candidate === null || typeof candidate !== "object") {
+      assign(normalizeScalar(candidate));
+      return;
+    }
+    countNormalizationNode(state);
+    if (state.active.has(candidate)) throw new SafeJsonError("cycle_detected");
+    state.active.add(candidate);
+    if (Array.isArray(candidate)) {
+      if (Object.getPrototypeOf(candidate) !== Array.prototype) throw new SafeJsonError("unsupported_prototype");
+      const lengthDescriptor = Object.getOwnPropertyDescriptor(candidate, "length");
+      if (lengthDescriptor === undefined || !("value" in lengthDescriptor)) throw new SafeJsonError("sparse_array");
+      const length = lengthDescriptor.value;
+      if (!Number.isSafeInteger(length) || length < 0 || length > limits.maxCollectionItems) {
+        throw new SafeJsonError("collection_size_exceeded");
+      }
+      let enumerableCount = 0;
+      for (const key in candidate) {
+        if (Object.hasOwn(candidate, key)) {
+          enumerableCount += 1;
+          if (enumerableCount > limits.maxCollectionItems) throw new SafeJsonError("collection_size_exceeded");
+        }
+      }
+      const keys = Reflect.ownKeys(candidate);
+      if (keys.length - 1 > limits.maxCollectionItems) throw new SafeJsonError("collection_size_exceeded");
+      for (const key of keys) {
+        if (typeof key !== "string") throw new SafeJsonError("unsupported_symbol_key");
+        if (key !== "length" && !isCanonicalArrayIndex(key, length)) throw new SafeJsonError("unsupported_value");
+      }
+      const target: unknown[] = [];
+      assign(target);
+      frames.push({
+        source: candidate,
+        target,
+        keys: Array.from({ length }, (_, index) => String(index)),
+        index: 0,
+        depth,
+        isArray: true,
+      });
+      return;
+    }
+    const prototype = Object.getPrototypeOf(candidate);
+    if (prototype !== Object.prototype && prototype !== null) throw new SafeJsonError("unsupported_prototype");
+    let enumerableCount = 0;
+    for (const key in candidate) {
+      if (Object.hasOwn(candidate, key)) {
+        enumerableCount += 1;
+        if (enumerableCount > limits.maxCollectionItems) throw new SafeJsonError("collection_size_exceeded");
+      }
+    }
+    const keys = Reflect.ownKeys(candidate);
+    if (keys.length > limits.maxCollectionItems) throw new SafeJsonError("collection_size_exceeded");
+    const stringKeys: string[] = [];
+    for (const key of keys) {
+      if (typeof key !== "string") throw new SafeJsonError("unsupported_symbol_key");
+      stringKeys.push(key);
+    }
+    const target = Object.create(null) as Record<string, unknown>;
+    assign(target);
+    frames.push({ source: candidate, target, keys: stringKeys, index: 0, depth, isArray: false });
+  };
+
+  push(value, 0, (normalized) => {
+    result = normalized;
   });
+  while (frames.length > 0) {
+    const frame = frames[frames.length - 1];
+    if (frame.index >= frame.keys.length) {
+      state.active.delete(frame.source);
+      frames.pop();
+      continue;
+    }
+    const key = frame.keys[frame.index];
+    frame.index += 1;
+    if (frame.isArray && key === undefined) throw new SafeJsonError("sparse_array");
+    const descriptor = Object.getOwnPropertyDescriptor(frame.source, key);
+    if (descriptor === undefined) throw new SafeJsonError("sparse_array");
+    if (!("value" in descriptor)) throw new SafeJsonError("unsupported_accessor");
+    if (!descriptor.enumerable) throw new SafeJsonError("unsupported_non_enumerable");
+    if (!frame.isArray) {
+      const keyBytes = utf8ByteLengthUpTo(key, limits.maxStringBytes);
+      if (keyBytes > limits.maxStringBytes) throw new SafeJsonError("string_bytes_exceeded");
+      state.stringBytes += keyBytes;
+      if (state.stringBytes > limits.maxStringBytes) throw new SafeJsonError("string_bytes_exceeded");
+      spendNormalizationWork(state, keyBytes + 1);
+    }
+    push(descriptor.value, frame.depth + 1, (normalized) => {
+      if (frame.isArray) {
+        (frame.target as unknown[]).push(normalized);
+      } else {
+        Object.defineProperty(frame.target, key, {
+          configurable: true,
+          enumerable: true,
+          value: normalized,
+          writable: true,
+        });
+      }
+    });
+  }
+  return result;
 }
 
 type CanonicalMeasurementState = {
@@ -878,7 +874,7 @@ function measureCanonicalJsonUtf8Bytes(value: unknown, maxBytes = CANONICAL_JSON
   return measureNormalizedJsonUtf8Bytes(normalizeJsonValue(value), maxBytes);
 }
 
-export function isCanonicalJsonUtf8ByteLengthAtMost(value: unknown, limit: number): boolean {
+function isCanonicalOwnedJsonUtf8ByteLengthAtMost(value: unknown, limit: number): boolean {
   try {
     measureCanonicalJsonUtf8Bytes(value, limit);
     return true;
@@ -901,7 +897,7 @@ function writeCanonicalJson(value: unknown): string {
     .join(",")}}`;
 }
 
-export function canonicalJsonEquals(left: unknown, right: unknown): boolean {
+function canonicalJsonEqualsOwned(left: unknown, right: unknown): boolean {
   const normalizedLeft = normalizeJsonValue(left);
   const normalizedRight = normalizeJsonValue(right);
   const compare = (first: unknown, second: unknown, depth: number): boolean => {
@@ -931,33 +927,36 @@ export function canonicalJsonEquals(left: unknown, right: unknown): boolean {
   return compare(normalizedLeft, normalizedRight, 0);
 }
 
+export function canonicalJsonEquals(left: ContractJsonInput, right: ContractJsonInput): boolean {
+  return canonicalJsonEqualsOwned(
+    parseSerializedJson(left, "canonicalJson.left"),
+    parseSerializedJson(right, "canonicalJson.right")
+  );
+}
+
+export type ContractParseErrorCode =
+  | "invalid_contract"
+  | "invalid_serialized_input"
+  | "serialized_input_too_large"
+  | "unsupported_live_input";
+
+const safeContractPath = (path: string): string => (/^[A-Za-z][A-Za-z0-9_.[\]-]*$/.test(path) ? path : "input");
+
 export class ContractParseError extends TypeError {
+  readonly code: ContractParseErrorCode;
   readonly path: string;
 
-  constructor(path: string, message: string) {
-    super(`${path}: ${message}`);
+  constructor(path: string, message: string, code: ContractParseErrorCode = "invalid_contract") {
+    const safePath = safeContractPath(path);
+    super(`${safePath}: ${message}`);
     this.name = "ContractParseError";
-    this.path = path;
+    this.code = code;
+    this.path = safePath;
   }
 }
 
-function parseRawJson(value: unknown, path: string): unknown {
-  let parsed = value;
-  if (typeof value === "string") {
-    if (utf8ByteLengthUpTo(value, CANONICAL_JSON_LIMITS.maxCanonicalBytes) > CANONICAL_JSON_LIMITS.maxCanonicalBytes) {
-      throw new ContractParseError(path, "serialized JSON input exceeds the configured UTF-8 byte limit");
-    }
-    try {
-      parsed = JSON.parse(value) as unknown;
-    } catch {
-      throw new ContractParseError(path, "must be valid JSON");
-    }
-  }
-  try {
-    return normalizeJsonValue(parsed);
-  } catch (error) {
-    throw new ContractParseError(path, safeJsonErrorMessage(error));
-  }
+function parseOwnedJson(value: unknown, _path: string): unknown {
+  return value;
 }
 
 function requireRecord(value: unknown, path: string, required: readonly string[], optional: readonly string[] = []) {
@@ -965,9 +964,15 @@ function requireRecord(value: unknown, path: string, required: readonly string[]
     throw new ContractParseError(path, "must be an object");
   }
   const allowed = new Set([...required, ...optional]);
-  for (const key of Object.keys(value)) {
+  let propertyCount = 0;
+  for (const key in value) {
+    if (!Object.hasOwn(value, key)) continue;
+    propertyCount += 1;
+    if (propertyCount > CANONICAL_JSON_LIMITS.maxCollectionItems) {
+      throw new ContractParseError(path, "contains too many properties");
+    }
     if (!allowed.has(key)) {
-      throw new ContractParseError(`${path}.${key}`, "unknown properties are not allowed");
+      throw new ContractParseError(path, "contains unknown properties");
     }
   }
   for (const key of required) {
@@ -1010,7 +1015,7 @@ function parseRef<Tag extends string>(
 ): OpaqueRef<Tag> {
   try {
     const parsed = parser(value);
-    if (serializedJsonByteLength(parsed) - 2 > UTF8_BYTE_LIMITS.reference) {
+    if (serializedOwnedJsonByteLength(parsed) - 2 > UTF8_BYTE_LIMITS.reference) {
       throw new TypeError("reference exceeds the UTF-8 byte limit");
     }
     return parsed;
@@ -1536,8 +1541,8 @@ function parseSnapshotContent(value: unknown, path: string): RunSnapshotContent 
   return parsed;
 }
 
-export function parseRunSnapshot(value: unknown): RunSnapshot {
-  const raw = parseRawJson(value, "RunSnapshot");
+function parseRunSnapshotObject(value: unknown): RunSnapshot {
+  const raw = parseOwnedJson(value, "RunSnapshot");
   const object = requireRecord(raw, "RunSnapshot", [
     "protocol",
     "workspaceRef",
@@ -1559,7 +1564,7 @@ export function parseRunSnapshot(value: unknown): RunSnapshot {
     parseRunSnapshotContentDigest
   ) as RunSnapshotContentDigest;
   const parsed = { ...content, contentDigest };
-  if (computeRunSnapshotContentDigest(content) !== contentDigest) {
+  if (computeRunSnapshotContentDigestOwned(content) !== contentDigest) {
     throw new ContractParseError(
       "RunSnapshot.contentDigest",
       "does not match the canonical immutable snapshot content"
@@ -1568,8 +1573,12 @@ export function parseRunSnapshot(value: unknown): RunSnapshot {
   return deepFreeze(markValidatedContract(parsed, "RunSnapshot"));
 }
 
-export function parseInvocationEnvelope(value: unknown): InvocationEnvelope {
-  const raw = parseRawJson(value, "InvocationEnvelope");
+export function parseRunSnapshot(value: ContractJsonInput): RunSnapshot {
+  return parseRunSnapshotObject(parseSerializedJson(value, "RunSnapshot"));
+}
+
+function parseInvocationEnvelopeObject(value: unknown): InvocationEnvelope {
+  const raw = parseOwnedJson(value, "InvocationEnvelope");
   const object = requireRecord(
     raw,
     "InvocationEnvelope",
@@ -1696,8 +1705,12 @@ export function parseInvocationEnvelope(value: unknown): InvocationEnvelope {
   return deepFreeze(markValidatedContract(parsed, "InvocationEnvelope"));
 }
 
-export function parseRuntimeEvent(value: unknown): RuntimeEvent {
-  const raw = parseRawJson(value, "RuntimeEvent");
+export function parseInvocationEnvelope(value: ContractJsonInput): InvocationEnvelope {
+  return parseInvocationEnvelopeObject(parseSerializedJson(value, "InvocationEnvelope"));
+}
+
+function parseRuntimeEventObject(value: unknown): RuntimeEvent {
+  const raw = parseOwnedJson(value, "RuntimeEvent");
   const object = requireRecord(raw, "RuntimeEvent", [
     "protocol",
     "trust",
@@ -1729,14 +1742,18 @@ export function parseRuntimeEvent(value: unknown): RuntimeEvent {
     body: parseBody(object.body, "RuntimeEvent.body"),
   } satisfies RuntimeEventShape;
   const result = deepFreeze(markValidatedContract(parsed, "RuntimeEvent"));
-  if (!isCanonicalJsonUtf8ByteLengthAtMost(result, MAX_SERIALIZED_JSON_BYTES)) {
+  if (!isCanonicalOwnedJsonUtf8ByteLengthAtMost(result, MAX_SERIALIZED_JSON_BYTES)) {
     throw new ContractParseError("RuntimeEvent", "canonical serialized UTF-8 bytes exceed the global limit");
   }
   return result;
 }
 
-export function parseRuntimeExit(value: unknown): RuntimeExit {
-  const raw = parseRawJson(value, "RuntimeExit");
+export function parseRuntimeEvent(value: ContractJsonInput): RuntimeEvent {
+  return parseRuntimeEventObject(parseSerializedJson(value, "RuntimeEvent"));
+}
+
+function parseRuntimeExitObject(value: unknown): RuntimeExit {
+  const raw = parseOwnedJson(value, "RuntimeExit");
   const object = requireRecord(
     raw,
     "RuntimeExit",
@@ -1793,19 +1810,47 @@ export function parseRuntimeExit(value: unknown): RuntimeExit {
   return deepFreeze(markValidatedContract(parsed, "RuntimeExit"));
 }
 
-const sha256 = (value: string): string => createHash("sha256").update(value, "utf8").digest("hex");
-
-export function computeRunSnapshotContentDigest(snapshot: RunSnapshot | RunSnapshotContent): RunSnapshotContentDigest {
-  return createRunSnapshotContentDigest(sha256(canonicalizeJson(withoutSnapshotContentDigest(snapshot))));
+export function parseRuntimeExit(value: ContractJsonInput): RuntimeExit {
+  return parseRuntimeExitObject(parseSerializedJson(value, "RuntimeExit"));
 }
 
-export function verifyRunSnapshotContentDigest(snapshot: RunSnapshot): boolean {
+const sha256 = (value: string): string => createHash("sha256").update(value, "utf8").digest("hex");
+
+function computeRunSnapshotContentDigestOwned(snapshot: RunSnapshot | RunSnapshotContent): RunSnapshotContentDigest {
+  return createRunSnapshotContentDigest(sha256(canonicalizeOwnedJson(withoutSnapshotContentDigest(snapshot))));
+}
+
+export function computeRunSnapshotContentDigest(value: ContractJsonInput): RunSnapshotContentDigest {
+  const raw = parseSerializedJson(value, "RunSnapshot");
+  const object = requireRecord(
+    raw,
+    "RunSnapshot",
+    [
+      "protocol",
+      "workspaceRef",
+      "runId",
+      "assignment",
+      "actorRef",
+      "profile",
+      "context",
+      "toolCatalog",
+      "runtimePolicy",
+      "totalBudget",
+      "contractDigests",
+    ],
+    ["contentDigest"]
+  );
+  return computeRunSnapshotContentDigestOwned(parseSnapshotContent(object, "RunSnapshot"));
+}
+
+function verifyRunSnapshotContentDigest(snapshot: RunSnapshot): boolean {
   return (
-    isValidatedContract(snapshot, "RunSnapshot") && snapshot.contentDigest === computeRunSnapshotContentDigest(snapshot)
+    isValidatedContract(snapshot, "RunSnapshot") &&
+    snapshot.contentDigest === computeRunSnapshotContentDigestOwned(snapshot)
   );
 }
 
-export function verifyInvocationSnapshotBinding(snapshot: RunSnapshot, invocation: InvocationEnvelope): boolean {
+function verifyInvocationSnapshotBinding(snapshot: RunSnapshot, invocation: InvocationEnvelope): boolean {
   return (
     isValidatedContract(snapshot, "RunSnapshot") &&
     isValidatedContract(invocation, "InvocationEnvelope") &&
@@ -1814,15 +1859,25 @@ export function verifyInvocationSnapshotBinding(snapshot: RunSnapshot, invocatio
   );
 }
 
-export function createRunSnapshot(
-  input: Omit<RunSnapshotShape, "contractDigests" | "contentDigest">,
-  manifest: ContractManifest
-): RunSnapshot {
+export function createRunSnapshot(input: ContractJsonInput, manifest: ContractJsonInput): RunSnapshot {
+  const raw = parseSerializedJson(input, "RunSnapshot");
+  const object = requireRecord(raw, "RunSnapshot", [
+    "protocol",
+    "workspaceRef",
+    "runId",
+    "assignment",
+    "actorRef",
+    "profile",
+    "context",
+    "toolCatalog",
+    "runtimePolicy",
+    "totalBudget",
+  ]);
+  const parsedManifest = parseContractManifestObject(parseSerializedJson(manifest, "ContractManifest"));
   const content: RunSnapshotContent = {
-    ...input,
-    contractDigests: contractDigestsFromManifest(manifest),
+    ...parseSnapshotContent({ ...object, contractDigests: contractDigestsFromManifest(parsedManifest) }, "RunSnapshot"),
   };
-  return parseRunSnapshot({ ...content, contentDigest: computeRunSnapshotContentDigest(content) });
+  return parseRunSnapshotObject({ ...content, contentDigest: computeRunSnapshotContentDigestOwned(content) });
 }
 
 export type InvocationTrigger =
@@ -2309,7 +2364,7 @@ export type RuntimeVerificationFacts = Readonly<{
   publicationReceipts: readonly TrustedPublicationReceipt[];
 }>;
 
-export type RuntimeVerificationInput = Readonly<{
+type RuntimeVerificationInputObject = Readonly<{
   manifest: ContractManifest;
   snapshot: RunSnapshot;
   invocation: InvocationEnvelope;
@@ -2337,7 +2392,7 @@ export type RuntimeVerificationFailure = Readonly<{
 export type RuntimeVerificationResult = RuntimeVerificationSuccess | RuntimeVerificationFailure;
 
 export interface RuntimeSemanticVerifier {
-  verify(input: RuntimeVerificationInput): RuntimeVerificationResult;
+  verify(input: ContractJsonInput): RuntimeVerificationResult;
 }
 
 const DURABLE_EVENT_KINDS = [
@@ -2734,15 +2789,41 @@ function requireDurableConsistency(condition: boolean, path: string, message: st
 }
 
 function sameJson(left: unknown, right: unknown): boolean {
-  return canonicalJsonEquals(left, right);
+  return canonicalJsonEqualsOwned(left, right);
 }
 
-export function computeTrustedHumanInputAnswerDigest(
+function computeTrustedHumanInputAnswerDigestOwned(
   answer: TrustedHumanInputAnswerFact | TrustedHumanInputAnswer
 ): ContentDigest {
   const fact =
     "answerFactDigest" in answer ? (({ answerFactDigest: _answerFactDigest, ...content }) => content)(answer) : answer;
-  return createContentDigest(sha256(canonicalizeJson(fact)));
+  return createContentDigest(sha256(canonicalizeOwnedJson(fact)));
+}
+
+export function computeTrustedHumanInputAnswerDigest(value: ContractJsonInput): ContentDigest {
+  const raw = parseSerializedJson(value, "TrustedHumanInputAnswer");
+  const object = requireRecord(
+    raw,
+    "TrustedHumanInputAnswer",
+    [
+      "answerEventRef",
+      "inputRequestRef",
+      "responderPrincipal",
+      "workspaceRef",
+      "runId",
+      "authorizationReceiptRef",
+      "applicationServiceRef",
+      "gatewayReceiptRef",
+      "receiptRef",
+      "auditReceiptRef",
+      "correlationId",
+      "causationRef",
+      "payloadDigest",
+    ],
+    ["answerFactDigest"]
+  );
+  const { answerFactDigest: _answerFactDigest, ...fact } = object;
+  return createContentDigest(sha256(canonicalizeOwnedJson(fact)));
 }
 
 type RuntimeDurableStateContent = Omit<RuntimeDurableStateShape, "stateDigest">;
@@ -2757,13 +2838,37 @@ function withoutRuntimeDurableStateDigest(
   return state;
 }
 
-export function computeRuntimeDurableStateDigest(
-  state: RuntimeDurableState | RuntimeDurableStateContent
-): ContentDigest {
-  return createContentDigest(sha256(canonicalizeJson(withoutRuntimeDurableStateDigest(state))));
+function computeRuntimeDurableStateDigestOwned(state: RuntimeDurableState | RuntimeDurableStateContent): ContentDigest {
+  return createContentDigest(sha256(canonicalizeOwnedJson(withoutRuntimeDurableStateDigest(state))));
 }
 
-export function createInitialRuntimeDurableState(binding: RuntimeDurableStateBinding): RuntimeDurableState {
+export function computeRuntimeDurableStateDigest(value: ContractJsonInput): ContentDigest {
+  const raw = parseSerializedJson(value, "RuntimeDurableState");
+  const object = requireRecord(
+    raw,
+    "RuntimeDurableState",
+    [
+      "protocol",
+      "stateVersion",
+      "binding",
+      "state",
+      "revision",
+      "lastAcceptedSequence",
+      "acceptedEvents",
+      "acceptedHumanInputAnswers",
+      "acceptedExits",
+    ],
+    ["stateDigest", "previousRevision", "previousStateDigest", "terminal", "pendingInput"]
+  );
+  const { stateDigest: _stateDigest, ...content } = object;
+  return createContentDigest(sha256(canonicalizeOwnedJson(content)));
+}
+
+export function createInitialRuntimeDurableState(value: ContractJsonInput): RuntimeDurableState {
+  const binding = parseRuntimeDurableStateBinding(
+    parseSerializedJson(value, "RuntimeDurableState.binding"),
+    "RuntimeDurableState.binding"
+  );
   const content: RuntimeDurableStateContent = {
     protocol: PLANE_AGENT_RUNTIME_PROTOCOL,
     stateVersion: RUNTIME_DURABLE_STATE_VERSION,
@@ -2775,7 +2880,7 @@ export function createInitialRuntimeDurableState(binding: RuntimeDurableStateBin
     acceptedHumanInputAnswers: [],
     acceptedExits: [],
   };
-  return parseRuntimeDurableState({ ...content, stateDigest: computeRuntimeDurableStateDigest(content) });
+  return parseRuntimeDurableStateObject({ ...content, stateDigest: computeRuntimeDurableStateDigestOwned(content) });
 }
 
 type AppliedProductIdentitySource = Readonly<{
@@ -2800,7 +2905,7 @@ function productUniquenessKeys(binding: AppliedProductIdentitySource): readonly 
     `productEventRef:${binding.productEventRef}`,
     `product:${binding.productKind}:${binding.productRef}`,
     `operation-gateway:${binding.operationRef}:${binding.gatewayReceiptRef}`,
-    `binding:${canonicalizeJson({
+    `binding:${canonicalizeOwnedJson({
       operationAttemptRef: binding.operationAttemptRef,
       operationRef: binding.operationRef,
       applicationServiceRef: binding.applicationServiceRef,
@@ -2944,7 +3049,7 @@ function validateRuntimeDurableStateConsistency(state: RuntimeDurableStateShape,
       "must remain separate from the Agent actor"
     );
     requireDurableConsistency(
-      computeTrustedHumanInputAnswerDigest(answer) === answer.answerFactDigest,
+      computeTrustedHumanInputAnswerDigestOwned(answer) === answer.answerFactDigest,
       `${path}.acceptedHumanInputAnswers[${index}].answerFactDigest`,
       "must match the canonical complete answer fact"
     );
@@ -3266,8 +3371,8 @@ function validateRuntimeDurableStateConsistency(state: RuntimeDurableStateShape,
   }
 }
 
-export function parseRuntimeDurableState(value: unknown): RuntimeDurableState {
-  const raw = parseRawJson(value, "RuntimeDurableState");
+function parseRuntimeDurableStateObject(value: unknown): RuntimeDurableState {
+  const raw = parseOwnedJson(value, "RuntimeDurableState");
   const object = requireRecord(
     raw,
     "RuntimeDurableState",
@@ -3356,7 +3461,7 @@ export function parseRuntimeDurableState(value: unknown): RuntimeDurableState {
       ? { pendingInput: parseDurablePendingInput(object.pendingInput, "RuntimeDurableState.pendingInput") }
       : {}),
   };
-  if (computeRuntimeDurableStateDigest(parsed) !== parsed.stateDigest) {
+  if (computeRuntimeDurableStateDigestOwned(parsed) !== parsed.stateDigest) {
     throw new ContractParseError(
       "RuntimeDurableState.stateDigest",
       "does not match the canonical durable state content"
@@ -3364,6 +3469,10 @@ export function parseRuntimeDurableState(value: unknown): RuntimeDurableState {
   }
   validateRuntimeDurableStateConsistency(parsed, "RuntimeDurableState");
   return deepFreeze(markValidatedContract(parsed, "RuntimeDurableState"));
+}
+
+export function parseRuntimeDurableState(value: ContractJsonInput): RuntimeDurableState {
+  return parseRuntimeDurableStateObject(parseSerializedJson(value, "RuntimeDurableState"));
 }
 
 const budgetFields = ["inputTokens", "outputTokens", "durationMs"] as const;
@@ -3384,11 +3493,12 @@ function addVerificationError(
   path: string,
   message: string
 ) {
-  errors.push({ code, path, message });
+  if (errors.length >= MAX_VERIFICATION_ERRORS) return;
+  errors.push({ code, path: safeContractPath(path), message });
 }
 
 function fingerprint(value: unknown): ContentDigest {
-  return createContentDigest(sha256(canonicalizeJson(value)));
+  return createContentDigest(sha256(canonicalizeOwnedJson(value)));
 }
 
 function authorityMatches(
@@ -3526,7 +3636,7 @@ function verifyPublication(
     return;
   }
 
-  if (!isCanonicalJsonUtf8ByteLengthAtMost(publication, snapshot.runtimePolicy.maxReceiptBytes)) {
+  if (!isCanonicalOwnedJsonUtf8ByteLengthAtMost(publication, snapshot.runtimePolicy.maxReceiptBytes)) {
     addVerificationError(
       errors,
       "receipt_too_large",
@@ -3972,7 +4082,7 @@ function verifyTrustedHumanInputAnswer(
     parsedResponderPrincipal.planePrincipalId !== snapshot.actorRef &&
     fact.answerFactDigest === head.answerFactDigest &&
     fact.answerFactDigest === invocation.trigger.answerFactDigest &&
-    computeTrustedHumanInputAnswerDigest(fact) === head.answerFactDigest;
+    computeTrustedHumanInputAnswerDigestOwned(fact) === head.answerFactDigest;
   if (!exactBinding) {
     addVerificationError(
       errors,
@@ -4018,7 +4128,7 @@ function durableStateHeadMatches(
   );
 }
 
-export function verifyRuntimeExecution(input: RuntimeVerificationInput): RuntimeVerificationResult {
+function verifyRuntimeExecutionOwned(input: RuntimeVerificationInputObject): RuntimeVerificationResult {
   const errors: RuntimeVerificationError[] = [];
   const { manifest, snapshot, invocation, events, exit, trusted } = input;
   const durableStateParsed = trusted !== undefined && isValidatedContract(trusted.lifecycle, "RuntimeDurableState");
@@ -4329,7 +4439,7 @@ export function verifyRuntimeExecution(input: RuntimeVerificationInput): Runtime
       }
     }
     if (
-      !isCanonicalJsonUtf8ByteLengthAtMost(
+      !isCanonicalOwnedJsonUtf8ByteLengthAtMost(
         event,
         Math.min(MAX_SERIALIZED_JSON_BYTES, snapshot.runtimePolicy.maxEventPayloadBytes)
       )
@@ -4437,7 +4547,7 @@ export function verifyRuntimeExecution(input: RuntimeVerificationInput): Runtime
     return { ok: false, errors };
   }
   if (exactExitReplay) {
-    const replayLifecycle = parseRuntimeDurableState(canonicalizeJson(trusted.lifecycle));
+    const replayLifecycle = parseRuntimeDurableStateObject(trusted.lifecycle);
     return {
       ok: true,
       result: "idempotent_replay",
@@ -4483,9 +4593,9 @@ export function verifyRuntimeExecution(input: RuntimeVerificationInput): Runtime
     ...(nextTerminal === undefined ? {} : { terminal: nextTerminal }),
     ...(exit.kind === "waiting_for_input" && nextPending !== undefined ? { pendingInput: nextPending } : {}),
   };
-  const nextLifecycle = parseRuntimeDurableState({
+  const nextLifecycle = parseRuntimeDurableStateObject({
     ...nextLifecycleRaw,
-    stateDigest: computeRuntimeDurableStateDigest(nextLifecycleRaw),
+    stateDigest: computeRuntimeDurableStateDigestOwned(nextLifecycleRaw),
   });
   return {
     ok: true,
@@ -4495,6 +4605,313 @@ export function verifyRuntimeExecution(input: RuntimeVerificationInput): Runtime
     terminalEventCount,
     nextLifecycle,
   };
+}
+
+const MAX_RUNTIME_EVENTS = 4096;
+const MAX_PUBLICATION_RECEIPTS = 4096;
+const MAX_VERIFICATION_ERRORS = 256;
+
+function parseBoolean(value: unknown, path: string): boolean {
+  if (typeof value !== "boolean") throw new ContractParseError(path, "must be a boolean");
+  return value;
+}
+
+function parseTrustedPublicationReceipt(value: unknown, path: string): TrustedPublicationReceipt {
+  const object = requireRecord(
+    value,
+    path,
+    [
+      "workspaceRef",
+      "actorRef",
+      "profileVersionRef",
+      "runId",
+      "invocationId",
+      "productKind",
+      "productRef",
+      "operationAttemptRef",
+      "operationRef",
+      "applicationServiceRef",
+      "gatewayReceiptRef",
+      "receiptRef",
+      "auditReceiptRef",
+      "productEventRef",
+    ],
+    ["cancellationRef"]
+  );
+  if (!DURABLE_PRODUCT_KINDS.includes(object.productKind as (typeof DURABLE_PRODUCT_KINDS)[number])) {
+    throw new ContractParseError(`${path}.productKind`, "is not a supported product kind");
+  }
+  const productKind = object.productKind as AnyProductPublication["productKind"];
+  const parsed: TrustedPublicationReceipt = {
+    workspaceRef: parseRef(object.workspaceRef, `${path}.workspaceRef`, parseWorkspaceRef),
+    actorRef: parseRef(object.actorRef, `${path}.actorRef`, parseActorRef),
+    profileVersionRef: parseRef(object.profileVersionRef, `${path}.profileVersionRef`, parseProfileVersionRef),
+    runId: parseRef(object.runId, `${path}.runId`, parseRunId),
+    invocationId: parseRef(object.invocationId, `${path}.invocationId`, parseInvocationId),
+    productKind,
+    productRef: parseDurableProductRef(
+      productKind,
+      object.productRef,
+      `${path}.productRef`
+    ) as AnyProductPublication["productRef"],
+    operationAttemptRef: parseRef(object.operationAttemptRef, `${path}.operationAttemptRef`, parseOperationAttemptRef),
+    operationRef: parseRef(object.operationRef, `${path}.operationRef`, parseOperationRef),
+    applicationServiceRef: parseRef(
+      object.applicationServiceRef,
+      `${path}.applicationServiceRef`,
+      parseApplicationServiceRef
+    ),
+    gatewayReceiptRef: parseRef(object.gatewayReceiptRef, `${path}.gatewayReceiptRef`, parseGatewayReceiptRef),
+    receiptRef: parseRef(object.receiptRef, `${path}.receiptRef`, parseReceiptRef),
+    auditReceiptRef: parseRef(object.auditReceiptRef, `${path}.auditReceiptRef`, parseAuditReceiptRef),
+    productEventRef: parseRef(object.productEventRef, `${path}.productEventRef`, parseProductEventRef),
+    ...(Object.hasOwn(object, "cancellationRef")
+      ? { cancellationRef: parseRef(object.cancellationRef, `${path}.cancellationRef`, parseCancellationRef) }
+      : {}),
+  };
+  return parsed;
+}
+
+function parseRuntimeVerificationInputObject(value: unknown): RuntimeVerificationInputObject {
+  const object = requireRecord(value, "RuntimeVerificationInput", [
+    "manifest",
+    "snapshot",
+    "invocation",
+    "events",
+    "exit",
+    "trusted",
+  ]);
+  const eventsRaw = object.events;
+  if (!Array.isArray(eventsRaw) || eventsRaw.length > MAX_RUNTIME_EVENTS) {
+    throw new ContractParseError("RuntimeVerificationInput.events", "must contain at most 4096 events");
+  }
+  const trustedObject = requireRecord(
+    object.trusted,
+    "RuntimeVerificationInput.trusted",
+    ["authority", "lifecycle", "durableStateHead", "lease", "cancellation", "publicationReceipts"],
+    ["checkpoint", "humanInputAnswer", "humanInputAnswerHead", "previousRemainingBudget"]
+  );
+  const authority = requireRecord(trustedObject.authority, "RuntimeVerificationInput.trusted.authority", [
+    "workspaceRef",
+    "actorRef",
+    "profileVersionRef",
+    "runId",
+    "invocationId",
+    "snapshotContentDigest",
+    "cancellationRef",
+    "correlationId",
+    "causationRef",
+    "invocationIdempotencyKey",
+  ]);
+  const durableStateHead = requireRecord(
+    trustedObject.durableStateHead,
+    "RuntimeVerificationInput.trusted.durableStateHead",
+    ["workspaceRef", "actorRef", "profileVersionRef", "runId", "snapshotContentDigest", "revision", "stateDigest"],
+    ["previousRevision", "previousStateDigest"]
+  );
+  if (Object.hasOwn(durableStateHead, "previousRevision") !== Object.hasOwn(durableStateHead, "previousStateDigest")) {
+    throw new ContractParseError(
+      "RuntimeVerificationInput.trusted.durableStateHead",
+      "previous revision and digest must be supplied together"
+    );
+  }
+  const lease = requireRecord(trustedObject.lease, "RuntimeVerificationInput.trusted.lease", ["leaseId", "isValid"]);
+  const cancellation = requireRecord(trustedObject.cancellation, "RuntimeVerificationInput.trusted.cancellation", [
+    "cancellationRef",
+    "isCancelled",
+  ]);
+  const checkpoint = Object.hasOwn(trustedObject, "checkpoint")
+    ? (() => {
+        const parsed = requireRecord(trustedObject.checkpoint, "RuntimeVerificationInput.trusted.checkpoint", [
+          "checkpointRef",
+          "isVerified",
+        ]);
+        return {
+          checkpointRef: parseRef(
+            parsed.checkpointRef,
+            "RuntimeVerificationInput.trusted.checkpoint.checkpointRef",
+            parseCheckpointRef
+          ),
+          isVerified: parseBoolean(parsed.isVerified, "RuntimeVerificationInput.trusted.checkpoint.isVerified"),
+        };
+      })()
+    : undefined;
+  const answer = Object.hasOwn(trustedObject, "humanInputAnswer")
+    ? parseDurableHumanInputAnswer(trustedObject.humanInputAnswer, "RuntimeVerificationInput.trusted.humanInputAnswer")
+    : undefined;
+  const answerHead = Object.hasOwn(trustedObject, "humanInputAnswerHead")
+    ? (() => {
+        const parsed = requireRecord(
+          trustedObject.humanInputAnswerHead,
+          "RuntimeVerificationInput.trusted.humanInputAnswerHead",
+          ["answerFactDigest"]
+        );
+        return {
+          answerFactDigest: parseDigest(
+            parsed.answerFactDigest,
+            "RuntimeVerificationInput.trusted.humanInputAnswerHead.answerFactDigest",
+            parseContentDigest
+          ) as ContentDigest,
+        };
+      })()
+    : undefined;
+  const publicationReceiptsRaw = trustedObject.publicationReceipts;
+  if (!Array.isArray(publicationReceiptsRaw) || publicationReceiptsRaw.length > MAX_PUBLICATION_RECEIPTS) {
+    throw new ContractParseError(
+      "RuntimeVerificationInput.trusted.publicationReceipts",
+      "must contain at most 4096 receipts"
+    );
+  }
+
+  const parsed: RuntimeVerificationInputObject = {
+    manifest: parseContractManifestObject(object.manifest),
+    snapshot: parseRunSnapshotObject(object.snapshot),
+    invocation: parseInvocationEnvelopeObject(object.invocation),
+    events: eventsRaw.map((item) => parseRuntimeEventObject(item)),
+    exit: parseRuntimeExitObject(object.exit),
+    trusted: {
+      authority: {
+        workspaceRef: parseRef(
+          authority.workspaceRef,
+          "RuntimeVerificationInput.trusted.authority.workspaceRef",
+          parseWorkspaceRef
+        ),
+        actorRef: parseRef(authority.actorRef, "RuntimeVerificationInput.trusted.authority.actorRef", parseActorRef),
+        profileVersionRef: parseRef(
+          authority.profileVersionRef,
+          "RuntimeVerificationInput.trusted.authority.profileVersionRef",
+          parseProfileVersionRef
+        ),
+        runId: parseRef(authority.runId, "RuntimeVerificationInput.trusted.authority.runId", parseRunId),
+        invocationId: parseRef(
+          authority.invocationId,
+          "RuntimeVerificationInput.trusted.authority.invocationId",
+          parseInvocationId
+        ),
+        snapshotContentDigest: parseDigest(
+          authority.snapshotContentDigest,
+          "RuntimeVerificationInput.trusted.authority.snapshotContentDigest",
+          parseRunSnapshotContentDigest
+        ) as RunSnapshotContentDigest,
+        cancellationRef: parseRef(
+          authority.cancellationRef,
+          "RuntimeVerificationInput.trusted.authority.cancellationRef",
+          parseCancellationRef
+        ),
+        correlationId: parseRef(
+          authority.correlationId,
+          "RuntimeVerificationInput.trusted.authority.correlationId",
+          parseCorrelationId
+        ),
+        causationRef: parseRef(
+          authority.causationRef,
+          "RuntimeVerificationInput.trusted.authority.causationRef",
+          parseCausationRef
+        ),
+        invocationIdempotencyKey: parseRef(
+          authority.invocationIdempotencyKey,
+          "RuntimeVerificationInput.trusted.authority.invocationIdempotencyKey",
+          parseIdempotencyKey
+        ),
+      },
+      lifecycle: parseRuntimeDurableStateObject(trustedObject.lifecycle),
+      durableStateHead: {
+        workspaceRef: parseRef(
+          durableStateHead.workspaceRef,
+          "RuntimeVerificationInput.trusted.durableStateHead.workspaceRef",
+          parseWorkspaceRef
+        ),
+        actorRef: parseRef(
+          durableStateHead.actorRef,
+          "RuntimeVerificationInput.trusted.durableStateHead.actorRef",
+          parseActorRef
+        ),
+        profileVersionRef: parseRef(
+          durableStateHead.profileVersionRef,
+          "RuntimeVerificationInput.trusted.durableStateHead.profileVersionRef",
+          parseProfileVersionRef
+        ),
+        runId: parseRef(durableStateHead.runId, "RuntimeVerificationInput.trusted.durableStateHead.runId", parseRunId),
+        snapshotContentDigest: parseDigest(
+          durableStateHead.snapshotContentDigest,
+          "RuntimeVerificationInput.trusted.durableStateHead.snapshotContentDigest",
+          parseRunSnapshotContentDigest
+        ) as RunSnapshotContentDigest,
+        revision: parseInteger(durableStateHead.revision, "RuntimeVerificationInput.trusted.durableStateHead.revision"),
+        stateDigest: parseDigest(
+          durableStateHead.stateDigest,
+          "RuntimeVerificationInput.trusted.durableStateHead.stateDigest",
+          parseContentDigest
+        ) as ContentDigest,
+        ...(Object.hasOwn(durableStateHead, "previousRevision")
+          ? {
+              previousRevision: parseInteger(
+                durableStateHead.previousRevision,
+                "RuntimeVerificationInput.trusted.durableStateHead.previousRevision"
+              ),
+              previousStateDigest: parseDigest(
+                durableStateHead.previousStateDigest,
+                "RuntimeVerificationInput.trusted.durableStateHead.previousStateDigest",
+                parseContentDigest
+              ) as ContentDigest,
+            }
+          : {}),
+      },
+      lease: {
+        leaseId: parseRef(lease.leaseId, "RuntimeVerificationInput.trusted.lease.leaseId", parseLeaseId),
+        isValid: parseBoolean(lease.isValid, "RuntimeVerificationInput.trusted.lease.isValid"),
+      },
+      cancellation: {
+        cancellationRef: parseRef(
+          cancellation.cancellationRef,
+          "RuntimeVerificationInput.trusted.cancellation.cancellationRef",
+          parseCancellationRef
+        ),
+        isCancelled: parseBoolean(
+          cancellation.isCancelled,
+          "RuntimeVerificationInput.trusted.cancellation.isCancelled"
+        ),
+      },
+      ...(checkpoint === undefined ? {} : { checkpoint }),
+      ...(answer === undefined ? {} : { humanInputAnswer: answer }),
+      ...(answerHead === undefined ? {} : { humanInputAnswerHead: answerHead }),
+      ...(Object.hasOwn(trustedObject, "previousRemainingBudget")
+        ? {
+            previousRemainingBudget: parseBudget(
+              trustedObject.previousRemainingBudget,
+              "RuntimeVerificationInput.trusted.previousRemainingBudget"
+            ),
+          }
+        : {}),
+      publicationReceipts: publicationReceiptsRaw.map((item, index) =>
+        parseTrustedPublicationReceipt(item, `RuntimeVerificationInput.trusted.publicationReceipts[${index}]`)
+      ),
+    },
+  };
+  return deepFreeze(parsed);
+}
+
+function frozenVerificationFailure(errors: readonly RuntimeVerificationError[]): RuntimeVerificationFailure {
+  return Object.freeze({ ok: false, errors: Object.freeze(errors.map((error) => Object.freeze({ ...error }))) });
+}
+
+export type RuntimeVerificationInput = ContractJsonInput;
+
+export function verifyRuntimeExecution(value: ContractJsonInput): RuntimeVerificationResult {
+  try {
+    const result = verifyRuntimeExecutionOwned(
+      parseRuntimeVerificationInputObject(parseSerializedJson(value, "RuntimeVerificationInput"))
+    );
+    return result.ok ? Object.freeze(result) : frozenVerificationFailure(result.errors);
+  } catch {
+    return frozenVerificationFailure([
+      {
+        code: "unparsed_contract_input",
+        path: "input",
+        message: "Runtime verification accepts only a bounded serialized verification envelope",
+      },
+    ]);
+  }
 }
 
 export const runtimeSemanticVerifier: RuntimeSemanticVerifier = {
