@@ -92,7 +92,7 @@ The universal core has one `search_workspace` discovery primitive. It returns ty
 
 The hidden execution kernel supplies the mechanisms for the model loop, context management, tool dispatch, transcript capture, concurrency, and bounded results. Plane owns the durable product concepts and authoritative state for identity, profiles, assignments, runs, conversations, agent-private memory, skills, schedules, dynamic delegation, artifacts, evaluator review before human acceptance or return, and outcomes. Reused kernel subsystems sit behind Plane adapters when they support those concepts; kernel-specific work systems and operational tools remain hidden.
 
-Definitions and control state for memory, skills, schedules, and dynamic delegation remain in Plane. There is no saved/versioned workflow-definition system in this scope. The execution kernel may execute these mechanisms behind adapters. Plane-governed storage remains authoritative; `MEMORY.md`, subject-bound `USER.md`, skill packages, and other files are lossless run projections rather than the source of truth. Gardener improvements remain agent-private, immutable, and rollbackable; no knowledge is copied between agents.
+Definitions and control state for memory, skills, schedules, and dynamic delegation remain in Plane. There is no saved/versioned workflow-definition system in this scope. The execution kernel may run these mechanisms behind adapters. Plane-governed storage remains authoritative; `MEMORY.md`, subject-bound `USER.md`, skill packages, and other files are lossless run projections rather than the source of truth. Gardener improvements remain agent-private, immutable, and rollbackable; no knowledge is copied between agents.
 
 Native adapters remain thin:
 
