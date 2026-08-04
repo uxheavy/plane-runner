@@ -735,3 +735,29 @@ Stage and commit this single documentation/contract/evidence-control checkpoint,
 - `for file in docs/agent-tooling/verifiers/*.mjs; do node --check "$file" || exit 1; done` — exit 0; `./node_modules/.bin/oxlint --deny-warnings docs/agent-tooling/verifiers/*.mjs` — exit 0 with 0 warnings and 0 errors.
 - `git diff --check` across the seal range — exit 0. `RESULT.md` remains byte-identical at SHA-256 `c7b6404f435ea1ce53c9b360ba2b8745096f1d3dd42d81de4bdbb55117c4bb87`.
 - The seal commit changes exactly `SOURCE-INVENTORY.md`, `WORKLOG.md`, `g0-readiness.json`, and `integration-lock.g0.json`; its first parent is the content commit above. Final commit SHAs are reported from git after the evidence amendment.
+
+## 2026-08-04 — Fresh Luna remediation: clause-level historical marker consumption
+
+### Scope and design
+
+- Replaced per-occurrence historical-marker evaluation in `verify-g0-preflight.mjs` with one clause-level classification pass. Each marker has at most one directional candidate; a marker between two same-family occurrences is ambiguous and consumes neither occurrence. Historical markers and retired-token occurrences are paired at most once, while token-local internal-identifier and ordinary-path exemptions remain separate.
+- Preserved the exact compact `Rejected <retired-name> authoritative model-facing name <retired-name>` control and its authoritative second occurrence. Added direct ambiguous-marker assertions for all 11 retired-name families.
+- Retained all 94 prior negative-control cases. Added 11 real valid-reseal ambiguous-marker negatives (one per family) and 11 real valid-reseal positives with two occurrences and clearly corresponding marker-before/marker-after clauses: 116 total exercised controls.
+- No Plane Agent product/runtime code, approval state, `RESULT.md`, or unscoped authority changed.
+
+### Content checkpoint
+
+- Content/remediation commit: `33cc0ed519c5c89ce9af791bd9fe3ec82f44863c`.
+- The actual seal generator was run from that clean content commit and bound 56 content paths plus the four authorized seal paths. The separate evidence-seal commit and post-seal validation results are recorded from git after the seal-only commit.
+
+### Post-seal validation
+
+- `pnpm install --frozen-lockfile` — exit 0; repository-pinned dependencies installed, including `ajv@8.18.0`.
+- `node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode preflight` — exit 0; all checks passed and human approval remained pending by design.
+- `node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode g0` — exit 1 specifically for pending human approval; all non-approval checks passed and no implementation authorization was implied.
+- `node docs/agent-tooling/verifiers/test-g0-approved-fixture.mjs` — exit 0; temporary approved readiness passed and the real pending record remained unchanged.
+- `node docs/agent-tooling/verifiers/run-g0-negative-controls.mjs` — exit 0; 116 controls passed: all 94 retained controls, 11 new resealed ambiguous-marker negatives, and 11 new resealed two-marker directional positives.
+- `node docs/agent-tooling/verifiers/validate-ajv-2020.mjs` — exit 0; 6 schema/instance pairs. Ownership validation — exit 0 with 15 writable surfaces and 12 plan-lane joins. Requirement coverage — exit 0 with 11 invariants, 6 gates, 12 phases, 11 completion-proof rows, and 15 ownership joins.
+- Both renderer checks, planning fixtures, all verifier Node syntax checks, and verifier OxLint — exit 0; OxLint reported 0 warnings and 0 errors.
+- `git diff --check 6dae0eb97b27945d1f0830b5c13dadab2c03fc15..HEAD` — exit 0. The seal commit first parent is the content commit and its diff is exactly `SOURCE-INVENTORY.md`, `WORKLOG.md`, `g0-readiness.json`, and `integration-lock.g0.json`.
+- `RESULT.md` remained byte-identical at SHA-256 `c7b6404f435ea1ce53c9b360ba2b8745096f1d3dd42d81de4bdbb55117c4bb87`; final worktree status was clean.
