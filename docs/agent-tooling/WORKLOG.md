@@ -711,3 +711,4 @@ Stage and commit this single documentation/contract/evidence-control checkpoint,
 - Final content/remediation checkpoint for this correction: `6e19d96d42194772829b90d4fbbc11b93811928f`.
 - The digest-refresh helper is idempotent when a reseal mutates only the model-facing surface or another non-prompt artifact; prompt-mutating controls still update the prompt oracle and fixture-contract row. Final content checkpoint: `d944acb8c3db7b893dbdf25eb434ac9f78143284`.
 - Prompt-mutating reseals also refresh the fixture-contract row for the changed planning verifier, so valid reseal failures are isolated to retired-name authority. Final content checkpoint: `5e066fb672feac2348ff7209d49af5b2768fbaa5`.
+- The ordinary path/prose positive uses `README.md`, a non-generated canonical document, so the resealed control exercises token-local context without bypassing generated-artifact freshness. Final content checkpoint: `b7557a0a1db873de08cb37bbd6499a894746e117`.
