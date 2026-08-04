@@ -1,13 +1,10 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-
-import Ajv2020 from "ajv/dist/2020.js";
 import { describe, expect, test } from "vitest";
 
 import {
   computeRunSnapshotContentDigest,
   computeRuntimeDurableStateDigest,
   computeTrustedHumanInputAnswerDigest,
+  createRuntimeSchemaValidator,
   createActorRef,
   createApplicationServiceRef,
   createAuditReceiptRef,
@@ -26,6 +23,7 @@ import {
   createInvocationId,
   createLeaseId,
   createOperationRef,
+  createProductEventRef,
   createReceiptRef,
   createRunId,
   createWorkspaceRef,
@@ -41,6 +39,7 @@ import {
   verifyRuntimeExecution,
   type RuntimeDurableState,
   type RuntimeEvent,
+  type RuntimeEventBody,
   type RuntimeVerificationFacts,
   type TrustedDurableStateHead,
   type TrustedHumanAnswerHead,
@@ -71,7 +70,6 @@ import {
   trustedHumanInputAnswer,
 } from "./fixtures";
 
-const schemaDirectory = fileURLToPath(new URL("../schemas/v1/", import.meta.url));
 const schemaNames = [
   "run-snapshot",
   "invocation-envelope",
@@ -79,17 +77,57 @@ const schemaNames = [
   "runtime-exit",
   "runtime-durable-state",
 ] as const;
-const ajv = new Ajv2020({ allErrors: true, strict: false });
+const schemaValidator = createRuntimeSchemaValidator();
 const validators = Object.fromEntries(
-  schemaNames.map((name) => [
-    name,
-    ajv.compile(JSON.parse(readFileSync(`${schemaDirectory}/${name}.schema.json`, "utf8")) as object),
-  ])
-);
+  schemaNames.map((name) => [name, (value: unknown) => schemaValidator.validate(name, value)])
+) as Record<(typeof schemaNames)[number], (value: unknown) => boolean>;
 
 const assertValid = (name: (typeof schemaNames)[number], value: unknown) => {
   const valid = validators[name](value);
-  expect(valid, validators[name].errors ? JSON.stringify(validators[name].errors) : undefined).toBe(true);
+  expect(valid, schemaValidator.errors(name) ? JSON.stringify(schemaValidator.errors(name)) : undefined).toBe(true);
+};
+
+const durableStateWithAppliedEvent = (body: RuntimeEventBody, productBindingOverride?: unknown) => {
+  const genesis = createInitialRuntimeDurableState({
+    workspaceRef: snapshot.workspaceRef,
+    actorRef: snapshot.actorRef,
+    profileVersionRef: snapshot.profile.profileRef,
+    runId: snapshot.runId,
+    snapshotContentDigest: snapshot.contentDigest,
+  });
+  const observed = event(body);
+  const publication =
+    "publication" in observed.body && observed.body.publication.action !== "observation_only"
+      ? observed.body.publication
+      : undefined;
+  const content = {
+    ...genesis,
+    state: "running" as const,
+    revision: 1,
+    previousRevision: 0,
+    previousStateDigest: genesis.stateDigest,
+    lastAcceptedSequence: 0,
+    acceptedEvents: [
+      {
+        ...genesis.binding,
+        invocationId: observed.invocationId,
+        eventId: observed.eventId,
+        idempotencyKey: observed.idempotencyKey,
+        correlationId: observed.correlationId,
+        causationRef: observed.causationRef,
+        sequence: 0,
+        fingerprint: contentDigest("a"),
+        kind: observed.body.kind,
+        ...(publication === undefined
+          ? {}
+          : { productBinding: productBindingOverride === undefined ? publication : productBindingOverride }),
+      },
+    ],
+  };
+  return {
+    ...content,
+    stateDigest: computeRuntimeDurableStateDigest(content as unknown as RuntimeDurableState),
+  };
 };
 
 const durableStateHead = (lifecycle: RuntimeDurableState): TrustedDurableStateHead => ({
@@ -482,6 +520,38 @@ describe("parser and generated-schema compatibility matrix", () => {
     expect(validators["runtime-durable-state"](invalid)).toBe(false);
     expect(() => parseRuntimeDurableState(invalid)).toThrow();
   });
+
+  test.each([
+    ["conversation", appliedConversationBody(), appliedArtifactBody()],
+    ["input_request", appliedInputRequestBody(), appliedArtifactBody()],
+    ["artifact", appliedArtifactBody(), appliedConversationBody()],
+    ["outcome_submission", appliedOutcomeBody("history-outcome"), appliedArtifactBody()],
+    ["run_failure", appliedFailureBody(), appliedArtifactBody()],
+    ["run_blocker", appliedBlockerBody(), appliedArtifactBody()],
+    ["run_cancellation", appliedCancellationBody(), appliedArtifactBody()],
+  ] as const)("couples %s history kind to its applied product binding", (_name, body, alternateBody) => {
+    const valid = durableStateWithAppliedEvent(body);
+    expect(schemaValidator.validate("runtime-durable-state", valid)).toBe(true);
+    expect(() => parseRuntimeDurableState(valid)).not.toThrow();
+
+    const alternatePublication = event(alternateBody).body.publication;
+    const mismatched = durableStateWithAppliedEvent(body, alternatePublication);
+    expect(schemaValidator.validate("runtime-durable-state", mismatched)).toBe(false);
+    expect(() => parseRuntimeDurableState(mismatched)).toThrow(/must match the accepted event kind/);
+  });
+
+  test.each([appliedFailureBody(), appliedBlockerBody(), appliedCancellationBody()] as const)(
+    "rejects a terminal history binding whose product reference differs from its product event reference",
+    (body) => {
+      const publication = event(body).body.publication;
+      const mismatched = durableStateWithAppliedEvent(body, {
+        ...publication,
+        productEventRef: createProductEventRef("different-terminal-event"),
+      });
+      expect(schemaValidator.validate("runtime-durable-state", mismatched)).toBe(false);
+      expect(() => parseRuntimeDurableState(mismatched)).toThrow(/must identify the terminal product/);
+    }
+  );
 });
 
 describe("audited terminal product-event boundary", () => {
@@ -1733,16 +1803,31 @@ describe("explicit UTF-8 bounds", () => {
 
   test("distinguishes ASCII code-unit edges, emoji byte edges, and serialized overhead", () => {
     expect(serializedJsonByteLength("🙂")).toBe(6);
-    expect(() => parseRuntimeEvent(event(observationBody("x".repeat(4096))))).not.toThrow();
-    const emojiEvent = {
-      ...event(observationBody("x")),
-      body: {
-        ...event(observationBody("x")).body,
-        payload: inlinePayload("🙂".repeat(2048)),
-      },
+    const eventWithText = (text: string) => {
+      const base = event(observationBody("x"));
+      return {
+        ...base,
+        body: { ...base.body, payload: inlinePayload(text) },
+      };
     };
-    expect(validators["runtime-event"](emojiEvent)).toBe(true);
-    expect(() => parseRuntimeEvent(emojiEvent)).toThrow();
+    const parityCases = [
+      ["ASCII exact", "x".repeat(UTF8_BYTE_LIMITS.boundedText), true],
+      ["ASCII over", "x".repeat(UTF8_BYTE_LIMITS.boundedText + 1), false],
+      ["emoji exact", "🙂".repeat(UTF8_BYTE_LIMITS.boundedText / 4), true],
+      ["emoji over", "🙂".repeat(UTF8_BYTE_LIMITS.boundedText / 4 + 1), false],
+      ["NFC exact", "é".repeat(UTF8_BYTE_LIMITS.boundedText / 2), true],
+      ["NFD exact", "e\u0301".repeat(Math.floor(UTF8_BYTE_LIMITS.boundedText / 3)), true],
+      ["NFD boundary over", `${"e\u0301".repeat(Math.floor(UTF8_BYTE_LIMITS.boundedText / 3))}\u0301`, false],
+    ] as const;
+    for (const [name, text, expected] of parityCases) {
+      const value = eventWithText(text);
+      expect(validators["runtime-event"](value), name).toBe(expected);
+      if (expected) {
+        expect(() => parseRuntimeEvent(value), name).not.toThrow();
+      } else {
+        expect(() => parseRuntimeEvent(value), name).toThrow();
+      }
+    }
     const smallSnapshotContent = {
       ...snapshot,
       runtimePolicy: {

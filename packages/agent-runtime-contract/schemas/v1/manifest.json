@@ -19,7 +19,7 @@
     },
     "runtime-durable-state": {
       "filename": "runtime-durable-state.schema.json",
-      "sha256": "9fe8d67c9a6154a23e399f2299dfe512b2c38a0656056ddfe54c80e0fc1ee006"
+      "sha256": "444c944ec8a5054f33c8662470529a1f4565d42ff06138438beceeef7967a0da"
     }
   }
 }

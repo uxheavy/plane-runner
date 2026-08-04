@@ -733,74 +733,29 @@ const durableStateBinding = {
   },
 };
 
-const durableProductRef = {
-  oneOf: [
-    ref("conversationRef"),
-    ref("inputRequestRef"),
-    ref("artifactRef"),
-    ref("outcomeSubmissionRef"),
-    ref("productEventRef"),
-  ],
-};
+definitions.durableConversationBinding = publicationDefinition("conversation", "conversationRef");
+definitions.durableInputRequestBinding = publicationDefinition("input_request", "inputRequestRef");
+definitions.durableArtifactBinding = publicationDefinition("artifact", "artifactRef");
+definitions.durableOutcomeSubmissionBinding = publicationDefinition("outcome_submission", "outcomeSubmissionRef", true);
+definitions.durableFailureBinding = terminalPublicationDefinition("run_failure");
+definitions.durableBlockerBinding = terminalPublicationDefinition("run_blocker");
+definitions.durableCancellationBinding = terminalPublicationDefinition("run_cancellation", true);
+
+const durableProductBindingVariants = [
+  ref("durableConversationBinding"),
+  ref("durableInputRequestBinding"),
+  ref("durableArtifactBinding"),
+  ref("durableOutcomeSubmissionBinding"),
+  ref("durableFailureBinding"),
+  ref("durableBlockerBinding"),
+  ref("durableCancellationBinding"),
+];
 
 const durableProductBinding = {
-  oneOf: [
-    {
-      type: "object",
-      additionalProperties: false,
-      required: ["action", "productKind", "productRef", "operationAttemptRef"],
-      properties: {
-        action: { const: "proposal" },
-        productKind: {
-          enum: ["conversation", "input_request", "artifact"],
-        },
-        productRef: durableProductRef,
-        operationAttemptRef: ref("operationAttemptRef"),
-      },
-    },
-    {
-      type: "object",
-      additionalProperties: false,
-      required: [
-        "action",
-        "productKind",
-        "productRef",
-        "operationAttemptRef",
-        "operationRef",
-        "applicationServiceRef",
-        "gatewayReceiptRef",
-        "receiptRef",
-        "auditReceiptRef",
-        "productEventRef",
-      ],
-      properties: {
-        action: { const: "applied" },
-        productKind: {
-          enum: [
-            "conversation",
-            "input_request",
-            "artifact",
-            "outcome_submission",
-            "run_failure",
-            "run_blocker",
-            "run_cancellation",
-          ],
-        },
-        productRef: durableProductRef,
-        operationAttemptRef: ref("operationAttemptRef"),
-        operationRef: ref("operationRef"),
-        applicationServiceRef: ref("applicationServiceRef"),
-        gatewayReceiptRef: ref("gatewayReceiptRef"),
-        receiptRef: ref("receiptRef"),
-        auditReceiptRef: ref("auditReceiptRef"),
-        productEventRef: ref("productEventRef"),
-        cancellationRef: ref("cancellationRef"),
-      },
-    },
-  ],
+  oneOf: durableProductBindingVariants,
 };
 
-const durableAcceptedEvent = {
+const durableAcceptedEventBase = {
   type: "object",
   additionalProperties: false,
   required: [
@@ -847,6 +802,69 @@ const durableAcceptedEvent = {
     },
     productBinding: durableProductBinding,
   },
+};
+
+const durableAcceptedEvent = {
+  ...durableAcceptedEventBase,
+  oneOf: [
+    {
+      properties: {
+        kind: {
+          enum: ["progress_observed", "usage_observed", "transcript_evidence_observed"],
+        },
+      },
+      not: { required: ["productBinding"] },
+    },
+    {
+      properties: {
+        kind: { const: "conversation_publication_observed" },
+        productBinding: ref("durableConversationBinding"),
+      },
+      required: ["productBinding"],
+    },
+    {
+      properties: {
+        kind: { const: "input_request_observed" },
+        productBinding: ref("durableInputRequestBinding"),
+      },
+      required: ["productBinding"],
+    },
+    {
+      properties: {
+        kind: { const: "artifact_observed" },
+        productBinding: ref("durableArtifactBinding"),
+      },
+      required: ["productBinding"],
+    },
+    {
+      properties: {
+        kind: { const: "outcome_submission_observed" },
+        productBinding: ref("durableOutcomeSubmissionBinding"),
+      },
+      required: ["productBinding"],
+    },
+    {
+      properties: {
+        kind: { const: "failure_observed" },
+        productBinding: ref("durableFailureBinding"),
+      },
+      required: ["productBinding"],
+    },
+    {
+      properties: {
+        kind: { const: "blocker_observed" },
+        productBinding: ref("durableBlockerBinding"),
+      },
+      required: ["productBinding"],
+    },
+    {
+      properties: {
+        kind: { const: "cancellation_observed" },
+        productBinding: ref("durableCancellationBinding"),
+      },
+      required: ["productBinding"],
+    },
+  ],
 };
 
 const durableHumanInputAnswer = {
@@ -926,7 +944,14 @@ const durableTerminalBinding = {
     invocationId: ref("invocationId"),
     correlationId: ref("correlationId"),
     causationRef: ref("causationRef"),
-    productBinding: durableProductBinding,
+    productBinding: {
+      oneOf: [
+        ref("durableOutcomeSubmissionBinding"),
+        ref("durableFailureBinding"),
+        ref("durableBlockerBinding"),
+        ref("durableCancellationBinding"),
+      ],
+    },
   },
 };
 

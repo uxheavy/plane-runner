@@ -2061,6 +2061,12 @@ function parseDurableProductBinding(value: unknown, path: string): DurableAccept
     auditReceiptRef: parseRef(object.auditReceiptRef, `${path}.auditReceiptRef`, parseAuditReceiptRef),
     productEventRef: parseRef(object.productEventRef, `${path}.productEventRef`, parseProductEventRef),
   };
+  if (
+    (productKind === "run_failure" || productKind === "run_blocker" || productKind === "run_cancellation") &&
+    applied.productRef !== applied.productEventRef
+  ) {
+    throw new ContractParseError(`${path}.productEventRef`, "must identify the terminal product");
+  }
   if (productKind === "run_cancellation") {
     return {
       ...applied,
