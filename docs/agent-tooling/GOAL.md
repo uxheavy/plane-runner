@@ -2,17 +2,17 @@
 
 ## Objective
 
-Build and independently verify one complete, production-ready Plane Agent system for backend assignments, runs, artifacts, conversations, outcomes, reviews, product events, and every supported Plane integration/action. The system must be operable and verifiable through Plane APIs, CLI/fixtures, ordinary Plane object pages, operator surfaces, and reused settings surfaces.
+Build and independently verify one complete, production-ready Plane Agent system, conforming to [ADR-0001](../decisions/0001-plane-agent-tooling-architecture.md) through [ADR-0010](../decisions/0010-plane-runtime-contract.md), for backend assignments, runs, artifacts, conversations, outcomes, reviews, product events, and every supported Plane integration/action. The system must be operable and verifiable through Plane APIs, CLI/fixtures, ordinary Plane object pages, operator surfaces, and reused settings surfaces.
 
 This goal covers the full Plane Agent control plane and the hidden execution service. It does not require chat, composer, thread, inbox, sidecar, transcript, or conversation-navigation UI.
 
 ## Status and authorization
 
-| Item | Current state |
-| --- | --- |
-| G0 | Complete as a lightweight start condition: ADRs 0001–0010 exist and cohere, scope and non-goals are explicit here, and local implementation is authorized. |
-| Implementation | Not started in this repository. |
-| Source authorization | Codex task `019fc7db-e8bf-7f92-8f2b-b2346e5eeeb8`, 2026-08-04. |
+| Item                 | Current state                                                                                                                                                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| G0                   | Complete as a lightweight start condition: ADRs 0001–0010 exist and cohere, scope and non-goals are explicit here, and local implementation is authorized.                                                                           |
+| Implementation       | In progress. G1 foundation work is active in L1 (runtime contracts), L3 (operation gateway/publication effects), and L4 (Hermes runtime adapter); each lane is being remediated against fresh independent review before integration. |
+| Source authorization | Codex task `019fc7db-e8bf-7f92-8f2b-b2346e5eeeb8`, 2026-08-04.                                                                                                                                                                       |
 
 Durable authorization statement:
 
@@ -36,18 +36,18 @@ The deleted planning documents, manifests, generated mirrors, inventories, fixtu
 
 Every future task packet must name each applicable ADR by number, title, and path. “Follow the ADRs” or “follow the architecture” alone is insufficient.
 
-| ADR | Title and lane-relevant purpose | Path |
-| --- | --- | --- |
-| ADR-0001 | Shared Plane operation gateway with native Hermes tools and external MCP compatibility; common operation boundary and catalog approach. | [0001](../decisions/0001-plane-agent-tooling-architecture.md) |
-| ADR-0002 | Plane agent operations execute autonomously within Plane authorization; live authorization and no runtime operation approval. | [0002](../decisions/0002-autonomous-agent-operations.md) |
-| ADR-0003 | Plane Agent is a native Plane product; Plane-owned product boundary, one model, and Buzz reference-only role. | [0003](../decisions/0003-plane-agent-native-product-boundary.md) |
-| ADR-0004 | Fork Hermes as the hidden Plane Agent execution kernel; reuse and narrow runtime adapter seam. | [0004](../decisions/0004-fork-hermes-as-hidden-execution-kernel.md) |
-| ADR-0005 | Plane owns one role-bearing Agent model; actor authorization, versioned profiles, one role per Agent, and role governance. | [0005](../decisions/0005-plane-owned-agent-profiles.md) |
-| ADR-0006 | Plane owns assignment and run lifecycle; five independent records, invocations, recovery, publication, review, and terminal events. | [0006](../decisions/0006-assignment-and-run-lifecycle.md) |
-| ADR-0007 | Expose Plane-native tools adaptively; separates authorization, availability, and disclosure with complete discoverability. | [0007](../decisions/0007-adaptive-plane-tool-exposure.md) |
-| ADR-0008 | Keep Agent memory and skills private and governable; Agent-private scope, provenance, gardener changes, and rollback. | [0008](../decisions/0008-scoped-memory-and-context.md) |
-| ADR-0009 | Use dynamic planning and delegation, not saved workflows; delegator role, normal child assignments, schedules, and lineage. | [0009](../decisions/0009-workflows-and-agent-delegation.md) |
-| ADR-0010 | Use one versioned Plane runtime contract; cross-process seam, snapshots, invocations, events, trust, and isolation. | [0010](../decisions/0010-plane-runtime-contract.md) |
+| ADR      | Title and lane-relevant purpose                                                                                                         | Path                                                                |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| ADR-0001 | Shared Plane operation gateway with native Hermes tools and external MCP compatibility; common operation boundary and catalog approach. | [0001](../decisions/0001-plane-agent-tooling-architecture.md)       |
+| ADR-0002 | Plane agent operations execute autonomously within Plane authorization; live authorization and no runtime operation approval.           | [0002](../decisions/0002-autonomous-agent-operations.md)            |
+| ADR-0003 | Plane Agent is a native Plane product; Plane-owned product boundary, one model, and Buzz reference-only role.                           | [0003](../decisions/0003-plane-agent-native-product-boundary.md)    |
+| ADR-0004 | Fork Hermes as the hidden Plane Agent execution kernel; reuse and narrow runtime adapter seam.                                          | [0004](../decisions/0004-fork-hermes-as-hidden-execution-kernel.md) |
+| ADR-0005 | Plane owns one role-bearing Agent model; actor authorization, versioned profiles, one role per Agent, and role governance.              | [0005](../decisions/0005-plane-owned-agent-profiles.md)             |
+| ADR-0006 | Plane owns assignment and run lifecycle; five independent records, invocations, recovery, publication, review, and terminal events.     | [0006](../decisions/0006-assignment-and-run-lifecycle.md)           |
+| ADR-0007 | Expose Plane-native tools adaptively; separates authorization, availability, and disclosure with complete discoverability.              | [0007](../decisions/0007-adaptive-plane-tool-exposure.md)           |
+| ADR-0008 | Keep Agent memory and skills private and governable; Agent-private scope, provenance, gardener changes, and rollback.                   | [0008](../decisions/0008-scoped-memory-and-context.md)              |
+| ADR-0009 | Use dynamic planning and delegation, not saved workflows; delegator role, normal child assignments, schedules, and lineage.             | [0009](../decisions/0009-workflows-and-agent-delegation.md)         |
+| ADR-0010 | Use one versioned Plane runtime contract; cross-process seam, snapshots, invocations, events, trust, and isolation.                     | [0010](../decisions/0010-plane-runtime-contract.md)                 |
 
 ## Product model and non-goals
 
@@ -63,75 +63,75 @@ Every future task packet must name each applicable ADR by number, title, and pat
 
 These five records are independently meaningful and must not be collapsed into a Hermes session or one aggregate lifecycle:
 
-| Record | Authority and meaning |
-| --- | --- |
-| `AgentActor` | Durable Plane principal, assignee, identity, credential, memberships, roles, and object permissions. It is the sole live entitlement source. |
-| `ProfileVersion` | Immutable Plane-owned behavioral configuration: one role, instructions, model/runtime defaults, skills, context references, and presentation defaults. |
-| `AssignmentContract` | Durable commission with target, objective, acceptance criteria/context, assignee, lineage, and review state. |
-| `RunAttempt` | Plane-owned execution attempt with a frozen resolved snapshot, context, model, tool presentation, budget, and lifecycle state. One run may span many runtime invocations or restarts. |
-| `OutcomeSubmission` | Result, artifacts, evidence, evaluator review, and human accept/return decision produced from a run. |
+| Record               | Authority and meaning                                                                                                                                                                 |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AgentActor`         | Durable Plane principal, assignee, identity, credential, memberships, roles, and object permissions. It is the sole live entitlement source.                                          |
+| `ProfileVersion`     | Immutable Plane-owned behavioral configuration: one role, instructions, model/runtime defaults, skills, context references, and presentation defaults.                                |
+| `AssignmentContract` | Durable commission with target, objective, acceptance criteria/context, assignee, lineage, and review state.                                                                          |
+| `RunAttempt`         | Plane-owned execution attempt with a frozen resolved snapshot, context, model, tool presentation, budget, and lifecycle state. One run may span many runtime invocations or restarts. |
+| `OutcomeSubmission`  | Result, artifacts, evidence, evaluator review, and human accept/return decision produced from a run.                                                                                  |
 
 Each runtime invocation has its own lease and disposable process/container. Plane persists the immutable run snapshot, input/context events, cumulative budget, and terminal product state. The kernel's completion is evidence only: every terminal invocation must produce exactly one visible Plane terminal event—submission, failure, blocker, or cancellation. An `outcome_unknown` operation is reconciled or escalated and is never blindly replayed.
 
 ## Ownership boundaries
 
-| Concern | Owner and contract |
-| --- | --- |
-| Product/control state | Plane owns the domain records above, permissions, profiles, assignment/run/outcome lifecycles, conversations, artifacts, memory/skills governance, schedules, delegation, evaluator/human review, recovery, and audit. |
-| Operation Gateway | One shared Plane application boundary for native Hermes tools, credential-free TypeScript host callbacks, runtime lifecycle mutations, and external MCP compatibility. It authenticates the caller, applies live authorization, idempotency, bounded results, semantic application services, and append-only audit. |
-| Runtime service | A separate co-located service owns dispatch, leases, cancellation, event ingress, and safe continuation through the versioned `plane.agent-runtime/v1` contract and deterministic adapter. It has no direct Plane database or product-model authority. |
-| Hermes | Executes model loops, context/retrieval, tool dispatch, transcripts, checkpoints, concurrency, and recovery mechanisms behind the narrow adapter. Plane concepts do not leak into unrelated kernel modules. |
-| External MCP | Remains a supported compatibility surface and converges incrementally on the same gateway; external human/integration identity is preserved and is not represented as an internal Agent. |
-| Buzz | Reference only; no runtime import, product dependency, or durable-state ownership. |
-| UI | No chat/composer/thread/transcript/navigation UI. Required administration reuses existing Plane settings/admin UI primitives after API/CLI parity exists. |
+| Concern               | Owner and contract                                                                                                                                                                                                                                                                                                  |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Product/control state | Plane owns the domain records above, permissions, profiles, assignment/run/outcome lifecycles, conversations, artifacts, memory/skills governance, schedules, delegation, evaluator/human review, recovery, and audit.                                                                                              |
+| Operation Gateway     | One shared Plane application boundary for native Hermes tools, credential-free TypeScript host callbacks, runtime lifecycle mutations, and external MCP compatibility. It authenticates the caller, applies live authorization, idempotency, bounded results, semantic application services, and append-only audit. |
+| Runtime service       | A separate co-located service owns dispatch, leases, cancellation, event ingress, and safe continuation through the versioned `plane.agent-runtime/v1` contract and deterministic adapter. It has no direct Plane database or product-model authority.                                                              |
+| Hermes                | Executes model loops, context/retrieval, tool dispatch, transcripts, checkpoints, concurrency, and recovery mechanisms behind the narrow adapter. Plane concepts do not leak into unrelated kernel modules.                                                                                                         |
+| External MCP          | Remains a supported compatibility surface and converges incrementally on the same gateway; external human/integration identity is preserved and is not represented as an internal Agent.                                                                                                                            |
+| Buzz                  | Reference only; no runtime import, product dependency, or durable-state ownership.                                                                                                                                                                                                                                  |
+| UI                    | No chat/composer/thread/transcript/navigation UI. Required administration reuses existing Plane settings/admin UI primitives after API/CLI parity exists.                                                                                                                                                           |
 
 ## Gates
 
 G0 is complete under the lightweight condition above. Later gates are implementation and delivery checkpoints, not documentation seals:
 
-| Gate | Exit condition |
-| --- | --- |
+| Gate                            | Exit condition                                                                                                                                                                                                                                                                                              |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | G1 — deterministic domain spine | Fixtures and contract tests create the five Plane records, run snapshot, invocation, and terminal outcome without a model or UI; the deterministic runtime crosses the intended dispatch/event seam; one authorized semantic mutation proves gateway authorization, idempotency, bounded output, and audit. |
-| G2 — real single-Agent slice | A real forked-Hermes process completes one assigned outcome through native tools and restricted TypeScript composition; Plane publishes exactly one visible terminal event; denials, stable replay, host-only credentials, and API/CLI readback pass. |
-| G3 — non-UI breadth | Full supported Plane integration/action coverage, memory/skills, schedules, delegation, artifacts, evaluator review, HR governance, chief-of-staff provisioning, MCP convergence, and API/CLI administration satisfy their contracts; settings reuse is proven and no chat UI exists. |
-| G4 — production candidate | Clean-checkout contract, authorization, isolation, mutation, compatibility, load, recovery, observability, credential, runbook, and rollback checks pass; live evaluation meets approved thresholds with no provider/model fallback. |
-| G5 — controlled rollout | Development, allowlisted workspace, expanded cohort, and approved GA stages each have separate evidence, approval, canary readback, safety stops, and rollback readiness. |
+| G2 — real single-Agent slice    | A real forked-Hermes process completes one assigned outcome through native tools and restricted TypeScript composition; Plane publishes exactly one visible terminal event; denials, stable replay, host-only credentials, and API/CLI readback pass.                                                       |
+| G3 — non-UI breadth             | Full supported Plane integration/action coverage, memory/skills, schedules, delegation, artifacts, evaluator review, HR governance, chief-of-staff provisioning, MCP convergence, and API/CLI administration satisfy their contracts; settings reuse is proven and no chat UI exists.                       |
+| G4 — production candidate       | Clean-checkout contract, authorization, isolation, mutation, compatibility, load, recovery, observability, credential, runbook, and rollback checks pass; live evaluation meets approved thresholds with no provider/model fallback.                                                                        |
+| G5 — controlled rollout         | Development, allowlisted workspace, expanded cohort, and approved GA stages each have separate evidence, approval, canary readback, safety stops, and rollback readiness.                                                                                                                                   |
 
 ## Implementation phases
 
 Each phase has one accountable lane. A lane may run in parallel with the lanes listed below after its start gate; it must not consume another lane's unfinished contract as if it were complete.
 
-| Phase | Outcome | Lane(s) | Start/dependency | Gate |
-| --- | --- | --- | --- | --- |
-| P0 | Reconcile ADR authority, scope, non-goals, ownership, and the implementation authorization. | L0 | None | G0 |
-| P1 | Generate and freeze the implementation contracts, catalog inputs, fixtures, and verification interfaces needed by later lanes. | L1 | G0 | G1 |
-| P2 | Implement Plane Agent actors, exactly-one-role profiles, assignments, runs, outcomes, and lifecycle governance. | L2 | G0; consumes P1 contracts as available | G1 |
-| P3 | Implement the shared operation catalog/gateway, live authorization, idempotency, bounded results, audit, and full-action foundation. | L3 | G0; consumes P1 catalog contracts | G1/G3 |
-| P4 | Implement the separate runtime service, leases, events, checkpoints, and narrow Hermes adapter. | L4 | G0; consumes the runtime contract | G2 |
-| P5 | Implement native Plane tools, progressive discovery, credential-free TypeScript composition, and isolation. | L5 | G1 | G2 |
-| P6 | Implement private memory/skills, gardeners, immutable revisions/rollback, and schedules as normal assignments. | L6 | G1 | G3 |
-| P7 | Implement dynamic planning, delegation lineage, HR proposals, chief-of-staff provisioning, and evaluator-before-human review. | L7 | G2 | G3 |
-| P8 | Converge the supported external MCP/SDK surface on the shared gateway with explicit per-action disposition. | L8 | G1 | G3 |
-| P9 | Implement platform isolation, credentials, quotas, observability, reliability, incident response, and reused settings/admin surfaces. | L9, L10 | L9 after G0; L10 after G1 | G4 |
-| P10 | Run deterministic/live evaluation, security, load, recovery, rollback, and production-candidate proof. | L11 | G2 | G4 |
-| P11 | Execute approved staged rollout, post-deploy readback, safety stops, and GA evidence. | L11 | G4 and separate rollout/deployment approval | G5 |
+| Phase | Outcome                                                                                                                               | Lane(s) | Start/dependency                            | Gate  |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------- | ----- |
+| P0    | Reconcile ADR authority, scope, non-goals, ownership, and the implementation authorization.                                           | L0      | None                                        | G0    |
+| P1    | Generate and freeze the implementation contracts, catalog inputs, fixtures, and verification interfaces needed by later lanes.        | L1      | G0                                          | G1    |
+| P2    | Implement Plane Agent actors, exactly-one-role profiles, assignments, runs, outcomes, and lifecycle governance.                       | L2      | G0; consumes P1 contracts as available      | G1    |
+| P3    | Implement the shared operation catalog/gateway, live authorization, idempotency, bounded results, audit, and full-action foundation.  | L3      | G0; consumes P1 catalog contracts           | G1/G3 |
+| P4    | Implement the separate runtime service, leases, events, checkpoints, and narrow Hermes adapter.                                       | L4      | G0; consumes the runtime contract           | G2    |
+| P5    | Implement native Plane tools, progressive discovery, credential-free TypeScript composition, and isolation.                           | L5      | G1                                          | G2    |
+| P6    | Implement private memory/skills, gardeners, immutable revisions/rollback, and schedules as normal assignments.                        | L6      | G1                                          | G3    |
+| P7    | Implement dynamic planning, delegation lineage, HR proposals, chief-of-staff provisioning, and evaluator-before-human review.         | L7      | G2                                          | G3    |
+| P8    | Converge the supported external MCP/SDK surface on the shared gateway with explicit per-action disposition.                           | L8      | G1                                          | G3    |
+| P9    | Implement platform isolation, credentials, quotas, observability, reliability, incident response, and reused settings/admin surfaces. | L9, L10 | L9 after G0; L10 after G1                   | G4    |
+| P10   | Run deterministic/live evaluation, security, load, recovery, rollback, and production-candidate proof.                                | L11     | G2                                          | G4    |
+| P11   | Execute approved staged rollout, post-deploy readback, safety stops, and GA evidence.                                                 | L11     | G4 and separate rollout/deployment approval | G5    |
 
 ## Parallel lane map
 
-| Lane | Responsibility | Start → finish | Parallel with |
-| --- | --- | --- | --- |
-| L0 | Product, architecture, and contract control; maintain ADR/GOAL coherence and scope decisions. | — → G0 | L1 |
-| L1 | Verification and release engineering; deterministic contracts, fixtures, evidence, compatibility, and later release proof. | G0 → G5 | L0, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11 |
-| L2 | Plane Agent domain and lifecycle; actors, profiles, assignments, runs, outcomes, roles, HR, chief-of-staff, and review state. | G0 → G3 | L1, L3, L4, L10 |
-| L3 | Operation catalog, gateway, authorization, idempotency, and audit; all native, runtime, Code Mode, and MCP paths share the seam. | G0 → G3 | L1, L2, L4, L10 |
-| L4 | Separate runtime service and Hermes kernel adapter; dispatch, leases, cancellation, event ingress, checkpoints, and recovery. | G0 → G2 | L1, L2, L3, L5, L6, L9 |
-| L5 | Native tools, progressive discovery, and restricted TypeScript isolation; credential-free host callbacks and cumulative budgets. | G1 → G2 | L1, L4, L6, L9, L10 |
-| L6 | Private memory, skills, gardeners, and schedules; strict Agent walls, provenance, revisions, rollback, and normal assignment triggers. | G1 → G3 | L1, L4, L5, L7, L10 |
-| L7 | Dynamic planning and delegation; dedicated delegator, lineage, scope/budget, HR governance, chief-of-staff, and evaluator integration. | G2 → G3 | L1, L6, L8, L10, L11 |
-| L8 | External MCP and SDK convergence; preserve compatibility while routing supported actions through the gateway. | G1 → G3 | L1, L7, L9, L10, L11 |
-| L9 | Platform, security, reliability, and operations; isolation, credentials, limits, telemetry, runbooks, kill switches, and rollback. | G0 → G5 | L1, L4, L5, L8, L10, L11 |
-| L10 | Minimal administration and settings; API/CLI first, then extend existing Plane settings primitives only. | G1 → G3 | L1, L2, L3, L5, L6, L7, L8, L9, L11 |
-| L11 | Evaluation, production proof, and rollout; requirement-level evidence, live readback, canaries, and staged promotion. | G2 → G5 | L1, L7, L8, L9, L10 |
+| Lane | Responsibility                                                                                                                         | Start → finish | Parallel with                                |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------- | -------------------------------------------- |
+| L0   | Product, architecture, and contract control; maintain ADR/GOAL coherence and scope decisions.                                          | — → G0         | L1                                           |
+| L1   | Verification and release engineering; deterministic contracts, fixtures, evidence, compatibility, and later release proof.             | G0 → G5        | L0, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11 |
+| L2   | Plane Agent domain and lifecycle; actors, profiles, assignments, runs, outcomes, roles, HR, chief-of-staff, and review state.          | G0 → G3        | L1, L3, L4, L10                              |
+| L3   | Operation catalog, gateway, authorization, idempotency, and audit; all native, runtime, Code Mode, and MCP paths share the seam.       | G0 → G3        | L1, L2, L4, L10                              |
+| L4   | Separate runtime service and Hermes kernel adapter; dispatch, leases, cancellation, event ingress, checkpoints, and recovery.          | G0 → G2        | L1, L2, L3, L5, L6, L9                       |
+| L5   | Native tools, progressive discovery, and restricted TypeScript isolation; credential-free host callbacks and cumulative budgets.       | G1 → G2        | L1, L4, L6, L9, L10                          |
+| L6   | Private memory, skills, gardeners, and schedules; strict Agent walls, provenance, revisions, rollback, and normal assignment triggers. | G1 → G3        | L1, L4, L5, L7, L10                          |
+| L7   | Dynamic planning and delegation; dedicated delegator, lineage, scope/budget, HR governance, chief-of-staff, and evaluator integration. | G2 → G3        | L1, L6, L8, L10, L11                         |
+| L8   | External MCP and SDK convergence; preserve compatibility while routing supported actions through the gateway.                          | G1 → G3        | L1, L7, L9, L10, L11                         |
+| L9   | Platform, security, reliability, and operations; isolation, credentials, limits, telemetry, runbooks, kill switches, and rollback.     | G0 → G5        | L1, L4, L5, L8, L10, L11                     |
+| L10  | Minimal administration and settings; API/CLI first, then extend existing Plane settings primitives only.                               | G1 → G3        | L1, L2, L3, L5, L6, L7, L8, L9, L11          |
+| L11  | Evaluation, production proof, and rollout; requirement-level evidence, live readback, canaries, and staged promotion.                  | G2 → G5        | L1, L7, L8, L9, L10                          |
 
 ## Worker and review protocol
 
@@ -146,15 +146,15 @@ Each phase has one accountable lane. A lane may run in parallel with the lanes l
 
 The full outcome is complete only when every row below has executable evidence from the actual implementation and a coordinator/fresh-reviewer readback. Documentation, a fixture, or a generated artifact alone is not proof.
 
-| Requirement | Passing proof |
-| --- | --- |
-| One native Plane Agent model | API/domain tests prove one product/runtime mode, exactly one role per Agent, live permission authority, HR governance, evaluator review, and chief-of-staff provisioning without a second authorization model. |
-| Independent lifecycles | Contract and migration tests prove independent `AgentActor`, `ProfileVersion`, `AssignmentContract`, `RunAttempt`, and `OutcomeSubmission` state, immutable run snapshots, multi-invocation continuation, revision history, and no Hermes-session authority. |
-| Gateway authority | Native tools, TypeScript host callbacks, runtime lifecycle mutations, and external MCP traces all cross the shared gateway with caller binding, live authorization, idempotency/reconciliation, bounded results, structured denial, and append-only audit. |
-| Runtime safety | Deterministic and real Hermes adapters pass event ordering, duplicate/out-of-order, lease death, cancellation, checkpoint, budget, `outcome_unknown`, host-only credential, network/filesystem/process isolation, and exactly-one-terminal-event tests. |
-| Full action breadth | The supported Plane integration/action catalog and external MCP surface are generated or explicitly dispositioned per action, with representative real-client coverage and no count-only or wildcard claim. |
-| Context and delegation | Agent-private memory/skills, gardener revisions/rollback, schedules, dynamic plans, delegation lineage, cancellation, and permissions pass leakage, provenance, replay, and recovery tests. No saved workflow-definition product is introduced. |
-| Non-UI operability | API, CLI, fixtures, operator surfaces, ordinary Plane object pages, and reused settings/admin primitives configure and inspect the required system. No chat, composer, thread, inbox, sidecar, transcript, or conversation-navigation UI is required. |
-| Production proof | Clean-checkout static/contract/security/reliability/load/recovery/observability checks pass; live permitted/denied canaries, audit/version readback, rollback, safety-stop, staged rollout, and separate pilot/production/deployment approvals are recorded. |
+| Requirement                  | Passing proof                                                                                                                                                                                                                                                |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| One native Plane Agent model | API/domain tests prove one product/runtime mode, exactly one role per Agent, live permission authority, HR governance, evaluator review, and chief-of-staff provisioning without a second authorization model.                                               |
+| Independent lifecycles       | Contract and migration tests prove independent `AgentActor`, `ProfileVersion`, `AssignmentContract`, `RunAttempt`, and `OutcomeSubmission` state, immutable run snapshots, multi-invocation continuation, revision history, and no Hermes-session authority. |
+| Gateway authority            | Native tools, TypeScript host callbacks, runtime lifecycle mutations, and external MCP traces all cross the shared gateway with caller binding, live authorization, idempotency/reconciliation, bounded results, structured denial, and append-only audit.   |
+| Runtime safety               | Deterministic and real Hermes adapters pass event ordering, duplicate/out-of-order, lease death, cancellation, checkpoint, budget, `outcome_unknown`, host-only credential, network/filesystem/process isolation, and exactly-one-terminal-event tests.      |
+| Full action breadth          | The supported Plane integration/action catalog and external MCP surface are generated or explicitly dispositioned per action, with representative real-client coverage and no count-only or wildcard claim.                                                  |
+| Context and delegation       | Agent-private memory/skills, gardener revisions/rollback, schedules, dynamic plans, delegation lineage, cancellation, and permissions pass leakage, provenance, replay, and recovery tests. No saved workflow-definition product is introduced.              |
+| Non-UI operability           | API, CLI, fixtures, operator surfaces, ordinary Plane object pages, and reused settings/admin primitives configure and inspect the required system. No chat, composer, thread, inbox, sidecar, transcript, or conversation-navigation UI is required.        |
+| Production proof             | Clean-checkout static/contract/security/reliability/load/recovery/observability checks pass; live permitted/denied canaries, audit/version readback, rollback, safety-stop, staged rollout, and separate pilot/production/deployment approvals are recorded. |
 
 Completion requires all rows, all applicable G1–G5 gates, a clean final worktree, and no unresolved security-critical failure, credential disclosure, authorization bypass, duplicate committed mutation, missing audit event, unsafe replay, or isolation escape.
