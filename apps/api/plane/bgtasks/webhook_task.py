@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import logging
+import re
 import uuid
 from dataclasses import dataclass
 
@@ -83,6 +84,143 @@ MODEL_MAPPER = {
 
 logger = logging.getLogger("plane.worker")
 
+WEBHOOK_RESPONSE_BODY_LIMIT = 4096
+_REDACTED_RESPONSE_VALUE = "[REDACTED]"
+_SENSITIVE_RESPONSE_FIELD = re.compile(
+    r"(?i)([\"']?(?:authorization|cookie|set-cookie|password|secret|token|api[_-]?key)[\"']?\s*[:=]\s*[\"']?)([^\"'&,\s}]+)",
+)
+
+
+@dataclass(frozen=True)
+class WebhookResponseEvidence:
+    """Bounded response evidence retained for the durable webhook audit log."""
+
+    prefix: str = ""
+    observed_size: int = 0
+    size_known: bool = False
+    truncated: bool = False
+    sha256: str | None = None
+
+
+class WebhookResponseReadError(RuntimeError):
+    """A streamed response failed after bounded evidence was collected."""
+
+    def __init__(self, cause: Exception, evidence: WebhookResponseEvidence):
+        super().__init__(str(cause))
+        self.cause = cause
+        self.evidence = evidence
+
+
+def _response_content_length(response: Any) -> int | None:
+    headers = getattr(response, "headers", {}) or {}
+    value = headers.get("Content-Length") or headers.get("content-length")
+    if value is None:
+        return None
+    try:
+        length = int(value)
+    except (TypeError, ValueError):
+        return None
+    return length if length >= 0 else None
+
+
+def _decode_bounded_prefix(raw_prefix: bytes) -> str:
+    """Decode complete UTF-8 characters without exceeding the byte cap."""
+
+    return raw_prefix.decode("utf-8", errors="ignore")
+
+
+def _redact_response_prefix(raw_prefix: bytes, *, limit: int = WEBHOOK_RESPONSE_BODY_LIMIT) -> str:
+    text = _decode_bounded_prefix(raw_prefix)
+    redacted = _SENSITIVE_RESPONSE_FIELD.sub(rf"\1{_REDACTED_RESPONSE_VALUE}", text)
+    encoded = redacted.encode("utf-8")
+    if len(encoded) > limit:
+        encoded = encoded[:limit]
+        redacted = _decode_bounded_prefix(encoded)
+    return redacted
+
+
+def _evidence_from_raw(
+    raw_prefix: bytes,
+    *,
+    observed_size: int,
+    size_known: bool,
+    truncated: bool,
+    limit: int = WEBHOOK_RESPONSE_BODY_LIMIT,
+) -> WebhookResponseEvidence:
+    return WebhookResponseEvidence(
+        prefix=_redact_response_prefix(raw_prefix, limit=limit),
+        observed_size=observed_size,
+        size_known=size_known,
+        truncated=truncated,
+        sha256=hashlib.sha256(raw_prefix).hexdigest(),
+    )
+
+
+def read_bounded_webhook_response(
+    response: Any,
+    *,
+    limit: int = WEBHOOK_RESPONSE_BODY_LIMIT,
+) -> WebhookResponseEvidence:
+    """Read a response through its streaming iterator with a hard byte cap.
+
+    The iterator is intentionally the only body API used here. A single extra
+    chunk is inspected for responses without Content-Length so an exact-limit
+    response is not incorrectly marked truncated. The caller owns and closes
+    the response on every path.
+    """
+
+    if limit <= 0:
+        raise ValueError("response limit must be positive")
+    content_length = _response_content_length(response)
+    raw_prefix = bytearray()
+    observed_size = 0
+    at_limit = False
+    truncated = bool(content_length is not None and content_length > limit)
+    try:
+        for chunk in response.iter_content(chunk_size=limit):
+            if not chunk:
+                continue
+            data = chunk if isinstance(chunk, bytes) else str(chunk).encode("utf-8")
+            chunk_size = len(data)
+            remaining = limit - len(raw_prefix)
+            if remaining > 0:
+                raw_prefix.extend(data[:remaining])
+            observed_size += chunk_size
+            if len(raw_prefix) < limit:
+                continue
+            if content_length is not None:
+                observed_size = content_length
+                break
+            if chunk_size > remaining or at_limit:
+                truncated = True
+                break
+            at_limit = True
+    except Exception as error:
+        evidence = _evidence_from_raw(
+            bytes(raw_prefix),
+            observed_size=content_length if content_length is not None else observed_size,
+            size_known=False if content_length is None else True,
+            truncated=True,
+            limit=limit,
+        )
+        raise WebhookResponseReadError(error, evidence) from error
+
+    if content_length is not None:
+        observed_size = content_length
+        size_known = True
+    else:
+        # Reaching the iterator's natural end proves the observed total. If we
+        # stopped after a look-ahead chunk, its size is intentionally only the
+        # amount observed before closing the response.
+        size_known = not truncated
+    return _evidence_from_raw(
+        bytes(raw_prefix),
+        observed_size=observed_size,
+        size_known=size_known,
+        truncated=truncated,
+        limit=limit,
+    )
+
 
 @dataclass(frozen=True)
 class WebhookDeliveryResult:
@@ -92,6 +230,10 @@ class WebhookDeliveryResult:
     retryable: bool
     response_status: int | None = None
     response_body: str = ""
+    response_body_size: int | None = None
+    response_body_size_known: bool = False
+    response_body_truncated: bool = False
+    response_body_sha256: str | None = None
     error: str = ""
 
     def as_dict(self) -> dict[str, Any]:
@@ -99,7 +241,11 @@ class WebhookDeliveryResult:
             "state": self.state,
             "retryable": self.retryable,
             "response_status": self.response_status,
-            "response_body": self.response_body[:4096],
+            "response_body": self.response_body[:WEBHOOK_RESPONSE_BODY_LIMIT],
+            "response_body_size": self.response_body_size,
+            "response_body_size_known": self.response_body_size_known,
+            "response_body_truncated": self.response_body_truncated,
+            "response_body_sha256": self.response_body_sha256,
             "error": self.error[:255],
         }
 
@@ -118,14 +264,27 @@ def save_webhook_log(
     request_body: str,
     response_status: str,
     response_headers: str,
-    response_body: str,
+    response_body: str | bytes,
     retry_count: int,
     event_type: str,
     delivery_key: str | None = None,
     delivery_state: str | None = None,
     delivery_result: dict[str, Any] | None = None,
+    response_body_size: int | None = None,
+    response_body_size_known: bool = False,
+    response_body_truncated: bool = False,
+    response_body_sha256: str | None = None,
     raise_on_error: bool = False,
 ) -> None:
+    response_size_supplied = response_body_size is not None
+    raw_response_body = response_body if isinstance(response_body, bytes) else str(response_body).encode("utf-8")
+    if response_body_size is None:
+        response_body_size = len(raw_response_body)
+    if response_body_sha256 is None:
+        response_body_sha256 = hashlib.sha256(raw_response_body[:WEBHOOK_RESPONSE_BODY_LIMIT]).hexdigest()
+    response_body_truncated = response_body_truncated or len(raw_response_body) > WEBHOOK_RESPONSE_BODY_LIMIT
+    bounded_response_body = _redact_response_prefix(raw_response_body[:WEBHOOK_RESPONSE_BODY_LIMIT])
+    response_body_size_known = response_body_size_known or not response_size_supplied
     log_data = {
         "workspace_id": str(webhook.workspace_id),
         "webhook": str(webhook.id),
@@ -135,7 +294,11 @@ def save_webhook_log(
         "request_body": str(request_body),
         "response_status": str(response_status),
         "response_headers": str(response_headers),
-        "response_body": str(response_body),
+        "response_body": bounded_response_body,
+        "response_body_size": response_body_size,
+        "response_body_size_known": response_body_size_known,
+        "response_body_truncated": response_body_truncated,
+        "response_body_sha256": response_body_sha256,
         "retry_count": retry_count,
         "delivery_key": delivery_key,
         "delivery_state": delivery_state,
@@ -230,6 +393,7 @@ def deliver_webhook_target(
             )
         return result
 
+    response = None
     try:
         response = pinned_fetch(
             "POST",
@@ -239,6 +403,7 @@ def deliver_webhook_target(
             headers=headers,
             json=payload,
             timeout=30,
+            stream=True,
         )
     except ValueError as error:
         result = WebhookDeliveryResult("failed", False, error=f"Webhook URL rejected: {error}")
@@ -277,36 +442,85 @@ def deliver_webhook_target(
         )
         return result
 
-    if 200 <= response.status_code < 300:
-        state, retryable = "succeeded", False
-    else:
-        # A response proves the request reached the receiver. Its application
-        # may have performed partial work before returning an error, so the
-        # gateway must not blindly replay a non-2xx response.
-        state, retryable = "failed", False
-    result = WebhookDeliveryResult(
-        state,
-        retryable,
-        response_status=response.status_code,
-        response_body=response.text,
-        error="" if state == "succeeded" else f"Webhook returned HTTP {response.status_code}",
-    )
-    save_webhook_log(
-        webhook=webhook,
-        request_method="POST",
-        request_headers=headers,
-        request_body=payload,
-        response_status=response.status_code,
-        response_headers=response.headers,
-        response_body=response.text,
-        retry_count=0,
-        event_type=event,
-        delivery_key=delivery_key,
-        delivery_state=result.state,
-        delivery_result=result.as_dict(),
-        raise_on_error=True,
-    )
-    return result
+    try:
+        evidence = read_bounded_webhook_response(response)
+        if 200 <= response.status_code < 300:
+            state, retryable = "succeeded", False
+        else:
+            # A response proves the request reached the receiver. Its
+            # application may have performed partial work before returning an
+            # error, so the gateway must not blindly replay a non-2xx response.
+            state, retryable = "failed", False
+        result = WebhookDeliveryResult(
+            state,
+            retryable,
+            response_status=response.status_code,
+            response_body=evidence.prefix,
+            response_body_size=evidence.observed_size,
+            response_body_size_known=evidence.size_known,
+            response_body_truncated=evidence.truncated,
+            response_body_sha256=evidence.sha256,
+            error="" if state == "succeeded" else f"Webhook returned HTTP {response.status_code}",
+        )
+        save_webhook_log(
+            webhook=webhook,
+            request_method="POST",
+            request_headers=headers,
+            request_body=payload,
+            response_status=response.status_code,
+            response_headers=response.headers,
+            response_body=evidence.prefix,
+            response_body_size=evidence.observed_size,
+            response_body_size_known=evidence.size_known,
+            response_body_truncated=evidence.truncated,
+            response_body_sha256=evidence.sha256,
+            retry_count=0,
+            event_type=event,
+            delivery_key=delivery_key,
+            delivery_state=result.state,
+            delivery_result=result.as_dict(),
+            raise_on_error=True,
+        )
+        return result
+    except WebhookResponseReadError as stream_error:
+        evidence = stream_error.evidence
+        result = WebhookDeliveryResult(
+            "outcome_unknown",
+            False,
+            response_status=getattr(response, "status_code", None),
+            response_body=evidence.prefix,
+            response_body_size=evidence.observed_size,
+            response_body_size_known=evidence.size_known,
+            response_body_truncated=evidence.truncated,
+            response_body_sha256=evidence.sha256,
+            error=str(stream_error.cause),
+        )
+        save_webhook_log(
+            webhook=webhook,
+            request_method="POST",
+            request_headers=headers,
+            request_body=payload,
+            response_status=getattr(response, "status_code", "unknown"),
+            response_headers=getattr(response, "headers", ""),
+            response_body=evidence.prefix,
+            response_body_size=evidence.observed_size,
+            response_body_size_known=evidence.size_known,
+            response_body_truncated=evidence.truncated,
+            response_body_sha256=evidence.sha256,
+            retry_count=0,
+            event_type=event,
+            delivery_key=delivery_key,
+            delivery_state=result.state,
+            delivery_result=result.as_dict(),
+            raise_on_error=True,
+        )
+        return result
+    finally:
+        if response is not None:
+            try:
+                response.close()
+            except Exception:
+                logger.warning("Failed to close webhook response", exc_info=True)
 
 
 def get_model_data(event: str, event_id: Union[str, List[str]], many: bool = False) -> Dict[str, Any]:
@@ -494,6 +708,7 @@ def webhook_send_task(
         logger.error(f"Failed to send webhook: {e}")
         return
 
+    response = None
     try:
         # Resolve + validate the webhook URL and pin the connection to the
         # validated IP. Pinning closes the DNS-rebinding TOCTOU (validating the
@@ -509,7 +724,9 @@ def webhook_send_task(
             headers=headers,
             json=payload,
             timeout=30,
+            stream=True,
         )
+        evidence = read_bounded_webhook_response(response)
 
         # Log the webhook request
         save_webhook_log(
@@ -519,11 +736,34 @@ def webhook_send_task(
             request_body=payload,
             response_status=response.status_code,
             response_headers=response.headers,
-            response_body=response.text,
+            response_body=evidence.prefix,
+            response_body_size=evidence.observed_size,
+            response_body_size_known=evidence.size_known,
+            response_body_truncated=evidence.truncated,
+            response_body_sha256=evidence.sha256,
             retry_count=self.request.retries,
             event_type=event,
         )
         logger.info(f"Webhook {webhook.id} sent successfully")
+    except WebhookResponseReadError as e:
+        evidence = e.evidence
+        save_webhook_log(
+            webhook=webhook,
+            request_method=action,
+            request_headers=headers,
+            request_body=payload,
+            response_status=getattr(response, "status_code", "unknown"),
+            response_headers=getattr(response, "headers", ""),
+            response_body=evidence.prefix,
+            response_body_size=evidence.observed_size,
+            response_body_size_known=evidence.size_known,
+            response_body_truncated=evidence.truncated,
+            response_body_sha256=evidence.sha256,
+            retry_count=self.request.retries,
+            event_type=event,
+        )
+        logger.error(f"Webhook {webhook.id} response stream failed: {e}")
+        return
     except requests.RequestException as e:
         # Log the failed webhook request
         save_webhook_log(
@@ -574,6 +814,12 @@ def webhook_send_task(
     except Exception as e:
         log_exception(e)
         return
+    finally:
+        if response is not None:
+            try:
+                response.close()
+            except Exception:
+                logger.warning("Failed to close webhook response", exc_info=True)
 
 
 @shared_task

@@ -3,6 +3,7 @@ import uuid
 import pytest
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
+from django.utils import timezone
 
 
 BASE_MIGRATION = ("db", "0123_operationgatewayaudit_operationgatewayidempotency")
@@ -180,6 +181,70 @@ def test_historical_invocation_backfill_is_deterministic_across_directions():
     assert {publication.target_id for publication in legacy_publications} == {webhook_one.pk, webhook_two.pk}
     assert all(publication.state == "outcome_unknown" for publication in legacy_publications)
     assert all(publication.payload["webhook_id"] for publication in legacy_publications)
+    assert set(MigrationExecutor(connection).loader.graph.leaf_nodes("db")) == {HEAD_MIGRATION}
+
+    # Exercise every 0126 publication state, including the states that 0125
+    # cannot name. The reverse marker must preserve all durable identity and
+    # dispatch facts, while the visible 0125 row must remain non-runnable when
+    # any target has ambiguous or already-started delivery history.
+    roundtrip_record = NewIdempotency.objects.get(pk=records[1].pk)
+    now = timezone.now()
+    state_rows = [
+        ("pending", False, None, None),
+        ("running", False, None, now),
+        ("succeeded", True, {"state": "succeeded", "receipt": "known"}, None),
+        ("failed", False, {"state": "failed"}, None),
+        ("retryable", False, {"state": "retryable"}, None),
+        ("outcome_unknown", True, {"state": "outcome_unknown"}, None),
+    ]
+    for index, (state, dispatch_started, delivery_result, lease_until) in enumerate(state_rows):
+        NewPublication.objects.create(
+            id=uuid.uuid4(),
+            idempotency=roundtrip_record,
+            invocation_id=roundtrip_record.invocation_id,
+            kind="webhook",
+            target_id=uuid.uuid4(),
+            publication_key=f"roundtrip:{index}",
+            payload={"webhook_id": f"target-{index}", "index": index},
+            state=state,
+            attempts=index,
+            last_error=f"error-{index}",
+            delivery_result=delivery_result,
+            dispatch_started=dispatch_started,
+            lease_until=lease_until,
+            published_at=now if state == "succeeded" else None,
+        )
+
+    def publication_snapshot(model, record_id):
+        return [
+            (
+                str(row.id),
+                str(row.idempotency_id),
+                str(row.invocation_id),
+                str(row.target_id),
+                row.publication_key,
+                row.payload,
+                row.state,
+                row.attempts,
+                row.last_error,
+                row.delivery_result,
+                row.dispatch_started,
+                row.lease_until.isoformat() if row.lease_until else None,
+                row.published_at.isoformat() if row.published_at else None,
+            )
+            for row in model.objects.filter(idempotency_id=record_id, kind="webhook").order_by("id")
+        ]
+
+    before_roundtrip = publication_snapshot(NewPublication, roundtrip_record.pk)
+    _, reverse_apps = _migrate_and_reload(PRE_HEAD_MIGRATION)
+    ReversePublication = reverse_apps.get_model("db", "OperationGatewayPublication")
+    reverse_row = ReversePublication.objects.get(idempotency_id=roundtrip_record.pk, kind="webhook")
+    assert reverse_row.state == "failed"
+    assert reverse_row.payload["__plane_0126_reverse__"]["version"] == 1
+    assert len(reverse_row.payload["__plane_0126_reverse__"]["rows"]) == len(state_rows)
+    _, roundtrip_apps = _migrate_and_reload(HEAD_MIGRATION)
+    RoundtripPublication = roundtrip_apps.get_model("db", "OperationGatewayPublication")
+    assert publication_snapshot(RoundtripPublication, roundtrip_record.pk) == before_roundtrip
     assert set(MigrationExecutor(connection).loader.graph.leaf_nodes("db")) == {HEAD_MIGRATION}
 
     _, base_again_apps = _migrate_and_reload(BASE_MIGRATION)

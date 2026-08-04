@@ -77,6 +77,13 @@ class WebhookLog(BaseModel):
     response_status = models.TextField(blank=True, null=True)
     response_headers = models.TextField(blank=True, null=True)
     response_body = models.TextField(blank=True, null=True)
+    # Gateway response evidence is a bounded, redacted prefix. The metadata
+    # records whether the size is authoritative and whether the body exceeded
+    # the byte limit without retaining the full response.
+    response_body_size = models.PositiveBigIntegerField(blank=True, null=True)
+    response_body_size_known = models.BooleanField(default=False)
+    response_body_truncated = models.BooleanField(default=False)
+    response_body_sha256 = models.CharField(max_length=64, blank=True, null=True)
 
     # Retry Count
     retry_count = models.PositiveSmallIntegerField(default=0)

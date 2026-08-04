@@ -45,7 +45,7 @@ from .publications import (
     dispatch_publication_once,
     schedule_publications_on_commit,
 )
-from .role_boundary import verify_audit_role_boundary
+from .role_boundary import audited_gateway_boundary
 from .work_items import WorkItemRenameFailure, WorkItemRenameOutcome, WorkItemRenameService
 
 READ_RESULT_FIELDS = ("id", "name", "sequence_id", "priority", "state", "project", "workspace")
@@ -106,8 +106,8 @@ class GatewayServiceRequest:
 class OperationGateway:
     """One deep application boundary for the initial gateway vertical slice."""
 
+    @audited_gateway_boundary
     def execute(self, request: Any, envelope: dict[str, Any]) -> tuple[GatewayEnvelope, int]:
-        verify_audit_role_boundary()
         caller_id = str(request.user.id)
         operation_id = envelope["operation_id"]
         workspace_slug = envelope["workspace_slug"]
@@ -193,6 +193,7 @@ class OperationGateway:
             status_code=status_code,
         )
 
+    @audited_gateway_boundary
     def record_invalid_request(
         self,
         request: Any,
@@ -220,6 +221,7 @@ class OperationGateway:
             failure=GatewayFailure(code, status_code or (413 if code == "REQUEST_TOO_LARGE" else 400), False),
         )
 
+    @audited_gateway_boundary
     def reconcile(self, idempotency_id: uuid.UUID) -> tuple[GatewayEnvelope, int]:
         """Restore and dispatch every publication before resolving the operation."""
 
@@ -463,6 +465,7 @@ class OperationGateway:
                     correlation_id=correlation_id,
                     request_digest=request_digest,
                     invocation_id=uuid.uuid4(),
+                    request_id=uuid.uuid4(),
                     outcome=OperationGatewayAudit.Outcome.OUTCOME_UNKNOWN,
                     error=GatewayFailure("OUTCOME_UNKNOWN", 409, False),
                 )
@@ -530,6 +533,7 @@ class OperationGateway:
                 correlation_id=correlation_id,
                 request_digest=request_digest,
                 invocation_id=uuid.uuid4(),
+                request_id=uuid.uuid4(),
                 outcome=OperationGatewayAudit.Outcome.REPLAY,
                 result=record.result,
                 error=self._failure_from_record(record),
@@ -930,7 +934,7 @@ class OperationGateway:
         correlation_id: str,
         request_digest: str,
         invocation_id: uuid.UUID,
-        request_id: uuid.UUID | None = None,
+        request_id: uuid.UUID,
         outcome: str,
         result: dict[str, Any] | None = None,
         error: GatewayError | GatewayFailure | None = None,
@@ -938,7 +942,7 @@ class OperationGateway:
         error_value = self._error(error.code, error.retryable) if isinstance(error, GatewayFailure) else error
         fields = {
             "invocation_id": invocation_id,
-            "request_id": request_id or record.request_id,
+            "request_id": request_id,
             "operation_id": record.operation_id,
             "workspace_id": record.workspace_id,
             "workspace_slug": record.workspace_slug,
@@ -1055,14 +1059,24 @@ class OperationGateway:
         ), status_code
 
     def _direct_unknown(self, record: OperationGatewayIdempotency) -> tuple[GatewayFailureEnvelope, int]:
+        audit = self._write_invocation_pair(
+            record=record,
+            correlation_id=record.correlation_id,
+            request_digest=record.request_digest,
+            invocation_id=uuid.uuid4(),
+            request_id=uuid.uuid4(),
+            outcome=OperationGatewayAudit.Outcome.OUTCOME_UNKNOWN,
+            result=record.result,
+            error=GatewayFailure("OUTCOME_UNKNOWN", 409, False),
+        )
         return self._direct_failure_envelope(
             operation_id=record.operation_id,
             workspace_slug=record.workspace_slug,
             caller_id=str(record.caller_id),
-            request_id=record.request_id,
+            request_id=audit.request_id,
             idempotency_key=record.idempotency_key,
-            correlation_id=record.correlation_id,
-            audit_receipt=record.audit_receipt,
+            correlation_id=audit.correlation_id,
+            audit_receipt=audit.id,
             error=GatewayFailure("OUTCOME_UNKNOWN", 409, False),
             replayed=True,
             status_code=409,

@@ -10,6 +10,7 @@ from .common import *  # noqa
 
 DEBUG = True
 PLANE_AUDIT_ENFORCE_ROLE_SEPARATION = False
+PLANE_AUDIT_MIGRATION_ROLE = DATABASES["default"].get("USER") or "plane"
 
 # Debug Toolbar settings
 INSTALLED_APPS += ("debug_toolbar",)  # noqa

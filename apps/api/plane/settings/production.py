@@ -11,6 +11,16 @@ from .common import *  # noqa
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = int(os.environ.get("DEBUG", 0)) == 1
 
+if PLANE_AUDIT_ENFORCE_ROLE_SEPARATION and not DEBUG:
+    if not DATABASE_RUNTIME_URL or not DATABASE_MIGRATION_URL:
+        raise ImproperlyConfigured(
+            "Production Operation Gateway requires distinct DATABASE_RUNTIME_URL and DATABASE_MIGRATION_URL"
+        )
+    if DATABASE_RUNTIME_URL == DATABASE_MIGRATION_URL:
+        raise ImproperlyConfigured(
+            "Production Operation Gateway runtime and migration database URLs must be distinct"
+        )
+
 # Honor the 'X-Forwarded-Proto' header for request.is_secure()
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 

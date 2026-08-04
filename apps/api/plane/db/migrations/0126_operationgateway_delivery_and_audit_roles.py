@@ -1,13 +1,17 @@
 """Close durable publication, effect-idempotency, trigger, and role gaps."""
 
+import copy
 import re
 import uuid
+from datetime import datetime
 
 from django.conf import settings
 from django.db import migrations, models
 
 
 ROLE_NAME = re.compile(r"^[a-z_][a-z0-9_$]{0,62}$")
+PUBLICATION_NAMESPACE = uuid.UUID("8a1b4fd8-49a5-54ad-a49e-7f2e0c1a3f1c")
+REVERSE_MARKER = "__plane_0126_reverse__"
 
 CREATE_APPEND_ONLY_TRIGGERS = """
 DROP TRIGGER IF EXISTS operation_gateway_audit_append_only_trigger ON operation_gateway_audit;
@@ -61,19 +65,29 @@ EXECUTE FUNCTION operation_gateway_audit_append_only();
 
 
 def split_legacy_webhook_intents(apps, schema_editor):
-    """Convert pre-0126 workspace fan-out rows without claiming delivery."""
+    """Convert pre-0126 fan-out rows without claiming delivery.
+
+    The reverse migration stores a lossless marker in the old JSON payload. It
+    is consumed here before looking at current active webhooks, so a
+    0125 -> 0126 -> 0125 -> 0126 round trip restores the original target set,
+    durable keys, results, ambiguity, and dispatch markers.
+    """
 
     Publication = apps.get_model("db", "OperationGatewayPublication")
     Webhook = apps.get_model("db", "Webhook")
-    legacy_publications = Publication.objects.filter(kind="webhook", target_id__isnull=True)
+    legacy_publications = Publication.objects.filter(kind="webhook", target_id__isnull=True).order_by("id")
     for publication in legacy_publications:
         payload = publication.payload if isinstance(publication.payload, dict) else {}
+        marker = payload.get(REVERSE_MARKER)
+        if isinstance(marker, dict) and marker.get("version") == 1:
+            _restore_reversed_webhook_rows(Publication, publication, marker)
+            continue
         targets = list(
             Webhook.objects.filter(
                 workspace_id=publication.idempotency.workspace_id,
                 is_active=True,
                 issue=True,
-            ).values_list("id", flat=True)
+            ).order_by("id").values_list("id", flat=True)
         )
         was_ambiguous = publication.state in ("running", "succeeded")
         state = "outcome_unknown" if was_ambiguous else publication.state
@@ -86,6 +100,9 @@ def split_legacy_webhook_intents(apps, schema_editor):
             else publication.delivery_result
         )
         if not targets:
+            publication.id = _stable_publication_id(publication.idempotency_id, "none")
+            payload.pop(REVERSE_MARKER, None)
+            publication.payload = payload
             publication.state = state
             publication.dispatch_started = was_ambiguous
             publication.lease_until = None
@@ -94,6 +111,7 @@ def split_legacy_webhook_intents(apps, schema_editor):
             publication.save(
                 update_fields=[
                     "state",
+                    "id",
                     "dispatch_started",
                     "lease_until",
                     "published_at",
@@ -106,7 +124,9 @@ def split_legacy_webhook_intents(apps, schema_editor):
         for index, target_id in enumerate(targets):
             target_payload = {**payload, "webhook_id": str(target_id)}
             publication_key = f"{publication.idempotency_id}:webhook:{target_id}"
+            target_publication_id = _stable_publication_id(publication.idempotency_id, str(target_id))
             if index == 0:
+                publication.id = target_publication_id
                 publication.target_id = target_id
                 publication.publication_key = publication_key
                 publication.payload = target_payload
@@ -118,6 +138,7 @@ def split_legacy_webhook_intents(apps, schema_editor):
                 publication.save(
                     update_fields=[
                         "target_id",
+                        "id",
                         "publication_key",
                         "payload",
                         "state",
@@ -130,7 +151,7 @@ def split_legacy_webhook_intents(apps, schema_editor):
                 )
             else:
                 Publication.objects.create(
-                    id=uuid.uuid4(),
+                    id=target_publication_id,
                     idempotency_id=publication.idempotency_id,
                     invocation_id=publication.invocation_id,
                     kind="webhook",
@@ -148,21 +169,27 @@ def split_legacy_webhook_intents(apps, schema_editor):
 
 
 def merge_webhook_intents_for_reverse(apps, schema_editor):
-    """Restore the pre-0126 single fan-out row when this migration is reversed."""
+    """Restore one legacy row with a lossless target/state marker."""
 
     Publication = apps.get_model("db", "OperationGatewayPublication")
     groups = {}
-    for publication in Publication.objects.filter(kind="webhook", target_id__isnull=False).order_by("created_at", "id"):
+    for publication in Publication.objects.filter(kind="webhook").order_by("id"):
         groups.setdefault(publication.idempotency_id, []).append(publication)
 
     for idempotency_id, publications in groups.items():
         first = publications[0]
-        payload = first.payload if isinstance(first.payload, dict) else {}
+        payload = copy.deepcopy(first.payload) if isinstance(first.payload, dict) else {}
+        reverse_rows = [_serialize_webhook_publication(publication) for publication in publications]
         payload.pop("webhook_id", None)
+        payload[REVERSE_MARKER] = {"version": 1, "rows": reverse_rows}
         first.target_id = None
         first.publication_key = f"{idempotency_id}:webhook"
         first.payload = payload
-        first.state = "pending" if first.state in ("running", "succeeded", "outcome_unknown") else first.state
+        first.state = (
+            "failed"
+            if any(_legacy_state(publication) == "failed" for publication in publications)
+            else _legacy_state(first)
+        )
         first.dispatch_started = False
         first.lease_until = None
         first.published_at = None
@@ -184,6 +211,80 @@ def merge_webhook_intents_for_reverse(apps, schema_editor):
             publication.delete()
 
 
+def _stable_publication_id(idempotency_id, target_id: str) -> uuid.UUID:
+    return uuid.uuid5(PUBLICATION_NAMESPACE, f"{idempotency_id}:webhook:{target_id}")
+
+
+def _legacy_state(publication) -> str:
+    """Map to 0125 without making an ambiguous dispatch runnable."""
+
+    if publication.state == "succeeded" and not publication.dispatch_started:
+        return "succeeded"
+    if publication.state == "pending" and not publication.dispatch_started:
+        return "pending"
+    if publication.state == "running" and not publication.dispatch_started:
+        return "running"
+    # 0125 has no outcome_unknown/retryable state. ``failed`` is the only
+    # non-runnable representation; the marker restores the exact 0126 state
+    # when the migration is applied forward again.
+    return "failed"
+
+
+def _serialize_webhook_publication(publication) -> dict:
+    return {
+        "id": str(publication.id),
+        "idempotency_id": str(publication.idempotency_id),
+        "invocation_id": str(publication.invocation_id),
+        "target_id": str(publication.target_id) if publication.target_id else None,
+        "publication_key": publication.publication_key,
+        "payload": copy.deepcopy(publication.payload) if isinstance(publication.payload, dict) else {},
+        "state": publication.state,
+        "attempts": publication.attempts,
+        "last_error": publication.last_error,
+        "delivery_result": publication.delivery_result,
+        "dispatch_started": publication.dispatch_started,
+        "lease_until": publication.lease_until.isoformat() if publication.lease_until else None,
+        "published_at": publication.published_at.isoformat() if publication.published_at else None,
+    }
+
+
+def _parse_datetime(value):
+    return datetime.fromisoformat(value) if isinstance(value, str) else value
+
+
+def _restore_reversed_webhook_rows(Publication, legacy_publication, marker: dict) -> None:
+    rows = marker.get("rows")
+    if not isinstance(rows, list) or not rows:
+        raise RuntimeError("Invalid 0126 reverse marker for webhook publication")
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            raise RuntimeError("Invalid 0126 reverse marker row")
+        target_id = row.get("target_id")
+        defaults = {
+            "idempotency_id": legacy_publication.idempotency_id,
+            "invocation_id": uuid.UUID(row["invocation_id"]),
+            "kind": "webhook",
+            "target_id": uuid.UUID(target_id) if target_id else None,
+            "publication_key": row["publication_key"],
+            "payload": row.get("payload") if isinstance(row.get("payload"), dict) else {},
+            "state": row.get("state", "pending"),
+            "attempts": row.get("attempts", 0),
+            "last_error": row.get("last_error", ""),
+            "delivery_result": row.get("delivery_result"),
+            "dispatch_started": bool(row.get("dispatch_started", False)),
+            "lease_until": _parse_datetime(row.get("lease_until")),
+            "published_at": _parse_datetime(row.get("published_at")),
+        }
+        if index == 0:
+            restored = legacy_publication
+            restored.id = uuid.UUID(row["id"])
+            for field, value in defaults.items():
+                setattr(restored, field, value)
+            restored.save()
+        else:
+            Publication.objects.create(id=uuid.UUID(row["id"]), **defaults)
+
+
 def _role_identifier(connection, value: str) -> str:
     if not isinstance(value, str) or not ROLE_NAME.fullmatch(value):
         raise RuntimeError("Operation Gateway audit role names must be simple PostgreSQL identifiers")
@@ -194,24 +295,53 @@ def configure_audit_role_boundary(apps, schema_editor):
     connection = schema_editor.connection
     runtime_role = settings.PLANE_AUDIT_RUNTIME_ROLE
     governance_role = settings.PLANE_AUDIT_GOVERNANCE_ROLE
-    if not runtime_role or runtime_role == governance_role:
+    migration_role = settings.PLANE_AUDIT_MIGRATION_ROLE
+    if not runtime_role or not governance_role or not migration_role:
         raise RuntimeError("Operation Gateway audit runtime and governance roles must be distinct")
+    if runtime_role == governance_role or (
+        settings.PLANE_AUDIT_ENFORCE_ROLE_SEPARATION and runtime_role == migration_role
+    ):
+        raise RuntimeError("Operation Gateway audit runtime, migration, and governance roles must be distinct")
     runtime_ident = _role_identifier(connection, runtime_role)
     governance_ident = _role_identifier(connection, governance_role)
+    migration_ident = _role_identifier(connection, migration_role)
 
     with connection.cursor() as cursor:
-        cursor.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", [governance_role])
-        if cursor.fetchone() is None:
-            cursor.execute(f"CREATE ROLE {governance_ident} NOLOGIN")
-        cursor.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", [runtime_role])
-        if cursor.fetchone() is None:
-            raise RuntimeError("Configured Operation Gateway audit runtime role does not exist")
+        cursor.execute(
+            "SELECT current_user, current_user = %s, current_user = %s, current_user = %s",
+            [runtime_role, governance_role, migration_role],
+        )
+        current_user, is_runtime, is_governance, is_migration = cursor.fetchone()
+        if not is_migration:
+            raise RuntimeError("Operation Gateway audit migration must use the migration database credential")
+        cursor.execute(
+            "SELECT rolname FROM pg_roles WHERE rolname IN (%s, %s, %s)",
+            [runtime_role, governance_role, migration_role],
+        )
+        existing_roles = {row[0] for row in cursor.fetchall()}
+        missing_roles = {runtime_role, governance_role, migration_role} - existing_roles
+        if missing_roles:
+            raise RuntimeError(
+                "Operation Gateway audit roles are missing; run bootstrap_operation_gateway_audit first"
+            )
 
-        # A migration authority can transfer the table to the governed owner
-        # without granting the runtime role any role-management capability.
-        cursor.execute(f"GRANT {governance_ident} TO CURRENT_USER")
+        # The explicit bootstrap command provisions the owner. This migration
+        # temporarily grants the migration authority membership in it so DDL
+        # can transfer ownership, but it never creates the governed role.
+        cursor.execute(f"GRANT {governance_ident} TO {migration_ident}")
+        cursor.execute(f"REVOKE {governance_ident} FROM {runtime_ident}")
+        cursor.execute(f"REVOKE {migration_ident} FROM {runtime_ident}")
+
         cursor.execute(f"ALTER TABLE operation_gateway_audit OWNER TO {governance_ident}")
-        cursor.execute(f"REVOKE {governance_ident} FROM CURRENT_USER")
+        cursor.execute(
+            f"ALTER FUNCTION operation_gateway_audit_append_only() OWNER TO {governance_ident}"
+        )
+        cursor.execute(
+            "ALTER FUNCTION operation_gateway_audit_append_only() SECURITY DEFINER"
+        )
+        cursor.execute(
+            "ALTER FUNCTION operation_gateway_audit_append_only() SET search_path = pg_catalog"
+        )
         cursor.execute(f"REVOKE ALL ON TABLE operation_gateway_audit FROM PUBLIC")
         cursor.execute("SELECT current_schema()")
         schema_ident = connection.ops.quote_name(cursor.fetchone()[0])
@@ -219,6 +349,12 @@ def configure_audit_role_boundary(apps, schema_editor):
         cursor.execute(f"REVOKE CREATE ON SCHEMA {schema_ident} FROM {runtime_ident}")
         cursor.execute(f"GRANT SELECT, INSERT ON TABLE operation_gateway_audit TO {runtime_ident}")
         cursor.execute(f"REVOKE UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON TABLE operation_gateway_audit FROM {runtime_ident}")
+        cursor.execute(
+            f"REVOKE ALL ON FUNCTION operation_gateway_audit_append_only() FROM PUBLIC, {runtime_ident}"
+        )
+        cursor.execute(
+            f"GRANT EXECUTE ON FUNCTION operation_gateway_audit_append_only() TO {governance_ident}"
+        )
 
         cursor.execute(
             """
@@ -234,15 +370,19 @@ def configure_audit_role_boundary(apps, schema_editor):
             sequence_ident = _role_identifier(connection, sequence_name)
             cursor.execute(f"GRANT USAGE, SELECT ON SEQUENCE {sequence_ident} TO {runtime_ident}")
 
+        cursor.execute(f"REVOKE {governance_ident} FROM {migration_ident}")
+
 
 def unconfigure_audit_role_boundary(apps, schema_editor):
     connection = schema_editor.connection
     runtime_ident = _role_identifier(connection, settings.PLANE_AUDIT_RUNTIME_ROLE)
     governance_ident = _role_identifier(connection, settings.PLANE_AUDIT_GOVERNANCE_ROLE)
+    migration_ident = _role_identifier(connection, settings.PLANE_AUDIT_MIGRATION_ROLE)
     with connection.cursor() as cursor:
-        cursor.execute(f"GRANT {governance_ident} TO CURRENT_USER")
-        cursor.execute("ALTER TABLE operation_gateway_audit OWNER TO CURRENT_USER")
-        cursor.execute(f"REVOKE {governance_ident} FROM CURRENT_USER")
+        cursor.execute(f"GRANT {governance_ident} TO {migration_ident}")
+        cursor.execute(f"ALTER FUNCTION operation_gateway_audit_append_only() OWNER TO {migration_ident}")
+        cursor.execute(f"ALTER TABLE operation_gateway_audit OWNER TO {migration_ident}")
+        cursor.execute(f"REVOKE {governance_ident} FROM {migration_ident}")
         cursor.execute(f"REVOKE ALL ON TABLE operation_gateway_audit FROM {runtime_ident}")
         cursor.execute("SELECT current_schema()")
         schema_ident = connection.ops.quote_name(cursor.fetchone()[0])
@@ -343,6 +483,26 @@ class Migration(migrations.Migration):
             model_name="webhooklog",
             name="delivery_result",
             field=models.JSONField(blank=True, null=True),
+        ),
+        migrations.AddField(
+            model_name="webhooklog",
+            name="response_body_size",
+            field=models.PositiveBigIntegerField(blank=True, null=True),
+        ),
+        migrations.AddField(
+            model_name="webhooklog",
+            name="response_body_size_known",
+            field=models.BooleanField(default=False),
+        ),
+        migrations.AddField(
+            model_name="webhooklog",
+            name="response_body_truncated",
+            field=models.BooleanField(default=False),
+        ),
+        migrations.AddField(
+            model_name="webhooklog",
+            name="response_body_sha256",
+            field=models.CharField(blank=True, max_length=64, null=True),
         ),
         migrations.RunSQL(
             CREATE_APPEND_ONLY_TRIGGERS,

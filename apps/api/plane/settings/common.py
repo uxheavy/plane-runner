@@ -15,6 +15,7 @@ from urllib.parse import urljoin
 import dj_database_url
 
 # Django imports
+from django.core.exceptions import ImproperlyConfigured
 from django.core.management.utils import get_random_secret_key
 from corsheaders.defaults import default_headers
 
@@ -202,6 +203,8 @@ SITE_ID = 1
 AUTH_USER_MODEL = "db.User"
 
 # Database
+DATABASE_RUNTIME_URL = os.environ.get("DATABASE_RUNTIME_URL") or os.environ.get("DATABASE_URL")
+DATABASE_MIGRATION_URL = os.environ.get("DATABASE_MIGRATION_URL")
 if bool(os.environ.get("DATABASE_URL")):
     # Parse database configuration from $DATABASE_URL
     DATABASES = {"default": dj_database_url.config()}
@@ -218,19 +221,20 @@ else:
         }
 
 # Operation Gateway audit storage is owned by a dedicated no-login role. Local
-# and test defaults keep the existing database user as the runtime role and
-# let the migration create the owner role. Production must set enforcement to
-# 1 and use a non-superuser runtime role distinct from the governed owner.
+# and test defaults keep the existing database user as the runtime role. In a
+# production topology the runtime and migration URLs are explicit, distinct
+# credentials; the migrator entrypoint activates DATABASE_MIGRATION_URL only
+# for its migration/bootstrap process.
 PLANE_AUDIT_RUNTIME_ROLE = os.environ.get("PLANE_AUDIT_RUNTIME_ROLE") or DATABASES["default"].get("USER", "")
 PLANE_AUDIT_GOVERNANCE_ROLE = os.environ.get("PLANE_AUDIT_GOVERNANCE_ROLE", "plane_audit_owner")
+PLANE_AUDIT_MIGRATION_ROLE = os.environ.get("PLANE_AUDIT_MIGRATION_ROLE") or "plane_migrator"
+PLANE_AUDIT_RUNTIME_PASSWORD = os.environ.get("PLANE_AUDIT_RUNTIME_PASSWORD", "")
 # Production fails closed by default. The local and test settings explicitly
 # disable this check while they use the repository's single bootstrap role.
 PLANE_AUDIT_ENFORCE_ROLE_SEPARATION = os.environ.get(
     "PLANE_AUDIT_ENFORCE_ROLE_SEPARATION",
     "0" if DEBUG else "1",
 ) == "1"
-
-
 if os.environ.get("ENABLE_READ_REPLICA", "0") == "1":
     if bool(os.environ.get("DATABASE_READ_REPLICA_URL")):
         # Parse database configuration from $DATABASE_URL

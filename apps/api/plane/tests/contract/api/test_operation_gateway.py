@@ -3,11 +3,14 @@ import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 from django.conf import settings
+from django.core.management import call_command
 from django.db import DatabaseError, close_old_connections, connection, transaction
+from django.test import override_settings
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -35,6 +38,7 @@ from plane.db.models import (
 from plane.operation_gateway.contracts import MAX_RESULT_BYTES
 from plane.operation_gateway.gateway import OperationGateway
 from plane.operation_gateway.publications import dispatch_publication_once
+from plane.operation_gateway.role_boundary import AuditRoleBoundaryError, verify_audit_role_boundary
 from plane.bgtasks.webhook_task import WebhookDeliveryResult, deliver_webhook_target
 from plane.operation_gateway.work_items import WorkItemRenameFailure, WorkItemRenameService
 
@@ -526,9 +530,16 @@ def test_webhook_adapter_records_stable_key_headers_and_definite_failure(
     class Response:
         status_code = 404
         headers = {"content-type": "text/plain"}
-        text = "not found"
+        closed = False
 
-    with patch("plane.bgtasks.webhook_task.pinned_fetch", return_value=Response()) as fetch:
+        def iter_content(self, chunk_size):
+            yield b"not found"
+
+        def close(self):
+            self.closed = True
+
+    response = Response()
+    with patch("plane.bgtasks.webhook_task.pinned_fetch", return_value=response) as fetch:
         result = deliver_webhook_target(
             webhook_id=str(webhook.id),
             slug=workspace.slug,
@@ -542,6 +553,8 @@ def test_webhook_adapter_records_stable_key_headers_and_definite_failure(
 
     assert result.state == OperationGatewayPublication.State.FAILED
     assert result.retryable is False
+    assert fetch.call_args.kwargs["stream"] is True
+    assert response.closed is True
     assert fetch.call_args.kwargs["headers"]["X-Plane-Delivery"] == "gateway:webhook:stable"
     assert fetch.call_args.kwargs["headers"]["Idempotency-Key"] == "gateway:webhook:stable"
     log = WebhookLog.all_objects.get(delivery_key="gateway:webhook:stable")
@@ -551,7 +564,11 @@ def test_webhook_adapter_records_stable_key_headers_and_definite_failure(
     class ServerErrorResponse:
         status_code = 503
         headers = {}
-        text = "temporarily unavailable"
+        def iter_content(self, chunk_size):
+            yield b"temporarily unavailable"
+
+        def close(self):
+            pass
 
     with patch("plane.bgtasks.webhook_task.pinned_fetch", return_value=ServerErrorResponse()):
         server_error = deliver_webhook_target(
@@ -1031,6 +1048,109 @@ def test_postgres_audit_runtime_role_cannot_govern_or_bypass_trigger():
         with connection.cursor() as cursor:
             cursor.execute("RESET ROLE")
             cursor.execute(f'DROP ROLE "{runtime_role}"')
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_separated_audit_boot_and_runtime_probes_cover_membership_and_trigger_power():
+    runtime_role = f"gateway_runtime_{uuid.uuid4().hex[:10]}"
+    bridge_role = f"gateway_bridge_{uuid.uuid4().hex[:10]}"
+    governance_role = settings.PLANE_AUDIT_GOVERNANCE_ROLE
+    migration_role = settings.PLANE_AUDIT_MIGRATION_ROLE
+
+    with connection.cursor() as cursor:
+        cursor.execute(f'CREATE ROLE "{runtime_role}" LOGIN NOINHERIT PASSWORD \'probe\'')
+        cursor.execute(f'CREATE ROLE "{bridge_role}" NOLOGIN NOINHERIT')
+        cursor.execute(f'GRANT SELECT, INSERT ON operation_gateway_audit TO "{runtime_role}"')
+
+        cursor.execute("SELECT tableowner FROM pg_tables WHERE tablename = 'operation_gateway_audit'")
+        table_owner = cursor.fetchone()[0]
+        cursor.execute(
+            "SELECT t.tgenabled, pg_get_triggerdef(t.oid) "
+            "FROM pg_trigger AS t "
+            "WHERE t.tgrelid = 'operation_gateway_audit'::regclass "
+            "AND t.tgname = 'operation_gateway_audit_append_only_row_trigger'"
+        )
+        trigger_enabled, trigger_definition = cursor.fetchone()
+        cursor.execute(
+            "SELECT r.rolname FROM pg_proc AS f "
+            "JOIN pg_roles AS r ON r.oid = f.proowner "
+            "WHERE f.oid = to_regprocedure('operation_gateway_audit_append_only()')"
+        )
+        function_owner = cursor.fetchone()[0]
+        assert table_owner == governance_role
+        assert function_owner == governance_role
+        assert trigger_enabled == "O"
+        assert "BEFORE UPDATE OR DELETE" in trigger_definition or "BEFORE DELETE OR UPDATE" in trigger_definition
+
+    try:
+        with override_settings(
+            PLANE_AUDIT_ENFORCE_ROLE_SEPARATION=True,
+            PLANE_AUDIT_RUNTIME_ROLE=runtime_role,
+            PLANE_AUDIT_MIGRATION_ROLE=migration_role,
+        ):
+            call_command("bootstrap_operation_gateway_audit")
+
+            with connection.cursor() as cursor:
+                cursor.execute(f'GRANT "{bridge_role}" TO "{runtime_role}"')
+                cursor.execute(f'GRANT "{governance_role}" TO "{bridge_role}"')
+                cursor.execute(f'SET ROLE "{runtime_role}"')
+            with pytest.raises(AuditRoleBoundaryError, match="protected role"):
+                verify_audit_role_boundary()
+
+            with connection.cursor() as cursor:
+                cursor.execute("RESET ROLE")
+                cursor.execute(f'REVOKE "{governance_role}" FROM "{bridge_role}"')
+                cursor.execute(f'REVOKE "{bridge_role}" FROM "{runtime_role}"')
+                cursor.execute(f'GRANT "{governance_role}" TO "{runtime_role}"')
+                cursor.execute(f'SET ROLE "{runtime_role}"')
+            with pytest.raises(AuditRoleBoundaryError, match="protected role"):
+                verify_audit_role_boundary()
+
+            with connection.cursor() as cursor:
+                cursor.execute("RESET ROLE")
+                cursor.execute(f'REVOKE "{governance_role}" FROM "{runtime_role}"')
+                cursor.execute(f'SET ROLE "{runtime_role}"')
+            verify_audit_role_boundary()
+
+            for statement in (
+                "ALTER TABLE operation_gateway_audit DISABLE TRIGGER ALL",
+                "DROP TRIGGER operation_gateway_audit_append_only_row_trigger ON operation_gateway_audit",
+                "ALTER FUNCTION operation_gateway_audit_append_only() RENAME TO operation_gateway_audit_renamed",
+                "DROP FUNCTION operation_gateway_audit_append_only()",
+                "TRUNCATE operation_gateway_audit",
+                "DROP TABLE operation_gateway_audit",
+            ):
+                with pytest.raises(DatabaseError):
+                    with transaction.atomic():
+                        with connection.cursor() as cursor:
+                            cursor.execute(statement)
+    finally:
+        with connection.cursor() as cursor:
+            cursor.execute("RESET ROLE")
+            cursor.execute(f'DROP ROLE IF EXISTS "{runtime_role}"')
+            cursor.execute(f'DROP ROLE IF EXISTS "{bridge_role}"')
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_rejected_production_role_cannot_reach_any_public_gateway_path():
+    request = SimpleNamespace(user=SimpleNamespace(id=uuid.uuid4()), META={})
+    gateway = OperationGateway()
+    rejected_role = f"missing_gateway_runtime_{uuid.uuid4().hex[:10]}"
+
+    with override_settings(
+        PLANE_AUDIT_ENFORCE_ROLE_SEPARATION=True,
+        PLANE_AUDIT_RUNTIME_ROLE=rejected_role,
+    ):
+        with pytest.raises(AuditRoleBoundaryError):
+            gateway.execute(request, {})
+        with pytest.raises(AuditRoleBoundaryError):
+            gateway.record_invalid_request(request, {})
+        with pytest.raises(AuditRoleBoundaryError):
+            gateway.reconcile(uuid.uuid4())
+        with pytest.raises(AuditRoleBoundaryError):
+            verify_audit_role_boundary()
 
 
 @pytest.mark.contract
