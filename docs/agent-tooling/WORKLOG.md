@@ -762,6 +762,20 @@ Stage and commit this single documentation/contract/evidence-control checkpoint,
 - `git diff --check 6dae0eb97b27945d1f0830b5c13dadab2c03fc15..HEAD` — exit 0. The seal commit first parent is the content commit and its diff is exactly `SOURCE-INVENTORY.md`, `WORKLOG.md`, `g0-readiness.json`, and `integration-lock.g0.json`.
 - `RESULT.md` remained byte-identical at SHA-256 `c7b6404f435ea1ce53c9b360ba2b8745096f1d3dd42d81de4bdbb55117c4bb87`; final worktree status was clean.
 
+## 2026-08-04 — Fresh Luna remediation: manifest table, sealed-inventory policy, and cleanup reliability
+
+### Scope and design
+
+- Added an exact parser for the frozen model-facing table in `APPROVAL-MANIFEST.md`; its first column must equal the ordered `model-facing-surface.json` name list. The one-to-one retired-name occurrence controls remain unchanged.
+- Replaced whole-file/default retired-name exemptions with an explicit policy inventory covering the sealed content paths plus governed `SOURCE-INVENTORY.md`, `WORKLOG.md`, readiness, and lock evidence. Markdown authority is section-heading scoped; structured authority is JSON-pointer scoped; unclassified authority-shaped sections/pointers fail closed while historical, internal-identifier, ordinary-path, and ordinary-prose contexts remain permitted.
+- Added real reseal controls for all 11 frozen manifest table rows, `GOAL.md`, `product-requirements.md`, the model-surface schema description, policy omission/drift, and a deterministic cleanup retry/backoff control. Temporary clones disable Git maintenance and cleanup assertion failures remain distinct from cleanup failures.
+- No Plane Agent product/runtime code, approval state, `RESULT.md`, or unscoped authority changed.
+
+### Content checkpoint
+
+- Content/remediation commit: `8ebc418d25fc1ff197664f7e0772564d2bb0f1b3`.
+- The actual seal generator bound 56 content paths and the four authorized seal paths from that clean content commit. The separate evidence-seal commit and final validation results follow.
+
 ## 2026-08-04 — Fresh Luna remediation: global retired-family matching and approval-manifest authority
 
 ### Scope and design
@@ -788,3 +802,15 @@ Stage and commit this single documentation/contract/evidence-control checkpoint,
 - Both renderer checks, planning fixtures, all verifier Node syntax checks, and verifier OxLint — exit 0; OxLint reported 0 warnings and 0 errors.
 - `git diff --check 5ca6e9f515c4258a2a3692f6db62af6c41167d47..HEAD` — exit 0. The seal commit first parent is the content commit and its diff is exactly `SOURCE-INVENTORY.md`, `WORKLOG.md`, `g0-readiness.json`, and `integration-lock.g0.json`; the lock binds 56 content paths and 4 seal paths.
 - `RESULT.md` remained byte-identical at SHA-256 `c7b6404f435ea1ce53c9b360ba2b8745096f1d3dd42d81de4bdbb55117c4bb87`; final topology and clean-worktree readback follow the seal-only commit amendment.
+
+## 2026-08-04 — Fresh Luna remediation: final sealed validation
+
+- `pnpm install --frozen-lockfile` — exit 0; the repository-pinned Node 26.4.0 environment installed successfully with `ajv@8.18.0` and `oxlint@1.51.0`.
+- `node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode preflight` — exit 0; all checks passed and human approval remained pending by design.
+- `node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode g0` — exit 1 only for the expected pending human approval; no implementation authorization was implied.
+- `node docs/agent-tooling/verifiers/test-g0-approved-fixture.mjs` — exit 0; the temporary approved readiness state passed and the real pending record was unchanged.
+- `node docs/agent-tooling/verifiers/run-g0-negative-controls.mjs` — exit 0; 199 controls passed: 182 retained controls, 11 frozen manifest table-row reseals, 3 omitted canonical authority reseals, 2 policy omission/drift reseals, and 1 cleanup retry/backoff control.
+- `node docs/agent-tooling/verifiers/validate-ajv-2020.mjs` — exit 0; 6 schema/instance pairs. Ownership validation — exit 0 with 15 writable surfaces and 12 plan-lane joins. Requirement coverage — exit 0 with 11 invariants, 6 gates, 12 phases, 11 completion-proof rows, and 15 ownership joins.
+- Both renderer checks, planning fixtures, all verifier Node syntax checks, and verifier OxLint — exit 0; OxLint reported 0 warnings and 0 errors.
+- `git diff --check 50de279ea15459addaac8dcc768ef215563c29e7..HEAD` — exit 0. The content commit is `8ebc418d25fc1ff197664f7e0772564d2bb0f1b3`; the separate seal-only commit's first parent is the content commit and its diff changes exactly `SOURCE-INVENTORY.md`, `WORKLOG.md`, `g0-readiness.json`, and `integration-lock.g0.json`.
+- `RESULT.md` remained byte-identical at SHA-256 `c7b6404f435ea1ce53c9b360ba2b8745096f1d3dd42d81de4bdbb55117c4bb87`; final topology was sealed and the worktree was clean.
