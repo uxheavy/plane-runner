@@ -1748,6 +1748,7 @@ function designatedInternalIdentifierRanges(line) {
     /\b(?:operationId|runtime[-_ ]adapter(?:[-_ ](?:identifier|id))?|adapter[-_ ](?:identifier|id))\b\s*[:=]\s*(?:"([^"]+)"|'([^']+)'|`([^`]+)`|([A-Za-z0-9_.@-]+))/gi,
     1
   );
+  ranges.push(...rangesForPattern(line, /[`"]plane\.[a-z0-9_.-]+@[0-9]+[`"]?/gi));
   ranges.push(...rangesForPattern(line, /\bplane_runtime\.[A-Za-z0-9_.-]+/g));
   return ranges;
 }
