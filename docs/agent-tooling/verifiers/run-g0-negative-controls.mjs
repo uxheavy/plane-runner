@@ -592,6 +592,18 @@ const omittedCanonicalAuthorityCases = [
     reseal: true,
   },
   {
+    name: "valid-reseal GOAL plain retired token in authoritative section",
+    mutate: (directory) =>
+      insertAfterHeading(
+        directory,
+        "docs/agent-tooling/GOAL.md",
+        "## Normative resource catalog and authority",
+        "Use search for work items."
+      ),
+    expected: "docs/agent-tooling/GOAL.md authoritatively uses retired name search",
+    reseal: true,
+  },
+  {
     name: "valid-reseal product-requirements authoritative search",
     mutate: (directory) =>
       insertAfterHeading(
@@ -690,6 +702,29 @@ const authorityBoundaryCases = [
   },
 ];
 
+const structuredSchemaEvolutionCases = [
+  {
+    name: "valid-reseal schema evolution adds unclassified ownership pointer",
+    mutate: (directory) => {
+      replace(
+        directory,
+        "docs/agent-tooling/ownership-map.json",
+        '  "mapId": "plane-agent-tooling-g0-ownership",\n',
+        '  "mapId": "plane-agent-tooling-g0-ownership",\n  "modelFacingPurpose": "search",\n'
+      );
+      replace(
+        directory,
+        "docs/agent-tooling/ownership-map.schema.json",
+        '    "mapId": { "const": "plane-agent-tooling-g0-ownership" },\n',
+        '    "mapId": { "const": "plane-agent-tooling-g0-ownership" },\n    "modelFacingPurpose": { "const": "search" },\n'
+      );
+    },
+    expected:
+      "docs/agent-tooling/ownership-map.json has an unclassified structured authority pointer /modelFacingPurpose",
+    reseal: true,
+  },
+];
+
 const policyCoverageCases = [
   {
     name: "valid-reseal omitted product-requirements section declaration",
@@ -725,12 +760,7 @@ const policyCoverageCases = [
   {
     name: "valid-reseal missing structured pointer subtree",
     mutate: (directory) =>
-      replace(
-        directory,
-        "docs/agent-tooling/verifiers/verify-g0-preflight.mjs",
-        '  "docs/agent-tooling/g0-readiness.json": {\n    authoritative: [],\n    authoritativeSubtrees: [],\n    nonModelFacingSubtrees: [[]],\n  },',
-        '  "docs/agent-tooling/g0-readiness.json": {\n    authoritative: [],\n    authoritativeSubtrees: [],\n    nonModelFacingSubtrees: [],\n  },'
-      ),
+      replace(directory, "docs/agent-tooling/verifiers/verify-g0-preflight.mjs", '      ["recordId"],\n', ""),
     expected: "docs/agent-tooling/g0-readiness.json has an unclassified structured authority pointer",
     reseal: true,
   },
@@ -757,6 +787,7 @@ cases.push(
   ...approvalManifestPermittedCases,
   ...manifestTableResealedCases,
   ...omittedCanonicalAuthorityCases,
+  ...structuredSchemaEvolutionCases,
   ...authorityBoundaryCases,
   ...policyCoverageCases
 );

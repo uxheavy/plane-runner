@@ -937,60 +937,118 @@ const verifierPolicyPaths = [
   "docs/agent-tooling/verifiers/verify-g0-preflight.mjs",
 ];
 
-// `[]` is an explicit recursive pointer subtree: every reachable string pointer
-// not claimed by an authoritative pointer pattern is non-model-facing. The
-// verifier checks that every string is covered and every declared pointer is
-// live, so no structured path can fall back to ordinary evidence.
+// Structured declarations are intentionally scoped to semantic fields and
+// bounded evidence subtrees. There is no document-root fallback: a new string
+// pointer outside these declarations is unclassified until it is deliberately
+// classified.
 const structuredAuthority = {
   "docs/agent-tooling/NON-UI-IMPLEMENTATION-PLAN.json": {
     authoritative: [],
     authoritativeSubtrees: [],
-    nonModelFacingSubtrees: [[]],
+    nonModelFacingSubtrees: [
+      ["title"],
+      ["status"],
+      ["scope", "included"],
+      ["scope", "excluded"],
+      ["scope", "uiRule"],
+      ["principles"],
+      ["phaseLaneRelationships"],
+      ["gates"],
+      ["lanes"],
+    ],
   },
   "docs/agent-tooling/fixtures/planning-v1.json": {
     authoritative: [],
     authoritativeSubtrees: [],
-    nonModelFacingSubtrees: [[]],
+    nonModelFacingSubtrees: [
+      ["$schema"],
+      ["schema"],
+      ["fixture_set_id"],
+      ["seed_clock"],
+      ["symbolic_identity_rule"],
+      ["impact_scoring"],
+      ["shared"],
+      ["fixtures"],
+      ["common_expected"],
+    ],
   },
   "docs/agent-tooling/fixtures/planning-v1.predicates.json": {
     authoritative: [["common", "*", "expected", "required", "*"]],
     authoritativeSubtrees: [],
-    nonModelFacingSubtrees: [[]],
+    nonModelFacingSubtrees: [
+      ["$schema"],
+      ["schema"],
+      ["predicate_set_id"],
+      ["fixture_set"],
+      ["common"],
+      ["plan_created"],
+      ["scenario_overrides"],
+    ],
   },
   "docs/agent-tooling/fixtures/planning-v1.predicates.schema.json": {
     authoritative: [],
     authoritativeSubtrees: [],
-    nonModelFacingSubtrees: [[]],
+    nonModelFacingSubtrees: [["$schema"], ["$id"], ["title"], ["type"], ["required"], ["properties"], ["$defs"]],
   },
   "docs/agent-tooling/fixtures/planning-v1.schema.json": {
     authoritative: [],
     authoritativeSubtrees: [],
-    nonModelFacingSubtrees: [[]],
+    nonModelFacingSubtrees: [["$schema"], ["$id"], ["title"], ["type"], ["required"], ["properties"], ["$defs"]],
   },
   "docs/agent-tooling/g0-readiness.json": {
     authoritative: [],
     authoritativeSubtrees: [],
-    nonModelFacingSubtrees: [[]],
+    nonModelFacingSubtrees: [
+      ["$schema"],
+      ["recordId"],
+      ["status"],
+      ["approval"],
+      ["owners"],
+      ["integrationLock"],
+      ["evidenceDigests"],
+      ["clauses"],
+      ["preflightCommand"],
+      ["normalVerificationCommand"],
+    ],
   },
   "docs/agent-tooling/g0-readiness.schema.json": {
     authoritative: [],
     authoritativeSubtrees: [],
-    nonModelFacingSubtrees: [[]],
+    nonModelFacingSubtrees: [
+      ["$schema"],
+      ["$id"],
+      ["title"],
+      ["type"],
+      ["required"],
+      ["properties"],
+      ["$defs"],
+      ["allOf"],
+    ],
   },
   "docs/agent-tooling/integration-lock.g0.json": {
     authoritative: [],
     authoritativeSubtrees: [],
-    nonModelFacingSubtrees: [[]],
+    nonModelFacingSubtrees: [
+      ["$schema"],
+      ["lockId"],
+      ["status"],
+      ["reviewedBaseline"],
+      ["repositories"],
+      ["digests"],
+      ["seal"],
+      ["pendingInputs"],
+      ["owners"],
+    ],
   },
   "docs/agent-tooling/integration-lock.schema.json": {
     authoritative: [],
     authoritativeSubtrees: [],
-    nonModelFacingSubtrees: [[]],
+    nonModelFacingSubtrees: [["$schema"], ["$id"], ["title"], ["type"], ["required"], ["properties"]],
   },
   "docs/agent-tooling/inventories/plane-mcp-v0.2.11.json": {
     authoritative: [],
     authoritativeSubtrees: [],
-    nonModelFacingSubtrees: [[]],
+    nonModelFacingSubtrees: [["repository"], ["commit"], ["version"], ["tools"]],
   },
   "docs/agent-tooling/model-facing-surface.json": {
     authoritative: [
@@ -998,22 +1056,84 @@ const structuredAuthority = {
       ["names", "*", "description"],
     ],
     authoritativeSubtrees: [],
-    nonModelFacingSubtrees: [[]],
+    nonModelFacingSubtrees: [
+      ["$schema"],
+      ["surfaceId"],
+      ["status"],
+      ["g0ContractPolicy"],
+      ["names", "*", "kind"],
+      ["names", "*", "operationId"],
+      ["names", "*", "disclosure"],
+      ["retiredNames"],
+    ],
   },
   "docs/agent-tooling/model-facing-surface.schema.json": {
     authoritative: [],
     authoritativeSubtrees: [["properties", "names", "items", "properties", "description"]],
-    nonModelFacingSubtrees: [[]],
+    nonModelFacingSubtrees: [
+      ["$schema"],
+      ["$id"],
+      ["title"],
+      ["type"],
+      ["required"],
+      ["properties", "$schema"],
+      ["properties", "surfaceId"],
+      ["properties", "status"],
+      ["properties", "g0ContractPolicy"],
+      ["properties", "names", "type"],
+      ["properties", "names", "items", "required"],
+      ["properties", "names", "items", "type"],
+      ["properties", "names", "items", "properties", "name"],
+      ["properties", "names", "items", "properties", "kind"],
+      ["properties", "names", "items", "properties", "operationId"],
+      ["properties", "names", "items", "properties", "disclosure"],
+      ["properties", "names", "items", "properties", "eager"],
+      ["properties", "retiredNames"],
+    ],
   },
   "docs/agent-tooling/ownership-map.json": {
     authoritative: [],
     authoritativeSubtrees: [],
-    nonModelFacingSubtrees: [[]],
+    nonModelFacingSubtrees: [
+      ["$schema"],
+      ["mapId"],
+      ["status"],
+      ["repositoryRoot"],
+      ["overlapRule"],
+      ["owners", "*", "ownerId"],
+      ["owners", "*", "role"],
+      ["owners", "*", "repository"],
+      ["owners", "*", "planLaneIds"],
+      ["owners", "*", "writePaths"],
+      ["owners", "*", "readPaths"],
+      ["owners", "*", "restriction"],
+      ["surfaces", "*", "surfaceId"],
+      ["surfaces", "*", "description"],
+      ["surfaces", "*", "repository"],
+      ["surfaces", "*", "paths"],
+      ["surfaces", "*", "ownerId"],
+      ["surfaces", "*", "planLaneIds"],
+      ["requiredSurfaceIds"],
+    ],
   },
   "docs/agent-tooling/ownership-map.schema.json": {
     authoritative: [],
     authoritativeSubtrees: [],
-    nonModelFacingSubtrees: [[]],
+    nonModelFacingSubtrees: [
+      ["$schema"],
+      ["$id"],
+      ["title"],
+      ["type"],
+      ["required"],
+      ["properties", "$schema"],
+      ["properties", "mapId"],
+      ["properties", "status"],
+      ["properties", "repositoryRoot"],
+      ["properties", "overlapRule"],
+      ["properties", "owners"],
+      ["properties", "surfaces"],
+      ["properties", "requiredSurfaceIds"],
+    ],
   },
 };
 
@@ -1662,9 +1782,9 @@ function retiredNameOccurrences(line, retiredNames) {
     );
 }
 
-function retiredNameViolations(line, retiredNames, { structured = false } = {}) {
+function retiredNameViolations(line, retiredNames, { authoritative = false, structured = false } = {}) {
   const occurrences = retiredNameOccurrences(line, retiredNames);
-  if (occurrences.length === 0 || (!structured && !hasAuthorityMarker(line))) return new Set();
+  if (occurrences.length === 0 || (!structured && !authoritative && !hasAuthorityMarker(line))) return new Set();
   const internalRanges = designatedInternalIdentifierRanges(line);
   const pathRanges = ordinaryPathRanges(line);
   const historical = classifyHistoricalOccurrences(line, occurrences);
@@ -1871,7 +1991,9 @@ function checkRetiredNames() {
       const section = sectionIndex === -1 ? "preamble" : sectionPolicy.headings[sectionIndex].heading;
       const classification =
         sectionIndex === -1 ? sectionPolicy.preamble : sectionPolicy.headings[sectionIndex].classification;
-      const violations = retiredNameViolations(line, retired);
+      const violations = retiredNameViolations(line, retired, {
+        authoritative: classification === "authoritative/model-facing",
+      });
       for (const name of violations)
         if (classification === "authoritative/model-facing")
           throw new Error(`${path} authoritatively uses retired name ${name}`);
