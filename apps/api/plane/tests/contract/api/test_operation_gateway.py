@@ -1355,6 +1355,83 @@ def test_separated_audit_boot_and_runtime_probes_cover_membership_and_trigger_po
 
 @pytest.mark.contract
 @pytest.mark.django_db(transaction=True)
+def test_audit_schema_owner_topology_is_catalog_bound_and_rejects_owner_changes():
+    runtime_role = f"gateway_schema_runtime_{uuid.uuid4().hex[:10]}"
+    unrelated_login = f"gateway_schema_login_{uuid.uuid4().hex[:10]}"
+    unrelated_no_login = f"gateway_schema_nologin_{uuid.uuid4().hex[:10]}"
+    governance_role = settings.PLANE_AUDIT_GOVERNANCE_ROLE
+    migration_role = settings.PLANE_AUDIT_MIGRATION_ROLE
+    original_schema_owner = None
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT schema_owner.rolname, database_owner.rolname "
+            "FROM pg_namespace AS schema_info "
+            "JOIN pg_roles AS schema_owner ON schema_owner.oid = schema_info.nspowner "
+            "CROSS JOIN pg_database AS database_info "
+            "JOIN pg_roles AS database_owner ON database_owner.oid = database_info.datdba "
+            "WHERE schema_info.nspname = current_schema() "
+            "AND database_info.datname = current_database()"
+        )
+        original_schema_owner, database_owner = cursor.fetchone()
+        cursor.execute(f"CREATE ROLE \"{runtime_role}\" LOGIN NOINHERIT PASSWORD 'probe'")
+        cursor.execute(f"CREATE ROLE \"{unrelated_login}\" LOGIN NOINHERIT PASSWORD 'probe'")
+        cursor.execute(f'CREATE ROLE "{unrelated_no_login}" NOLOGIN NOINHERIT')
+
+    try:
+        with override_settings(
+            PLANE_AUDIT_ENFORCE_ROLE_SEPARATION=True,
+            PLANE_AUDIT_RUNTIME_ROLE=runtime_role,
+            PLANE_AUDIT_MIGRATION_ROLE=migration_role,
+        ):
+            call_command("bootstrap_operation_gateway_audit")
+            approved_owner_roles = {
+                "pg_database_owner",
+                database_owner,
+                migration_role,
+                governance_role,
+            }
+            assert original_schema_owner in approved_owner_roles
+
+            for approved_owner in sorted(approved_owner_roles):
+                if not approved_owner:
+                    continue
+                with connection.cursor() as cursor:
+                    cursor.execute(f'ALTER SCHEMA public OWNER TO "{approved_owner}"')
+                    cursor.execute(f'SET ROLE "{runtime_role}"')
+                verify_audit_role_boundary()
+                with connection.cursor() as cursor:
+                    cursor.execute("RESET ROLE")
+
+            for unrelated_owner in (unrelated_login, unrelated_no_login, runtime_role):
+                with connection.cursor() as cursor:
+                    cursor.execute(f'ALTER SCHEMA public OWNER TO "{unrelated_owner}"')
+                    cursor.execute(f'SET ROLE "{runtime_role}"')
+                with pytest.raises(AuditRoleBoundaryError, match="owner topology"):
+                    verify_audit_role_boundary()
+                with connection.cursor() as cursor:
+                    cursor.execute("RESET ROLE")
+
+            with connection.cursor() as cursor:
+                cursor.execute(f'ALTER SCHEMA public OWNER TO "{governance_role}"')
+                cursor.execute(f'GRANT "{governance_role}" TO "{runtime_role}"')
+                cursor.execute(f'SET ROLE "{runtime_role}"')
+            with pytest.raises(AuditRoleBoundaryError, match="protected role|schema owner"):
+                verify_audit_role_boundary()
+            with connection.cursor() as cursor:
+                cursor.execute("RESET ROLE")
+                cursor.execute(f'REVOKE "{governance_role}" FROM "{runtime_role}"')
+    finally:
+        with connection.cursor() as cursor:
+            cursor.execute("RESET ROLE")
+            if original_schema_owner:
+                cursor.execute(f'ALTER SCHEMA public OWNER TO "{original_schema_owner}"')
+            cursor.execute(f'DROP ROLE IF EXISTS "{runtime_role}"')
+            cursor.execute(f'DROP ROLE IF EXISTS "{unrelated_login}"')
+            cursor.execute(f'DROP ROLE IF EXISTS "{unrelated_no_login}"')
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
 def test_rejected_production_role_cannot_reach_any_public_gateway_path():
     request = SimpleNamespace(user=SimpleNamespace(id=uuid.uuid4()), META={})
     gateway = OperationGateway()

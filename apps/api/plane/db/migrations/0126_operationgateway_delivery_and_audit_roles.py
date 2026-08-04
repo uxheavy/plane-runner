@@ -474,6 +474,15 @@ def unconfigure_audit_role_boundary(apps, schema_editor):
         cursor.execute("SELECT current_schema()")
         schema_ident = connection.ops.quote_name(cursor.fetchone()[0])
         cursor.execute(
+            """
+            SELECT schema_owner.rolname
+            FROM pg_namespace AS audit_schema
+            JOIN pg_roles AS schema_owner ON schema_owner.oid = audit_schema.nspowner
+            WHERE audit_schema.nspname = current_schema()
+            """
+        )
+        schema_owner = cursor.fetchone()[0]
+        cursor.execute(
             f"REVOKE SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {schema_ident} FROM {runtime_ident}"
         )
         cursor.execute(f"REVOKE USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA {schema_ident} FROM {runtime_ident}")
@@ -490,9 +499,26 @@ def unconfigure_audit_role_boundary(apps, schema_editor):
             f"ALTER DEFAULT PRIVILEGES FOR ROLE {migration_ident} IN SCHEMA {schema_ident} "
             f"REVOKE EXECUTE ON FUNCTIONS FROM {runtime_ident}"
         )
-        cursor.execute(f"REVOKE ALL ON TABLE operation_gateway_audit FROM {runtime_ident}")
-        cursor.execute(f"REVOKE USAGE, CREATE ON SCHEMA {schema_ident} FROM {runtime_ident}")
-        cursor.execute(f"GRANT USAGE, CREATE ON SCHEMA {schema_ident} TO PUBLIC")
+        # Remove only the explicit 0126 grants. In particular, never restore
+        # PostgreSQL's broad PUBLIC schema defaults while downgrading: a
+        # rollback must remain safe even when 0125 was created on a fresh
+        # PostgreSQL 15+ database.
+        cursor.execute(
+            f"REVOKE SELECT, INSERT ON TABLE operation_gateway_audit FROM {runtime_ident}, {migration_ident}"
+        )
+        cursor.execute(f"REVOKE ALL ON FUNCTION operation_gateway_audit_append_only() FROM {governance_ident}")
+        schema_grants_to_revoke = [runtime_ident]
+        if schema_owner != settings.PLANE_AUDIT_MIGRATION_ROLE:
+            schema_grants_to_revoke.append(migration_ident)
+        if schema_owner != settings.PLANE_AUDIT_GOVERNANCE_ROLE:
+            schema_grants_to_revoke.append(governance_ident)
+        cursor.execute(f"REVOKE USAGE, CREATE ON SCHEMA {schema_ident} FROM {', '.join(schema_grants_to_revoke)}")
+        if schema_owner == settings.PLANE_AUDIT_MIGRATION_ROLE:
+            cursor.execute(f"GRANT USAGE, CREATE ON SCHEMA {schema_ident} TO {migration_ident}")
+        elif schema_owner == settings.PLANE_AUDIT_GOVERNANCE_ROLE:
+            cursor.execute(f"GRANT USAGE, CREATE ON SCHEMA {schema_ident} TO {governance_ident}")
+        cursor.execute("ALTER FUNCTION operation_gateway_audit_append_only() SECURITY INVOKER")
+        cursor.execute("ALTER FUNCTION operation_gateway_audit_append_only() RESET search_path")
         cursor.execute(
             """
             SELECT c.relname

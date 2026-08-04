@@ -73,6 +73,7 @@ def _role_reachable(cursor: Any, member: str, target: str) -> bool:
 
 _TABLE_PRIVILEGES = frozenset({"DELETE", "INSERT", "REFERENCES", "SELECT", "TRIGGER", "TRUNCATE", "UPDATE"})
 _SEQUENCE_PRIVILEGES = frozenset({"SELECT", "UPDATE", "USAGE"})
+_POSTGRES_DATABASE_OWNER_ROLE = "pg_database_owner"
 
 
 def _fetch_acl_entries(cursor: Any, query: str, params: list[Any] | None = None) -> list[tuple[Any, ...]]:
@@ -218,6 +219,22 @@ def verify_audit_role_boundary() -> None:
         raise AuditRoleBoundaryError("The audit table is not owned by the governed audit role")
     if function_owner != governance_role:
         raise AuditRoleBoundaryError("The append-only trigger function is not owned by the governed audit role")
+    # PostgreSQL 15+ owns a fresh public schema by pg_database_owner. Supported
+    # upgrades may retain the catalog database owner or one of the explicit
+    # Plane migration/governance owners. The catalog-derived set is deliberate:
+    # the observed schema owner must never become an allowlist entry by itself.
+    approved_schema_owners = frozenset(
+        role
+        for role in (
+            _POSTGRES_DATABASE_OWNER_ROLE,
+            database_owner,
+            migration_role,
+            governance_role,
+        )
+        if role
+    )
+    if schema_owner not in approved_schema_owners or schema_owner == runtime_role:
+        raise AuditRoleBoundaryError("The audit schema has an unapproved owner topology")
     if not function_security_definer or function_config != ["search_path=pg_catalog"]:
         raise AuditRoleBoundaryError("The append-only trigger function has an unsafe execution context")
     if (
@@ -227,8 +244,6 @@ def verify_audit_role_boundary() -> None:
         raise AuditRoleBoundaryError("The append-only trigger function body is not the protected implementation")
     if public_can_execute or runtime_can_execute or not migration_can_execute or not governance_can_execute:
         raise AuditRoleBoundaryError("The append-only trigger function has an invalid ACL")
-    if schema_owner == runtime_role:
-        raise AuditRoleBoundaryError("The audit schema is owned by the runtime role")
     if (
         not can_use_schema
         or can_create_in_schema
@@ -309,15 +324,20 @@ def verify_audit_role_boundary() -> None:
             WHERE audit_schema.nspname = current_schema()
             """,
         )
+        schema_acl_allowlist = {
+            runtime_role: frozenset({"USAGE"}),
+            migration_role: frozenset({"CREATE", "USAGE"}),
+            governance_role: frozenset({"USAGE"}),
+            _POSTGRES_DATABASE_OWNER_ROLE: frozenset({"CREATE", "USAGE"}),
+            database_owner: frozenset({"CREATE", "USAGE"}),
+        }
+        # This only supplies owner privileges after schema_owner has passed the
+        # explicit catalog-topology check above; it does not approve the value.
+        schema_acl_allowlist[schema_owner] = frozenset({"CREATE", "USAGE"})
         _validate_acl_allowlist(
             "audit schema",
             schema_acl_entries,
-            {
-                schema_owner: frozenset({"CREATE", "USAGE"}),
-                runtime_role: frozenset({"USAGE"}),
-                migration_role: frozenset({"CREATE", "USAGE"}),
-                governance_role: frozenset({"USAGE"}),
-            },
+            schema_acl_allowlist,
             frozenset({schema_owner}),
         )
 
@@ -402,6 +422,12 @@ def verify_audit_role_boundary() -> None:
             cursor.execute("SELECT pg_has_role(%s, %s, 'USAGE')", [runtime_role, target_role])
             if cursor.fetchone()[0]:
                 raise AuditRoleBoundaryError(f"The audit runtime role can SET ROLE to the protected role {target_role}")
+        if schema_owner != _POSTGRES_DATABASE_OWNER_ROLE and _role_reachable(cursor, runtime_role, schema_owner):
+            raise AuditRoleBoundaryError("The audit runtime role can reach the audit schema owner")
+        if schema_owner != _POSTGRES_DATABASE_OWNER_ROLE:
+            cursor.execute("SELECT pg_has_role(%s, %s, 'USAGE')", [runtime_role, schema_owner])
+            if cursor.fetchone()[0]:
+                raise AuditRoleBoundaryError("The audit runtime role can SET ROLE to the audit schema owner")
 
         cursor.execute(
             """

@@ -1,4 +1,3 @@
-import ast
 import json
 import os
 import shutil
@@ -8,36 +7,13 @@ from pathlib import Path
 
 import pytest
 
+from plane.tests.contract.api.libpq_environment_baseline import LIBPQ_CONNECTION_ENVIRONMENT_NAMES_V1
+
 
 API_ROOT = Path(__file__).resolve().parents[4]
 REPOSITORY_ROOT = API_ROOT.parents[1]
 COMPOSE_FILE = REPOSITORY_ROOT / "deployments/cli/community/docker-compose.yml"
 MIGRATOR_ENTRYPOINT = API_ROOT / "bin/docker-entrypoint-migrator.sh"
-
-
-def _canonical_environment_names() -> tuple[str, ...]:
-    tree = ast.parse((API_ROOT / "plane/settings/production.py").read_text())
-    assignments = {
-        target.id: node.value
-        for node in tree.body
-        if isinstance(node, ast.Assign)
-        for target in node.targets
-        if isinstance(target, ast.Name)
-    }
-
-    def evaluate(name: str) -> set[str]:
-        value = assignments[name]
-        if isinstance(value, ast.Call):
-            value = value.args[0]
-        names: set[str] = set()
-        for element in value.elts:
-            if isinstance(element, ast.Starred):
-                names.update(evaluate(element.value.id))
-            else:
-                names.add(ast.literal_eval(element))
-        return names
-
-    return tuple(sorted(evaluate("_MIGRATION_DATABASE_ENVIRONMENT_NAMES_V1")))
 
 
 MIGRATION_POSTGRES_VARS = (
@@ -49,7 +25,23 @@ MIGRATION_POSTGRES_VARS = (
     "POSTGRES_PASSWORD",
 )
 MIGRATION_ENV_VARS = (
-    *_canonical_environment_names(),
+    *LIBPQ_CONNECTION_ENVIRONMENT_NAMES_V1,
+    "PGDATA",
+    "POSTGRES_HOST",
+    "POSTGRES_PORT",
+    "POSTGRES_DB",
+    "POSTGRES_USER",
+    "POSTGRES_PASSWORD",
+    "POSTGRES_INITDB_ARGS",
+    "POSTGRES_INITDB_WALDIR",
+    "POSTGRES_HOST_AUTH_METHOD",
+    "POSTGRES_READ_REPLICA_DB",
+    "POSTGRES_READ_REPLICA_USER",
+    "POSTGRES_READ_REPLICA_PASSWORD",
+    "POSTGRES_READ_REPLICA_HOST",
+    "POSTGRES_READ_REPLICA_PORT",
+    "DATABASE_READ_REPLICA_URL",
+    "PLANE_AUDIT_RUNTIME_PASSWORD",
     "DATABASE_MIGRATION_URL",
 )
 MIGRATION_DATABASE_PREFIXES = (
@@ -99,6 +91,27 @@ def _boot_settings(environment: dict[str, str]) -> subprocess.CompletedProcess[s
         text=True,
         check=False,
     )
+
+
+def _production_libpq_environment_names() -> frozenset[str]:
+    environment = _settings_environment()
+    environment["DATABASE_RUNTIME_URL"] = "postgresql://plane_runtime:runtime@db/plane"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import django; django.setup(); "
+            "from plane.settings.production import _LIBPQ_CONNECTION_ENVIRONMENT_NAMES_V1 as names; "
+            "import json; print(json.dumps(sorted(names)))",
+        ],
+        cwd=API_ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    return frozenset(json.loads(result.stdout))
 
 
 def _run_migrator(environment: dict[str, str], tmp_path: Path) -> tuple[subprocess.CompletedProcess[str], Path]:
@@ -381,22 +394,11 @@ def test_migration_settings_require_exact_configured_migration_role():
 
 
 @pytest.mark.contract
-def test_runtime_denylist_is_generated_from_the_versioned_canonical_inventory():
-    required = {
-        "PGCHANNELBINDING",
-        "PGGSSENCMODE",
-        "PGGSSLIB",
-        "PGKRBSRVNAME",
-        "PGREQUIREPEER",
-        "PGSSLCOMPRESSION",
-        "PGSSLMINPROTOCOLVERSION",
-        "PGSSLMAXPROTOCOLVERSION",
-        "PGSSLSNI",
-        "PGCLIENTENCODING",
-    }
-
-    assert required <= set(_canonical_environment_names())
-    assert "PGCHANNELBIND" in _canonical_environment_names()
+def test_runtime_denylist_matches_the_independent_reviewed_libpq_baseline():
+    assert _production_libpq_environment_names() == LIBPQ_CONNECTION_ENVIRONMENT_NAMES_V1
+    assert {"PGUSER", "PGPASSWORD", "PGHOST"} <= LIBPQ_CONNECTION_ENVIRONMENT_NAMES_V1
+    assert "PGCHANNELBINDING" in LIBPQ_CONNECTION_ENVIRONMENT_NAMES_V1
+    assert "PGCHANNELBIND" in LIBPQ_CONNECTION_ENVIRONMENT_NAMES_V1
 
 
 @pytest.mark.contract

@@ -2,6 +2,7 @@ import uuid
 from datetime import timedelta
 
 import pytest
+from django.conf import settings
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.utils import timezone
@@ -31,6 +32,138 @@ def _audit_kwargs(*, request_id, operation_id, workspace_slug, caller_id, key, c
         "correlation_id": correlation,
         "request_digest": digest,
     }
+
+
+def _safe_catalog_snapshot():
+    """Capture the 0125 audit catalog contract, excluding PUBLIC entries."""
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT table_owner.rolname, function_owner.rolname,
+                   schema_owner.rolname, audit_function.prosecdef,
+                   audit_function.proconfig
+            FROM pg_class AS audit_table
+            JOIN pg_namespace AS audit_schema ON audit_schema.oid = audit_table.relnamespace
+            JOIN pg_roles AS table_owner ON table_owner.oid = audit_table.relowner
+            JOIN pg_proc AS audit_function
+              ON audit_function.oid = to_regprocedure('operation_gateway_audit_append_only()')
+            JOIN pg_roles AS function_owner ON function_owner.oid = audit_function.proowner
+            JOIN pg_roles AS schema_owner ON schema_owner.oid = audit_schema.nspowner
+            WHERE audit_schema.nspname = current_schema()
+              AND audit_table.relname = 'operation_gateway_audit'
+            """
+        )
+        owners = cursor.fetchone()
+
+        def acl(query):
+            cursor.execute(query)
+            return tuple(cursor.fetchall())
+
+        table_acl = acl(
+            """
+            SELECT grantor.rolname, grantee.rolname, exploded.privilege_type,
+                   exploded.is_grantable
+            FROM pg_class AS object_info
+            JOIN pg_namespace AS object_schema ON object_schema.oid = object_info.relnamespace
+            JOIN LATERAL aclexplode(
+                COALESCE(object_info.relacl, acldefault('r', object_info.relowner))
+            ) AS exploded ON exploded.grantee <> 0
+            JOIN pg_roles AS grantor ON grantor.oid = exploded.grantor
+            JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
+            WHERE object_schema.nspname = current_schema()
+              AND object_info.relname = 'operation_gateway_audit'
+            ORDER BY 1, 2, 3, 4
+            """
+        )
+        function_acl = acl(
+            """
+            SELECT grantor.rolname, grantee.rolname, exploded.privilege_type,
+                   exploded.is_grantable
+            FROM pg_proc AS object_info
+            JOIN LATERAL aclexplode(
+                COALESCE(object_info.proacl, acldefault('f', object_info.proowner))
+            ) AS exploded ON exploded.grantee <> 0
+            JOIN pg_roles AS grantor ON grantor.oid = exploded.grantor
+            JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
+            WHERE object_info.oid = to_regprocedure('operation_gateway_audit_append_only()')
+            ORDER BY 1, 2, 3, 4
+            """
+        )
+        schema_acl = acl(
+            """
+            SELECT grantor.rolname, grantee.rolname, exploded.privilege_type,
+                   exploded.is_grantable
+            FROM pg_namespace AS object_info
+            JOIN LATERAL aclexplode(
+                COALESCE(object_info.nspacl, acldefault('n', object_info.nspowner))
+            ) AS exploded ON exploded.grantee <> 0
+            JOIN pg_roles AS grantor ON grantor.oid = exploded.grantor
+            JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
+            WHERE object_info.nspname = current_schema()
+            ORDER BY 1, 2, 3, 4
+            """
+        )
+        sequence_acl = acl(
+            """
+            SELECT object_info.relname, object_owner.rolname, grantor.rolname,
+                   grantee.rolname, exploded.privilege_type, exploded.is_grantable
+            FROM pg_class AS object_info
+            JOIN pg_namespace AS object_schema ON object_schema.oid = object_info.relnamespace
+            JOIN pg_roles AS object_owner ON object_owner.oid = object_info.relowner
+            JOIN LATERAL aclexplode(
+                COALESCE(object_info.relacl, acldefault('S', object_info.relowner))
+            ) AS exploded ON exploded.grantee <> 0
+            JOIN pg_roles AS grantor ON grantor.oid = exploded.grantor
+            JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
+            WHERE object_schema.nspname = current_schema()
+              AND object_info.relkind = 'S'
+              AND object_info.relname LIKE 'operation_gateway_audit%'
+            ORDER BY 1, 2, 3, 4, 5, 6
+            """
+        )
+        cursor.execute(
+            """
+            SELECT default_owner.rolname, defaults.defaclnamespace,
+                   defaults.defaclobjtype, grantor.rolname, grantee.rolname,
+                   exploded.privilege_type, exploded.is_grantable
+            FROM pg_default_acl AS defaults
+            JOIN pg_roles AS default_owner ON default_owner.oid = defaults.defaclrole
+            JOIN LATERAL aclexplode(defaults.defaclacl) AS exploded ON exploded.grantee <> 0
+            JOIN pg_roles AS grantor ON grantor.oid = exploded.grantor
+            JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
+            WHERE defaults.defaclobjtype IN ('r', 'S', 'f')
+              AND (
+                  defaults.defaclnamespace = 0
+                  OR defaults.defaclnamespace = (
+                      SELECT oid FROM pg_namespace WHERE nspname = current_schema()
+                  )
+              )
+            ORDER BY 1, 2, 3, 4, 5, 6, 7
+            """
+        )
+        default_acl = tuple(cursor.fetchall())
+        cursor.execute(
+            """
+            SELECT role_name.rolname, member_name.rolname, memberships.admin_option
+            FROM pg_auth_members AS memberships
+            JOIN pg_roles AS role_name ON role_name.oid = memberships.roleid
+            JOIN pg_roles AS member_name ON member_name.oid = memberships.member
+            WHERE role_name.rolname IN (%s, %s, %s)
+               OR member_name.rolname IN (%s, %s, %s)
+            ORDER BY 1, 2, 3
+            """,
+            [
+                settings.PLANE_AUDIT_RUNTIME_ROLE,
+                settings.PLANE_AUDIT_MIGRATION_ROLE,
+                settings.PLANE_AUDIT_GOVERNANCE_ROLE,
+                settings.PLANE_AUDIT_RUNTIME_ROLE,
+                settings.PLANE_AUDIT_MIGRATION_ROLE,
+                settings.PLANE_AUDIT_GOVERNANCE_ROLE,
+            ],
+        )
+        role_grants = tuple(cursor.fetchall())
+    return owners, table_acl, function_acl, schema_acl, sequence_acl, default_acl, role_grants
 
 
 @pytest.mark.contract
@@ -150,6 +283,7 @@ def test_historical_invocation_backfill_is_deterministic_across_directions():
         state="succeeded",
         attempts=1,
     )
+    pre_safe_catalog = _safe_catalog_snapshot()
 
     _, head_apps = _migrate_and_reload(HEAD_MIGRATION)
     NewIdempotency = head_apps.get_model("db", "OperationGatewayIdempotency")
@@ -271,6 +405,27 @@ def test_historical_invocation_backfill_is_deterministic_across_directions():
         "created_at",
         "updated_at",
     } <= set(reverse_row.payload["__plane_0126_reverse__"]["rows"][0])
+    assert _safe_catalog_snapshot() == pre_safe_catalog
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM pg_namespace AS schema_info
+                JOIN LATERAL aclexplode(
+                    COALESCE(schema_info.nspacl, acldefault('n', schema_info.nspowner))
+                ) AS exploded ON exploded.grantee = 0
+                WHERE schema_info.nspname = current_schema()
+                  AND exploded.privilege_type IN ('CREATE', 'USAGE')
+            ),
+            has_schema_privilege('public', current_schema(), 'CREATE'),
+            has_schema_privilege('public', current_schema(), 'USAGE')
+            """
+        )
+        public_acl, public_can_create, public_can_use = cursor.fetchone()
+    assert public_acl is False
+    assert public_can_create is False
+    assert public_can_use is False
     _, roundtrip_apps = _migrate_and_reload(HEAD_MIGRATION)
     RoundtripPublication = roundtrip_apps.get_model("db", "OperationGatewayPublication")
     assert publication_snapshot(RoundtripPublication, roundtrip_record.pk) == before_roundtrip
