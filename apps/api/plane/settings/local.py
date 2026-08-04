@@ -9,6 +9,7 @@ import os
 from .common import *  # noqa
 
 DEBUG = True
+PLANE_AUDIT_ENFORCE_ROLE_SEPARATION = False
 
 # Debug Toolbar settings
 INSTALLED_APPS += ("debug_toolbar",)  # noqa

@@ -40,10 +40,12 @@ from .contracts import (
     canonical_json,
 )
 from .publications import (
+    activity_id_for_publication,
     create_publication_intents,
     dispatch_publication_once,
     schedule_publications_on_commit,
 )
+from .role_boundary import verify_audit_role_boundary
 from .work_items import WorkItemRenameFailure, WorkItemRenameOutcome, WorkItemRenameService
 
 READ_RESULT_FIELDS = ("id", "name", "sequence_id", "priority", "state", "project", "workspace")
@@ -105,6 +107,7 @@ class OperationGateway:
     """One deep application boundary for the initial gateway vertical slice."""
 
     def execute(self, request: Any, envelope: dict[str, Any]) -> tuple[GatewayEnvelope, int]:
+        verify_audit_role_boundary()
         caller_id = str(request.user.id)
         operation_id = envelope["operation_id"]
         workspace_slug = envelope["workspace_slug"]
@@ -332,8 +335,9 @@ class OperationGateway:
                 "project_id": str(issue.project_id),
                 "current_instance": current_instance,
                 "epoch": record.updated_at.timestamp(),
+                "activity_id": activity_id_for_publication(f"{record.id}:activity"),
                 "origin": None,
-                "expected": False,
+                "expected": True,
             },
             "notification": {
                 "type": "issue.activity.updated",
@@ -343,6 +347,7 @@ class OperationGateway:
                 "subscriber": True,
                 "requested_data": requested_data,
                 "current_instance": current_instance,
+                "activity_id": activity_id_for_publication(f"{record.id}:activity"),
             },
             "webhook": {
                 "model_name": "issue",
@@ -354,7 +359,7 @@ class OperationGateway:
                 "origin": None,
             },
         }
-        create_publication_intents(record, payload)
+        create_publication_intents(record, payload, preserve_webhook_targets=True)
 
     def _begin_attempt_once(
         self,
@@ -474,6 +479,8 @@ class OperationGateway:
                             audit.id,
                             error,
                             True,
+                            request_id=audit.request_id,
+                            correlation_id=audit.correlation_id,
                         ),
                         409,
                     ),
@@ -530,7 +537,7 @@ class OperationGateway:
             return AttemptDecision(
                 workspace=workspace,
                 record=None,
-                response=self._replay_terminal(record, descriptor, workspace.slug, caller_id, replay_audit.id),
+                response=self._replay_terminal(record, descriptor, workspace.slug, caller_id, replay_audit),
             )
 
     def _run_attempt(
@@ -816,14 +823,26 @@ class OperationGateway:
             locked = OperationGatewayIdempotency.objects.select_for_update().get(pk=record.id)
             error = self._error("OUTCOME_UNKNOWN", False)
             if locked.state == OperationGatewayIdempotency.State.OUTCOME_UNKNOWN:
+                audit = self._write_invocation_pair(
+                    record=locked,
+                    correlation_id=locked.correlation_id,
+                    request_digest=request_digest,
+                    invocation_id=uuid.uuid4(),
+                    request_id=uuid.uuid4(),
+                    outcome=OperationGatewayAudit.Outcome.OUTCOME_UNKNOWN,
+                    result=locked.result,
+                    error=GatewayFailure("OUTCOME_UNKNOWN", 409, False),
+                )
                 return self._failure_envelope(
                     locked,
                     descriptor,
                     workspace_slug,
                     caller_id,
-                    locked.audit_receipt,
+                    audit.id,
                     error,
                     True,
+                    request_id=audit.request_id,
+                    correlation_id=audit.correlation_id,
                 ), 409
             audit = self._write_audit(
                 phase=OperationGatewayAudit.Phase.OUTCOME,
@@ -852,6 +871,7 @@ class OperationGateway:
             correlation_id=record.correlation_id,
             request_digest=record.request_digest,
             invocation_id=invocation_id,
+            request_id=uuid.uuid4(),
             outcome=OperationGatewayAudit.Outcome.OUTCOME_UNKNOWN,
             result=record.result,
             error=error,
@@ -873,6 +893,8 @@ class OperationGateway:
             audit.id,
             error,
             True,
+            request_id=audit.request_id,
+            correlation_id=audit.correlation_id,
         ), 409
 
     def _write_audit(
@@ -1000,7 +1022,7 @@ class OperationGateway:
         descriptor: OperationDescriptor,
         workspace_slug: str,
         caller_id: str,
-        audit_receipt: uuid.UUID,
+        replay_audit: OperationGatewayAudit,
     ) -> tuple[GatewayEnvelope, int]:
         if record.state == OperationGatewayIdempotency.State.SUCCEEDED and record.result is not None:
             return self._success_envelope(
@@ -1008,9 +1030,11 @@ class OperationGateway:
                 descriptor,
                 workspace_slug,
                 caller_id,
-                record.audit_receipt,
+                replay_audit.id,
                 record.result,
                 True,
+                request_id=replay_audit.request_id,
+                correlation_id=replay_audit.correlation_id,
             ), 200
         failure = self._failure_from_record(record) or GatewayFailure("UPSTREAM_FAILURE", 503, False)
         status_code = (
@@ -1023,9 +1047,11 @@ class OperationGateway:
             descriptor,
             workspace_slug,
             caller_id,
-            record.audit_receipt or audit_receipt,
+            replay_audit.id,
             self._error(failure.code, record.retryable),
             True,
+            request_id=replay_audit.request_id,
+            correlation_id=replay_audit.correlation_id,
         ), status_code
 
     def _direct_unknown(self, record: OperationGatewayIdempotency) -> tuple[GatewayFailureEnvelope, int]:
@@ -1059,14 +1085,17 @@ class OperationGateway:
         audit_receipt: uuid.UUID | None,
         result: dict[str, Any],
         replayed: bool,
+        *,
+        request_id: uuid.UUID | None = None,
+        correlation_id: str | None = None,
     ) -> GatewaySuccessEnvelope:
         envelope = self._envelope_base(
             descriptor.operation_id,
             workspace_slug,
             caller_id,
-            record.request_id,
+            request_id or record.request_id,
             record.idempotency_key,
-            record.correlation_id,
+            correlation_id or record.correlation_id,
             str(audit_receipt) if audit_receipt else None,
             replayed,
             record.workspace_id,
@@ -1083,14 +1112,17 @@ class OperationGateway:
         audit_receipt: uuid.UUID | None,
         error: GatewayError,
         replayed: bool,
+        *,
+        request_id: uuid.UUID | None = None,
+        correlation_id: str | None = None,
     ) -> GatewayFailureEnvelope:
         envelope = self._envelope_base(
             descriptor.operation_id,
             workspace_slug,
             caller_id,
-            record.request_id,
+            request_id or record.request_id,
             record.idempotency_key,
-            record.correlation_id,
+            correlation_id or record.correlation_id,
             str(audit_receipt) if audit_receipt else None,
             replayed,
             None,

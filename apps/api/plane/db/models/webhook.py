@@ -80,6 +80,11 @@ class WebhookLog(BaseModel):
 
     # Retry Count
     retry_count = models.PositiveSmallIntegerField(default=0)
+    # Present for Operation Gateway deliveries. Legacy webhook calls may keep
+    # this null and continue to create one log per attempt.
+    delivery_key = models.CharField(max_length=160, blank=True, null=True, unique=True)
+    delivery_state = models.CharField(max_length=32, blank=True, null=True)
+    delivery_result = models.JSONField(blank=True, null=True)
 
     class Meta:
         verbose_name = "Webhook Log"

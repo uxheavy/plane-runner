@@ -128,6 +128,8 @@ class OperationGatewayPublication(models.Model):
         RUNNING = "running", "Running"
         SUCCEEDED = "succeeded", "Succeeded"
         FAILED = "failed", "Failed"
+        RETRYABLE = "retryable", "Retryable"
+        OUTCOME_UNKNOWN = "outcome_unknown", "Outcome unknown"
 
     id = models.UUIDField(default=uuid.uuid4, primary_key=True, editable=False)
     idempotency = models.ForeignKey(
@@ -137,11 +139,18 @@ class OperationGatewayPublication(models.Model):
     )
     invocation_id = models.UUIDField(editable=False)
     kind = models.CharField(max_length=32, choices=Kind.choices)
+    # Non-null for a concrete webhook target. Activity and notification
+    # publications intentionally keep this null and are unique per kind.
+    target_id = models.UUIDField(null=True, blank=True, editable=False)
     publication_key = models.CharField(max_length=160, unique=True, editable=False)
     payload = models.JSONField(default=dict)
-    state = models.CharField(max_length=16, choices=State.choices, default=State.PENDING)
+    state = models.CharField(max_length=32, choices=State.choices, default=State.PENDING)
     attempts = models.PositiveIntegerField(default=0)
     last_error = models.CharField(max_length=255, blank=True, default="")
+    delivery_result = models.JSONField(null=True, blank=True)
+    # This marker is committed before an external request is attempted. An
+    # expired row with this marker is outcome_unknown and must not be replayed.
+    dispatch_started = models.BooleanField(default=False)
     lease_until = models.DateTimeField(null=True, blank=True)
     published_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -152,7 +161,13 @@ class OperationGatewayPublication(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=("idempotency", "kind"),
-                name="operation_gateway_publication_kind",
+                condition=models.Q(target_id__isnull=True),
+                name="operation_gateway_publication_kind_without_target",
+            ),
+            models.UniqueConstraint(
+                fields=("idempotency", "kind", "target_id"),
+                condition=models.Q(target_id__isnull=False),
+                name="operation_gateway_publication_target",
             )
         ]
         indexes = [

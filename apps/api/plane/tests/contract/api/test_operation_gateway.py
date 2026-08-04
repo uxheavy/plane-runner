@@ -2,10 +2,13 @@ import json
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
+from django.conf import settings
 from django.db import DatabaseError, close_old_connections, connection, transaction
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -16,6 +19,7 @@ from plane.db.models import (
     IssueActivity,
     IssueSubscriber,
     Notification,
+    EmailNotificationLog,
     OperationGatewayAudit,
     OperationGatewayIdempotency,
     OperationGatewayPublication,
@@ -24,11 +28,14 @@ from plane.db.models import (
     State,
     User,
     UserNotificationPreference,
+    Webhook,
+    WebhookLog,
     Workspace,
 )
 from plane.operation_gateway.contracts import MAX_RESULT_BYTES
 from plane.operation_gateway.gateway import OperationGateway
 from plane.operation_gateway.publications import dispatch_publication_once
+from plane.bgtasks.webhook_task import WebhookDeliveryResult, deliver_webhook_target
 from plane.operation_gateway.work_items import WorkItemRenameFailure, WorkItemRenameService
 
 
@@ -164,6 +171,31 @@ def test_denied_mutation_has_no_side_effect_and_audits_denial(create_user, works
 
 @pytest.mark.contract
 @pytest.mark.django_db(transaction=True)
+def test_terminal_failure_replay_returns_fresh_receipt(api_key_client, workspace, gateway_project, gateway_issue):
+    denied = User.objects.create(email="gateway-replay-denied@plane.so", username="gateway-replay-denied")
+    client = client_for_user(denied)
+    payload = gateway_body(
+        workspace,
+        gateway_project,
+        gateway_issue,
+        operation_id="work_item.rename",
+        key="failure-replay",
+        input_data={"name": "Never Changes"},
+    )
+    first = client.post("/api/v1/operations/", payload, format="json")
+    second = client.post("/api/v1/operations/", payload, format="json")
+    assert first.status_code == status.HTTP_403_FORBIDDEN
+    assert second.status_code == status.HTTP_403_FORBIDDEN
+    assert first.json()["request_id"] != second.json()["request_id"]
+    assert first.json()["audit_receipt"] != second.json()["audit_receipt"]
+    replay_audit = OperationGatewayAudit.objects.get(id=second.json()["audit_receipt"])
+    assert replay_audit.outcome == OperationGatewayAudit.Outcome.REPLAY
+    assert replay_audit.request_id == uuid.UUID(second.json()["request_id"])
+    assert replay_audit.invocation_id != OperationGatewayAudit.objects.get(id=first.json()["audit_receipt"]).invocation_id
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
 def test_mutation_replay_is_stable_and_does_not_repeat_plane_service(
     api_key_client, workspace, gateway_project, gateway_issue
 ):
@@ -182,11 +214,11 @@ def test_mutation_replay_is_stable_and_does_not_repeat_plane_service(
 
     assert first.status_code == status.HTTP_200_OK
     assert second.status_code == status.HTTP_200_OK
-    assert first.json()["request_id"] == second.json()["request_id"]
+    assert first.json()["request_id"] != second.json()["request_id"]
     assert first.json()["result"] == second.json()["result"]
     assert second.json()["idempotency"]["replayed"] is True
-    assert record.publications.count() == 3
-    assert record.publications.filter(state=OperationGatewayPublication.State.SUCCEEDED).count() == 3
+    assert record.publications.count() == 2
+    assert record.publications.filter(state=OperationGatewayPublication.State.SUCCEEDED).count() == 2
     assert IssueActivity.objects.filter(issue_id=gateway_issue.id, field="name").count() == 1
     gateway_issue.refresh_from_db()
     assert gateway_issue.name == "Renamed Once"
@@ -196,6 +228,11 @@ def test_mutation_replay_is_stable_and_does_not_repeat_plane_service(
         .order_by("created_at", "id")
         .values_list("outcome", flat=True)
     ) == ["intent", "success", "intent", "replay"]
+    replay_audit = OperationGatewayAudit.objects.get(id=second.json()["audit_receipt"])
+    assert replay_audit.outcome == OperationGatewayAudit.Outcome.REPLAY
+    assert replay_audit.request_id == uuid.UUID(second.json()["request_id"])
+    assert replay_audit.request_id != uuid.UUID(first.json()["request_id"])
+    assert replay_audit.invocation_id != record.invocation_id
 
 
 @pytest.mark.contract
@@ -250,11 +287,285 @@ def test_post_commit_dispatch_loss_is_recovered_from_durable_publications(
 
     assert first.status_code == status.HTTP_200_OK
     assert record.state == OperationGatewayIdempotency.State.SUCCEEDED
-    assert record.publications.filter(state=OperationGatewayPublication.State.PENDING).count() == 3
+    assert record.publications.filter(state=OperationGatewayPublication.State.PENDING).count() == 2
     reconciled, reconcile_status = OperationGateway().reconcile(record.id)
     assert reconcile_status == status.HTTP_200_OK
     assert reconciled["ok"] is True
+    assert record.publications.filter(state=OperationGatewayPublication.State.SUCCEEDED).count() == 2
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_webhook_intents_are_per_target_and_partial_success_is_independent(
+    api_key_client, workspace, gateway_project, gateway_issue, create_user
+):
+    first_webhook = Webhook.objects.create(
+        workspace=workspace,
+        url="https://hooks-one.example.com/plane",
+        issue=True,
+        created_by=create_user,
+    )
+    second_webhook = Webhook.objects.create(
+        workspace=workspace,
+        url="https://hooks-two.example.com/plane",
+        issue=True,
+        created_by=create_user,
+    )
+    payload = gateway_body(
+        workspace,
+        gateway_project,
+        gateway_issue,
+        operation_id="work_item.rename",
+        key="webhook-targets",
+        input_data={"name": "Targeted Rename"},
+    )
+    with patch("plane.operation_gateway.publications.schedule_publications") as schedule:
+        response = api_key_client.post("/api/v1/operations/", payload, format="json")
+        schedule.assert_called_once()
+        assert len(schedule.call_args.args[0]) == 4
+
+    record = OperationGatewayIdempotency.objects.get(idempotency_key="webhook-targets")
+    webhook_publications = list(
+        record.publications.filter(kind=OperationGatewayPublication.Kind.WEBHOOK).order_by("target_id")
+    )
+    assert {publication.target_id for publication in webhook_publications} == {
+        first_webhook.id,
+        second_webhook.id,
+    }
+    assert len({publication.publication_key for publication in webhook_publications}) == 2
+
+    def result_for_target(**kwargs):
+        if kwargs["webhook_id"] == str(first_webhook.id):
+            return WebhookDeliveryResult("succeeded", False, response_status=202)
+        return WebhookDeliveryResult("failed", False, response_status=400, error="rejected")
+
+    with patch("plane.operation_gateway.publications.deliver_webhook_target", side_effect=result_for_target) as deliver:
+        for publication in webhook_publications:
+            dispatch_publication_once(str(publication.id))
+        assert deliver.call_count == 2
+        assert {call.kwargs["delivery_key"] for call in deliver.call_args_list} == {
+            publication.publication_key for publication in webhook_publications
+        }
+
+    webhook_publications[0].refresh_from_db()
+    webhook_publications[1].refresh_from_db()
+    assert webhook_publications[0].state == OperationGatewayPublication.State.SUCCEEDED
+    assert webhook_publications[1].state == OperationGatewayPublication.State.FAILED
     assert record.publications.filter(state=OperationGatewayPublication.State.SUCCEEDED).count() == 3
+    assert response.status_code == status.HTTP_200_OK
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_concurrent_webhook_workers_have_one_durable_claim(
+    api_key_client, workspace, gateway_project, gateway_issue, create_user
+):
+    webhook = Webhook.objects.create(
+        workspace=workspace,
+        url="https://hooks-concurrent.example.com/plane",
+        issue=True,
+        created_by=create_user,
+    )
+    payload = gateway_body(
+        workspace,
+        gateway_project,
+        gateway_issue,
+        operation_id="work_item.rename",
+        key="webhook-concurrent-claim",
+        input_data={"name": "Concurrent Claim"},
+    )
+    with patch("plane.operation_gateway.publications.schedule_publications"):
+        api_key_client.post("/api/v1/operations/", payload, format="json")
+    publication = OperationGatewayPublication.objects.get(
+        idempotency__idempotency_key="webhook-concurrent-claim",
+        kind=OperationGatewayPublication.Kind.WEBHOOK,
+        target_id=webhook.id,
+    )
+    entered = threading.Event()
+    release = threading.Event()
+
+    def deliver(**kwargs):
+        entered.set()
+        assert release.wait(timeout=10)
+        return WebhookDeliveryResult("succeeded", False, response_status=204)
+
+    def dispatch():
+        close_old_connections()
+        try:
+            return dispatch_publication_once(str(publication.id))
+        finally:
+            close_old_connections()
+
+    with (
+        patch("plane.operation_gateway.publications.deliver_webhook_target", side_effect=deliver) as send,
+        ThreadPoolExecutor(max_workers=2) as executor,
+    ):
+        first_future = executor.submit(dispatch)
+        assert entered.wait(timeout=10)
+        second_future = executor.submit(dispatch)
+        second_future.result(timeout=10)
+        release.set()
+        first_future.result(timeout=20)
+
+    publication.refresh_from_db()
+    assert publication.state == OperationGatewayPublication.State.SUCCEEDED
+    assert publication.attempts == 1
+    assert send.call_count == 1
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_webhook_crash_before_send_is_retryable_but_ambiguous_delivery_is_not(
+    api_key_client, workspace, gateway_project, gateway_issue, create_user
+):
+    webhook = Webhook.objects.create(
+        workspace=workspace,
+        url="https://hooks-crash.example.com/plane",
+        issue=True,
+        created_by=create_user,
+    )
+    payload = gateway_body(
+        workspace,
+        gateway_project,
+        gateway_issue,
+        operation_id="work_item.rename",
+        key="webhook-crash",
+        input_data={"name": "Crash Rename"},
+    )
+    with patch("plane.operation_gateway.publications.schedule_publications"):
+        api_key_client.post("/api/v1/operations/", payload, format="json")
+    publication = OperationGatewayPublication.objects.get(
+        idempotency__idempotency_key="webhook-crash",
+        kind=OperationGatewayPublication.Kind.WEBHOOK,
+        target_id=webhook.id,
+    )
+
+    with patch(
+        "plane.operation_gateway.publications._mark_dispatch_started",
+        side_effect=RuntimeError("crashed before send"),
+    ):
+        with pytest.raises(RuntimeError):
+            dispatch_publication_once(str(publication.id))
+    publication.refresh_from_db()
+    assert publication.state == OperationGatewayPublication.State.RETRYABLE
+
+    with patch(
+        "plane.operation_gateway.publications.deliver_webhook_target",
+        side_effect=RuntimeError("worker died after request was sent"),
+    ):
+        with pytest.raises(RuntimeError):
+            dispatch_publication_once(str(publication.id))
+    publication.refresh_from_db()
+    assert publication.state == OperationGatewayPublication.State.OUTCOME_UNKNOWN
+    attempts = publication.attempts
+    dispatch_publication_once(str(publication.id))
+    publication.refresh_from_db()
+    assert publication.state == OperationGatewayPublication.State.OUTCOME_UNKNOWN
+    assert publication.attempts == attempts
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_webhook_success_before_worker_death_becomes_unknown_without_replay(
+    api_key_client, workspace, gateway_project, gateway_issue, create_user
+):
+    webhook = Webhook.objects.create(
+        workspace=workspace,
+        url="https://hooks-success-death.example.com/plane",
+        issue=True,
+        created_by=create_user,
+    )
+    payload = gateway_body(
+        workspace,
+        gateway_project,
+        gateway_issue,
+        operation_id="work_item.rename",
+        key="webhook-success-death",
+        input_data={"name": "Success Death"},
+    )
+    with patch("plane.operation_gateway.publications.schedule_publications"):
+        api_key_client.post("/api/v1/operations/", payload, format="json")
+    publication = OperationGatewayPublication.objects.get(
+        idempotency__idempotency_key="webhook-success-death",
+        kind=OperationGatewayPublication.Kind.WEBHOOK,
+        target_id=webhook.id,
+    )
+    result = WebhookDeliveryResult("succeeded", False, response_status=204)
+    with (
+        patch("plane.operation_gateway.publications.deliver_webhook_target", return_value=result) as deliver,
+        patch(
+            "plane.operation_gateway.publications._finalize_external_publication",
+            side_effect=RuntimeError("worker died after response"),
+        ),
+    ):
+        with pytest.raises(RuntimeError):
+            dispatch_publication_once(str(publication.id))
+
+    publication.refresh_from_db()
+    assert publication.state == OperationGatewayPublication.State.RUNNING
+    publication.lease_until = timezone.now() - timedelta(seconds=1)
+    publication.save(update_fields=["lease_until", "updated_at"])
+    dispatch_publication_once(str(publication.id))
+    publication.refresh_from_db()
+    assert publication.state == OperationGatewayPublication.State.OUTCOME_UNKNOWN
+    assert deliver.call_count == 1
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_webhook_adapter_records_stable_key_headers_and_definite_failure(
+    workspace, create_user
+):
+    webhook = Webhook.objects.create(
+        workspace=workspace,
+        url="https://hooks-definite.example.com/plane",
+        issue=True,
+        created_by=create_user,
+    )
+
+    class Response:
+        status_code = 404
+        headers = {"content-type": "text/plain"}
+        text = "not found"
+
+    with patch("plane.bgtasks.webhook_task.pinned_fetch", return_value=Response()) as fetch:
+        result = deliver_webhook_target(
+            webhook_id=str(webhook.id),
+            slug=workspace.slug,
+            event="issue",
+            event_data={"id": "issue"},
+            action="updated",
+            current_site=None,
+            activity=None,
+            delivery_key="gateway:webhook:stable",
+        )
+
+    assert result.state == OperationGatewayPublication.State.FAILED
+    assert result.retryable is False
+    assert fetch.call_args.kwargs["headers"]["X-Plane-Delivery"] == "gateway:webhook:stable"
+    assert fetch.call_args.kwargs["headers"]["Idempotency-Key"] == "gateway:webhook:stable"
+    log = WebhookLog.all_objects.get(delivery_key="gateway:webhook:stable")
+    assert log.delivery_state == OperationGatewayPublication.State.FAILED
+    assert log.delivery_result["response_status"] == 404
+
+    class ServerErrorResponse:
+        status_code = 503
+        headers = {}
+        text = "temporarily unavailable"
+
+    with patch("plane.bgtasks.webhook_task.pinned_fetch", return_value=ServerErrorResponse()):
+        server_error = deliver_webhook_target(
+            webhook_id=str(webhook.id),
+            slug=workspace.slug,
+            event="issue",
+            event_data={"id": "issue"},
+            action="updated",
+            current_site=None,
+            activity=None,
+            delivery_key="gateway:webhook:server-error",
+        )
+    assert server_error.state == OperationGatewayPublication.State.FAILED
+    assert server_error.retryable is False
 
 
 @pytest.mark.contract
@@ -451,7 +762,7 @@ def test_retryable_precommit_failure_reopens_only_after_rollback(
     record = OperationGatewayIdempotency.objects.get(idempotency_key="retryable-precommit")
     assert record.state == OperationGatewayIdempotency.State.SUCCEEDED
     assert record.retryable is False
-    assert record.publications.count() == 3
+    assert record.publications.count() == 2
     assert list(
         OperationGatewayAudit.objects.filter(idempotency_key="retryable-precommit")
         .order_by("created_at", "id")
@@ -486,7 +797,7 @@ def test_publication_worker_crash_rolls_back_effect_and_retry_is_idempotent(
             dispatch_publication_once(str(activity.id))
 
     activity.refresh_from_db()
-    assert activity.state == OperationGatewayPublication.State.PENDING
+    assert activity.state == OperationGatewayPublication.State.RETRYABLE
     assert IssueActivity.objects.filter(issue_id=gateway_issue.id, field="name").count() == 0
     dispatch_publication_once(str(activity.id))
     assert IssueActivity.objects.filter(issue_id=gateway_issue.id, field="name").count() == 1
@@ -543,6 +854,55 @@ def test_notification_publication_retries_without_duplicate_notifications(
     assert response.status_code == status.HTTP_200_OK
     assert count_after_first == 1
     assert Notification.objects.filter(entity_identifier=gateway_issue.id).count() == 1
+    assert Notification.objects.filter(entity_identifier=gateway_issue.id).exclude(idempotency_key__isnull=True).count() == 1
+    assert EmailNotificationLog.objects.filter(entity_identifier=gateway_issue.id).exclude(
+        idempotency_key__isnull=True
+    ).count() == 1
+    assert OperationGatewayPublication.objects.get(
+        idempotency__idempotency_key="notification-retry",
+        kind=OperationGatewayPublication.Kind.NOTIFICATION,
+    ).state == OperationGatewayPublication.State.SUCCEEDED
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_notification_adapter_failure_is_visible_and_missing_activity_is_not_success(
+    api_key_client, workspace, gateway_project, gateway_issue
+):
+    payload = gateway_body(
+        workspace,
+        gateway_project,
+        gateway_issue,
+        operation_id="work_item.rename",
+        key="notification-failure",
+        input_data={"name": "Notification Failure"},
+    )
+    with patch("plane.operation_gateway.publications.schedule_publications"):
+        api_key_client.post("/api/v1/operations/", payload, format="json")
+    record = OperationGatewayIdempotency.objects.get(idempotency_key="notification-failure")
+    activity_publication = record.publications.get(kind=OperationGatewayPublication.Kind.ACTIVITY)
+    notification_publication = record.publications.get(kind=OperationGatewayPublication.Kind.NOTIFICATION)
+
+    with patch(
+        "plane.operation_gateway.publications.run_notifications",
+        side_effect=RuntimeError("notification downstream failed"),
+    ):
+        with pytest.raises(Exception):
+            dispatch_publication_once(str(notification_publication.id))
+    notification_publication.refresh_from_db()
+    assert notification_publication.state == OperationGatewayPublication.State.RETRYABLE
+    assert Notification.objects.filter(entity_identifier=gateway_issue.id).count() == 0
+
+    activity_publication.state = OperationGatewayPublication.State.SUCCEEDED
+    activity_publication.payload = {"activity_id": str(uuid.uuid4())}
+    activity_publication.save(update_fields=["state", "payload", "updated_at"])
+    notification_publication.payload["activity_id"] = str(uuid.uuid4())
+    notification_publication.state = OperationGatewayPublication.State.RETRYABLE
+    notification_publication.save(update_fields=["payload", "state", "updated_at"])
+    with pytest.raises(Exception):
+        dispatch_publication_once(str(notification_publication.id))
+    notification_publication.refresh_from_db()
+    assert notification_publication.state == OperationGatewayPublication.State.FAILED
 
 
 @pytest.mark.contract
@@ -594,6 +954,10 @@ def test_audit_queryset_and_bulk_mutations_are_blocked(api_key_client, workspace
                     "DELETE FROM operation_gateway_audit WHERE id = %s",
                     [str(audit.pk)],
                 )
+    with pytest.raises(DatabaseError, match="append-only"):
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute("TRUNCATE operation_gateway_audit")
 
     inserted = OperationGatewayAudit.objects.create(
         invocation_id=uuid.uuid4(),
@@ -609,6 +973,64 @@ def test_audit_queryset_and_bulk_mutations_are_blocked(api_key_client, workspace
         request_digest="0" * 64,
     )
     assert OperationGatewayAudit._base_manager.get(pk=inserted.pk).pk == inserted.pk
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_postgres_audit_runtime_role_cannot_govern_or_bypass_trigger():
+    runtime_role = f"gateway_runtime_{uuid.uuid4().hex[:10]}"
+    with connection.cursor() as cursor:
+        cursor.execute(f'CREATE ROLE "{runtime_role}" NOLOGIN')
+        cursor.execute(
+            f'GRANT SELECT, INSERT ON operation_gateway_audit TO "{runtime_role}"'
+        )
+        cursor.execute(f'REVOKE UPDATE, DELETE, TRUNCATE, TRIGGER ON operation_gateway_audit FROM "{runtime_role}"')
+        cursor.execute(
+            "SELECT tableowner, has_table_privilege(%s, 'operation_gateway_audit', 'SELECT'), "
+            "has_table_privilege(%s, 'operation_gateway_audit', 'INSERT'), "
+            "has_table_privilege(%s, 'operation_gateway_audit', 'UPDATE'), "
+            "has_table_privilege(%s, 'operation_gateway_audit', 'DELETE'), "
+            "has_table_privilege(%s, 'operation_gateway_audit', 'TRUNCATE') "
+            "FROM pg_tables WHERE tablename = 'operation_gateway_audit'",
+            [runtime_role] * 5,
+        )
+        owner, can_select, can_insert, can_update, can_delete, can_truncate = cursor.fetchone()
+        assert owner == settings.PLANE_AUDIT_GOVERNANCE_ROLE
+        assert can_select is True
+        assert can_insert is True
+        assert can_update is False
+        assert can_delete is False
+        assert can_truncate is False
+        cursor.execute(f'SET ROLE "{runtime_role}"')
+
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO operation_gateway_audit
+                    (id, invocation_id, phase, outcome, request_id, operation_id,
+                     workspace_slug, caller_id, idempotency_key, correlation_id,
+                     request_digest, created_at)
+                VALUES (%s, %s, 'intent', 'intent', %s, 'role-probe',
+                        'role-probe', %s, %s, 'role-probe', %s, NOW())
+                """,
+                [uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), "role-probe", "0" * 64],
+            )
+        for statement in (
+            "UPDATE operation_gateway_audit SET error_code = 'x'",
+            "DELETE FROM operation_gateway_audit",
+            "TRUNCATE operation_gateway_audit",
+            "ALTER TABLE operation_gateway_audit DISABLE TRIGGER ALL",
+            "DROP TABLE operation_gateway_audit",
+        ):
+            with pytest.raises(DatabaseError):
+                with transaction.atomic():
+                    with connection.cursor() as cursor:
+                        cursor.execute(statement)
+    finally:
+        with connection.cursor() as cursor:
+            cursor.execute("RESET ROLE")
+            cursor.execute(f'DROP ROLE "{runtime_role}"')
 
 
 @pytest.mark.contract
@@ -736,4 +1158,10 @@ def test_concurrent_first_use_applies_and_publishes_once(api_token, workspace, g
     gateway_issue.refresh_from_db()
     assert gateway_issue.name == "One Concurrent Rename"
     record = OperationGatewayIdempotency.objects.get(idempotency_key="concurrent-first-use")
-    assert record.publications.count() == 3
+    assert record.publications.count() == 2
+    replay_response = first if first.json()["idempotency"]["replayed"] else second
+    replay_audit = OperationGatewayAudit.objects.get(id=replay_response.json()["audit_receipt"])
+    assert replay_audit.outcome == OperationGatewayAudit.Outcome.REPLAY
+    assert replay_audit.request_id == uuid.UUID(replay_response.json()["request_id"])
+    assert replay_audit.correlation_id == replay_response.json()["correlation_id"]
+    assert replay_audit.invocation_id != record.invocation_id

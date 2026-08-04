@@ -7,6 +7,7 @@
 from .common import *  # noqa
 
 DEBUG = True
+PLANE_AUDIT_ENFORCE_ROLE_SEPARATION = False
 
 # Send it in a dummy outbox
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"

@@ -7,6 +7,7 @@ import hmac
 import json
 import logging
 import uuid
+from dataclasses import dataclass
 
 import requests
 from typing import Any, Dict, List, Optional, Union
@@ -83,6 +84,26 @@ MODEL_MAPPER = {
 logger = logging.getLogger("plane.worker")
 
 
+@dataclass(frozen=True)
+class WebhookDeliveryResult:
+    """Durable result of one concrete webhook delivery attempt."""
+
+    state: str
+    retryable: bool
+    response_status: int | None = None
+    response_body: str = ""
+    error: str = ""
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "state": self.state,
+            "retryable": self.retryable,
+            "response_status": self.response_status,
+            "response_body": self.response_body[:4096],
+            "error": self.error[:255],
+        }
+
+
 def get_issue_prefetches():
     return [
         Prefetch("label_issue", queryset=IssueLabel.objects.select_related("label")),
@@ -100,6 +121,10 @@ def save_webhook_log(
     response_body: str,
     retry_count: int,
     event_type: str,
+    delivery_key: str | None = None,
+    delivery_state: str | None = None,
+    delivery_result: dict[str, Any] | None = None,
+    raise_on_error: bool = False,
 ) -> None:
     log_data = {
         "workspace_id": str(webhook.workspace_id),
@@ -112,14 +137,176 @@ def save_webhook_log(
         "response_headers": str(response_headers),
         "response_body": str(response_body),
         "retry_count": retry_count,
+        "delivery_key": delivery_key,
+        "delivery_state": delivery_state,
+        "delivery_result": delivery_result,
     }
 
     try:
-        WebhookLog.objects.create(**log_data)
+        if delivery_key:
+            log, created = WebhookLog.all_objects.get_or_create(delivery_key=delivery_key, defaults=log_data)
+            if not created:
+                WebhookLog.all_objects.filter(pk=log.pk).update(
+                    **{key: value for key, value in log_data.items() if key != "delivery_key"},
+                )
+        else:
+            WebhookLog.objects.create(**log_data)
         logger.info("Webhook log saved successfully to database")
     except Exception as e:
         log_exception(e, warning=True)
         logger.error(f"Failed to save webhook log: {e}")
+        if raise_on_error:
+            raise
+
+
+def deliver_webhook_target(
+    *,
+    webhook_id: str,
+    slug: str,
+    event: str,
+    event_data: Optional[Dict[str, Any]],
+    action: str,
+    current_site: str | None,
+    activity: Optional[Dict[str, Any]],
+    delivery_key: str,
+) -> WebhookDeliveryResult:
+    """Send one target with a stable key and record its durable result.
+
+    A transport exception is deliberately ``outcome_unknown``. The receiver
+    may have observed the request even when the worker did not receive a
+    response, so callers must not blindly replay this key.
+    """
+
+    try:
+        webhook = Webhook.objects.get(id=webhook_id, workspace__slug=slug)
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "Autopilot",
+            "X-Plane-Delivery": delivery_key,
+            "Idempotency-Key": delivery_key,
+            "X-Plane-Event": event,
+        }
+        event_data = json.loads(json.dumps(event_data, cls=DjangoJSONEncoder)) if event_data is not None else None
+        activity = json.loads(json.dumps(activity, cls=DjangoJSONEncoder)) if activity is not None else None
+        payload = {
+            "event": event,
+            "action": action,
+            "webhook_id": str(webhook.id),
+            "workspace_id": str(webhook.workspace_id),
+            "workspace_slug": slug,
+            "data": event_data,
+            "activity": activity,
+        }
+        if webhook.secret_key:
+            signature = hmac.new(
+                webhook.secret_key.encode("utf-8"),
+                json.dumps(payload).encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()
+            headers["X-Plane-Signature"] = signature
+    except ObjectDoesNotExist as error:
+        result = WebhookDeliveryResult("failed", False, error=str(error))
+        return result
+    except Exception as error:
+        result = WebhookDeliveryResult("failed", False, error=str(error))
+        # No request was attempted, so this is a deterministic pre-send
+        # failure. There may be no live Webhook row to attach to.
+        webhook = Webhook.objects.filter(pk=webhook_id).first()
+        if webhook is not None:
+            save_webhook_log(
+                webhook=webhook,
+                request_method="POST",
+                request_headers={},
+                request_body={},
+                response_status="400",
+                response_headers="",
+                response_body=str(error),
+                retry_count=0,
+                event_type=event,
+                delivery_key=delivery_key,
+                delivery_state=result.state,
+                delivery_result=result.as_dict(),
+                raise_on_error=True,
+            )
+        return result
+
+    try:
+        response = pinned_fetch(
+            "POST",
+            webhook.url,
+            allowed_ips=settings.WEBHOOK_ALLOWED_IPS,
+            allowed_hosts=settings.WEBHOOK_ALLOWED_HOSTS,
+            headers=headers,
+            json=payload,
+            timeout=30,
+        )
+    except ValueError as error:
+        result = WebhookDeliveryResult("failed", False, error=f"Webhook URL rejected: {error}")
+        save_webhook_log(
+            webhook=webhook,
+            request_method="POST",
+            request_headers=headers,
+            request_body=payload,
+            response_status="400",
+            response_headers="",
+            response_body=result.error,
+            retry_count=0,
+            event_type=event,
+            delivery_key=delivery_key,
+            delivery_state=result.state,
+            delivery_result=result.as_dict(),
+            raise_on_error=True,
+        )
+        return result
+    except requests.RequestException as error:
+        result = WebhookDeliveryResult("outcome_unknown", False, error=str(error))
+        save_webhook_log(
+            webhook=webhook,
+            request_method="POST",
+            request_headers=headers,
+            request_body=payload,
+            response_status="unknown",
+            response_headers="",
+            response_body=str(error),
+            retry_count=0,
+            event_type=event,
+            delivery_key=delivery_key,
+            delivery_state=result.state,
+            delivery_result=result.as_dict(),
+            raise_on_error=True,
+        )
+        return result
+
+    if 200 <= response.status_code < 300:
+        state, retryable = "succeeded", False
+    else:
+        # A response proves the request reached the receiver. Its application
+        # may have performed partial work before returning an error, so the
+        # gateway must not blindly replay a non-2xx response.
+        state, retryable = "failed", False
+    result = WebhookDeliveryResult(
+        state,
+        retryable,
+        response_status=response.status_code,
+        response_body=response.text,
+        error="" if state == "succeeded" else f"Webhook returned HTTP {response.status_code}",
+    )
+    save_webhook_log(
+        webhook=webhook,
+        request_method="POST",
+        request_headers=headers,
+        request_body=payload,
+        response_status=response.status_code,
+        response_headers=response.headers,
+        response_body=response.text,
+        retry_count=0,
+        event_type=event,
+        delivery_key=delivery_key,
+        delivery_state=result.state,
+        delivery_result=result.as_dict(),
+        raise_on_error=True,
+    )
+    return result
 
 
 def get_model_data(event: str, event_id: Union[str, List[str]], many: bool = False) -> Dict[str, Any]:

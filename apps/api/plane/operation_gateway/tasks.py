@@ -16,13 +16,13 @@ def dispatch_publication(self, publication_id: str) -> None:
     try:
         dispatch_publication_once(publication_id)
     except Exception as error:
-        OperationGatewayPublication.objects.filter(pk=publication_id).update(
-            state=OperationGatewayPublication.State.FAILED,
-            lease_until=None,
-            last_error=str(error)[:255],
-            updated_at=timezone.now(),
-        )
-        raise self.retry(exc=error, countdown=min(60 * (self.request.retries + 1), 900)) from error
+        publication = OperationGatewayPublication.objects.get(pk=publication_id)
+        if publication.state == OperationGatewayPublication.State.RETRYABLE:
+            raise self.retry(exc=error, countdown=min(60 * (self.request.retries + 1), 900)) from error
+        # FAILED and OUTCOME_UNKNOWN are durable terminal decisions. In
+        # particular, an external delivery that may have reached its target
+        # must never be replayed by Celery's generic exception path.
+        raise
 
 
 @shared_task
@@ -33,7 +33,7 @@ def reconcile_publications() -> int:
     publication_ids = OperationGatewayPublication.objects.filter(
         state__in=(
             OperationGatewayPublication.State.PENDING,
-            OperationGatewayPublication.State.FAILED,
+            OperationGatewayPublication.State.RETRYABLE,
         )
     ).values_list("id", flat=True)
     publication_ids = list(publication_ids) + list(

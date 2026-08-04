@@ -215,7 +215,20 @@ else:
             "HOST": os.environ.get("POSTGRES_HOST"),
             "PORT": os.environ.get("POSTGRES_PORT", "5432"),
         }
-    }
+        }
+
+# Operation Gateway audit storage is owned by a dedicated no-login role. Local
+# and test defaults keep the existing database user as the runtime role and
+# let the migration create the owner role. Production must set enforcement to
+# 1 and use a non-superuser runtime role distinct from the governed owner.
+PLANE_AUDIT_RUNTIME_ROLE = os.environ.get("PLANE_AUDIT_RUNTIME_ROLE") or DATABASES["default"].get("USER", "")
+PLANE_AUDIT_GOVERNANCE_ROLE = os.environ.get("PLANE_AUDIT_GOVERNANCE_ROLE", "plane_audit_owner")
+# Production fails closed by default. The local and test settings explicitly
+# disable this check while they use the repository's single bootstrap role.
+PLANE_AUDIT_ENFORCE_ROLE_SEPARATION = os.environ.get(
+    "PLANE_AUDIT_ENFORCE_ROLE_SEPARATION",
+    "0" if DEBUG else "1",
+) == "1"
 
 
 if os.environ.get("ENABLE_READ_REPLICA", "0") == "1":
