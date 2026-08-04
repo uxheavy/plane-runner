@@ -578,7 +578,7 @@ function designatedInternalIdentifierRanges(line) {
 }
 
 function ordinaryPathRanges(line) {
-  return rangesForPattern(line, /\bdocs\/[A-Za-z0-9_.*\/-]+/g);
+  return rangesForPattern(line, /\bdocs\/[-A-Za-z0-9_./]+/g);
 }
 
 function hasAuthoritativeTextMarker(line) {
