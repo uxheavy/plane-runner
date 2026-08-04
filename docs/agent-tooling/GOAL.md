@@ -8,11 +8,11 @@ This goal covers the full Plane Agent control plane and the hidden execution ser
 
 ## Status and authorization
 
-| Item                 | Current state                                                                                                                                                                                                                        |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| G0                   | Complete as a lightweight start condition: ADRs 0001–0010 exist and cohere, scope and non-goals are explicit here, and local implementation is authorized.                                                                           |
-| Implementation       | In progress. G1 foundation work is active in L1 (runtime contracts), L3 (operation gateway/publication effects), and L4 (Hermes runtime adapter); each lane is being remediated against fresh independent review before integration. |
-| Source authorization | Codex task `019fc7db-e8bf-7f92-8f2b-b2346e5eeeb8`, 2026-08-04.                                                                                                                                                                       |
+| Item                 | Current state                                                                                                                                                                                                                                                     |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| G0                   | Complete as a lightweight start condition: ADRs 0001–0010 exist and cohere, scope and non-goals are explicit here, and local implementation is authorized.                                                                                                        |
+| Implementation       | In progress. G1 foundation work is active in L1 (runtime contracts) and L3 (operation gateway/publication effects). L4 (Hermes runtime adapter) passed fresh independent review and is integrated on Hermes `main` at `c8a693f5300ecb5e348dd0e23ba259c86a266ee1`. |
+| Source authorization | Codex task `019fc7db-e8bf-7f92-8f2b-b2346e5eeeb8`, 2026-08-04.                                                                                                                                                                                                    |
 
 Durable authorization statement:
 
