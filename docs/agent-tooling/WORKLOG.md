@@ -761,3 +761,30 @@ Stage and commit this single documentation/contract/evidence-control checkpoint,
 - Both renderer checks, planning fixtures, all verifier Node syntax checks, and verifier OxLint — exit 0; OxLint reported 0 warnings and 0 errors.
 - `git diff --check 6dae0eb97b27945d1f0830b5c13dadab2c03fc15..HEAD` — exit 0. The seal commit first parent is the content commit and its diff is exactly `SOURCE-INVENTORY.md`, `WORKLOG.md`, `g0-readiness.json`, and `integration-lock.g0.json`.
 - `RESULT.md` remained byte-identical at SHA-256 `c7b6404f435ea1ce53c9b360ba2b8745096f1d3dd42d81de4bdbb55117c4bb87`; final worktree status was clean.
+
+## 2026-08-04 — Fresh Luna remediation: global retired-family matching and approval-manifest authority
+
+### Scope and design
+
+- Replaced per-family historical-marker classification with one clause-level pass over the globally ordered occurrences of all 11 retired-name families. A marker and occurrence must be mutually unique; ambiguous, competing, or already-consumed matches exempt nothing. Token-local internal identifiers and ordinary documentation paths remain independent exemptions.
+- Added an exact explicit retired-name policy for every canonical Markdown path. `APPROVAL-MANIFEST.md`, the generated implementation overview, and the release-planning prompt are deliberately classified as authoritative; all other current canonical Markdown sources are deliberately classified non-model-facing. Policy-map/key drift fails closed, so a future canonical source cannot silently escape validation.
+- Clarified the manifest’s generic-name collision sentence without changing its authority or approval state. Added table-driven valid-reseal controls for all 11 adjacent cross-family pairs in both marker directions (22), all 11 approval-manifest authoritative names (11), and historical/internal/path-or-ordinary permitted manifest prose (33).
+- Retained the existing 116 controls. The expanded matrix will exercise 182 controls: 116 retained + 22 cross-family + 11 manifest-authoritative + 33 manifest-permitted.
+- No Plane Agent product/runtime code, approval state, `RESULT.md`, or unscoped authority changed.
+
+### Content checkpoint
+
+- Content/remediation commit: `5ca6e9f515c4258a2a3692f6db62af6c41167d47`.
+- The actual seal generator was run from that clean content commit and bound 56 content paths plus the four authorized seal paths. Post-seal validation is recorded after the separate evidence-seal commit.
+
+### Post-seal validation
+
+- `pnpm install --frozen-lockfile` — exit 0; repository-pinned install completed with `ajv@8.18.0` and `oxlint@1.51.0`.
+- `node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode preflight` — exit 0; all checks passed and human approval remained pending by design.
+- `node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode g0` — exit 1 specifically for pending human approval; all non-approval checks passed and no implementation authorization was implied.
+- `node docs/agent-tooling/verifiers/test-g0-approved-fixture.mjs` — exit 0; temporary approved readiness passed and the real pending record remained unchanged.
+- `node docs/agent-tooling/verifiers/run-g0-negative-controls.mjs` — exit 0; 182 controls passed: all 116 retained controls, 22 cross-family marker-before/marker-after controls across all 11 adjacent family pairs, 11 approval-manifest authoritative controls, and 33 approval-manifest historical/internal/path-or-ordinary permitted controls.
+- `node docs/agent-tooling/verifiers/validate-ajv-2020.mjs` — exit 0; 6 schema/instance pairs. Ownership validation — exit 0 with 15 writable surfaces and 12 plan-lane joins. Requirement coverage — exit 0 with 11 invariants, 6 gates, 12 phases, 11 completion-proof rows, and 15 ownership joins.
+- Both renderer checks, planning fixtures, all verifier Node syntax checks, and verifier OxLint — exit 0; OxLint reported 0 warnings and 0 errors.
+- `git diff --check 5ca6e9f515c4258a2a3692f6db62af6c41167d47..HEAD` — exit 0. The seal commit first parent is the content commit and its diff is exactly `SOURCE-INVENTORY.md`, `WORKLOG.md`, `g0-readiness.json`, and `integration-lock.g0.json`; the lock binds 56 content paths and 4 seal paths.
+- `RESULT.md` remained byte-identical at SHA-256 `c7b6404f435ea1ce53c9b360ba2b8745096f1d3dd42d81de4bdbb55117c4bb87`; final topology and clean-worktree readback follow the seal-only commit amendment.
