@@ -2,13 +2,21 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import {
   canonicalJsonEquals,
   canonicalizeJson,
+  createContentDigest,
+  createContractDigest,
+  createRunSnapshotContentDigest,
   createRuntimeSchemaValidator,
+  parseContentDigest,
+  parseContractDigest,
+  parseRunSnapshotContentDigest,
   parseRuntimeEvent,
+  createWorkspaceRef,
+  parseWorkspaceRef,
   serializedJsonByteLength,
   validateRuntimeSchema,
   verifyRuntimeExecution,
@@ -197,6 +205,78 @@ describe("serialized runtime-contract boundary", () => {
       expect(Object.isFrozen(result.errors?.[0]?.params)).toBe(true);
     }
     expect(traps).toBe(0);
+  });
+
+  test("rejects oversized schema names before closed-set lookup", () => {
+    const validWire = wire(event(observationBody()));
+    const lookup = vi.spyOn(Set.prototype, "has");
+    try {
+      lookup.mockClear();
+      expect(validateRuntimeSchema("x".repeat(1_000_000), validWire)).toEqual({
+        valid: false,
+        errors: [
+          {
+            instancePath: "",
+            schemaPath: "#",
+            keyword: "x-plane-schema-name",
+            params: {},
+            message: "unknown runtime schema",
+          },
+        ],
+      });
+      expect(lookup).not.toHaveBeenCalled();
+    } finally {
+      lookup.mockRestore();
+    }
+  });
+
+  test("rejects oversized digest and reference values before proportional scans", () => {
+    const oversized = "a".repeat(1_000_000);
+    const oversizedContent = `content:${oversized}`;
+    const oversizedSnapshot = `snapshot:${oversized}`;
+    const originalCharCodeAt = String.prototype.charCodeAt;
+    const charCodeAt = vi.spyOn(String.prototype, "charCodeAt");
+    let oversizedValueScanned = false;
+    charCodeAt.mockImplementation(function (this: string, index: number) {
+      if (this.length > 128) oversizedValueScanned = true;
+      return originalCharCodeAt.call(this, index);
+    });
+    try {
+      const rejected = [
+        () => createContractDigest(oversized),
+        () => parseContractDigest(oversized),
+        () => createContentDigest(oversized),
+        () => parseContentDigest(oversizedContent),
+        () => createRunSnapshotContentDigest(oversized),
+        () => parseRunSnapshotContentDigest(oversizedSnapshot),
+        () => createWorkspaceRef(oversized),
+        () => parseWorkspaceRef(oversized),
+      ];
+      for (const operation of rejected) expect(operation).toThrow();
+      expect(oversizedValueScanned).toBe(false);
+    } finally {
+      charCodeAt.mockRestore();
+    }
+  });
+
+  test("keeps multibyte digest scans within the private digest maximum", () => {
+    const value = "🙂".repeat(18);
+    const inspectedIndexes: number[] = [];
+    const originalCharCodeAt = String.prototype.charCodeAt;
+    const charCodeAt = vi.spyOn(String.prototype, "charCodeAt");
+    charCodeAt.mockImplementation(function (this: string, index: number) {
+      if (this === value) inspectedIndexes.push(index);
+      return originalCharCodeAt.call(this, index);
+    });
+    try {
+      expect(() => createContractDigest(value)).toThrow();
+      expect(() => createContentDigest(value)).toThrow();
+      expect(() => createRunSnapshotContentDigest(value)).toThrow();
+      expect(inspectedIndexes.length).toBeGreaterThan(0);
+      expect(Math.max(...inspectedIndexes)).toBeLessThan(value.length - 1);
+    } finally {
+      charCodeAt.mockRestore();
+    }
   });
 
   test("has no mutable singleton validator and removes call-stateful errors compatibility", () => {

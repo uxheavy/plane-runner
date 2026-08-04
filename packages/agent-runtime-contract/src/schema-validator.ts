@@ -22,13 +22,18 @@ const schemaDefinitions = {
   "runtime-durable-state": runtimeDurableStateSchema,
 } as const;
 
-const RUNTIME_SCHEMA_NAME_SET = new Set<keyof typeof schemaDefinitions>([
+const RUNTIME_SCHEMA_NAMES = [
   "run-snapshot",
   "invocation-envelope",
   "runtime-event",
   "runtime-exit",
   "runtime-durable-state",
-]);
+] as const;
+const RUNTIME_SCHEMA_NAME_MAX_LENGTH = RUNTIME_SCHEMA_NAMES.reduce(
+  (maximum, name) => Math.max(maximum, name.length),
+  0
+);
+const RUNTIME_SCHEMA_NAME_SET = new Set<keyof typeof schemaDefinitions>(RUNTIME_SCHEMA_NAMES);
 
 const requiredProperties = {
   "run-snapshot": [
@@ -131,7 +136,9 @@ export type RuntimeSchemaValidator = Readonly<{
 }>;
 
 const isKnownRuntimeSchemaName = (value: unknown): value is RuntimeSchemaName =>
-  typeof value === "string" && RUNTIME_SCHEMA_NAME_SET.has(value as RuntimeSchemaName);
+  typeof value === "string" &&
+  value.length <= RUNTIME_SCHEMA_NAME_MAX_LENGTH &&
+  RUNTIME_SCHEMA_NAME_SET.has(value as RuntimeSchemaName);
 
 const schemaNameError = (): readonly SafeValidationError[] =>
   Object.freeze([
@@ -163,7 +170,13 @@ const invalidValueResult = (): RuntimeSchemaValidationResult => Object.freeze({ 
 const validResult = (): RuntimeSchemaValidationResult => Object.freeze({ valid: true, errors: null });
 
 function decodeSerializedJson(value: unknown): unknown {
-  if (typeof value !== "string" || !utf8ByteLengthAtMost(value, MAX_SERIALIZED_JSON_BYTES)) return undefined;
+  if (
+    typeof value !== "string" ||
+    value.length > MAX_SERIALIZED_JSON_BYTES ||
+    !utf8ByteLengthAtMost(value, MAX_SERIALIZED_JSON_BYTES)
+  ) {
+    return undefined;
+  }
   try {
     return JSON.parse(value) as unknown;
   } catch {

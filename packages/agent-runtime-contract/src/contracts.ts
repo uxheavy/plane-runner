@@ -111,6 +111,9 @@ function makeNamespacedRef<Tag extends RefTag>(tag: Tag, namespace: string, valu
   if (typeof value !== "string") {
     throw new ContractParseError("reference", "invalid contract reference");
   }
+  if (value.length > REF_IDENTIFIER_MAX_LENGTH) {
+    throw new ContractParseError("reference", "invalid contract reference");
+  }
   if (!REF_SUFFIX_PATTERN.test(value)) {
     throw new ContractParseError("reference", "invalid contract reference");
   }
@@ -255,8 +258,12 @@ function makeDigest<Tag extends RefTag>(
   if (typeof value !== "string") {
     throw new ContractParseError("digest", "invalid contract digest");
   }
+  const maximumCodeUnits = maximum - namespace.length - 1;
+  if (value.length > maximumCodeUnits) {
+    throw new ContractParseError("digest", "invalid contract digest");
+  }
   const bounds = namespacedDigestBounds(namespace, minimum, maximum);
-  const bytes = utf8ByteLengthUpTo(value);
+  const bytes = utf8ByteLengthUpTo(value, bounds.maximum);
   if (
     bytes < bounds.minimum ||
     bytes > bounds.maximum ||
@@ -276,7 +283,10 @@ function parseNamespacedDigest<Tag extends RefTag>(
   maximum: number
 ): OpaqueRef<Tag> {
   void tag;
-  if (typeof value !== "string" || !value.startsWith(`${namespace}:`)) {
+  if (typeof value !== "string" || value.length > maximum) {
+    throw new ContractParseError("digest", "invalid contract digest");
+  }
+  if (utf8ByteLengthUpTo(value, maximum) > maximum || !value.startsWith(`${namespace}:`)) {
     throw new ContractParseError("digest", "invalid contract digest");
   }
 
@@ -287,7 +297,10 @@ export function createContractDigest(value: string): ContractDigest {
   if (typeof value !== "string") {
     throw new ContractParseError("digest", "invalid contract digest");
   }
-  const bytes = utf8ByteLengthUpTo(value);
+  if (value.length > CONTRACT_DIGEST_BYTE_MAX) {
+    throw new ContractParseError("digest", "invalid contract digest");
+  }
+  const bytes = utf8ByteLengthUpTo(value, CONTRACT_DIGEST_BYTE_MAX);
   if (bytes < CONTRACT_DIGEST_BYTE_MIN || bytes > CONTRACT_DIGEST_BYTE_MAX || !DIGEST_PATTERN.test(value)) {
     throw new ContractParseError("digest", "invalid contract digest");
   }
@@ -471,6 +484,13 @@ export type ContractJsonInput = string;
 function parseSerializedJson(value: unknown, path: string): unknown {
   if (typeof value !== "string") {
     throw new ContractParseError(path, "input must be serialized JSON text", "unsupported_live_input");
+  }
+  if (value.length > MAX_SERIALIZED_JSON_BYTES) {
+    throw new ContractParseError(
+      path,
+      "serialized input exceeds the maximum UTF-8 byte size",
+      "serialized_input_too_large"
+    );
   }
   if (utf8ByteLengthUpTo(value, MAX_SERIALIZED_JSON_BYTES) > MAX_SERIALIZED_JSON_BYTES) {
     throw new ContractParseError(
@@ -975,6 +995,9 @@ function requireRecord(value: unknown, path: string, required: readonly string[]
 function parseString(value: unknown, path: string, limit: number, min = 1): string {
   if (typeof value !== "string") {
     throw new ContractParseError(path, "must be a string");
+  }
+  if (value.length > limit) {
+    throw new ContractParseError(path, `must be between ${min} and ${limit} UTF-8 bytes`);
   }
   const bytes = utf8ByteLengthUpTo(value, limit);
   if (bytes < min || bytes > limit) {
