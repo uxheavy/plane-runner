@@ -549,7 +549,7 @@ function tokenOccurrences(text, name) {
 function rangesForPattern(text, pattern, valueGroup = 0) {
   return [...text.matchAll(pattern)].map((match) => {
     const value =
-      valueGroup === 0 ? match[0] : match.slice(valueGroup).find((candidate) => candidate !== undefined) ?? match[0];
+      valueGroup === 0 ? match[0] : (match.slice(valueGroup).find((candidate) => candidate !== undefined) ?? match[0]);
     const valueOffset = valueGroup === 0 ? 0 : match[0].indexOf(value);
     return { start: match.index + valueOffset, end: match.index + valueOffset + value.length };
   });
@@ -559,12 +559,31 @@ function isWithinRange(occurrence, ranges) {
   return ranges.some((range) => occurrence.start >= range.start && occurrence.end <= range.end);
 }
 
-function historicalOccurrence(line, occurrence) {
-  const marker = "(?:retired|historical|negative[- ]control|legacy|supersed(?:ed|es)?|rejected|forbidden|replaced)";
-  const before = line.slice(Math.max(0, occurrence.start - 72), occurrence.start).split(/[;|.!?\n]/).at(-1) ?? "";
-  const after = line.slice(occurrence.end, occurrence.end + 72).split(/[;|.!?\n]/)[0] ?? "";
-  return new RegExp(`\\b${marker}\\b[^;|.!?\\n]{0,48}$`, "i").test(before) ||
-    new RegExp(`^[^;|.!?\\n]{0,48}\\b${marker}\\b`, "i").test(after);
+function historicalOccurrence(line, occurrence, occurrences) {
+  const marker =
+    /\b(?:retired|historical|negative[- ]control|legacy|supersed(?:ed|es)?|rejected|forbidden|replaced)\b/gi;
+  const separators = /[;|.!?\n]/g;
+  const separatorPositions = [...line.matchAll(separators)].map((match) => match.index);
+  const previousSeparator = separatorPositions.findLast((position) => position < occurrence.start);
+  const clauseStart = previousSeparator === undefined ? 0 : previousSeparator + 1;
+  const clauseEnd = separatorPositions.find((position) => position >= occurrence.end) ?? line.length;
+  const clauseOccurrences = occurrences.filter(
+    (candidate) => candidate.start >= clauseStart && candidate.end <= clauseEnd
+  );
+
+  for (const match of line.matchAll(marker)) {
+    const markerStart = match.index;
+    const markerEnd = markerStart + match[0].length;
+    if (markerStart < clauseStart || markerEnd > clauseEnd) continue;
+    if (markerEnd <= occurrence.start) {
+      const firstFollowing = clauseOccurrences.find((candidate) => candidate.start >= markerEnd);
+      if (firstFollowing?.start === occurrence.start) return true;
+    } else if (markerStart >= occurrence.end) {
+      const lastPreceding = clauseOccurrences.findLast((candidate) => candidate.end <= markerStart);
+      if (lastPreceding?.start === occurrence.start) return true;
+    }
+  }
+  return false;
 }
 
 function designatedInternalIdentifierRanges(line) {
@@ -594,7 +613,7 @@ function retiredNameViolation(line, name, { structured = false } = {}) {
   const pathRanges = ordinaryPathRanges(line);
   return occurrences.some(
     (occurrence) =>
-      !historicalOccurrence(line, occurrence) &&
+      !historicalOccurrence(line, occurrence, occurrences) &&
       !isWithinRange(occurrence, internalRanges) &&
       !isWithinRange(occurrence, pathRanges)
   );
@@ -619,7 +638,8 @@ function jsonPointer(segments) {
 function checkStructuredRetiredNames(path, value, retired, segments = []) {
   if (typeof value === "string") {
     const classification = structuredFieldClassification(path, segments);
-    if (classification === "unclassified") throw new Error(`${path} has an unclassified authority pointer ${jsonPointer(segments)}`);
+    if (classification === "unclassified")
+      throw new Error(`${path} has an unclassified authority pointer ${jsonPointer(segments)}`);
     if (classification !== "authoritative") return;
     for (const name of retired)
       if (retiredNameViolation(value, name, { structured: true }))
@@ -669,6 +689,24 @@ function checkRetiredNameControls() {
   ]);
   for (const control of controls)
     assert(retiredNameViolation(control.line, control.name) === control.rejects, control.label);
+
+  for (const name of retired) {
+    const line = `Rejected ${name} authoritative model-facing name ${name}`;
+    const occurrences = tokenOccurrences(line, name);
+    assert(occurrences.length === 2, `compact same-clause control must contain two ${name} occurrences`);
+    assert(
+      historicalOccurrence(line, occurrences[0], occurrences),
+      `compact same-clause control did not allow the explicitly rejected ${name} occurrence`
+    );
+    assert(
+      !historicalOccurrence(line, occurrences[1], occurrences),
+      `compact same-clause control incorrectly allowed the authoritative ${name} occurrence`
+    );
+    assert(
+      retiredNameViolation(line, name),
+      `compact same-clause control did not reject the later authoritative ${name} occurrence`
+    );
+  }
 }
 
 function checkStructuredModelFacingFields() {
