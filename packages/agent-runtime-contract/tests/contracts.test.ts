@@ -6,6 +6,8 @@ import { describe, expect, test } from "vitest";
 
 import {
   computeRunSnapshotContentDigest,
+  computeRuntimeDurableStateDigest,
+  createInitialRuntimeDurableState,
   createContentDigest,
   createContractDigest,
   createRunSnapshotContentDigest,
@@ -31,14 +33,15 @@ import {
   type RuntimeDurableState,
   type RuntimeEvent,
   type RuntimeVerificationFacts,
+  type TrustedDurableStateHead,
   type TrustedPublicationReceipt,
 } from "../src";
 import {
   appliedBlockerBody,
   appliedCancellationBody,
   appliedConversationBody,
+  appliedArtifactBody,
   appliedFailureBody,
-  appliedHumanInputAnswerBody,
   appliedInputRequestBody,
   appliedOutcomeBody,
   contentDigest,
@@ -48,7 +51,14 @@ import {
   inlinePayload,
   manifest,
   observationBody,
+  observationUsageBody,
+  proposalArtifactBody,
+  proposalInputRequestBody,
+  proposalOutcomeBody,
+  publicationBody,
   snapshot,
+  transcriptEvidenceBody,
+  trustedHumanInputAnswer,
 } from "./fixtures";
 
 const schemaDirectory = fileURLToPath(new URL("../schemas/v1/", import.meta.url));
@@ -72,49 +82,60 @@ const assertValid = (name: (typeof schemaNames)[number], value: unknown) => {
   expect(valid, validators[name].errors ? JSON.stringify(validators[name].errors) : undefined).toBe(true);
 };
 
+const durableStateHead = (lifecycle: RuntimeDurableState): TrustedDurableStateHead => ({
+  workspaceRef: lifecycle.binding.workspaceRef,
+  actorRef: lifecycle.binding.actorRef,
+  profileVersionRef: lifecycle.binding.profileVersionRef,
+  runId: lifecycle.binding.runId,
+  snapshotContentDigest: lifecycle.binding.snapshotContentDigest,
+  revision: lifecycle.revision,
+  stateDigest: lifecycle.stateDigest,
+  ...(lifecycle.previousRevision === undefined
+    ? {}
+    : {
+        previousRevision: lifecycle.previousRevision,
+        previousStateDigest: lifecycle.previousStateDigest,
+      }),
+});
+
 const trusted = (
   invocation = envelope(),
-  lifecycle: RuntimeDurableState = parseRuntimeDurableState({
-    protocol: "plane.agent-runtime/v1",
-    stateVersion: "v1",
-    binding: {
-      workspaceRef: snapshot.workspaceRef,
-      actorRef: snapshot.actorRef,
-      profileVersionRef: snapshot.profile.profileRef,
-      runId: snapshot.runId,
-      snapshotContentDigest: snapshot.contentDigest,
-    },
-    state: "queued",
-    lastAcceptedSequence: -1,
-    acceptedEvents: [],
-    acceptedExits: [],
-  }),
-  overrides: Partial<RuntimeVerificationFacts> = {}
-): RuntimeVerificationFacts => ({
-  authority: {
+  lifecycle: RuntimeDurableState = createInitialRuntimeDurableState({
     workspaceRef: snapshot.workspaceRef,
     actorRef: snapshot.actorRef,
     profileVersionRef: snapshot.profile.profileRef,
     runId: snapshot.runId,
-    invocationId: invocation.invocationId,
     snapshotContentDigest: snapshot.contentDigest,
-    cancellationRef: invocation.cancellationRef,
-    correlationId: invocation.correlationId,
-    causationRef: invocation.causationRef,
-    invocationIdempotencyKey: invocation.idempotencyKey,
-  },
-  lifecycle,
-  lease: { leaseId: invocation.lease.leaseId, isValid: true },
-  cancellation: { cancellationRef: invocation.cancellationRef, isCancelled: false },
-  publicationReceipts: [],
-  ...overrides,
-});
+  }),
+  overrides: Partial<RuntimeVerificationFacts> = {}
+): RuntimeVerificationFacts => {
+  const resolvedLifecycle = overrides.lifecycle ?? lifecycle;
+  return {
+    authority: {
+      workspaceRef: snapshot.workspaceRef,
+      actorRef: snapshot.actorRef,
+      profileVersionRef: snapshot.profile.profileRef,
+      runId: snapshot.runId,
+      invocationId: invocation.invocationId,
+      snapshotContentDigest: snapshot.contentDigest,
+      cancellationRef: invocation.cancellationRef,
+      correlationId: invocation.correlationId,
+      causationRef: invocation.causationRef,
+      invocationIdempotencyKey: invocation.idempotencyKey,
+    },
+    lifecycle: resolvedLifecycle,
+    durableStateHead: overrides.durableStateHead ?? durableStateHead(resolvedLifecycle),
+    lease: { leaseId: invocation.lease.leaseId, isValid: true },
+    cancellation: { cancellationRef: invocation.cancellationRef, isCancelled: false },
+    publicationReceipts: [],
+    ...overrides,
+  };
+};
 
 const receiptFor = (eventValue: RuntimeEvent): TrustedPublicationReceipt => {
   if (
     eventValue.body.kind !== "conversation_publication_observed" &&
     eventValue.body.kind !== "input_request_observed" &&
-    eventValue.body.kind !== "human_input_answer_observed" &&
     eventValue.body.kind !== "artifact_observed" &&
     eventValue.body.kind !== "outcome_submission_observed" &&
     eventValue.body.kind !== "failure_observed" &&
@@ -253,6 +274,78 @@ describe("parsed plane.agent-runtime/v1 contract boundary", () => {
     expect(
       parseInvocationEnvelope({ ...envelope(), runSnapshotDigest: createRunSnapshotContentDigest("f".repeat(64)) })
     ).toBeDefined();
+  });
+});
+
+describe("parser and generated-schema compatibility matrix", () => {
+  const bodies = [
+    observationBody(),
+    publicationBody(),
+    appliedConversationBody(),
+    proposalInputRequestBody(),
+    appliedInputRequestBody(),
+    proposalArtifactBody(),
+    appliedArtifactBody(),
+    observationUsageBody(),
+    proposalOutcomeBody(),
+    appliedOutcomeBody("compatibility-outcome"),
+    appliedFailureBody(),
+    appliedBlockerBody(),
+    appliedCancellationBody(),
+    transcriptEvidenceBody(),
+  ] as const;
+
+  test.each(bodies)("accepts every parsed durable event/action variant in the generated schema", (body) => {
+    const parsed = parseRuntimeEvent(event(body));
+    assertValid("runtime-event", parsed);
+  });
+
+  test("rejects terminal durable proposals in both parser and schema", () => {
+    const terminalProposal = {
+      ...event(appliedFailureBody()),
+      body: {
+        ...event(appliedFailureBody()).body,
+        publication: {
+          ...event(appliedFailureBody()).body.publication,
+          action: "proposal",
+        },
+      },
+    } as unknown;
+    expect(validators["runtime-event"](terminalProposal)).toBe(false);
+    expect(() => parseRuntimeEvent(terminalProposal)).toThrow();
+  });
+
+  test("rejects terminal durable proposals in durable state parser and schema", () => {
+    const invocation = envelope();
+    const terminal = event(appliedFailureBody());
+    const verified = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation,
+      events: [terminal],
+      exit: exits[2],
+      trusted: withReceipts(invocation, [terminal]),
+    });
+    expect(verified.ok).toBe(true);
+    if (!verified.ok) return;
+    const acceptedEvent = verified.nextLifecycle.acceptedEvents[0];
+    expect(acceptedEvent?.productBinding).toBeDefined();
+    if (acceptedEvent?.productBinding === undefined) return;
+    const invalidContent = {
+      ...verified.nextLifecycle,
+      acceptedEvents: [
+        {
+          ...acceptedEvent,
+          productBinding: { ...acceptedEvent.productBinding, action: "proposal" as const },
+        },
+      ],
+    };
+    const invalid = {
+      ...invalidContent,
+      stateDigest: computeRuntimeDurableStateDigest(invalidContent),
+    };
+    expect(validators["runtime-durable-state"](invalid)).toBe(false);
+    expect(() => parseRuntimeDurableState(invalid)).toThrow();
   });
 });
 
@@ -557,32 +650,42 @@ describe("durable lifecycle and idempotent replay", () => {
           inputRequestRef: "input-request:historical",
         },
       })
-    ).toThrow(/must match the accepted request/);
+    ).toThrow(/must match the accepted request|stateDigest/);
 
-    const answerEventRef = createEventRef("event-id-1");
+    const answerFact = trustedHumanInputAnswer(
+      parseInvocationEnvelope({
+        ...initialInvocation,
+        invocationId: createInvocationId("invocation-2"),
+        trigger: {
+          kind: "human_input",
+          eventRef: createEventRef("human-answer-1"),
+          pendingInputEventRef: request.eventId,
+        },
+        newContextEventRefs: [request.eventId, createEventRef("human-answer-1")],
+        checkpointRef: createCheckpointRef("checkpoint-1"),
+        lease: { ...initialInvocation.lease, leaseId: createLeaseId("lease-2") },
+        causationRef: createCausationRef("causation-2"),
+        correlationId: createCorrelationId("correlation-2"),
+        idempotencyKey: createIdempotencyKey("idempotency-2"),
+      })
+    );
     const continuation = parseInvocationEnvelope({
       ...initialInvocation,
       invocationId: createInvocationId("invocation-2"),
       trigger: {
         kind: "human_input",
-        eventRef: answerEventRef,
+        eventRef: answerFact.answerEventRef,
         pendingInputEventRef: request.eventId,
       },
-      newContextEventRefs: [request.eventId, answerEventRef],
+      newContextEventRefs: [request.eventId, answerFact.answerEventRef],
       checkpointRef: createCheckpointRef("checkpoint-1"),
       lease: { ...initialInvocation.lease, leaseId: createLeaseId("lease-2") },
       causationRef: createCausationRef("causation-2"),
       correlationId: createCorrelationId("correlation-2"),
       idempotencyKey: createIdempotencyKey("idempotency-2"),
     });
-    const answer = parseRuntimeEvent({
-      ...event(appliedHumanInputAnswerBody(), 1),
-      invocationId: continuation.invocationId,
-      correlationId: continuation.correlationId,
-      causationRef: continuation.causationRef,
-    });
     const secondRequest = parseRuntimeEvent({
-      ...event(appliedInputRequestBody("input-request-2"), 2),
+      ...event(appliedInputRequestBody("input-request-2"), 1),
       invocationId: continuation.invocationId,
       correlationId: continuation.correlationId,
       causationRef: continuation.causationRef,
@@ -590,7 +693,7 @@ describe("durable lifecycle and idempotent replay", () => {
     const waitingContinuationExit = parseRuntimeExit({
       ...exits[1],
       invocationId: continuation.invocationId,
-      finalSequence: 2,
+      finalSequence: 1,
       inputEventRef: secondRequest.eventId,
       idempotencyKey: continuation.idempotencyKey,
       correlationId: continuation.correlationId,
@@ -600,12 +703,13 @@ describe("durable lifecycle and idempotent replay", () => {
       manifest,
       snapshot,
       invocation: continuation,
-      events: [answer, secondRequest],
+      events: [secondRequest],
       exit: waitingContinuationExit,
-      trusted: withReceipts(continuation, [answer, secondRequest], {
+      trusted: withReceipts(continuation, [secondRequest], {
         lifecycle: reparsedState,
         previousRemainingBudget: initialInvocation.remainingBudget,
         checkpoint: { checkpointRef: continuation.checkpointRef, isVerified: true },
+        humanInputAnswer: answerFact,
       }),
     });
     expect(secondWaiting.ok, secondWaiting.ok ? undefined : JSON.stringify(secondWaiting.errors)).toBe(true);
@@ -614,7 +718,7 @@ describe("durable lifecycle and idempotent replay", () => {
     expect(secondWaiting.nextLifecycle.acceptedExits).toHaveLength(2);
 
     const secondReparsedState = parseRuntimeDurableState(JSON.stringify(secondWaiting.nextLifecycle));
-    const finalAnswerEventRef = createEventRef("event-id-3");
+    const finalAnswerEventRef = createEventRef("human-answer-2");
     const finalInvocation = parseInvocationEnvelope({
       ...initialInvocation,
       invocationId: createInvocationId("invocation-3"),
@@ -630,14 +734,9 @@ describe("durable lifecycle and idempotent replay", () => {
       correlationId: createCorrelationId("correlation-3"),
       idempotencyKey: createIdempotencyKey("idempotency-3"),
     });
-    const finalAnswer = parseRuntimeEvent({
-      ...event(appliedHumanInputAnswerBody("input-request-2"), 3),
-      invocationId: finalInvocation.invocationId,
-      correlationId: finalInvocation.correlationId,
-      causationRef: finalInvocation.causationRef,
-    });
+    const finalAnswer = trustedHumanInputAnswer(finalInvocation, "input-request-2", "human-answer-2");
     const outcome = parseRuntimeEvent({
-      ...event(appliedOutcomeBody(), 4),
+      ...event(appliedOutcomeBody(), 2),
       invocationId: finalInvocation.invocationId,
       correlationId: finalInvocation.correlationId,
       causationRef: finalInvocation.causationRef,
@@ -645,7 +744,7 @@ describe("durable lifecycle and idempotent replay", () => {
     const finalExit = parseRuntimeExit({
       ...exits[0],
       invocationId: finalInvocation.invocationId,
-      finalSequence: 4,
+      finalSequence: 2,
       idempotencyKey: finalInvocation.idempotencyKey,
       correlationId: finalInvocation.correlationId,
       causationRef: finalInvocation.causationRef,
@@ -654,12 +753,13 @@ describe("durable lifecycle and idempotent replay", () => {
       manifest,
       snapshot,
       invocation: finalInvocation,
-      events: [finalAnswer, outcome],
+      events: [outcome],
       exit: finalExit,
-      trusted: withReceipts(finalInvocation, [finalAnswer, outcome], {
+      trusted: withReceipts(finalInvocation, [outcome], {
         lifecycle: secondReparsedState,
         previousRemainingBudget: initialInvocation.remainingBudget,
         checkpoint: { checkpointRef: finalInvocation.checkpointRef, isVerified: true },
+        humanInputAnswer: finalAnswer,
       }),
     });
     expect(resumed.ok, resumed.ok ? undefined : JSON.stringify(resumed.errors)).toBe(true);
@@ -668,27 +768,22 @@ describe("durable lifecycle and idempotent replay", () => {
       ...finalInvocation,
       trigger: {
         kind: "human_input",
-        eventRef: finalAnswer.eventId,
+        eventRef: finalAnswer.answerEventRef,
         pendingInputEventRef: request.eventId,
       },
-      newContextEventRefs: [request.eventId, finalAnswer.eventId],
-    });
-    const staleAnswer = parseRuntimeEvent({
-      ...event(appliedHumanInputAnswerBody("input-request-1"), 3),
-      invocationId: staleTrigger.invocationId,
-      correlationId: staleTrigger.correlationId,
-      causationRef: staleTrigger.causationRef,
+      newContextEventRefs: [request.eventId, finalAnswer.answerEventRef],
     });
     const stale = verifyRuntimeExecution({
       manifest,
       snapshot,
       invocation: staleTrigger,
-      events: [staleAnswer, outcome],
+      events: [outcome],
       exit: finalExit,
-      trusted: withReceipts(staleTrigger, [staleAnswer, outcome], {
+      trusted: withReceipts(staleTrigger, [outcome], {
         lifecycle: secondReparsedState,
         previousRemainingBudget: initialInvocation.remainingBudget,
         checkpoint: { checkpointRef: staleTrigger.checkpointRef, isVerified: true },
+        humanInputAnswer: trustedHumanInputAnswer(staleTrigger),
       }),
     });
     expect(stale.ok).toBe(false);
@@ -770,68 +865,407 @@ describe("durable lifecycle and idempotent replay", () => {
     });
     expect(duplicate.ok).toBe(false);
 
-    const priorTerminal: RuntimeDurableState = parseRuntimeDurableState({
-      protocol: "plane.agent-runtime/v1",
-      stateVersion: "v1",
-      binding: {
-        workspaceRef: snapshot.workspaceRef,
-        actorRef: snapshot.actorRef,
-        profileVersionRef: snapshot.profile.profileRef,
-        runId: snapshot.runId,
-        snapshotContentDigest: snapshot.contentDigest,
-      },
-      state: "succeeded",
-      lastAcceptedSequence: 0,
-      acceptedEvents: [
-        {
-          workspaceRef: snapshot.workspaceRef,
-          actorRef: snapshot.actorRef,
-          profileVersionRef: snapshot.profile.profileRef,
-          runId: snapshot.runId,
-          snapshotContentDigest: snapshot.contentDigest,
-          invocationId: invocation.invocationId,
-          eventId: terminal.eventId,
-          idempotencyKey: terminal.idempotencyKey,
-          correlationId: invocation.correlationId,
-          causationRef: invocation.causationRef,
-          sequence: 0,
-          fingerprint: contentDigest("a"),
-          kind: "outcome_submission_observed",
-          productBinding: terminalBody.publication,
-        },
-      ],
-      acceptedExits: [
-        {
-          workspaceRef: snapshot.workspaceRef,
-          actorRef: snapshot.actorRef,
-          profileVersionRef: snapshot.profile.profileRef,
-          runId: snapshot.runId,
-          snapshotContentDigest: snapshot.contentDigest,
-          invocationId: invocation.invocationId,
-          idempotencyKey: invocation.idempotencyKey,
-          finalSequence: 0,
-          fingerprint: contentDigest("b"),
-          kind: "completed",
-          terminalEventId: terminal.eventId,
-        },
-      ],
-      terminal: {
-        eventId: terminal.eventId,
-        invocationId: invocation.invocationId,
-        correlationId: invocation.correlationId,
-        causationRef: invocation.causationRef,
-        productBinding: terminalBody.publication,
-      },
+    const priorTerminalEvent = event(terminalBody, 0);
+    const firstTerminal = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation,
+      events: [priorTerminalEvent],
+      exit: exits[0],
+      trusted: withReceipts(invocation, [priorTerminalEvent]),
+    });
+    expect(firstTerminal.ok).toBe(true);
+    if (!firstTerminal.ok) return;
+    const conflictingPriorTerminal = parseRuntimeEvent({
+      ...priorTerminalEvent,
+      body: { ...priorTerminalEvent.body, payload: inlinePayload("different terminal") },
     });
     const prior = verifyRuntimeExecution({
       manifest,
       snapshot,
       invocation,
-      events: [terminal],
+      events: [conflictingPriorTerminal],
       exit: exits[0],
-      trusted: withReceipts(invocation, [terminal], { lifecycle: priorTerminal }),
+      trusted: withReceipts(invocation, [conflictingPriorTerminal], { lifecycle: firstTerminal.nextLifecycle }),
     });
     expect(prior.ok).toBe(false);
+  });
+});
+
+describe("independently trusted durable heads and history", () => {
+  test("rejects reset, stale, alternate-byte, and previous-link state against the Plane head", () => {
+    const invocation = envelope();
+    const request = event(appliedInputRequestBody(), 0);
+    const waitingExit = parseRuntimeExit({ ...exits[1], inputEventRef: request.eventId });
+    const accepted = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation,
+      events: [request],
+      exit: waitingExit,
+      trusted: withReceipts(invocation, [request]),
+    });
+    expect(accepted.ok).toBe(true);
+    if (!accepted.ok) return;
+
+    const trustedHead = durableStateHead(accepted.nextLifecycle);
+    const reset = createInitialRuntimeDurableState(accepted.nextLifecycle.binding);
+    const resetResult = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation,
+      events: [request],
+      exit: waitingExit,
+      trusted: withReceipts(invocation, [request], { lifecycle: reset, durableStateHead: trustedHead }),
+    });
+    expect(resetResult.ok).toBe(false);
+    if (!resetResult.ok)
+      expect(resetResult.errors.some((error) => error.code === "durable_state_head_mismatch")).toBe(true);
+
+    const alternateContent = {
+      ...accepted.nextLifecycle,
+      acceptedEvents: [
+        {
+          ...accepted.nextLifecycle.acceptedEvents[0],
+          fingerprint: contentDigest("e"),
+        },
+      ],
+    };
+    const alternate = parseRuntimeDurableState({
+      ...alternateContent,
+      stateDigest: computeRuntimeDurableStateDigest(alternateContent),
+    });
+    const alternateResult = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation,
+      events: [request],
+      exit: waitingExit,
+      trusted: withReceipts(invocation, [request], { lifecycle: alternate, durableStateHead: trustedHead }),
+    });
+    expect(alternateResult.ok).toBe(false);
+
+    const previousLinkContent = {
+      ...accepted.nextLifecycle,
+      previousStateDigest: contentDigest("f"),
+    };
+    const previousLink = parseRuntimeDurableState({
+      ...previousLinkContent,
+      stateDigest: computeRuntimeDurableStateDigest(previousLinkContent),
+    });
+    const previousLinkResult = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation,
+      events: [request],
+      exit: waitingExit,
+      trusted: withReceipts(invocation, [request], {
+        lifecycle: previousLink,
+        durableStateHead: trustedHead,
+      }),
+    });
+    expect(previousLinkResult.ok).toBe(false);
+  });
+
+  test("advances and freezes the digest chain and correlates every waiting exit", () => {
+    const invocation = envelope();
+    const request = event(appliedInputRequestBody(), 0);
+    const waitingExit = parseRuntimeExit({ ...exits[1], inputEventRef: request.eventId });
+    const result = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation,
+      events: [request],
+      exit: waitingExit,
+      trusted: withReceipts(invocation, [request]),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.nextLifecycle.revision).toBe(1);
+    expect(result.nextLifecycle.previousRevision).toBe(0);
+    expect(result.nextLifecycle.previousStateDigest).toBe(trusted().lifecycle.stateDigest);
+    expect(result.nextLifecycle.stateDigest).toBe(computeRuntimeDurableStateDigest(result.nextLifecycle));
+    expect(result.nextLifecycle.acceptedExits[0]?.inputEventId).toBe(request.eventId);
+    expect(Object.isFrozen(result.nextLifecycle)).toBe(true);
+
+    const fabricatedExitContent = {
+      ...result.nextLifecycle,
+      acceptedExits: result.nextLifecycle.acceptedExits.map((exit) =>
+        Object.assign({}, exit, { finalSequence: exit.finalSequence + 1 })
+      ),
+    };
+    expect(() =>
+      parseRuntimeDurableState({
+        ...fabricatedExitContent,
+        stateDigest: computeRuntimeDurableStateDigest(fabricatedExitContent),
+      })
+    ).toThrow(/exact accepted input-request product|cannot exceed the accepted sequence/);
+  });
+
+  test.each([
+    "operationAttemptRef",
+    "gatewayReceiptRef",
+    "receiptRef",
+    "auditReceiptRef",
+    "productEventRef",
+    "productRef",
+  ] as const)("rejects historical %s reuse on a restart", (field) => {
+    const originalInvocation = envelope();
+    const historicalEvent = event(appliedOutcomeBody("historical-outcome"));
+    const historical = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation: originalInvocation,
+      events: [historicalEvent],
+      exit: exits[0],
+      trusted: withReceipts(originalInvocation, [historicalEvent]),
+    });
+    expect(historical.ok).toBe(true);
+    if (!historical.ok) return;
+
+    const restartedInvocation = parseInvocationEnvelope({
+      ...envelope(),
+      invocationId: createInvocationId("invocation-restart"),
+      lease: { ...envelope().lease, leaseId: createLeaseId("lease-restart") },
+      causationRef: createCausationRef("causation-restart"),
+      correlationId: createCorrelationId("correlation-restart"),
+      idempotencyKey: createIdempotencyKey("idempotency-restart"),
+    });
+    const currentBody = appliedOutcomeBody("current-outcome");
+    const historicalPublication = historicalEvent.body;
+    if (
+      historicalPublication.kind !== "outcome_submission_observed" ||
+      currentBody.kind !== "outcome_submission_observed"
+    ) {
+      throw new Error("Expected outcome publications");
+    }
+    const current = parseRuntimeEvent({
+      ...event(currentBody, 1),
+      invocationId: restartedInvocation.invocationId,
+      causationRef: restartedInvocation.causationRef,
+      correlationId: restartedInvocation.correlationId,
+    });
+    const currentPublication = current.body.publication;
+    const historicalFields = historicalPublication.publication as unknown as Record<string, unknown>;
+    const reused = parseRuntimeEvent({
+      ...current,
+      body: {
+        ...current.body,
+        publication: {
+          ...currentPublication,
+          [field]: historicalFields[field],
+        },
+      },
+    });
+    const currentExit = parseRuntimeExit({
+      ...exits[0],
+      invocationId: restartedInvocation.invocationId,
+      finalSequence: 1,
+      idempotencyKey: restartedInvocation.idempotencyKey,
+      correlationId: restartedInvocation.correlationId,
+      causationRef: restartedInvocation.causationRef,
+    });
+    const rejected = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation: restartedInvocation,
+      events: [reused],
+      exit: currentExit,
+      trusted: withReceipts(restartedInvocation, [reused], { lifecycle: historical.nextLifecycle }),
+    });
+    expect(rejected.ok).toBe(false);
+    if (!rejected.ok) {
+      expect(
+        rejected.errors.some(
+          (error) => error.code === "publication_receipt_duplicate" || error.code === "publication_product_duplicate"
+        )
+      ).toBe(true);
+    }
+  });
+
+  test("rejects a combined historical identity collision on a restart", () => {
+    const originalInvocation = envelope();
+    const historicalEvent = event(appliedOutcomeBody("historical-combined"));
+    const historical = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation: originalInvocation,
+      events: [historicalEvent],
+      exit: exits[0],
+      trusted: withReceipts(originalInvocation, [historicalEvent]),
+    });
+    expect(historical.ok).toBe(true);
+    if (!historical.ok) return;
+
+    const restartedInvocation = parseInvocationEnvelope({
+      ...envelope(),
+      invocationId: createInvocationId("invocation-combined-restart"),
+      lease: { ...envelope().lease, leaseId: createLeaseId("lease-combined-restart") },
+      causationRef: createCausationRef("causation-combined-restart"),
+      correlationId: createCorrelationId("correlation-combined-restart"),
+      idempotencyKey: createIdempotencyKey("idempotency-combined-restart"),
+    });
+    const current = parseRuntimeEvent({
+      ...event(appliedOutcomeBody("current-combined"), 1),
+      invocationId: restartedInvocation.invocationId,
+      causationRef: restartedInvocation.causationRef,
+      correlationId: restartedInvocation.correlationId,
+    });
+    if (
+      historicalEvent.body.kind !== "outcome_submission_observed" ||
+      current.body.kind !== "outcome_submission_observed" ||
+      historicalEvent.body.publication.action !== "applied" ||
+      current.body.publication.action !== "applied"
+    ) {
+      throw new Error("Expected outcome publications");
+    }
+    const historicalPublication = historicalEvent.body.publication;
+    const currentPublication = current.body.publication;
+    const reused = parseRuntimeEvent({
+      ...current,
+      body: {
+        ...current.body,
+        publication: {
+          ...currentPublication,
+          productRef: historicalPublication.productRef,
+          operationAttemptRef: historicalPublication.operationAttemptRef,
+          operationRef: historicalPublication.operationRef,
+          applicationServiceRef: historicalPublication.applicationServiceRef,
+          gatewayReceiptRef: historicalPublication.gatewayReceiptRef,
+          receiptRef: historicalPublication.receiptRef,
+          auditReceiptRef: historicalPublication.auditReceiptRef,
+          productEventRef: historicalPublication.productEventRef,
+        },
+      },
+    });
+    const rejected = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation: restartedInvocation,
+      events: [reused],
+      exit: parseRuntimeExit({
+        ...exits[0],
+        invocationId: restartedInvocation.invocationId,
+        finalSequence: 1,
+        idempotencyKey: restartedInvocation.idempotencyKey,
+        correlationId: restartedInvocation.correlationId,
+        causationRef: restartedInvocation.causationRef,
+      }),
+      trusted: withReceipts(restartedInvocation, [reused], { lifecycle: historical.nextLifecycle }),
+    });
+    expect(rejected.ok).toBe(false);
+  });
+});
+
+describe("Plane-owned human answer boundary", () => {
+  test("requires one exact trusted responder fact and never accepts a runtime answer event", () => {
+    const initialInvocation = envelope();
+    const request = event(appliedInputRequestBody(), 0);
+    const waitingExit = parseRuntimeExit({ ...exits[1], inputEventRef: request.eventId });
+    const waiting = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation: initialInvocation,
+      events: [request],
+      exit: waitingExit,
+      trusted: withReceipts(initialInvocation, [request]),
+    });
+    expect(waiting.ok).toBe(true);
+    if (!waiting.ok) return;
+
+    const continuation = parseInvocationEnvelope({
+      ...initialInvocation,
+      invocationId: createInvocationId("invocation-answer"),
+      trigger: {
+        kind: "human_input",
+        eventRef: createEventRef("human-answer-boundary"),
+        pendingInputEventRef: request.eventId,
+      },
+      newContextEventRefs: [request.eventId, createEventRef("human-answer-boundary")],
+      checkpointRef: createCheckpointRef("checkpoint-answer"),
+      lease: { ...initialInvocation.lease, leaseId: createLeaseId("lease-answer") },
+      causationRef: createCausationRef("causation-answer"),
+      correlationId: createCorrelationId("correlation-answer"),
+      idempotencyKey: createIdempotencyKey("idempotency-answer"),
+    });
+    const fact = trustedHumanInputAnswer(continuation, "input-request-1", "human-answer-boundary");
+    const outcome = parseRuntimeEvent({
+      ...event(appliedOutcomeBody("answer-outcome"), 1),
+      invocationId: continuation.invocationId,
+      causationRef: continuation.causationRef,
+      correlationId: continuation.correlationId,
+    });
+    const exit = parseRuntimeExit({
+      ...exits[0],
+      invocationId: continuation.invocationId,
+      finalSequence: 1,
+      idempotencyKey: continuation.idempotencyKey,
+      causationRef: continuation.causationRef,
+      correlationId: continuation.correlationId,
+    });
+    const accepted = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation: continuation,
+      events: [outcome],
+      exit,
+      trusted: withReceipts(continuation, [outcome], {
+        lifecycle: waiting.nextLifecycle,
+        previousRemainingBudget: initialInvocation.remainingBudget,
+        checkpoint: { checkpointRef: continuation.checkpointRef, isVerified: true },
+        humanInputAnswer: fact,
+      }),
+    });
+    expect(accepted.ok).toBe(true);
+    if (!accepted.ok) return;
+
+    const duplicateFact = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation: continuation,
+      events: [outcome],
+      exit,
+      trusted: withReceipts(continuation, [outcome], {
+        lifecycle: accepted.nextLifecycle,
+        durableStateHead: durableStateHead(accepted.nextLifecycle),
+        previousRemainingBudget: initialInvocation.remainingBudget,
+        checkpoint: { checkpointRef: continuation.checkpointRef, isVerified: true },
+        humanInputAnswer: fact,
+      }),
+    });
+    expect(duplicateFact.ok).toBe(false);
+
+    const runtimeFake = {
+      ...outcome,
+      eventId: fact.answerEventRef,
+    };
+    expect(() => parseRuntimeEvent(runtimeFake)).not.toThrow();
+    const fakeResult = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation: continuation,
+      events: [runtimeFake],
+      exit,
+      trusted: withReceipts(continuation, [runtimeFake], {
+        lifecycle: waiting.nextLifecycle,
+        previousRemainingBudget: initialInvocation.remainingBudget,
+        checkpoint: { checkpointRef: continuation.checkpointRef, isVerified: true },
+        humanInputAnswer: fact,
+      }),
+    });
+    expect(fakeResult.ok).toBe(false);
+
+    expect(() =>
+      parseRuntimeEvent({
+        ...outcome,
+        body: {
+          kind: "human_input_answer_observed",
+          inputRequestRef: fact.inputRequestRef,
+          payload: inlinePayload("fake"),
+          publication: outcome.body.publication,
+        },
+      })
+    ).toThrow();
   });
 });
 
@@ -963,5 +1397,71 @@ describe("explicit UTF-8 bounds", () => {
       trusted: trusted(),
     });
     expect(bounded.ok).toBe(false);
+  });
+
+  test("covers exact, +1 ASCII, and multibyte edges for every shared byte-bound field", () => {
+    const parseSnapshotField = (field: "behavioralPrompt" | "revision", value: string) => {
+      const content = {
+        ...snapshot,
+        profile:
+          field === "behavioralPrompt"
+            ? { ...snapshot.profile, behavioralPrompt: value }
+            : { ...snapshot.profile, revision: value },
+      };
+      return parseRunSnapshot({
+        ...content,
+        contentDigest: computeRunSnapshotContentDigest(content),
+      });
+    };
+    const boundedCases = [
+      {
+        name: "text",
+        limit: UTF8_BYTE_LIMITS.boundedText,
+        parse: (value: string) => parseRuntimeEvent(event(observationBody(value))),
+      },
+      {
+        name: "prompt",
+        limit: UTF8_BYTE_LIMITS.boundedPrompt,
+        parse: (value: string) => parseSnapshotField("behavioralPrompt", value),
+      },
+      {
+        name: "token",
+        limit: UTF8_BYTE_LIMITS.boundedToken,
+        parse: (value: string) => parseSnapshotField("revision", value),
+      },
+      {
+        name: "timestamp",
+        limit: UTF8_BYTE_LIMITS.timestamp,
+        parse: (value: string) => parseRuntimeEvent({ ...event(observationBody()), observedAt: value }),
+      },
+    ] as const;
+
+    for (const { name, limit, parse } of boundedCases) {
+      expect(() => parse("a".repeat(limit)), name).not.toThrow();
+      expect(() => parse("a".repeat(limit) + "a"), name).toThrow();
+      const multibyteExact = "🙂".repeat(Math.floor(limit / 4));
+      expect(new TextEncoder().encode(multibyteExact).byteLength).toBe(limit);
+      expect(() => parse(multibyteExact), name).not.toThrow();
+      expect(() => parse(multibyteExact + "🙂"), name).toThrow();
+    }
+
+    const exactReferenceSuffix = "a".repeat(UTF8_BYTE_LIMITS.reference - "workspace:".length);
+    expect(createWorkspaceRef(exactReferenceSuffix)).toBe("workspace:" + exactReferenceSuffix);
+    expect(() => createWorkspaceRef(exactReferenceSuffix + "a")).toThrow();
+    expect(() => createWorkspaceRef("🙂")).toThrow();
+
+    expect(createContractDigest("a".repeat(64))).toHaveLength(64);
+    expect(() => createContractDigest("a".repeat(65))).toThrow();
+    expect(() => createContractDigest("🙂".repeat(16))).toThrow();
+    expect(createContentDigest("b".repeat(64))).toHaveLength(UTF8_BYTE_LIMITS.reference - 56);
+    expect(() => createContentDigest("b".repeat(65))).toThrow();
+    expect(() => createContentDigest("🙂".repeat(16))).toThrow();
+
+    const exactSerializedAscii = "x".repeat(MAX_SERIALIZED_JSON_BYTES - 2);
+    expect(serializedJsonByteLength(exactSerializedAscii)).toBe(MAX_SERIALIZED_JSON_BYTES);
+    expect(serializedJsonByteLength(exactSerializedAscii + "x")).toBe(MAX_SERIALIZED_JSON_BYTES + 1);
+    const exactSerializedEmoji = "🙂".repeat(MAX_SERIALIZED_JSON_BYTES / 4 - 1);
+    expect(serializedJsonByteLength(exactSerializedEmoji)).toBe(MAX_SERIALIZED_JSON_BYTES - 2);
+    expect(serializedJsonByteLength(exactSerializedEmoji + "🙂")).toBe(MAX_SERIALIZED_JSON_BYTES + 2);
   });
 });

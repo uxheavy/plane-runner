@@ -9,8 +9,11 @@
     "stateVersion",
     "binding",
     "state",
+    "revision",
+    "stateDigest",
     "lastAcceptedSequence",
     "acceptedEvents",
+    "acceptedHumanInputAnswers",
     "acceptedExits"
   ],
   "properties": {
@@ -44,6 +47,22 @@
     },
     "state": {
       "enum": ["queued", "running", "waiting_for_input", "succeeded", "failed", "blocked", "cancelled"]
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "stateDigest": {
+      "$ref": "#/$defs/contentDigest"
+    },
+    "previousRevision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "previousStateDigest": {
+      "$ref": "#/$defs/contentDigest"
     },
     "lastAcceptedSequence": {
       "type": "integer",
@@ -112,7 +131,6 @@
               "progress_observed",
               "conversation_publication_observed",
               "input_request_observed",
-              "human_input_answer_observed",
               "artifact_observed",
               "usage_observed",
               "outcome_submission_observed",
@@ -133,7 +151,7 @@
                     "const": "proposal"
                   },
                   "productKind": {
-                    "enum": ["conversation", "input_request", "artifact", "outcome_submission", "human_input_answer"]
+                    "enum": ["conversation", "input_request", "artifact"]
                   },
                   "productRef": {
                     "oneOf": [
@@ -184,7 +202,6 @@
                       "input_request",
                       "artifact",
                       "outcome_submission",
-                      "human_input_answer",
                       "run_failure",
                       "run_blocker",
                       "run_cancellation"
@@ -240,6 +257,66 @@
         }
       }
     },
+    "acceptedHumanInputAnswers": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "answerEventRef",
+          "inputRequestRef",
+          "responderPrincipalRef",
+          "workspaceRef",
+          "runId",
+          "authorizationReceiptRef",
+          "applicationServiceRef",
+          "gatewayReceiptRef",
+          "receiptRef",
+          "auditReceiptRef",
+          "correlationId",
+          "causationRef"
+        ],
+        "properties": {
+          "answerEventRef": {
+            "$ref": "#/$defs/eventRef"
+          },
+          "inputRequestRef": {
+            "$ref": "#/$defs/inputRequestRef"
+          },
+          "responderPrincipalRef": {
+            "$ref": "#/$defs/responderPrincipalRef"
+          },
+          "workspaceRef": {
+            "$ref": "#/$defs/workspaceRef"
+          },
+          "runId": {
+            "$ref": "#/$defs/runId"
+          },
+          "authorizationReceiptRef": {
+            "$ref": "#/$defs/authorizationReceiptRef"
+          },
+          "applicationServiceRef": {
+            "$ref": "#/$defs/applicationServiceRef"
+          },
+          "gatewayReceiptRef": {
+            "$ref": "#/$defs/gatewayReceiptRef"
+          },
+          "receiptRef": {
+            "$ref": "#/$defs/receiptRef"
+          },
+          "auditReceiptRef": {
+            "$ref": "#/$defs/auditReceiptRef"
+          },
+          "correlationId": {
+            "$ref": "#/$defs/correlationId"
+          },
+          "causationRef": {
+            "$ref": "#/$defs/causationRef"
+          }
+        }
+      }
+    },
     "acceptedExits": {
       "type": "array",
       "maxItems": 256,
@@ -290,6 +367,9 @@
           "kind": {
             "enum": ["completed", "waiting_for_input", "failed", "blocked", "cancelled"]
           },
+          "inputEventId": {
+            "$ref": "#/$defs/eventRef"
+          },
           "terminalEventId": {
             "$ref": "#/$defs/eventRef"
           }
@@ -324,7 +404,7 @@
                   "const": "proposal"
                 },
                 "productKind": {
-                  "enum": ["conversation", "input_request", "artifact", "outcome_submission", "human_input_answer"]
+                  "enum": ["conversation", "input_request", "artifact"]
                 },
                 "productRef": {
                   "oneOf": [
@@ -375,7 +455,6 @@
                     "input_request",
                     "artifact",
                     "outcome_submission",
-                    "human_input_answer",
                     "run_failure",
                     "run_blocker",
                     "run_cancellation"
@@ -561,6 +640,13 @@
       "x-utf8ByteMax": 128,
       "pattern": "^audit-receipt:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
+    "authorizationReceiptRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^authorization-receipt:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
     "cancellationRef": {
       "type": "string",
       "minLength": 1,
@@ -677,6 +763,13 @@
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^receipt:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "responderPrincipalRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^responder:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "runId": {
       "type": "string",

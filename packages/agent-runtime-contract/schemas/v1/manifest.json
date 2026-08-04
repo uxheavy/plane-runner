@@ -11,7 +11,7 @@
     },
     "runtime-event": {
       "filename": "runtime-event.schema.json",
-      "sha256": "3f7d3976927eba2f7ddb0ceef47b9e4721f0c3d0be4417ac7f7ff0fa804a36ab"
+      "sha256": "4437a6375cb8ca54b845fe79745ff9f188426d3c96ebcf0aa3a6624b42afcc5b"
     },
     "runtime-exit": {
       "filename": "runtime-exit.schema.json",
@@ -19,7 +19,7 @@
     },
     "runtime-durable-state": {
       "filename": "runtime-durable-state.schema.json",
-      "sha256": "ede9dbc54a481bbe88b4f22afb41e1ae1a9af7b394d9f082472b9d466136e797"
+      "sha256": "99611586cc801fa760007d54d580d27c8aadc2bcd0f05eb837f365fd25fda0a7"
     }
   }
 }

@@ -44,6 +44,10 @@ const definitions = {
     pattern: namespacedPattern("application-service"),
   }),
   gatewayReceiptRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("gateway-receipt") }),
+  responderPrincipalRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("responder") }),
+  authorizationReceiptRef: stringWithBytes(byteConstraints.reference, {
+    pattern: namespacedPattern("authorization-receipt"),
+  }),
   receiptRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("receipt") }),
   auditReceiptRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("audit-receipt") }),
   productEventRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("product-event") }),
@@ -204,7 +208,6 @@ definitions.conversationPublication = publicationDefinition("conversation", "con
 definitions.inputRequestPublication = publicationDefinition("input_request", "inputRequestRef");
 definitions.artifactPublication = publicationDefinition("artifact", "artifactRef");
 definitions.outcomeSubmissionPublication = publicationDefinition("outcome_submission", "outcomeSubmissionRef");
-definitions.humanInputAnswerPublication = publicationDefinition("human_input_answer", "productEventRef");
 const terminalPublicationDefinition = (productKind, includeCancellationRef = false) => ({
   type: "object",
   additionalProperties: false,
@@ -542,17 +545,6 @@ const eventBodies = [
   {
     type: "object",
     additionalProperties: false,
-    required: ["kind", "inputRequestRef", "payload", "publication"],
-    properties: {
-      kind: { const: "human_input_answer_observed" },
-      inputRequestRef: ref("inputRequestRef"),
-      payload: ref("boundedPayload"),
-      publication: ref("humanInputAnswerPublication"),
-    },
-  },
-  {
-    type: "object",
-    additionalProperties: false,
     required: ["kind", "artifact", "publication"],
     properties: {
       kind: { const: "artifact_observed" },
@@ -745,7 +737,7 @@ const durableProductBinding = {
       properties: {
         action: { const: "proposal" },
         productKind: {
-          enum: ["conversation", "input_request", "artifact", "outcome_submission", "human_input_answer"],
+          enum: ["conversation", "input_request", "artifact"],
         },
         productRef: durableProductRef,
         operationAttemptRef: ref("operationAttemptRef"),
@@ -774,7 +766,6 @@ const durableProductBinding = {
             "input_request",
             "artifact",
             "outcome_submission",
-            "human_input_answer",
             "run_failure",
             "run_blocker",
             "run_cancellation",
@@ -830,7 +821,6 @@ const durableAcceptedEvent = {
         "progress_observed",
         "conversation_publication_observed",
         "input_request_observed",
-        "human_input_answer_observed",
         "artifact_observed",
         "usage_observed",
         "outcome_submission_observed",
@@ -841,6 +831,39 @@ const durableAcceptedEvent = {
       ],
     },
     productBinding: durableProductBinding,
+  },
+};
+
+const durableHumanInputAnswer = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "answerEventRef",
+    "inputRequestRef",
+    "responderPrincipalRef",
+    "workspaceRef",
+    "runId",
+    "authorizationReceiptRef",
+    "applicationServiceRef",
+    "gatewayReceiptRef",
+    "receiptRef",
+    "auditReceiptRef",
+    "correlationId",
+    "causationRef",
+  ],
+  properties: {
+    answerEventRef: ref("eventRef"),
+    inputRequestRef: ref("inputRequestRef"),
+    responderPrincipalRef: ref("responderPrincipalRef"),
+    workspaceRef: ref("workspaceRef"),
+    runId: ref("runId"),
+    authorizationReceiptRef: ref("authorizationReceiptRef"),
+    applicationServiceRef: ref("applicationServiceRef"),
+    gatewayReceiptRef: ref("gatewayReceiptRef"),
+    receiptRef: ref("receiptRef"),
+    auditReceiptRef: ref("auditReceiptRef"),
+    correlationId: ref("correlationId"),
+    causationRef: ref("causationRef"),
   },
 };
 
@@ -870,6 +893,7 @@ const durableAcceptedExit = {
     finalSequence: { type: "integer", minimum: 0 },
     fingerprint: ref("contentDigest"),
     kind: { enum: ["completed", "waiting_for_input", "failed", "blocked", "cancelled"] },
+    inputEventId: ref("eventRef"),
     terminalEventId: ref("eventRef"),
   },
 };
@@ -924,7 +948,18 @@ const durablePendingInput = {
 
 const runtimeDurableState = objectSchema(
   "RuntimeDurableState",
-  ["protocol", "stateVersion", "binding", "state", "lastAcceptedSequence", "acceptedEvents", "acceptedExits"],
+  [
+    "protocol",
+    "stateVersion",
+    "binding",
+    "state",
+    "revision",
+    "stateDigest",
+    "lastAcceptedSequence",
+    "acceptedEvents",
+    "acceptedHumanInputAnswers",
+    "acceptedExits",
+  ],
   {
     protocol: { const: protocol },
     stateVersion: { const: "v1" },
@@ -932,8 +967,13 @@ const runtimeDurableState = objectSchema(
     state: {
       enum: ["queued", "running", "waiting_for_input", "succeeded", "failed", "blocked", "cancelled"],
     },
+    revision: { type: "integer", minimum: 0, maximum: 2147483647 },
+    stateDigest: ref("contentDigest"),
+    previousRevision: { type: "integer", minimum: 0, maximum: 2147483647 },
+    previousStateDigest: ref("contentDigest"),
     lastAcceptedSequence: { type: "integer", minimum: -1 },
     acceptedEvents: { type: "array", maxItems: 4096, items: durableAcceptedEvent },
+    acceptedHumanInputAnswers: { type: "array", maxItems: 256, items: durableHumanInputAnswer },
     acceptedExits: { type: "array", maxItems: 256, items: durableAcceptedExit },
     terminal: durableTerminalBinding,
     pendingInput: durablePendingInput,

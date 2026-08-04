@@ -109,25 +109,6 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "inputRequestRef", "payload", "publication"],
-          "properties": {
-            "kind": {
-              "const": "human_input_answer_observed"
-            },
-            "inputRequestRef": {
-              "$ref": "#/$defs/inputRequestRef"
-            },
-            "payload": {
-              "$ref": "#/$defs/boundedPayload"
-            },
-            "publication": {
-              "$ref": "#/$defs/humanInputAnswerPublication"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
           "required": ["kind", "artifact", "publication"],
           "properties": {
             "kind": {
@@ -692,77 +673,6 @@
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^gateway-receipt:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
-    },
-    "humanInputAnswerPublication": {
-      "oneOf": [
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["action", "productKind", "productRef", "operationAttemptRef"],
-          "properties": {
-            "action": {
-              "const": "proposal"
-            },
-            "productKind": {
-              "const": "human_input_answer"
-            },
-            "productRef": {
-              "$ref": "#/$defs/productEventRef"
-            },
-            "operationAttemptRef": {
-              "$ref": "#/$defs/operationAttemptRef"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "action",
-            "productKind",
-            "productRef",
-            "operationAttemptRef",
-            "operationRef",
-            "applicationServiceRef",
-            "gatewayReceiptRef",
-            "receiptRef",
-            "auditReceiptRef",
-            "productEventRef"
-          ],
-          "properties": {
-            "action": {
-              "const": "applied"
-            },
-            "productKind": {
-              "const": "human_input_answer"
-            },
-            "productRef": {
-              "$ref": "#/$defs/productEventRef"
-            },
-            "operationAttemptRef": {
-              "$ref": "#/$defs/operationAttemptRef"
-            },
-            "operationRef": {
-              "$ref": "#/$defs/operationRef"
-            },
-            "applicationServiceRef": {
-              "$ref": "#/$defs/applicationServiceRef"
-            },
-            "gatewayReceiptRef": {
-              "$ref": "#/$defs/gatewayReceiptRef"
-            },
-            "receiptRef": {
-              "$ref": "#/$defs/receiptRef"
-            },
-            "auditReceiptRef": {
-              "$ref": "#/$defs/auditReceiptRef"
-            },
-            "productEventRef": {
-              "$ref": "#/$defs/productEventRef"
-            }
-          }
-        }
-      ]
     },
     "idempotencyKey": {
       "type": "string",

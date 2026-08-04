@@ -3,7 +3,9 @@ import { fileURLToPath } from "node:url";
 
 import {
   createActorRef,
+  createArtifactRef,
   createApplicationServiceRef,
+  createAuthorizationReceiptRef,
   createAssignmentRef,
   createAuditReceiptRef,
   createCancellationRef,
@@ -24,6 +26,7 @@ import {
   createOutcomeSubmissionRef,
   createProductEventRef,
   createProfileVersionRef,
+  createResponderPrincipalRef,
   createReceiptRef,
   createRunId,
   createRunSnapshot,
@@ -42,6 +45,7 @@ import {
   type RuntimeEvent,
   type RuntimeEventBody,
   type RuntimeExit,
+  type TrustedHumanInputAnswer,
 } from "../src";
 
 const manifestDirectory = fileURLToPath(new URL("../schemas/v1/", import.meta.url));
@@ -196,6 +200,56 @@ export const appliedConversationBody = (): RuntimeEventBody => ({
   },
 });
 
+export const appliedArtifactBody = (): RuntimeEventBody => ({
+  kind: "artifact_observed",
+  artifact: {
+    artifactRef: createArtifactRef("artifact-1"),
+    contentDigest: contentDigest("e"),
+    mediaType: "text/plain",
+    sizeBytes: 1,
+  },
+  publication: {
+    action: "applied",
+    productKind: "artifact",
+    productRef: createArtifactRef("artifact-1"),
+    operationAttemptRef: createOperationAttemptRef("operation-attempt-artifact"),
+    operationRef: createOperationRef("publish-artifact"),
+    applicationServiceRef: createApplicationServiceRef("artifact-service"),
+    gatewayReceiptRef: createGatewayReceiptRef("gateway-artifact"),
+    receiptRef: createReceiptRef("receipt-artifact"),
+    auditReceiptRef: createAuditReceiptRef("audit-artifact"),
+    productEventRef: createProductEventRef("product-event-artifact"),
+  },
+});
+
+export const proposalArtifactBody = (): RuntimeEventBody => ({
+  kind: "artifact_observed",
+  artifact: {
+    artifactRef: createArtifactRef("artifact-proposal"),
+    contentDigest: contentDigest("f"),
+    mediaType: "text/plain",
+    sizeBytes: 1,
+  },
+  publication: {
+    action: "proposal",
+    productKind: "artifact",
+    productRef: createArtifactRef("artifact-proposal"),
+    operationAttemptRef: createOperationAttemptRef("operation-attempt-artifact-proposal"),
+  },
+});
+
+export const observationUsageBody = (): RuntimeEventBody => ({
+  kind: "usage_observed",
+  usage: { inputTokens: 1, outputTokens: 2, durationMs: 3 },
+  publication: { action: "observation_only" },
+});
+
+export const transcriptEvidenceBody = (): RuntimeEventBody => ({
+  kind: "transcript_evidence_observed",
+  payload: inlinePayload("Transcript evidence."),
+  publication: { action: "observation_only" },
+});
+
 export const appliedInputRequestBody = (requestId = "input-request-1"): RuntimeEventBody => ({
   kind: "input_request_observed",
   question: "Please provide the missing detail.",
@@ -203,48 +257,71 @@ export const appliedInputRequestBody = (requestId = "input-request-1"): RuntimeE
     action: "applied",
     productKind: "input_request",
     productRef: createInputRequestRef(requestId),
-    operationAttemptRef: createOperationAttemptRef("operation-attempt-input"),
-    operationRef: createOperationRef("request-input"),
-    applicationServiceRef: createApplicationServiceRef("input-service"),
-    gatewayReceiptRef: createGatewayReceiptRef("gateway-input"),
-    receiptRef: createReceiptRef("receipt-input"),
-    auditReceiptRef: createAuditReceiptRef("audit-input"),
-    productEventRef: createProductEventRef("product-event-input"),
+    operationAttemptRef: createOperationAttemptRef("operation-attempt-" + requestId),
+    operationRef: createOperationRef("request-input-" + requestId),
+    applicationServiceRef: createApplicationServiceRef("input-service-" + requestId),
+    gatewayReceiptRef: createGatewayReceiptRef("gateway-input-" + requestId),
+    receiptRef: createReceiptRef("receipt-input-" + requestId),
+    auditReceiptRef: createAuditReceiptRef("audit-input-" + requestId),
+    productEventRef: createProductEventRef("product-event-input-" + requestId),
   },
 });
 
-export const appliedHumanInputAnswerBody = (requestId = "input-request-1"): RuntimeEventBody => ({
-  kind: "human_input_answer_observed",
-  inputRequestRef: createInputRequestRef(requestId),
-  payload: inlinePayload("The Plane-owned human answer."),
+export const proposalInputRequestBody = (): RuntimeEventBody => ({
+  kind: "input_request_observed",
+  question: "Please provide the missing detail.",
   publication: {
-    action: "applied",
-    productKind: "human_input_answer",
-    productRef: createProductEventRef("product-event-answer"),
-    operationAttemptRef: createOperationAttemptRef("operation-attempt-answer"),
-    operationRef: createOperationRef("answer-input"),
-    applicationServiceRef: createApplicationServiceRef("answer-service"),
-    gatewayReceiptRef: createGatewayReceiptRef("gateway-answer"),
-    receiptRef: createReceiptRef("receipt-answer"),
-    auditReceiptRef: createAuditReceiptRef("audit-answer"),
-    productEventRef: createProductEventRef("product-event-answer"),
+    action: "proposal",
+    productKind: "input_request",
+    productRef: createInputRequestRef("input-request-proposal"),
+    operationAttemptRef: createOperationAttemptRef("operation-attempt-input-proposal"),
   },
 });
 
-export const appliedOutcomeBody = (): RuntimeEventBody => ({
+export const trustedHumanInputAnswer = (
+  invocation: InvocationEnvelope,
+  requestId = "input-request-1",
+  answerEventId = "human-answer-1"
+): TrustedHumanInputAnswer => ({
+  answerEventRef: createEventRef(answerEventId),
+  inputRequestRef: createInputRequestRef(requestId),
+  responderPrincipalRef: createResponderPrincipalRef("human-1"),
+  workspaceRef,
+  runId,
+  authorizationReceiptRef: createAuthorizationReceiptRef("authorization-" + answerEventId),
+  applicationServiceRef: createApplicationServiceRef("answer-" + answerEventId),
+  gatewayReceiptRef: createGatewayReceiptRef("answer-" + answerEventId),
+  receiptRef: createReceiptRef("answer-" + answerEventId),
+  auditReceiptRef: createAuditReceiptRef("answer-" + answerEventId),
+  correlationId: invocation.correlationId,
+  causationRef: invocation.causationRef,
+});
+
+export const appliedOutcomeBody = (suffix = "outcome-1"): RuntimeEventBody => ({
   kind: "outcome_submission_observed",
   payload: inlinePayload("The completed outcome."),
   publication: {
     action: "applied",
     productKind: "outcome_submission",
-    productRef: createOutcomeSubmissionRef("outcome-1"),
-    operationAttemptRef: createOperationAttemptRef("operation-attempt-outcome"),
-    operationRef: createOperationRef("submit-outcome"),
-    applicationServiceRef: createApplicationServiceRef("outcome-service"),
-    gatewayReceiptRef: createGatewayReceiptRef("gateway-outcome"),
-    receiptRef: createReceiptRef("receipt-outcome"),
-    auditReceiptRef: createAuditReceiptRef("audit-outcome"),
-    productEventRef: createProductEventRef("product-event-outcome"),
+    productRef: createOutcomeSubmissionRef(suffix),
+    operationAttemptRef: createOperationAttemptRef("operation-attempt-" + suffix),
+    operationRef: createOperationRef("submit-" + suffix),
+    applicationServiceRef: createApplicationServiceRef("outcome-service-" + suffix),
+    gatewayReceiptRef: createGatewayReceiptRef("gateway-" + suffix),
+    receiptRef: createReceiptRef("receipt-" + suffix),
+    auditReceiptRef: createAuditReceiptRef("audit-" + suffix),
+    productEventRef: createProductEventRef("product-event-" + suffix),
+  },
+});
+
+export const proposalOutcomeBody = (): RuntimeEventBody => ({
+  kind: "outcome_submission_observed",
+  payload: inlinePayload("The proposed outcome."),
+  publication: {
+    action: "proposal",
+    productKind: "outcome_submission",
+    productRef: createOutcomeSubmissionRef("outcome-proposal"),
+    operationAttemptRef: createOperationAttemptRef("operation-attempt-outcome-proposal"),
   },
 });
 

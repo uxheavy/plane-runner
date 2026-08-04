@@ -75,6 +75,8 @@ export type OutcomeSubmissionRef = OpaqueRef<"outcome-submission">;
 export type PayloadRef = OpaqueRef<"payload">;
 export type ApplicationServiceRef = OpaqueRef<"application-service">;
 export type GatewayReceiptRef = OpaqueRef<"gateway-receipt">;
+export type ResponderPrincipalRef = OpaqueRef<"responder-principal">;
+export type AuthorizationReceiptRef = OpaqueRef<"authorization-receipt">;
 export type ContractDigest = OpaqueRef<"contract-digest">;
 export type ContentDigest = OpaqueRef<"content-digest">;
 export type RunSnapshotContentDigest = OpaqueRef<"run-snapshot-content-digest">;
@@ -164,6 +166,8 @@ const refs = {
   payload: defineRef("payload", "payload"),
   applicationService: defineRef("application-service", "application-service"),
   gatewayReceipt: defineRef("gateway-receipt", "gateway-receipt"),
+  responderPrincipal: defineRef("responder-principal", "responder"),
+  authorizationReceipt: defineRef("authorization-receipt", "authorization-receipt"),
 } as const;
 
 export const createWorkspaceRef = refs.workspace.create;
@@ -220,6 +224,10 @@ export const createApplicationServiceRef = refs.applicationService.create;
 export const parseApplicationServiceRef = refs.applicationService.parse;
 export const createGatewayReceiptRef = refs.gatewayReceipt.create;
 export const parseGatewayReceiptRef = refs.gatewayReceipt.parse;
+export const createResponderPrincipalRef = refs.responderPrincipal.create;
+export const parseResponderPrincipalRef = refs.responderPrincipal.parse;
+export const createAuthorizationReceiptRef = refs.authorizationReceipt.create;
+export const parseAuthorizationReceiptRef = refs.authorizationReceipt.parse;
 
 function namespacedDigestBounds(namespace: string, constraint: typeof byteConstraints.contentDigest) {
   const prefixBytes = new TextEncoder().encode(`${namespace}:`).byteLength;
@@ -817,17 +825,6 @@ function parseBody(value: unknown, path: string): RuntimeEventBody {
         question: parseBoundedText(object.question, `${path}.question`),
         publication: parsePublication(object.publication, `${path}.publication`, "input_request", (item) =>
           parseRef(item, `${path}.publication.productRef`, parseInputRequestRef)
-        ),
-      } as RuntimeEventBody;
-    }
-    case "human_input_answer_observed": {
-      const object = requireRecord(base, path, ["kind", "inputRequestRef", "payload", "publication"]);
-      return {
-        kind: base.kind,
-        inputRequestRef: parseRef(object.inputRequestRef, `${path}.inputRequestRef`, parseInputRequestRef),
-        payload: parseBoundedPayload(object.payload, `${path}.payload`),
-        publication: parsePublication(object.publication, `${path}.publication`, "human_input_answer", (item) =>
-          parseRef(item, `${path}.publication.productRef`, parseProductEventRef)
         ),
       } as RuntimeEventBody;
     }
@@ -1472,7 +1469,6 @@ type Publication<ProductKind extends string, ProductRef extends OpaqueRef<string
 
 export type ConversationPublication = Publication<"conversation", ConversationRef>;
 export type InputRequestPublication = Publication<"input_request", InputRequestRef>;
-export type HumanInputAnswerPublication = Publication<"human_input_answer", ProductEventRef>;
 export type ArtifactPublication = Publication<"artifact", ArtifactRef>;
 export type OutcomeSubmissionPublication = Publication<"outcome_submission", OutcomeSubmissionRef>;
 type TerminalPublication<ProductKind extends string> = Readonly<{
@@ -1497,7 +1493,6 @@ export type CancellationPublication = TerminalPublication<"run_cancellation"> &
 export type AnyProductPublication =
   | ConversationPublication
   | InputRequestPublication
-  | HumanInputAnswerPublication
   | ArtifactPublication
   | OutcomeSubmissionPublication
   | FailurePublication
@@ -1519,12 +1514,6 @@ export type RuntimeEventBody =
       kind: "input_request_observed";
       question: BoundedText;
       publication: InputRequestPublication;
-    }>
-  | Readonly<{
-      kind: "human_input_answer_observed";
-      inputRequestRef: InputRequestRef;
-      payload: BoundedPayload;
-      publication: HumanInputAnswerPublication;
     }>
   | Readonly<{
       kind: "artifact_observed";
@@ -1610,6 +1599,8 @@ export type RuntimeVerificationErrorCode =
   | "snapshot_content_digest_mismatch"
   | "invocation_snapshot_binding_mismatch"
   | "invocation_identity_mismatch"
+  | "durable_state_head_mismatch"
+  | "durable_state_digest_mismatch"
   | "initial_checkpoint_forbidden"
   | "continuation_checkpoint_missing"
   | "checkpoint_untrusted"
@@ -1638,7 +1629,9 @@ export type RuntimeVerificationErrorCode =
   | "exit_identity_mismatch"
   | "exit_reference_mismatch"
   | "exit_failure_mismatch"
-  | "pending_input_mismatch";
+  | "pending_input_mismatch"
+  | "human_input_answer_mismatch"
+  | "publication_product_duplicate";
 
 export type RuntimeVerificationError = Readonly<{
   code: RuntimeVerificationErrorCode;
@@ -1693,6 +1686,18 @@ export type RuntimeDurableStateBinding = Readonly<{
   snapshotContentDigest: RunSnapshotContentDigest;
 }>;
 
+export type TrustedDurableStateHead = Readonly<{
+  workspaceRef: WorkspaceRef;
+  actorRef: ActorRef;
+  profileVersionRef: ProfileVersionRef;
+  runId: RunId;
+  snapshotContentDigest: RunSnapshotContentDigest;
+  revision: number;
+  stateDigest: ContentDigest;
+  previousRevision?: number;
+  previousStateDigest?: ContentDigest;
+}>;
+
 export type DurableAcceptedProductBinding =
   | Readonly<{
       action: "proposal";
@@ -1731,6 +1736,23 @@ export type DurableAcceptedEvent = Readonly<{
   productBinding?: DurableAcceptedProductBinding;
 }>;
 
+export type TrustedHumanInputAnswer = Readonly<{
+  answerEventRef: EventRef;
+  inputRequestRef: InputRequestRef;
+  responderPrincipalRef: ResponderPrincipalRef;
+  workspaceRef: WorkspaceRef;
+  runId: RunId;
+  authorizationReceiptRef: AuthorizationReceiptRef;
+  applicationServiceRef: ApplicationServiceRef;
+  gatewayReceiptRef: GatewayReceiptRef;
+  receiptRef: ReceiptRef;
+  auditReceiptRef: AuditReceiptRef;
+  correlationId: CorrelationId;
+  causationRef: CausationRef;
+}>;
+
+export type DurableAcceptedHumanInputAnswer = TrustedHumanInputAnswer;
+
 export type DurableAcceptedExit = Readonly<{
   workspaceRef: WorkspaceRef;
   actorRef: ActorRef;
@@ -1742,6 +1764,7 @@ export type DurableAcceptedExit = Readonly<{
   finalSequence: number;
   fingerprint: ContentDigest;
   kind: RuntimeExit["kind"];
+  inputEventId?: EventId;
   terminalEventId?: EventId;
 }>;
 
@@ -1774,8 +1797,13 @@ type RuntimeDurableStateShape = Readonly<{
   stateVersion: typeof RUNTIME_DURABLE_STATE_VERSION;
   binding: RuntimeDurableStateBinding;
   state: RuntimeLifecycleState;
+  revision: number;
+  stateDigest: ContentDigest;
+  previousRevision?: number;
+  previousStateDigest?: ContentDigest;
   lastAcceptedSequence: number;
   acceptedEvents: readonly DurableAcceptedEvent[];
+  acceptedHumanInputAnswers: readonly DurableAcceptedHumanInputAnswer[];
   acceptedExits: readonly DurableAcceptedExit[];
   terminal?: DurableTerminalBinding;
   pendingInput?: DurablePendingInputBinding;
@@ -1804,9 +1832,11 @@ export type TrustedPublicationReceipt = Readonly<{
 export type RuntimeVerificationFacts = Readonly<{
   authority: TrustedRuntimeAuthority;
   lifecycle: RuntimeDurableState;
+  durableStateHead: TrustedDurableStateHead;
   lease: TrustedLeaseVerification;
   cancellation: TrustedCancellationVerification;
   checkpoint?: TrustedCheckpointVerification;
+  humanInputAnswer?: TrustedHumanInputAnswer;
   previousRemainingBudget?: RuntimeBudget;
   publicationReceipts: readonly TrustedPublicationReceipt[];
 }>;
@@ -1846,7 +1876,6 @@ const DURABLE_EVENT_KINDS = [
   "progress_observed",
   "conversation_publication_observed",
   "input_request_observed",
-  "human_input_answer_observed",
   "artifact_observed",
   "usage_observed",
   "outcome_submission_observed",
@@ -1859,7 +1888,6 @@ const DURABLE_EVENT_KINDS = [
 const DURABLE_PRODUCT_KINDS = [
   "conversation",
   "input_request",
-  "human_input_answer",
   "artifact",
   "outcome_submission",
   "run_failure",
@@ -1868,6 +1896,7 @@ const DURABLE_PRODUCT_KINDS = [
 ] as const;
 
 const DURABLE_TERMINAL_KINDS = ["run_failure", "run_blocker", "run_cancellation", "outcome_submission"] as const;
+const DURABLE_PROPOSAL_PRODUCT_KINDS = ["conversation", "input_request", "artifact"] as const;
 
 function parseRuntimeDurableStateBinding(value: unknown, path: string): RuntimeDurableStateBinding {
   const object = requireRecord(value, path, [
@@ -1896,7 +1925,6 @@ function parseDurableProductRef(productKind: (typeof DURABLE_PRODUCT_KINDS)[numb
       return parseRef(value, path, parseConversationRef);
     case "input_request":
       return parseRef(value, path, parseInputRequestRef);
-    case "human_input_answer":
     case "run_failure":
     case "run_blocker":
     case "run_cancellation":
@@ -1937,6 +1965,9 @@ function parseDurableProductBinding(value: unknown, path: string): DurableAccept
     parseOperationAttemptRef
   );
   if (base.action === "proposal") {
+    if (!DURABLE_PROPOSAL_PRODUCT_KINDS.includes(productKind as (typeof DURABLE_PROPOSAL_PRODUCT_KINDS)[number])) {
+      throw new ContractParseError(`${path}.action`, "terminal durable product bindings cannot be proposals");
+    }
     for (const key of [
       "operationRef",
       "applicationServiceRef",
@@ -2061,7 +2092,7 @@ function parseDurableAcceptedExit(value: unknown, path: string): DurableAccepted
       "fingerprint",
       "kind",
     ],
-    ["terminalEventId"]
+    ["inputEventId", "terminalEventId"]
   );
   const kinds = ["completed", "waiting_for_input", "failed", "blocked", "cancelled"] as const;
   if (!kinds.includes(object.kind as (typeof kinds)[number])) {
@@ -2069,6 +2100,9 @@ function parseDurableAcceptedExit(value: unknown, path: string): DurableAccepted
   }
   const terminalEventId = Object.hasOwn(object, "terminalEventId")
     ? parseRef(object.terminalEventId, `${path}.terminalEventId`, parseEventRef)
+    : undefined;
+  const inputEventId = Object.hasOwn(object, "inputEventId")
+    ? parseRef(object.inputEventId, `${path}.inputEventId`, parseEventRef)
     : undefined;
   return {
     workspaceRef: parseRef(object.workspaceRef, `${path}.workspaceRef`, parseWorkspaceRef),
@@ -2085,6 +2119,7 @@ function parseDurableAcceptedExit(value: unknown, path: string): DurableAccepted
     finalSequence: parseInteger(object.finalSequence, `${path}.finalSequence`),
     fingerprint: parseDigest(object.fingerprint, `${path}.fingerprint`, parseContentDigest) as ContentDigest,
     kind: object.kind as RuntimeExit["kind"],
+    ...(inputEventId === undefined ? {} : { inputEventId }),
     ...(terminalEventId === undefined ? {} : { terminalEventId }),
   };
 }
@@ -2156,6 +2191,49 @@ function parseDurablePendingInput(value: unknown, path: string): DurablePendingI
   };
 }
 
+function parseDurableHumanInputAnswer(value: unknown, path: string): DurableAcceptedHumanInputAnswer {
+  const object = requireRecord(value, path, [
+    "answerEventRef",
+    "inputRequestRef",
+    "responderPrincipalRef",
+    "workspaceRef",
+    "runId",
+    "authorizationReceiptRef",
+    "applicationServiceRef",
+    "gatewayReceiptRef",
+    "receiptRef",
+    "auditReceiptRef",
+    "correlationId",
+    "causationRef",
+  ]);
+  return {
+    answerEventRef: parseRef(object.answerEventRef, `${path}.answerEventRef`, parseEventRef),
+    inputRequestRef: parseRef(object.inputRequestRef, `${path}.inputRequestRef`, parseInputRequestRef),
+    responderPrincipalRef: parseRef(
+      object.responderPrincipalRef,
+      `${path}.responderPrincipalRef`,
+      parseResponderPrincipalRef
+    ),
+    workspaceRef: parseRef(object.workspaceRef, `${path}.workspaceRef`, parseWorkspaceRef),
+    runId: parseRef(object.runId, `${path}.runId`, parseRunId),
+    authorizationReceiptRef: parseRef(
+      object.authorizationReceiptRef,
+      `${path}.authorizationReceiptRef`,
+      parseAuthorizationReceiptRef
+    ),
+    applicationServiceRef: parseRef(
+      object.applicationServiceRef,
+      `${path}.applicationServiceRef`,
+      parseApplicationServiceRef
+    ),
+    gatewayReceiptRef: parseRef(object.gatewayReceiptRef, `${path}.gatewayReceiptRef`, parseGatewayReceiptRef),
+    receiptRef: parseRef(object.receiptRef, `${path}.receiptRef`, parseReceiptRef),
+    auditReceiptRef: parseRef(object.auditReceiptRef, `${path}.auditReceiptRef`, parseAuditReceiptRef),
+    correlationId: parseRef(object.correlationId, `${path}.correlationId`, parseCorrelationId),
+    causationRef: parseRef(object.causationRef, `${path}.causationRef`, parseCausationRef),
+  };
+}
+
 function requireDurableConsistency(condition: boolean, path: string, message: string): asserts condition {
   if (!condition) {
     throw new ContractParseError(path, message);
@@ -2166,9 +2244,102 @@ function sameJson(left: unknown, right: unknown): boolean {
   return canonicalizeJson(left) === canonicalizeJson(right);
 }
 
+type RuntimeDurableStateContent = Omit<RuntimeDurableStateShape, "stateDigest">;
+
+function withoutRuntimeDurableStateDigest(
+  state: RuntimeDurableState | RuntimeDurableStateContent
+): RuntimeDurableStateContent {
+  if ("stateDigest" in state) {
+    const { stateDigest: _stateDigest, ...content } = state;
+    return content;
+  }
+  return state;
+}
+
+export function computeRuntimeDurableStateDigest(
+  state: RuntimeDurableState | RuntimeDurableStateContent
+): ContentDigest {
+  return createContentDigest(sha256(canonicalizeJson(withoutRuntimeDurableStateDigest(state))));
+}
+
+export function createInitialRuntimeDurableState(binding: RuntimeDurableStateBinding): RuntimeDurableState {
+  const content: RuntimeDurableStateContent = {
+    protocol: PLANE_AGENT_RUNTIME_PROTOCOL,
+    stateVersion: RUNTIME_DURABLE_STATE_VERSION,
+    binding,
+    state: "queued",
+    revision: 0,
+    lastAcceptedSequence: -1,
+    acceptedEvents: [],
+    acceptedHumanInputAnswers: [],
+    acceptedExits: [],
+  };
+  return parseRuntimeDurableState({ ...content, stateDigest: computeRuntimeDurableStateDigest(content) });
+}
+
+type AppliedProductIdentitySource = Readonly<{
+  productKind: DurableAcceptedProductBinding["productKind"];
+  productRef: DurableAcceptedProductBinding["productRef"];
+  operationAttemptRef: OperationAttemptRef;
+  operationRef: OperationRef;
+  applicationServiceRef: ApplicationServiceRef;
+  gatewayReceiptRef: GatewayReceiptRef;
+  receiptRef: ReceiptRef;
+  auditReceiptRef: AuditReceiptRef;
+  productEventRef: ProductEventRef;
+  cancellationRef?: CancellationRef;
+}>;
+
+function productUniquenessKeys(binding: AppliedProductIdentitySource): readonly string[] {
+  return [
+    `operationAttemptRef:${binding.operationAttemptRef}`,
+    `gatewayReceiptRef:${binding.gatewayReceiptRef}`,
+    `receiptRef:${binding.receiptRef}`,
+    `auditReceiptRef:${binding.auditReceiptRef}`,
+    `productEventRef:${binding.productEventRef}`,
+    `product:${binding.productKind}:${binding.productRef}`,
+    `operation-gateway:${binding.operationRef}:${binding.gatewayReceiptRef}`,
+    `binding:${canonicalizeJson({
+      operationAttemptRef: binding.operationAttemptRef,
+      operationRef: binding.operationRef,
+      applicationServiceRef: binding.applicationServiceRef,
+      gatewayReceiptRef: binding.gatewayReceiptRef,
+      receiptRef: binding.receiptRef,
+      auditReceiptRef: binding.auditReceiptRef,
+      productEventRef: binding.productEventRef,
+      cancellationRef: binding.cancellationRef,
+    })}`,
+  ];
+}
+
+function isAppliedProductBinding(
+  binding: DurableAcceptedProductBinding | undefined
+): binding is Extract<DurableAcceptedProductBinding, { action: "applied" }> {
+  return binding?.action === "applied";
+}
+
 function validateRuntimeDurableStateConsistency(state: RuntimeDurableStateShape, path: string): void {
+  requireDurableConsistency(
+    Number.isSafeInteger(state.revision) && state.revision >= 0,
+    `${path}.revision`,
+    "must be a non-negative safe integer"
+  );
+  if (state.revision === 0) {
+    requireDurableConsistency(
+      state.previousRevision === undefined && state.previousStateDigest === undefined,
+      `${path}.previousRevision`,
+      "must be absent on the explicit initial revision"
+    );
+  } else {
+    requireDurableConsistency(
+      state.previousRevision === state.revision - 1 && state.previousStateDigest !== undefined,
+      `${path}.previousRevision`,
+      "must link to the immediately preceding durable revision"
+    );
+  }
   const eventIds = new Set<string>();
   const eventKeys = new Set<string>();
+  const productKeys = new Set<string>();
   let previousSequence = -1;
   for (const [index, event] of state.acceptedEvents.entries()) {
     requireDurableConsistency(
@@ -2201,7 +2372,6 @@ function validateRuntimeDurableStateConsistency(state: RuntimeDurableStateShape,
     const productRequired = [
       "conversation_publication_observed",
       "input_request_observed",
-      "human_input_answer_observed",
       "artifact_observed",
       "outcome_submission_observed",
       "failure_observed",
@@ -2219,22 +2389,30 @@ function validateRuntimeDurableStateConsistency(state: RuntimeDurableStateShape,
           ? "conversation"
           : event.kind === "input_request_observed"
             ? "input_request"
-            : event.kind === "human_input_answer_observed"
-              ? "human_input_answer"
-              : event.kind === "artifact_observed"
-                ? "artifact"
-                : event.kind === "outcome_submission_observed"
-                  ? "outcome_submission"
-                  : event.kind === "failure_observed"
-                    ? "run_failure"
-                    : event.kind === "blocker_observed"
-                      ? "run_blocker"
-                      : "run_cancellation";
+            : event.kind === "artifact_observed"
+              ? "artifact"
+              : event.kind === "outcome_submission_observed"
+                ? "outcome_submission"
+                : event.kind === "failure_observed"
+                  ? "run_failure"
+                  : event.kind === "blocker_observed"
+                    ? "run_blocker"
+                    : "run_cancellation";
       requireDurableConsistency(
         event.productBinding.productKind === expectedProductKind,
         `${path}.acceptedEvents[${index}].productBinding.productKind`,
         "must match the accepted event kind"
       );
+      if (isAppliedProductBinding(event.productBinding)) {
+        for (const key of productUniquenessKeys(event.productBinding)) {
+          requireDurableConsistency(
+            !productKeys.has(key),
+            `${path}.acceptedEvents[${index}].productBinding`,
+            "must not reuse an applied product identity or receipt across durable history"
+          );
+          productKeys.add(key);
+        }
+      }
     }
   }
   requireDurableConsistency(
@@ -2242,6 +2420,46 @@ function validateRuntimeDurableStateConsistency(state: RuntimeDurableStateShape,
     `${path}.lastAcceptedSequence`,
     "must equal the last accepted event sequence"
   );
+
+  const answerEventIds = new Set<string>();
+  const answerReceiptKeys = new Set<string>();
+  for (const [index, answer] of state.acceptedHumanInputAnswers.entries()) {
+    requireDurableConsistency(
+      answer.workspaceRef === state.binding.workspaceRef && answer.runId === state.binding.runId,
+      `${path}.acceptedHumanInputAnswers[${index}]`,
+      "must bind to the durable workspace and run"
+    );
+    requireDurableConsistency(
+      String(answer.responderPrincipalRef) !== String(state.binding.actorRef),
+      `${path}.acceptedHumanInputAnswers[${index}].responderPrincipalRef`,
+      "must remain separate from the Agent actor"
+    );
+    requireDurableConsistency(
+      !answerEventIds.has(answer.answerEventRef),
+      `${path}.acceptedHumanInputAnswers[${index}].answerEventRef`,
+      "must be unique"
+    );
+    requireDurableConsistency(
+      !eventIds.has(answer.answerEventRef),
+      `${path}.acceptedHumanInputAnswers[${index}].answerEventRef`,
+      "must not be manufactured as a runtime event"
+    );
+    for (const key of [
+      `authorizationReceiptRef:${answer.authorizationReceiptRef}`,
+      `applicationServiceRef:${answer.applicationServiceRef}`,
+      `gatewayReceiptRef:${answer.gatewayReceiptRef}`,
+      `receiptRef:${answer.receiptRef}`,
+      `auditReceiptRef:${answer.auditReceiptRef}`,
+    ]) {
+      requireDurableConsistency(
+        !answerReceiptKeys.has(key),
+        `${path}.acceptedHumanInputAnswers[${index}]`,
+        "must not reuse an answer authorization or application proof"
+      );
+      answerReceiptKeys.add(key);
+    }
+    answerEventIds.add(answer.answerEventRef);
+  }
 
   const exitInvocations = new Set<string>();
   const exitKeys = new Set<string>();
@@ -2271,6 +2489,29 @@ function validateRuntimeDurableStateConsistency(state: RuntimeDurableStateShape,
       `${path}.acceptedExits[${index}].finalSequence`,
       "cannot exceed the accepted sequence"
     );
+    if (exit.kind === "waiting_for_input") {
+      requireDurableConsistency(
+        exit.inputEventId !== undefined,
+        `${path}.acceptedExits[${index}].inputEventId`,
+        "is required for a waiting exit"
+      );
+      const inputEvent = state.acceptedEvents.find((event) => event.eventId === exit.inputEventId);
+      requireDurableConsistency(
+        inputEvent !== undefined &&
+          inputEvent.kind === "input_request_observed" &&
+          inputEvent.sequence === exit.finalSequence &&
+          inputEvent.productBinding?.action === "applied" &&
+          inputEvent.productBinding.productKind === "input_request",
+        `${path}.acceptedExits[${index}].inputEventId`,
+        "must identify the exact accepted input-request product at the exit final sequence"
+      );
+    } else {
+      requireDurableConsistency(
+        exit.inputEventId === undefined,
+        `${path}.acceptedExits[${index}].inputEventId`,
+        "is only valid for a waiting exit"
+      );
+    }
     exitInvocations.add(exit.invocationId);
     exitKeys.add(exit.idempotencyKey);
   }
@@ -2289,6 +2530,7 @@ function validateRuntimeDurableStateConsistency(state: RuntimeDurableStateShape,
     );
     requireDurableConsistency(state.acceptedExits.length === 0, `${path}.acceptedExits`, "is forbidden before an exit");
     if (state.state === "queued") {
+      requireDurableConsistency(state.revision === 0, `${path}.revision`, "must remain 0 while queued");
       requireDurableConsistency(
         state.acceptedEvents.length === 0,
         `${path}.acceptedEvents`,
@@ -2298,6 +2540,11 @@ function validateRuntimeDurableStateConsistency(state: RuntimeDurableStateShape,
         state.lastAcceptedSequence === -1,
         `${path}.lastAcceptedSequence`,
         "must remain -1 while queued"
+      );
+      requireDurableConsistency(
+        state.acceptedHumanInputAnswers.length === 0,
+        `${path}.acceptedHumanInputAnswers`,
+        "is forbidden on the explicit initial state"
       );
     }
     return;
@@ -2396,9 +2643,11 @@ function validateRuntimeDurableStateConsistency(state: RuntimeDurableStateShape,
     );
     const lastExit = state.acceptedExits.at(-1);
     requireDurableConsistency(
-      lastExit?.kind === "waiting_for_input" && lastExit.finalSequence === state.lastAcceptedSequence,
+      lastExit?.kind === "waiting_for_input" &&
+        lastExit.finalSequence === state.lastAcceptedSequence &&
+        lastExit.inputEventId === pending?.eventId,
       `${path}.acceptedExits`,
-      "must end with the waiting exit"
+      "must end with the waiting exit for the exact current pending input request"
     );
     return;
   }
@@ -2508,8 +2757,19 @@ export function parseRuntimeDurableState(value: unknown): RuntimeDurableState {
   const object = requireRecord(
     raw,
     "RuntimeDurableState",
-    ["protocol", "stateVersion", "binding", "state", "lastAcceptedSequence", "acceptedEvents", "acceptedExits"],
-    ["terminal", "pendingInput"]
+    [
+      "protocol",
+      "stateVersion",
+      "binding",
+      "state",
+      "revision",
+      "stateDigest",
+      "lastAcceptedSequence",
+      "acceptedEvents",
+      "acceptedHumanInputAnswers",
+      "acceptedExits",
+    ],
+    ["previousRevision", "previousStateDigest", "terminal", "pendingInput"]
   );
   const states = ["queued", "running", "waiting_for_input", "succeeded", "failed", "blocked", "cancelled"] as const;
   if (!states.includes(object.state as (typeof states)[number])) {
@@ -2530,14 +2790,47 @@ export function parseRuntimeDurableState(value: unknown): RuntimeDurableState {
   ) {
     throw new ContractParseError("RuntimeDurableState.lastAcceptedSequence", "must be -1 or a non-negative integer");
   }
+  const revision = parseInteger(object.revision, "RuntimeDurableState.revision");
+  if (Object.hasOwn(object, "previousRevision") !== Object.hasOwn(object, "previousStateDigest")) {
+    throw new ContractParseError(
+      "RuntimeDurableState.previousRevision",
+      "previousRevision and previousStateDigest must be supplied together"
+    );
+  }
+  const acceptedHumanInputAnswersRaw = object.acceptedHumanInputAnswers;
+  if (!Array.isArray(acceptedHumanInputAnswersRaw) || acceptedHumanInputAnswersRaw.length > 256) {
+    throw new ContractParseError(
+      "RuntimeDurableState.acceptedHumanInputAnswers",
+      "must contain at most 256 accepted answer facts"
+    );
+  }
   const parsed: RuntimeDurableStateShape = {
     protocol: parseLiteral(object.protocol, PLANE_AGENT_RUNTIME_PROTOCOL, "RuntimeDurableState.protocol"),
     stateVersion: parseLiteral(object.stateVersion, RUNTIME_DURABLE_STATE_VERSION, "RuntimeDurableState.stateVersion"),
     binding: parseRuntimeDurableStateBinding(object.binding, "RuntimeDurableState.binding"),
     state: object.state as RuntimeLifecycleState,
+    revision,
+    stateDigest: parseDigest(
+      object.stateDigest,
+      "RuntimeDurableState.stateDigest",
+      parseContentDigest
+    ) as ContentDigest,
+    ...(Object.hasOwn(object, "previousRevision")
+      ? {
+          previousRevision: parseInteger(object.previousRevision, "RuntimeDurableState.previousRevision"),
+          previousStateDigest: parseDigest(
+            object.previousStateDigest,
+            "RuntimeDurableState.previousStateDigest",
+            parseContentDigest
+          ) as ContentDigest,
+        }
+      : {}),
     lastAcceptedSequence: object.lastAcceptedSequence,
     acceptedEvents: acceptedEventsRaw.map((item, index) =>
       parseDurableAcceptedEvent(item, `RuntimeDurableState.acceptedEvents[${index}]`)
+    ),
+    acceptedHumanInputAnswers: acceptedHumanInputAnswersRaw.map((item, index) =>
+      parseDurableHumanInputAnswer(item, `RuntimeDurableState.acceptedHumanInputAnswers[${index}]`)
     ),
     acceptedExits: acceptedExitsRaw.map((item, index) =>
       parseDurableAcceptedExit(item, `RuntimeDurableState.acceptedExits[${index}]`)
@@ -2549,6 +2842,12 @@ export function parseRuntimeDurableState(value: unknown): RuntimeDurableState {
       ? { pendingInput: parseDurablePendingInput(object.pendingInput, "RuntimeDurableState.pendingInput") }
       : {}),
   };
+  if (computeRuntimeDurableStateDigest(parsed) !== parsed.stateDigest) {
+    throw new ContractParseError(
+      "RuntimeDurableState.stateDigest",
+      "does not match the canonical durable state content"
+    );
+  }
   validateRuntimeDurableStateConsistency(parsed, "RuntimeDurableState");
   return deepFreeze(markValidatedContract(parsed, "RuntimeDurableState"));
 }
@@ -2627,66 +2926,28 @@ function receiptMatches(
   );
 }
 
-function receiptBindingKey(receipt: TrustedPublicationReceipt): string {
-  return canonicalizeJson({
-    workspaceRef: receipt.workspaceRef,
-    actorRef: receipt.actorRef,
-    profileVersionRef: receipt.profileVersionRef,
-    runId: receipt.runId,
-    invocationId: receipt.invocationId,
-    productKind: receipt.productKind,
-    productRef: receipt.productRef,
-    operationAttemptRef: receipt.operationAttemptRef,
-    operationRef: receipt.operationRef,
-    applicationServiceRef: receipt.applicationServiceRef,
-    gatewayReceiptRef: receipt.gatewayReceiptRef,
-    receiptRef: receipt.receiptRef,
-    auditReceiptRef: receipt.auditReceiptRef,
-    productEventRef: receipt.productEventRef,
-    ...("cancellationRef" in receipt ? { cancellationRef: receipt.cancellationRef } : {}),
-  });
-}
-
 function prevalidatePublicationReceipts(
   receipts: readonly TrustedPublicationReceipt[],
-  errors: RuntimeVerificationError[]
+  errors: RuntimeVerificationError[],
+  historicalProductKeys: ReadonlySet<string>,
+  replayableProductKeys: ReadonlySet<string>
 ): void {
-  const uniqueFields = [
-    "operationAttemptRef",
-    "gatewayReceiptRef",
-    "receiptRef",
-    "auditReceiptRef",
-    "productEventRef",
-  ] as const;
   const seen = new Map<string, number>();
   for (const [index, receipt] of receipts.entries()) {
-    for (const field of uniqueFields) {
-      const key = `${field}:${receipt[field]}`;
-      if (seen.has(key)) {
-        addVerificationError(
-          errors,
-          "publication_receipt_duplicate",
-          `trusted.publicationReceipts[${index}].${field}`,
-          `${field} must identify exactly one trusted application receipt`
-        );
-      } else {
-        seen.set(key, index);
-      }
-    }
-    const operationGatewayKey = `operation-gateway:${receipt.operationRef}:${receipt.gatewayReceiptRef}`;
-    const productKey = `product:${receipt.productKind}:${receipt.productRef}`;
-    const bindingKey = `binding:${receiptBindingKey(receipt)}`;
-    for (const [label, key] of [
-      ["operation/gateway receipt", operationGatewayKey],
-      ["product identity", productKey],
-      ["binding tuple", bindingKey],
-    ] as const) {
+    for (const key of productUniquenessKeys(receipt)) {
       if (seen.has(key)) {
         addVerificationError(
           errors,
           "publication_receipt_duplicate",
           `trusted.publicationReceipts[${index}]`,
-          `${label} must identify exactly one trusted application receipt`
+          "Every current trusted receipt identity and binding tuple must be unique"
+        );
+      } else if (historicalProductKeys.has(key) && !replayableProductKeys.has(key)) {
+        addVerificationError(
+          errors,
+          "publication_receipt_duplicate",
+          `trusted.publicationReceipts[${index}]`,
+          "A current trusted receipt cannot reuse an applied product identity or receipt from durable history"
         );
       } else {
         seen.set(key, index);
@@ -2707,7 +2968,6 @@ function verifyPublication(
   const publicationBody =
     body.kind === "conversation_publication_observed" ||
     body.kind === "input_request_observed" ||
-    body.kind === "human_input_answer_observed" ||
     body.kind === "artifact_observed" ||
     body.kind === "outcome_submission_observed" ||
     body.kind === "failure_observed" ||
@@ -2996,22 +3256,28 @@ function durableProductBindingFromPublication(publication: AnyProductPublication
   return publication;
 }
 
+function productBindingFromRuntimeEvent(event: RuntimeEvent): DurableAcceptedProductBinding | undefined {
+  const body = event.body;
+  if (
+    body.kind !== "conversation_publication_observed" &&
+    body.kind !== "input_request_observed" &&
+    body.kind !== "artifact_observed" &&
+    body.kind !== "outcome_submission_observed" &&
+    body.kind !== "failure_observed" &&
+    body.kind !== "blocker_observed" &&
+    body.kind !== "cancellation_observed"
+  ) {
+    return undefined;
+  }
+  return durableProductBindingFromPublication(body.publication);
+}
+
 function durableAcceptedEventFromRuntimeEvent(
   event: RuntimeEvent,
   binding: RuntimeDurableStateBinding
 ): DurableAcceptedEvent {
   const body = event.body;
-  const publication =
-    body.kind === "conversation_publication_observed" ||
-    body.kind === "input_request_observed" ||
-    body.kind === "human_input_answer_observed" ||
-    body.kind === "artifact_observed" ||
-    body.kind === "outcome_submission_observed" ||
-    body.kind === "failure_observed" ||
-    body.kind === "blocker_observed" ||
-    body.kind === "cancellation_observed"
-      ? body.publication
-      : undefined;
+  const productBinding = productBindingFromRuntimeEvent(event);
   return {
     ...binding,
     invocationId: event.invocationId,
@@ -3022,7 +3288,7 @@ function durableAcceptedEventFromRuntimeEvent(
     sequence: event.sequence,
     fingerprint: fingerprint(event),
     kind: body.kind,
-    ...(publication === undefined ? {} : { productBinding: durableProductBindingFromPublication(publication) }),
+    ...(productBinding === undefined ? {} : { productBinding }),
   };
 }
 
@@ -3075,7 +3341,6 @@ function terminalBindingFromRuntimeEvent(event: RuntimeEvent): DurableTerminalBi
 function verifyPendingInputContinuation(
   trigger: InvocationTrigger,
   lifecycle: RuntimeDurableState,
-  events: readonly RuntimeEvent[],
   newContextEventRefs: readonly EventRef[],
   errors: RuntimeVerificationError[]
 ): void {
@@ -3095,7 +3360,7 @@ function verifyPendingInputContinuation(
 
   const pending = lifecycle.pendingInput;
   if (
-    (trigger.kind !== "human_input" && trigger.kind !== "continuation") ||
+    trigger.kind !== "human_input" ||
     pending === undefined ||
     trigger.pendingInputEventRef === undefined ||
     trigger.pendingInputEventRef !== pending.eventId
@@ -3116,23 +3381,115 @@ function verifyPendingInputContinuation(
       "Continuation context must include both the pending request and the Plane-owned answer event"
     );
   }
-  const answers = events.filter((event) => event.body.kind === "human_input_answer_observed");
-  const answer = answers.find((event) => event.eventId === trigger.eventRef);
-  if (
-    answers.length !== 1 ||
-    answer === undefined ||
-    answer.body.kind !== "human_input_answer_observed" ||
-    answer.body.inputRequestRef !== pending.inputRequestRef ||
-    answer.eventId === pending.eventId ||
-    answer.body.publication.action !== "applied"
-  ) {
+}
+
+function verifyTrustedHumanInputAnswer(
+  snapshot: RunSnapshot,
+  invocation: InvocationEnvelope,
+  lifecycle: RuntimeDurableState,
+  events: readonly RuntimeEvent[],
+  fact: TrustedHumanInputAnswer | undefined,
+  errors: RuntimeVerificationError[]
+): void {
+  if (invocation.trigger.kind !== "human_input") {
+    if (fact !== undefined) {
+      addVerificationError(
+        errors,
+        "human_input_answer_mismatch",
+        "trusted.humanInputAnswer",
+        "A trusted human answer fact is valid only for a human-input invocation"
+      );
+    }
+    return;
+  }
+  if (fact === undefined) {
     addVerificationError(
       errors,
-      "pending_input_mismatch",
-      "invocation.trigger.eventRef",
-      "Continuation must cite exactly one applied Plane answer for the current pending request"
+      "human_input_answer_mismatch",
+      "trusted.humanInputAnswer",
+      "Human-input invocations require one trusted Plane answer fact"
+    );
+    return;
+  }
+  try {
+    parseRef(fact.answerEventRef, "trusted.humanInputAnswer.answerEventRef", parseEventRef);
+    parseRef(fact.inputRequestRef, "trusted.humanInputAnswer.inputRequestRef", parseInputRequestRef);
+    parseRef(fact.responderPrincipalRef, "trusted.humanInputAnswer.responderPrincipalRef", parseResponderPrincipalRef);
+    parseRef(fact.workspaceRef, "trusted.humanInputAnswer.workspaceRef", parseWorkspaceRef);
+    parseRef(fact.runId, "trusted.humanInputAnswer.runId", parseRunId);
+    parseRef(
+      fact.authorizationReceiptRef,
+      "trusted.humanInputAnswer.authorizationReceiptRef",
+      parseAuthorizationReceiptRef
+    );
+    parseRef(fact.applicationServiceRef, "trusted.humanInputAnswer.applicationServiceRef", parseApplicationServiceRef);
+    parseRef(fact.gatewayReceiptRef, "trusted.humanInputAnswer.gatewayReceiptRef", parseGatewayReceiptRef);
+    parseRef(fact.receiptRef, "trusted.humanInputAnswer.receiptRef", parseReceiptRef);
+    parseRef(fact.auditReceiptRef, "trusted.humanInputAnswer.auditReceiptRef", parseAuditReceiptRef);
+    parseRef(fact.correlationId, "trusted.humanInputAnswer.correlationId", parseCorrelationId);
+    parseRef(fact.causationRef, "trusted.humanInputAnswer.causationRef", parseCausationRef);
+  } catch {
+    addVerificationError(
+      errors,
+      "human_input_answer_mismatch",
+      "trusted.humanInputAnswer",
+      "The trusted Plane answer must carry valid authorization, application, and audit proof references"
     );
   }
+  const pending = lifecycle.pendingInput;
+  const exactBinding =
+    lifecycle.state === "waiting_for_input" &&
+    pending !== undefined &&
+    fact.workspaceRef === snapshot.workspaceRef &&
+    fact.runId === snapshot.runId &&
+    fact.answerEventRef === invocation.trigger.eventRef &&
+    fact.inputRequestRef === pending.inputRequestRef &&
+    fact.correlationId === invocation.correlationId &&
+    fact.causationRef === invocation.causationRef &&
+    String(fact.responderPrincipalRef) !== String(snapshot.actorRef);
+  if (!exactBinding) {
+    addVerificationError(
+      errors,
+      "human_input_answer_mismatch",
+      "trusted.humanInputAnswer",
+      "The trusted Plane answer must bind to the current pending request, run, correlation, causation, and a separate responder principal"
+    );
+  }
+  if (events.some((event) => event.eventId === fact.answerEventRef)) {
+    addVerificationError(
+      errors,
+      "human_input_answer_mismatch",
+      "events",
+      "Runtime events cannot manufacture the Plane answer that triggered an invocation"
+    );
+  }
+  if (lifecycle.acceptedHumanInputAnswers.some((answer) => answer.answerEventRef === fact.answerEventRef)) {
+    addVerificationError(
+      errors,
+      "human_input_answer_mismatch",
+      "trusted.humanInputAnswer.answerEventRef",
+      "A Plane answer fact can be consumed only once across invocations and restarts"
+    );
+  }
+}
+
+function durableStateHeadMatches(
+  snapshot: RunSnapshot,
+  lifecycle: RuntimeDurableState,
+  head: TrustedDurableStateHead | undefined
+): boolean {
+  return (
+    head !== undefined &&
+    head.workspaceRef === snapshot.workspaceRef &&
+    head.actorRef === snapshot.actorRef &&
+    head.profileVersionRef === snapshot.profile.profileRef &&
+    head.runId === snapshot.runId &&
+    head.snapshotContentDigest === snapshot.contentDigest &&
+    head.revision === lifecycle.revision &&
+    head.stateDigest === lifecycle.stateDigest &&
+    head.previousRevision === lifecycle.previousRevision &&
+    head.previousStateDigest === lifecycle.previousStateDigest
+  );
 }
 
 export function verifyRuntimeExecution(input: RuntimeVerificationInput): RuntimeVerificationResult {
@@ -3167,6 +3524,14 @@ export function verifyRuntimeExecution(input: RuntimeVerificationInput): Runtime
     return { ok: false, errors };
   }
   validateLifecycleFacts(trusted.lifecycle, errors);
+  if (!durableStateHeadMatches(snapshot, trusted.lifecycle, trusted.durableStateHead)) {
+    addVerificationError(
+      errors,
+      "durable_state_head_mismatch",
+      "trusted.durableStateHead",
+      "The supplied parsed durable state must exactly match the independently trusted Plane durable head"
+    );
+  }
   if (
     trusted.lifecycle.binding.workspaceRef !== snapshot.workspaceRef ||
     trusted.lifecycle.binding.actorRef !== snapshot.actorRef ||
@@ -3181,6 +3546,7 @@ export function verifyRuntimeExecution(input: RuntimeVerificationInput): Runtime
       "Durable state must bind to the exact workspace, actor, profile, run, and snapshot"
     );
   }
+  verifyTrustedHumanInputAnswer(snapshot, invocation, trusted.lifecycle, events, trusted.humanInputAnswer, errors);
   const expectedContractDigests = contractDigestsFromManifest(manifest);
   if (JSON.stringify(snapshot.contractDigests) !== JSON.stringify(expectedContractDigests)) {
     addVerificationError(
@@ -3315,13 +3681,37 @@ export function verifyRuntimeExecution(input: RuntimeVerificationInput): Runtime
 
   const acceptedById = new Map(trusted.lifecycle.acceptedEvents.map((event) => [event.eventId, event]));
   const acceptedByIdempotency = new Map(trusted.lifecycle.acceptedEvents.map((event) => [event.idempotencyKey, event]));
+  const historicalProductKeys = new Set<string>();
+  for (const acceptedEvent of trusted.lifecycle.acceptedEvents) {
+    if (isAppliedProductBinding(acceptedEvent.productBinding)) {
+      for (const key of productUniquenessKeys(acceptedEvent.productBinding)) {
+        historicalProductKeys.add(key);
+      }
+    }
+  }
+  const replayableProductKeys = new Set<string>();
+  for (const runtimeEvent of events) {
+    const acceptedEvent = acceptedById.get(runtimeEvent.eventId);
+    const productBinding = productBindingFromRuntimeEvent(runtimeEvent);
+    if (
+      acceptedEvent !== undefined &&
+      acceptedEvent.fingerprint === fingerprint(runtimeEvent) &&
+      productBinding !== undefined &&
+      isAppliedProductBinding(productBinding) &&
+      sameJson(acceptedEvent.productBinding, productBinding)
+    ) {
+      for (const key of productUniquenessKeys(productBinding)) {
+        replayableProductKeys.add(key);
+      }
+    }
+  }
   const seenEventIds = new Set<string>();
   const seenIdempotencyKeys = new Set<string>();
   const newEvents: DurableAcceptedEvent[] = [];
   let expectedSequence = trusted.lifecycle.lastAcceptedSequence + 1;
   let allEventsReplay = true;
   const usedReceiptIndexes = new Set<number>();
-  prevalidatePublicationReceipts(trusted.publicationReceipts, errors);
+  prevalidatePublicationReceipts(trusted.publicationReceipts, errors, historicalProductKeys, replayableProductKeys);
   for (const [index, event] of events.entries()) {
     const path = `events[${index}]`;
     if (
@@ -3389,6 +3779,21 @@ export function verifyRuntimeExecution(input: RuntimeVerificationInput): Runtime
       expectedSequence += 1;
       newEvents.push(durableAcceptedEventFromRuntimeEvent(event, trusted.lifecycle.binding));
     }
+    const productBinding = productBindingFromRuntimeEvent(event);
+    if (isAppliedProductBinding(productBinding) && historicalProductKeys.size > 0) {
+      const exactReplay =
+        durableById !== undefined &&
+        durableById.fingerprint === eventFingerprint &&
+        sameJson(durableById.productBinding, productBinding);
+      if (!exactReplay && productUniquenessKeys(productBinding).some((key) => historicalProductKeys.has(key))) {
+        addVerificationError(
+          errors,
+          "publication_product_duplicate",
+          "events.body",
+          "An applied product event cannot reuse an operation, receipt, product identity, or binding tuple from durable history"
+        );
+      }
+    }
     if (
       serializedJsonByteLength(event) > MAX_SERIALIZED_JSON_BYTES ||
       serializedJsonByteLength(event) > snapshot.runtimePolicy.maxEventPayloadBytes
@@ -3434,7 +3839,7 @@ export function verifyRuntimeExecution(input: RuntimeVerificationInput): Runtime
       "Exit finalSequence must equal the last accepted event sequence"
     );
   }
-  verifyPendingInputContinuation(invocation.trigger, trusted.lifecycle, events, invocation.newContextEventRefs, errors);
+  verifyPendingInputContinuation(invocation.trigger, trusted.lifecycle, invocation.newContextEventRefs, errors);
   for (const [index] of trusted.publicationReceipts.entries()) {
     if (!usedReceiptIndexes.has(index)) {
       addVerificationError(
@@ -3510,13 +3915,22 @@ export function verifyRuntimeExecution(input: RuntimeVerificationInput): Runtime
   const finalEvent = events.at(-1);
   const nextTerminal = finalEvent === undefined ? undefined : terminalBindingFromRuntimeEvent(finalEvent);
   const nextPending = finalEvent === undefined ? undefined : pendingInputFromRuntimeEvent(finalEvent);
-  const nextLifecycleRaw: RuntimeDurableStateShape = {
+  const nextLifecycleRaw: RuntimeDurableStateContent = {
     protocol: PLANE_AGENT_RUNTIME_PROTOCOL,
     stateVersion: RUNTIME_DURABLE_STATE_VERSION,
     binding: trusted.lifecycle.binding,
     state: stateForExit(exit.kind),
+    revision: trusted.lifecycle.revision + 1,
+    previousRevision: trusted.lifecycle.revision,
+    previousStateDigest: trusted.lifecycle.stateDigest,
     lastAcceptedSequence: Math.max(trusted.lifecycle.lastAcceptedSequence, ...newEvents.map((event) => event.sequence)),
     acceptedEvents: [...trusted.lifecycle.acceptedEvents, ...newEvents],
+    acceptedHumanInputAnswers: [
+      ...trusted.lifecycle.acceptedHumanInputAnswers,
+      ...(invocation.trigger.kind === "human_input" && trusted.humanInputAnswer !== undefined
+        ? [trusted.humanInputAnswer]
+        : []),
+    ],
     acceptedExits: [
       ...trusted.lifecycle.acceptedExits,
       {
@@ -3526,13 +3940,17 @@ export function verifyRuntimeExecution(input: RuntimeVerificationInput): Runtime
         finalSequence: exit.finalSequence,
         fingerprint: exitFingerprint,
         kind: exit.kind,
+        ...(exit.kind === "waiting_for_input" ? { inputEventId: exit.inputEventRef } : {}),
         ...(nextTerminal === undefined ? {} : { terminalEventId: nextTerminal.eventId }),
       },
     ],
     ...(nextTerminal === undefined ? {} : { terminal: nextTerminal }),
     ...(exit.kind === "waiting_for_input" && nextPending !== undefined ? { pendingInput: nextPending } : {}),
   };
-  const nextLifecycle = parseRuntimeDurableState(nextLifecycleRaw);
+  const nextLifecycle = parseRuntimeDurableState({
+    ...nextLifecycleRaw,
+    stateDigest: computeRuntimeDurableStateDigest(nextLifecycleRaw),
+  });
   return {
     ok: true,
     result: "accepted",
