@@ -14,7 +14,6 @@
   "types": "./dist/index.d.mts",
   "exports": {
     ".": "./dist/index.mjs",
-    "./schemas/v1/*": "./schemas/v1/*",
     "./package.json": "./package.json"
   },
   "scripts": {

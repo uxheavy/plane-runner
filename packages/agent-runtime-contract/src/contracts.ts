@@ -6,6 +6,38 @@ export const PLANE_AGENT_RUNTIME_PROTOCOL = "plane.agent-runtime/v1" as const;
 
 const MAX_REF_LENGTH = byteConstraints.reference.jsonSchemaMaxLength;
 const REF_IDENTIFIER_MAX_LENGTH = byteConstraints.reference.identifierCharacterMaxLength;
+const utf8ByteLengthUpTo = (value: string, limit = Number.MAX_SAFE_INTEGER): number => {
+  let bytes = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    let increment: number;
+    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        increment = 4;
+        index += 1;
+      } else {
+        increment = 3;
+      }
+    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+      increment = 3;
+    } else if (codeUnit <= 0x7f) {
+      increment = 1;
+    } else if (codeUnit <= 0x7ff) {
+      increment = 2;
+    } else {
+      increment = 3;
+    }
+    bytes += increment;
+    if (bytes > limit) {
+      return limit + 1;
+    }
+  }
+  return bytes;
+};
+
+export const utf8ByteLengthAtMost = (value: string, limit: number): boolean =>
+  utf8ByteLengthUpTo(value, limit) <= limit;
 declare const validatedContractBrand: unique symbol;
 
 export type PlaneAgentRuntimeProtocol = typeof PLANE_AGENT_RUNTIME_PROTOCOL;
@@ -104,7 +136,7 @@ function makeNamespacedRef<Tag extends RefTag>(tag: Tag, namespace: string, valu
   const namespaced = `${namespace}:${value}`;
   if (
     namespaced.length > MAX_REF_LENGTH ||
-    new TextEncoder().encode(namespaced).byteLength > UTF8_BYTE_LIMITS.reference
+    utf8ByteLengthUpTo(namespaced, UTF8_BYTE_LIMITS.reference) > UTF8_BYTE_LIMITS.reference
   ) {
     throw new TypeError(`${namespace} references must be at most 128 characters`);
   }
@@ -117,7 +149,7 @@ function parseNamespacedRef<Tag extends RefTag>(tag: Tag, namespace: string, val
   if (
     typeof value !== "string" ||
     value.length > MAX_REF_LENGTH ||
-    new TextEncoder().encode(value).byteLength > UTF8_BYTE_LIMITS.reference ||
+    utf8ByteLengthUpTo(value, UTF8_BYTE_LIMITS.reference) > UTF8_BYTE_LIMITS.reference ||
     !NAMESPACED_REF_PATTERN.test(value)
   ) {
     throw new TypeError(`${namespace} references must use the ${namespace}:<identifier> namespace`);
@@ -226,7 +258,7 @@ export const createAuthorizationReceiptRef = refs.authorizationReceipt.create;
 export const parseAuthorizationReceiptRef = refs.authorizationReceipt.parse;
 
 function namespacedDigestBounds(namespace: string, constraint: typeof byteConstraints.contentDigest) {
-  const prefixBytes = new TextEncoder().encode(`${namespace}:`).byteLength;
+  const prefixBytes = utf8ByteLengthUpTo(`${namespace}:`);
   return {
     minimum: constraint.utf8ByteMin - prefixBytes,
     maximum: constraint.utf8ByteMax - prefixBytes,
@@ -241,7 +273,7 @@ function makeDigest<Tag extends RefTag>(
 ): OpaqueRef<Tag> {
   void tag;
   const bounds = namespacedDigestBounds(namespace, constraint);
-  const bytes = new TextEncoder().encode(value).byteLength;
+  const bytes = utf8ByteLengthUpTo(value);
   if (
     bytes < bounds.minimum ||
     bytes > bounds.maximum ||
@@ -268,7 +300,7 @@ function parseNamespacedDigest<Tag extends RefTag>(
 }
 
 export function createContractDigest(value: string): ContractDigest {
-  const bytes = new TextEncoder().encode(value).byteLength;
+  const bytes = utf8ByteLengthUpTo(value);
   if (
     bytes < byteConstraints.contractDigest.utf8ByteMin ||
     bytes > byteConstraints.contractDigest.utf8ByteMax ||
@@ -300,7 +332,11 @@ export const parseRunSnapshotContentDigest = (value: unknown): RunSnapshotConten
 function deepFreeze<T>(value: T): T {
   if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
     for (const key of Reflect.ownKeys(value)) {
-      deepFreeze(Reflect.get(value, key));
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined || !("value" in descriptor)) {
+        throw new TypeError("Contract values cannot contain accessors");
+      }
+      deepFreeze(descriptor.value);
     }
     Object.freeze(value);
   }
@@ -413,19 +449,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function parseManifestEntry(value: unknown, name: ContractSchemaName) {
-  if (!isRecord(value) || value.filename !== `${name}.schema.json`) {
+  const object = requireRecord(value, `ContractManifest.schemas.${name}`, ["filename", "sha256"]);
+  if (object.filename !== `${name}.schema.json`) {
     throw new TypeError(`Invalid manifest entry for ${name}`);
   }
 
-  return { filename: value.filename, sha256: parseContractDigest(value.sha256) };
+  return { filename: object.filename, sha256: parseContractDigest(object.sha256) };
 }
 
 export function parseContractManifest(value: unknown): ContractManifest {
-  if (!isRecord(value) || value.protocol !== PLANE_AGENT_RUNTIME_PROTOCOL || !isRecord(value.schemas)) {
+  const object = requireRecord(parseRawJson(value, "ContractManifest"), "ContractManifest", ["protocol", "schemas"]);
+  if (object.protocol !== PLANE_AGENT_RUNTIME_PROTOCOL) {
     throw new TypeError("Invalid Plane Agent runtime contract manifest");
   }
-
-  const schemas = value.schemas;
+  const schemas = requireRecord(object.schemas, "ContractManifest.schemas", CONTRACT_SCHEMA_NAMES);
   return {
     protocol: PLANE_AGENT_RUNTIME_PROTOCOL,
     schemas: {
@@ -466,39 +503,13 @@ function withoutSnapshotContentDigest(snapshot: RunSnapshot | RunSnapshotContent
 }
 
 export function canonicalizeJson(value: unknown): string {
-  if (value === null) {
-    return "null";
-  }
-
-  if (typeof value === "string" || typeof value === "boolean") {
-    return JSON.stringify(value);
-  }
-
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) {
-      throw new TypeError("Canonical JSON cannot contain non-finite numbers");
-    }
-    return JSON.stringify(value);
-  }
-
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => canonicalizeJson(item)).join(",")}]`;
-  }
-
-  if (typeof value === "object") {
-    const object = value as Record<string, unknown>;
-    const entries = Object.keys(object)
-      .toSorted()
-      .filter((key) => object[key] !== undefined)
-      .map((key) => `${JSON.stringify(key)}:${canonicalizeJson(object[key])}`);
-    return `{${entries.join(",")}}`;
-  }
-
-  throw new TypeError("Canonical JSON cannot contain undefined, bigint, function, or symbol values");
+  const normalized = normalizeJsonValue(value);
+  measureNormalizedJsonUtf8Bytes(normalized, CANONICAL_JSON_LIMITS.maxCanonicalBytes);
+  return writeCanonicalJson(normalized);
 }
 
 export function serializedJsonByteLength(value: unknown): number {
-  return new TextEncoder().encode(canonicalizeJson(value)).byteLength;
+  return measureCanonicalJsonUtf8Bytes(value);
 }
 
 export const UTF8_BYTE_LIMITS = {
@@ -513,6 +524,413 @@ export const UTF8_BYTE_LIMITS = {
 export const MAX_SERIALIZED_JSON_BYTES = UTF8_BYTE_LIMITS.serializedContract;
 const MAX_BOUNDED_BYTE_COUNT = byteConstraints.boundedByteCount.numericMax;
 
+export type CanonicalJsonLimits = Readonly<{
+  maxDepth: number;
+  maxNodes: number;
+  maxStringBytes: number;
+  maxCollectionItems: number;
+  maxWork: number;
+  maxCanonicalBytes: number;
+}>;
+
+export const CANONICAL_JSON_LIMITS: CanonicalJsonLimits = Object.freeze({
+  maxDepth: 64,
+  maxNodes: 10_000,
+  maxStringBytes: 16 * 1024 * 1024,
+  maxCollectionItems: 4096,
+  maxWork: 32 * 1024 * 1024,
+  maxCanonicalBytes: 16 * 1024 * 1024,
+});
+
+type SafeJsonErrorCode =
+  | "depth_exceeded"
+  | "node_count_exceeded"
+  | "string_bytes_exceeded"
+  | "collection_size_exceeded"
+  | "work_exceeded"
+  | "cycle_detected"
+  | "unsupported_prototype"
+  | "unsupported_accessor"
+  | "unsupported_symbol_key"
+  | "unsupported_non_enumerable"
+  | "sparse_array"
+  | "unsupported_value"
+  | "serialized_bytes_exceeded";
+
+class SafeJsonError extends TypeError {
+  readonly code: SafeJsonErrorCode;
+
+  constructor(code: SafeJsonErrorCode) {
+    super(code);
+    this.name = "SafeJsonError";
+    this.code = code;
+  }
+}
+
+const safeJsonErrorMessage = (error: unknown): string => {
+  if (!(error instanceof SafeJsonError)) {
+    return "contains unsupported JSON data";
+  }
+  switch (error.code) {
+    case "depth_exceeded":
+      return "exceeds the maximum JSON depth";
+    case "node_count_exceeded":
+      return "exceeds the maximum JSON node count";
+    case "string_bytes_exceeded":
+      return "exceeds the maximum accumulated UTF-8 string bytes";
+    case "collection_size_exceeded":
+      return "exceeds the maximum JSON collection size";
+    case "work_exceeded":
+      return "exceeds the maximum JSON validation work";
+    case "cycle_detected":
+      return "contains a cyclic JSON value";
+    case "unsupported_prototype":
+      return "must contain only plain JSON objects and arrays";
+    case "unsupported_accessor":
+      return "must not contain accessors";
+    case "unsupported_symbol_key":
+      return "must not contain symbol keys";
+    case "unsupported_non_enumerable":
+      return "must not contain non-enumerable properties";
+    case "sparse_array":
+      return "must not contain sparse arrays";
+    case "serialized_bytes_exceeded":
+      return "exceeds the configured canonical UTF-8 byte limit";
+    case "unsupported_value":
+      return "contains an unsupported JSON value";
+  }
+};
+
+type NormalizationState = {
+  readonly limits: CanonicalJsonLimits;
+  nodes: number;
+  stringBytes: number;
+  work: number;
+  active: WeakSet<object>;
+};
+
+const spendNormalizationWork = (state: NormalizationState, amount: number): void => {
+  state.work += amount;
+  if (state.work > state.limits.maxWork) {
+    throw new SafeJsonError("work_exceeded");
+  }
+};
+
+const countNormalizationNode = (state: NormalizationState): void => {
+  state.nodes += 1;
+  spendNormalizationWork(state, 1);
+  if (state.nodes > state.limits.maxNodes) {
+    throw new SafeJsonError("node_count_exceeded");
+  }
+};
+
+const isCanonicalArrayIndex = (key: string, length: number): boolean => {
+  if (key === "0") return length > 0;
+  if (!/^[1-9][0-9]*$/.test(key)) return false;
+  const index = Number(key);
+  return Number.isSafeInteger(index) && index < length;
+};
+
+function normalizeJsonValueInternal(value: unknown, depth: number, state: NormalizationState): unknown {
+  if (depth > state.limits.maxDepth) {
+    throw new SafeJsonError("depth_exceeded");
+  }
+  countNormalizationNode(state);
+
+  if (value === null) {
+    return null;
+  }
+  if (typeof value === "string") {
+    const bytes = utf8ByteLengthUpTo(value, state.limits.maxStringBytes);
+    if (bytes > state.limits.maxStringBytes) {
+      throw new SafeJsonError("string_bytes_exceeded");
+    }
+    state.stringBytes += bytes;
+    if (state.stringBytes > state.limits.maxStringBytes) {
+      throw new SafeJsonError("string_bytes_exceeded");
+    }
+    spendNormalizationWork(state, bytes + 1);
+    return value;
+  }
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new SafeJsonError("unsupported_value");
+    }
+    spendNormalizationWork(state, 8);
+    return value;
+  }
+  if (typeof value !== "object") {
+    throw new SafeJsonError("unsupported_value");
+  }
+
+  if (state.active.has(value)) {
+    throw new SafeJsonError("cycle_detected");
+  }
+  state.active.add(value);
+  try {
+    if (Array.isArray(value)) {
+      if (Object.getPrototypeOf(value) !== Array.prototype) {
+        throw new SafeJsonError("unsupported_prototype");
+      }
+      const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
+      if (lengthDescriptor === undefined || !("value" in lengthDescriptor)) {
+        throw new SafeJsonError("sparse_array");
+      }
+      const length = lengthDescriptor.value;
+      if (!Number.isSafeInteger(length) || length < 0 || length > state.limits.maxCollectionItems) {
+        throw new SafeJsonError("collection_size_exceeded");
+      }
+      const keys = Reflect.ownKeys(value);
+      if (keys.length - 1 > state.limits.maxCollectionItems) {
+        throw new SafeJsonError("collection_size_exceeded");
+      }
+      for (const key of keys) {
+        if (typeof key !== "string") {
+          throw new SafeJsonError("unsupported_symbol_key");
+        }
+        if (key !== "length" && !isCanonicalArrayIndex(key, length)) {
+          throw new SafeJsonError("unsupported_value");
+        }
+      }
+      const normalized: unknown[] = [];
+      for (let index = 0; index < length; index += 1) {
+        const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+        if (descriptor === undefined) {
+          throw new SafeJsonError("sparse_array");
+        }
+        if (!("value" in descriptor)) {
+          throw new SafeJsonError("unsupported_accessor");
+        }
+        if (!descriptor.enumerable) {
+          throw new SafeJsonError("unsupported_non_enumerable");
+        }
+        normalized.push(normalizeJsonValueInternal(descriptor.value, depth + 1, state));
+      }
+      return normalized;
+    }
+
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new SafeJsonError("unsupported_prototype");
+    }
+    const keys = Reflect.ownKeys(value);
+    if (keys.length > state.limits.maxCollectionItems) {
+      throw new SafeJsonError("collection_size_exceeded");
+    }
+    const normalized = Object.create(null) as Record<string, unknown>;
+    for (const key of keys) {
+      if (typeof key !== "string") {
+        throw new SafeJsonError("unsupported_symbol_key");
+      }
+      const keyBytes = utf8ByteLengthUpTo(key, state.limits.maxStringBytes);
+      if (keyBytes > state.limits.maxStringBytes) {
+        throw new SafeJsonError("string_bytes_exceeded");
+      }
+      state.stringBytes += keyBytes;
+      if (state.stringBytes > state.limits.maxStringBytes) {
+        throw new SafeJsonError("string_bytes_exceeded");
+      }
+      spendNormalizationWork(state, keyBytes + 1);
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined) {
+        throw new SafeJsonError("unsupported_value");
+      }
+      if (!("value" in descriptor)) {
+        throw new SafeJsonError("unsupported_accessor");
+      }
+      if (!descriptor.enumerable) {
+        throw new SafeJsonError("unsupported_non_enumerable");
+      }
+      Object.defineProperty(normalized, key, {
+        configurable: true,
+        enumerable: true,
+        value: normalizeJsonValueInternal(descriptor.value, depth + 1, state),
+        writable: true,
+      });
+    }
+    return normalized;
+  } finally {
+    state.active.delete(value);
+  }
+}
+
+export function normalizeJsonValue(value: unknown, overrides: Partial<CanonicalJsonLimits> = {}): unknown {
+  const limits = { ...CANONICAL_JSON_LIMITS, ...overrides };
+  return normalizeJsonValueInternal(value, 0, {
+    limits,
+    nodes: 0,
+    stringBytes: 0,
+    work: 0,
+    active: new WeakSet<object>(),
+  });
+}
+
+type CanonicalMeasurementState = {
+  bytes: number;
+  work: number;
+  readonly maxBytes: number;
+  readonly maxWork: number;
+};
+
+const addCanonicalBytes = (state: CanonicalMeasurementState, bytes: number): void => {
+  state.bytes += bytes;
+  state.work += bytes + 1;
+  if (state.bytes > state.maxBytes) {
+    throw new SafeJsonError("serialized_bytes_exceeded");
+  }
+  if (state.work > state.maxWork) {
+    throw new SafeJsonError("work_exceeded");
+  }
+};
+
+const jsonStringByteLength = (value: string, state: CanonicalMeasurementState): void => {
+  addCanonicalBytes(state, 1);
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    if (
+      codeUnit === 0x22 ||
+      codeUnit === 0x5c ||
+      codeUnit === 0x08 ||
+      codeUnit === 0x09 ||
+      codeUnit === 0x0a ||
+      codeUnit === 0x0c ||
+      codeUnit === 0x0d
+    ) {
+      addCanonicalBytes(state, 2);
+      continue;
+    }
+    if (codeUnit < 0x20) {
+      addCanonicalBytes(state, 6);
+      continue;
+    }
+    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        addCanonicalBytes(state, 4);
+        index += 1;
+      } else {
+        addCanonicalBytes(state, 6);
+      }
+      continue;
+    }
+    if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+      addCanonicalBytes(state, 6);
+      continue;
+    }
+    addCanonicalBytes(state, codeUnit <= 0x7f ? 1 : codeUnit <= 0x7ff ? 2 : 3);
+  }
+  addCanonicalBytes(state, 1);
+};
+
+function measureNormalizedJsonUtf8Bytes(value: unknown, maxBytes: number): number {
+  const state: CanonicalMeasurementState = {
+    bytes: 0,
+    work: 0,
+    maxBytes,
+    maxWork: CANONICAL_JSON_LIMITS.maxWork,
+  };
+  const measure = (candidate: unknown): void => {
+    if (candidate === null) {
+      addCanonicalBytes(state, 4);
+      return;
+    }
+    if (typeof candidate === "string") {
+      jsonStringByteLength(candidate, state);
+      return;
+    }
+    if (typeof candidate === "boolean") {
+      addCanonicalBytes(state, candidate ? 4 : 5);
+      return;
+    }
+    if (typeof candidate === "number") {
+      addCanonicalBytes(state, utf8ByteLengthUpTo(JSON.stringify(candidate)));
+      return;
+    }
+    if (Array.isArray(candidate)) {
+      addCanonicalBytes(state, 1);
+      candidate.forEach((item, index) => {
+        if (index > 0) addCanonicalBytes(state, 1);
+        measure(item);
+      });
+      addCanonicalBytes(state, 1);
+      return;
+    }
+    const object = candidate as Record<string, unknown>;
+    addCanonicalBytes(state, 1);
+    Object.keys(object)
+      .toSorted()
+      .forEach((key, index) => {
+        if (index > 0) addCanonicalBytes(state, 1);
+        jsonStringByteLength(key, state);
+        addCanonicalBytes(state, 1);
+        measure(object[key]);
+      });
+    addCanonicalBytes(state, 1);
+  };
+  measure(value);
+  return state.bytes;
+}
+
+function measureCanonicalJsonUtf8Bytes(value: unknown, maxBytes = CANONICAL_JSON_LIMITS.maxCanonicalBytes): number {
+  return measureNormalizedJsonUtf8Bytes(normalizeJsonValue(value), maxBytes);
+}
+
+export function isCanonicalJsonUtf8ByteLengthAtMost(value: unknown, limit: number): boolean {
+  try {
+    measureCanonicalJsonUtf8Bytes(value, limit);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function writeCanonicalJson(value: unknown): string {
+  if (value === null || typeof value === "string" || typeof value === "boolean" || typeof value === "number") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => writeCanonicalJson(item)).join(",")}]`;
+  }
+  const object = value as Record<string, unknown>;
+  return `{${Object.keys(object)
+    .toSorted()
+    .map((key) => `${JSON.stringify(key)}:${writeCanonicalJson(object[key])}`)
+    .join(",")}}`;
+}
+
+export function canonicalJsonEquals(left: unknown, right: unknown): boolean {
+  const normalizedLeft = normalizeJsonValue(left);
+  const normalizedRight = normalizeJsonValue(right);
+  const compare = (first: unknown, second: unknown, depth: number): boolean => {
+    if (depth > CANONICAL_JSON_LIMITS.maxDepth) {
+      throw new SafeJsonError("depth_exceeded");
+    }
+    if (first === null || second === null || typeof first !== "object" || typeof second !== "object") {
+      if (typeof first !== typeof second) return false;
+      return typeof first === "number" && typeof second === "number"
+        ? JSON.stringify(first) === JSON.stringify(second)
+        : first === second;
+    }
+    if (Array.isArray(first) !== Array.isArray(second)) return false;
+    if (Array.isArray(first)) {
+      if (first.length !== (second as unknown[]).length) return false;
+      return first.every((item, index) => compare(item, (second as unknown[])[index], depth + 1));
+    }
+    const firstObject = first as Record<string, unknown>;
+    const secondObject = second as Record<string, unknown>;
+    const firstKeys = Object.keys(firstObject).toSorted();
+    const secondKeys = Object.keys(secondObject).toSorted();
+    if (firstKeys.length !== secondKeys.length) return false;
+    return firstKeys.every(
+      (key, index) => key === secondKeys[index] && compare(firstObject[key], secondObject[key], depth + 1)
+    );
+  };
+  return compare(normalizedLeft, normalizedRight, 0);
+}
+
 export class ContractParseError extends TypeError {
   readonly path: string;
 
@@ -524,14 +942,21 @@ export class ContractParseError extends TypeError {
 }
 
 function parseRawJson(value: unknown, path: string): unknown {
-  if (typeof value !== "string") {
-    return value;
+  let parsed = value;
+  if (typeof value === "string") {
+    if (utf8ByteLengthUpTo(value, CANONICAL_JSON_LIMITS.maxCanonicalBytes) > CANONICAL_JSON_LIMITS.maxCanonicalBytes) {
+      throw new ContractParseError(path, "serialized JSON input exceeds the configured UTF-8 byte limit");
+    }
+    try {
+      parsed = JSON.parse(value) as unknown;
+    } catch {
+      throw new ContractParseError(path, "must be valid JSON");
+    }
   }
-
   try {
-    return JSON.parse(value) as unknown;
-  } catch {
-    throw new ContractParseError(path, "must be valid JSON");
+    return normalizeJsonValue(parsed);
+  } catch (error) {
+    throw new ContractParseError(path, safeJsonErrorMessage(error));
   }
 }
 
@@ -557,7 +982,7 @@ function parseString(value: unknown, path: string, limit: number, min = 1): stri
   if (typeof value !== "string") {
     throw new ContractParseError(path, "must be a string");
   }
-  const bytes = new TextEncoder().encode(value).byteLength;
+  const bytes = utf8ByteLengthUpTo(value, limit);
   if (bytes < min || bytes > limit) {
     throw new ContractParseError(path, `must be between ${min} and ${limit} UTF-8 bytes`);
   }
@@ -1304,7 +1729,7 @@ export function parseRuntimeEvent(value: unknown): RuntimeEvent {
     body: parseBody(object.body, "RuntimeEvent.body"),
   } satisfies RuntimeEventShape;
   const result = deepFreeze(markValidatedContract(parsed, "RuntimeEvent"));
-  if (serializedJsonByteLength(result) > MAX_SERIALIZED_JSON_BYTES) {
+  if (!isCanonicalJsonUtf8ByteLengthAtMost(result, MAX_SERIALIZED_JSON_BYTES)) {
     throw new ContractParseError("RuntimeEvent", "canonical serialized UTF-8 bytes exceed the global limit");
   }
   return result;
@@ -2309,7 +2734,7 @@ function requireDurableConsistency(condition: boolean, path: string, message: st
 }
 
 function sameJson(left: unknown, right: unknown): boolean {
-  return canonicalizeJson(left) === canonicalizeJson(right);
+  return canonicalJsonEquals(left, right);
 }
 
 export function computeTrustedHumanInputAnswerDigest(
@@ -2383,7 +2808,7 @@ function productUniquenessKeys(binding: AppliedProductIdentitySource): readonly 
       receiptRef: binding.receiptRef,
       auditReceiptRef: binding.auditReceiptRef,
       productEventRef: binding.productEventRef,
-      cancellationRef: binding.cancellationRef,
+      ...(binding.cancellationRef === undefined ? {} : { cancellationRef: binding.cancellationRef }),
     })}`,
   ];
 }
@@ -3101,7 +3526,7 @@ function verifyPublication(
     return;
   }
 
-  if (serializedJsonByteLength(publication) > snapshot.runtimePolicy.maxReceiptBytes) {
+  if (!isCanonicalJsonUtf8ByteLengthAtMost(publication, snapshot.runtimePolicy.maxReceiptBytes)) {
     addVerificationError(
       errors,
       "receipt_too_large",
@@ -3904,8 +4329,10 @@ export function verifyRuntimeExecution(input: RuntimeVerificationInput): Runtime
       }
     }
     if (
-      serializedJsonByteLength(event) > MAX_SERIALIZED_JSON_BYTES ||
-      serializedJsonByteLength(event) > snapshot.runtimePolicy.maxEventPayloadBytes
+      !isCanonicalJsonUtf8ByteLengthAtMost(
+        event,
+        Math.min(MAX_SERIALIZED_JSON_BYTES, snapshot.runtimePolicy.maxEventPayloadBytes)
+      )
     ) {
       addVerificationError(
         errors,

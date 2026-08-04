@@ -5,12 +5,15 @@ import runSnapshotSchema from "../schemas/v1/run-snapshot.schema.json" with { ty
 import runtimeDurableStateSchema from "../schemas/v1/runtime-durable-state.schema.json" with { type: "json" };
 import runtimeEventSchema from "../schemas/v1/runtime-event.schema.json" with { type: "json" };
 import runtimeExitSchema from "../schemas/v1/runtime-exit.schema.json" with { type: "json" };
-import { canonicalizeJson } from "./contracts";
-
-const utf8Encoder = new TextEncoder();
+import {
+  canonicalJsonEquals,
+  isCanonicalJsonUtf8ByteLengthAtMost,
+  normalizeJsonValue,
+  utf8ByteLengthAtMost,
+} from "./contracts";
 
 const utf8ByteMaxValidator = (limit: number, value: unknown): boolean =>
-  typeof value === "string" && utf8Encoder.encode(value).byteLength <= limit;
+  typeof value === "string" && utf8ByteLengthAtMost(value, limit);
 
 const equalPropertiesValidator = (pairs: unknown, value: unknown): boolean => {
   if (value === null || typeof value !== "object" || !Array.isArray(pairs)) {
@@ -24,17 +27,14 @@ const equalPropertiesValidator = (pairs: unknown, value: unknown): boolean => {
       pair.length === 2 &&
       typeof pair[0] === "string" &&
       typeof pair[1] === "string" &&
-      object[pair[0]] === object[pair[1]]
+      Object.hasOwn(object, pair[0]) &&
+      Object.hasOwn(object, pair[1]) &&
+      canonicalJsonEquals(object[pair[0]], object[pair[1]])
   );
 };
 
-const serializedUtf8ByteMaxValidator = (limit: number, value: unknown): boolean => {
-  try {
-    return utf8Encoder.encode(canonicalizeJson(value)).byteLength <= limit;
-  } catch {
-    return false;
-  }
-};
+const serializedUtf8ByteMaxValidator = (limit: number, value: unknown): boolean =>
+  isCanonicalJsonUtf8ByteLengthAtMost(value, limit);
 
 const schemaDefinitions = {
   "run-snapshot": runSnapshotSchema,
@@ -43,6 +43,16 @@ const schemaDefinitions = {
   "runtime-exit": runtimeExitSchema,
   "runtime-durable-state": runtimeDurableStateSchema,
 } as const;
+
+const safeBoundaryError = (): readonly ErrorObject[] => [
+  {
+    instancePath: "",
+    schemaPath: "#",
+    keyword: "x-plane-safe-json",
+    params: { reason: "unsupported_or_unbounded_input" },
+    message: "must be bounded plain JSON data",
+  },
+];
 
 export const RUNTIME_SCHEMA_NAMES = Object.keys(schemaDefinitions) as [
   keyof typeof schemaDefinitions,
@@ -65,7 +75,7 @@ export type RuntimeSchemaValidator = Readonly<{
  * must not be used as the runtime contract validator.
  */
 export function createRuntimeSchemaValidator(): RuntimeSchemaValidator {
-  const ajv = new Ajv2020({ allErrors: true, strict: false });
+  const ajv = new Ajv2020({ allErrors: false, strict: true, strictRequired: false, strictTypes: false });
   ajv.addKeyword({
     keyword: "x-utf8ByteMax",
     type: "string",
@@ -88,13 +98,22 @@ export function createRuntimeSchemaValidator(): RuntimeSchemaValidator {
   const validators = Object.fromEntries(
     Object.entries(schemaDefinitions).map(([name, schema]) => [name, ajv.compile(schema)])
   ) as Record<RuntimeSchemaName, ValidateFunction>;
+  const validationErrors = new Map<RuntimeSchemaName, readonly ErrorObject[] | null>();
 
   return {
     validate(name, value) {
-      return validators[name](value);
+      try {
+        const normalized = normalizeJsonValue(value);
+        const valid = validators[name](normalized);
+        validationErrors.set(name, validators[name].errors ?? null);
+        return valid;
+      } catch {
+        validationErrors.set(name, safeBoundaryError());
+        return false;
+      }
     },
     errors(name) {
-      return validators[name].errors ?? null;
+      return validationErrors.get(name) ?? null;
     },
   };
 }
