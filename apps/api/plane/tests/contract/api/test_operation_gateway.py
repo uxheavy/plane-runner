@@ -37,8 +37,14 @@ from plane.db.models import (
 )
 from plane.operation_gateway.contracts import MAX_RESULT_BYTES
 from plane.operation_gateway.gateway import OperationGateway
-from plane.operation_gateway.publications import dispatch_publication_once
+from plane.operation_gateway.publications import (
+    create_publication_intents,
+    dispatch_publication_once,
+    schedule_publications,
+    schedule_publications_on_commit,
+)
 from plane.operation_gateway.role_boundary import AuditRoleBoundaryError, verify_audit_role_boundary
+from plane.operation_gateway.tasks import dispatch_publication, reconcile_publications
 from plane.bgtasks.webhook_task import WebhookDeliveryResult, deliver_webhook_target
 from plane.operation_gateway.work_items import WorkItemRenameFailure, WorkItemRenameService
 
@@ -195,7 +201,9 @@ def test_terminal_failure_replay_returns_fresh_receipt(api_key_client, workspace
     replay_audit = OperationGatewayAudit.objects.get(id=second.json()["audit_receipt"])
     assert replay_audit.outcome == OperationGatewayAudit.Outcome.REPLAY
     assert replay_audit.request_id == uuid.UUID(second.json()["request_id"])
-    assert replay_audit.invocation_id != OperationGatewayAudit.objects.get(id=first.json()["audit_receipt"]).invocation_id
+    assert replay_audit.invocation_id != OperationGatewayAudit.objects.get(
+        id=first.json()["audit_receipt"]
+    ).invocation_id
 
 
 @pytest.mark.contract
@@ -871,7 +879,12 @@ def test_notification_publication_retries_without_duplicate_notifications(
     assert response.status_code == status.HTTP_200_OK
     assert count_after_first == 1
     assert Notification.objects.filter(entity_identifier=gateway_issue.id).count() == 1
-    assert Notification.objects.filter(entity_identifier=gateway_issue.id).exclude(idempotency_key__isnull=True).count() == 1
+    assert (
+        Notification.objects.filter(entity_identifier=gateway_issue.id)
+        .exclude(idempotency_key__isnull=True)
+        .count()
+        == 1
+    )
     assert EmailNotificationLog.objects.filter(entity_identifier=gateway_issue.id).exclude(
         idempotency_key__isnull=True
     ).count() == 1
@@ -1113,6 +1126,49 @@ def test_separated_audit_boot_and_runtime_probes_cover_membership_and_trigger_po
                 cursor.execute(f'SET ROLE "{runtime_role}"')
             verify_audit_role_boundary()
 
+            with connection.cursor() as cursor:
+                cursor.execute("RESET ROLE")
+                cursor.execute(
+                    """
+                    CREATE OR REPLACE FUNCTION operation_gateway_audit_append_only()
+                    RETURNS trigger
+                    LANGUAGE plpgsql
+                    AS $$
+                    BEGIN
+                        IF false THEN
+                            RAISE EXCEPTION 'operation gateway audit records are append-only'
+                                USING ERRCODE = '55000';
+                        END IF;
+                        RETURN NEW;
+                    END;
+                    $$;
+                    """
+                )
+                cursor.execute("ALTER FUNCTION operation_gateway_audit_append_only() SECURITY DEFINER")
+                cursor.execute("ALTER FUNCTION operation_gateway_audit_append_only() SET search_path = pg_catalog")
+                cursor.execute(f'SET ROLE "{runtime_role}"')
+            with pytest.raises(AuditRoleBoundaryError, match="function body"):
+                verify_audit_role_boundary()
+            with connection.cursor() as cursor:
+                cursor.execute("RESET ROLE")
+                cursor.execute(
+                    """
+                    CREATE OR REPLACE FUNCTION operation_gateway_audit_append_only()
+                    RETURNS trigger
+                    LANGUAGE plpgsql
+                    AS $$
+                    BEGIN
+                        RAISE EXCEPTION 'operation gateway audit records are append-only'
+                            USING ERRCODE = '55000';
+                    END;
+                    $$;
+                    """
+                )
+                cursor.execute("ALTER FUNCTION operation_gateway_audit_append_only() SECURITY DEFINER")
+                cursor.execute("ALTER FUNCTION operation_gateway_audit_append_only() SET search_path = pg_catalog")
+                cursor.execute(f'SET ROLE "{runtime_role}"')
+            verify_audit_role_boundary()
+
             for statement in (
                 "ALTER TABLE operation_gateway_audit DISABLE TRIGGER ALL",
                 "DROP TRIGGER operation_gateway_audit_append_only_row_trigger ON operation_gateway_audit",
@@ -1138,6 +1194,13 @@ def test_rejected_production_role_cannot_reach_any_public_gateway_path():
     request = SimpleNamespace(user=SimpleNamespace(id=uuid.uuid4()), META={})
     gateway = OperationGateway()
     rejected_role = f"missing_gateway_runtime_{uuid.uuid4().hex[:10]}"
+    before = {
+        "audit": OperationGatewayAudit.objects.count(),
+        "idempotency": OperationGatewayIdempotency.objects.count(),
+        "publication": OperationGatewayPublication.objects.count(),
+        "webhook": Webhook.objects.count(),
+        "webhook_log": WebhookLog.objects.count(),
+    }
 
     with override_settings(
         PLANE_AUDIT_ENFORCE_ROLE_SEPARATION=True,
@@ -1151,6 +1214,39 @@ def test_rejected_production_role_cannot_reach_any_public_gateway_path():
             gateway.reconcile(uuid.uuid4())
         with pytest.raises(AuditRoleBoundaryError):
             verify_audit_role_boundary()
+        for operation in (
+            lambda: create_publication_intents(None, {}),
+            lambda: dispatch_publication_once(str(uuid.uuid4())),
+            lambda: schedule_publications([]),
+            lambda: schedule_publications_on_commit(None),
+            lambda: dispatch_publication.run(str(uuid.uuid4())),
+            reconcile_publications.run,
+            lambda: deliver_webhook_target(
+                webhook_id=str(uuid.uuid4()),
+                slug="rejected",
+                event="issue",
+                event_data=None,
+                action="created",
+                current_site=None,
+                activity=None,
+                delivery_key="rejected",
+            ),
+            lambda: OperationGatewayAudit.objects.create(),
+            lambda: OperationGatewayAudit.objects.bulk_create([]),
+            lambda: OperationGatewayIdempotency.objects.create(),
+            lambda: OperationGatewayPublication.objects.bulk_create([]),
+        ):
+            with pytest.raises(AuditRoleBoundaryError):
+                operation()
+
+    after = {
+        "audit": OperationGatewayAudit.objects.count(),
+        "idempotency": OperationGatewayIdempotency.objects.count(),
+        "publication": OperationGatewayPublication.objects.count(),
+        "webhook": Webhook.objects.count(),
+        "webhook_log": WebhookLog.objects.count(),
+    }
+    assert after == before
 
 
 @pytest.mark.contract

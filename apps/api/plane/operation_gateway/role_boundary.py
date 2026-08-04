@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import re
 from functools import wraps
 from typing import Any, Callable
 
@@ -13,8 +15,25 @@ class AuditRoleBoundaryError(RuntimeError):
     """The configured runtime role cannot safely use the audit table."""
 
 
+EXPECTED_APPEND_ONLY_FUNCTION_SOURCE = """
+BEGIN
+    RAISE EXCEPTION 'operation gateway audit records are append-only'
+        USING ERRCODE = '55000';
+END;
+"""
+
+
+def _normalized_function_source(source: str) -> str:
+    return re.sub(r"\s+", " ", source).strip().lower()
+
+
+EXPECTED_APPEND_ONLY_FUNCTION_DIGEST = hashlib.sha256(
+    _normalized_function_source(EXPECTED_APPEND_ONLY_FUNCTION_SOURCE).encode("utf-8")
+).hexdigest()
+
+
 def audited_gateway_boundary(method: Callable[..., Any]) -> Callable[..., Any]:
-    """Apply the same fail-closed database check to every public gateway path."""
+    """Apply the shared fail-closed check to every externally callable path."""
 
     @wraps(method)
     def guarded(*args: Any, **kwargs: Any) -> Any:
@@ -79,6 +98,10 @@ def verify_audit_role_boundary() -> None:
                    table_info.schema_owner,
                    table_info.function_security_definer,
                    table_info.function_config,
+                   table_info.function_source,
+                   has_function_privilege('public', 'operation_gateway_audit_append_only()'::regprocedure, 'EXECUTE'),
+                   has_function_privilege(%s, 'operation_gateway_audit_append_only()'::regprocedure, 'EXECUTE'),
+                   has_function_privilege(%s, 'operation_gateway_audit_append_only()'::regprocedure, 'EXECUTE'),
                    has_schema_privilege(current_user, current_schema(), 'USAGE'),
                    has_schema_privilege(current_user, current_schema(), 'CREATE'),
                    has_table_privilege(current_user, 'operation_gateway_audit', 'SELECT'),
@@ -100,7 +123,8 @@ def verify_audit_role_boundary() -> None:
                        function_owner.rolname AS function_owner,
                        schema_owner.rolname AS schema_owner,
                        audit_function.prosecdef AS function_security_definer,
-                       audit_function.proconfig AS function_config
+                       audit_function.proconfig AS function_config,
+                       audit_function.prosrc AS function_source
                 FROM pg_class AS audit_table
                 JOIN pg_namespace AS audit_schema ON audit_schema.oid = audit_table.relnamespace
                 JOIN pg_roles AS table_owner ON table_owner.oid = audit_table.relowner
@@ -112,7 +136,8 @@ def verify_audit_role_boundary() -> None:
                   AND audit_table.relname = 'operation_gateway_audit'
             ) AS table_info ON TRUE
             WHERE runtime.rolname = current_user
-            """
+            """,
+            [migration_role, governance_role],
         )
         row = cursor.fetchone()
 
@@ -132,6 +157,10 @@ def verify_audit_role_boundary() -> None:
         schema_owner,
         function_security_definer,
         function_config,
+        function_source,
+        public_can_execute,
+        runtime_can_execute,
+        governance_can_execute,
         can_use_schema,
         can_create_in_schema,
         can_select,
@@ -156,6 +185,13 @@ def verify_audit_role_boundary() -> None:
         raise AuditRoleBoundaryError("The append-only trigger function is not owned by the governed audit role")
     if not function_security_definer or function_config != ["search_path=pg_catalog"]:
         raise AuditRoleBoundaryError("The append-only trigger function has an unsafe execution context")
+    if (
+        hashlib.sha256(_normalized_function_source(function_source).encode("utf-8")).hexdigest()
+        != EXPECTED_APPEND_ONLY_FUNCTION_DIGEST
+    ):
+        raise AuditRoleBoundaryError("The append-only trigger function body is not the protected implementation")
+    if public_can_execute or runtime_can_execute or not governance_can_execute:
+        raise AuditRoleBoundaryError("The append-only trigger function has an invalid ACL")
     if schema_owner == runtime_role:
         raise AuditRoleBoundaryError("The audit schema is owned by the runtime role")
     if (

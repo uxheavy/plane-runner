@@ -19,6 +19,8 @@ from plane.bgtasks.notification_task import run_notifications
 from plane.bgtasks.webhook_task import WebhookDeliveryResult, deliver_webhook_target, get_model_data
 from plane.db.models import IssueActivity, OperationGatewayIdempotency, OperationGatewayPublication, Webhook
 
+from .role_boundary import audited_gateway_boundary
+
 
 PUBLICATION_LEASE_SECONDS = 300
 ACTIVITY_NAMESPACE = uuid.UUID("cbf3b03a-6bc3-4b09-89f1-04f3ffdecd38")
@@ -46,12 +48,14 @@ class PreparedWebhookDelivery:
     activity: dict[str, Any]
 
 
+@audited_gateway_boundary
 def activity_id_for_publication(publication_key: str) -> str:
     """Return the deterministic Activity PK for one gateway activity intent."""
 
     return str(uuid.uuid5(ACTIVITY_NAMESPACE, publication_key))
 
 
+@audited_gateway_boundary
 def create_publication_intents(
     record: OperationGatewayIdempotency,
     payload: dict[str, Any] | None,
@@ -139,6 +143,7 @@ def create_publication_intents(
     return publications
 
 
+@audited_gateway_boundary
 def dispatch_publication_once(publication_id: str) -> None:
     """Claim and dispatch one intent without holding a DB transaction over HTTP."""
 
@@ -268,7 +273,9 @@ def _finalize_external_publication(publication_id: uuid.UUID, result: WebhookDel
         publication.state = result.state
         publication.dispatch_started = True
         publication.lease_until = None
-        publication.published_at = timezone.now() if result.state == OperationGatewayPublication.State.SUCCEEDED else None
+        publication.published_at = (
+            timezone.now() if result.state == OperationGatewayPublication.State.SUCCEEDED else None
+        )
         publication.last_error = result.error[:255] if result.error else ""
         publication.delivery_result = result.as_dict()
         publication.save(
@@ -465,6 +472,7 @@ def _dispatch_webhook(
     )
 
 
+@audited_gateway_boundary
 def schedule_publications(publications: list[OperationGatewayPublication]) -> None:
     """Best-effort post-commit dispatch; durable rows are the recovery source."""
 
@@ -474,6 +482,7 @@ def schedule_publications(publications: list[OperationGatewayPublication]) -> No
         dispatch_publication.delay(str(publication.id))
 
 
+@audited_gateway_boundary
 def schedule_publications_on_commit(record: OperationGatewayIdempotency) -> None:
     publications = list(record.publications.all())
     transaction.on_commit(

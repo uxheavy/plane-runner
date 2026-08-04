@@ -9,9 +9,11 @@ from django.utils import timezone
 from plane.db.models import OperationGatewayPublication
 
 from .publications import dispatch_publication_once
+from .role_boundary import audited_gateway_boundary
 
 
 @shared_task(bind=True, max_retries=5)
+@audited_gateway_boundary
 def dispatch_publication(self, publication_id: str) -> None:
     try:
         dispatch_publication_once(publication_id)
@@ -26,6 +28,7 @@ def dispatch_publication(self, publication_id: str) -> None:
 
 
 @shared_task
+@audited_gateway_boundary
 def reconcile_publications() -> int:
     """Requeue each missing/failed/expired intent independently."""
 

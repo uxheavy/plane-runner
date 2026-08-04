@@ -5,21 +5,114 @@ import uuid
 from django.db import models
 
 
+def _verify_gateway_write_boundary() -> None:
+    # Keep the import local: role_boundary is an application seam, while this
+    # module is imported during Django model discovery and migrations.
+    from plane.operation_gateway.role_boundary import verify_audit_role_boundary
+
+    verify_audit_role_boundary()
+
+
+class OperationGatewayWriteQuerySet(models.QuerySet):
+    """Make every public ORM write enter the shared gateway boundary."""
+
+    def create(self, **kwargs):
+        _verify_gateway_write_boundary()
+        return super().create(**kwargs)
+
+    def bulk_create(
+        self,
+        objs,
+        batch_size=None,
+        ignore_conflicts=False,
+        update_conflicts=False,
+        update_fields=None,
+        unique_fields=None,
+    ):
+        _verify_gateway_write_boundary()
+        return super().bulk_create(
+            objs,
+            batch_size=batch_size,
+            ignore_conflicts=ignore_conflicts,
+            update_conflicts=update_conflicts,
+            update_fields=update_fields,
+            unique_fields=unique_fields,
+        )
+
+    def update(self, **kwargs):
+        _verify_gateway_write_boundary()
+        return super().update(**kwargs)
+
+    def bulk_update(self, objs, fields, batch_size=None):
+        _verify_gateway_write_boundary()
+        return super().bulk_update(objs, fields, batch_size=batch_size)
+
+    def delete(self):
+        _verify_gateway_write_boundary()
+        return super().delete()
+
+    def get_or_create(self, defaults=None, **kwargs):
+        _verify_gateway_write_boundary()
+        return super().get_or_create(defaults=defaults, **kwargs)
+
+    def update_or_create(self, defaults=None, create_defaults=None, **kwargs):
+        _verify_gateway_write_boundary()
+        return super().update_or_create(defaults=defaults, create_defaults=create_defaults, **kwargs)
+
+
+class OperationGatewayWriteManager(models.Manager.from_queryset(OperationGatewayWriteQuerySet)):
+    """Manager whose public mutation methods cannot bypass the gateway guard."""
+
+
 class AppendOnlyAuditQuerySet(models.QuerySet):
     """Prevent every ORM mutation path, not only instance mutation methods."""
 
     def update(self, **kwargs):
+        _verify_gateway_write_boundary()
         raise ValueError("Operation gateway audit records are append-only")
 
     def delete(self):
+        _verify_gateway_write_boundary()
         raise ValueError("Operation gateway audit records are append-only")
 
     def bulk_update(self, objs, fields, batch_size=None):
+        _verify_gateway_write_boundary()
         raise ValueError("Operation gateway audit records are append-only")
+
+    def create(self, **kwargs):
+        _verify_gateway_write_boundary()
+        return super().create(**kwargs)
+
+    def bulk_create(
+        self,
+        objs,
+        batch_size=None,
+        ignore_conflicts=False,
+        update_conflicts=False,
+        update_fields=None,
+        unique_fields=None,
+    ):
+        _verify_gateway_write_boundary()
+        return super().bulk_create(
+            objs,
+            batch_size=batch_size,
+            ignore_conflicts=ignore_conflicts,
+            update_conflicts=update_conflicts,
+            update_fields=update_fields,
+            unique_fields=unique_fields,
+        )
+
+    def get_or_create(self, defaults=None, **kwargs):
+        _verify_gateway_write_boundary()
+        return super().get_or_create(defaults=defaults, **kwargs)
+
+    def update_or_create(self, defaults=None, create_defaults=None, **kwargs):
+        _verify_gateway_write_boundary()
+        return super().update_or_create(defaults=defaults, create_defaults=create_defaults, **kwargs)
 
 
 class AppendOnlyAuditManager(models.Manager.from_queryset(AppendOnlyAuditQuerySet)):
-    pass
+    """Append-only manager with explicit guard coverage for public writes."""
 
 
 class OperationGatewayIdempotency(models.Model):
@@ -49,6 +142,16 @@ class OperationGatewayIdempotency(models.Model):
     audit_receipt = models.UUIDField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = OperationGatewayWriteManager()
+
+    def save(self, *args, **kwargs):
+        _verify_gateway_write_boundary()
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        _verify_gateway_write_boundary()
+        return super().delete(*args, **kwargs)
 
     class Meta:
         db_table = "operation_gateway_idempotency"
@@ -107,11 +210,13 @@ class OperationGatewayAudit(models.Model):
     objects = AppendOnlyAuditManager()
 
     def save(self, *args, **kwargs):
+        _verify_gateway_write_boundary()
         if not self._state.adding:
             raise ValueError("Operation gateway audit records are append-only")
         return super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
+        _verify_gateway_write_boundary()
         raise ValueError("Operation gateway audit records are append-only")
 
 
@@ -155,6 +260,16 @@ class OperationGatewayPublication(models.Model):
     published_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = OperationGatewayWriteManager()
+
+    def save(self, *args, **kwargs):
+        _verify_gateway_write_boundary()
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        _verify_gateway_write_boundary()
+        return super().delete(*args, **kwargs)
 
     class Meta:
         db_table = "operation_gateway_publication"

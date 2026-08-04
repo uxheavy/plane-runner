@@ -75,6 +75,7 @@ def split_legacy_webhook_intents(apps, schema_editor):
 
     Publication = apps.get_model("db", "OperationGatewayPublication")
     Webhook = apps.get_model("db", "Webhook")
+    table_name = schema_editor.quote_name(Publication._meta.db_table)
     legacy_publications = Publication.objects.filter(kind="webhook", target_id__isnull=True).order_by("id")
     for publication in legacy_publications:
         payload = publication.payload if isinstance(publication.payload, dict) else {}
@@ -100,7 +101,9 @@ def split_legacy_webhook_intents(apps, schema_editor):
             else publication.delivery_result
         )
         if not targets:
-            publication.id = _stable_publication_id(publication.idempotency_id, "none")
+            new_id = _stable_publication_id(publication.idempotency_id, "none")
+            _rewrite_publication_primary_key(schema_editor, table_name, publication.id, new_id)
+            publication.id = new_id
             payload.pop(REVERSE_MARKER, None)
             publication.payload = payload
             publication.state = state
@@ -111,7 +114,6 @@ def split_legacy_webhook_intents(apps, schema_editor):
             publication.save(
                 update_fields=[
                     "state",
-                    "id",
                     "dispatch_started",
                     "lease_until",
                     "published_at",
@@ -126,6 +128,7 @@ def split_legacy_webhook_intents(apps, schema_editor):
             publication_key = f"{publication.idempotency_id}:webhook:{target_id}"
             target_publication_id = _stable_publication_id(publication.idempotency_id, str(target_id))
             if index == 0:
+                _rewrite_publication_primary_key(schema_editor, table_name, publication.id, target_publication_id)
                 publication.id = target_publication_id
                 publication.target_id = target_id
                 publication.publication_key = publication_key
@@ -138,7 +141,6 @@ def split_legacy_webhook_intents(apps, schema_editor):
                 publication.save(
                     update_fields=[
                         "target_id",
-                        "id",
                         "publication_key",
                         "payload",
                         "state",
@@ -209,6 +211,23 @@ def merge_webhook_intents_for_reverse(apps, schema_editor):
         )
         for publication in publications[1:]:
             publication.delete()
+
+
+def _rewrite_publication_primary_key(schema_editor, table_name: str, old_id, new_id) -> None:
+    """Rewrite a legacy PK in-place without Django's update_fields PK guard."""
+
+    if old_id == new_id:
+        return
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute(f"SELECT 1 FROM {table_name} WHERE id = %s FOR UPDATE", [old_id])
+        if cursor.fetchone() is None:
+            raise RuntimeError(f"Legacy publication {old_id} disappeared during migration")
+        cursor.execute(f"SELECT 1 FROM {table_name} WHERE id = %s", [new_id])
+        if cursor.fetchone() is not None:
+            raise RuntimeError(f"Deterministic publication id {new_id} already exists")
+        cursor.execute(f"UPDATE {table_name} SET id = %s WHERE id = %s", [new_id, old_id])
+        if cursor.rowcount != 1:
+            raise RuntimeError(f"Legacy publication {old_id} was not rewritten")
 
 
 def _stable_publication_id(idempotency_id, target_id: str) -> uuid.UUID:
@@ -324,6 +343,8 @@ def configure_audit_role_boundary(apps, schema_editor):
             raise RuntimeError(
                 "Operation Gateway audit roles are missing; run bootstrap_operation_gateway_audit first"
             )
+        cursor.execute("SELECT current_schema()")
+        schema_ident = connection.ops.quote_name(cursor.fetchone()[0])
 
         # The explicit bootstrap command provisions the owner. This migration
         # temporarily grants the migration authority membership in it so DDL
@@ -332,23 +353,57 @@ def configure_audit_role_boundary(apps, schema_editor):
         cursor.execute(f"REVOKE {governance_ident} FROM {runtime_ident}")
         cursor.execute(f"REVOKE {migration_ident} FROM {runtime_ident}")
 
+        # PostgreSQL requires the target owner to have CREATE on the schema
+        # during an ownership transfer. Keep this capability scoped to the
+        # transfer; the governance role is otherwise NOLOGIN and has no
+        # schema-creation responsibility.
+        cursor.execute(f"GRANT USAGE, CREATE ON SCHEMA {schema_ident} TO {governance_ident}")
         cursor.execute(f"ALTER TABLE operation_gateway_audit OWNER TO {governance_ident}")
         cursor.execute(
             f"ALTER FUNCTION operation_gateway_audit_append_only() OWNER TO {governance_ident}"
         )
+        cursor.execute(f"REVOKE CREATE ON SCHEMA {schema_ident} FROM {governance_ident}")
         cursor.execute(
             "ALTER FUNCTION operation_gateway_audit_append_only() SECURITY DEFINER"
         )
         cursor.execute(
             "ALTER FUNCTION operation_gateway_audit_append_only() SET search_path = pg_catalog"
         )
-        cursor.execute(f"REVOKE ALL ON TABLE operation_gateway_audit FROM PUBLIC")
-        cursor.execute("SELECT current_schema()")
-        schema_ident = connection.ops.quote_name(cursor.fetchone()[0])
         cursor.execute(f"GRANT USAGE ON SCHEMA {schema_ident} TO {runtime_ident}")
         cursor.execute(f"REVOKE CREATE ON SCHEMA {schema_ident} FROM {runtime_ident}")
+
+        # The runtime role needs ordinary Plane ORM access to the application
+        # schema. Keep this grant explicit rather than using ALL so it cannot
+        # acquire DDL, TRUNCATE, or role-governance powers through the schema.
+        cursor.execute(
+            f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {schema_ident} TO {runtime_ident}"
+        )
+        cursor.execute(f"GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA {schema_ident} TO {runtime_ident}")
+        cursor.execute(f"GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA {schema_ident} TO {runtime_ident}")
+        cursor.execute(
+            f"ALTER DEFAULT PRIVILEGES FOR ROLE {migration_ident} IN SCHEMA {schema_ident} "
+            f"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {runtime_ident}"
+        )
+        cursor.execute(
+            f"ALTER DEFAULT PRIVILEGES FOR ROLE {migration_ident} IN SCHEMA {schema_ident} "
+            f"GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO {runtime_ident}"
+        )
+        cursor.execute(
+            f"ALTER DEFAULT PRIVILEGES FOR ROLE {migration_ident} IN SCHEMA {schema_ident} "
+            f"GRANT EXECUTE ON FUNCTIONS TO {runtime_ident}"
+        )
+
+        # Audit storage is stricter than the ordinary application schema.
+        cursor.execute("REVOKE ALL ON TABLE operation_gateway_audit FROM PUBLIC")
         cursor.execute(f"GRANT SELECT, INSERT ON TABLE operation_gateway_audit TO {runtime_ident}")
-        cursor.execute(f"REVOKE UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON TABLE operation_gateway_audit FROM {runtime_ident}")
+        # The one-shot migrator still needs to inspect and append audit rows
+        # while running later migrations, but it does not receive mutation or
+        # trigger-control privileges through this grant.
+        cursor.execute(f"GRANT SELECT, INSERT ON TABLE operation_gateway_audit TO {migration_ident}")
+        cursor.execute(
+            f"REVOKE UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON TABLE operation_gateway_audit "
+            f"FROM {runtime_ident}"
+        )
         cursor.execute(
             f"REVOKE ALL ON FUNCTION operation_gateway_audit_append_only() FROM PUBLIC, {runtime_ident}"
         )
@@ -383,9 +438,26 @@ def unconfigure_audit_role_boundary(apps, schema_editor):
         cursor.execute(f"ALTER FUNCTION operation_gateway_audit_append_only() OWNER TO {migration_ident}")
         cursor.execute(f"ALTER TABLE operation_gateway_audit OWNER TO {migration_ident}")
         cursor.execute(f"REVOKE {governance_ident} FROM {migration_ident}")
-        cursor.execute(f"REVOKE ALL ON TABLE operation_gateway_audit FROM {runtime_ident}")
         cursor.execute("SELECT current_schema()")
         schema_ident = connection.ops.quote_name(cursor.fetchone()[0])
+        cursor.execute(
+            f"REVOKE SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {schema_ident} FROM {runtime_ident}"
+        )
+        cursor.execute(f"REVOKE USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA {schema_ident} FROM {runtime_ident}")
+        cursor.execute(f"REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA {schema_ident} FROM {runtime_ident}")
+        cursor.execute(
+            f"ALTER DEFAULT PRIVILEGES FOR ROLE {migration_ident} IN SCHEMA {schema_ident} "
+            f"REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLES FROM {runtime_ident}"
+        )
+        cursor.execute(
+            f"ALTER DEFAULT PRIVILEGES FOR ROLE {migration_ident} IN SCHEMA {schema_ident} "
+            f"REVOKE USAGE, SELECT, UPDATE ON SEQUENCES FROM {runtime_ident}"
+        )
+        cursor.execute(
+            f"ALTER DEFAULT PRIVILEGES FOR ROLE {migration_ident} IN SCHEMA {schema_ident} "
+            f"REVOKE EXECUTE ON FUNCTIONS FROM {runtime_ident}"
+        )
+        cursor.execute(f"REVOKE ALL ON TABLE operation_gateway_audit FROM {runtime_ident}")
         cursor.execute(f"REVOKE USAGE, CREATE ON SCHEMA {schema_ident} FROM {runtime_ident}")
         cursor.execute(
             """

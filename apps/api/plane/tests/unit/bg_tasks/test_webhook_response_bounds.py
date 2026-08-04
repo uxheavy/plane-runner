@@ -28,6 +28,14 @@ class StreamResponse:
     def close(self):
         self.closed = True
 
+    @property
+    def content(self):
+        raise AssertionError("full response content must not be read")
+
+    @property
+    def text(self):
+        raise AssertionError("full response text must not be read")
+
 
 @pytest.mark.unit
 def test_exact_limit_is_bounded_and_not_truncated_when_stream_ends():
@@ -40,7 +48,7 @@ def test_exact_limit_is_bounded_and_not_truncated_when_stream_ends():
     assert evidence.observed_size == WEBHOOK_RESPONSE_BODY_LIMIT
     assert evidence.size_known is True
     assert evidence.truncated is False
-    assert evidence.sha256 == hashlib.sha256(b"a" * WEBHOOK_RESPONSE_BODY_LIMIT).hexdigest()
+    assert evidence.prefix_sha256 == hashlib.sha256(b"a" * WEBHOOK_RESPONSE_BODY_LIMIT).hexdigest()
     assert len(evidence.prefix.encode()) <= WEBHOOK_RESPONSE_BODY_LIMIT
     assert response.closed is True
 
@@ -68,8 +76,8 @@ def test_content_length_large_stream_stops_at_configured_limit():
     evidence = read_bounded_webhook_response(response)
 
     assert evidence.prefix == "z" * WEBHOOK_RESPONSE_BODY_LIMIT
-    assert evidence.observed_size == 1024 * 1024
-    assert evidence.size_known is True
+    assert evidence.observed_size == WEBHOOK_RESPONSE_BODY_LIMIT + 1
+    assert evidence.size_known is False
     assert evidence.truncated is True
     assert len(evidence.prefix.encode()) == WEBHOOK_RESPONSE_BODY_LIMIT
 
@@ -107,4 +115,42 @@ def test_stream_exception_keeps_bounded_evidence_and_marks_truncation():
     assert evidence.observed_size == len(b"prefix")
     assert evidence.size_known is False
     assert evidence.truncated is True
-    assert evidence.sha256 == hashlib.sha256(b"prefix").hexdigest()
+    assert evidence.prefix_sha256 == hashlib.sha256(b"prefix").hexdigest()
+
+
+@pytest.mark.unit
+def test_declared_short_length_does_not_hide_observed_extra_bytes():
+    response = StreamResponse([b"a" * (WEBHOOK_RESPONSE_BODY_LIMIT + 1)], headers={"Content-Length": "1"})
+
+    evidence = read_bounded_webhook_response(response)
+
+    assert evidence.observed_size == WEBHOOK_RESPONSE_BODY_LIMIT + 1
+    assert evidence.size_known is False
+    assert evidence.truncated is True
+
+
+@pytest.mark.unit
+def test_declared_long_length_does_not_claim_a_short_stream_is_truncated():
+    response = StreamResponse([b"short"], headers={"Content-Length": "999999"})
+
+    evidence = read_bounded_webhook_response(response)
+
+    assert evidence.observed_size == len(b"short")
+    assert evidence.size_known is True
+    assert evidence.truncated is False
+
+
+@pytest.mark.unit
+def test_chunked_multibyte_and_plain_sensitive_values_are_bounded_and_redacted():
+    json_response = StreamResponse([b'{"password":"multi word secret","safe":"ok"}'])
+    form_response = StreamResponse([b"token=multi word secret&safe=ok"])
+    plain_response = StreamResponse([b"Authorization: Bearer multi word secret"])
+
+    json_evidence = read_bounded_webhook_response(json_response)
+    form_evidence = read_bounded_webhook_response(form_response)
+    plain_evidence = read_bounded_webhook_response(plain_response)
+
+    for evidence in (json_evidence, form_evidence, plain_evidence):
+        assert "multi word secret" not in evidence.prefix
+        assert "[REDACTED]" in evidence.prefix
+        assert len(evidence.prefix.encode()) <= WEBHOOK_RESPONSE_BODY_LIMIT
