@@ -463,7 +463,7 @@ const existingResealedPositiveCases = [
       append(
         directory,
         "docs/agent-tooling/prompts/release-planning-v1.md",
-        "\nHistorical negative-control prose: retired alias plane_add_comment.\n"
+        "\nHistorical alias: plane_add_comment.\n"
       ),
     expected: "PASS retired-name negative control",
     expectSuccess: true,
@@ -540,11 +540,7 @@ const approvalManifestPermittedCases = retiredNames.flatMap((name) => [
   {
     name: `valid-reseal approval-manifest historical ${name}`,
     mutate: (directory) =>
-      append(
-        directory,
-        "docs/agent-tooling/APPROVAL-MANIFEST.md",
-        `\nHistorical negative-control prose: retired alias ${name}.\n`
-      ),
+      append(directory, "docs/agent-tooling/APPROVAL-MANIFEST.md", `\nHistorical alias: ${name}.\n`),
     expected: "PASS retired-name negative control",
     expectSuccess: true,
     reseal: true,
@@ -558,11 +554,11 @@ const approvalManifestPermittedCases = retiredNames.flatMap((name) => [
     reseal: true,
   },
   {
-    name: `valid-reseal approval-manifest path and prose ${name}`,
+    name: `valid-reseal non-model-facing path and prose ${name}`,
     mutate: (directory) =>
       append(
         directory,
-        "docs/agent-tooling/APPROVAL-MANIFEST.md",
+        "docs/agent-tooling/README.md",
         `\nImplementation note: see docs/agent-tooling/README.md; ordinary prose may ${name}.\n`
       ),
     expected: "PASS retired-name negative control",
