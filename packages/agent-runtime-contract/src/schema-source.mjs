@@ -2,19 +2,42 @@ const protocol = "plane.agent-runtime/v1";
 const draft = "https://json-schema.org/draft/2020-12/schema";
 
 const ref = (name) => ({ $ref: `#/$defs/${name}` });
-const opaque = (kind) => ({ ...ref("opaqueRef"), "x-plane-opaque-kind": kind });
-const digest = (kind) => ({ ...ref("digest"), "x-plane-opaque-kind": kind });
+const namespacedPattern = (namespace) => `^${namespace}:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$`;
+const digestPattern = (namespace) => `^${namespace}:[a-f0-9]{64}$`;
 
 const definitions = {
-  opaqueRef: {
+  workspaceRef: { type: "string", maxLength: 128, pattern: namespacedPattern("workspace") },
+  actorRef: { type: "string", maxLength: 128, pattern: namespacedPattern("actor") },
+  assignmentRef: { type: "string", maxLength: 128, pattern: namespacedPattern("assignment") },
+  profileVersionRef: { type: "string", maxLength: 128, pattern: namespacedPattern("profile-version") },
+  runId: { type: "string", maxLength: 128, pattern: namespacedPattern("run") },
+  invocationId: { type: "string", maxLength: 128, pattern: namespacedPattern("invocation") },
+  targetRef: { type: "string", maxLength: 128, pattern: namespacedPattern("target") },
+  contextRef: { type: "string", maxLength: 128, pattern: namespacedPattern("context") },
+  operationRef: { type: "string", maxLength: 128, pattern: namespacedPattern("operation") },
+  eventRef: { type: "string", maxLength: 128, pattern: namespacedPattern("event") },
+  correlationId: { type: "string", maxLength: 128, pattern: namespacedPattern("correlation") },
+  idempotencyKey: { type: "string", maxLength: 128, pattern: namespacedPattern("idempotency") },
+  causationRef: { type: "string", maxLength: 128, pattern: namespacedPattern("causation") },
+  cancellationRef: { type: "string", maxLength: 128, pattern: namespacedPattern("cancellation") },
+  checkpointRef: { type: "string", maxLength: 128, pattern: namespacedPattern("checkpoint") },
+  leaseId: { type: "string", maxLength: 128, pattern: namespacedPattern("lease") },
+  operationAttemptRef: { type: "string", maxLength: 128, pattern: namespacedPattern("operation-attempt") },
+  receiptRef: { type: "string", maxLength: 128, pattern: namespacedPattern("receipt") },
+  auditReceiptRef: { type: "string", maxLength: 128, pattern: namespacedPattern("audit-receipt") },
+  productEventRef: { type: "string", maxLength: 128, pattern: namespacedPattern("product-event") },
+  conversationRef: { type: "string", maxLength: 128, pattern: namespacedPattern("conversation") },
+  inputRequestRef: { type: "string", maxLength: 128, pattern: namespacedPattern("input-request") },
+  artifactRef: { type: "string", maxLength: 128, pattern: namespacedPattern("artifact") },
+  outcomeSubmissionRef: { type: "string", maxLength: 128, pattern: namespacedPattern("outcome-submission") },
+  payloadRef: { type: "string", maxLength: 128, pattern: namespacedPattern("payload") },
+  contractDigest: { type: "string", minLength: 64, maxLength: 64, pattern: "^[a-f0-9]{64}$" },
+  contentDigest: { type: "string", minLength: 72, maxLength: 72, pattern: digestPattern("content") },
+  runSnapshotContentDigest: {
     type: "string",
-    minLength: 1,
-    maxLength: 128,
-    pattern: "^[A-Za-z0-9][A-Za-z0-9._~:/-]{0,127}$",
-  },
-  digest: {
-    type: "string",
-    pattern: "^[a-f0-9]{64}$",
+    minLength: 73,
+    maxLength: 73,
+    pattern: digestPattern("snapshot"),
   },
   boundedText: {
     type: "string",
@@ -96,9 +119,9 @@ const definitions = {
         required: ["kind", "payloadRef", "contentType", "contentDigest", "sizeBytes"],
         properties: {
           kind: { const: "payload_ref" },
-          payloadRef: opaque("payload"),
+          payloadRef: ref("payloadRef"),
           contentType: ref("boundedToken"),
-          contentDigest: digest("content"),
+          contentDigest: ref("contentDigest"),
           sizeBytes: ref("boundedByteCount"),
         },
       },
@@ -109,8 +132,8 @@ const definitions = {
     additionalProperties: false,
     required: ["artifactRef", "contentDigest", "mediaType", "sizeBytes"],
     properties: {
-      artifactRef: opaque("artifact"),
-      contentDigest: digest("content"),
+      artifactRef: ref("artifactRef"),
+      contentDigest: ref("contentDigest"),
       mediaType: ref("boundedToken"),
       sizeBytes: ref("boundedByteCount"),
     },
@@ -123,54 +146,107 @@ const definitions = {
       action: { const: "observation_only" },
     },
   },
-  publicationRequest: {
-    type: "object",
-    additionalProperties: false,
-    required: ["action", "operationAttemptRef"],
-    properties: {
-      action: { const: "explicit_plane_publication_requested" },
-      operationAttemptRef: opaque("operation-attempt"),
-    },
-  },
-  publicationReceipt: {
-    type: "object",
-    additionalProperties: false,
-    required: ["action", "operationAttemptRef", "receiptRef", "productEventRef"],
-    properties: {
-      action: { const: "plane_publication_receipt_observed" },
-      operationAttemptRef: opaque("operation-attempt"),
-      receiptRef: opaque("receipt"),
-      productEventRef: opaque("product-event"),
-    },
-  },
-  publicationBoundary: {
-    oneOf: [ref("observationPublication"), ref("publicationRequest"), ref("publicationReceipt")],
-  },
-  publicationRequired: {
-    oneOf: [ref("publicationRequest"), ref("publicationReceipt")],
-  },
 };
 
-const objectSchema = (name, required, properties, extra = {}) => ({
-  $schema: draft,
-  $id: `https://plane.dev/schemas/${protocol}/${name}.schema.json`,
-  title: name,
-  type: "object",
-  additionalProperties: false,
-  required,
-  properties,
-  $defs: definitions,
-  ...extra,
+const publicationDefinition = (productKind, productRef) => ({
+  oneOf: [
+    {
+      type: "object",
+      additionalProperties: false,
+      required: ["action", "productKind", "productRef", "operationAttemptRef"],
+      properties: {
+        action: { const: "proposal" },
+        productKind: { const: productKind },
+        productRef: ref(productRef),
+        operationAttemptRef: ref("operationAttemptRef"),
+      },
+    },
+    {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "action",
+        "productKind",
+        "productRef",
+        "operationAttemptRef",
+        "receiptRef",
+        "auditReceiptRef",
+        "productEventRef",
+      ],
+      properties: {
+        action: { const: "applied" },
+        productKind: { const: productKind },
+        productRef: ref(productRef),
+        operationAttemptRef: ref("operationAttemptRef"),
+        receiptRef: ref("receiptRef"),
+        auditReceiptRef: ref("auditReceiptRef"),
+        productEventRef: ref("productEventRef"),
+      },
+    },
+  ],
 });
+
+definitions.conversationPublication = publicationDefinition("conversation", "conversationRef");
+definitions.inputRequestPublication = publicationDefinition("input_request", "inputRequestRef");
+definitions.artifactPublication = publicationDefinition("artifact", "artifactRef");
+definitions.outcomeSubmissionPublication = publicationDefinition("outcome_submission", "outcomeSubmissionRef");
+
+const objectSchema = (name, required, properties, extra = {}) => {
+  const root = {
+    $schema: draft,
+    $id: `https://plane.dev/schemas/${protocol}/${name}.schema.json`,
+    title: name,
+    type: "object",
+    additionalProperties: false,
+    required,
+    properties,
+    ...extra,
+  };
+
+  const reachable = new Set();
+  const collect = (value) => {
+    if (Array.isArray(value)) {
+      value.forEach(collect);
+      return;
+    }
+    if (value === null || typeof value !== "object") {
+      return;
+    }
+    if (typeof value.$ref === "string" && value.$ref.startsWith("#/$defs/")) {
+      reachable.add(value.$ref.slice("#/$defs/".length));
+    }
+    Object.entries(value).forEach(([key, child]) => {
+      if (key !== "$defs") {
+        collect(child);
+      }
+    });
+  };
+  collect(root);
+
+  const queue = [...reachable];
+  for (const definitionName of queue) {
+    collect(definitions[definitionName]);
+    for (const nestedName of reachable) {
+      if (!queue.includes(nestedName)) {
+        queue.push(nestedName);
+      }
+    }
+  }
+
+  root.$defs = Object.fromEntries(
+    [...reachable].toSorted().map((definitionName) => [definitionName, definitions[definitionName]])
+  );
+  return root;
+};
 
 const assignment = {
   type: "object",
   additionalProperties: false,
   required: ["assignmentRef", "revision", "targetRef", "objective", "acceptanceCriteria"],
   properties: {
-    assignmentRef: opaque("assignment"),
+    assignmentRef: ref("assignmentRef"),
     revision: ref("boundedToken"),
-    targetRef: opaque("target"),
+    targetRef: ref("targetRef"),
     objective: ref("boundedText"),
     acceptanceCriteria: {
       type: "array",
@@ -186,7 +262,7 @@ const profile = {
   additionalProperties: false,
   required: ["profileRef", "revision", "role", "behavioralPrompt"],
   properties: {
-    profileRef: opaque("profile-version"),
+    profileRef: ref("profileVersionRef"),
     revision: ref("boundedToken"),
     role: {
       enum: ["worker", "delegator", "gardener", "chief_of_staff", "hr", "evaluator", "custom"],
@@ -203,9 +279,9 @@ const context = {
     additionalProperties: false,
     required: ["contextRef", "revision", "contentDigest"],
     properties: {
-      contextRef: opaque("context"),
+      contextRef: ref("contextRef"),
       revision: ref("boundedToken"),
-      contentDigest: digest("content"),
+      contentDigest: ref("contentDigest"),
     },
   },
 };
@@ -215,7 +291,7 @@ const toolCatalog = {
   additionalProperties: false,
   required: ["catalogDigest", "eagerOperations"],
   properties: {
-    catalogDigest: digest("content"),
+    catalogDigest: ref("contentDigest"),
     eagerOperations: {
       type: "array",
       maxItems: 64,
@@ -224,8 +300,8 @@ const toolCatalog = {
         additionalProperties: false,
         required: ["operationRef", "schemaDigest", "disclosure"],
         properties: {
-          operationRef: opaque("operation"),
-          schemaDigest: digest("content"),
+          operationRef: ref("operationRef"),
+          schemaDigest: ref("contentDigest"),
           disclosure: { enum: ["eager", "progressive"] },
         },
       },
@@ -260,10 +336,10 @@ const contractDigests = {
   additionalProperties: false,
   required: ["runSnapshot", "invocationEnvelope", "runtimeEvent", "runtimeExit"],
   properties: {
-    runSnapshot: digest("contract-digest"),
-    invocationEnvelope: digest("contract-digest"),
-    runtimeEvent: digest("contract-digest"),
-    runtimeExit: digest("contract-digest"),
+    runSnapshot: ref("contractDigest"),
+    invocationEnvelope: ref("contractDigest"),
+    runtimeEvent: ref("contractDigest"),
+    runtimeExit: ref("contractDigest"),
   },
 };
 
@@ -281,19 +357,21 @@ const runSnapshot = objectSchema(
     "runtimePolicy",
     "totalBudget",
     "contractDigests",
+    "contentDigest",
   ],
   {
     protocol: { const: protocol },
-    workspaceRef: opaque("workspace"),
-    runId: opaque("run"),
+    workspaceRef: ref("workspaceRef"),
+    runId: ref("runId"),
     assignment,
-    actorRef: opaque("actor"),
+    actorRef: ref("actorRef"),
     profile,
     context,
     toolCatalog,
     runtimePolicy,
     totalBudget: ref("runtimeBudget"),
     contractDigests,
+    contentDigest: ref("runSnapshotContentDigest"),
   }
 );
 
@@ -311,7 +389,7 @@ const invocationTrigger = {
       required: ["kind", "eventRef"],
       properties: {
         kind: { enum: ["human_input", "recoverable_restart", "continuation"] },
-        eventRef: opaque("event"),
+        eventRef: ref("eventRef"),
       },
     },
   ],
@@ -322,7 +400,7 @@ const lease = {
   additionalProperties: false,
   required: ["leaseId", "expiresAt", "renewAfterMs"],
   properties: {
-    leaseId: opaque("lease"),
+    leaseId: ref("leaseId"),
     expiresAt: ref("timestamp"),
     renewAfterMs: ref("nonNegativeInteger"),
   },
@@ -348,24 +426,24 @@ const invocationEnvelope = objectSchema(
   ],
   {
     protocol: { const: protocol },
-    workspaceRef: opaque("workspace"),
-    actorRef: opaque("actor"),
-    runId: opaque("run"),
-    invocationId: opaque("invocation"),
-    runSnapshotDigest: digest("contract-digest"),
+    workspaceRef: ref("workspaceRef"),
+    actorRef: ref("actorRef"),
+    runId: ref("runId"),
+    invocationId: ref("invocationId"),
+    runSnapshotDigest: ref("runSnapshotContentDigest"),
     trigger: invocationTrigger,
     newContextEventRefs: {
       type: "array",
       maxItems: 64,
-      items: opaque("event"),
+      items: ref("eventRef"),
     },
-    checkpointRef: opaque("checkpoint"),
+    checkpointRef: ref("checkpointRef"),
     remainingBudget: ref("runtimeBudget"),
     lease,
-    cancellationRef: opaque("cancellation"),
-    causationRef: opaque("causation"),
-    correlationId: opaque("correlation"),
-    idempotencyKey: opaque("idempotency"),
+    cancellationRef: ref("cancellationRef"),
+    causationRef: ref("causationRef"),
+    correlationId: ref("correlationId"),
+    idempotencyKey: ref("idempotencyKey"),
   }
 );
 
@@ -387,7 +465,7 @@ const eventBodies = [
     properties: {
       kind: { const: "conversation_publication_observed" },
       payload: ref("boundedPayload"),
-      publication: ref("publicationRequired"),
+      publication: ref("conversationPublication"),
     },
   },
   {
@@ -397,7 +475,7 @@ const eventBodies = [
     properties: {
       kind: { const: "input_request_observed" },
       question: ref("boundedText"),
-      publication: ref("observationPublication"),
+      publication: ref("inputRequestPublication"),
     },
   },
   {
@@ -407,7 +485,7 @@ const eventBodies = [
     properties: {
       kind: { const: "artifact_observed" },
       artifact: ref("artifactReference"),
-      publication: ref("observationPublication"),
+      publication: ref("artifactPublication"),
     },
   },
   {
@@ -427,7 +505,7 @@ const eventBodies = [
     properties: {
       kind: { const: "outcome_submission_observed" },
       payload: ref("boundedPayload"),
-      publication: ref("publicationRequired"),
+      publication: ref("outcomeSubmissionPublication"),
     },
   },
   {
@@ -447,6 +525,26 @@ const eventBodies = [
     properties: {
       kind: { const: "blocker_observed" },
       reason: ref("boundedText"),
+      publication: ref("observationPublication"),
+    },
+  },
+  {
+    type: "object",
+    additionalProperties: false,
+    required: ["kind", "reason", "publication"],
+    properties: {
+      kind: { const: "cancellation_observed" },
+      reason: ref("boundedText"),
+      publication: ref("observationPublication"),
+    },
+  },
+  {
+    type: "object",
+    additionalProperties: false,
+    required: ["kind", "payload", "publication"],
+    properties: {
+      kind: { const: "transcript_evidence_observed" },
+      payload: ref("boundedPayload"),
       publication: ref("observationPublication"),
     },
   },
@@ -472,15 +570,15 @@ const runtimeEvent = objectSchema(
   {
     protocol: { const: protocol },
     trust: { const: "untrusted" },
-    workspaceRef: opaque("workspace"),
-    actorRef: opaque("actor"),
-    runId: opaque("run"),
-    invocationId: opaque("invocation"),
+    workspaceRef: ref("workspaceRef"),
+    actorRef: ref("actorRef"),
+    runId: ref("runId"),
+    invocationId: ref("invocationId"),
     sequence: ref("nonNegativeInteger"),
-    eventId: opaque("event-id"),
-    idempotencyKey: opaque("idempotency"),
-    correlationId: opaque("correlation"),
-    causationRef: opaque("causation"),
+    eventId: ref("eventRef"),
+    idempotencyKey: ref("idempotencyKey"),
+    correlationId: ref("correlationId"),
+    causationRef: ref("causationRef"),
     observedAt: ref("timestamp"),
     body: { oneOf: eventBodies },
   }
@@ -489,18 +587,18 @@ const runtimeEvent = objectSchema(
 const runtimeExitBaseProperties = {
   protocol: { const: protocol },
   authority: { const: "runtime_evidence_only" },
-  workspaceRef: opaque("workspace"),
-  actorRef: opaque("actor"),
-  runId: opaque("run"),
-  invocationId: opaque("invocation"),
+  workspaceRef: ref("workspaceRef"),
+  actorRef: ref("actorRef"),
+  runId: ref("runId"),
+  invocationId: ref("invocationId"),
   finalSequence: ref("nonNegativeInteger"),
-  idempotencyKey: opaque("idempotency"),
-  correlationId: opaque("correlation"),
-  causationRef: opaque("causation"),
+  idempotencyKey: ref("idempotencyKey"),
+  correlationId: ref("correlationId"),
+  causationRef: ref("causationRef"),
   kind: {
     enum: ["completed", "waiting_for_input", "failed", "blocked", "cancelled"],
   },
-  inputEventRef: opaque("event"),
+  inputEventRef: ref("eventRef"),
   failure: ref("runtimeFailure"),
 };
 

@@ -1,15 +1,20 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
 import { protocol, schemas } from "../src/schema-source.mjs";
 
 const outputDirectory = fileURLToPath(new URL("../schemas/v1/", import.meta.url));
-const formatterPath = fileURLToPath(new URL("../../../node_modules/.bin/oxfmt", import.meta.url));
+const localFormatterPath = fileURLToPath(new URL("../../../node_modules/.bin/oxfmt", import.meta.url));
+const formatterConfigPath = fileURLToPath(new URL("../../../.oxfmtrc.json", import.meta.url));
 const manifestFilename = "manifest.json";
 const checkOnly = process.argv.includes("--check");
+
+const formatterPath = await access(localFormatterPath)
+  .then(() => localFormatterPath)
+  .catch(() => process.env.OXFMT_PATH ?? "oxfmt");
 
 const canonicalJson = (value) => `${JSON.stringify(value, null, 2)}\n`;
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
@@ -19,7 +24,7 @@ const rawSchemaFiles = new Map(
 );
 
 const formatFiles = (directory, filenames) => {
-  execFileSync(formatterPath, ["--ignore-path=.prettierignore", ...filenames], {
+  execFileSync(formatterPath, ["--config", formatterConfigPath, "--ignore-path=.prettierignore", ...filenames], {
     cwd: directory,
     stdio: "ignore",
   });
