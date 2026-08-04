@@ -3,3 +3,47 @@
 # See the LICENSE file for details.
 
 """The single cross-record lifecycle transition seam."""
+
+from .services import (
+    AgentDomainError,
+    IdempotencyConflictError,
+    InvalidTransitionError,
+    RecoveryIntentRequiredError,
+    TerminalEventRequiredError,
+    accept_outcome,
+    cancel_assignment,
+    create_actor,
+    create_assignment,
+    create_profile,
+    create_run,
+    finalize_invocation,
+    propose_outcome,
+    record_input_event,
+    record_invocation,
+    request_revision,
+    review_outcome,
+    transition_assignment,
+    transition_run,
+)
+
+__all__ = [
+    "AgentDomainError",
+    "IdempotencyConflictError",
+    "InvalidTransitionError",
+    "RecoveryIntentRequiredError",
+    "TerminalEventRequiredError",
+    "accept_outcome",
+    "cancel_assignment",
+    "create_actor",
+    "create_assignment",
+    "create_profile",
+    "create_run",
+    "finalize_invocation",
+    "propose_outcome",
+    "record_input_event",
+    "record_invocation",
+    "request_revision",
+    "review_outcome",
+    "transition_assignment",
+    "transition_run",
+]
