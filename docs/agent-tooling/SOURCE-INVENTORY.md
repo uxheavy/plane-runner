@@ -8,13 +8,13 @@ This inventory records stable repository identities and exact source SHAs used b
 | ---------- | --------------------- | ------------------------------------------ | ---------------------------------- | ---------------------------------------------------------------------- |
 | Plane      | repository root (`.`) | `dac96b0ff9a3adb6bfcc3fea235ab4a697ae5acd` | `codex/agent-tooling-architecture` | historical reviewed baseline; not required to equal the sealed package |
 
-The reviewed baseline is an ancestor check only. The exact Plane package content SHA is `d35f68c7d7692f9abfeeb96fe538d4bf9c4fe9b5` and is also machine-bound as `integration-lock.g0.json#/seal/contentCommit`; the seal commit is the current first-parent evidence boundary. No branch name is used as package identity.
+The reviewed baseline is an ancestor check only. The exact Plane package content SHA is `f07ab6864c189db13272309ff28cad64c503fdfc` and is also machine-bound as `integration-lock.g0.json#/seal/contentCommit`; the seal commit is the current first-parent evidence boundary. No branch name is used as package identity.
 
 ## Current pinned source revisions
 
 | Repository            | Stable repository path            | Exact SHA                                  | Ref/tag                              | Role                                                               |
 | --------------------- | --------------------------------- | ------------------------------------------ | ------------------------------------ | ------------------------------------------------------------------ |
-| Plane package         | `.`                               | `d35f68c7d7692f9abfeeb96fe538d4bf9c4fe9b5` | sealed content commit                | control plane, domain, gateway, catalog, and integration root      |
+| Plane package         | `.`                               | `f07ab6864c189db13272309ff28cad64c503fdfc` | sealed content commit                | control plane, domain, gateway, catalog, and integration root      |
 | Hermes                | `repository:uxheavy/hermes-agent` | `112f51a5543d490768931514d48a780ad964a868` | `main`                               | separate runtime service and hidden execution-kernel adapter donor |
 | Buzz                  | `repository:uxheavy/buzz`         | `3b8567a05d4c40e667d061666feb7aa7bc38212d` | `main`                               | reference donor only; never a runtime dependency or authority      |
 | Plane MCP fork        | `external/plane-mcp-server`       | `96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1` | `codex/agent-tooling-v1` / `0.2.11`  | official MCP compatibility adapter host                            |

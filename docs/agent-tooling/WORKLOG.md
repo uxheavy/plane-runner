@@ -848,5 +848,13 @@ Stage and commit this single documentation/contract/evidence-control checkpoint,
 - Baseline matrix: 208 controls (207 negative/positive matrix cases plus one cleanup retry/backoff control).
 - Added exactly 2 controls: one plain-token authoritative Markdown control and one schema-evolution unclassified-pointer control.
 - New exact matrix total: 210 controls.
-- Final content/remediation commit: `d35f68c7d7692f9abfeeb96fe538d4bf9c4fe9b5`.
+- Final content/remediation commit: `f07ab6864c189db13272309ff28cad64c503fdfc`.
 - The actual seal generator bound that clean content commit to 56 content paths and the exact four authorized seal paths. Final validation evidence follows after the separate seal commit.
+- Final `node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode preflight` — exit 0; every non-approval check passed and human approval remained pending by design.
+- Final `node docs/agent-tooling/verifiers/verify-g0-preflight.mjs --mode g0` — exit 1 solely for pending human approval; no implementation authorization was implied.
+- Final `node docs/agent-tooling/verifiers/test-g0-approved-fixture.mjs` — exit 0; the copied approved state passed and the real pending record was unchanged.
+- Final `node docs/agent-tooling/verifiers/run-g0-negative-controls.mjs` — exit 0; exactly 210 controls passed, including the plain authoritative Markdown reseal, schema-evolution unclassified-pointer reseal, legitimate token-local positives, and cleanup retry/backoff.
+- Final AJV/schema, ownership, requirement coverage, both renderer checks, planning fixtures, verifier Node syntax, direct verifier OxLint, and `git diff --check` — exit 0; OxLint reported 0 warnings and 0 errors.
+- Final structured policy readback found no document-root `nonModelFacingSubtrees: [[]]` declaration; all 3,810 current structured string pointers were covered by live exact/bounded declarations.
+- Final seal topology is content commit `f07ab6864c189db13272309ff28cad64c503fdfc` followed immediately by the four-path seal commit; the lock binds 56 content paths and 4 seal paths.
+- `RESULT.md` remains byte-identical at SHA-256 `c7b6404f435ea1ce53c9b360ba2b8745096f1d3dd42d81de4bdbb55117c4bb87`; final worktree status is clean after the seal-only evidence update.
