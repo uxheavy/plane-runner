@@ -415,7 +415,88 @@ const existingResealedPositiveCases = [
   },
 ];
 
-cases.push(...resealedAdversarialCases, ...existingResealedPositiveCases, ...resealedPositiveCases);
+const crossFamilyPairs = retiredNames.map((first, index) => ({
+  first,
+  second: retiredNames[(index + 1) % retiredNames.length],
+}));
+const crossFamilyResealedCases = crossFamilyPairs.flatMap(({ first, second }) => [
+  {
+    name: `valid-reseal cross-family marker-before ${first} then ${second}`,
+    mutate: (directory) =>
+      append(
+        directory,
+        "docs/agent-tooling/prompts/release-planning-v1.md",
+        `\nRejected ${first} then ${second} authoritative model-facing name\n`
+      ),
+    expected: `docs/agent-tooling/prompts/release-planning-v1.md authoritatively uses retired name ${second}`,
+    reseal: true,
+    refreshPromptDigest: true,
+  },
+  {
+    name: `valid-reseal cross-family marker-after ${first} then ${second}`,
+    mutate: (directory) =>
+      append(
+        directory,
+        "docs/agent-tooling/prompts/release-planning-v1.md",
+        `\n${first} then ${second} rejected authoritative model-facing name\n`
+      ),
+    expected: `docs/agent-tooling/prompts/release-planning-v1.md authoritatively uses retired name ${first}`,
+    reseal: true,
+    refreshPromptDigest: true,
+  },
+]);
+
+const approvalManifestAuthoritativeCases = retiredNames.map((name) => ({
+  name: `valid-reseal approval-manifest authoritative ${name}`,
+  mutate: (directory) =>
+    append(directory, "docs/agent-tooling/APPROVAL-MANIFEST.md", `\nAuthoritative model-facing name: ${name}\n`),
+  expected: `docs/agent-tooling/APPROVAL-MANIFEST.md authoritatively uses retired name ${name}`,
+  reseal: true,
+}));
+
+const approvalManifestPermittedCases = retiredNames.flatMap((name) => [
+  {
+    name: `valid-reseal approval-manifest historical ${name}`,
+    mutate: (directory) =>
+      append(
+        directory,
+        "docs/agent-tooling/APPROVAL-MANIFEST.md",
+        `\nHistorical negative-control prose: retired alias ${name}.\n`
+      ),
+    expected: "PASS retired-name negative control",
+    expectSuccess: true,
+    reseal: true,
+  },
+  {
+    name: `valid-reseal approval-manifest internal ${name}`,
+    mutate: (directory) =>
+      append(directory, "docs/agent-tooling/APPROVAL-MANIFEST.md", `\noperationId: "plane.${name}@1"\n`),
+    expected: "PASS retired-name negative control",
+    expectSuccess: true,
+    reseal: true,
+  },
+  {
+    name: `valid-reseal approval-manifest path and prose ${name}`,
+    mutate: (directory) =>
+      append(
+        directory,
+        "docs/agent-tooling/APPROVAL-MANIFEST.md",
+        `\nImplementation note: see docs/agent-tooling/README.md; ordinary prose may ${name}.\n`
+      ),
+    expected: "PASS retired-name negative control",
+    expectSuccess: true,
+    reseal: true,
+  },
+]);
+
+cases.push(
+  ...resealedAdversarialCases,
+  ...existingResealedPositiveCases,
+  ...resealedPositiveCases,
+  ...crossFamilyResealedCases,
+  ...approvalManifestAuthoritativeCases,
+  ...approvalManifestPermittedCases
+);
 
 function runPreflight(directory, testCase, { allowDirty = false } = {}) {
   const args = ["docs/agent-tooling/verifiers/verify-g0-preflight.mjs", "--mode", "preflight"];

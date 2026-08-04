@@ -52,7 +52,7 @@ Workspace binding is trusted host context, not a caller-supplied operation. The 
 
 ## Frozen model-facing surface
 
-These names are the only model-facing names for the first boundary. They are intentionally unqualified natural Plane vocabulary at the runtime profile boundary; internal contract IDs retain the `plane.*` namespace. The catalog and composition adapters are distinct from domain mutations so no generic `search`, `describe`, or `execute` collision is possible.
+These names are the only model-facing names for the first boundary. They are intentionally unqualified natural Plane vocabulary at the runtime profile boundary; internal contract IDs retain the `plane.*` namespace. The catalog and composition adapters are distinct from domain mutations, so discovery and composition cannot collide with a domain capability.
 
 | Model-facing name    | Surface contract                        | Dispatch or purpose                                                         | Compatibility status                                                                      |
 | -------------------- | --------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |

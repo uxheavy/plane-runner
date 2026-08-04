@@ -90,6 +90,46 @@ const canonicalMarkdown = [
   ),
 ];
 
+// Every canonical Markdown source has an intentional retired-name policy. A
+// new source must be classified here before it can enter canonicalMarkdown;
+// no extension or path convention silently grants it an authority exemption.
+const canonicalMarkdownRetiredNamePolicies = {
+  "README.md": "non-model-facing",
+  "GOAL.md": "non-model-facing",
+  "APPROVAL-MANIFEST.md": "authoritative",
+  "SOURCE-INVENTORY.md": "non-model-facing",
+  "decision-register.md": "non-model-facing",
+  "delivery-plan.md": "non-model-facing",
+  "architecture.md": "non-model-facing",
+  "INTERFACE-DESIGN.md": "non-model-facing",
+  "RUNTIME-DESIGN.md": "non-model-facing",
+  "GATEWAY-WIRE.md": "non-model-facing",
+  "PILOT-CONTRACTS.md": "non-model-facing",
+  "RELEASE-MANIFEST.md": "non-model-facing",
+  "VERIFICATION-MANIFEST.md": "non-model-facing",
+  "REQUIREMENT-COVERAGE.md": "non-model-facing",
+  "RESULT.md": "non-model-facing",
+  "EVALUATION-FIXTURE-CONTRACT.md": "non-model-facing",
+  "EVALUATION-SCENARIOS.md": "non-model-facing",
+  "MCP-COMPATIBILITY.md": "non-model-facing",
+  "MCP-MAPPING-CONTRACT.md": "non-model-facing",
+  "SAFETY-EVALUATION-DESIGN.md": "non-model-facing",
+  "ADR-SYNTHESIS.md": "non-model-facing",
+  "NON-UI-IMPLEMENTATION-OVERVIEW.md": "authoritative",
+  "inventories/plane-mcp-v0.2.11-dispositions.md": "non-model-facing",
+  "prompts/release-planning-v1.md": "authoritative",
+  "../decisions/0001-plane-agent-tooling-architecture.md": "non-model-facing",
+  "../decisions/0002-autonomous-agent-operations.md": "non-model-facing",
+  "../decisions/0003-plane-agent-native-product-boundary.md": "non-model-facing",
+  "../decisions/0004-fork-hermes-as-hidden-execution-kernel.md": "non-model-facing",
+  "../decisions/0005-plane-owned-agent-profiles.md": "non-model-facing",
+  "../decisions/0006-assignment-and-run-lifecycle.md": "non-model-facing",
+  "../decisions/0007-adaptive-plane-tool-exposure.md": "non-model-facing",
+  "../decisions/0008-scoped-memory-and-context.md": "non-model-facing",
+  "../decisions/0009-workflows-and-agent-delegation.md": "non-model-facing",
+  "../decisions/0010-plane-runtime-contract.md": "non-model-facing",
+};
+
 // Structured authority is explicit and fail-closed. The model-facing surface
 // is authoritative by default under each named operation; only these exact
 // JSON-pointer contexts are metadata or historical registries. Other
@@ -576,6 +616,9 @@ function classifyHistoricalOccurrences(line, occurrences) {
     clauseStart = separatorPosition + 1;
   }
 
+  const consumedMarkers = new Set();
+  const consumedOccurrences = new Set();
+
   for (const clause of clauses) {
     const clauseOccurrences = occurrences
       .map((occurrence, index) => ({ occurrence, index }))
@@ -583,18 +626,28 @@ function classifyHistoricalOccurrences(line, occurrences) {
     const clauseMarkers = [...line.matchAll(markerPattern)]
       .map((match) => ({ start: match.index, end: match.index + match[0].length }))
       .filter((marker) => marker.start >= clause.start && marker.end <= clause.end);
-    const consumedOccurrences = new Set();
 
-    for (const marker of clauseMarkers) {
+    const markerCandidates = clauseMarkers.map((marker) => {
       const candidates = new Set();
       const firstFollowing = clauseOccurrences.find(({ occurrence }) => occurrence.start >= marker.end);
       const lastPreceding = clauseOccurrences.findLast(({ occurrence }) => occurrence.end <= marker.start);
       if (firstFollowing) candidates.add(firstFollowing.index);
       if (lastPreceding) candidates.add(lastPreceding.index);
+      return { marker, candidates };
+    });
 
-      if (candidates.size !== 1) continue;
+    // A marker is usable only when its occurrence candidate is unique in both
+    // directions. This rejects between-occurrence ambiguity and competing
+    // markers, and the consumed sets make the one-to-one rule global across
+    // all retired-name families and all clauses in the line.
+    for (const { marker, candidates } of markerCandidates) {
+      if (candidates.size !== 1 || consumedMarkers.has(marker.start)) continue;
       const [occurrenceIndex] = candidates;
+      const contenders = markerCandidates.filter((candidate) => candidate.candidates.has(occurrenceIndex));
+      if (contenders.length !== 1 || contenders[0].candidates.size !== 1) continue;
       if (consumedOccurrences.has(occurrenceIndex)) continue;
+
+      consumedMarkers.add(marker.start);
       consumedOccurrences.add(occurrenceIndex);
       historical.add(occurrenceIndex);
     }
@@ -623,15 +676,39 @@ function hasAuthoritativeTextMarker(line) {
   );
 }
 
-function retiredNameViolation(line, name, { structured = false } = {}) {
-  const occurrences = tokenOccurrences(line, name);
-  if (occurrences.length === 0 || (!structured && !hasAuthoritativeTextMarker(line))) return false;
+function retiredNameOccurrences(line, retiredNames) {
+  return retiredNames
+    .flatMap((name, familyIndex) =>
+      tokenOccurrences(line, name).map((occurrence, occurrenceIndex) => ({
+        start: occurrence.start,
+        end: occurrence.end,
+        name,
+        familyIndex,
+        occurrenceIndex,
+      }))
+    )
+    .toSorted(
+      (left, right) =>
+        left.start - right.start ||
+        left.end - right.end ||
+        left.familyIndex - right.familyIndex ||
+        left.occurrenceIndex - right.occurrenceIndex
+    );
+}
+
+function retiredNameViolations(line, retiredNames, { structured = false } = {}) {
+  const occurrences = retiredNameOccurrences(line, retiredNames);
+  if (occurrences.length === 0 || (!structured && !hasAuthoritativeTextMarker(line))) return new Set();
   const internalRanges = designatedInternalIdentifierRanges(line);
   const pathRanges = ordinaryPathRanges(line);
   const historical = classifyHistoricalOccurrences(line, occurrences);
-  return occurrences.some(
-    (occurrence, index) =>
-      !historical[index] && !isWithinRange(occurrence, internalRanges) && !isWithinRange(occurrence, pathRanges)
+  return new Set(
+    occurrences
+      .filter(
+        (occurrence, index) =>
+          !historical[index] && !isWithinRange(occurrence, internalRanges) && !isWithinRange(occurrence, pathRanges)
+      )
+      .map((occurrence) => occurrence.name)
   );
 }
 
@@ -657,9 +734,8 @@ function checkStructuredRetiredNames(path, value, retired, segments = []) {
     if (classification === "unclassified")
       throw new Error(`${path} has an unclassified authority pointer ${jsonPointer(segments)}`);
     if (classification !== "authoritative") return;
-    for (const name of retired)
-      if (retiredNameViolation(value, name, { structured: true }))
-        throw new Error(`${path} authoritatively uses retired name ${name} in ${jsonPointer(segments)}`);
+    for (const name of retiredNameViolations(value, retired, { structured: true }))
+      throw new Error(`${path} authoritatively uses retired name ${name} in ${jsonPointer(segments)}`);
     return;
   }
   if (Array.isArray(value)) {
@@ -704,25 +780,34 @@ function checkRetiredNameControls() {
     },
   ]);
   for (const control of controls)
-    assert(retiredNameViolation(control.line, control.name) === control.rejects, control.label);
+    assert(retiredNameViolations(control.line, retired).has(control.name) === control.rejects, control.label);
 
   for (const name of retired) {
     const line = `Rejected ${name} authoritative model-facing name ${name}`;
-    const occurrences = tokenOccurrences(line, name);
+    const occurrences = retiredNameOccurrences(line, retired).filter((occurrence) => occurrence.name === name);
     assert(occurrences.length === 2, `compact same-clause control must contain two ${name} occurrences`);
-    const historical = classifyHistoricalOccurrences(line, occurrences);
-    assert(historical[0], `compact same-clause control did not allow the explicitly rejected ${name} occurrence`);
-    assert(!historical[1], `compact same-clause control incorrectly allowed the authoritative ${name} occurrence`);
+    const allOccurrences = retiredNameOccurrences(line, retired);
+    const historical = classifyHistoricalOccurrences(line, allOccurrences);
+    const nameHistorical = allOccurrences
+      .map((occurrence, index) => ({ occurrence, historical: historical[index] }))
+      .filter(({ occurrence }) => occurrence.name === name)
+      .map(({ historical: isHistorical }) => isHistorical);
+    assert(nameHistorical[0], `compact same-clause control did not allow the explicitly rejected ${name} occurrence`);
+    assert(!nameHistorical[1], `compact same-clause control incorrectly allowed the authoritative ${name} occurrence`);
     assert(
-      retiredNameViolation(line, name),
+      retiredNameViolations(line, retired).has(name),
       `compact same-clause control did not reject the later authoritative ${name} occurrence`
     );
 
     const ambiguousLine = `${name} rejected ${name} authoritative model-facing name`;
-    const ambiguousOccurrences = tokenOccurrences(ambiguousLine, name);
+    const ambiguousOccurrences = retiredNameOccurrences(ambiguousLine, retired).filter(
+      (occurrence) => occurrence.name === name
+    );
     assert(ambiguousOccurrences.length === 2, `ambiguous same-clause control must contain two ${name} occurrences`);
     assert(
-      classifyHistoricalOccurrences(ambiguousLine, ambiguousOccurrences).every((matched) => !matched),
+      classifyHistoricalOccurrences(ambiguousLine, retiredNameOccurrences(ambiguousLine, retired)).every(
+        (matched) => !matched
+      ),
       `ambiguous same-clause control consumed a marker for ${name}`
     );
   }
@@ -751,23 +836,30 @@ function checkStructuredModelFacingFields() {
 function checkRetiredNames() {
   const surface = readJson(paths.modelSurface);
   const retired = [...surface.retiredNames.bare, ...surface.retiredNames.historicalPrefixed];
-  const pathsToCheck = [
-    paths.modelSurface,
-    paths.prompt,
-    paths.fixture,
-    paths.predicates,
-    paths.plan,
-    paths.overview,
-    paths.lock,
-    paths.readiness,
-    paths.ownershipMap,
-  ];
-  for (const path of pathsToCheck)
-    if (path.endsWith(".json")) checkStructuredRetiredNames(path, readJson(path), retired);
-    else
-      for (const line of read(path).split("\n"))
-        for (const name of retired)
-          if (retiredNameViolation(line, name)) throw new Error(`${path} authoritatively uses retired name ${name}`);
+  const configuredMarkdownPaths = Object.keys(canonicalMarkdownRetiredNamePolicies).toSorted();
+  const expectedMarkdownPaths = [...canonicalMarkdown].toSorted();
+  assert(
+    JSON.stringify(configuredMarkdownPaths) === JSON.stringify(expectedMarkdownPaths),
+    "canonical Markdown retired-name policy is not an exact explicit classification"
+  );
+  assert(
+    Object.values(canonicalMarkdownRetiredNamePolicies).every(
+      (policy) => policy === "authoritative" || policy === "non-model-facing"
+    ),
+    "canonical Markdown retired-name policy contains an invalid classification"
+  );
+
+  for (const path of Object.keys(structuredRetiredNamePolicies))
+    checkStructuredRetiredNames(path, readJson(path), retired);
+
+  for (const [path, policy] of Object.entries(canonicalMarkdownRetiredNamePolicies)) {
+    if (policy !== "authoritative") continue;
+    for (const line of read(`docs/agent-tooling/${path}`).split("\n")) {
+      const violations = retiredNameViolations(line, retired);
+      for (const name of violations)
+        throw new Error(`docs/agent-tooling/${path} authoritatively uses retired name ${name}`);
+    }
+  }
   const required =
     readJson(paths.predicates).common.find((predicate) => predicate.id === "PLAN-COMMON-007")?.expected?.required ?? [];
   assert(
