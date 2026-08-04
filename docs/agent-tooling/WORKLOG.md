@@ -841,3 +841,12 @@ Stage and commit this single documentation/contract/evidence-control checkpoint,
 - AJV/schema, ownership, requirement coverage, both renderer checks, planning fixtures, all verifier Node syntax checks, direct verifier OxLint, and `git diff --check` — exit 0.
 - Seal topology — `311525824cfb42a7d5073b0086f3d57061dc18ed` is the content commit; the separate seal commit changes exactly SOURCE-INVENTORY.md, WORKLOG.md, g0-readiness.json, and integration-lock.g0.json, with 56 content paths and 4 seal paths bound.
 - `RESULT.md` remains byte-identical at SHA-256 `c7b6404f435ea1ce53c9b360ba2b8745096f1d3dd42d81de4bdbb55117c4bb87`; final worktree status is clean.
+
+- Authoritative/model-facing Markdown sections now scan every retired-token occurrence even when the line has no additional authority marker. Historical, internal-identifier, and repository-path exemptions remain token-local and preserve the existing global one-to-one occurrence matching.
+- Removed every structured document-root fallback. Current strings are covered by exact semantic fields or bounded evidence subtrees; a new reachable string pointer outside those declarations is unclassified and fails preflight.
+- Added two valid-reseal controls: the plain-token Markdown reproduction under the GOAL catalog section and schema-valid root-pointer evolution in the ownership map and schema. Existing approval state, `RESULT.md`, product/runtime scope, Hermes, and Buzz remain unchanged.
+- Baseline matrix: 208 controls (207 negative/positive matrix cases plus one cleanup retry/backoff control).
+- Added exactly 2 controls: one plain-token authoritative Markdown control and one schema-evolution unclassified-pointer control.
+- New exact matrix total: 210 controls.
+- Final content/remediation commit: `ee43b1f0bbd10f166aa2f29cd63441a0351f1eb4`.
+- The actual seal generator bound that clean content commit to 56 content paths and the exact four authorized seal paths. Final validation evidence follows after the separate seal commit.

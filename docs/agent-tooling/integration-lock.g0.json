@@ -13,7 +13,7 @@
       "id": "plane",
       "path": ".",
       "remote": "https://github.com/uxheavy/plane-runner.git",
-      "sha": "311525824cfb42a7d5073b0086f3d57061dc18ed",
+      "sha": "ee43b1f0bbd10f166aa2f29cd63441a0351f1eb4",
       "ref": "codex/agent-tooling-architecture",
       "status": "clean",
       "role": "control plane, domain, gateway, catalog, and integration root",
@@ -64,7 +64,7 @@
   "digests": {
     "files": {
       "docs/agent-tooling/ADR-SYNTHESIS.md": "bd9255b306076c9f3871e6ad383f2f1ec5750c17b8385ebd2908354f3ccc2cc8",
-      "docs/agent-tooling/APPROVAL-MANIFEST.md": "075225ea0dcf499d5776f7b93ea84c6a4bb0e357337b138ea87a14c530e0b305",
+      "docs/agent-tooling/APPROVAL-MANIFEST.md": "e9c961074bd25d47eaaa1b58cf056f06495d1441fdc020924aade9c9df95d9d8",
       "docs/agent-tooling/EVALUATION-FIXTURE-CONTRACT.md": "847b1cfbfce8b65fed002502b396653b63a6840e96577e839cd1a19171123e5a",
       "docs/agent-tooling/EVALUATION-SCENARIOS.md": "cf93636b519903220375037e0505c7f3e418462624c99a06152a62b5c0935d93",
       "docs/agent-tooling/GATEWAY-WIRE.md": "f8ad417a247375b7ef38bfefa9fe8f22c52c49a961107ce0618bcb317c59dabe",
@@ -75,7 +75,7 @@
       "docs/agent-tooling/NON-UI-IMPLEMENTATION-OVERVIEW.md": "19daf20203a7c29b17581cff0a0d283717ac6d80755ea437a188ae92edaf238e",
       "docs/agent-tooling/NON-UI-IMPLEMENTATION-PLAN.json": "ca67895a83e9aa5715a1246a3a4a9bc5c177651d289c26c2b18ba97d076a790c",
       "docs/agent-tooling/PILOT-CONTRACTS.md": "d8e26dbe075f3dd4da6b546dac7aaf2cf605d7c6dc2fea75e4a348ae1ab94aab",
-      "docs/agent-tooling/README.md": "6efc71420e4dc6cb298c76da66c3c95e2d34c7b62a4c4718f542c34b97a1336a",
+      "docs/agent-tooling/README.md": "b53bf9ccb7e654ce17926739bd65d9c5e2e09b9b3f7a26c07c4ec1468d1ffbf4",
       "docs/agent-tooling/RELEASE-MANIFEST.md": "ee0c22e678ef724a89b8e102d45a054948094eb6877d60d46ff7907bf1722dea",
       "docs/agent-tooling/REQUIREMENT-COVERAGE.md": "ebcb570dee73522a1b0da9ec44b6249d599ae297cc960f164d1e721518921b6b",
       "docs/agent-tooling/RESULT.md": "c7b6404f435ea1ce53c9b360ba2b8745096f1d3dd42d81de4bdbb55117c4bb87",
@@ -101,14 +101,14 @@
       "docs/agent-tooling/prompts/release-planning-v1.md": "9c6674acce0e060b8570a764f31c792297d718fd08d8559ca59d19c0dd4d89a1",
       "docs/agent-tooling/verifiers/render-non-ui-implementation-plan.mjs": "83b0ec4956af73a0fc49cac17ef5473e7f8b197e09ff1c6c404653888847c795",
       "docs/agent-tooling/verifiers/render-requirement-coverage.mjs": "5993661f3c05af46bae762bb59058f5a477a35b7d5649325fbba9d9200eae542",
-      "docs/agent-tooling/verifiers/run-g0-negative-controls.mjs": "a4887659e6a699c0a03125367d1a0808abc17c2d11b37cd8a1a84a249299b3af",
+      "docs/agent-tooling/verifiers/run-g0-negative-controls.mjs": "b498b41405653bba41c4ad9b0f341f54b884184d52ee01d25c0bccb56b19f913",
       "docs/agent-tooling/verifiers/seal-g0-evidence.mjs": "c66bb534ce85a0562a4b535ed1feba6aeaf99ebcd6d19d91d480e363743d497f",
       "docs/agent-tooling/verifiers/test-g0-approved-fixture.mjs": "e58ac31a3f41dc592a89fb90e57c6b9293a457ebe49204721d8eaa766140db4e",
       "docs/agent-tooling/verifiers/validate-ajv-2020.mjs": "d5cab3244bdb63e91522a861058b243bc49e056932f855a332812aad6f3df3ea",
       "docs/agent-tooling/verifiers/validate-ownership-map.mjs": "d0c29039e42892fd53ae46ac6cd5cd692ced1a215175ee733d1c90ec558c9878",
       "docs/agent-tooling/verifiers/validate-planning-fixtures.mjs": "f6c785ae848d92c788a1b96e5359fbbddedd84b002fc3ef4658c8d6890b882b2",
       "docs/agent-tooling/verifiers/validate-requirement-coverage.mjs": "9717e1e471ba8d5d8e462d57080bcb9b78b0c534fef95ad784a2faab424dd91c",
-      "docs/agent-tooling/verifiers/verify-g0-preflight.mjs": "60e4bed08f14ba5f6dab9da44cd30d7c4f6cf2f871454eda0c8b6d925189faee",
+      "docs/agent-tooling/verifiers/verify-g0-preflight.mjs": "719db911a456e1b11de7df452c180b98b6316ec2ea0b2bd2c22301532fc86b29",
       "docs/decisions/0001-plane-agent-tooling-architecture.md": "e3401e0b15e12a97cdab8b5fc91f570708f6575630a24fac95f593a3ac33633e",
       "docs/decisions/0002-autonomous-agent-operations.md": "f815f53c8016bc873c8154829c993a3a43b506e34d73c9db3f8f2d795f7c8fdf",
       "docs/decisions/0003-plane-agent-native-product-boundary.md": "87faa3737632cb9eea52532f37586750cca4bb374e9d57872ebade1d45494291",
@@ -119,13 +119,13 @@
       "docs/decisions/0008-scoped-memory-and-context.md": "4fba4c326c428af491bdef6dbd55f0b8a1cc22f5e04e2fc26f59c61fe4b22c10",
       "docs/decisions/0009-workflows-and-agent-delegation.md": "81b0e3a6b7665897f3cf461f3b647cfc2b8c4bef6e2d26f4a4908b6c5f9b4740",
       "docs/decisions/0010-plane-runtime-contract.md": "2d6bbdf50580602fd4da6df10715bbb6f77e65ed4a8167e2d7c34bb45d32537b",
-      "docs/agent-tooling/SOURCE-INVENTORY.md": "4c55850692f9c1053481bcd5b0f9c2b2763b7e03c1d3262c857677d7d18cdfa6"
+      "docs/agent-tooling/SOURCE-INVENTORY.md": "a16e81b01cb80fb3747e474343f52064c63a9670a5c9782367a609fba4ea970f"
     }
   },
   "seal": {
     "state": "sealed",
-    "contentCommit": "311525824cfb42a7d5073b0086f3d57061dc18ed",
-    "contentTree": "4e090accac5b9539a33b5d5867d6d75000a86bfc",
+    "contentCommit": "ee43b1f0bbd10f166aa2f29cd63441a0351f1eb4",
+    "contentTree": "ffedc71b713b28446b96a6eaefbf3256a259fe34",
     "contentPaths": [
       "docs/agent-tooling/ADR-SYNTHESIS.md",
       "docs/agent-tooling/APPROVAL-MANIFEST.md",
