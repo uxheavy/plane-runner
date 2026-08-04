@@ -1,0 +1,21 @@
+{
+  "protocol": "plane.agent-runtime/v1",
+  "schemas": {
+    "run-snapshot": {
+      "filename": "run-snapshot.schema.json",
+      "sha256": "136e574d9e1754ea6f02e5e099af993c61fc50757da844854cce2128a5250636"
+    },
+    "invocation-envelope": {
+      "filename": "invocation-envelope.schema.json",
+      "sha256": "63ae99512f9bc8463991464d8522383b877de80b80404e3a1422b668129fdddc"
+    },
+    "runtime-event": {
+      "filename": "runtime-event.schema.json",
+      "sha256": "e6b2d34e9dccb664f629639f251b51e4fbd8eb6de993f623f436e62f0db89b89"
+    },
+    "runtime-exit": {
+      "filename": "runtime-exit.schema.json",
+      "sha256": "27ba6193ae337cf372b741ef5882f60280a3f2154e92b3683713bce13475d58c"
+    }
+  }
+}

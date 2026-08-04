@@ -1,0 +1,430 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://plane.dev/schemas/plane.agent-runtime/v1/RuntimeEvent.schema.json",
+  "title": "RuntimeEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol",
+    "trust",
+    "workspaceRef",
+    "actorRef",
+    "runId",
+    "invocationId",
+    "sequence",
+    "eventId",
+    "idempotencyKey",
+    "correlationId",
+    "causationRef",
+    "observedAt",
+    "body"
+  ],
+  "properties": {
+    "protocol": {
+      "const": "plane.agent-runtime/v1"
+    },
+    "trust": {
+      "const": "untrusted"
+    },
+    "workspaceRef": {
+      "$ref": "#/$defs/opaqueRef",
+      "x-plane-opaque-kind": "workspace"
+    },
+    "actorRef": {
+      "$ref": "#/$defs/opaqueRef",
+      "x-plane-opaque-kind": "actor"
+    },
+    "runId": {
+      "$ref": "#/$defs/opaqueRef",
+      "x-plane-opaque-kind": "run"
+    },
+    "invocationId": {
+      "$ref": "#/$defs/opaqueRef",
+      "x-plane-opaque-kind": "invocation"
+    },
+    "sequence": {
+      "$ref": "#/$defs/nonNegativeInteger"
+    },
+    "eventId": {
+      "$ref": "#/$defs/opaqueRef",
+      "x-plane-opaque-kind": "event-id"
+    },
+    "idempotencyKey": {
+      "$ref": "#/$defs/opaqueRef",
+      "x-plane-opaque-kind": "idempotency"
+    },
+    "correlationId": {
+      "$ref": "#/$defs/opaqueRef",
+      "x-plane-opaque-kind": "correlation"
+    },
+    "causationRef": {
+      "$ref": "#/$defs/opaqueRef",
+      "x-plane-opaque-kind": "causation"
+    },
+    "observedAt": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "body": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "payload", "publication"],
+          "properties": {
+            "kind": {
+              "const": "progress_observed"
+            },
+            "payload": {
+              "$ref": "#/$defs/boundedPayload"
+            },
+            "publication": {
+              "$ref": "#/$defs/observationPublication"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "payload", "publication"],
+          "properties": {
+            "kind": {
+              "const": "conversation_publication_observed"
+            },
+            "payload": {
+              "$ref": "#/$defs/boundedPayload"
+            },
+            "publication": {
+              "$ref": "#/$defs/publicationRequired"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "question", "publication"],
+          "properties": {
+            "kind": {
+              "const": "input_request_observed"
+            },
+            "question": {
+              "$ref": "#/$defs/boundedText"
+            },
+            "publication": {
+              "$ref": "#/$defs/observationPublication"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "artifact", "publication"],
+          "properties": {
+            "kind": {
+              "const": "artifact_observed"
+            },
+            "artifact": {
+              "$ref": "#/$defs/artifactReference"
+            },
+            "publication": {
+              "$ref": "#/$defs/observationPublication"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "usage", "publication"],
+          "properties": {
+            "kind": {
+              "const": "usage_observed"
+            },
+            "usage": {
+              "$ref": "#/$defs/runtimeUsage"
+            },
+            "publication": {
+              "$ref": "#/$defs/observationPublication"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "payload", "publication"],
+          "properties": {
+            "kind": {
+              "const": "outcome_submission_observed"
+            },
+            "payload": {
+              "$ref": "#/$defs/boundedPayload"
+            },
+            "publication": {
+              "$ref": "#/$defs/publicationRequired"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "failure", "publication"],
+          "properties": {
+            "kind": {
+              "const": "failure_observed"
+            },
+            "failure": {
+              "$ref": "#/$defs/runtimeFailure"
+            },
+            "publication": {
+              "$ref": "#/$defs/observationPublication"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "reason", "publication"],
+          "properties": {
+            "kind": {
+              "const": "blocker_observed"
+            },
+            "reason": {
+              "$ref": "#/$defs/boundedText"
+            },
+            "publication": {
+              "$ref": "#/$defs/observationPublication"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "opaqueRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._~:/-]{0,127}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "boundedText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "boundedPrompt": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32768
+    },
+    "boundedToken": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "timestamp": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "nonNegativeInteger": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "boundedByteCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1048576
+    },
+    "runtimeFailure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "retryable"],
+      "properties": {
+        "code": {
+          "enum": [
+            "runtime_error",
+            "lease_expired",
+            "invalid_continuation",
+            "budget_exhausted",
+            "cancelled"
+          ]
+        },
+        "message": {
+          "$ref": "#/$defs/boundedText"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "runtimeUsage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputTokens", "outputTokens", "durationMs"],
+      "properties": {
+        "inputTokens": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "outputTokens": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "durationMs": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        }
+      }
+    },
+    "runtimeBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputTokens", "outputTokens", "durationMs"],
+      "properties": {
+        "inputTokens": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "outputTokens": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "durationMs": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        }
+      }
+    },
+    "boundedPayload": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "contentType", "text"],
+          "properties": {
+            "kind": {
+              "const": "inline_text"
+            },
+            "contentType": {
+              "const": "text/plain"
+            },
+            "text": {
+              "$ref": "#/$defs/boundedText"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "payloadRef", "contentType", "contentDigest", "sizeBytes"],
+          "properties": {
+            "kind": {
+              "const": "payload_ref"
+            },
+            "payloadRef": {
+              "$ref": "#/$defs/opaqueRef",
+              "x-plane-opaque-kind": "payload"
+            },
+            "contentType": {
+              "$ref": "#/$defs/boundedToken"
+            },
+            "contentDigest": {
+              "$ref": "#/$defs/digest",
+              "x-plane-opaque-kind": "content"
+            },
+            "sizeBytes": {
+              "$ref": "#/$defs/boundedByteCount"
+            }
+          }
+        }
+      ]
+    },
+    "artifactReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactRef", "contentDigest", "mediaType", "sizeBytes"],
+      "properties": {
+        "artifactRef": {
+          "$ref": "#/$defs/opaqueRef",
+          "x-plane-opaque-kind": "artifact"
+        },
+        "contentDigest": {
+          "$ref": "#/$defs/digest",
+          "x-plane-opaque-kind": "content"
+        },
+        "mediaType": {
+          "$ref": "#/$defs/boundedToken"
+        },
+        "sizeBytes": {
+          "$ref": "#/$defs/boundedByteCount"
+        }
+      }
+    },
+    "observationPublication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action"],
+      "properties": {
+        "action": {
+          "const": "observation_only"
+        }
+      }
+    },
+    "publicationRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "operationAttemptRef"],
+      "properties": {
+        "action": {
+          "const": "explicit_plane_publication_requested"
+        },
+        "operationAttemptRef": {
+          "$ref": "#/$defs/opaqueRef",
+          "x-plane-opaque-kind": "operation-attempt"
+        }
+      }
+    },
+    "publicationReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "operationAttemptRef", "receiptRef", "productEventRef"],
+      "properties": {
+        "action": {
+          "const": "plane_publication_receipt_observed"
+        },
+        "operationAttemptRef": {
+          "$ref": "#/$defs/opaqueRef",
+          "x-plane-opaque-kind": "operation-attempt"
+        },
+        "receiptRef": {
+          "$ref": "#/$defs/opaqueRef",
+          "x-plane-opaque-kind": "receipt"
+        },
+        "productEventRef": {
+          "$ref": "#/$defs/opaqueRef",
+          "x-plane-opaque-kind": "product-event"
+        }
+      }
+    },
+    "publicationBoundary": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/observationPublication"
+        },
+        {
+          "$ref": "#/$defs/publicationRequest"
+        },
+        {
+          "$ref": "#/$defs/publicationReceipt"
+        }
+      ]
+    },
+    "publicationRequired": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/publicationRequest"
+        },
+        {
+          "$ref": "#/$defs/publicationReceipt"
+        }
+      ]
+    }
+  }
+}
