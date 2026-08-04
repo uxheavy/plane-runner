@@ -7,6 +7,11 @@ import { describe, expect, test } from "vitest";
 import {
   computeRunSnapshotContentDigest,
   computeRuntimeDurableStateDigest,
+  computeTrustedHumanInputAnswerDigest,
+  createActorRef,
+  createApplicationServiceRef,
+  createAuditReceiptRef,
+  createAuthorizationReceiptRef,
   createInitialRuntimeDurableState,
   createContentDigest,
   createContractDigest,
@@ -15,10 +20,14 @@ import {
   createCheckpointRef,
   createCorrelationId,
   createEventRef,
+  createGatewayReceiptRef,
   createIdempotencyKey,
+  createInputRequestRef,
   createInvocationId,
   createLeaseId,
   createOperationRef,
+  createReceiptRef,
+  createRunId,
   createWorkspaceRef,
   MAX_SERIALIZED_JSON_BYTES,
   createOutcomeSubmissionRef,
@@ -34,6 +43,8 @@ import {
   type RuntimeEvent,
   type RuntimeVerificationFacts,
   type TrustedDurableStateHead,
+  type TrustedHumanAnswerHead,
+  type TrustedHumanInputAnswer,
   type TrustedPublicationReceipt,
 } from "../src";
 import {
@@ -54,7 +65,6 @@ import {
   observationUsageBody,
   proposalArtifactBody,
   proposalInputRequestBody,
-  proposalOutcomeBody,
   publicationBody,
   snapshot,
   transcriptEvidenceBody,
@@ -172,9 +182,16 @@ const receiptFor = (eventValue: RuntimeEvent): TrustedPublicationReceipt => {
   return receipt;
 };
 
-const withReceipts = (invocation: ReturnType<typeof envelope>, events: readonly RuntimeEvent[], extra = {}) =>
+const withReceipts = (
+  invocation: ReturnType<typeof envelope>,
+  events: readonly RuntimeEvent[],
+  extra: Partial<RuntimeVerificationFacts> = {}
+) =>
   trusted(invocation, undefined, {
     publicationReceipts: events.filter((item) => item.body.kind !== "progress_observed").map(receiptFor),
+    ...("humanInputAnswer" in extra && extra.humanInputAnswer !== undefined
+      ? { humanInputAnswerHead: { answerFactDigest: extra.humanInputAnswer.answerFactDigest } }
+      : {}),
     ...extra,
   });
 
@@ -275,6 +292,62 @@ describe("parsed plane.agent-runtime/v1 contract boundary", () => {
       parseInvocationEnvelope({ ...envelope(), runSnapshotDigest: createRunSnapshotContentDigest("f".repeat(64)) })
     ).toBeDefined();
   });
+
+  test("accepts only the canonical genesis and rejects alternate revision-zero states in parser and schema", () => {
+    const genesis = createInitialRuntimeDurableState({
+      workspaceRef: snapshot.workspaceRef,
+      actorRef: snapshot.actorRef,
+      profileVersionRef: snapshot.profile.profileRef,
+      runId: snapshot.runId,
+      snapshotContentDigest: snapshot.contentDigest,
+    });
+    assertValid("runtime-durable-state", genesis);
+    expect(parseRuntimeDurableState(JSON.stringify(genesis))).toEqual(genesis);
+
+    const withDigest = (overrides: Record<string, unknown>) => {
+      const content = { ...genesis, ...overrides };
+      return {
+        ...content,
+        stateDigest: computeRuntimeDurableStateDigest(content as unknown as RuntimeDurableState),
+      };
+    };
+    const linkedRunning = withDigest({
+      state: "running",
+      revision: 1,
+      previousRevision: 0,
+      previousStateDigest: genesis.stateDigest,
+    });
+    expect(validators["runtime-durable-state"]?.(linkedRunning)).toBe(true);
+    expect(parseRuntimeDurableState(linkedRunning).state).toBe("running");
+    const request = event(appliedInputRequestBody(), 0);
+    const populated = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation: envelope(),
+      events: [request],
+      exit: parseRuntimeExit({ ...exits[1], inputEventRef: request.eventId }),
+      trusted: withReceipts(envelope(), [request]),
+    });
+    expect(populated.ok).toBe(true);
+    if (!populated.ok) return;
+    const invalidStates = [
+      withDigest({ state: "running" }),
+      withDigest({ state: "queued", revision: 1 }),
+      withDigest({
+        state: "queued",
+        acceptedEvents: populated.nextLifecycle.acceptedEvents,
+        lastAcceptedSequence: populated.nextLifecycle.lastAcceptedSequence,
+      }),
+    ];
+    for (const invalid of invalidStates) {
+      expect(validators["runtime-durable-state"]?.(invalid)).toBe(false);
+      expect(() => parseRuntimeDurableState(invalid)).toThrow();
+    }
+
+    const alternateGenesis = withDigest({ lastAcceptedSequence: 1 });
+    expect(validators["runtime-durable-state"]?.(alternateGenesis)).toBe(false);
+    expect(() => parseRuntimeDurableState(alternateGenesis)).toThrow();
+  });
 });
 
 describe("parser and generated-schema compatibility matrix", () => {
@@ -287,7 +360,6 @@ describe("parser and generated-schema compatibility matrix", () => {
     proposalArtifactBody(),
     appliedArtifactBody(),
     observationUsageBody(),
-    proposalOutcomeBody(),
     appliedOutcomeBody("compatibility-outcome"),
     appliedFailureBody(),
     appliedBlockerBody(),
@@ -299,6 +371,37 @@ describe("parser and generated-schema compatibility matrix", () => {
     const parsed = parseRuntimeEvent(event(body));
     assertValid("runtime-event", parsed);
   });
+
+  test("rejects outcome-submission proposals in the parser and generated schema", () => {
+    const invalid = {
+      ...event(appliedOutcomeBody()),
+      body: {
+        ...event(appliedOutcomeBody()).body,
+        publication: {
+          ...event(appliedOutcomeBody()).body.publication,
+          action: "proposal",
+        },
+      },
+    } as unknown;
+    expect(validators["runtime-event"](invalid)).toBe(false);
+    expect(() => parseRuntimeEvent(invalid)).toThrow();
+  });
+
+  test.each([appliedOutcomeBody(), appliedFailureBody(), appliedBlockerBody(), appliedCancellationBody()] as const)(
+    "rejects a proposal for every terminal product kind",
+    (body) => {
+      const parsedEvent = event(body);
+      const invalid = {
+        ...parsedEvent,
+        body: {
+          ...parsedEvent.body,
+          publication: { ...parsedEvent.body.publication, action: "proposal" },
+        },
+      } as unknown;
+      expect(validators["runtime-event"](invalid)).toBe(false);
+      expect(() => parseRuntimeEvent(invalid)).toThrow();
+    }
+  );
 
   test("rejects terminal durable proposals in both parser and schema", () => {
     const terminalProposal = {
@@ -342,7 +445,39 @@ describe("parser and generated-schema compatibility matrix", () => {
     };
     const invalid = {
       ...invalidContent,
-      stateDigest: computeRuntimeDurableStateDigest(invalidContent),
+      stateDigest: computeRuntimeDurableStateDigest(invalidContent as unknown as RuntimeDurableState),
+    };
+    expect(validators["runtime-durable-state"](invalid)).toBe(false);
+    expect(() => parseRuntimeDurableState(invalid)).toThrow();
+  });
+
+  test("rejects an outcome-submission proposal in durable state parser and schema", () => {
+    const invocation = envelope();
+    const outcome = event(appliedOutcomeBody("durable-outcome-proposal"));
+    const verified = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation,
+      events: [outcome],
+      exit: exits[0],
+      trusted: withReceipts(invocation, [outcome]),
+    });
+    expect(verified.ok).toBe(true);
+    if (!verified.ok) return;
+    const acceptedEvent = verified.nextLifecycle.acceptedEvents[0];
+    if (acceptedEvent?.productBinding === undefined) return;
+    const invalidContent = {
+      ...verified.nextLifecycle,
+      acceptedEvents: [
+        {
+          ...acceptedEvent,
+          productBinding: { ...acceptedEvent.productBinding, action: "proposal" as const },
+        },
+      ],
+    };
+    const invalid = {
+      ...invalidContent,
+      stateDigest: computeRuntimeDurableStateDigest(invalidContent as unknown as RuntimeDurableState),
     };
     expect(validators["runtime-durable-state"](invalid)).toBe(false);
     expect(() => parseRuntimeDurableState(invalid)).toThrow();
@@ -660,6 +795,7 @@ describe("durable lifecycle and idempotent replay", () => {
           kind: "human_input",
           eventRef: createEventRef("human-answer-1"),
           pendingInputEventRef: request.eventId,
+          answerFactDigest: contentDigest("a"),
         },
         newContextEventRefs: [request.eventId, createEventRef("human-answer-1")],
         checkpointRef: createCheckpointRef("checkpoint-1"),
@@ -676,6 +812,7 @@ describe("durable lifecycle and idempotent replay", () => {
         kind: "human_input",
         eventRef: answerFact.answerEventRef,
         pendingInputEventRef: request.eventId,
+        answerFactDigest: answerFact.answerFactDigest,
       },
       newContextEventRefs: [request.eventId, answerFact.answerEventRef],
       checkpointRef: createCheckpointRef("checkpoint-1"),
@@ -708,7 +845,7 @@ describe("durable lifecycle and idempotent replay", () => {
       trusted: withReceipts(continuation, [secondRequest], {
         lifecycle: reparsedState,
         previousRemainingBudget: initialInvocation.remainingBudget,
-        checkpoint: { checkpointRef: continuation.checkpointRef, isVerified: true },
+        checkpoint: { checkpointRef: continuation.checkpointRef!, isVerified: true },
         humanInputAnswer: answerFact,
       }),
     });
@@ -726,6 +863,7 @@ describe("durable lifecycle and idempotent replay", () => {
         kind: "human_input",
         eventRef: finalAnswerEventRef,
         pendingInputEventRef: secondRequest.eventId,
+        answerFactDigest: contentDigest("b"),
       },
       newContextEventRefs: [secondRequest.eventId, finalAnswerEventRef],
       checkpointRef: createCheckpointRef("checkpoint-2"),
@@ -735,30 +873,39 @@ describe("durable lifecycle and idempotent replay", () => {
       idempotencyKey: createIdempotencyKey("idempotency-3"),
     });
     const finalAnswer = trustedHumanInputAnswer(finalInvocation, "input-request-2", "human-answer-2");
+    const resolvedFinalInvocation = parseInvocationEnvelope({
+      ...finalInvocation,
+      trigger: {
+        kind: "human_input",
+        eventRef: finalAnswer.answerEventRef,
+        pendingInputEventRef: secondRequest.eventId,
+        answerFactDigest: finalAnswer.answerFactDigest,
+      },
+    });
     const outcome = parseRuntimeEvent({
       ...event(appliedOutcomeBody(), 2),
-      invocationId: finalInvocation.invocationId,
-      correlationId: finalInvocation.correlationId,
-      causationRef: finalInvocation.causationRef,
+      invocationId: resolvedFinalInvocation.invocationId,
+      correlationId: resolvedFinalInvocation.correlationId,
+      causationRef: resolvedFinalInvocation.causationRef,
     });
     const finalExit = parseRuntimeExit({
       ...exits[0],
-      invocationId: finalInvocation.invocationId,
+      invocationId: resolvedFinalInvocation.invocationId,
       finalSequence: 2,
-      idempotencyKey: finalInvocation.idempotencyKey,
-      correlationId: finalInvocation.correlationId,
-      causationRef: finalInvocation.causationRef,
+      idempotencyKey: resolvedFinalInvocation.idempotencyKey,
+      correlationId: resolvedFinalInvocation.correlationId,
+      causationRef: resolvedFinalInvocation.causationRef,
     });
     const resumed = verifyRuntimeExecution({
       manifest,
       snapshot,
-      invocation: finalInvocation,
+      invocation: resolvedFinalInvocation,
       events: [outcome],
       exit: finalExit,
-      trusted: withReceipts(finalInvocation, [outcome], {
+      trusted: withReceipts(resolvedFinalInvocation, [outcome], {
         lifecycle: secondReparsedState,
         previousRemainingBudget: initialInvocation.remainingBudget,
-        checkpoint: { checkpointRef: finalInvocation.checkpointRef, isVerified: true },
+        checkpoint: { checkpointRef: resolvedFinalInvocation.checkpointRef!, isVerified: true },
         humanInputAnswer: finalAnswer,
       }),
     });
@@ -770,6 +917,7 @@ describe("durable lifecycle and idempotent replay", () => {
         kind: "human_input",
         eventRef: finalAnswer.answerEventRef,
         pendingInputEventRef: request.eventId,
+        answerFactDigest: finalAnswer.answerFactDigest,
       },
       newContextEventRefs: [request.eventId, finalAnswer.answerEventRef],
     });
@@ -782,7 +930,7 @@ describe("durable lifecycle and idempotent replay", () => {
       trusted: withReceipts(staleTrigger, [outcome], {
         lifecycle: secondReparsedState,
         previousRemainingBudget: initialInvocation.remainingBudget,
-        checkpoint: { checkpointRef: staleTrigger.checkpointRef, isVerified: true },
+        checkpoint: { checkpointRef: staleTrigger.checkpointRef!, isVerified: true },
         humanInputAnswer: trustedHumanInputAnswer(staleTrigger),
       }),
     });
@@ -1173,13 +1321,14 @@ describe("Plane-owned human answer boundary", () => {
     expect(waiting.ok).toBe(true);
     if (!waiting.ok) return;
 
-    const continuation = parseInvocationEnvelope({
+    const continuationSeed = parseInvocationEnvelope({
       ...initialInvocation,
       invocationId: createInvocationId("invocation-answer"),
       trigger: {
         kind: "human_input",
         eventRef: createEventRef("human-answer-boundary"),
         pendingInputEventRef: request.eventId,
+        answerFactDigest: contentDigest("c"),
       },
       newContextEventRefs: [request.eventId, createEventRef("human-answer-boundary")],
       checkpointRef: createCheckpointRef("checkpoint-answer"),
@@ -1188,7 +1337,16 @@ describe("Plane-owned human answer boundary", () => {
       correlationId: createCorrelationId("correlation-answer"),
       idempotencyKey: createIdempotencyKey("idempotency-answer"),
     });
-    const fact = trustedHumanInputAnswer(continuation, "input-request-1", "human-answer-boundary");
+    const fact = trustedHumanInputAnswer(continuationSeed, "input-request-1", "human-answer-boundary");
+    const continuation = parseInvocationEnvelope({
+      ...continuationSeed,
+      trigger: {
+        kind: "human_input",
+        eventRef: fact.answerEventRef,
+        pendingInputEventRef: request.eventId,
+        answerFactDigest: fact.answerFactDigest,
+      },
+    });
     const outcome = parseRuntimeEvent({
       ...event(appliedOutcomeBody("answer-outcome"), 1),
       invocationId: continuation.invocationId,
@@ -1212,7 +1370,7 @@ describe("Plane-owned human answer boundary", () => {
       trusted: withReceipts(continuation, [outcome], {
         lifecycle: waiting.nextLifecycle,
         previousRemainingBudget: initialInvocation.remainingBudget,
-        checkpoint: { checkpointRef: continuation.checkpointRef, isVerified: true },
+        checkpoint: { checkpointRef: continuation.checkpointRef!, isVerified: true },
         humanInputAnswer: fact,
       }),
     });
@@ -1229,7 +1387,7 @@ describe("Plane-owned human answer boundary", () => {
         lifecycle: accepted.nextLifecycle,
         durableStateHead: durableStateHead(accepted.nextLifecycle),
         previousRemainingBudget: initialInvocation.remainingBudget,
-        checkpoint: { checkpointRef: continuation.checkpointRef, isVerified: true },
+        checkpoint: { checkpointRef: continuation.checkpointRef!, isVerified: true },
         humanInputAnswer: fact,
       }),
     });
@@ -1249,7 +1407,7 @@ describe("Plane-owned human answer boundary", () => {
       trusted: withReceipts(continuation, [runtimeFake], {
         lifecycle: waiting.nextLifecycle,
         previousRemainingBudget: initialInvocation.remainingBudget,
-        checkpoint: { checkpointRef: continuation.checkpointRef, isVerified: true },
+        checkpoint: { checkpointRef: continuation.checkpointRef!, isVerified: true },
         humanInputAnswer: fact,
       }),
     });
@@ -1266,6 +1424,214 @@ describe("Plane-owned human answer boundary", () => {
         },
       })
     ).toThrow();
+  });
+
+  test.each([
+    [
+      "responder kind",
+      (answer: TrustedHumanInputAnswer) => ({
+        ...answer,
+        responderPrincipal: { ...answer.responderPrincipal, kind: "external_integration" as const },
+      }),
+    ],
+    [
+      "responder id",
+      (answer: TrustedHumanInputAnswer) => ({
+        ...answer,
+        responderPrincipal: { ...answer.responderPrincipal, planePrincipalId: createActorRef("human-2") },
+      }),
+    ],
+    [
+      "request",
+      (answer: TrustedHumanInputAnswer) => ({ ...answer, inputRequestRef: createInputRequestRef("unrelated-request") }),
+    ],
+    [
+      "answer event",
+      (answer: TrustedHumanInputAnswer) => ({ ...answer, answerEventRef: createEventRef("unrelated-answer") }),
+    ],
+    [
+      "workspace",
+      (answer: TrustedHumanInputAnswer) => ({ ...answer, workspaceRef: createWorkspaceRef("workspace-2") }),
+    ],
+    ["run", (answer: TrustedHumanInputAnswer) => ({ ...answer, runId: createRunId("run-2") })],
+    [
+      "authorization",
+      (answer: TrustedHumanInputAnswer) => ({
+        ...answer,
+        authorizationReceiptRef: createAuthorizationReceiptRef("unrelated-authorization"),
+      }),
+    ],
+    [
+      "application service",
+      (answer: TrustedHumanInputAnswer) => ({
+        ...answer,
+        applicationServiceRef: createApplicationServiceRef("unrelated-application"),
+      }),
+    ],
+    [
+      "gateway",
+      (answer: TrustedHumanInputAnswer) => ({
+        ...answer,
+        gatewayReceiptRef: createGatewayReceiptRef("unrelated-gateway"),
+      }),
+    ],
+    [
+      "receipt",
+      (answer: TrustedHumanInputAnswer) => ({ ...answer, receiptRef: createReceiptRef("unrelated-receipt") }),
+    ],
+    [
+      "audit",
+      (answer: TrustedHumanInputAnswer) => ({ ...answer, auditReceiptRef: createAuditReceiptRef("unrelated-audit") }),
+    ],
+    [
+      "correlation",
+      (answer: TrustedHumanInputAnswer) => ({ ...answer, correlationId: createCorrelationId("unrelated-correlation") }),
+    ],
+    [
+      "causation",
+      (answer: TrustedHumanInputAnswer) => ({ ...answer, causationRef: createCausationRef("unrelated-causation") }),
+    ],
+    ["payload digest", (answer: TrustedHumanInputAnswer) => ({ ...answer, payloadDigest: contentDigest("f") })],
+    ["answer head digest", (answer: TrustedHumanInputAnswer) => ({ ...answer, answerFactDigest: contentDigest("f") })],
+  ] as const)("rejects an independently valid unrelated %s field", (_name, mutate) => {
+    const initialInvocation = envelope();
+    const request = event(appliedInputRequestBody(), 0);
+    const waiting = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation: initialInvocation,
+      events: [request],
+      exit: parseRuntimeExit({ ...exits[1], inputEventRef: request.eventId }),
+      trusted: withReceipts(initialInvocation, [request]),
+    });
+    expect(waiting.ok).toBe(true);
+    if (!waiting.ok) return;
+
+    const seed = parseInvocationEnvelope({
+      ...initialInvocation,
+      invocationId: createInvocationId("field-attack-invocation"),
+      trigger: {
+        kind: "human_input",
+        eventRef: createEventRef("field-attack-answer"),
+        pendingInputEventRef: request.eventId,
+        answerFactDigest: contentDigest("d"),
+      },
+      newContextEventRefs: [request.eventId, createEventRef("field-attack-answer")],
+      checkpointRef: createCheckpointRef("field-attack-checkpoint"),
+      lease: { ...initialInvocation.lease, leaseId: createLeaseId("field-attack-lease") },
+      causationRef: createCausationRef("field-attack-causation"),
+      correlationId: createCorrelationId("field-attack-correlation"),
+      idempotencyKey: createIdempotencyKey("field-attack-idempotency"),
+    });
+    const fact = trustedHumanInputAnswer(seed, "input-request-1", "field-attack-answer");
+    const continuation = parseInvocationEnvelope({
+      ...seed,
+      trigger: {
+        kind: "human_input",
+        eventRef: fact.answerEventRef,
+        pendingInputEventRef: request.eventId,
+        answerFactDigest: fact.answerFactDigest,
+      },
+    });
+    const outcome = parseRuntimeEvent({
+      ...event(appliedOutcomeBody("field-attack-outcome"), 1),
+      invocationId: continuation.invocationId,
+      correlationId: continuation.correlationId,
+      causationRef: continuation.causationRef,
+    });
+    const exit = parseRuntimeExit({
+      ...exits[0],
+      invocationId: continuation.invocationId,
+      finalSequence: 1,
+      idempotencyKey: continuation.idempotencyKey,
+      correlationId: continuation.correlationId,
+      causationRef: continuation.causationRef,
+    });
+    const result = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation: continuation,
+      events: [outcome],
+      exit,
+      trusted: withReceipts(continuation, [outcome], {
+        lifecycle: waiting.nextLifecycle,
+        previousRemainingBudget: initialInvocation.remainingBudget,
+        checkpoint: { checkpointRef: continuation.checkpointRef!, isVerified: true },
+        humanInputAnswer: mutate(fact),
+      }),
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.some((error) => error.code === "human_input_answer_mismatch")).toBe(true);
+  });
+
+  test("rejects a separately altered expected answer head digest", () => {
+    const initialInvocation = envelope();
+    const request = event(appliedInputRequestBody(), 0);
+    const waiting = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation: initialInvocation,
+      events: [request],
+      exit: parseRuntimeExit({ ...exits[1], inputEventRef: request.eventId }),
+      trusted: withReceipts(initialInvocation, [request]),
+    });
+    expect(waiting.ok).toBe(true);
+    if (!waiting.ok) return;
+    const seed = parseInvocationEnvelope({
+      ...initialInvocation,
+      invocationId: createInvocationId("head-attack-invocation"),
+      trigger: {
+        kind: "human_input",
+        eventRef: createEventRef("head-attack-answer"),
+        pendingInputEventRef: request.eventId,
+        answerFactDigest: contentDigest("e"),
+      },
+      newContextEventRefs: [request.eventId, createEventRef("head-attack-answer")],
+      checkpointRef: createCheckpointRef("head-attack-checkpoint"),
+      lease: { ...initialInvocation.lease, leaseId: createLeaseId("head-attack-lease") },
+      causationRef: createCausationRef("head-attack-causation"),
+      correlationId: createCorrelationId("head-attack-correlation"),
+      idempotencyKey: createIdempotencyKey("head-attack-idempotency"),
+    });
+    const fact = trustedHumanInputAnswer(seed, "input-request-1", "head-attack-answer");
+    const continuation = parseInvocationEnvelope({
+      ...seed,
+      trigger: {
+        kind: "human_input",
+        eventRef: fact.answerEventRef,
+        pendingInputEventRef: request.eventId,
+        answerFactDigest: fact.answerFactDigest,
+      },
+    });
+    const outcome = parseRuntimeEvent({
+      ...event(appliedOutcomeBody("head-attack-outcome"), 1),
+      invocationId: continuation.invocationId,
+      correlationId: continuation.correlationId,
+      causationRef: continuation.causationRef,
+    });
+    const result = verifyRuntimeExecution({
+      manifest,
+      snapshot,
+      invocation: continuation,
+      events: [outcome],
+      exit: parseRuntimeExit({
+        ...exits[0],
+        invocationId: continuation.invocationId,
+        finalSequence: 1,
+        idempotencyKey: continuation.idempotencyKey,
+        correlationId: continuation.correlationId,
+        causationRef: continuation.causationRef,
+      }),
+      trusted: withReceipts(continuation, [outcome], {
+        lifecycle: waiting.nextLifecycle,
+        previousRemainingBudget: initialInvocation.remainingBudget,
+        checkpoint: { checkpointRef: continuation.checkpointRef!, isVerified: true },
+        humanInputAnswer: fact,
+        humanInputAnswerHead: { answerFactDigest: contentDigest("f") } satisfies TrustedHumanAnswerHead,
+      }),
+    });
+    expect(result.ok).toBe(false);
+    expect(computeTrustedHumanInputAnswerDigest(fact)).toBe(fact.answerFactDigest);
   });
 });
 

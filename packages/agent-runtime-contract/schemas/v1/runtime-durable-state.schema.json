@@ -66,7 +66,7 @@
     },
     "lastAcceptedSequence": {
       "type": "integer",
-      "minimum": -1
+      "minimum": 0
     },
     "acceptedEvents": {
       "type": "array",
@@ -266,7 +266,7 @@
         "required": [
           "answerEventRef",
           "inputRequestRef",
-          "responderPrincipalRef",
+          "responderPrincipal",
           "workspaceRef",
           "runId",
           "authorizationReceiptRef",
@@ -275,7 +275,9 @@
           "receiptRef",
           "auditReceiptRef",
           "correlationId",
-          "causationRef"
+          "causationRef",
+          "payloadDigest",
+          "answerFactDigest"
         ],
         "properties": {
           "answerEventRef": {
@@ -284,8 +286,8 @@
           "inputRequestRef": {
             "$ref": "#/$defs/inputRequestRef"
           },
-          "responderPrincipalRef": {
-            "$ref": "#/$defs/responderPrincipalRef"
+          "responderPrincipal": {
+            "$ref": "#/$defs/trustedHumanAnswerResponderPrincipal"
           },
           "workspaceRef": {
             "$ref": "#/$defs/workspaceRef"
@@ -313,6 +315,12 @@
           },
           "causationRef": {
             "$ref": "#/$defs/causationRef"
+          },
+          "payloadDigest": {
+            "$ref": "#/$defs/contentDigest"
+          },
+          "answerFactDigest": {
+            "$ref": "#/$defs/contentDigest"
           }
         }
       }
@@ -570,45 +578,99 @@
       }
     }
   },
-  "oneOf": [
+  "allOf": [
     {
-      "properties": {
-        "state": {
-          "enum": ["queued", "running"]
-        }
-      },
-      "not": {
-        "anyOf": [
-          {
-            "required": ["terminal"]
+      "oneOf": [
+        {
+          "properties": {
+            "state": {
+              "const": "queued"
+            },
+            "revision": {
+              "const": 0
+            },
+            "lastAcceptedSequence": {
+              "const": 0
+            },
+            "acceptedEvents": {
+              "maxItems": 0
+            },
+            "acceptedHumanInputAnswers": {
+              "maxItems": 0
+            },
+            "acceptedExits": {
+              "maxItems": 0
+            }
           },
-          {
+          "not": {
+            "anyOf": [
+              {
+                "required": ["previousRevision"]
+              },
+              {
+                "required": ["previousStateDigest"]
+              },
+              {
+                "required": ["terminal"]
+              },
+              {
+                "required": ["pendingInput"]
+              }
+            ]
+          }
+        },
+        {
+          "properties": {
+            "revision": {
+              "minimum": 1
+            }
+          },
+          "required": ["previousRevision", "previousStateDigest"]
+        }
+      ]
+    },
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "state": {
+              "enum": ["queued", "running"]
+            }
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": ["terminal"]
+              },
+              {
+                "required": ["pendingInput"]
+              }
+            ]
+          }
+        },
+        {
+          "properties": {
+            "state": {
+              "const": "waiting_for_input"
+            }
+          },
+          "required": ["pendingInput"],
+          "not": {
+            "required": ["terminal"]
+          }
+        },
+        {
+          "properties": {
+            "state": {
+              "enum": ["succeeded", "failed", "blocked", "cancelled"]
+            }
+          },
+          "required": ["terminal"],
+          "not": {
             "required": ["pendingInput"]
           }
-        ]
-      }
-    },
-    {
-      "properties": {
-        "state": {
-          "const": "waiting_for_input"
         }
-      },
-      "required": ["pendingInput"],
-      "not": {
-        "required": ["terminal"]
-      }
-    },
-    {
-      "properties": {
-        "state": {
-          "enum": ["succeeded", "failed", "blocked", "cancelled"]
-        }
-      },
-      "required": ["terminal"],
-      "not": {
-        "required": ["pendingInput"]
-      }
+      ]
     }
   ],
   "$defs": {
@@ -764,13 +826,6 @@
       "x-utf8ByteMax": 128,
       "pattern": "^receipt:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
-    "responderPrincipalRef": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 128,
-      "x-utf8ByteMax": 128,
-      "pattern": "^responder:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
-    },
     "runId": {
       "type": "string",
       "minLength": 1,
@@ -784,6 +839,19 @@
       "maxLength": 73,
       "x-utf8ByteMax": 73,
       "pattern": "^snapshot:[a-f0-9]{64}$"
+    },
+    "trustedHumanAnswerResponderPrincipal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "planePrincipalId"],
+      "properties": {
+        "kind": {
+          "enum": ["human_user", "external_integration"]
+        },
+        "planePrincipalId": {
+          "$ref": "#/$defs/actorRef"
+        }
+      }
     },
     "workspaceRef": {
       "type": "string",

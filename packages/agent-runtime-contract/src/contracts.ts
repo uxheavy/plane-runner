@@ -75,7 +75,6 @@ export type OutcomeSubmissionRef = OpaqueRef<"outcome-submission">;
 export type PayloadRef = OpaqueRef<"payload">;
 export type ApplicationServiceRef = OpaqueRef<"application-service">;
 export type GatewayReceiptRef = OpaqueRef<"gateway-receipt">;
-export type ResponderPrincipalRef = OpaqueRef<"responder-principal">;
 export type AuthorizationReceiptRef = OpaqueRef<"authorization-receipt">;
 export type ContractDigest = OpaqueRef<"contract-digest">;
 export type ContentDigest = OpaqueRef<"content-digest">;
@@ -166,7 +165,6 @@ const refs = {
   payload: defineRef("payload", "payload"),
   applicationService: defineRef("application-service", "application-service"),
   gatewayReceipt: defineRef("gateway-receipt", "gateway-receipt"),
-  responderPrincipal: defineRef("responder-principal", "responder"),
   authorizationReceipt: defineRef("authorization-receipt", "authorization-receipt"),
 } as const;
 
@@ -224,8 +222,6 @@ export const createApplicationServiceRef = refs.applicationService.create;
 export const parseApplicationServiceRef = refs.applicationService.parse;
 export const createGatewayReceiptRef = refs.gatewayReceipt.create;
 export const parseGatewayReceiptRef = refs.gatewayReceipt.parse;
-export const createResponderPrincipalRef = refs.responderPrincipal.create;
-export const parseResponderPrincipalRef = refs.responderPrincipal.parse;
 export const createAuthorizationReceiptRef = refs.authorizationReceipt.create;
 export const parseAuthorizationReceiptRef = refs.authorizationReceipt.parse;
 
@@ -648,7 +644,8 @@ function parsePublication<ProductKind extends string, ProductRef extends OpaqueR
   path: string,
   productKind: ProductKind,
   parseProductRef: (value: unknown) => ProductRef,
-  terminal = false
+  terminal = false,
+  appliedOnly = false
 ): Publication<ProductKind, ProductRef> {
   const object = requireRecord(
     value,
@@ -682,7 +679,7 @@ function parsePublication<ProductKind extends string, ProductRef extends OpaqueR
   );
   parseLiteral(object.productKind, productKind, `${path}.productKind`);
   const action = object.action;
-  if (action === "proposal" && !terminal) {
+  if (action === "proposal" && !terminal && !appliedOnly) {
     for (const key of [
       "operationRef",
       "applicationServiceRef",
@@ -853,9 +850,14 @@ function parseBody(value: unknown, path: string): RuntimeEventBody {
       return {
         kind: base.kind,
         payload: parseBoundedPayload(object.payload, `${path}.payload`),
-        publication: parsePublication(object.publication, `${path}.publication`, "outcome_submission", (item) =>
-          parseRef(item, `${path}.publication.productRef`, parseOutcomeSubmissionRef)
-        ),
+        publication: parsePublication(
+          object.publication,
+          `${path}.publication`,
+          "outcome_submission",
+          (item) => parseRef(item, `${path}.publication.productRef`, parseOutcomeSubmissionRef),
+          false,
+          true
+        ) as OutcomeSubmissionPublication,
       } as RuntimeEventBody;
     }
     case "failure_observed": {
@@ -1168,19 +1170,27 @@ export function parseInvocationEnvelope(value: unknown): InvocationEnvelope {
     object.trigger,
     "InvocationEnvelope.trigger",
     ["kind"],
-    ["eventRef", "pendingInputEventRef"]
+    ["eventRef", "pendingInputEventRef", "answerFactDigest"]
   );
   let trigger: InvocationTrigger;
   if (triggerObject.kind === "initial") {
-    if (Object.hasOwn(triggerObject, "eventRef") || Object.hasOwn(triggerObject, "pendingInputEventRef")) {
+    if (
+      Object.hasOwn(triggerObject, "eventRef") ||
+      Object.hasOwn(triggerObject, "pendingInputEventRef") ||
+      Object.hasOwn(triggerObject, "answerFactDigest")
+    ) {
       throw new ContractParseError("InvocationEnvelope.trigger", "initial invocations cannot cite continuation events");
     }
     trigger = { kind: "initial" };
   } else if (triggerObject.kind === "human_input") {
-    if (!Object.hasOwn(triggerObject, "eventRef") || !Object.hasOwn(triggerObject, "pendingInputEventRef")) {
+    if (
+      !Object.hasOwn(triggerObject, "eventRef") ||
+      !Object.hasOwn(triggerObject, "pendingInputEventRef") ||
+      !Object.hasOwn(triggerObject, "answerFactDigest")
+    ) {
       throw new ContractParseError(
         "InvocationEnvelope.trigger",
-        "human-input invocations require both the Plane answer event and exact pending input event"
+        "human-input invocations require the Plane answer event, exact pending input event, and answer fact digest"
       );
     }
     trigger = {
@@ -1191,8 +1201,19 @@ export function parseInvocationEnvelope(value: unknown): InvocationEnvelope {
         "InvocationEnvelope.trigger.pendingInputEventRef",
         parseEventRef
       ),
+      answerFactDigest: parseDigest(
+        triggerObject.answerFactDigest,
+        "InvocationEnvelope.trigger.answerFactDigest",
+        parseContentDigest
+      ) as ContentDigest,
     };
   } else if (triggerObject.kind === "recoverable_restart" || triggerObject.kind === "continuation") {
+    if (Object.hasOwn(triggerObject, "answerFactDigest")) {
+      throw new ContractParseError(
+        "InvocationEnvelope.trigger.answerFactDigest",
+        "is only valid for a human-input invocation"
+      );
+    }
     if (!Object.hasOwn(triggerObject, "eventRef")) {
       throw new ContractParseError("InvocationEnvelope.trigger.eventRef", "is required for a continuation");
     }
@@ -1385,6 +1406,7 @@ export type InvocationTrigger =
       kind: "human_input";
       eventRef: EventRef;
       pendingInputEventRef: EventRef;
+      answerFactDigest: ContentDigest;
     }>
   | Readonly<{
       kind: "recoverable_restart" | "continuation";
@@ -1467,10 +1489,15 @@ type Publication<ProductKind extends string, ProductRef extends OpaqueRef<string
       productEventRef: ProductEventRef;
     }>;
 
+type AppliedPublication<ProductKind extends string, ProductRef extends OpaqueRef<string>> = Extract<
+  Publication<ProductKind, ProductRef>,
+  { action: "applied" }
+>;
+
 export type ConversationPublication = Publication<"conversation", ConversationRef>;
 export type InputRequestPublication = Publication<"input_request", InputRequestRef>;
 export type ArtifactPublication = Publication<"artifact", ArtifactRef>;
-export type OutcomeSubmissionPublication = Publication<"outcome_submission", OutcomeSubmissionRef>;
+export type OutcomeSubmissionPublication = AppliedPublication<"outcome_submission", OutcomeSubmissionRef>;
 type TerminalPublication<ProductKind extends string> = Readonly<{
   action: "applied";
   productKind: ProductKind;
@@ -1701,8 +1728,8 @@ export type TrustedDurableStateHead = Readonly<{
 export type DurableAcceptedProductBinding =
   | Readonly<{
       action: "proposal";
-      productKind: AnyProductPublication["productKind"];
-      productRef: AnyProductPublication["productRef"];
+      productKind: "conversation" | "input_request" | "artifact";
+      productRef: ConversationRef | InputRequestRef | ArtifactRef;
       operationAttemptRef: OperationAttemptRef;
     }>
   | Readonly<{
@@ -1736,10 +1763,15 @@ export type DurableAcceptedEvent = Readonly<{
   productBinding?: DurableAcceptedProductBinding;
 }>;
 
-export type TrustedHumanInputAnswer = Readonly<{
+export type TrustedHumanAnswerResponderPrincipal = Readonly<{
+  kind: "human_user" | "external_integration";
+  planePrincipalId: ActorRef;
+}>;
+
+export type TrustedHumanInputAnswerFact = Readonly<{
   answerEventRef: EventRef;
   inputRequestRef: InputRequestRef;
-  responderPrincipalRef: ResponderPrincipalRef;
+  responderPrincipal: TrustedHumanAnswerResponderPrincipal;
   workspaceRef: WorkspaceRef;
   runId: RunId;
   authorizationReceiptRef: AuthorizationReceiptRef;
@@ -1749,6 +1781,16 @@ export type TrustedHumanInputAnswer = Readonly<{
   auditReceiptRef: AuditReceiptRef;
   correlationId: CorrelationId;
   causationRef: CausationRef;
+  payloadDigest: ContentDigest;
+}>;
+
+export type TrustedHumanInputAnswer = TrustedHumanInputAnswerFact &
+  Readonly<{
+    answerFactDigest: ContentDigest;
+  }>;
+
+export type TrustedHumanAnswerHead = Readonly<{
+  answerFactDigest: ContentDigest;
 }>;
 
 export type DurableAcceptedHumanInputAnswer = TrustedHumanInputAnswer;
@@ -1837,6 +1879,7 @@ export type RuntimeVerificationFacts = Readonly<{
   cancellation: TrustedCancellationVerification;
   checkpoint?: TrustedCheckpointVerification;
   humanInputAnswer?: TrustedHumanInputAnswer;
+  humanInputAnswerHead?: TrustedHumanAnswerHead;
   previousRemainingBudget?: RuntimeBudget;
   publicationReceipts: readonly TrustedPublicationReceipt[];
 }>;
@@ -2191,11 +2234,23 @@ function parseDurablePendingInput(value: unknown, path: string): DurablePendingI
   };
 }
 
+function parseTrustedHumanAnswerResponderPrincipal(value: unknown, path: string): TrustedHumanAnswerResponderPrincipal {
+  const object = requireRecord(value, path, ["kind", "planePrincipalId"]);
+  const kinds = ["human_user", "external_integration"] as const;
+  if (!kinds.includes(object.kind as (typeof kinds)[number])) {
+    throw new ContractParseError(`${path}.kind`, "must identify a human user or external integration");
+  }
+  return {
+    kind: object.kind as TrustedHumanAnswerResponderPrincipal["kind"],
+    planePrincipalId: parseRef(object.planePrincipalId, `${path}.planePrincipalId`, parseActorRef),
+  };
+}
+
 function parseDurableHumanInputAnswer(value: unknown, path: string): DurableAcceptedHumanInputAnswer {
   const object = requireRecord(value, path, [
     "answerEventRef",
     "inputRequestRef",
-    "responderPrincipalRef",
+    "responderPrincipal",
     "workspaceRef",
     "runId",
     "authorizationReceiptRef",
@@ -2205,14 +2260,15 @@ function parseDurableHumanInputAnswer(value: unknown, path: string): DurableAcce
     "auditReceiptRef",
     "correlationId",
     "causationRef",
+    "payloadDigest",
+    "answerFactDigest",
   ]);
   return {
     answerEventRef: parseRef(object.answerEventRef, `${path}.answerEventRef`, parseEventRef),
     inputRequestRef: parseRef(object.inputRequestRef, `${path}.inputRequestRef`, parseInputRequestRef),
-    responderPrincipalRef: parseRef(
-      object.responderPrincipalRef,
-      `${path}.responderPrincipalRef`,
-      parseResponderPrincipalRef
+    responderPrincipal: parseTrustedHumanAnswerResponderPrincipal(
+      object.responderPrincipal,
+      `${path}.responderPrincipal`
     ),
     workspaceRef: parseRef(object.workspaceRef, `${path}.workspaceRef`, parseWorkspaceRef),
     runId: parseRef(object.runId, `${path}.runId`, parseRunId),
@@ -2231,6 +2287,12 @@ function parseDurableHumanInputAnswer(value: unknown, path: string): DurableAcce
     auditReceiptRef: parseRef(object.auditReceiptRef, `${path}.auditReceiptRef`, parseAuditReceiptRef),
     correlationId: parseRef(object.correlationId, `${path}.correlationId`, parseCorrelationId),
     causationRef: parseRef(object.causationRef, `${path}.causationRef`, parseCausationRef),
+    payloadDigest: parseDigest(object.payloadDigest, `${path}.payloadDigest`, parseContentDigest) as ContentDigest,
+    answerFactDigest: parseDigest(
+      object.answerFactDigest,
+      `${path}.answerFactDigest`,
+      parseContentDigest
+    ) as ContentDigest,
   };
 }
 
@@ -2242,6 +2304,14 @@ function requireDurableConsistency(condition: boolean, path: string, message: st
 
 function sameJson(left: unknown, right: unknown): boolean {
   return canonicalizeJson(left) === canonicalizeJson(right);
+}
+
+export function computeTrustedHumanInputAnswerDigest(
+  answer: TrustedHumanInputAnswerFact | TrustedHumanInputAnswer
+): ContentDigest {
+  const fact =
+    "answerFactDigest" in answer ? (({ answerFactDigest: _answerFactDigest, ...content }) => content)(answer) : answer;
+  return createContentDigest(sha256(canonicalizeJson(fact)));
 }
 
 type RuntimeDurableStateContent = Omit<RuntimeDurableStateShape, "stateDigest">;
@@ -2269,7 +2339,7 @@ export function createInitialRuntimeDurableState(binding: RuntimeDurableStateBin
     binding,
     state: "queued",
     revision: 0,
-    lastAcceptedSequence: -1,
+    lastAcceptedSequence: 0,
     acceptedEvents: [],
     acceptedHumanInputAnswers: [],
     acceptedExits: [],
@@ -2326,9 +2396,17 @@ function validateRuntimeDurableStateConsistency(state: RuntimeDurableStateShape,
   );
   if (state.revision === 0) {
     requireDurableConsistency(
-      state.previousRevision === undefined && state.previousStateDigest === undefined,
-      `${path}.previousRevision`,
-      "must be absent on the explicit initial revision"
+      state.state === "queued" &&
+        state.previousRevision === undefined &&
+        state.previousStateDigest === undefined &&
+        state.lastAcceptedSequence === 0 &&
+        state.acceptedEvents.length === 0 &&
+        state.acceptedHumanInputAnswers.length === 0 &&
+        state.acceptedExits.length === 0 &&
+        state.terminal === undefined &&
+        state.pendingInput === undefined,
+      `${path}`,
+      "revision zero is reserved for the canonical empty queued genesis state"
     );
   } else {
     requireDurableConsistency(
@@ -2340,7 +2418,7 @@ function validateRuntimeDurableStateConsistency(state: RuntimeDurableStateShape,
   const eventIds = new Set<string>();
   const eventKeys = new Set<string>();
   const productKeys = new Set<string>();
-  let previousSequence = -1;
+  let previousSequence = state.acceptedEvents.length === 0 ? 0 : -1;
   for (const [index, event] of state.acceptedEvents.entries()) {
     requireDurableConsistency(
       !eventIds.has(event.eventId),
@@ -2430,9 +2508,14 @@ function validateRuntimeDurableStateConsistency(state: RuntimeDurableStateShape,
       "must bind to the durable workspace and run"
     );
     requireDurableConsistency(
-      String(answer.responderPrincipalRef) !== String(state.binding.actorRef),
-      `${path}.acceptedHumanInputAnswers[${index}].responderPrincipalRef`,
+      answer.responderPrincipal.planePrincipalId !== state.binding.actorRef,
+      `${path}.acceptedHumanInputAnswers[${index}].responderPrincipal.planePrincipalId`,
       "must remain separate from the Agent actor"
+    );
+    requireDurableConsistency(
+      computeTrustedHumanInputAnswerDigest(answer) === answer.answerFactDigest,
+      `${path}.acceptedHumanInputAnswers[${index}].answerFactDigest`,
+      "must match the canonical complete answer fact"
     );
     requireDurableConsistency(
       !answerEventIds.has(answer.answerEventRef),
@@ -2537,9 +2620,9 @@ function validateRuntimeDurableStateConsistency(state: RuntimeDurableStateShape,
         "is forbidden while queued"
       );
       requireDurableConsistency(
-        state.lastAcceptedSequence === -1,
+        state.lastAcceptedSequence === 0,
         `${path}.lastAcceptedSequence`,
-        "must remain -1 while queued"
+        "must remain 0 while queued"
       );
       requireDurableConsistency(
         state.acceptedHumanInputAnswers.length === 0,
@@ -2786,9 +2869,9 @@ export function parseRuntimeDurableState(value: unknown): RuntimeDurableState {
   if (
     typeof object.lastAcceptedSequence !== "number" ||
     !Number.isInteger(object.lastAcceptedSequence) ||
-    object.lastAcceptedSequence < -1
+    object.lastAcceptedSequence < 0
   ) {
-    throw new ContractParseError("RuntimeDurableState.lastAcceptedSequence", "must be -1 or a non-negative integer");
+    throw new ContractParseError("RuntimeDurableState.lastAcceptedSequence", "must be a non-negative integer");
   }
   const revision = parseInteger(object.revision, "RuntimeDurableState.revision");
   if (Object.hasOwn(object, "previousRevision") !== Object.hasOwn(object, "previousStateDigest")) {
@@ -3220,12 +3303,12 @@ function hasAcceptedTriggerEvent(trigger: InvocationTrigger, acceptedEvents: rea
 }
 
 function validateLifecycleFacts(lifecycle: RuntimeDurableState, errors: RuntimeVerificationError[]) {
-  if (!Number.isInteger(lifecycle.lastAcceptedSequence) || lifecycle.lastAcceptedSequence < -1) {
+  if (!Number.isInteger(lifecycle.lastAcceptedSequence) || lifecycle.lastAcceptedSequence < 0) {
     addVerificationError(
       errors,
       "authority_facts_missing",
       "trusted.lifecycle.lastAcceptedSequence",
-      "Durable sequence must start at -1 or a non-negative integer"
+      "Durable sequence must be a non-negative integer"
     );
   }
   const eventIds = new Set<string>();
@@ -3389,32 +3472,37 @@ function verifyTrustedHumanInputAnswer(
   lifecycle: RuntimeDurableState,
   events: readonly RuntimeEvent[],
   fact: TrustedHumanInputAnswer | undefined,
+  head: TrustedHumanAnswerHead | undefined,
   errors: RuntimeVerificationError[]
 ): void {
   if (invocation.trigger.kind !== "human_input") {
-    if (fact !== undefined) {
+    if (fact !== undefined || head !== undefined) {
       addVerificationError(
         errors,
         "human_input_answer_mismatch",
         "trusted.humanInputAnswer",
-        "A trusted human answer fact is valid only for a human-input invocation"
+        "A trusted human answer fact and head are valid only for a human-input invocation"
       );
     }
     return;
   }
-  if (fact === undefined) {
+  if (fact === undefined || head === undefined) {
     addVerificationError(
       errors,
       "human_input_answer_mismatch",
       "trusted.humanInputAnswer",
-      "Human-input invocations require one trusted Plane answer fact"
+      "Human-input invocations require one trusted Plane answer fact and its independent Plane answer head"
     );
     return;
   }
+  let parsedResponderPrincipal: TrustedHumanAnswerResponderPrincipal | undefined;
   try {
     parseRef(fact.answerEventRef, "trusted.humanInputAnswer.answerEventRef", parseEventRef);
     parseRef(fact.inputRequestRef, "trusted.humanInputAnswer.inputRequestRef", parseInputRequestRef);
-    parseRef(fact.responderPrincipalRef, "trusted.humanInputAnswer.responderPrincipalRef", parseResponderPrincipalRef);
+    parsedResponderPrincipal = parseTrustedHumanAnswerResponderPrincipal(
+      fact.responderPrincipal,
+      "trusted.humanInputAnswer.responderPrincipal"
+    );
     parseRef(fact.workspaceRef, "trusted.humanInputAnswer.workspaceRef", parseWorkspaceRef);
     parseRef(fact.runId, "trusted.humanInputAnswer.runId", parseRunId);
     parseRef(
@@ -3428,6 +3516,9 @@ function verifyTrustedHumanInputAnswer(
     parseRef(fact.auditReceiptRef, "trusted.humanInputAnswer.auditReceiptRef", parseAuditReceiptRef);
     parseRef(fact.correlationId, "trusted.humanInputAnswer.correlationId", parseCorrelationId);
     parseRef(fact.causationRef, "trusted.humanInputAnswer.causationRef", parseCausationRef);
+    parseDigest(fact.payloadDigest, "trusted.humanInputAnswer.payloadDigest", parseContentDigest);
+    parseDigest(fact.answerFactDigest, "trusted.humanInputAnswer.answerFactDigest", parseContentDigest);
+    parseDigest(head.answerFactDigest, "trusted.humanInputAnswerHead.answerFactDigest", parseContentDigest);
   } catch {
     addVerificationError(
       errors,
@@ -3446,13 +3537,17 @@ function verifyTrustedHumanInputAnswer(
     fact.inputRequestRef === pending.inputRequestRef &&
     fact.correlationId === invocation.correlationId &&
     fact.causationRef === invocation.causationRef &&
-    String(fact.responderPrincipalRef) !== String(snapshot.actorRef);
+    parsedResponderPrincipal !== undefined &&
+    parsedResponderPrincipal.planePrincipalId !== snapshot.actorRef &&
+    fact.answerFactDigest === head.answerFactDigest &&
+    fact.answerFactDigest === invocation.trigger.answerFactDigest &&
+    computeTrustedHumanInputAnswerDigest(fact) === head.answerFactDigest;
   if (!exactBinding) {
     addVerificationError(
       errors,
       "human_input_answer_mismatch",
       "trusted.humanInputAnswer",
-      "The trusted Plane answer must bind to the current pending request, run, correlation, causation, and a separate responder principal"
+      "The trusted Plane answer must bind to the current pending request, run, correlation, causation, separate responder principal, and independent answer head"
     );
   }
   if (events.some((event) => event.eventId === fact.answerEventRef)) {
@@ -3546,7 +3641,15 @@ export function verifyRuntimeExecution(input: RuntimeVerificationInput): Runtime
       "Durable state must bind to the exact workspace, actor, profile, run, and snapshot"
     );
   }
-  verifyTrustedHumanInputAnswer(snapshot, invocation, trusted.lifecycle, events, trusted.humanInputAnswer, errors);
+  verifyTrustedHumanInputAnswer(
+    snapshot,
+    invocation,
+    trusted.lifecycle,
+    events,
+    trusted.humanInputAnswer,
+    trusted.humanInputAnswerHead,
+    errors
+  );
   const expectedContractDigests = contractDigestsFromManifest(manifest);
   if (JSON.stringify(snapshot.contractDigests) !== JSON.stringify(expectedContractDigests)) {
     addVerificationError(
@@ -3708,7 +3811,7 @@ export function verifyRuntimeExecution(input: RuntimeVerificationInput): Runtime
   const seenEventIds = new Set<string>();
   const seenIdempotencyKeys = new Set<string>();
   const newEvents: DurableAcceptedEvent[] = [];
-  let expectedSequence = trusted.lifecycle.lastAcceptedSequence + 1;
+  let expectedSequence = trusted.lifecycle.revision === 0 ? 0 : trusted.lifecycle.lastAcceptedSequence + 1;
   let allEventsReplay = true;
   const usedReceiptIndexes = new Set<number>();
   prevalidatePublicationReceipts(trusted.publicationReceipts, errors, historicalProductKeys, replayableProductKeys);

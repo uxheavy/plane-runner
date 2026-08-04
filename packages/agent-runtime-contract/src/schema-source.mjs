@@ -44,7 +44,6 @@ const definitions = {
     pattern: namespacedPattern("application-service"),
   }),
   gatewayReceiptRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("gateway-receipt") }),
-  responderPrincipalRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("responder") }),
   authorizationReceiptRef: stringWithBytes(byteConstraints.reference, {
     pattern: namespacedPattern("authorization-receipt"),
   }),
@@ -158,56 +157,71 @@ const definitions = {
       action: { const: "observation_only" },
     },
   },
+  trustedHumanAnswerResponderPrincipal: {
+    type: "object",
+    additionalProperties: false,
+    required: ["kind", "planePrincipalId"],
+    properties: {
+      kind: { enum: ["human_user", "external_integration"] },
+      planePrincipalId: ref("actorRef"),
+    },
+  },
 };
 
-const publicationDefinition = (productKind, productRef) => ({
-  oneOf: [
-    {
-      type: "object",
-      additionalProperties: false,
-      required: ["action", "productKind", "productRef", "operationAttemptRef"],
-      properties: {
-        action: { const: "proposal" },
-        productKind: { const: productKind },
-        productRef: ref(productRef),
-        operationAttemptRef: ref("operationAttemptRef"),
-      },
+const publicationDefinition = (productKind, productRef, appliedOnly = false) => {
+  const applied = {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "action",
+      "productKind",
+      "productRef",
+      "operationAttemptRef",
+      "operationRef",
+      "applicationServiceRef",
+      "gatewayReceiptRef",
+      "receiptRef",
+      "auditReceiptRef",
+      "productEventRef",
+    ],
+    properties: {
+      action: { const: "applied" },
+      productKind: { const: productKind },
+      productRef: ref(productRef),
+      operationAttemptRef: ref("operationAttemptRef"),
+      operationRef: ref("operationRef"),
+      applicationServiceRef: ref("applicationServiceRef"),
+      gatewayReceiptRef: ref("gatewayReceiptRef"),
+      receiptRef: ref("receiptRef"),
+      auditReceiptRef: ref("auditReceiptRef"),
+      productEventRef: ref("productEventRef"),
     },
-    {
-      type: "object",
-      additionalProperties: false,
-      required: [
-        "action",
-        "productKind",
-        "productRef",
-        "operationAttemptRef",
-        "operationRef",
-        "applicationServiceRef",
-        "gatewayReceiptRef",
-        "receiptRef",
-        "auditReceiptRef",
-        "productEventRef",
-      ],
-      properties: {
-        action: { const: "applied" },
-        productKind: { const: productKind },
-        productRef: ref(productRef),
-        operationAttemptRef: ref("operationAttemptRef"),
-        operationRef: ref("operationRef"),
-        applicationServiceRef: ref("applicationServiceRef"),
-        gatewayReceiptRef: ref("gatewayReceiptRef"),
-        receiptRef: ref("receiptRef"),
-        auditReceiptRef: ref("auditReceiptRef"),
-        productEventRef: ref("productEventRef"),
+  };
+  if (appliedOnly) {
+    return applied;
+  }
+  return {
+    oneOf: [
+      {
+        type: "object",
+        additionalProperties: false,
+        required: ["action", "productKind", "productRef", "operationAttemptRef"],
+        properties: {
+          action: { const: "proposal" },
+          productKind: { const: productKind },
+          productRef: ref(productRef),
+          operationAttemptRef: ref("operationAttemptRef"),
+        },
       },
-    },
-  ],
-});
+      applied,
+    ],
+  };
+};
 
 definitions.conversationPublication = publicationDefinition("conversation", "conversationRef");
 definitions.inputRequestPublication = publicationDefinition("input_request", "inputRequestRef");
 definitions.artifactPublication = publicationDefinition("artifact", "artifactRef");
-definitions.outcomeSubmissionPublication = publicationDefinition("outcome_submission", "outcomeSubmissionRef");
+definitions.outcomeSubmissionPublication = publicationDefinition("outcome_submission", "outcomeSubmissionRef", true);
 const terminalPublicationDefinition = (productKind, includeCancellationRef = false) => ({
   type: "object",
   additionalProperties: false,
@@ -443,8 +457,9 @@ const invocationTrigger = {
         kind: { const: "human_input" },
         eventRef: ref("eventRef"),
         pendingInputEventRef: ref("eventRef"),
+        answerFactDigest: ref("contentDigest"),
       },
-      required: ["kind", "eventRef", "pendingInputEventRef"],
+      required: ["kind", "eventRef", "pendingInputEventRef", "answerFactDigest"],
     },
     {
       type: "object",
@@ -840,7 +855,7 @@ const durableHumanInputAnswer = {
   required: [
     "answerEventRef",
     "inputRequestRef",
-    "responderPrincipalRef",
+    "responderPrincipal",
     "workspaceRef",
     "runId",
     "authorizationReceiptRef",
@@ -850,11 +865,13 @@ const durableHumanInputAnswer = {
     "auditReceiptRef",
     "correlationId",
     "causationRef",
+    "payloadDigest",
+    "answerFactDigest",
   ],
   properties: {
     answerEventRef: ref("eventRef"),
     inputRequestRef: ref("inputRequestRef"),
-    responderPrincipalRef: ref("responderPrincipalRef"),
+    responderPrincipal: ref("trustedHumanAnswerResponderPrincipal"),
     workspaceRef: ref("workspaceRef"),
     runId: ref("runId"),
     authorizationReceiptRef: ref("authorizationReceiptRef"),
@@ -864,6 +881,8 @@ const durableHumanInputAnswer = {
     auditReceiptRef: ref("auditReceiptRef"),
     correlationId: ref("correlationId"),
     causationRef: ref("causationRef"),
+    payloadDigest: ref("contentDigest"),
+    answerFactDigest: ref("contentDigest"),
   },
 };
 
@@ -971,7 +990,7 @@ const runtimeDurableState = objectSchema(
     stateDigest: ref("contentDigest"),
     previousRevision: { type: "integer", minimum: 0, maximum: 2147483647 },
     previousStateDigest: ref("contentDigest"),
-    lastAcceptedSequence: { type: "integer", minimum: -1 },
+    lastAcceptedSequence: { type: "integer", minimum: 0 },
     acceptedEvents: { type: "array", maxItems: 4096, items: durableAcceptedEvent },
     acceptedHumanInputAnswers: { type: "array", maxItems: 256, items: durableHumanInputAnswer },
     acceptedExits: { type: "array", maxItems: 256, items: durableAcceptedExit },
@@ -979,20 +998,50 @@ const runtimeDurableState = objectSchema(
     pendingInput: durablePendingInput,
   },
   {
-    oneOf: [
+    allOf: [
       {
-        properties: { state: { enum: ["queued", "running"] } },
-        not: { anyOf: [{ required: ["terminal"] }, { required: ["pendingInput"] }] },
+        oneOf: [
+          {
+            properties: {
+              state: { const: "queued" },
+              revision: { const: 0 },
+              lastAcceptedSequence: { const: 0 },
+              acceptedEvents: { maxItems: 0 },
+              acceptedHumanInputAnswers: { maxItems: 0 },
+              acceptedExits: { maxItems: 0 },
+            },
+            not: {
+              anyOf: [
+                { required: ["previousRevision"] },
+                { required: ["previousStateDigest"] },
+                { required: ["terminal"] },
+                { required: ["pendingInput"] },
+              ],
+            },
+          },
+          {
+            properties: { revision: { minimum: 1 } },
+            required: ["previousRevision", "previousStateDigest"],
+          },
+        ],
       },
       {
-        properties: { state: { const: "waiting_for_input" } },
-        required: ["pendingInput"],
-        not: { required: ["terminal"] },
-      },
-      {
-        properties: { state: { enum: ["succeeded", "failed", "blocked", "cancelled"] } },
-        required: ["terminal"],
-        not: { required: ["pendingInput"] },
+        oneOf: [
+          {
+            properties: { state: { enum: ["queued", "running"] } },
+            not: { anyOf: [{ required: ["terminal"] }, { required: ["pendingInput"] }] },
+          },
+          {
+            properties: { state: { const: "waiting_for_input" } },
+            required: ["pendingInput"],
+            not: { required: ["terminal"] },
+          },
+          {
+            properties: { state: { enum: ["succeeded", "failed", "blocked", "cancelled"] } },
+            required: ["terminal"],
+            not: { required: ["pendingInput"] },
+          },
+        ],
       },
     ],
   }

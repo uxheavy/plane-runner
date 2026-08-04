@@ -7,11 +7,11 @@
     },
     "invocation-envelope": {
       "filename": "invocation-envelope.schema.json",
-      "sha256": "da1b29ecbe18491fc5b6365187d171171d290573c5b8329af1fd38017dc63498"
+      "sha256": "b7a15d74406f1624cdb7cd95b42edfd1ffee596abe57e4f00ed60e2e23ded995"
     },
     "runtime-event": {
       "filename": "runtime-event.schema.json",
-      "sha256": "4437a6375cb8ca54b845fe79745ff9f188426d3c96ebcf0aa3a6624b42afcc5b"
+      "sha256": "fcbf67ce71fa90dd9661a8f2a739b8119c59357c8bf01afabf4fe92a13de9425"
     },
     "runtime-exit": {
       "filename": "runtime-exit.schema.json",
@@ -19,7 +19,7 @@
     },
     "runtime-durable-state": {
       "filename": "runtime-durable-state.schema.json",
-      "sha256": "99611586cc801fa760007d54d580d27c8aadc2bcd0f05eb837f365fd25fda0a7"
+      "sha256": "9fe8d67c9a6154a23e399f2299dfe512b2c38a0656056ddfe54c80e0fc1ee006"
     }
   }
 }

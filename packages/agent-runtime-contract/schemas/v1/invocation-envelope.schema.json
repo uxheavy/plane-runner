@@ -63,9 +63,12 @@
             },
             "pendingInputEventRef": {
               "$ref": "#/$defs/eventRef"
+            },
+            "answerFactDigest": {
+              "$ref": "#/$defs/contentDigest"
             }
           },
-          "required": ["kind", "eventRef", "pendingInputEventRef"]
+          "required": ["kind", "eventRef", "pendingInputEventRef", "answerFactDigest"]
         },
         {
           "type": "object",
@@ -155,6 +158,13 @@
       "maxLength": 128,
       "x-utf8ByteMax": 128,
       "pattern": "^checkpoint:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "contentDigest": {
+      "type": "string",
+      "minLength": 72,
+      "maxLength": 72,
+      "x-utf8ByteMax": 72,
+      "pattern": "^content:[a-f0-9]{64}$"
     },
     "correlationId": {
       "type": "string",

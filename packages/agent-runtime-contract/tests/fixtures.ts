@@ -26,12 +26,12 @@ import {
   createOutcomeSubmissionRef,
   createProductEventRef,
   createProfileVersionRef,
-  createResponderPrincipalRef,
   createReceiptRef,
   createRunId,
   createRunSnapshot,
   createTargetRef,
   createWorkspaceRef,
+  computeTrustedHumanInputAnswerDigest,
   parseContractManifest,
   parseInvocationEnvelope,
   parseRuntimeEvent,
@@ -282,20 +282,24 @@ export const trustedHumanInputAnswer = (
   invocation: InvocationEnvelope,
   requestId = "input-request-1",
   answerEventId = "human-answer-1"
-): TrustedHumanInputAnswer => ({
-  answerEventRef: createEventRef(answerEventId),
-  inputRequestRef: createInputRequestRef(requestId),
-  responderPrincipalRef: createResponderPrincipalRef("human-1"),
-  workspaceRef,
-  runId,
-  authorizationReceiptRef: createAuthorizationReceiptRef("authorization-" + answerEventId),
-  applicationServiceRef: createApplicationServiceRef("answer-" + answerEventId),
-  gatewayReceiptRef: createGatewayReceiptRef("answer-" + answerEventId),
-  receiptRef: createReceiptRef("answer-" + answerEventId),
-  auditReceiptRef: createAuditReceiptRef("answer-" + answerEventId),
-  correlationId: invocation.correlationId,
-  causationRef: invocation.causationRef,
-});
+): TrustedHumanInputAnswer => {
+  const fact = {
+    answerEventRef: createEventRef(answerEventId),
+    inputRequestRef: createInputRequestRef(requestId),
+    responderPrincipal: { kind: "human_user" as const, planePrincipalId: createActorRef("human-1") },
+    workspaceRef,
+    runId,
+    authorizationReceiptRef: createAuthorizationReceiptRef("authorization-" + answerEventId),
+    applicationServiceRef: createApplicationServiceRef("answer-" + answerEventId),
+    gatewayReceiptRef: createGatewayReceiptRef("answer-" + answerEventId),
+    receiptRef: createReceiptRef("answer-" + answerEventId),
+    auditReceiptRef: createAuditReceiptRef("answer-" + answerEventId),
+    correlationId: invocation.correlationId,
+    causationRef: invocation.causationRef,
+    payloadDigest: contentDigest("a"),
+  } satisfies Omit<TrustedHumanInputAnswer, "answerFactDigest">;
+  return { ...fact, answerFactDigest: computeTrustedHumanInputAnswerDigest(fact) };
+};
 
 export const appliedOutcomeBody = (suffix = "outcome-1"): RuntimeEventBody => ({
   kind: "outcome_submission_observed",
@@ -311,17 +315,6 @@ export const appliedOutcomeBody = (suffix = "outcome-1"): RuntimeEventBody => ({
     receiptRef: createReceiptRef("receipt-" + suffix),
     auditReceiptRef: createAuditReceiptRef("audit-" + suffix),
     productEventRef: createProductEventRef("product-event-" + suffix),
-  },
-});
-
-export const proposalOutcomeBody = (): RuntimeEventBody => ({
-  kind: "outcome_submission_observed",
-  payload: inlinePayload("The proposed outcome."),
-  publication: {
-    action: "proposal",
-    productKind: "outcome_submission",
-    productRef: createOutcomeSubmissionRef("outcome-proposal"),
-    operationAttemptRef: createOperationAttemptRef("operation-attempt-outcome-proposal"),
   },
 });
 

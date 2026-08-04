@@ -796,75 +796,52 @@
       "pattern": "^operation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
     },
     "outcomeSubmissionPublication": {
-      "oneOf": [
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["action", "productKind", "productRef", "operationAttemptRef"],
-          "properties": {
-            "action": {
-              "const": "proposal"
-            },
-            "productKind": {
-              "const": "outcome_submission"
-            },
-            "productRef": {
-              "$ref": "#/$defs/outcomeSubmissionRef"
-            },
-            "operationAttemptRef": {
-              "$ref": "#/$defs/operationAttemptRef"
-            }
-          }
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "productKind",
+        "productRef",
+        "operationAttemptRef",
+        "operationRef",
+        "applicationServiceRef",
+        "gatewayReceiptRef",
+        "receiptRef",
+        "auditReceiptRef",
+        "productEventRef"
+      ],
+      "properties": {
+        "action": {
+          "const": "applied"
         },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "action",
-            "productKind",
-            "productRef",
-            "operationAttemptRef",
-            "operationRef",
-            "applicationServiceRef",
-            "gatewayReceiptRef",
-            "receiptRef",
-            "auditReceiptRef",
-            "productEventRef"
-          ],
-          "properties": {
-            "action": {
-              "const": "applied"
-            },
-            "productKind": {
-              "const": "outcome_submission"
-            },
-            "productRef": {
-              "$ref": "#/$defs/outcomeSubmissionRef"
-            },
-            "operationAttemptRef": {
-              "$ref": "#/$defs/operationAttemptRef"
-            },
-            "operationRef": {
-              "$ref": "#/$defs/operationRef"
-            },
-            "applicationServiceRef": {
-              "$ref": "#/$defs/applicationServiceRef"
-            },
-            "gatewayReceiptRef": {
-              "$ref": "#/$defs/gatewayReceiptRef"
-            },
-            "receiptRef": {
-              "$ref": "#/$defs/receiptRef"
-            },
-            "auditReceiptRef": {
-              "$ref": "#/$defs/auditReceiptRef"
-            },
-            "productEventRef": {
-              "$ref": "#/$defs/productEventRef"
-            }
-          }
+        "productKind": {
+          "const": "outcome_submission"
+        },
+        "productRef": {
+          "$ref": "#/$defs/outcomeSubmissionRef"
+        },
+        "operationAttemptRef": {
+          "$ref": "#/$defs/operationAttemptRef"
+        },
+        "operationRef": {
+          "$ref": "#/$defs/operationRef"
+        },
+        "applicationServiceRef": {
+          "$ref": "#/$defs/applicationServiceRef"
+        },
+        "gatewayReceiptRef": {
+          "$ref": "#/$defs/gatewayReceiptRef"
+        },
+        "receiptRef": {
+          "$ref": "#/$defs/receiptRef"
+        },
+        "auditReceiptRef": {
+          "$ref": "#/$defs/auditReceiptRef"
+        },
+        "productEventRef": {
+          "$ref": "#/$defs/productEventRef"
         }
-      ]
+      }
     },
     "outcomeSubmissionRef": {
       "type": "string",
