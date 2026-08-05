@@ -10,8 +10,8 @@ from plane.db.operation_gateway_audit_restore import verify_audit_catalog_snapsh
 
 
 ROLE_NAME = re.compile(r"^[a-z_][a-z0-9_$]{0,62}$")
-CATALOG_SNAPSHOT_TABLE = "plane_0126_audit_catalog_snapshot"
-CATALOG_SNAPSHOT_BINDING_TABLE = "plane_0126_audit_catalog_snapshot_binding"
+CATALOG_SNAPSHOT_TABLE = "plane_0129_audit_catalog_snapshot"
+CATALOG_SNAPSHOT_BINDING_TABLE = "plane_0129_audit_catalog_snapshot_binding"
 
 
 def _role_identifier(connection, value: str) -> str:

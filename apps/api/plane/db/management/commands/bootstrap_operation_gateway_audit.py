@@ -141,14 +141,14 @@ class Command(BaseCommand):
     def _drop_reversed_snapshot_if_migration_is_pending(self, cursor):
         schema_name = settings.PLANE_AUDIT_SCHEMA
         schema_ident = self._quote(schema_name)
-        snapshot_ident = self._quote("plane_0126_audit_catalog_snapshot")
-        binding_ident = self._quote("plane_0126_audit_catalog_snapshot_binding")
+        snapshot_ident = self._quote("plane_0129_audit_catalog_snapshot")
+        binding_ident = self._quote("plane_0129_audit_catalog_snapshot_binding")
         cursor.execute("SELECT to_regclass(%s)", ["django_migrations"])
         if cursor.fetchone()[0] is None:
             return
         cursor.execute(
             "SELECT 1 FROM django_migrations WHERE app = 'db' AND name = %s",
-            ["0126_operationgateway_delivery_and_audit_roles"],
+            ["0129_operationgateway_delivery_and_audit_roles"],
         )
         if cursor.fetchone() is None:
             cursor.execute(f"DROP TABLE IF EXISTS {schema_ident}.{binding_ident}")
@@ -315,8 +315,8 @@ class Command(BaseCommand):
             """,
             [
                 f"{settings.PLANE_AUDIT_SCHEMA}.{AUTHORITY_MARKER_TABLE}",
-                f"{settings.PLANE_AUDIT_SCHEMA}.plane_0126_audit_catalog_snapshot",
-                f"{settings.PLANE_AUDIT_SCHEMA}.plane_0126_audit_catalog_snapshot_binding",
+                f"{settings.PLANE_AUDIT_SCHEMA}.plane_0129_audit_catalog_snapshot",
+                f"{settings.PLANE_AUDIT_SCHEMA}.plane_0129_audit_catalog_snapshot_binding",
                 f"{settings.PLANE_AUDIT_SCHEMA}.operation_gateway_audit_append_only()",
             ],
         )

@@ -187,14 +187,14 @@ class Command(BaseCommand):
             cursor.execute(
                 "SELECT to_regclass(%s), to_regclass(%s)",
                 [
-                    f"{schema_name}.plane_0126_audit_catalog_snapshot",
-                    f"{schema_name}.plane_0126_audit_catalog_snapshot_binding",
+                    f"{schema_name}.plane_0129_audit_catalog_snapshot",
+                    f"{schema_name}.plane_0129_audit_catalog_snapshot_binding",
                 ],
             )
             snapshot_regclass, binding_regclass = cursor.fetchone()
             if snapshot_regclass is not None or binding_regclass is not None:
                 if snapshot_regclass is None or binding_regclass is None:
-                    raise CommandError("The 0126 audit catalog snapshot binding is incomplete")
+                    raise CommandError("The 0129 audit catalog snapshot binding is incomplete")
                 for relation in (snapshot_regclass, binding_regclass):
                     cursor.execute(
                         """
@@ -230,8 +230,8 @@ class Command(BaseCommand):
                     )
                     relation_boundary = cursor.fetchone()
                     if relation_boundary is None or relation_boundary[0] != provisioner_role:
-                        raise CommandError("The 0126 audit snapshot objects are not provisioner-owned")
+                        raise CommandError("The 0129 audit snapshot objects are not provisioner-owned")
                     if relation_boundary[1:] != (True, False, False, False, False, False, False):
-                        raise CommandError("The 0126 audit snapshot objects expose more than migrator reads")
+                        raise CommandError("The 0129 audit snapshot objects expose more than migrator reads")
 
         self.stdout.write(self.style.SUCCESS("Provisioned migration boundary verified"))

@@ -13,9 +13,9 @@ from django.db import migrations, models
 
 ROLE_NAME = re.compile(r"^[a-z_][a-z0-9_$]{0,62}$")
 PUBLICATION_NAMESPACE = uuid.UUID("8a1b4fd8-49a5-54ad-a49e-7f2e0c1a3f1c")
-REVERSE_MARKER = "__plane_0126_reverse__"
-CATALOG_SNAPSHOT_TABLE = "plane_0126_audit_catalog_snapshot"
-CATALOG_SNAPSHOT_BINDING_TABLE = "plane_0126_audit_catalog_snapshot_binding"
+REVERSE_MARKER = "__plane_0129_reverse__"
+CATALOG_SNAPSHOT_TABLE = "plane_0129_audit_catalog_snapshot"
+CATALOG_SNAPSHOT_BINDING_TABLE = "plane_0129_audit_catalog_snapshot_binding"
 CATALOG_SNAPSHOT_VERSION = 1
 
 CREATE_APPEND_ONLY_TRIGGERS = """
@@ -72,11 +72,11 @@ EXECUTE FUNCTION operation_gateway_audit_append_only();
 
 
 def split_legacy_webhook_intents(apps, schema_editor):
-    """Convert pre-0126 fan-out rows without claiming delivery.
+    """Convert pre-0129 fan-out rows without claiming delivery.
 
     The reverse migration stores a lossless marker in the old JSON payload. It
     is consumed here before looking at current active webhooks, so a
-    0125 -> 0126 -> 0125 -> 0126 round trip restores the original target set,
+    0128 -> 0129 -> 0128 -> 0129 round trip restores the original target set,
     durable keys, results, ambiguity, and dispatch markers.
     """
 
@@ -244,7 +244,7 @@ def _stable_publication_id(idempotency_id, target_id: str) -> uuid.UUID:
 
 
 def _legacy_state(publication) -> str:
-    """Map to 0125 without making an ambiguous dispatch runnable."""
+    """Map to 0128 without making an ambiguous dispatch runnable."""
 
     if publication.state == "succeeded" and not publication.dispatch_started:
         return "succeeded"
@@ -252,8 +252,8 @@ def _legacy_state(publication) -> str:
         return "pending"
     if publication.state == "running" and not publication.dispatch_started:
         return "running"
-    # 0125 has no outcome_unknown/retryable state. ``failed`` is the only
-    # non-runnable representation; the marker restores the exact 0126 state
+    # 0128 has no outcome_unknown/retryable state. ``failed`` is the only
+    # non-runnable representation; the marker restores the exact 0129 state
     # when the migration is applied forward again.
     return "failed"
 
@@ -296,15 +296,15 @@ def _parse_datetime(value):
 def _restore_reversed_webhook_rows(Publication, legacy_publication, marker: dict, schema_editor) -> None:
     rows = marker.get("rows")
     if not isinstance(rows, list) or not rows:
-        raise RuntimeError("Invalid 0126 reverse marker for webhook publication")
+        raise RuntimeError("Invalid 0129 reverse marker for webhook publication")
     for index, row in enumerate(rows):
         if not isinstance(row, dict):
-            raise RuntimeError("Invalid 0126 reverse marker row")
+            raise RuntimeError("Invalid 0129 reverse marker row")
         target_id = row.get("target_id")
         created_at = _parse_datetime(row.get("created_at"))
         updated_at = _parse_datetime(row.get("updated_at"))
         if created_at is None or updated_at is None:
-            raise RuntimeError("Invalid 0126 reverse marker row timestamps")
+            raise RuntimeError("Invalid 0129 reverse marker row timestamps")
         defaults = {
             "idempotency_id": uuid.UUID(row["idempotency_id"]),
             "invocation_id": uuid.UUID(row["invocation_id"]),
@@ -366,7 +366,7 @@ def _role_identity(cursor, role_name):
     cursor.execute("SELECT oid::bigint, rolname FROM pg_roles WHERE rolname = %s", [role_name])
     row = cursor.fetchone()
     if row is None:
-        raise RuntimeError(f"Missing role in the 0126 audit catalog binding: {role_name}")
+        raise RuntimeError(f"Missing role in the 0129 audit catalog binding: {role_name}")
     return {"oid": int(row[0]), "name": row[1]}
 
 
@@ -402,7 +402,7 @@ def _object_identity(cursor, schema_name, object_name, *, kind, identity_argumen
         )
     row = cursor.fetchone()
     if row is None:
-        raise RuntimeError(f"Missing object in the 0126 audit catalog binding: {schema_name}.{object_name}")
+        raise RuntimeError(f"Missing object in the 0129 audit catalog binding: {schema_name}.{object_name}")
     if kind == "table":
         oid, name, owner_oid, owner_name = row
         return {"oid": int(oid), "name": name, "owner": {"oid": int(owner_oid), "name": owner_name}}
@@ -476,7 +476,7 @@ def _capture_audit_catalog_binding(
     )
     binding_row = cursor.fetchone()
     if snapshot_row is None or binding_row is None:
-        raise RuntimeError("The 0126 audit snapshot binding objects are missing")
+        raise RuntimeError("The 0129 audit snapshot binding objects are missing")
 
     def relation_identity(row):
         oid, name, owner_oid, owner_name = row
@@ -515,7 +515,7 @@ def _capture_audit_catalog_binding(
 
 
 def _capture_audit_catalog_snapshot(connection, *, runtime_role, governance_role, migration_role):
-    """Capture the effective 0125 catalog before 0126 mutates any ACL.
+    """Capture the effective 0128 catalog before 0129 mutates any ACL.
 
     PostgreSQL exposes ACLs as catalog arrays, but replaying those arrays is a
     privileged catalog write. Store the effective grant rows instead; the
@@ -783,7 +783,7 @@ def drop_audit_catalog_snapshot(apps, schema_editor):
 
 
 def require_provisioned_reverse_state(apps, schema_editor):
-    """Reject a downgrade until the provisioner has restored the 0125 catalog."""
+    """Reject a downgrade until the provisioner has restored the 0128 catalog."""
 
     connection = schema_editor.connection
     schema_ident = connection.ops.quote_name(settings.PLANE_AUDIT_SCHEMA)
@@ -794,12 +794,12 @@ def require_provisioned_reverse_state(apps, schema_editor):
         cursor.execute(f"SELECT snapshot FROM {schema_ident}.{snapshot_ident}")
         row = cursor.fetchone()
         if row is None:
-            raise RuntimeError("The provisioner must restore the 0125 audit catalog before reverse migration")
+            raise RuntimeError("The provisioner must restore the 0128 audit catalog before reverse migration")
         snapshot = row[0]
         if isinstance(snapshot, str):
             snapshot = json.loads(snapshot)
         if not isinstance(snapshot, dict) or snapshot.get("version") != CATALOG_SNAPSHOT_VERSION:
-            raise RuntimeError("The provisioner must restore the 0125 audit catalog before reverse migration")
+            raise RuntimeError("The provisioner must restore the 0128 audit catalog before reverse migration")
         expected_objects = {
             (item["kind"], item["name"], item.get("identity_arguments")): item["owner"]
             for item in snapshot.get("objects", [])
@@ -830,14 +830,14 @@ def require_provisioned_reverse_state(apps, schema_editor):
             if key[1] in {"operation_gateway_audit", "operation_gateway_audit_append_only"}
         }
         if not expected_audit or set(expected_audit) - set(current_objects):
-            raise RuntimeError("The provisioner must restore the 0125 audit catalog before reverse migration")
+            raise RuntimeError("The provisioner must restore the 0128 audit catalog before reverse migration")
         if any(current_objects.get(key) != owner for key, owner in expected_audit.items()):
-            raise RuntimeError("The provisioner must restore the 0125 audit catalog before reverse migration")
+            raise RuntimeError("The provisioner must restore the 0128 audit catalog before reverse migration")
 
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("db", "0125_operationgateway_publications_and_audit_trigger"),
+        ("db", "0128_operationgateway_publications_and_audit_trigger"),
     ]
 
     operations = [

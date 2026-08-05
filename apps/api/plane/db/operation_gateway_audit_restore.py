@@ -1,4 +1,4 @@
-"""Restore a 0126 catalog snapshot using the authenticated provisioner."""
+"""Restore a 0129 catalog snapshot using the authenticated provisioner."""
 
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ from django.conf import settings
 
 
 ROLE_NAME = re.compile(r"^[a-z_][a-z0-9_$]{0,62}$")
-CATALOG_SNAPSHOT_TABLE = "plane_0126_audit_catalog_snapshot"
-CATALOG_SNAPSHOT_BINDING_TABLE = "plane_0126_audit_catalog_snapshot_binding"
+CATALOG_SNAPSHOT_TABLE = "plane_0129_audit_catalog_snapshot"
+CATALOG_SNAPSHOT_BINDING_TABLE = "plane_0129_audit_catalog_snapshot_binding"
 CATALOG_SNAPSHOT_VERSION = 1
 
 
@@ -38,7 +38,7 @@ def _role_identity(cursor, role_name):
     cursor.execute("SELECT oid::bigint, rolname FROM pg_roles WHERE rolname = %s", [role_name])
     row = cursor.fetchone()
     if row is None:
-        raise RuntimeError(f"Missing role in the 0126 audit catalog binding: {role_name}")
+        raise RuntimeError(f"Missing role in the 0129 audit catalog binding: {role_name}")
     return {"oid": int(row[0]), "name": row[1]}
 
 
@@ -57,7 +57,7 @@ def _relation_identity(cursor, schema_name, object_name):
     )
     row = cursor.fetchone()
     if row is None:
-        raise RuntimeError(f"Missing object in the 0126 audit catalog binding: {schema_name}.{object_name}")
+        raise RuntimeError(f"Missing object in the 0129 audit catalog binding: {schema_name}.{object_name}")
     oid, name, owner_oid, owner_name = row
     return {"oid": int(oid), "name": name, "owner": {"oid": int(owner_oid), "name": owner_name}}
 
@@ -78,7 +78,7 @@ def _function_identity(cursor, schema_name, function_name):
     )
     row = cursor.fetchone()
     if row is None:
-        raise RuntimeError(f"Missing function in the 0126 audit catalog binding: {schema_name}.{function_name}")
+        raise RuntimeError(f"Missing function in the 0129 audit catalog binding: {schema_name}.{function_name}")
     oid, name, identity_arguments, owner_oid, owner_name = row
     return {
         "oid": int(oid),
@@ -111,7 +111,7 @@ def _live_topology(cursor, schema_name, *, runtime_role, governance_role, migrat
     )
     schema = cursor.fetchone()
     if database is None or schema is None:
-        raise RuntimeError("The 0126 audit catalog topology is missing")
+        raise RuntimeError("The 0129 audit catalog topology is missing")
     database_oid, database_name, database_owner_oid, database_owner_name = database
     schema_oid, actual_schema_name, schema_owner_oid, schema_owner_name = schema
     roles = {
@@ -149,44 +149,44 @@ def _assert_snapshot_payload(snapshot):
         "default_privileges",
         "memberships",
     }:
-        raise RuntimeError("Missing or invalid 0126 audit catalog snapshot")
+        raise RuntimeError("Missing or invalid 0129 audit catalog snapshot")
     if snapshot["version"] != CATALOG_SNAPSHOT_VERSION:
-        raise RuntimeError("Missing or invalid 0126 audit catalog snapshot")
+        raise RuntimeError("Missing or invalid 0129 audit catalog snapshot")
     schema = snapshot["schema"]
     if not isinstance(schema, dict) or set(schema) != {"name", "owner", "acl"} or not isinstance(schema["acl"], list):
-        raise RuntimeError("Invalid 0126 audit catalog schema snapshot")
+        raise RuntimeError("Invalid 0129 audit catalog schema snapshot")
     if not isinstance(snapshot["objects"], list):
-        raise RuntimeError("Invalid 0126 audit catalog object snapshot")
+        raise RuntimeError("Invalid 0129 audit catalog object snapshot")
     seen_objects = set()
     for object_info in snapshot["objects"]:
         if not isinstance(object_info, dict) or object_info.get("kind") not in {"table", "sequence", "function"}:
-            raise RuntimeError("Invalid 0126 audit catalog object snapshot")
+            raise RuntimeError("Invalid 0129 audit catalog object snapshot")
         key = (object_info["kind"], object_info.get("name"), object_info.get("identity_arguments"))
         if key in seen_objects:
-            raise RuntimeError("Duplicate 0126 audit catalog object snapshot")
+            raise RuntimeError("Duplicate 0129 audit catalog object snapshot")
         seen_objects.add(key)
         required = {"kind", "name", "owner", "acl"}
         if object_info["kind"] == "function":
             required.update({"identity_arguments", "security_definer", "config"})
             if not isinstance(object_info.get("security_definer"), bool):
-                raise RuntimeError("Invalid 0126 audit catalog function snapshot")
+                raise RuntimeError("Invalid 0129 audit catalog function snapshot")
             if object_info.get("config") is not None and not isinstance(object_info["config"], list):
-                raise RuntimeError("Invalid 0126 audit catalog function snapshot")
+                raise RuntimeError("Invalid 0129 audit catalog function snapshot")
             for config in object_info.get("config") or []:
                 key_name, separator, _ = config.partition("=") if isinstance(config, str) else ("", "", "")
                 if not separator or not re.fullmatch(r"[a-z_][a-z0-9_]*", key_name):
-                    raise RuntimeError("Invalid 0126 function configuration snapshot")
+                    raise RuntimeError("Invalid 0129 function configuration snapshot")
         if not required <= object_info.keys() or not isinstance(object_info["acl"], list):
-            raise RuntimeError("Invalid 0126 audit catalog object snapshot")
+            raise RuntimeError("Invalid 0129 audit catalog object snapshot")
     if not isinstance(snapshot["default_privileges"], list) or not isinstance(snapshot["memberships"], list):
-        raise RuntimeError("Invalid 0126 audit catalog snapshot")
+        raise RuntimeError("Invalid 0129 audit catalog snapshot")
     for membership in snapshot["memberships"]:
         if (
             not isinstance(membership, dict)
             or set(membership) != {"role", "member", "admin_option"}
             or not isinstance(membership["admin_option"], bool)
         ):
-            raise RuntimeError("Invalid 0126 audit catalog membership snapshot")
+            raise RuntimeError("Invalid 0129 audit catalog membership snapshot")
 
 
 def _snapshot_membership_reaches(memberships, member_role, target_role):
@@ -253,7 +253,7 @@ def verify_audit_catalog_snapshot(
         cursor.execute("SELECT current_user, rolsuper FROM pg_roles WHERE rolname = current_user")
         current_user, is_superuser = cursor.fetchone()
         if current_user != provisioner_role and not is_superuser:
-            raise RuntimeError("The 0126 audit catalog can only be verified by the provisioner")
+            raise RuntimeError("The 0129 audit catalog can only be verified by the provisioner")
         schema_ident = connection.ops.quote_name(schema_name)
         snapshot_ident = connection.ops.quote_name(CATALOG_SNAPSHOT_TABLE)
         binding_ident = connection.ops.quote_name(CATALOG_SNAPSHOT_BINDING_TABLE)
@@ -264,30 +264,30 @@ def verify_audit_catalog_snapshot(
         )
         binding_row = cursor.fetchone()
         if snapshot_row is None or binding_row is None:
-            raise RuntimeError("Missing 0126 audit catalog snapshot binding")
+            raise RuntimeError("Missing 0129 audit catalog snapshot binding")
         snapshot = snapshot_row[0]
         if isinstance(snapshot, str):
             try:
                 snapshot = json.loads(snapshot)
             except json.JSONDecodeError as error:
-                raise RuntimeError("Invalid 0126 audit catalog snapshot JSON") from error
+                raise RuntimeError("Invalid 0129 audit catalog snapshot JSON") from error
         _assert_snapshot_payload(snapshot)
         binding_version, snapshot_digest, expected_topology = binding_row
         if isinstance(expected_topology, str):
             try:
                 expected_topology = json.loads(expected_topology)
             except json.JSONDecodeError as error:
-                raise RuntimeError("Invalid 0126 audit catalog snapshot binding") from error
+                raise RuntimeError("Invalid 0129 audit catalog snapshot binding") from error
         if (
             binding_version != CATALOG_SNAPSHOT_VERSION
             or not isinstance(snapshot_digest, str)
             or not isinstance(expected_topology, dict)
         ):
-            raise RuntimeError("Invalid 0126 audit catalog snapshot binding")
+            raise RuntimeError("Invalid 0129 audit catalog snapshot binding")
         if snapshot["schema"]["name"] != schema_name:
-            raise RuntimeError("0126 audit catalog snapshot belongs to another schema")
+            raise RuntimeError("0129 audit catalog snapshot belongs to another schema")
         if not hmac.compare_digest(snapshot_digest, _canonical_snapshot_digest(snapshot)):
-            raise RuntimeError("The 0126 audit catalog snapshot digest does not match its binding")
+            raise RuntimeError("The 0129 audit catalog snapshot digest does not match its binding")
         live_topology = _live_topology(
             cursor,
             schema_name,
@@ -297,7 +297,7 @@ def verify_audit_catalog_snapshot(
             provisioner_role=provisioner_role,
         )
         if expected_topology != live_topology:
-            raise RuntimeError("The 0126 audit catalog topology does not match its binding")
+            raise RuntimeError("The 0129 audit catalog topology does not match its binding")
         if any(
             (
                 live_topology["database"]["owner"] != live_topology["roles"]["provisioner"],
@@ -308,7 +308,7 @@ def verify_audit_catalog_snapshot(
                 live_topology["objects"]["audit_function"]["owner"] != live_topology["roles"]["governance"],
             )
         ):
-            raise RuntimeError("The 0126 audit catalog binding does not describe the provisioned authority")
+            raise RuntimeError("The 0129 audit catalog binding does not describe the provisioned authority")
         _assert_no_governance_membership(cursor, migration_role, governance_role)
         if _snapshot_membership_reaches(snapshot["memberships"], migration_role, governance_role):
             raise RuntimeError("The snapshot would restore migration governance membership")
@@ -316,7 +316,7 @@ def verify_audit_catalog_snapshot(
 
 
 def _restore_acl_entries(cursor, connection, target_type, target_sql, entries, known_grantees):
-    # PUBLIC is never restored by a downgrade. The 0125 predecessor contract
+    # PUBLIC is never restored by a downgrade. The 0128 predecessor contract
     # is deliberately safe for every protected object kind, even when an
     # older database carried PostgreSQL's broad default ACLs.
     entries = [entry for entry in entries if entry["grantee"] != "PUBLIC"]
@@ -373,7 +373,7 @@ def _restore_function_configuration(cursor, connection, schema_name, object_info
     for config in object_info.get("config") or []:
         key, separator, value = config.partition("=")
         if not separator or not re.fullmatch(r"[a-z_][a-z0-9_]*", key):
-            raise RuntimeError("Invalid 0126 function configuration snapshot")
+            raise RuntimeError("Invalid 0129 function configuration snapshot")
         cursor.execute("SELECT quote_literal(%s)", [value])
         quoted_value = cursor.fetchone()[0]
         cursor.execute(f"ALTER FUNCTION {function_sql} SET {key} = {quoted_value}")

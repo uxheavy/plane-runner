@@ -7,13 +7,9 @@ This file governs `apps/api/plane/agent/` and its descendants.
 ## Local Responsibility
 
 This package is the Plane-owned importable seam for one Agent system. The
-scaffold intentionally retains only the retained root package initializer and
-the `lifecycle`/`adapters` seams; it does not reserve empty packages for future
-concepts.
-
-It is a regular importable Python package, not a Django app yet. Do not add
-`apps.py`, models, migrations, routes, settings registration, test harnesses,
-or chat UI as part of this scaffold.
+implemented lifecycle and adapter services coordinate the durable Agent
+records in `plane.db.models` and the shared Operation Gateway; they do not
+create a second Django app or a second product model.
 
 ## Architecture Rules
 
@@ -27,7 +23,8 @@ or chat UI as part of this scaffold.
 - `lifecycle` is the one deep cross-record state-transition seam. Application
   services and adapters converge on it; individual concept implementations
   must not grow sibling transition interfaces or mutate other concepts
-  directly.
+  directly. Its migrations are owned by `plane.db` and remain separate from
+  the importable package.
 - The retained `adapters` seam remains Plane-owned for the Operation Gateway,
   operation catalog, invocation idempotency, and append-only audit. Future
   child adapter packages must land with real behavior and tests in the same
@@ -51,7 +48,7 @@ instead of copying their behavior here.
 
 | Gotcha | Why It Matters | Correct Action |
 | --- | --- | --- |
-| This scaffold is not a Django app. | Registering it or adding migrations would create runtime and schema commitments before the lifecycle contract exists. | Keep it out of `INSTALLED_APPS`; retain only the retained root package initializer and lifecycle/adapters seams until implementation is explicitly in scope, and add future concepts only with real behavior. |
+| The importable package is not a Django app. | Registering `plane.agent` would create a duplicate model/migration owner. | Keep models and migrations in `plane.db.models.agent` and `apps/api/plane/db/migrations/`; keep `plane.agent` focused on lifecycle and adapter services. |
 | A profile role is not an execution engine. | Role-specific runners would duplicate lifecycle and authorization behavior. | Express built-in roles as Plane-owned data/configuration over the common agent system. |
 | The external operation count is not the domain shape. | Mirroring 177 operations as prompt/runtime modules makes discovery shallow and fragments enforcement. | Grow the catalog and adapters behind the shared Plane lifecycle/application rules. |
 | Marker-only packages are not architecture. | Marker-only concept or subadapter packages create false ownership and shallow seams before behavior exists. | Keep only the retained root package initializer and lifecycle/adapters seams; add future concept packages only with real behavior and tests. |
@@ -59,14 +56,16 @@ instead of copying their behavior here.
 ## Local Verification
 
 From the repository root, first run `./setup.sh` as the repository prerequisite,
-then verify all retained seams in the repository-supported API test container:
+then verify the lifecycle and adapter seams plus their targeted tests in the
+repository-supported API test container:
 
 ```sh
 docker compose -f docker-compose-test.yml run --rm --build api-tests \
-  python -c "import plane.agent; import plane.agent.lifecycle; import plane.agent.adapters"
+  python -c "import plane.agent; import plane.agent.lifecycle; import plane.agent.adapters; from plane.db.models import AgentActor"
 ```
 
 Do not use host `python` or `python3` for this check.
 
-Inspect the final tree and confirm no files were added under
-`apps/api/plane/settings/`, `apps/api/plane/db/migrations/`, routes, or UI.
+Inspect the final tree and confirm no models were added under `plane.agent`
+itself, no second authorization seam exists, and no chat/composer/thread/
+inbox/sidecar/transcript/navigation UI was added.

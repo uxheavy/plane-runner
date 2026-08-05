@@ -37,8 +37,8 @@ def _require_head_audit_snapshot():
         cursor.execute(
             "SELECT to_regclass(%s), to_regclass(%s)",
             [
-                f"{schema}.plane_0126_audit_catalog_snapshot",
-                f"{schema}.plane_0126_audit_catalog_snapshot_binding",
+                f"{schema}.plane_0129_audit_catalog_snapshot",
+                f"{schema}.plane_0129_audit_catalog_snapshot_binding",
             ],
         )
         if any(value is None for value in cursor.fetchone()):
@@ -191,8 +191,8 @@ def test_provisioner_owned_authority_marker_residue_converges_on_retry():
 @pytest.mark.django_db(transaction=True)
 def test_non_superuser_noinherit_migrator_cannot_mutate_catalog_snapshot_binding():
     schema = settings.PLANE_AUDIT_SCHEMA
-    snapshot = f"{_quote(schema)}.{_quote('plane_0126_audit_catalog_snapshot')}"
-    binding = f"{_quote(schema)}.{_quote('plane_0126_audit_catalog_snapshot_binding')}"
+    snapshot = f"{_quote(schema)}.{_quote('plane_0129_audit_catalog_snapshot')}"
+    binding = f"{_quote(schema)}.{_quote('plane_0129_audit_catalog_snapshot_binding')}"
     migration_probe = f"gateway_snapshot_probe_{uuid.uuid4().hex[:12]}"
     migration_password = f"probe_{uuid.uuid4().hex}"
 
@@ -220,9 +220,9 @@ def test_non_superuser_noinherit_migrator_cannot_mutate_catalog_snapshot_binding
                 "WHERE snapshot_schema.nspname = %s AND snapshot_info.relname = %s "
                 "AND binding_schema.nspname = %s",
                 [
-                    "plane_0126_audit_catalog_snapshot_binding",
+                    "plane_0129_audit_catalog_snapshot_binding",
                     schema,
-                    "plane_0126_audit_catalog_snapshot",
+                    "plane_0129_audit_catalog_snapshot",
                     schema,
                 ],
             )
@@ -264,8 +264,8 @@ def test_non_superuser_noinherit_migrator_cannot_mutate_catalog_snapshot_binding
 @pytest.mark.parametrize("tamper_kind", ["content", "topology"])
 def test_reverse_rejects_snapshot_content_or_topology_tampering_before_catalog_changes(tamper_kind):
     schema = settings.PLANE_AUDIT_SCHEMA
-    snapshot = f"{_quote(schema)}.{_quote('plane_0126_audit_catalog_snapshot')}"
-    binding = f"{_quote(schema)}.{_quote('plane_0126_audit_catalog_snapshot_binding')}"
+    snapshot = f"{_quote(schema)}.{_quote('plane_0129_audit_catalog_snapshot')}"
+    binding = f"{_quote(schema)}.{_quote('plane_0129_audit_catalog_snapshot_binding')}"
 
     _require_head_audit_snapshot()
     with connection.cursor() as cursor:

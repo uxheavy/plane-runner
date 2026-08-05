@@ -9,9 +9,48 @@ from django.db.migrations.executor import MigrationExecutor
 from django.utils import timezone
 
 
-BASE_MIGRATION = ("db", "0123_operationgatewayaudit_operationgatewayidempotency")
-PRE_HEAD_MIGRATION = ("db", "0125_operationgateway_publications_and_audit_trigger")
-HEAD_MIGRATION = ("db", "0126_operationgateway_delivery_and_audit_roles")
+BASE_MIGRATION = ("db", "0126_operationgatewayaudit_operationgatewayidempotency")
+PRE_HEAD_MIGRATION = ("db", "0128_operationgateway_publications_and_audit_trigger")
+HEAD_MIGRATION = ("db", "0129_operationgateway_delivery_and_audit_roles")
+COMBINED_MIGRATION_CHAIN = (
+    ("db", "0123_agent_lifecycle_foundation", ("db", "0122_alter_draftissue_assignees_alter_issue_assignees_and_more")),
+    ("db", "0124_agent_lifecycle_database_integrity", ("db", "0123_agent_lifecycle_foundation")),
+    ("db", "0125_agent_lifecycle_append_only_integrity", ("db", "0124_agent_lifecycle_database_integrity")),
+    (
+        "db",
+        "0126_operationgatewayaudit_operationgatewayidempotency",
+        ("db", "0125_agent_lifecycle_append_only_integrity"),
+    ),
+    ("db", "0127_operationgateway_hardening", ("db", "0126_operationgatewayaudit_operationgatewayidempotency")),
+    ("db", "0128_operationgateway_publications_and_audit_trigger", ("db", "0127_operationgateway_hardening")),
+    (
+        "db",
+        "0129_operationgateway_delivery_and_audit_roles",
+        ("db", "0128_operationgateway_publications_and_audit_trigger"),
+    ),
+)
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
+def test_combined_agent_migration_chain_has_one_linear_leaf():
+    graph = MigrationExecutor(connection).loader.graph
+
+    assert set(graph.leaf_nodes("db")) == {HEAD_MIGRATION}
+    assert all(node in graph.node_map for node, _ in COMBINED_MIGRATION_CHAIN)
+    for node, dependency in COMBINED_MIGRATION_CHAIN:
+        assert graph.node_map[node].parents == {dependency}
+
+    assert not any(
+        node[1]
+        in {
+            "0123_operationgatewayaudit_operationgatewayidempotency",
+            "0124_operationgateway_hardening",
+            "0125_operationgateway_publications_and_audit_trigger",
+            "0126_operationgateway_delivery_and_audit_roles",
+        }
+        for node in graph.node_map
+    )
 
 
 def _migrate_and_reload(target):
@@ -36,7 +75,7 @@ def _audit_kwargs(*, request_id, operation_id, workspace_slug, caller_id, key, c
 
 
 def _safe_catalog_snapshot():
-    """Capture the complete safe 0125 catalog, including PUBLIC entries."""
+    """Capture the complete safe 0128 catalog, including PUBLIC entries."""
 
     with connection.cursor() as cursor:
         cursor.execute(
@@ -403,9 +442,9 @@ def test_historical_invocation_backfill_is_deterministic_across_directions():
     assert all(publication.payload["webhook_id"] for publication in legacy_publications)
     assert set(MigrationExecutor(connection).loader.graph.leaf_nodes("db")) == {HEAD_MIGRATION}
 
-    # Exercise every 0126 publication state, including the states that 0125
+    # Exercise every 0129 publication state, including the states that 0128
     # cannot name. The reverse marker must preserve all durable identity and
-    # dispatch facts, while the visible 0125 row must remain non-runnable when
+    # dispatch facts, while the visible 0128 row must remain non-runnable when
     # any target has ambiguous or already-started delivery history.
     roundtrip_record = NewIdempotency.objects.get(pk=records[1].pk)
     now = timezone.now()
@@ -468,7 +507,7 @@ def test_historical_invocation_backfill_is_deterministic_across_directions():
     before_roundtrip = publication_snapshot(NewPublication, roundtrip_record.pk)
     call_command("bootstrap_operation_gateway_audit", phase="before-reverse", verbosity=0)
     # Exercise PostgreSQL's default PUBLIC function privilege after the
-    # provisioner has restored the safe 0125 snapshot. The reverse migration
+    # provisioner has restored the safe 0128 snapshot. The reverse migration
     # must make the recreated trigger function safe at its creation boundary.
     try:
         with connection.cursor() as cursor:
@@ -486,8 +525,8 @@ def test_historical_invocation_backfill_is_deterministic_across_directions():
     ReversePublication = reverse_apps.get_model("db", "OperationGatewayPublication")
     reverse_row = ReversePublication.objects.get(idempotency_id=roundtrip_record.pk, kind="webhook")
     assert reverse_row.state == "failed"
-    assert reverse_row.payload["__plane_0126_reverse__"]["version"] == 1
-    assert len(reverse_row.payload["__plane_0126_reverse__"]["rows"]) == len(state_rows)
+    assert reverse_row.payload["__plane_0129_reverse__"]["version"] == 1
+    assert len(reverse_row.payload["__plane_0129_reverse__"]["rows"]) == len(state_rows)
     assert {
         "id",
         "idempotency_id",
@@ -505,7 +544,7 @@ def test_historical_invocation_backfill_is_deterministic_across_directions():
         "published_at",
         "created_at",
         "updated_at",
-    } <= set(reverse_row.payload["__plane_0126_reverse__"]["rows"][0])
+    } <= set(reverse_row.payload["__plane_0129_reverse__"]["rows"][0])
     assert _safe_catalog_snapshot() == pre_safe_catalog
     with connection.cursor() as cursor:
         cursor.execute(
@@ -544,8 +583,8 @@ def test_historical_invocation_backfill_is_deterministic_across_directions():
                 function_regprocedure,
             ],
         )
-        final_0125_acl = cursor.fetchone()
-    assert final_0125_acl == (False, True, True, False)
+        final_0128_acl = cursor.fetchone()
+    assert final_0128_acl == (False, True, True, False)
     with connection.cursor() as cursor:
         cursor.execute(
             """

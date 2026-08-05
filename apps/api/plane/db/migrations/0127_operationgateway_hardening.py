@@ -63,7 +63,7 @@ def backfill_gateway_history(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("db", "0123_operationgatewayaudit_operationgatewayidempotency"),
+        ("db", "0126_operationgatewayaudit_operationgatewayidempotency"),
     ]
 
     operations = [

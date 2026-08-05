@@ -32,7 +32,7 @@ DROP FUNCTION IF EXISTS operation_gateway_audit_append_only();
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("db", "0124_operationgateway_hardening"),
+        ("db", "0127_operationgateway_hardening"),
     ]
 
     operations = [
