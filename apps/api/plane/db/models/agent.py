@@ -185,8 +185,14 @@ class AgentActor(AgentScopedModel):
 
     def validate_agent_scope(self):
         if self.active_profile_id:
-            profile = ProfileVersion.objects.only("actor_id", "workspace_id", "project_id").get(pk=self.active_profile_id)
-            if profile.actor_id != self.id or profile.workspace_id != self.workspace_id or profile.project_id != self.project_id:
+            profile = ProfileVersion.objects.only("actor_id", "workspace_id", "project_id").get(
+                pk=self.active_profile_id
+            )
+            if (
+                profile.actor_id != self.id
+                or profile.workspace_id != self.workspace_id
+                or profile.project_id != self.project_id
+            ):
                 raise ValidationError("Active profile must belong to the same Agent actor and Plane scope")
 
 
@@ -310,6 +316,7 @@ class RunAttempt(AgentScopedModel):
     last_invocation_id = models.CharField(max_length=128, null=True, blank=True)
     cumulative_usage = models.JSONField(default=default_dict)
     creation_idempotency_key = models.CharField(max_length=128, null=True, blank=True, unique=True)
+    command_fingerprint = models.CharField(max_length=72, null=True, blank=True, editable=False)
     lineage_of = models.ForeignKey(
         "self",
         on_delete=models.PROTECT,
@@ -336,6 +343,7 @@ class RunAttempt(AgentScopedModel):
         "snapshot",
         "snapshot_content_digest",
         "creation_idempotency_key",
+        "command_fingerprint",
         "lineage_of_id",
         "lineage_reason",
         "recovery_of_id",
@@ -355,7 +363,9 @@ class RunAttempt(AgentScopedModel):
         super().save(*args, **kwargs)
 
     def validate_agent_scope(self):
-        assignment = AssignmentContract.objects.only("workspace_id", "project_id", "assignee_id").get(pk=self.assignment_id)
+        assignment = AssignmentContract.objects.only("workspace_id", "project_id", "assignee_id").get(
+            pk=self.assignment_id
+        )
         actor = AgentActor.objects.only("workspace_id", "project_id").get(pk=self.actor_id)
         profile = ProfileVersion.objects.only("workspace_id", "project_id", "actor_id").get(pk=self.profile_version_id)
         if assignment.assignee_id != self.actor_id or profile.actor_id != self.actor_id:
@@ -392,6 +402,7 @@ class RunInputEvent(AgentScopedModel):
     payload_digest = models.CharField(max_length=72, editable=False)
     pending_input_ref = models.CharField(max_length=128, null=True, blank=True, editable=False)
     idempotency_key = models.CharField(max_length=128, unique=True, null=True, blank=True, editable=False)
+    command_fingerprint = models.CharField(max_length=72, null=True, blank=True, editable=False)
 
     class Meta:
         db_table = "agent_run_input_events"
@@ -407,6 +418,7 @@ class RunInputEvent(AgentScopedModel):
         "payload_digest",
         "pending_input_ref",
         "idempotency_key",
+        "command_fingerprint",
     )
 
     def save(self, *args, **kwargs):
@@ -423,24 +435,34 @@ class RuntimeInvocation(AgentScopedModel):
     """One disposable runtime dispatch; it never becomes the durable run."""
 
     run = models.ForeignKey(RunAttempt, on_delete=models.PROTECT, related_name="invocations")
+    ordinal = models.PositiveIntegerField()
     invocation_id = models.CharField(max_length=128, unique=True, editable=False)
     idempotency_key = models.CharField(max_length=128, unique=True, editable=False)
+    command_fingerprint = models.CharField(max_length=72, null=True, blank=True, editable=False)
     envelope = models.JSONField()
+    usage = models.JSONField(default=default_dict)
     state = models.CharField(max_length=32, choices=InvocationState.choices, default=InvocationState.QUEUED)
 
     IMMUTABLE_FIELDS = (
         "workspace_id",
         "project_id",
         "run_id",
+        "ordinal",
         "invocation_id",
         "idempotency_key",
+        "command_fingerprint",
         "envelope",
+        "usage",
     )
 
     class Meta:
         db_table = "agent_runtime_invocations"
         ordering = ("created_at",)
         indexes = [models.Index(fields=["run", "state"], name="agent_invocation_run_state_idx")]
+        constraints = [
+            models.UniqueConstraint(fields=["run", "ordinal"], name="agent_invocation_run_ordinal_unique"),
+            models.CheckConstraint(condition=models.Q(ordinal__gte=1), name="agent_invocation_ordinal_positive"),
+        ]
 
     def save(self, *args, **kwargs):
         allowed = kwargs.pop("_allow_lifecycle", False)
@@ -463,6 +485,7 @@ class OutcomeSubmission(AgentScopedModel):
     evidence = models.JSONField(default=default_list)
     state = models.CharField(max_length=32, choices=OutcomeState.choices, default=OutcomeState.PROPOSED)
     submission_idempotency_key = models.CharField(max_length=128, unique=True, null=True, blank=True)
+    command_fingerprint = models.CharField(max_length=72, null=True, blank=True, editable=False)
     evaluator = models.ForeignKey(
         AgentActor,
         on_delete=models.PROTECT,
@@ -499,6 +522,7 @@ class OutcomeSubmission(AgentScopedModel):
                 "human_reviewer_id",
                 "human_decision_note",
                 "human_decided_at",
+                "command_fingerprint",
             ),
             allowed=allowed,
         )
@@ -529,6 +553,7 @@ class RunTerminalEvent(AgentScopedModel):
     product_ref = models.CharField(max_length=128)
     product_event_ref = models.CharField(max_length=128, unique=True, editable=False)
     idempotency_key = models.CharField(max_length=128, unique=True, editable=False)
+    command_fingerprint = models.CharField(max_length=72, null=True, blank=True, editable=False)
     reason = models.TextField(blank=True)
     cancellation_ref = models.CharField(max_length=128, null=True, blank=True, editable=False)
     visible = models.BooleanField(default=True, editable=False)
@@ -550,6 +575,7 @@ class RunTerminalEvent(AgentScopedModel):
         "product_ref",
         "product_event_ref",
         "idempotency_key",
+        "command_fingerprint",
         "reason",
         "cancellation_ref",
         "visible",

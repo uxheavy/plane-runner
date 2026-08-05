@@ -102,7 +102,8 @@ BEGIN
             WHERE r.id = NEW.lineage_of_id AND r.assignment_id = NEW.assignment_id
               AND r.workspace_id = NEW.workspace_id AND r.project_id IS NOT DISTINCT FROM NEW.project_id
         ) THEN
-            RAISE EXCEPTION 'Run lineage must remain on the same assignment and scope' USING ERRCODE = 'check_violation';
+            RAISE EXCEPTION 'Run lineage must remain on the same assignment and scope'
+                USING ERRCODE = 'check_violation';
         END IF;
         IF NEW.recovery_of_id IS NOT NULL AND NOT EXISTS (
             SELECT 1 FROM agent_run_attempts r
@@ -110,7 +111,8 @@ BEGIN
               AND r.workspace_id = NEW.workspace_id AND r.project_id IS NOT DISTINCT FROM NEW.project_id
               AND r.state = 'outcome_unknown'
         ) THEN
-            RAISE EXCEPTION 'Run recovery must name an outcome-unknown run on the same assignment' USING ERRCODE = 'check_violation';
+            RAISE EXCEPTION 'Run recovery must name an outcome-unknown run on the same assignment'
+                USING ERRCODE = 'check_violation';
         END IF;
         IF NEW.recovery_intent IS NOT NULL AND NEW.recovery_of_id IS NULL THEN
             RAISE EXCEPTION 'Run recovery intent requires a recovery source' USING ERRCODE = 'check_violation';
@@ -142,9 +144,11 @@ BEGIN
            OR (referenced_workspace, referenced_project) IS DISTINCT FROM (NEW.workspace_id, NEW.project_id)
            OR NOT EXISTS (
                SELECT 1 FROM agent_run_attempts r
-               WHERE r.id = NEW.run_id AND (r.workspace_id, r.project_id) IS NOT DISTINCT FROM (NEW.workspace_id, NEW.project_id)
+               WHERE r.id = NEW.run_id
+                 AND (r.workspace_id, r.project_id) IS NOT DISTINCT FROM (NEW.workspace_id, NEW.project_id)
            ) THEN
-            RAISE EXCEPTION 'Terminal event must bind one invocation and its run scope' USING ERRCODE = 'check_violation';
+            RAISE EXCEPTION 'Terminal event must bind one invocation and its run scope'
+                USING ERRCODE = 'check_violation';
         END IF;
     END IF;
     RETURN NEW;
@@ -158,9 +162,12 @@ BEGIN
        OR NEW.actor_id IS DISTINCT FROM OLD.actor_id OR NEW.version IS DISTINCT FROM OLD.version
        OR NEW.display_name IS DISTINCT FROM OLD.display_name OR NEW.role IS DISTINCT FROM OLD.role
        OR NEW.persona IS DISTINCT FROM OLD.persona OR NEW.instructions IS DISTINCT FROM OLD.instructions
-       OR NEW.expected_outcomes IS DISTINCT FROM OLD.expected_outcomes OR NEW.model_defaults IS DISTINCT FROM OLD.model_defaults
-       OR NEW.runtime_defaults IS DISTINCT FROM OLD.runtime_defaults OR NEW.context_refs IS DISTINCT FROM OLD.context_refs
-       OR NEW.tool_presentation IS DISTINCT FROM OLD.tool_presentation OR NEW.memory_scopes IS DISTINCT FROM OLD.memory_scopes THEN
+       OR NEW.expected_outcomes IS DISTINCT FROM OLD.expected_outcomes
+       OR NEW.model_defaults IS DISTINCT FROM OLD.model_defaults
+       OR NEW.runtime_defaults IS DISTINCT FROM OLD.runtime_defaults
+       OR NEW.context_refs IS DISTINCT FROM OLD.context_refs
+       OR NEW.tool_presentation IS DISTINCT FROM OLD.tool_presentation
+       OR NEW.memory_scopes IS DISTINCT FROM OLD.memory_scopes THEN
         RAISE EXCEPTION 'ProfileVersion immutable fields cannot change' USING ERRCODE = 'check_violation';
     END IF;
     RETURN NEW;
@@ -176,8 +183,10 @@ BEGIN
        OR NEW.snapshot_content_digest IS DISTINCT FROM OLD.snapshot_content_digest
        OR NEW.creation_idempotency_key IS DISTINCT FROM OLD.creation_idempotency_key
        OR NEW.lineage_of_id IS DISTINCT FROM OLD.lineage_of_id OR NEW.lineage_reason IS DISTINCT FROM OLD.lineage_reason
-       OR NEW.recovery_of_id IS DISTINCT FROM OLD.recovery_of_id OR NEW.recovery_intent IS DISTINCT FROM OLD.recovery_intent THEN
-        RAISE EXCEPTION 'RunAttempt immutable snapshot and binding fields cannot change' USING ERRCODE = 'check_violation';
+       OR NEW.recovery_of_id IS DISTINCT FROM OLD.recovery_of_id
+       OR NEW.recovery_intent IS DISTINCT FROM OLD.recovery_intent THEN
+        RAISE EXCEPTION 'RunAttempt immutable snapshot and binding fields cannot change'
+            USING ERRCODE = 'check_violation';
     END IF;
     RETURN NEW;
 END;
@@ -193,11 +202,13 @@ BEGIN
                SELECT 1 FROM agent_runtime_invocations i
                WHERE i.run_id = NEW.id AND i.invocation_id = NEW.last_invocation_id
            ) THEN
-            RAISE EXCEPTION 'Run invocation lifecycle must advance one bound invocation at a time' USING ERRCODE = 'check_violation';
+            RAISE EXCEPTION 'Run invocation lifecycle must advance one bound invocation at a time'
+                USING ERRCODE = 'check_violation';
         END IF;
     ELSIF NEW.last_invocation_id IS DISTINCT FROM OLD.last_invocation_id
        OR NEW.cumulative_usage IS DISTINCT FROM OLD.cumulative_usage THEN
-        RAISE EXCEPTION 'Run invocation binding and usage changes require a new invocation' USING ERRCODE = 'check_violation';
+        RAISE EXCEPTION 'Run invocation binding and usage changes require a new invocation'
+            USING ERRCODE = 'check_violation';
     END IF;
     RETURN NEW;
 END;
@@ -209,7 +220,8 @@ BEGIN
     IF NEW.workspace_id IS DISTINCT FROM OLD.workspace_id OR NEW.project_id IS DISTINCT FROM OLD.project_id
        OR NEW.run_id IS DISTINCT FROM OLD.run_id OR NEW.event_ref IS DISTINCT FROM OLD.event_ref
        OR NEW.kind IS DISTINCT FROM OLD.kind OR NEW.payload IS DISTINCT FROM OLD.payload
-       OR NEW.payload_digest IS DISTINCT FROM OLD.payload_digest OR NEW.pending_input_ref IS DISTINCT FROM OLD.pending_input_ref
+       OR NEW.payload_digest IS DISTINCT FROM OLD.payload_digest
+       OR NEW.pending_input_ref IS DISTINCT FROM OLD.pending_input_ref
        OR NEW.idempotency_key IS DISTINCT FROM OLD.idempotency_key THEN
         RAISE EXCEPTION 'RunInputEvent immutable fields cannot change' USING ERRCODE = 'check_violation';
     END IF;
@@ -223,7 +235,8 @@ BEGIN
     IF NEW.workspace_id IS DISTINCT FROM OLD.workspace_id OR NEW.project_id IS DISTINCT FROM OLD.project_id
        OR NEW.run_id IS DISTINCT FROM OLD.run_id OR NEW.invocation_id IS DISTINCT FROM OLD.invocation_id
        OR NEW.idempotency_key IS DISTINCT FROM OLD.idempotency_key OR NEW.envelope IS DISTINCT FROM OLD.envelope THEN
-        RAISE EXCEPTION 'RuntimeInvocation immutable binding and envelope fields cannot change' USING ERRCODE = 'check_violation';
+        RAISE EXCEPTION 'RuntimeInvocation immutable binding and envelope fields cannot change'
+            USING ERRCODE = 'check_violation';
     END IF;
     RETURN NEW;
 END;
@@ -236,7 +249,8 @@ BEGIN
        OR NEW.run_id IS DISTINCT FROM OLD.run_id OR NEW.summary IS DISTINCT FROM OLD.summary
        OR NEW.artifacts IS DISTINCT FROM OLD.artifacts OR NEW.evidence IS DISTINCT FROM OLD.evidence
        OR NEW.submission_idempotency_key IS DISTINCT FROM OLD.submission_idempotency_key THEN
-        RAISE EXCEPTION 'OutcomeSubmission binding and submitted content cannot change' USING ERRCODE = 'check_violation';
+        RAISE EXCEPTION 'OutcomeSubmission binding and submitted content cannot change'
+            USING ERRCODE = 'check_violation';
     END IF;
     RETURN NEW;
 END;
@@ -260,7 +274,8 @@ BEGIN
     END IF;
     IF NEW.revision IS DISTINCT FROM OLD.revision
        AND (NEW.revision <> OLD.revision + 1 OR NEW.state <> 'revision') THEN
-        RAISE EXCEPTION 'Assignment revisions must advance exactly with a revision state' USING ERRCODE = 'check_violation';
+        RAISE EXCEPTION 'Assignment revisions must advance exactly with a revision state'
+            USING ERRCODE = 'check_violation';
     END IF;
     IF NEW.state = 'revision' AND NEW.revision = OLD.revision THEN
         RAISE EXCEPTION 'Assignment revision state must increment its revision' USING ERRCODE = 'check_violation';
@@ -285,9 +300,15 @@ BEGIN
         RETURN NEW;
     END IF;
     IF NEW.state = OLD.state THEN RETURN NEW; END IF;
-    IF NOT ((OLD.state = 'queued' AND NEW.state IN ('running', 'failed', 'blocked', 'cancelled', 'outcome_unknown'))
-        OR (OLD.state = 'running' AND NEW.state IN ('waiting_for_input', 'succeeded', 'failed', 'blocked', 'cancelled', 'outcome_unknown'))
-        OR (OLD.state = 'waiting_for_input' AND NEW.state IN ('running', 'succeeded', 'failed', 'blocked', 'cancelled', 'outcome_unknown'))) THEN
+    IF NOT (
+        (OLD.state = 'queued' AND NEW.state IN ('running', 'failed', 'blocked', 'cancelled', 'outcome_unknown'))
+        OR (OLD.state = 'running' AND NEW.state IN (
+            'waiting_for_input', 'succeeded', 'failed', 'blocked', 'cancelled', 'outcome_unknown'
+        ))
+        OR (OLD.state = 'waiting_for_input' AND NEW.state IN (
+            'running', 'succeeded', 'failed', 'blocked', 'cancelled', 'outcome_unknown'
+        ))
+    ) THEN
         RAISE EXCEPTION 'Illegal RunAttempt state transition' USING ERRCODE = 'check_violation';
     END IF;
     RETURN NEW;
@@ -304,9 +325,15 @@ BEGIN
         RETURN NEW;
     END IF;
     IF NEW.state = OLD.state THEN RETURN NEW; END IF;
-    IF NOT ((OLD.state = 'queued' AND NEW.state = 'running')
-        OR (OLD.state = 'running' AND NEW.state IN ('waiting_for_input', 'succeeded', 'failed', 'blocked', 'cancelled', 'outcome_unknown'))
-        OR (OLD.state = 'waiting_for_input' AND NEW.state IN ('running', 'succeeded', 'failed', 'blocked', 'cancelled', 'outcome_unknown'))) THEN
+    IF NOT (
+        (OLD.state = 'queued' AND NEW.state = 'running')
+        OR (OLD.state = 'running' AND NEW.state IN (
+            'waiting_for_input', 'succeeded', 'failed', 'blocked', 'cancelled', 'outcome_unknown'
+        ))
+        OR (OLD.state = 'waiting_for_input' AND NEW.state IN (
+            'running', 'succeeded', 'failed', 'blocked', 'cancelled', 'outcome_unknown'
+        ))
+    ) THEN
         RAISE EXCEPTION 'Illegal RuntimeInvocation state transition' USING ERRCODE = 'check_violation';
     END IF;
     RETURN NEW;
@@ -370,7 +397,8 @@ BEGIN
     IF NEW.state IN ('succeeded', 'failed', 'blocked', 'cancelled') AND NOT EXISTS (
         SELECT 1 FROM agent_run_terminal_events e WHERE e.invocation_id = NEW.id AND e.run_id = NEW.run_id
     ) THEN
-        RAISE EXCEPTION 'Terminal invocations require a matching visible terminal event' USING ERRCODE = 'check_violation';
+        RAISE EXCEPTION 'Terminal invocations require a matching visible terminal event'
+            USING ERRCODE = 'check_violation';
     END IF;
     RETURN NULL;
 END;
@@ -390,7 +418,8 @@ BEGIN
               AND i.state = 'succeeded' AND e.kind = 'outcome_submission'
         )
     ) THEN
-        RAISE EXCEPTION 'Final outcome decisions require review fields and a succeeded run' USING ERRCODE = 'check_violation';
+        RAISE EXCEPTION 'Final outcome decisions require review fields and a succeeded run'
+            USING ERRCODE = 'check_violation';
     END IF;
     RETURN NULL;
 END;
@@ -411,7 +440,8 @@ BEGIN
        OR (NEW.kind = 'run_failure' AND (invocation_state <> 'failed' OR run_state <> 'failed'))
        OR (NEW.kind = 'run_blocker' AND (invocation_state <> 'blocked' OR run_state <> 'blocked'))
        OR (NEW.kind = 'run_cancellation' AND (invocation_state <> 'cancelled' OR run_state <> 'cancelled')) THEN
-        RAISE EXCEPTION 'Terminal event kind does not match its invocation and run states' USING ERRCODE = 'check_violation';
+        RAISE EXCEPTION 'Terminal event kind does not match its invocation and run states'
+            USING ERRCODE = 'check_violation';
     END IF;
     IF NEW.kind = 'outcome_submission' AND NOT EXISTS (
         SELECT 1 FROM agent_outcome_submissions o
@@ -420,10 +450,12 @@ BEGIN
         RAISE EXCEPTION 'Outcome terminal event must identify its submitted outcome' USING ERRCODE = 'check_violation';
     END IF;
     IF NEW.kind <> 'outcome_submission' AND NEW.product_ref IS DISTINCT FROM NEW.product_event_ref THEN
-        RAISE EXCEPTION 'Supervisor terminal product refs must equal their product event refs' USING ERRCODE = 'check_violation';
+        RAISE EXCEPTION 'Supervisor terminal product refs must equal their product event refs'
+            USING ERRCODE = 'check_violation';
     END IF;
     IF NEW.kind = 'run_cancellation' AND NEW.cancellation_ref IS NULL THEN
-        RAISE EXCEPTION 'Cancellation terminal events require a cancellation reference' USING ERRCODE = 'check_violation';
+        RAISE EXCEPTION 'Cancellation terminal events require a cancellation reference'
+            USING ERRCODE = 'check_violation';
     END IF;
     RETURN NEW;
 END;

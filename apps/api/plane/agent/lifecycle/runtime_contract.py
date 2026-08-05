@@ -48,19 +48,8 @@ class RuntimeContractError(ValueError):
     """Raised when Plane data cannot satisfy the accepted runtime contract."""
 
 
-def _read_json(path: Path) -> dict[str, Any]:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise RuntimeContractError(f"unable to read runtime contract artifact: {path}") from exc
-    if not isinstance(value, dict):
-        raise RuntimeContractError(f"runtime contract artifact must be an object: {path}")
-    return value
-
-
-@lru_cache(maxsize=1)
-def contract_manifest() -> dict[str, Any]:
-    """Load and verify the exact accepted manifest and every schema byte."""
+def _verified_contract_artifacts() -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    """Read and verify the exact accepted manifest and schema bytes."""
 
     directory = ARTIFACT_DIRECTORY
     manifest_path = directory / "manifest.json"
@@ -72,13 +61,19 @@ def contract_manifest() -> dict[str, Any]:
         raise RuntimeContractError(f"runtime contract manifest is unavailable: {manifest_path}") from exc
     if hashlib.sha256(manifest_bytes).hexdigest() != EXPECTED_MANIFEST_SHA256:
         raise RuntimeContractError(f"runtime contract manifest digest drifted: {manifest_path}")
-    manifest = _read_json(manifest_path)
+    try:
+        manifest = json.loads(manifest_bytes)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeContractError(f"runtime contract manifest is invalid: {manifest_path}") from exc
+    if not isinstance(manifest, dict):
+        raise RuntimeContractError(f"runtime contract artifact must be an object: {manifest_path}")
     if manifest.get("protocol") != PROTOCOL:
         raise RuntimeContractError("runtime contract protocol does not match Plane Agent v1")
     schemas = manifest.get("schemas")
     if not isinstance(schemas, dict) or frozenset(schemas) != _SCHEMA_NAMES:
         raise RuntimeContractError("runtime contract manifest does not contain the exact accepted schema set")
 
+    parsed_schemas = {}
     for name in _SCHEMA_NAMES:
         entry = schemas[name]
         expected_filename = f"{name}.schema.json"
@@ -88,12 +83,27 @@ def contract_manifest() -> dict[str, Any]:
         if schema_path.parent != directory or not schema_path.is_file():
             raise RuntimeContractError(f"runtime contract schema is unavailable: {schema_path}")
         try:
-            digest = hashlib.sha256(schema_path.read_bytes()).hexdigest()
+            schema_bytes = schema_path.read_bytes()
         except OSError as exc:
             raise RuntimeContractError(f"runtime contract schema is unavailable: {schema_path}") from exc
+        digest = hashlib.sha256(schema_bytes).hexdigest()
         if digest != entry.get("sha256"):
             raise RuntimeContractError(f"runtime contract schema digest drifted: {schema_path}")
-    return deepcopy(manifest)
+        try:
+            schema = json.loads(schema_bytes)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise RuntimeContractError(f"runtime contract schema is invalid: {schema_path}") from exc
+        if not isinstance(schema, dict):
+            raise RuntimeContractError(f"runtime contract schema must be an object: {schema_path}")
+        parsed_schemas[name] = schema
+    return deepcopy(manifest), parsed_schemas
+
+
+def contract_manifest() -> dict[str, Any]:
+    """Return a freshly verified copy of the accepted runtime manifest."""
+
+    manifest, _ = _verified_contract_artifacts()
+    return manifest
 
 
 def contract_digests() -> dict[str, str]:
@@ -120,6 +130,13 @@ def content_digest(value: Any) -> str:
     return f"content:{hashlib.sha256(canonical_json(value).encode('utf-8')).hexdigest()}"
 
 
+def command_fingerprint(operation: str, binding: Any) -> str:
+    """Create one deterministic digest for an idempotent semantic command."""
+
+    command = canonical_json({"operation": operation, "binding": binding})
+    return f"command:{hashlib.sha256(command.encode('utf-8')).hexdigest()}"
+
+
 def snapshot_digest(content: dict[str, Any]) -> str:
     return f"snapshot:{hashlib.sha256(canonical_json(content).encode('utf-8')).hexdigest()}"
 
@@ -136,7 +153,7 @@ def namespaced_ref(namespace: str, value: str) -> str:
     return candidate
 
 
-def _schema_validator(name: str):
+def _schema_validator(name: str, schemas: dict[str, dict[str, Any]]):
     try:
         from jsonschema import Draft202012Validator, validators
     except ImportError as exc:
@@ -171,18 +188,27 @@ def _schema_validator(name: str):
             "x-serializedUtf8ByteMax": serialized_utf8_max,
         },
     )
-    schemas = contract_manifest()["schemas"]
-    schema_name = name
-    schema_path = ARTIFACT_DIRECTORY / schemas[schema_name]["filename"]
-    return ContractValidator(_read_json(schema_path))
+    return ContractValidator(schemas[name])
 
 
 @lru_cache(maxsize=None)
+def _compiled_validator(name: str):
+    _, schemas = _verified_contract_artifacts()
+    return _schema_validator(name, schemas)
+
+
 def _validator(name: str):
-    # Verify the manifest on every first use, then cache only the validator
-    # compiled from those exact verified bytes.
-    contract_manifest()
-    return _schema_validator(name)
+    """Verify packaged bytes on every use before consulting the validator cache."""
+
+    _verified_contract_artifacts()
+    return _compiled_validator(name)
+
+
+def _clear_contract_cache() -> None:
+    _compiled_validator.cache_clear()
+
+
+contract_manifest.cache_clear = _clear_contract_cache
 
 
 def _validate(name: str, value: Any) -> dict[str, Any]:
@@ -191,7 +217,7 @@ def _validate(name: str, value: Any) -> dict[str, Any]:
     # Recheck the on-disk bytes at every API use, not only when the compiled
     # validator is first cached.  A missing or tampered artifact therefore
     # fails closed even after a long-lived process has validated once.
-    contract_manifest()
+    _verified_contract_artifacts()
     errors = sorted(_validator(name).iter_errors(value), key=lambda error: list(error.path))
     if errors:
         error = errors[0]

@@ -41,6 +41,7 @@ from .runtime_contract import (
     PROTOCOL,
     RuntimeContractError,
     canonical_json,
+    command_fingerprint,
     contract_digests,
     content_digest,
     namespaced_ref,
@@ -68,6 +69,16 @@ class IdempotencyConflictError(AgentDomainError):
 
 class TerminalEventRequiredError(AgentDomainError):
     """Raised when an invocation would finish without a visible Plane event."""
+
+
+def _command_id(value):
+    if value is None:
+        return None
+    return str(getattr(value, "pk", value))
+
+
+def _command_fingerprint(operation, binding):
+    return command_fingerprint(operation, binding)
 
 
 _ASSIGNMENT_TRANSITIONS = {
@@ -568,22 +579,36 @@ def create_run(
     if locked_assignment.state in {AssignmentState.COMPLETED, AssignmentState.CANCELLED}:
         raise AgentDomainError("Terminal assignments cannot create runs")
 
-    creation_key = None
-    if idempotency_key is not None:
-        creation_key = _normalise_idempotency(idempotency_key, "run idempotency_key")
-        _lock_idempotency_key(creation_key)
-        existing = RunAttempt.all_objects.filter(creation_idempotency_key=creation_key).first()
-        if existing is not None:
-            if existing.assignment_id != locked_assignment.id or existing.profile_version_id != profile.id:
-                raise IdempotencyConflictError("Run idempotency key is bound to another Plane command")
-            return existing
-
     recovery_intent = (
         _state(recovery_intent, RecoveryIntent, "recovery intent") if recovery_intent is not None else None
     )
     lineage_reason = (
         _state(lineage_reason, RunLineageReason, "run lineage reason") if lineage_reason is not None else None
     )
+    snapshot_value = _as_dict(snapshot, "snapshot") if snapshot is not None else None
+    creation_key = None
+    creation_fingerprint = None
+    if idempotency_key is not None:
+        creation_key = _normalise_idempotency(idempotency_key, "run idempotency_key")
+        creation_fingerprint = _command_fingerprint(
+            "create_run",
+            {
+                "assignmentId": _command_id(locked_assignment),
+                "profileVersionId": _command_id(profile),
+                "snapshot": snapshot_value,
+                "lineageOf": _command_id(lineage_of),
+                "lineageReason": lineage_reason,
+                "recoveryOf": _command_id(recovery_of),
+                "recoveryIntent": recovery_intent,
+                "createdBy": _command_id(created_by),
+            },
+        )
+        _lock_idempotency_key(creation_key)
+        existing = RunAttempt.all_objects.filter(creation_idempotency_key=creation_key).first()
+        if existing is not None:
+            if existing.command_fingerprint != creation_fingerprint:
+                raise IdempotencyConflictError("Run idempotency key is bound to another Plane command")
+            return existing
     source = None
     if lineage_of is not None:
         source = RunAttempt.objects.select_for_update().get(pk=lineage_of.pk)
@@ -632,14 +657,12 @@ def create_run(
         ):
             raise RecoveryIntentRequiredError("Terminal run continuation requires an explicit fresh-run lineage")
 
-    if snapshot is not None and not isinstance(snapshot, dict):
-        raise AgentDomainError("snapshot must be an object")
     run_id = (
-        _uuid_from_ref(snapshot["runId"], "snapshot.runId")
-        if snapshot is not None and snapshot.get("runId")
+        _uuid_from_ref(snapshot_value["runId"], "snapshot.runId")
+        if snapshot_value is not None and snapshot_value.get("runId")
         else uuid4()
     )
-    resolved_snapshot = _build_snapshot(locked_assignment, profile, run_id, snapshot=snapshot)
+    resolved_snapshot = _build_snapshot(locked_assignment, profile, run_id, snapshot=snapshot_value)
     if locked_assignment.state in {AssignmentState.READY, AssignmentState.REVISION}:
         _transition_assignment_locked(locked_assignment, AssignmentState.ACTIVE)
     run_fields = dict(
@@ -654,6 +677,7 @@ def create_run(
         state=RunState.QUEUED,
         cumulative_usage={"inputTokens": 0, "outputTokens": 0, "durationMs": 0},
         creation_idempotency_key=creation_key,
+        command_fingerprint=creation_fingerprint,
         lineage_of=source,
         lineage_reason=lineage_reason,
         recovery_of=source if recovery_of is not None else None,
@@ -666,9 +690,7 @@ def create_run(
         RunAttempt,
         fields=run_fields,
         key_lookup={"creation_idempotency_key": creation_key},
-        compatible=lambda existing: (
-            existing.assignment_id == locked_assignment.id and existing.profile_version_id == profile.id
-        ),
+        compatible=lambda existing: existing.command_fingerprint == creation_fingerprint,
         message="Run idempotency key is bound to another Plane command",
     )
 
@@ -708,22 +730,34 @@ def record_input_event(
     key = (
         _normalise_idempotency(idempotency_key, "input event idempotency_key") if idempotency_key is not None else None
     )
-    if key is not None:
-        _lock_idempotency_key(key)
-        existing = RunInputEvent.all_objects.filter(idempotency_key=key).first()
-        if existing is not None:
-            if existing.run_id != run.id:
-                raise IdempotencyConflictError("Input event idempotency key is bound to another run")
-            return existing
     try:
         canonical_json(payload)
     except RuntimeContractError as exc:
         raise AgentDomainError("Input event payload must be JSON") from exc
-    event_uuid = uuid4()
-    event_ref = namespaced_ref("event", str(event_uuid))
     pending_ref = (
         _normalise_ref(pending_input_ref, "event", "pending_input_ref") if pending_input_ref is not None else None
     )
+    event_fingerprint = None
+    if key is not None:
+        event_fingerprint = _command_fingerprint(
+            "record_input_event",
+            {
+                "runId": _command_id(run),
+                "kind": kind,
+                "payload": payload,
+                "pendingInputRef": pending_ref,
+                "createdBy": _command_id(created_by),
+            },
+        )
+    if key is not None:
+        _lock_idempotency_key(key)
+        existing = RunInputEvent.all_objects.filter(idempotency_key=key).first()
+        if existing is not None:
+            if existing.run_id != run.id or existing.command_fingerprint != event_fingerprint:
+                raise IdempotencyConflictError("Input event idempotency key is bound to another run")
+            return existing
+    event_uuid = uuid4()
+    event_ref = namespaced_ref("event", str(event_uuid))
     fields = dict(
         workspace=run.workspace,
         project=run.project,
@@ -734,6 +768,7 @@ def record_input_event(
         payload_digest=content_digest(payload),
         pending_input_ref=pending_ref,
         idempotency_key=key,
+        command_fingerprint=event_fingerprint,
         created_by=created_by,
     )
     if key is None:
@@ -742,7 +777,7 @@ def record_input_event(
         RunInputEvent,
         fields=fields,
         key_lookup={"idempotency_key": key},
-        compatible=lambda existing: existing.run_id == run.id,
+        compatible=lambda existing: existing.run_id == run.id and existing.command_fingerprint == event_fingerprint,
         message="Input event idempotency key is bound to another run",
     )
 
@@ -788,7 +823,6 @@ def record_invocation(
 ):
     run = RunAttempt.objects.select_for_update().get(pk=run.pk)
     key = _normalise_idempotency(idempotency_key, "invocation idempotency_key")
-    _lock_idempotency_key(key)
     requested_invocation_ref = None
     if invocation_id is not None:
         if isinstance(invocation_id, UUID):
@@ -803,21 +837,39 @@ def record_invocation(
             )
         except (ValueError, AttributeError) as exc:
             raise AgentDomainError("invocation_ref must be a UUID") from exc
-    existing = RuntimeInvocation.all_objects.filter(idempotency_key=key).first()
-    if existing is not None:
-        if existing.run_id != run.id:
-            raise IdempotencyConflictError("Invocation idempotency key is bound to another run")
-        if requested_invocation_ref is not None and existing.invocation_id != requested_invocation_ref:
-            raise IdempotencyConflictError("Invocation idempotency key is bound to another invocation")
-        return existing
-    if run.state not in {RunState.QUEUED, RunState.RUNNING, RunState.WAITING_FOR_INPUT}:
-        raise InvalidTransitionError(f"Run {run.id} cannot receive an invocation from {run.state}")
     if input_event is None and input_event_ref is not None:
+        input_event_ref = _normalise_ref(input_event_ref, "event", "input_event_ref")
         input_event = RunInputEvent.objects.get(event_ref=input_event_ref)
     if input_event is not None:
         input_event = RunInputEvent.objects.get(pk=input_event.pk)
         if input_event.run_id != run.id:
             raise AgentDomainError("Invocation input event belongs to another run")
+    trigger_binding = trigger
+    if isinstance(trigger_binding, str):
+        trigger_binding = {"kind": trigger_binding}
+    elif trigger_binding is not None:
+        trigger_binding = _as_dict(trigger_binding, "invocation trigger")
+    usage_value = _usage(usage)
+    usage_delta = {field: usage_value.get(field, 0) for field in ("inputTokens", "outputTokens", "durationMs")}
+    invocation_fingerprint = _command_fingerprint(
+        "record_invocation",
+        {
+            "runId": _command_id(run),
+            "invocationId": requested_invocation_ref,
+            "trigger": trigger_binding,
+            "inputEventRef": input_event.event_ref if input_event is not None else input_event_ref,
+            "usage": usage_delta,
+            "createdBy": _command_id(created_by),
+        },
+    )
+    _lock_idempotency_key(key)
+    existing = RuntimeInvocation.all_objects.filter(idempotency_key=key).first()
+    if existing is not None:
+        if existing.run_id != run.id or existing.command_fingerprint != invocation_fingerprint:
+            raise IdempotencyConflictError("Invocation idempotency key is bound to another Plane command")
+        return existing
+    if run.state not in {RunState.QUEUED, RunState.RUNNING, RunState.WAITING_FOR_INPUT}:
+        raise InvalidTransitionError(f"Run {run.id} cannot receive an invocation from {run.state}")
     if trigger is None and run.invocation_count > 0 and input_event is None:
         input_event = record_input_event(run, payload={"kind": "continuation"}, kind=InputEventKind.CONTINUATION)
     trigger_value = _make_trigger(run, trigger, input_event)
@@ -865,7 +917,6 @@ def record_invocation(
         validate_invocation_envelope(envelope)
     except RuntimeContractError as exc:
         raise AgentDomainError(str(exc)) from exc
-    usage_value = _usage(usage)
     cumulative_usage = deepcopy(run.cumulative_usage or {})
     for field in ("inputTokens", "outputTokens", "durationMs"):
         cumulative_usage[field] = int(cumulative_usage.get(field, 0)) + usage_value.get(field, 0)
@@ -875,9 +926,12 @@ def record_invocation(
         workspace=run.workspace,
         project=run.project,
         run=run,
+        ordinal=run.invocation_count + 1,
         invocation_id=invocation_ref_value,
         idempotency_key=key,
+        command_fingerprint=invocation_fingerprint,
         envelope=envelope,
+        usage=usage_delta,
         state=InvocationState.RUNNING,
         created_by=created_by,
     )
@@ -888,7 +942,8 @@ def record_invocation(
         alternate_lookup={"invocation_id": invocation_ref_value},
         compatible=lambda existing: existing.run_id == run.id
         and existing.invocation_id == invocation_ref_value
-        and existing.idempotency_key == key,
+        and existing.idempotency_key == key
+        and existing.command_fingerprint == invocation_fingerprint,
         message="Invocation idempotency key or invocation id is bound to another Plane command",
     )
     run.state = RunState.RUNNING
@@ -923,7 +978,7 @@ def transition_run(run, target):
             locked,
             kind=kind,
             source=TerminalEventSource.SUPERVISOR,
-            product_ref=namespaced_ref("product-event", str(uuid4())),
+            product_ref=namespaced_ref("product-event", f"terminal-{invocation.id}"),
             reason=f"Run transitioned to {target}",
             idempotency_key=namespaced_ref("idempotency", f"terminal-{invocation.id}-{target}"),
         )
@@ -951,17 +1006,6 @@ def _create_terminal_event_locked(
     invocation, run, *, kind, source, product_ref, reason, idempotency_key, cancellation_ref=None
 ):
     event_key = _normalise_idempotency(idempotency_key, "terminal event idempotency_key")
-    _lock_idempotency_key(event_key)
-    existing = RunTerminalEvent.all_objects.filter(invocation=invocation).first()
-    if existing is not None:
-        if existing.kind != kind or existing.product_ref != product_ref:
-            raise TerminalEventRequiredError("Invocation already has a different visible terminal event")
-        return existing
-    conflicting = RunTerminalEvent.all_objects.filter(idempotency_key=event_key).first()
-    if conflicting is not None:
-        if conflicting.invocation_id != invocation.id:
-            raise IdempotencyConflictError("Terminal event idempotency key is bound to another invocation")
-        return conflicting
     invocation_state, run_state = _terminal_state(kind)
     event_ref = (
         product_ref
@@ -976,10 +1020,35 @@ def _create_terminal_event_locked(
     cancellation = (
         _normalise_ref(cancellation_ref, "cancellation", "cancellation_ref")
         if cancellation_ref is not None
-        else namespaced_ref("cancellation", str(uuid4()))
+        else namespaced_ref("cancellation", f"terminal-{invocation.id}")
         if kind == TerminalEventKind.RUN_CANCELLATION
         else None
     )
+    reason_value = _ensure_non_empty(reason, "terminal reason") if reason else ""
+    terminal_fingerprint = _command_fingerprint(
+        "record_terminal_event",
+        {
+            "invocationId": _command_id(invocation),
+            "runId": _command_id(run),
+            "kind": kind,
+            "source": source,
+            "productRef": product_ref,
+            "productEventRef": event_ref,
+            "reason": reason_value,
+            "cancellationRef": cancellation,
+        },
+    )
+    _lock_idempotency_key(event_key)
+    existing = RunTerminalEvent.all_objects.filter(invocation=invocation).first()
+    if existing is not None:
+        if existing.command_fingerprint != terminal_fingerprint:
+            raise IdempotencyConflictError("Terminal event is bound to another Plane command")
+        return existing
+    conflicting = RunTerminalEvent.all_objects.filter(idempotency_key=event_key).first()
+    if conflicting is not None:
+        if conflicting.command_fingerprint != terminal_fingerprint:
+            raise IdempotencyConflictError("Terminal event idempotency key is bound to another Plane command")
+        return conflicting
     invocation.state = invocation_state
     invocation.save(_allow_lifecycle=True)
     run.state = run_state
@@ -994,7 +1063,8 @@ def _create_terminal_event_locked(
         product_ref=product_ref,
         product_event_ref=event_ref,
         idempotency_key=event_key,
-        reason=_ensure_non_empty(reason, "terminal reason") if reason else "",
+        command_fingerprint=terminal_fingerprint,
+        reason=reason_value,
         cancellation_ref=cancellation,
         visible=True,
     )
@@ -1004,8 +1074,7 @@ def _create_terminal_event_locked(
         key_lookup={"idempotency_key": event_key},
         alternate_lookup={"product_event_ref": event_ref},
         compatible=lambda existing: existing.invocation_id == invocation.id
-        and existing.kind == kind
-        and existing.product_ref == product_ref,
+        and existing.command_fingerprint == terminal_fingerprint,
         message="Terminal event idempotency key or product event is bound to another invocation",
     )
 
@@ -1018,14 +1087,10 @@ def finalize_invocation(invocation, *, kind, reason="", source=TerminalEventSour
     source = _state(source, TerminalEventSource, "terminal event source")
     if kind == TerminalEventKind.OUTCOME_SUBMISSION:
         raise TerminalEventRequiredError("Outcome terminal events must be created with an OutcomeSubmission")
-    existing = RunTerminalEvent.all_objects.filter(invocation=invocation).first()
-    if existing is not None:
-        if existing.kind != kind:
-            raise TerminalEventRequiredError("Invocation already has a different visible terminal event")
-        return existing
     if invocation.state in _INVOCATION_TERMINAL_STATES and not hasattr(invocation, "terminal_event"):
         raise TerminalEventRequiredError("Terminal invocation state has no visible Plane terminal event")
-    product_event_ref = namespaced_ref("product-event", str(uuid4()))
+    product_event_ref = namespaced_ref("product-event", f"terminal-{invocation.id}-{kind}")
+    event_idempotency_key = idempotency_key or namespaced_ref("idempotency", f"terminal-{invocation.id}-{kind}")
     return _create_terminal_event_locked(
         invocation,
         run,
@@ -1033,21 +1098,34 @@ def finalize_invocation(invocation, *, kind, reason="", source=TerminalEventSour
         source=source,
         product_ref=product_event_ref,
         reason=reason,
-        idempotency_key=idempotency_key,
+        idempotency_key=event_idempotency_key,
     )
 
 
 @transaction.atomic
 def propose_outcome(run, *, summary, artifacts=None, evidence=None, idempotency_key=None, created_by=None):
     summary = _ensure_non_empty(summary, "summary")
+    artifacts_value = _as_list(artifacts, "artifacts")
+    evidence_value = _as_list(evidence, "evidence")
     run = RunAttempt.objects.select_for_update().get(pk=run.pk)
     key = _normalise_idempotency(idempotency_key, "outcome idempotency_key") if idempotency_key is not None else None
+    outcome_fingerprint = None
     if key is not None:
+        outcome_fingerprint = _command_fingerprint(
+            "propose_outcome",
+            {
+                "runId": _command_id(run),
+                "summary": summary,
+                "artifacts": artifacts_value,
+                "evidence": evidence_value,
+                "createdBy": _command_id(created_by),
+            },
+        )
         _lock_idempotency_key(key)
         existing = OutcomeSubmission.all_objects.filter(submission_idempotency_key=key).first()
         if existing is not None:
-            if existing.run_id != run.id:
-                raise IdempotencyConflictError("Outcome idempotency key is bound to another run")
+            if existing.run_id != run.id or existing.command_fingerprint != outcome_fingerprint:
+                raise IdempotencyConflictError("Outcome idempotency key is bound to another Plane command")
             return existing
     if run.state not in {RunState.RUNNING, RunState.WAITING_FOR_INPUT}:
         raise InvalidTransitionError(f"Run cannot submit an outcome from {run.state}")
@@ -1064,10 +1142,11 @@ def propose_outcome(run, *, summary, artifacts=None, evidence=None, idempotency_
         project=run.project,
         run=run,
         summary=summary,
-        artifacts=_as_list(artifacts, "artifacts"),
-        evidence=_as_list(evidence, "evidence"),
+        artifacts=artifacts_value,
+        evidence=evidence_value,
         state=OutcomeState.PROPOSED,
         submission_idempotency_key=key,
+        command_fingerprint=outcome_fingerprint,
         created_by=created_by,
     )
     if key is None:
@@ -1078,7 +1157,9 @@ def propose_outcome(run, *, summary, artifacts=None, evidence=None, idempotency_
             fields=outcome_fields,
             key_lookup={"submission_idempotency_key": key},
             alternate_lookup={"run_id": run.id},
-            compatible=lambda existing: existing.run_id == run.id and existing.submission_idempotency_key == key,
+            compatible=lambda existing: existing.run_id == run.id
+            and existing.submission_idempotency_key == key
+            and existing.command_fingerprint == outcome_fingerprint,
             message="Outcome idempotency key or run is bound to another Plane command",
         )
     return_value = _create_terminal_event_locked(

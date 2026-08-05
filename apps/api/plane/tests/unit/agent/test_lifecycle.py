@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import pytest
 from django.core.exceptions import ValidationError
-from django.db import DatabaseError, close_old_connections, connection
+from django.db import DatabaseError, close_old_connections, connection, transaction
 from django.utils import timezone
 
 from plane.agent.lifecycle import (
@@ -17,7 +17,6 @@ from plane.agent.lifecycle import (
     IdempotencyConflictError,
     InvalidTransitionError,
     RecoveryIntentRequiredError,
-    TerminalEventRequiredError,
     accept_outcome,
     create_actor,
     create_assignment,
@@ -36,6 +35,7 @@ from plane.agent.lifecycle.runtime_contract import (
     contract_digests,
     contract_manifest,
     namespaced_ref,
+    snapshot_digest,
     validate_invocation_envelope,
     validate_run_snapshot,
 )
@@ -382,6 +382,202 @@ def test_concurrent_invocations_on_different_runs_return_typed_conflict(assignme
     assert RuntimeInvocation.objects.filter(idempotency_key="idempotency:cross-run-race").count() == 1
 
 
+@pytest.mark.django_db(transaction=True)
+def test_assignment_actor_can_rebind_before_execution_but_not_after(assignment, profile, actor, project):
+    other_actor = create_actor(workspace=assignment.workspace, project=project, display_name="Other worker")
+    other_profile = create_profile(other_actor, role=AgentRole.WORKER, instructions="Other instructions.")
+
+    AssignmentContract.objects.filter(pk=assignment.pk).update(assignee_id=other_actor.id)
+    assignment.refresh_from_db()
+    assert assignment.assignee_id == other_actor.id
+    run = create_run(assignment, other_profile)
+
+    assignment.assignee_id = actor.id
+    with pytest.raises(DatabaseError):
+        with transaction.atomic():
+            AssignmentContract.objects.bulk_update([assignment], ["assignee"])
+    with pytest.raises(DatabaseError):
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE agent_assignment_contracts SET assignee_id = %s WHERE id = %s",
+                    [actor.id, run.assignment_id],
+                )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_invocation_usage_and_ordinals_are_append_only_and_aggregated(assignment, profile):
+    run = create_run(assignment, profile)
+    first = record_invocation(
+        run,
+        idempotency_key="idempotency:append-only",
+        usage={"inputTokens": 4},
+    )
+    repeated = record_invocation(
+        run,
+        idempotency_key="idempotency:append-only",
+        usage={"inputTokens": 4},
+    )
+    assert repeated.id == first.id
+    run.refresh_from_db()
+    assert first.ordinal == 1
+    assert first.usage == {"inputTokens": 4, "outputTokens": 0, "durationMs": 0}
+    assert run.invocation_count == 1
+    assert run.cumulative_usage == {"inputTokens": 4, "outputTokens": 0, "durationMs": 0}
+
+    with pytest.raises(IdempotencyConflictError):
+        record_invocation(run, idempotency_key="idempotency:append-only", usage={"inputTokens": 5})
+    with pytest.raises(DatabaseError):
+        with transaction.atomic():
+            RuntimeInvocation.objects.filter(pk=first.pk).update(ordinal=2)
+    with pytest.raises(DatabaseError):
+        with transaction.atomic():
+            RuntimeInvocation.objects.filter(pk=first.pk).update(usage={"inputTokens": 999})
+    with pytest.raises(DatabaseError):
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE agent_run_attempts SET invocation_count = 2, last_invocation_id = %s WHERE id = %s",
+                    [first.invocation_id, run.id],
+                )
+    with pytest.raises(DatabaseError):
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM agent_runtime_invocations WHERE id = %s",
+                    [first.id],
+                )
+
+
+@pytest.mark.django_db
+def test_warm_contract_validator_rechecks_missing_and_tampered_artifacts(assignment, profile, tmp_path, monkeypatch):
+    run = create_run(assignment, profile)
+    validate_run_snapshot(run.snapshot)
+    import shutil
+
+    artifact_directory = tmp_path / "v1"
+    shutil.copytree(ARTIFACT_DIRECTORY, artifact_directory)
+    monkeypatch.setattr("plane.agent.lifecycle.runtime_contract.ARTIFACT_DIRECTORY", artifact_directory)
+    (artifact_directory / "run-snapshot.schema.json").unlink()
+    with pytest.raises(ValueError, match="schema is unavailable"):
+        validate_run_snapshot(run.snapshot)
+
+
+@pytest.mark.django_db
+def test_idempotency_fingerprints_reject_material_command_changes(assignment, profile):
+    run = create_run(assignment, profile, idempotency_key="idempotency:fingerprint-run")
+    assert create_run(assignment, profile, idempotency_key="idempotency:fingerprint-run").id == run.id
+    changed_snapshot = deepcopy(run.snapshot)
+    changed_snapshot["totalBudget"]["inputTokens"] += 1
+    changed_snapshot["contentDigest"] = snapshot_digest(
+        {key: value for key, value in changed_snapshot.items() if key != "contentDigest"}
+    )
+    with pytest.raises(IdempotencyConflictError):
+        create_run(
+            assignment,
+            profile,
+            snapshot=changed_snapshot,
+            idempotency_key="idempotency:fingerprint-run",
+        )
+
+    input_event = record_input_event(
+        run,
+        payload={"answer": "one"},
+        idempotency_key="idempotency:fingerprint-input",
+    )
+    assert (
+        record_input_event(
+            run,
+            payload={"answer": "one"},
+            idempotency_key="idempotency:fingerprint-input",
+        ).id
+        == input_event.id
+    )
+    with pytest.raises(IdempotencyConflictError):
+        record_input_event(
+            run,
+            payload={"answer": "two"},
+            idempotency_key="idempotency:fingerprint-input",
+        )
+    with pytest.raises(IdempotencyConflictError):
+        record_input_event(
+            run,
+            payload={"answer": "one"},
+            pending_input_ref="event:00000000-0000-0000-0000-000000000001",
+            idempotency_key="idempotency:fingerprint-input",
+        )
+
+    invocation = record_invocation(run, idempotency_key="idempotency:fingerprint-invocation")
+    with pytest.raises(IdempotencyConflictError):
+        record_invocation(
+            run,
+            invocation_id=invocation.invocation_id,
+            usage={"outputTokens": 1},
+            idempotency_key="idempotency:fingerprint-invocation",
+        )
+    with pytest.raises(IdempotencyConflictError):
+        record_invocation(
+            run,
+            trigger="continuation",
+            idempotency_key="idempotency:fingerprint-invocation",
+        )
+
+    outcome = propose_outcome(
+        run,
+        summary="first",
+        artifacts=["artifact:one"],
+        evidence=["evidence:one"],
+        idempotency_key="idempotency:fingerprint-outcome",
+    )
+    assert outcome.summary == "first"
+    assert (
+        propose_outcome(
+            run,
+            summary="first",
+            artifacts=["artifact:one"],
+            evidence=["evidence:one"],
+            idempotency_key="idempotency:fingerprint-outcome",
+        ).id
+        == outcome.id
+    )
+    with pytest.raises(IdempotencyConflictError):
+        propose_outcome(
+            run,
+            summary="second",
+            artifacts=["artifact:one"],
+            evidence=["evidence:one"],
+            idempotency_key="idempotency:fingerprint-outcome",
+        )
+    with pytest.raises(IdempotencyConflictError):
+        propose_outcome(
+            run,
+            summary="first",
+            artifacts=["artifact:two"],
+            evidence=["evidence:one"],
+            idempotency_key="idempotency:fingerprint-outcome",
+        )
+    with pytest.raises(IdempotencyConflictError):
+        propose_outcome(
+            run,
+            summary="first",
+            artifacts=["artifact:one"],
+            evidence=["evidence:two"],
+            idempotency_key="idempotency:fingerprint-outcome",
+        )
+
+
+@pytest.mark.django_db
+def test_cancellation_terminal_retry_reuses_the_same_event(assignment, profile):
+    run = create_run(assignment, profile)
+    invocation = record_invocation(run, idempotency_key="idempotency:retryable-cancellation")
+
+    first = finalize_invocation(invocation, kind=TerminalEventKind.RUN_CANCELLATION)
+    repeated = finalize_invocation(invocation, kind=TerminalEventKind.RUN_CANCELLATION)
+
+    assert repeated.id == first.id
+    assert repeated.cancellation_ref == f"cancellation:terminal-{invocation.id}"
+
+
 @pytest.mark.django_db
 def test_supervisor_failure_has_exactly_one_visible_terminal_event(assignment, profile):
     run = create_run(assignment, profile)
@@ -395,7 +591,7 @@ def test_supervisor_failure_has_exactly_one_visible_terminal_event(assignment, p
     repeated = finalize_invocation(
         invocation,
         kind=TerminalEventKind.RUN_FAILURE,
-        reason="ignored on the idempotent retry",
+        reason="The isolated process died before it published an exit.",
         idempotency_key="idempotency:supervised-failure",
     )
     run.refresh_from_db()
@@ -407,7 +603,15 @@ def test_supervisor_failure_has_exactly_one_visible_terminal_event(assignment, p
     assert invocation.state == InvocationState.FAILED
     assert run.terminal_events.count() == 1
 
-    with pytest.raises(TerminalEventRequiredError):
+    with pytest.raises(IdempotencyConflictError):
+        finalize_invocation(
+            invocation,
+            kind=TerminalEventKind.RUN_FAILURE,
+            reason="A different reason is a different command.",
+            idempotency_key="idempotency:supervised-failure",
+        )
+
+    with pytest.raises(IdempotencyConflictError):
         finalize_invocation(invocation, kind=TerminalEventKind.RUN_CANCELLATION)
 
 
