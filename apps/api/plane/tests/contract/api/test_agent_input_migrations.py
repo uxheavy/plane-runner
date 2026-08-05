@@ -54,6 +54,21 @@ def _legacy_snapshot(run_id):
         return cursor.fetchall()
 
 
+def _sequence_metadata_snapshot():
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT to_regclass('agent_run_input_sequence_legacy_metadata')")
+        if cursor.fetchone()[0] is None:
+            return None
+        cursor.execute(
+            """
+            SELECT run_input_event_id, original_sequence, original_sequence_was_null
+            FROM agent_run_input_sequence_legacy_metadata
+            ORDER BY run_input_event_id
+            """
+        )
+        return cursor.fetchall()
+
+
 def _insert_legacy_event(run, *, sequence, pending_ref, index, created_at):
     event_id = uuid4()
     with connection.cursor() as cursor:
@@ -144,6 +159,7 @@ def test_0133_preserves_duplicate_input_evidence_and_recovers_keyed_guards(works
     before = _legacy_snapshot(run.id)
 
     _move(HEAD)
+    canonical = _legacy_snapshot(run.id)
     rows = list(
         RunInputEvent.all_objects.filter(run_id=run.id)
         .order_by("sequence")
@@ -169,6 +185,28 @@ def test_0133_preserves_duplicate_input_evidence_and_recovers_keyed_guards(works
         ).count()
         == 1
     )
+    expected_metadata = {
+        first_id: (7, False),
+        canonical_id: (2, False),
+        legacy_id: (0, True),
+        second_a_id: (0, True),
+        second_b_id: (0, True),
+    }
+    assert {row[0]: (row[1], row[2]) for row in _sequence_metadata_snapshot()} == expected_metadata
+    with pytest.raises(DatabaseError), transaction.atomic():
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE agent_run_input_sequence_legacy_metadata "
+                "SET original_sequence = 8 WHERE run_input_event_id = %s",
+                [canonical_id],
+            )
+    with pytest.raises(DatabaseError), transaction.atomic():
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM agent_run_input_sequence_legacy_metadata WHERE run_input_event_id = %s",
+                [canonical_id],
+            )
+    assert {row[0]: (row[1], row[2]) for row in _sequence_metadata_snapshot()} == expected_metadata
     with pytest.raises(IntegrityError), transaction.atomic():
         _insert_legacy_event(
             run,
@@ -180,11 +218,14 @@ def test_0133_preserves_duplicate_input_evidence_and_recovers_keyed_guards(works
     readback = RunInputEventAdminSerializer(RunInputEvent.objects.get(pk=legacy_id)).data
     assert readback["is_authoritative"] is False
     assert "payload" not in readback
+    assert "original_sequence" not in readback
 
     _move(PRE_HEAD)
     assert _legacy_snapshot(run.id) == before
+    assert _sequence_metadata_snapshot() is None
     _move(HEAD)
-    assert _legacy_snapshot(run.id) == before
+    assert _legacy_snapshot(run.id) == canonical
+    assert {row[0]: (row[1], row[2]) for row in _sequence_metadata_snapshot()} == expected_metadata
 
     for missing in KEYED_TRIGGERS:
         _move(PRE_HEAD)
@@ -217,6 +258,9 @@ def test_0133_preserves_duplicate_input_evidence_and_recovers_keyed_guards(works
         )
         assert cursor.fetchone()[0] is False
     assert _legacy_snapshot(run.id) == failed_before
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT to_regclass('agent_run_input_sequence_legacy_metadata')")
+        assert cursor.fetchone()[0] is None
     with connection.cursor() as cursor:
         cursor.execute("DROP INDEX agent_input_run_pending_ref_unique")
     _move(HEAD)

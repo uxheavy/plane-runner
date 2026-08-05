@@ -3,6 +3,67 @@
 from django.db import migrations, models
 
 
+SEQUENCE_METADATA_FORWARD_SQL = """
+CREATE TABLE agent_run_input_sequence_legacy_metadata (
+    run_input_event_id uuid PRIMARY KEY REFERENCES agent_run_input_events(id) ON DELETE CASCADE,
+    original_sequence integer NOT NULL,
+    original_sequence_was_null boolean NOT NULL,
+    CONSTRAINT agent_input_sequence_metadata_bounds CHECK (
+        original_sequence >= 0
+        AND original_sequence <= 2147483647
+        AND (
+            (original_sequence_was_null AND original_sequence = 0)
+            OR NOT original_sequence_was_null
+        )
+    )
+);
+
+INSERT INTO agent_run_input_sequence_legacy_metadata (
+    run_input_event_id, original_sequence, original_sequence_was_null
+)
+SELECT id, COALESCE(sequence, 0), sequence IS NULL
+FROM agent_run_input_events;
+
+CREATE OR REPLACE FUNCTION agent_guard_input_sequence_metadata_immutable() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'RunInputEvent migration metadata is immutable'
+        USING ERRCODE = 'check_violation';
+END;
+$$;
+
+DROP TRIGGER IF EXISTS agent_input_sequence_metadata_immutable_guard
+    ON agent_run_input_sequence_legacy_metadata;
+CREATE TRIGGER agent_input_sequence_metadata_immutable_guard
+BEFORE UPDATE OR DELETE ON agent_run_input_sequence_legacy_metadata
+FOR EACH ROW EXECUTE FUNCTION agent_guard_input_sequence_metadata_immutable();
+
+REVOKE ALL ON TABLE agent_run_input_sequence_legacy_metadata FROM PUBLIC;
+REVOKE ALL ON FUNCTION agent_guard_input_sequence_metadata_immutable() FROM PUBLIC;
+"""
+
+
+SEQUENCE_METADATA_REVERSE_SQL = """
+DROP TRIGGER IF EXISTS agent_input_keyed_binding_guard ON agent_run_input_events;
+DROP TRIGGER IF EXISTS agent_input_sequence_immutable_guard ON agent_run_input_events;
+
+ALTER TABLE agent_run_input_events ALTER COLUMN sequence DROP NOT NULL;
+
+UPDATE agent_run_input_events AS event
+SET sequence = CASE
+    WHEN metadata.original_sequence_was_null THEN NULL
+    ELSE metadata.original_sequence
+END
+FROM agent_run_input_sequence_legacy_metadata AS metadata
+WHERE event.id = metadata.run_input_event_id;
+
+DROP TRIGGER IF EXISTS agent_input_sequence_metadata_immutable_guard
+    ON agent_run_input_sequence_legacy_metadata;
+DROP FUNCTION IF EXISTS agent_guard_input_sequence_metadata_immutable();
+DROP TABLE agent_run_input_sequence_legacy_metadata;
+"""
+
+
 LEGACY_INPUT_DISPOSITION_SQL = """
 LOCK TABLE agent_run_input_events IN SHARE ROW EXCLUSIVE MODE;
 DROP TRIGGER IF EXISTS agent_input_keyed_binding_guard ON agent_run_input_events;
@@ -209,6 +270,7 @@ class Migration(migrations.Migration):
             name="is_authoritative",
             field=models.BooleanField(default=True, editable=False),
         ),
+        migrations.RunSQL(SEQUENCE_METADATA_FORWARD_SQL, migrations.RunSQL.noop),
         migrations.RunSQL(
             LEGACY_INPUT_DISPOSITION_SQL,
             migrations.RunSQL.noop,
@@ -237,4 +299,5 @@ class Migration(migrations.Migration):
             INPUT_IMMUTABILITY_FORWARD_SQL + KEYED_BINDING_FORWARD_SQL,
             INPUT_IMMUTABILITY_REVERSE_SQL + KEYED_BINDING_REVERSE_SQL,
         ),
+        migrations.RunSQL(migrations.RunSQL.noop, SEQUENCE_METADATA_REVERSE_SQL),
     ]

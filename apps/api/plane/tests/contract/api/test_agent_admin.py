@@ -155,6 +155,7 @@ def test_admin_api_proves_lifecycle_review_and_redaction(api_key_client, workspa
     assert run_body["invocations"][0]["id"] == invocation_id
     assert "raw_payload" not in json.dumps(run_body)
     assert "envelope" not in json.dumps(run_body)
+    assert "original_sequence" not in json.dumps(run_body)
 
     assignment = AssignmentContract.objects.get(pk=assignment_id)
     assert assignment.state == AssignmentState.COMPLETED
