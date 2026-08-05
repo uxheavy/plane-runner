@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone as dt_timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -37,76 +38,150 @@ def _get_zone(name: str) -> ZoneInfo:
         raise AgentScheduleError(f"Unknown schedule timezone: {name}") from exc
 
 
-def _field_values(field: str, lower: int, upper: int) -> set[int]:
+@dataclass(frozen=True)
+class _CronFields:
+    minutes: set[int]
+    hours: set[int]
+    days: set[int]
+    months: set[int]
+    weekdays: set[int]
+    days_unrestricted: bool
+    weekdays_unrestricted: bool
+
+
+def _field_values(field: str, lower: int, upper: int) -> tuple[set[int], bool]:
     values: set[int] = set()
     for token in field.split(","):
         token = token.strip()
         if not token:
             raise AgentScheduleError("Cron fields cannot contain empty values")
-        if token == "*":
-            values.update(range(lower, upper + 1))
-            continue
-        if token.startswith("*/"):
+        base, separator, raw_step = token.partition("/")
+        if separator:
             try:
-                step = int(token[2:])
+                step = int(raw_step)
             except ValueError as exc:
                 raise AgentScheduleError("Cron step must be an integer") from exc
             if step < 1:
                 raise AgentScheduleError("Cron step must be positive")
-            values.update(range(lower, upper + 1, step))
-            continue
-        if "-" in token:
-            parts = token.split("-")
+        else:
+            step = 1
+        if base == "*":
+            start, end = lower, upper
+        elif "-" in base:
+            parts = base.split("-")
             if len(parts) != 2:
                 raise AgentScheduleError("Cron ranges must have one hyphen")
             try:
                 start, end = (int(part) for part in parts)
             except ValueError as exc:
                 raise AgentScheduleError("Cron range values must be integers") from exc
-            if start < lower or end > upper or start > end:
-                raise AgentScheduleError("Cron range is outside its field")
-            values.update(range(start, end + 1))
-            continue
-        try:
-            value = int(token)
-        except ValueError as exc:
-            raise AgentScheduleError("Cron values must be integers, ranges, or steps") from exc
-        if value < lower or value > upper:
-            raise AgentScheduleError("Cron value is outside its field")
-        values.add(value)
-    return values
+        else:
+            try:
+                start = end = int(base)
+            except ValueError as exc:
+                raise AgentScheduleError("Cron values must be integers, ranges, or steps") from exc
+            if separator:
+                end = upper
+        if start < lower or end > upper or start > end:
+            raise AgentScheduleError("Cron range is outside its field")
+        values.update(range(start, end + 1, step))
+    return values, values == set(range(lower, upper + 1))
 
 
-def parse_cron_expression(expression: str) -> tuple[set[int], set[int], set[int], set[int], set[int]]:
+def _weekday_values(field: str) -> tuple[set[int], bool]:
+    values, unrestricted = _field_values(field, 0, 7)
+    normalized = {0 if value == 7 else value for value in values}
+    return normalized, unrestricted or normalized == set(range(7))
+
+
+def _cron_fields(expression: str) -> _CronFields:
     fields = _non_empty(expression, "cron_expression", 255).split()
     if len(fields) != 5:
         raise AgentScheduleError("Cron expressions must contain five fields")
-    return (
-        _field_values(fields[0], 0, 59),
-        _field_values(fields[1], 0, 23),
-        _field_values(fields[2], 1, 31),
-        _field_values(fields[3], 1, 12),
-        _field_values(fields[4], 0, 6),
+    minutes, _ = _field_values(fields[0], 0, 59)
+    hours, _ = _field_values(fields[1], 0, 23)
+    days, days_unrestricted = _field_values(fields[2], 1, 31)
+    months, _ = _field_values(fields[3], 1, 12)
+    weekdays, weekdays_unrestricted = _weekday_values(fields[4])
+    return _CronFields(
+        minutes=minutes,
+        hours=hours,
+        days=days,
+        months=months,
+        weekdays=weekdays,
+        days_unrestricted=days_unrestricted,
+        weekdays_unrestricted=weekdays_unrestricted,
     )
 
 
-def next_schedule_fire(expression: str, timezone_name: str, after: datetime) -> datetime:
-    """Return the next matching local minute as an aware UTC datetime."""
+def parse_cron_expression(expression: str) -> tuple[set[int], set[int], set[int], set[int], set[int]]:
+    """Parse standard five-field cron values (Sunday is both 0 and 7)."""
 
-    minutes, hours, days, months, weekdays = parse_cron_expression(expression)
+    parsed = _cron_fields(expression)
+    return (
+        parsed.minutes,
+        parsed.hours,
+        parsed.days,
+        parsed.months,
+        parsed.weekdays,
+    )
+
+
+def _cron_day_matches(parsed: _CronFields, local: datetime) -> bool:
+    day_of_month_matches = local.day in parsed.days
+    cron_weekday = (local.weekday() + 1) % 7
+    day_of_week_matches = cron_weekday in parsed.weekdays
+    if parsed.days_unrestricted and parsed.weekdays_unrestricted:
+        return True
+    if parsed.days_unrestricted:
+        return day_of_week_matches
+    if parsed.weekdays_unrestricted:
+        return day_of_month_matches
+    return day_of_month_matches or day_of_week_matches
+
+
+def _resolve_local_minute(local_naive: datetime, zone: ZoneInfo) -> datetime | None:
+    """Return the first valid UTC occurrence for a local minute.
+
+    Nonexistent spring-forward minutes return ``None``.  Ambiguous fall-back
+    minutes deterministically choose the earlier UTC occurrence (fold 0); a
+    schedule therefore fires once for that local wall-clock minute.
+    """
+
+    candidates: set[datetime] = set()
+    for fold in (0, 1):
+        candidate = local_naive.replace(tzinfo=zone, fold=fold)
+        utc_candidate = candidate.astimezone(dt_timezone.utc)
+        round_trip = utc_candidate.astimezone(zone)
+        if round_trip.replace(tzinfo=None) == local_naive:
+            candidates.add(utc_candidate)
+    return min(candidates) if candidates else None
+
+
+def next_schedule_fire(expression: str, timezone_name: str, after: datetime) -> datetime:
+    """Return the next standard-cron minute as an aware UTC datetime.
+
+    The search is chronological in UTC, while matching uses local calendar
+    fields.  This explicitly skips nonexistent local minutes and chooses the
+    first UTC occurrence of an ambiguous fall-back minute.
+    """
+
+    parsed = _cron_fields(expression)
     zone = _get_zone(timezone_name)
     if after.tzinfo is None or after.utcoffset() is None:
         raise AgentScheduleError("Schedule calculations require an aware datetime")
-    candidate = after.astimezone(zone).replace(second=0, microsecond=0, fold=0) + timedelta(minutes=1)
+    candidate = after.astimezone(dt_timezone.utc).replace(second=0, microsecond=0) + timedelta(minutes=1)
     for _ in range(60 * 24 * 370):
+        local = candidate.astimezone(zone)
         if (
-            candidate.minute in minutes
-            and candidate.hour in hours
-            and candidate.day in days
-            and candidate.month in months
-            and candidate.weekday() in weekdays
+            local.minute in parsed.minutes
+            and local.hour in parsed.hours
+            and local.month in parsed.months
+            and _cron_day_matches(parsed, local)
         ):
-            return candidate.astimezone(dt_timezone.utc)
+            local_naive = local.replace(tzinfo=None)
+            if _resolve_local_minute(local_naive, zone) == candidate:
+                return candidate
         candidate += timedelta(minutes=1)
     raise AgentScheduleError("Cron expression has no fire within the supported horizon")
 

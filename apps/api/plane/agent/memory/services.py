@@ -22,6 +22,7 @@ from plane.db.models import (
     AgentProvenanceKind,
     AgentRevisionState,
     AgentRole,
+    WorkspaceMember,
 )
 
 from .contracts import AgentContextProjection, ContextAuthorizationPort, DenySubjectContext
@@ -61,6 +62,23 @@ def _ensure_gardener(gardener: AgentActor) -> AgentActor:
     if gardener.active_profile_id is None or gardener.active_profile.role != AgentRole.GARDENER:
         raise AgentMemoryError("Only an Agent with the current gardener role may propose changes")
     return gardener
+
+
+def _ensure_human_reviewer(reviewer, *, workspace_id) -> object:
+    """Require a live, non-bot workspace member for governance actions."""
+
+    if reviewer is None or getattr(reviewer, "pk", None) is None:
+        raise AgentMemoryError("Governance requires a persisted human reviewer")
+    if not getattr(reviewer, "is_active", False) or getattr(reviewer, "is_bot", False):
+        raise AgentMemoryError("Governance reviewer must be an active human user")
+    if not WorkspaceMember.objects.filter(
+        workspace_id=workspace_id,
+        member_id=reviewer.pk,
+        role__gte=15,
+        is_active=True,
+    ).exists():
+        raise AgentMemoryError("Governance reviewer is not authorized for the Agent workspace")
+    return reviewer
 
 
 def _latest_memory_revision(entry: AgentMemoryEntry) -> AgentMemoryRevision | None:
@@ -301,9 +319,8 @@ def propose_memory_change(
 def review_proposal(proposal: AgentChangeProposal, *, reviewer, approve: bool, note: str = "") -> AgentChangeProposal:
     """Record human governance without changing the candidate revision."""
 
-    if reviewer is None:
-        raise AgentMemoryError("Proposal review requires a human reviewer")
     locked = AgentChangeProposal.objects.select_for_update().get(pk=proposal.pk)
+    _ensure_human_reviewer(reviewer, workspace_id=locked.workspace_id)
     if locked.state in {AgentProposalState.APPLIED, AgentProposalState.REJECTED}:
         return locked
     if locked.state != AgentProposalState.PROPOSED:
@@ -327,10 +344,13 @@ def promote_proposal(proposal: AgentChangeProposal, *, reviewer=None):
         return promote_skill_proposal(locked, reviewer=reviewer)
     if locked.state == AgentProposalState.APPLIED:
         return AgentMemoryRevision.objects.get(pk=locked.applied_revision_ref)
-    if locked.state != AgentProposalState.APPROVED or locked.reviewed_by_id is None:
+    if locked.state != AgentProposalState.APPROVED or locked.reviewed_by_id is None or locked.reviewed_at is None:
         raise AgentMemoryError("Only a human-approved proposal may be promoted")
     candidate = AgentMemoryRevision.objects.select_related("entry").get(pk=locked.memory_revision_id)
     entry = AgentMemoryEntry.objects.select_for_update().get(pk=candidate.entry_id)
+    _ensure_human_reviewer(locked.reviewed_by, workspace_id=entry.workspace_id)
+    if candidate.state != AgentRevisionState.CANDIDATE:
+        raise AgentMemoryError("Only a candidate memory revision may be promoted")
     predecessor = _latest_memory_revision(entry)
     revision = _create_memory_revision(
         entry,
@@ -356,18 +376,34 @@ def rollback_memory(
     to_revision: AgentMemoryRevision,
     reviewer,
     rationale: str,
+    now: datetime | None = None,
 ) -> AgentMemoryRevision:
     """Restore an earlier content state by appending a new revision."""
 
-    if reviewer is None:
-        raise AgentMemoryError("Rollback requires a human reviewer")
-    locked_entry = AgentMemoryEntry.objects.select_for_update().get(pk=entry.pk)
-    target = AgentMemoryRevision.objects.get(pk=to_revision.pk)
+    now = now or timezone.now()
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise AgentMemoryError("Rollback requires an aware timestamp")
+    locked_entry = AgentMemoryEntry.all_objects.select_for_update().get(pk=entry.pk)
+    _ensure_human_reviewer(reviewer, workspace_id=locked_entry.workspace_id)
+    if locked_entry.retention_expires_at is not None and locked_entry.retention_expires_at <= now:
+        raise AgentMemoryError("Memory retention has expired; rollback cannot restore this entry")
+    target = AgentMemoryRevision.all_objects.select_for_update().get(pk=to_revision.pk)
     if target.entry_id != locked_entry.id:
         raise AgentMemoryError("Rollback revision belongs to another memory entry")
+    if target.state != AgentRevisionState.ACTIVE:
+        raise AgentMemoryError("Rollback requires an active memory revision")
     predecessor = _latest_memory_revision(locked_entry)
     if predecessor is None:
         raise AgentMemoryError("Memory entry has no active revision")
+    provenance_ref = f"memory-revision:{target.id}"
+    existing = AgentMemoryRevision.all_objects.filter(
+        entry=locked_entry,
+        provenance=AgentProvenanceKind.ROLLBACK,
+        provenance_ref=provenance_ref,
+        state=AgentRevisionState.ACTIVE,
+    ).first()
+    if existing is not None:
+        return existing
     if locked_entry.deleted_at is not None:
         locked_entry.deleted_at = None
         locked_entry.deletion_reason = ""
@@ -378,7 +414,7 @@ def rollback_memory(
         content=target.content,
         state=AgentRevisionState.ACTIVE,
         provenance=AgentProvenanceKind.ROLLBACK,
-        provenance_ref=f"memory-revision:{target.id}",
+        provenance_ref=provenance_ref,
         rationale=_text(rationale, "rollback rationale"),
         predecessor=predecessor,
     )

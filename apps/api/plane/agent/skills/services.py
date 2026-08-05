@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from django.db import transaction
 from django.db.models import Q
@@ -23,14 +24,23 @@ from plane.db.models import (
 )
 
 from plane.agent.memory.contracts import ContextAuthorizationPort, DenySubjectContext
-from plane.agent.memory.services import AgentMemoryError, _ensure_gardener, _scope_actor
+from plane.agent.memory.services import AgentMemoryError, _ensure_gardener, _ensure_human_reviewer, _scope_actor
 
 from .projections import normalize_skill_files, project_skill_package, skill_package_digest
+
+
+_UNSUPPORTED_SHARED_VISIBILITIES = frozenset({AgentSkillVisibility.TEMPLATE, AgentSkillVisibility.ORGANIZATION})
 
 
 def _skill_key(value: Any) -> str:
     if not isinstance(value, str) or not value.strip() or len(value.encode("utf-8")) > 255:
         raise AgentMemoryError("skill key must be a non-empty string within 255 UTF-8 bytes")
+    return value
+
+
+def _rationale(value: Any) -> str:
+    if not isinstance(value, str) or not value.strip() or len(value.encode("utf-8")) > 65_536:
+        raise AgentMemoryError("rollback rationale must be a non-empty string within 65536 UTF-8 bytes")
     return value
 
 
@@ -41,6 +51,32 @@ def _visibility(visibility: str, subject_user) -> None:
         raise AgentMemoryError("subject-user skill requires subject_user")
     if visibility != AgentSkillVisibility.SUBJECT_USER and subject_user is not None:
         raise AgentMemoryError("only subject-user skills may bind a subject user")
+
+
+def _requested_scope_id(visibility: str, scope_id, *, workspace_id) -> UUID | None:
+    """Bind shared promotion to an authoritative Plane scope, or fail closed."""
+
+    if visibility == AgentSkillVisibility.AGENT_PRIVATE:
+        if scope_id is not None:
+            raise AgentMemoryError("Agent-private skill promotion cannot carry a shared scope")
+        return None
+    if visibility == AgentSkillVisibility.WORKSPACE:
+        if scope_id is None:
+            raise AgentMemoryError("Workspace skill promotion requires the target workspace scope id")
+        try:
+            parsed = UUID(str(scope_id))
+        except (TypeError, ValueError, AttributeError) as exc:
+            raise AgentMemoryError("Workspace skill promotion scope id is invalid") from exc
+        if parsed != workspace_id:
+            raise AgentMemoryError("Workspace skill promotion scope is outside the target Agent workspace")
+        return parsed
+    if visibility in _UNSUPPORTED_SHARED_VISIBILITIES:
+        raise AgentMemoryError(
+            f"Unsupported shared skill scope: {visibility}; Plane has no authoritative owner for this scope"
+        )
+    if visibility == AgentSkillVisibility.SUBJECT_USER:
+        raise AgentMemoryError("Subject-user skill promotion requires an explicit subject-user API")
+    raise AgentMemoryError("Unknown skill promotion scope")
 
 
 def _latest_revision(definition: AgentSkillDefinition) -> AgentSkillRevision | None:
@@ -113,18 +149,10 @@ def create_skill(
     actor = _scope_actor(actor)
     key = _skill_key(key)
     _visibility(visibility, subject_user)
+    if visibility not in {AgentSkillVisibility.AGENT_PRIVATE, AgentSkillVisibility.SUBJECT_USER}:
+        raise AgentMemoryError("Direct skill creation supports only Agent-private or subject-user visibility")
     if provenance not in AgentProvenanceKind.values:
         raise AgentMemoryError("Unknown skill provenance")
-    if (
-        visibility
-        in {
-            AgentSkillVisibility.TEMPLATE,
-            AgentSkillVisibility.WORKSPACE,
-            AgentSkillVisibility.ORGANIZATION,
-        }
-        and provenance != AgentProvenanceKind.HUMAN
-    ):
-        raise AgentMemoryError("Shared skills require human promotion")
     files = normalize_skill_files(package_files)
     definition = AgentSkillDefinition.objects.create(
         workspace=actor.workspace,
@@ -202,6 +230,7 @@ def propose_skill_change(
     gardener: AgentActor,
     rationale: str,
     requested_visibility: str = AgentSkillVisibility.AGENT_PRIVATE,
+    requested_scope_id=None,
     idempotency_key: str | None = None,
     source_run=None,
     created_by=None,
@@ -217,8 +246,11 @@ def propose_skill_change(
         raise AgentMemoryError("Gardener is outside the target Agent scope")
     if requested_visibility not in AgentSkillVisibility.values:
         raise AgentMemoryError("Unknown skill visibility")
-    if requested_visibility == AgentSkillVisibility.SUBJECT_USER:
-        raise AgentMemoryError("Skill proposals require an explicit subject-user API")
+    requested_scope_id = _requested_scope_id(
+        requested_visibility,
+        requested_scope_id,
+        workspace_id=actor.workspace_id,
+    )
     if idempotency_key is not None:
         if (
             not isinstance(idempotency_key, str)
@@ -229,7 +261,14 @@ def propose_skill_change(
     if idempotency_key:
         fingerprint = command_fingerprint(
             "propose_skill_change",
-            {"actor": str(actor.id), "key": key, "files": package_files, "gardener": str(gardener.id)},
+            {
+                "actor": str(actor.id),
+                "key": key,
+                "files": package_files,
+                "gardener": str(gardener.id),
+                "requestedVisibility": requested_visibility,
+                "requestedScopeId": str(requested_scope_id) if requested_scope_id else None,
+            },
         )
         existing = AgentChangeProposal.all_objects.filter(idempotency_key=idempotency_key).first()
         if existing:
@@ -272,6 +311,7 @@ def propose_skill_change(
         skill_revision=candidate,
         rationale=rationale,
         requested_visibility=requested_visibility,
+        requested_scope_id=requested_scope_id,
         proposed_by=gardener,
         idempotency_key=idempotency_key,
         command_fingerprint=fingerprint,
@@ -283,14 +323,23 @@ def propose_skill_change(
 def promote_skill_proposal(proposal: AgentChangeProposal, *, reviewer=None) -> AgentSkillRevision:
     locked = AgentChangeProposal.objects.select_for_update().get(pk=proposal.pk)
     if locked.state == AgentProposalState.APPLIED:
-        return AgentSkillRevision.objects.get(pk=locked.applied_revision_ref)
-    if locked.state != AgentProposalState.APPROVED or locked.reviewed_by_id is None:
+        return AgentSkillRevision.all_objects.get(pk=locked.applied_revision_ref)
+    if locked.state != AgentProposalState.APPROVED or locked.reviewed_by_id is None or locked.reviewed_at is None:
         raise AgentMemoryError("Only a human-approved skill proposal may be promoted")
-    candidate = AgentSkillRevision.objects.select_related("definition").get(pk=locked.skill_revision_id)
+    candidate = AgentSkillRevision.all_objects.select_related("definition").get(pk=locked.skill_revision_id)
     definition = AgentSkillDefinition.objects.select_for_update().get(pk=candidate.definition_id)
     requested_visibility = locked.requested_visibility or definition.visibility
-    if requested_visibility != definition.visibility:
+    _ensure_human_reviewer(locked.reviewed_by, workspace_id=definition.workspace_id)
+    if candidate.state != AgentRevisionState.CANDIDATE:
+        raise AgentMemoryError("Only a candidate skill revision may be promoted")
+    requested_scope_id = _requested_scope_id(
+        requested_visibility,
+        locked.requested_scope_id,
+        workspace_id=definition.workspace_id,
+    )
+    if requested_visibility != definition.visibility or requested_scope_id != definition.shared_scope_id:
         definition.visibility = requested_visibility
+        definition.shared_scope_id = requested_scope_id
         definition.save(_allow_governance=True)
     predecessor = _latest_revision(definition)
     revision = _create_revision(
@@ -311,16 +360,39 @@ def promote_skill_proposal(proposal: AgentChangeProposal, *, reviewer=None) -> A
 
 
 @transaction.atomic
-def rollback_skill(definition: AgentSkillDefinition, *, to_revision: AgentSkillRevision, reviewer, rationale: str):
-    if reviewer is None:
-        raise AgentMemoryError("Rollback requires a human reviewer")
-    locked = AgentSkillDefinition.objects.select_for_update().get(pk=definition.pk)
-    target = AgentSkillRevision.objects.get(pk=to_revision.pk)
+def rollback_skill(
+    definition: AgentSkillDefinition,
+    *,
+    to_revision: AgentSkillRevision,
+    reviewer,
+    rationale: str,
+    now: datetime | None = None,
+):
+    now = now or timezone.now()
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise AgentMemoryError("Rollback requires an aware timestamp")
+    locked = AgentSkillDefinition.all_objects.select_for_update().get(pk=definition.pk)
+    _ensure_human_reviewer(reviewer, workspace_id=locked.workspace_id)
+    if locked.retention_expires_at is not None and locked.retention_expires_at <= now:
+        raise AgentMemoryError("Skill retention has expired; rollback cannot restore this definition")
+    target = AgentSkillRevision.all_objects.select_for_update().get(pk=to_revision.pk)
     if target.definition_id != locked.id:
         raise AgentMemoryError("Rollback revision belongs to another skill")
+    if target.state != AgentRevisionState.ACTIVE:
+        raise AgentMemoryError("Rollback requires an active skill revision")
     predecessor = _latest_revision(locked)
     if predecessor is None:
         raise AgentMemoryError("Skill has no active revision")
+    rationale = _rationale(rationale)
+    provenance_ref = f"skill-revision:{target.id}"
+    existing = AgentSkillRevision.all_objects.filter(
+        definition=locked,
+        provenance=AgentProvenanceKind.ROLLBACK,
+        provenance_ref=provenance_ref,
+        state=AgentRevisionState.ACTIVE,
+    ).first()
+    if existing is not None:
+        return existing
     if locked.deleted_at is not None:
         locked.deleted_at = None
         locked.deletion_reason = ""
@@ -331,7 +403,7 @@ def rollback_skill(definition: AgentSkillDefinition, *, to_revision: AgentSkillR
         package_files=target.package_files,
         state=AgentRevisionState.ACTIVE,
         provenance=AgentProvenanceKind.ROLLBACK,
-        provenance_ref=f"skill-revision:{target.id}",
+        provenance_ref=provenance_ref,
         rationale=rationale,
         predecessor=predecessor,
     )
@@ -378,11 +450,8 @@ def project_visible_skill_packages(
         Q(actor=actor, visibility__in={AgentSkillVisibility.AGENT_PRIVATE, AgentSkillVisibility.SUBJECT_USER})
         | Q(
             workspace=actor.workspace,
-            visibility__in={
-                AgentSkillVisibility.TEMPLATE,
-                AgentSkillVisibility.WORKSPACE,
-                AgentSkillVisibility.ORGANIZATION,
-            },
+            visibility=AgentSkillVisibility.WORKSPACE,
+            shared_scope_id=actor.workspace_id,
         ),
         deleted_at__isnull=True,
     ).order_by("key", "visibility", "id")
@@ -395,13 +464,16 @@ def project_visible_skill_packages(
             and definition.subject_user_id == subject_user.id
         ):
             visible = authorization.can_read_user_preferences(actor=actor, subject_user_id=str(subject_user.id))
-        if definition.visibility in {
-            AgentSkillVisibility.TEMPLATE,
-            AgentSkillVisibility.WORKSPACE,
-            AgentSkillVisibility.ORGANIZATION,
-        }:
+        if definition.visibility == AgentSkillVisibility.WORKSPACE:
             can_read_shared = getattr(authorization, "can_read_shared_skills", None)
-            visible = bool(can_read_shared and can_read_shared(actor=actor, visibility=definition.visibility))
+            visible = bool(
+                can_read_shared
+                and can_read_shared(
+                    actor=actor,
+                    visibility=definition.visibility,
+                    scope_id=str(definition.shared_scope_id),
+                )
+            )
         if not visible:
             continue
         revision = _latest_revision(definition)

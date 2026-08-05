@@ -237,6 +237,11 @@ class AgentMemoryRevision(AgentScopedModel):
         ordering = ("entry_id", "revision")
         constraints = [
             models.UniqueConstraint(fields=["entry", "revision"], name="agent_memory_revision_unique_version"),
+            models.UniqueConstraint(
+                fields=["entry", "provenance", "provenance_ref"],
+                condition=models.Q(provenance=AgentProvenanceKind.ROLLBACK),
+                name="agent_memory_revision_unique_rollback_target",
+            ),
             models.CheckConstraint(condition=models.Q(revision__gte=1), name="agent_memory_revision_positive"),
         ]
 
@@ -286,6 +291,7 @@ class AgentSkillDefinition(AgentScopedModel):
         null=True,
         blank=True,
     )
+    shared_scope_id = models.UUIDField(null=True, blank=True)
     retention_expires_at = models.DateTimeField(null=True, blank=True)
     deletion_reason = models.CharField(max_length=255, blank=True)
     deleted_by = models.ForeignKey(
@@ -297,7 +303,7 @@ class AgentSkillDefinition(AgentScopedModel):
     )
 
     IMMUTABLE_FIELDS = ("workspace_id", "project_id", "actor_id", "key", "subject_user_id")
-    GOVERNANCE_FIELDS = ("visibility", "deleted_at", "deletion_reason", "deleted_by_id")
+    GOVERNANCE_FIELDS = ("visibility", "shared_scope_id", "deleted_at", "deletion_reason", "deleted_by_id")
 
     class Meta:
         db_table = "agent_skill_definitions"
@@ -306,29 +312,29 @@ class AgentSkillDefinition(AgentScopedModel):
             models.CheckConstraint(condition=~models.Q(key=""), name="agent_skill_key_not_empty"),
             models.CheckConstraint(
                 condition=(
-                    models.Q(visibility=AgentSkillVisibility.AGENT_PRIVATE, subject_user__isnull=True)
-                    | models.Q(visibility=AgentSkillVisibility.SUBJECT_USER, subject_user__isnull=False)
-                    | models.Q(
-                        visibility__in=[
-                            AgentSkillVisibility.TEMPLATE,
-                            AgentSkillVisibility.WORKSPACE,
-                            AgentSkillVisibility.ORGANIZATION,
-                        ],
+                    models.Q(
+                        visibility=AgentSkillVisibility.AGENT_PRIVATE,
                         subject_user__isnull=True,
+                        shared_scope_id__isnull=True,
+                    )
+                    | models.Q(
+                        visibility=AgentSkillVisibility.SUBJECT_USER,
+                        subject_user__isnull=False,
+                        shared_scope_id__isnull=True,
+                    )
+                    | models.Q(
+                        visibility=AgentSkillVisibility.WORKSPACE,
+                        subject_user__isnull=True,
+                        shared_scope_id__isnull=False,
                     )
                 ),
-                name="agent_skill_visibility_subject_binding",
+                name="agent_skill_visibility_scope_binding",
             ),
             models.UniqueConstraint(
-                fields=["workspace", "key"],
+                fields=["shared_scope_id", "key"],
                 condition=models.Q(
                     deleted_at__isnull=True,
-                    subject_user__isnull=True,
-                    visibility__in=[
-                        AgentSkillVisibility.TEMPLATE,
-                        AgentSkillVisibility.WORKSPACE,
-                        AgentSkillVisibility.ORGANIZATION,
-                    ],
+                    visibility=AgentSkillVisibility.WORKSPACE,
                 ),
                 name="agent_skill_unique_shared_key",
             ),
@@ -358,6 +364,16 @@ class AgentSkillDefinition(AgentScopedModel):
             raise ValidationError("Subject-user skills require a subject user")
         if self.visibility != AgentSkillVisibility.SUBJECT_USER and self.subject_user_id:
             raise ValidationError("Only subject-user skills may bind a subject user")
+        if self.visibility == AgentSkillVisibility.WORKSPACE:
+            if self.shared_scope_id != self.workspace_id:
+                raise ValidationError("Workspace skills must use their real workspace scope id")
+        elif self.shared_scope_id:
+            raise ValidationError("Only workspace skills may bind a shared scope id")
+        elif self.visibility in {
+            AgentSkillVisibility.TEMPLATE,
+            AgentSkillVisibility.ORGANIZATION,
+        }:
+            raise ValidationError("Template and organization skill scopes are unsupported in Plane")
 
 
 class AgentSkillRevision(AgentScopedModel):
@@ -415,6 +431,11 @@ class AgentSkillRevision(AgentScopedModel):
         ordering = ("definition_id", "revision")
         constraints = [
             models.UniqueConstraint(fields=["definition", "revision"], name="agent_skill_revision_unique_version"),
+            models.UniqueConstraint(
+                fields=["definition", "provenance", "provenance_ref"],
+                condition=models.Q(provenance=AgentProvenanceKind.ROLLBACK),
+                name="agent_skill_revision_unique_rollback_target",
+            ),
             models.CheckConstraint(condition=models.Q(revision__gte=1), name="agent_skill_revision_positive"),
         ]
 
@@ -467,6 +488,7 @@ class AgentChangeProposal(AgentScopedModel):
     state = models.CharField(max_length=32, choices=AgentProposalState.choices, default=AgentProposalState.PROPOSED)
     rationale = models.TextField()
     requested_visibility = models.CharField(max_length=32, blank=True)
+    requested_scope_id = models.UUIDField(null=True, blank=True)
     proposed_by = models.ForeignKey(
         AgentActor,
         on_delete=models.PROTECT,
@@ -525,6 +547,16 @@ class AgentChangeProposal(AgentScopedModel):
             definition = AgentSkillDefinition.objects.only("actor_id").get(pk=revision.definition_id)
             if definition.actor_id != self.actor_id:
                 raise ValidationError("Skill proposal revision belongs to another Agent")
+            if self.requested_visibility == AgentSkillVisibility.WORKSPACE:
+                if self.requested_scope_id != self.workspace_id:
+                    raise ValidationError("Workspace skill proposal must name its real workspace scope")
+            elif self.requested_scope_id is not None:
+                raise ValidationError("Only workspace skill proposals may carry a scope id")
+            elif self.requested_visibility in {
+                AgentSkillVisibility.TEMPLATE,
+                AgentSkillVisibility.ORGANIZATION,
+            }:
+                raise ValidationError("Template and organization skill scopes are unsupported in Plane")
 
 
 class AgentSchedule(AgentScopedModel):
