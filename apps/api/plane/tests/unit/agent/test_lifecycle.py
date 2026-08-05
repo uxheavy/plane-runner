@@ -52,6 +52,7 @@ from plane.db.models import (
     RecoveryIntent,
     RunLineageReason,
     RunAttempt,
+    RunInputEvent,
     RunState,
     TerminalEventKind,
     RunTerminalEvent,
@@ -551,6 +552,11 @@ def test_input_events_require_current_waiting_question_and_converge_on_replay(as
         idempotency_key="idempotency:input-answer",
     )
     assert event.sequence == 1
+    run.refresh_from_db()
+    initial.refresh_from_db()
+    assert run.state == RunState.RUNNING
+    assert run.pending_input_ref is None
+    assert initial.state == InvocationState.RUNNING
     assert (
         record_input_event(
             run,
@@ -571,13 +577,15 @@ def test_input_events_require_current_waiting_question_and_converge_on_replay(as
     assert run.state == RunState.RUNNING
     assert run.pending_input_ref is None
 
-    with pytest.raises(InvalidTransitionError):
+    before_events = RunInputEvent.objects.filter(run=run).count()
+    with pytest.raises(IdempotencyConflictError):
         record_input_event(
             run,
             payload={"answer": "terminal or nonwaiting mutation"},
             pending_input_ref=pending_ref,
             idempotency_key="idempotency:input-nonwaiting",
         )
+    assert RunInputEvent.objects.filter(run=run).count() == before_events
 
 
 @pytest.mark.django_db
@@ -598,6 +606,9 @@ def test_assignment_and_profile_boundaries_reject_unrunnable_or_credential_data(
         {"stop": [{"X-API-Key": "canary"}]},
         {"totalBudget": {"Cookie": "canary"}},
         {"headers": {"Authorization": "Bearer canary"}},
+        {"model": "Bearer canary-credential"},
+        {"model": "API-Key/canary-credential"},
+        {"model": "sk-canary-credential"},
     ):
         with pytest.raises(AgentDomainError):
             create_profile(
@@ -1063,6 +1074,24 @@ def test_evaluator_review_precedes_human_acceptance_and_revision_has_lineage(
     assert new_run.id != run.id
     assert new_run.lineage_of_id == run.id
     assert new_run.snapshot["assignment"]["revision"] == "2"
+
+
+@pytest.mark.django_db
+def test_review_and_decision_notes_are_utf8_bounded_before_state_mutation(assignment, profile, create_user, evaluator):
+    run = create_run(assignment, profile)
+    record_invocation(run, idempotency_key="idempotency:review-bounds-invocation")
+    outcome = propose_outcome(run, summary="A bounded review", idempotency_key="idempotency:review-bounds-outcome")
+
+    reviewed = review_outcome(outcome, evaluator=evaluator, feedback="é" * 2048)
+    assert reviewed.state == OutcomeState.EVALUATOR_REVIEWED
+    with pytest.raises(AgentDomainError):
+        accept_outcome(reviewed, human_reviewer=create_user, decision_note="é" * 2049)
+    outcome.refresh_from_db()
+    assert outcome.state == OutcomeState.EVALUATOR_REVIEWED
+    assert outcome.human_reviewer_id is None
+
+    accepted = accept_outcome(reviewed, human_reviewer=create_user, decision_note="é" * 2048)
+    assert accepted.state == OutcomeState.ACCEPTED
 
 
 @pytest.mark.django_db

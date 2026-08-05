@@ -24,15 +24,30 @@ MAX_AGENT_COLLECTION_ITEMS = 64
 MAX_AGENT_READBACK_BYTES = MAX_BOUNDED_BYTE_COUNT
 
 _CREDENTIAL_KEY = re.compile(r"[^a-z0-9]+", re.IGNORECASE)
-_EMBEDDED_CREDENTIAL_URL = re.compile(r"^[a-z][a-z0-9+.-]*://[^/\s:@]+:[^@\s/]+@", re.IGNORECASE)
+_EMBEDDED_CREDENTIAL_URL = re.compile(
+    r"[a-z][a-z0-9+.-]*://[^/\s:@]+:[^@\s/]+@|[?&#](?:api[\W_]*key|access[\W_]*token|refresh[\W_]*token|token|secret|password)\s*=\s*[^&#\s]+",
+    re.IGNORECASE,
+)
 _INLINE_CREDENTIAL = re.compile(
-    r"\b(?:bearer|basic|api[\W_]*key|access[\W_]*token|refresh[\W_]*token|secret|password)\s*[:=]\s*\S+",
+    r"(?<![a-z0-9])(?:x[\s_-]*api[\s_-]*key|api[\s_-]*key|authorization|auth|bearer|basic|access[\s_-]*token|refresh[\s_-]*token|token|password|cookie|secret)(?![a-z0-9])(?:\s*[:=,/\\_-]\s*|\s+)[^\s]+",
+    re.IGNORECASE,
+)
+_KNOWN_CREDENTIAL_PREFIX = re.compile(
+    r"(?<![a-z0-9])(?:sk-(?:ant-)?[a-z0-9_-]{8,}|gh[pousr]_[a-z0-9_]{8,}|github_pat_[a-z0-9_]{8,}|xox[baprs]-[a-z0-9-]{8,}|akia[0-9a-z]{16}|AIza[0-9a-z_-]{16,}|eyJ[a-z0-9_-]{20,})(?![a-z0-9])",
     re.IGNORECASE,
 )
 
 
 class AgentValueError(ValueError):
     """Raised when an Agent JSON value cannot cross a trusted boundary."""
+
+
+def contains_credential_value(value: str) -> bool:
+    return bool(
+        _EMBEDDED_CREDENTIAL_URL.search(value)
+        or _INLINE_CREDENTIAL.search(value)
+        or _KNOWN_CREDENTIAL_PREFIX.search(value)
+    )
 
 
 def is_credential_key(key: str) -> bool:
@@ -42,6 +57,9 @@ def is_credential_key(key: str) -> bool:
         "accesskey",
         "authorization",
         "authorizationheader",
+        "auth",
+        "authentication",
+        "authheader",
         "bearer",
         "basic",
         "cookie",
@@ -51,6 +69,7 @@ def is_credential_key(key: str) -> bool:
         "secret",
         "secretkey",
         "token",
+        "tokenvalue",
         "header",
         "headers",
     }:
@@ -94,7 +113,7 @@ def _validate_json_tree(
     if isinstance(value, str):
         if len(value.encode("utf-8")) > max_string_bytes:
             raise AgentValueError(f"{path} exceeds {max_string_bytes} UTF-8 bytes")
-        if reject_credentials and (_EMBEDDED_CREDENTIAL_URL.match(value) or _INLINE_CREDENTIAL.search(value)):
+        if reject_credentials and contains_credential_value(value):
             raise AgentValueError(f"{path} contains credential-shaped data")
         return
     if value is None or isinstance(value, bool):

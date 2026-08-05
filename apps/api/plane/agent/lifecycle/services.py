@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection, transaction
+from django.db.models import Max
 from django.utils import timezone
 
 from plane.agent.validation import (
@@ -201,6 +202,12 @@ _CREDENTIAL_REF_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9-]{0,31}:[A-Za-z0-9][A
 def _ensure_non_empty(value, field_name, *, limit=MAX_BOUNDED_TEXT_BYTES):
     if not isinstance(value, str) or not value.strip() or len(value.encode("utf-8")) > limit:
         raise AgentDomainError(f"{field_name} must be a non-empty string within {limit} UTF-8 bytes")
+    return value
+
+
+def _ensure_bounded_text(value, field_name, *, limit=MAX_BOUNDED_TEXT_BYTES):
+    if not isinstance(value, str) or len(value.encode("utf-8")) > limit:
+        raise AgentDomainError(f"{field_name} must fit within {limit} UTF-8 bytes")
     return value
 
 
@@ -675,7 +682,7 @@ def _transition_assignment_locked(assignment, target):
     if target == AssignmentState.REVISION:
         assignment.revision += 1
     assignment.state = target
-    assignment.save(_allow_lifecycle=True)
+    assignment.save(_allow_lifecycle=True, created_by_id=assignment.created_by_id)
     return assignment
 
 
@@ -1061,11 +1068,47 @@ def record_input_event(
     pending_ref = (
         _normalise_ref(pending_input_ref, "event", "pending_input_ref") if pending_input_ref is not None else None
     )
+    if key is not None:
+        _lock_idempotency_key(key)
+        existing = RunInputEvent.all_objects.select_for_update().filter(idempotency_key=key).first()
+        if existing is not None:
+            replay_pending_ref = pending_ref or existing.pending_input_ref
+            event_fingerprint = _command_fingerprint(
+                "record_input_event",
+                {
+                    "runId": _command_id(run),
+                    "kind": kind,
+                    "payload": payload,
+                    "pendingInputRef": replay_pending_ref,
+                    "createdBy": _command_id(created_by),
+                },
+            )
+            if existing.run_id != run.id or (pending_ref is not None and existing.pending_input_ref != pending_ref):
+                raise IdempotencyConflictError("Input event idempotency key is bound to another Plane command")
+            if existing.command_fingerprint != event_fingerprint:
+                if _is_legacy_fingerprint(existing.command_fingerprint):
+                    _legacy_match(
+                        existing,
+                        lambda row: _legacy_input_matches(row, run, kind, payload, replay_pending_ref, created_by),
+                        "Input event idempotency key is bound to another Plane command",
+                        event_fingerprint,
+                    )
+                else:
+                    raise IdempotencyConflictError("Input event idempotency key is bound to another Plane command")
+            return existing
     if pending_ref is None:
         raise AgentDomainError("Input events require the exact pending input reference")
-    event_fingerprint = None
-    if key is not None:
-        event_fingerprint = _command_fingerprint(
+    if run.state != RunState.WAITING_FOR_INPUT:
+        if RunInputEvent.all_objects.filter(run=run, pending_input_ref=pending_ref).exists():
+            raise IdempotencyConflictError("The pending input question has already been answered")
+        raise InvalidTransitionError("Input events require a run that is explicitly waiting for input")
+    if run.pending_input_ref != pending_ref:
+        raise AgentDomainError("Input event does not match the run's pending input reference")
+    _ensure_actor_active(run.actor)
+    if RunInputEvent.all_objects.filter(run=run, pending_input_ref=pending_ref).exists():
+        raise IdempotencyConflictError("The pending input question has already been answered")
+    event_fingerprint = (
+        _command_fingerprint(
             "record_input_event",
             {
                 "runId": _command_id(run),
@@ -1075,27 +1118,11 @@ def record_input_event(
                 "createdBy": _command_id(created_by),
             },
         )
-    if key is not None:
-        _lock_idempotency_key(key)
-        existing = RunInputEvent.all_objects.filter(idempotency_key=key).first()
-        if existing is not None:
-            if existing.command_fingerprint != event_fingerprint:
-                if _is_legacy_fingerprint(existing.command_fingerprint):
-                    _legacy_match(
-                        existing,
-                        lambda row: _legacy_input_matches(row, run, kind, payload, pending_ref, created_by),
-                        "Input event idempotency key is bound to another Plane command",
-                        event_fingerprint,
-                    )
-                else:
-                    raise IdempotencyConflictError("Input event idempotency key is bound to another run")
-            return existing
-    if run.state != RunState.WAITING_FOR_INPUT:
-        raise InvalidTransitionError("Input events require a run that is explicitly waiting for input")
-    if run.pending_input_ref != pending_ref:
-        raise AgentDomainError("Input event does not match the run's pending input reference")
-    _ensure_actor_active(run.actor)
-    sequence = RunInputEvent.all_objects.filter(run=run).count() + 1
+        if key is not None
+        else None
+    )
+    max_sequence = RunInputEvent.all_objects.filter(run=run).aggregate(max_sequence=Max("sequence"))["max_sequence"]
+    sequence = (max_sequence or 0) + 1
     event_uuid = uuid4()
     event_ref = namespaced_ref("event", str(event_uuid))
     fields = dict(
@@ -1112,29 +1139,38 @@ def record_input_event(
         command_fingerprint=event_fingerprint,
         created_by=created_by,
     )
-    if key is None:
-        return RunInputEvent.objects.create(**fields)
-    return _create_with_conflict_resolution(
-        RunInputEvent,
-        fields=fields,
-        key_lookup={"idempotency_key": key},
-        compatible=lambda existing: (
-            existing.run_id == run.id
-            and (
-                existing.command_fingerprint == event_fingerprint
-                or (
-                    _is_legacy_fingerprint(existing.command_fingerprint)
-                    and _legacy_match(
-                        existing,
-                        lambda row: _legacy_input_matches(row, run, kind, payload, pending_ref, created_by),
-                        "Input event idempotency key is bound to another Plane command",
-                        event_fingerprint,
-                    )
-                )
+    try:
+        if key is None:
+            event = RunInputEvent.objects.create(**fields)
+        else:
+            event = _create_with_conflict_resolution(
+                RunInputEvent,
+                fields=fields,
+                key_lookup={"idempotency_key": key},
+                compatible=lambda existing: (
+                    existing.run_id == run.id
+                    and existing.pending_input_ref == pending_ref
+                    and existing.command_fingerprint == event_fingerprint
+                ),
+                message="Input event idempotency key or pending input reference is already consumed",
             )
-        ),
-        message="Input event idempotency key is bound to another Plane command",
-    )
+    except IntegrityError as exc:
+        if RunInputEvent.all_objects.filter(run=run, pending_input_ref=pending_ref).exists():
+            raise IdempotencyConflictError("The pending input question has already been answered") from exc
+        raise
+
+    invocation = None
+    if run.last_invocation_id:
+        invocation = RuntimeInvocation.objects.select_for_update().get(invocation_id=run.last_invocation_id)
+        if invocation.state not in {InvocationState.RUNNING, InvocationState.WAITING_FOR_INPUT}:
+            raise InvalidTransitionError("The current invocation cannot continue after human input")
+    run.state = RunState.RUNNING
+    run.pending_input_ref = None
+    run.save(_allow_lifecycle=True, created_by_id=run.created_by_id)
+    if invocation is not None and invocation.state == InvocationState.WAITING_FOR_INPUT:
+        invocation.state = InvocationState.RUNNING
+        invocation.save(_allow_lifecycle=True, created_by_id=invocation.created_by_id)
+    return event
 
 
 def _make_trigger(run, trigger, input_event):
@@ -1344,7 +1380,7 @@ def record_invocation(
     run.invocation_count += 1
     run.last_invocation_id = invocation_ref_value
     run.cumulative_usage = cumulative_usage
-    run.save(_allow_lifecycle=True)
+    run.save(_allow_lifecycle=True, created_by_id=run.created_by_id)
     return invocation
 
 
@@ -1384,12 +1420,12 @@ def transition_run(run, target, *, pending_input_ref=None):
         return locked
     locked.state = target
     locked.pending_input_ref = pending_ref if target == RunState.WAITING_FOR_INPUT else None
-    locked.save(_allow_lifecycle=True)
+    locked.save(_allow_lifecycle=True, created_by_id=locked.created_by_id)
     if locked.last_invocation_id and target == RunState.WAITING_FOR_INPUT:
         invocation = RuntimeInvocation.objects.select_for_update().get(invocation_id=locked.last_invocation_id)
         if invocation.state == InvocationState.RUNNING:
             invocation.state = InvocationState.WAITING_FOR_INPUT
-            invocation.save(_allow_lifecycle=True)
+            invocation.save(_allow_lifecycle=True, created_by_id=invocation.created_by_id)
     return locked
 
 
@@ -1497,10 +1533,10 @@ def _create_terminal_event_locked(
                 raise IdempotencyConflictError("Terminal event idempotency key is bound to another Plane command")
         return conflicting
     invocation.state = invocation_state
-    invocation.save(_allow_lifecycle=True)
+    invocation.save(_allow_lifecycle=True, created_by_id=invocation.created_by_id)
     run.state = run_state
     run.pending_input_ref = None
-    run.save(_allow_lifecycle=True)
+    run.save(_allow_lifecycle=True, created_by_id=run.created_by_id)
     event_fields = dict(
         workspace=run.workspace,
         project=run.project,
@@ -1692,6 +1728,7 @@ def propose_outcome(run, *, summary, artifacts=None, evidence=None, idempotency_
 
 @transaction.atomic
 def review_outcome(outcome, *, evaluator, feedback=""):
+    feedback = _ensure_bounded_text(feedback, "evaluator_feedback")
     locked = OutcomeSubmission.objects.select_for_update().select_related("run").get(pk=outcome.pk)
     if locked.state != OutcomeState.PROPOSED:
         raise InvalidTransitionError(f"Outcome cannot be evaluated from {locked.state}")
@@ -1707,7 +1744,7 @@ def review_outcome(outcome, *, evaluator, feedback=""):
     locked.evaluator_feedback = feedback
     locked.evaluator_reviewed_at = timezone.now()
     locked.state = OutcomeState.EVALUATOR_REVIEWED
-    locked.save(_allow_lifecycle=True)
+    locked.save(_allow_lifecycle=True, created_by_id=locked.created_by_id)
     return locked
 
 
@@ -1722,6 +1759,7 @@ def _require_reviewed_outcome(outcome):
 
 @transaction.atomic
 def accept_outcome(outcome, *, human_reviewer, decision_note=""):
+    decision_note = _ensure_bounded_text(decision_note, "human_decision_note")
     locked = OutcomeSubmission.objects.select_for_update().select_related("run").get(pk=outcome.pk)
     _require_reviewed_outcome(locked)
     if human_reviewer is None:
@@ -1730,7 +1768,7 @@ def accept_outcome(outcome, *, human_reviewer, decision_note=""):
     locked.human_reviewer = human_reviewer
     locked.human_decision_note = decision_note
     locked.human_decided_at = timezone.now()
-    locked.save(_allow_lifecycle=True)
+    locked.save(_allow_lifecycle=True, created_by_id=locked.created_by_id)
     assignment = AssignmentContract.objects.select_for_update().get(pk=locked.run.assignment_id)
     _transition_assignment_locked(assignment, AssignmentState.COMPLETED)
     return locked
@@ -1738,6 +1776,7 @@ def accept_outcome(outcome, *, human_reviewer, decision_note=""):
 
 @transaction.atomic
 def request_revision(outcome, *, human_reviewer, decision_note=""):
+    decision_note = _ensure_bounded_text(decision_note, "human_decision_note")
     locked = OutcomeSubmission.objects.select_for_update().select_related("run").get(pk=outcome.pk)
     _require_reviewed_outcome(locked)
     if human_reviewer is None:
@@ -1746,7 +1785,7 @@ def request_revision(outcome, *, human_reviewer, decision_note=""):
     locked.human_reviewer = human_reviewer
     locked.human_decision_note = decision_note
     locked.human_decided_at = timezone.now()
-    locked.save(_allow_lifecycle=True)
+    locked.save(_allow_lifecycle=True, created_by_id=locked.created_by_id)
     assignment = AssignmentContract.objects.select_for_update().get(pk=locked.run.assignment_id)
     _transition_assignment_locked(assignment, AssignmentState.REVISION)
     return locked

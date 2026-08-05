@@ -11,16 +11,12 @@ from typing import Any, Protocol
 
 from django.db import transaction
 
-from plane.agent.validation import is_credential_key
+from plane.agent.validation import contains_credential_value, is_credential_key
 from plane.agent.lifecycle import create_profile
 from plane.db.models import AgentActor, ProfileVersion
 
 
 _CREDENTIAL_REF_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9-]{0,31}:[A-Za-z0-9][A-Za-z0-9._~/-]{0,219}$")
-_EMBEDDED_CREDENTIAL_PATTERN = re.compile(
-    r"(?:^[a-z][a-z0-9+.-]*://[^/\s:@]+:[^@\s/]+@|\b(?:bearer|basic|api[\W_]*key|secret|password)\s*[:=]\s*\S+)",
-    re.IGNORECASE,
-)
 
 
 class AgentAdminExtensionPort(Protocol):
@@ -81,7 +77,7 @@ def redact_admin_value(value: Any, *, key: str | None = None) -> Any:
         }
     if isinstance(value, list):
         return [redact_admin_value(item) for item in value]
-    if isinstance(value, str) and _EMBEDDED_CREDENTIAL_PATTERN.search(value):
+    if isinstance(value, str) and contains_credential_value(value):
         return "[redacted]"
     return value
 
@@ -125,10 +121,12 @@ def profile_matches_input(profile: ProfileVersion, profile_data: dict[str, Any])
     return all(getattr(profile, field) == value for field, value in profile_data.items())
 
 
+@transaction.atomic
 def ensure_fixture_profile(actor: AgentActor, *, created_by=None, **profile_data) -> ProfileVersion:
     """Converge a CLI fixture onto one active immutable profile version."""
 
-    profile = actor.active_profile
+    actor = AgentActor.objects.select_for_update().get(pk=actor.pk)
+    profile = ProfileVersion.objects.filter(actor=actor, pk=actor.active_profile_id).first()
     if profile is not None and profile_matches_input(profile, profile_data):
         return profile
     return create_profile(actor, created_by=created_by, **profile_data)

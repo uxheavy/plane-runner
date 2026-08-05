@@ -6,7 +6,7 @@
 from rest_framework import serializers
 
 from plane.agent.administration import redact_admin_value, validate_credential_ref
-from plane.agent.validation import AgentValueError, validate_bounded_json
+from plane.agent.validation import MAX_BOUNDED_TEXT_BYTES, AgentValueError, validate_bounded_json
 from plane.db.models import (
     AgentActor,
     AgentRole,
@@ -285,11 +285,21 @@ class OutcomeCreateSerializer(serializers.Serializer):
 
 class OutcomeReviewSerializer(serializers.Serializer):
     evaluator_id = serializers.UUIDField()
-    feedback = serializers.CharField(required=False, allow_blank=True, default="")
+    feedback = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+        max_length=MAX_BOUNDED_TEXT_BYTES,
+    )
 
 
 class OutcomeDecisionSerializer(serializers.Serializer):
-    decision_note = serializers.CharField(required=False, allow_blank=True, default="")
+    decision_note = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+        max_length=MAX_BOUNDED_TEXT_BYTES,
+    )
 
 
 class GatewayReceiptAdminSerializer(serializers.ModelSerializer):

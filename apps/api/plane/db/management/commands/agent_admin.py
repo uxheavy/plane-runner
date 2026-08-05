@@ -13,7 +13,6 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from plane.agent.administration import ensure_fixture_profile, update_actor, validate_credential_ref
-from plane.agent.lifecycle import create_actor
 from plane.db.models import AgentActor, AgentRole, Project, Workspace
 
 
@@ -60,19 +59,19 @@ class Command(BaseCommand):
             raise CommandError(str(exc)) from exc
 
         with transaction.atomic():
-            actor = AgentActor.objects.filter(workspace=workspace, display_name=display_name).first()
-            if actor is None:
-                actor = create_actor(
-                    workspace=workspace,
-                    project=project,
-                    display_name=display_name,
-                    credential_ref=credential_ref,
-                )
-            else:
-                if actor.project_id != getattr(project, "id", None):
-                    raise CommandError("Existing Agent actor has a different project scope")
-                if credential_ref is not None:
-                    actor = update_actor(actor, credential_ref=credential_ref)
+            actor, _ = AgentActor.objects.get_or_create(
+                workspace=workspace,
+                display_name=display_name,
+                defaults={
+                    "project": project,
+                    "credential_ref": credential_ref,
+                },
+            )
+            actor = AgentActor.objects.select_for_update().get(pk=actor.pk)
+            if actor.project_id != getattr(project, "id", None):
+                raise CommandError("Existing Agent actor has a different project scope")
+            if credential_ref is not None and actor.credential_ref != credential_ref:
+                actor = update_actor(actor, credential_ref=credential_ref)
 
             profile_data = {
                 "role": payload.get("role") or AgentRole.WORKER,

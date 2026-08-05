@@ -446,7 +446,7 @@ class RunInputEvent(AgentScopedModel):
     run = models.ForeignKey(RunAttempt, on_delete=models.PROTECT, related_name="input_events")
     event_ref = models.CharField(max_length=128, unique=True, editable=False)
     kind = models.CharField(max_length=32, choices=InputEventKind.choices)
-    sequence = models.PositiveIntegerField(null=True, blank=True, editable=False)
+    sequence = models.PositiveIntegerField(editable=False)
     payload = models.JSONField(default=default_dict)
     payload_digest = models.CharField(max_length=72, editable=False)
     pending_input_ref = models.CharField(max_length=128, null=True, blank=True, editable=False)
@@ -459,8 +459,12 @@ class RunInputEvent(AgentScopedModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["run", "sequence"],
-                condition=models.Q(sequence__isnull=False),
                 name="agent_input_run_sequence_unique",
+            ),
+            models.UniqueConstraint(
+                fields=["run", "pending_input_ref"],
+                condition=models.Q(pending_input_ref__isnull=False),
+                name="agent_input_run_pending_ref_unique",
             ),
             models.CheckConstraint(
                 condition=(
@@ -481,6 +485,7 @@ class RunInputEvent(AgentScopedModel):
         "run_id",
         "event_ref",
         "kind",
+        "sequence",
         "payload",
         "payload_digest",
         "pending_input_ref",
