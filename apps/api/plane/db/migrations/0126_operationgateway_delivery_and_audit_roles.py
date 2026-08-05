@@ -62,6 +62,8 @@ BEGIN
 END;
 $$;
 
+REVOKE EXECUTE ON FUNCTION operation_gateway_audit_append_only() FROM PUBLIC;
+
 CREATE TRIGGER operation_gateway_audit_append_only_trigger
 BEFORE UPDATE OR DELETE ON operation_gateway_audit
 FOR EACH ROW
