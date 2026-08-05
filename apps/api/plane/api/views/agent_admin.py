@@ -21,7 +21,6 @@ from plane.agent.lifecycle import (
     create_assignment,
     create_profile,
     create_run,
-    finalize_invocation,
     propose_outcome,
     record_input_event,
     record_invocation,
@@ -65,7 +64,6 @@ from plane.db.models import (
     RuntimeInvocation,
     Workspace,
 )
-from plane.db.models.agent import TerminalEventKind
 from plane.db.models.operation_gateway import OperationGatewayAudit, OperationGatewayIdempotency
 from plane.utils.permissions import WorkspaceOwnerPermission
 
@@ -287,6 +285,9 @@ class AgentRunAdminDetailAPIEndpoint(AgentAdminAPIView):
         outcome = OutcomeSubmission.objects.filter(run=run).first()
         return Response(
             {
+                "actor": AgentActorAdminSerializer(run.actor).data,
+                "profile": ProfileVersionAdminSerializer(run.profile_version).data,
+                "assignment": AssignmentAdminSerializer(run.assignment).data,
                 "run": RunAdminSerializer(run).data,
                 "input_events": RunInputEventAdminSerializer(
                     RunInputEvent.objects.filter(run=run)[:limit], many=True
@@ -304,6 +305,29 @@ class AgentRunAdminDetailAPIEndpoint(AgentAdminAPIView):
                     RunTerminalEvent.objects.filter(run=run)[:limit], many=True
                 ).data,
                 "outcome": OutcomeAdminSerializer(outcome).data if outcome else None,
+                "gateway_readback": [
+                    GatewayReadbackSerializer(
+                        {
+                            "receipt": receipt,
+                            "audit": OperationGatewayAudit.objects.filter(
+                                workspace_id=receipt.workspace_id,
+                                workspace_slug=receipt.workspace_slug,
+                                request_id=receipt.request_id,
+                                invocation_id=receipt.invocation_id,
+                                caller_id=receipt.caller_id,
+                                operation_id=receipt.operation_id,
+                                idempotency_key=receipt.idempotency_key,
+                                correlation_id=receipt.correlation_id,
+                                request_digest=receipt.request_digest,
+                            ).order_by("created_at", "id"),
+                        }
+                    ).data
+                    for receipt in OperationGatewayIdempotency.objects.filter(
+                        workspace_slug=slug,
+                        caller_id=run.actor.principal_id,
+                        correlation_id=f"correlation:{run.last_invocation_id}",
+                    ).order_by("-created_at")[:limit]
+                ],
             }
         )
 
@@ -361,16 +385,12 @@ class AgentRunCancelAPIEndpoint(AgentAdminAPIView):
     def post(self, request, slug, run_id):
         run = get_object_or_404(RunAttempt, workspace__slug=slug, pk=run_id)
         reason = request.data.get("reason", "Cancelled by an administrator")
-        idempotency_key = request.data.get("idempotency_key")
         if not run.last_invocation_id:
             raise AgentDomainError("A run can be cancelled only after an invocation exists")
         invocation = get_object_or_404(RuntimeInvocation, run=run, invocation_id=run.last_invocation_id)
-        finalize_invocation(
-            invocation,
-            kind=TerminalEventKind.RUN_CANCELLATION,
-            reason=reason,
-            idempotency_key=idempotency_key,
-        )
+        from plane.agent.runtime import request_runtime_cancellation
+
+        request_runtime_cancellation(invocation, reason=reason)
         run.refresh_from_db()
         return Response(RunAdminSerializer(run).data)
 

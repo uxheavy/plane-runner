@@ -42,6 +42,8 @@ from plane.db.models import (
     RunState,
     RunTerminalEvent,
     RuntimeInvocation,
+    RuntimeInvocationControl,
+    RuntimeUsageObservation,
     TerminalEventKind,
     TerminalEventSource,
 )
@@ -88,6 +90,9 @@ class IdempotencyConflictError(AgentDomainError):
 
 class TerminalEventRequiredError(AgentDomainError):
     """Raised when an invocation would finish without a visible Plane event."""
+
+
+_RUNTIME_LEASE_TTL = timedelta(minutes=5)
 
 
 def _command_id(value):
@@ -1079,8 +1084,19 @@ def _remaining_budget(run):
     }
 
 
-def _iso_timestamp():
-    return timezone.now().isoformat().replace("+00:00", "Z")
+def _iso_timestamp(value=None):
+    return (value or timezone.now()).isoformat().replace("+00:00", "Z")
+
+
+def _ensure_runtime_control(invocation, *, created_by=None):
+    return RuntimeInvocationControl.objects.get_or_create(
+        invocation=invocation,
+        defaults={
+            "workspace": invocation.workspace,
+            "project": invocation.project,
+            "created_by": created_by or invocation.created_by,
+        },
+    )[0]
 
 
 @transaction.atomic
@@ -1306,6 +1322,7 @@ def record_invocation(
                 )
             else:
                 raise IdempotencyConflictError("Invocation idempotency key is bound to another Plane command")
+        _ensure_runtime_control(existing, created_by=created_by)
         return existing
     if run.state not in {RunState.QUEUED, RunState.RUNNING, RunState.WAITING_FOR_INPUT}:
         raise InvalidTransitionError(f"Run {run.id} cannot receive an invocation from {run.state}")
@@ -1324,6 +1341,7 @@ def record_invocation(
             raise IdempotencyConflictError("Invocation id is bound to another run")
         if conflicting_invocation.idempotency_key != key:
             raise IdempotencyConflictError("Invocation id is already bound to another idempotency key")
+        _ensure_runtime_control(conflicting_invocation, created_by=created_by)
         return conflicting_invocation
     remaining = _remaining_budget(run)
     envelope = {
@@ -1338,7 +1356,7 @@ def record_invocation(
         "remainingBudget": remaining,
         "lease": {
             "leaseId": namespaced_ref("lease", str(uuid4())),
-            "expiresAt": _iso_timestamp(),
+            "expiresAt": _iso_timestamp(timezone.now() + _RUNTIME_LEASE_TTL),
             "renewAfterMs": 30_000,
         },
         "cancellationRef": namespaced_ref("cancellation", str(uuid4())),
@@ -1412,7 +1430,44 @@ def record_invocation(
     run.last_invocation_id = invocation_ref_value
     run.cumulative_usage = cumulative_usage
     run.save(_allow_lifecycle=True, created_by_id=run.created_by_id)
+    _ensure_runtime_control(invocation, created_by=created_by)
     return invocation
+
+
+@transaction.atomic
+def reconcile_runtime_usage(run, invocation, usage=None, *, created_by=None):
+    """Persist accepted runtime usage before the supervisor records an outcome."""
+
+    usage_value = _usage(usage)
+    normalized = {field: int(usage_value.get(field, 0)) for field in ("inputTokens", "outputTokens", "durationMs")}
+    locked_run = RunAttempt.objects.select_for_update().get(pk=run.pk)
+    locked_invocation = RuntimeInvocation.objects.select_for_update().get(pk=invocation.pk)
+    if locked_invocation.run_id != locked_run.id:
+        raise AgentDomainError("Runtime usage is not bound to its stored run")
+    existing = RuntimeUsageObservation.objects.filter(invocation=locked_invocation).first()
+    if existing is not None:
+        if existing.usage != normalized:
+            raise IdempotencyConflictError("Runtime usage is already reconciled with a different value")
+        return existing
+    cumulative = deepcopy(locked_run.cumulative_usage or {})
+    budget = locked_run.snapshot["totalBudget"]
+    for field, amount in normalized.items():
+        cumulative[field] = int(cumulative.get(field, 0)) + amount
+        if cumulative[field] > int(budget[field]):
+            raise AgentDomainError(f"Runtime usage {field} exceeds the remaining run budget")
+    observation = RuntimeUsageObservation.objects.create(
+        workspace=locked_run.workspace,
+        project=locked_run.project,
+        invocation=locked_invocation,
+        run=locked_run,
+        actor=locked_run.actor,
+        usage=normalized,
+        fingerprint=content_digest({"invocationRef": locked_invocation.invocation_id, "usage": normalized}),
+        created_by=created_by or locked_invocation.created_by,
+    )
+    locked_run.cumulative_usage = cumulative
+    locked_run.save(_allow_lifecycle=True, update_fields=["cumulative_usage"])
+    return observation
 
 
 def _code_mode_usage_fields(

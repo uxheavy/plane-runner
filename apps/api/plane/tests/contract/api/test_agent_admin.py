@@ -77,7 +77,7 @@ def agent_admin_gateway_issue(agent_admin_gateway_project, workspace, create_use
 
 @pytest.mark.contract
 @pytest.mark.django_db
-def test_admin_api_proves_lifecycle_review_and_redaction(api_key_client, workspace):
+def test_admin_api_proves_lifecycle_review_and_redaction(api_key_client, workspace, capsys):
     actor_response = _actor(api_key_client, workspace, "Admin worker")
     actor = actor_response.json()
     assert actor["credential_configured"] is True
@@ -150,9 +150,20 @@ def test_admin_api_proves_lifecycle_review_and_redaction(api_key_client, workspa
     run_response = api_key_client.get(_admin_url(workspace, f"runs/{run_id}/"))
     assert run_response.status_code == 200
     run_body = run_response.json()
+    assert set(run_body) >= {
+        "actor",
+        "profile",
+        "assignment",
+        "run",
+        "invocations",
+        "outcome",
+        "terminal_events",
+        "gateway_readback",
+    }
     assert run_body["run"]["id"] == run_id
     assert run_body["outcome"]["state"] == OutcomeState.ACCEPTED
     assert run_body["invocations"][0]["id"] == invocation_id
+    assert run_body["invocations"][0]["control"]["state"]
     assert "raw_payload" not in json.dumps(run_body)
     assert "envelope" not in json.dumps(run_body)
     assert "original_sequence" not in json.dumps(run_body)
@@ -160,6 +171,20 @@ def test_admin_api_proves_lifecycle_review_and_redaction(api_key_client, workspa
     assignment = AssignmentContract.objects.get(pk=assignment_id)
     assert assignment.state == AssignmentState.COMPLETED
     assert str(RunAttempt.objects.get(pk=run_id).profile_version_id) == profile_response.json()["id"]
+
+    call_command("agent_readback", workspace_slug=workspace.slug, run_id=run_id, limit=1)
+    readback = json.loads(capsys.readouterr().out)
+    assert set(readback) >= {
+        "actor",
+        "profile",
+        "assignment",
+        "run",
+        "invocations",
+        "outcome",
+        "terminal_events",
+        "gateway_readback",
+    }
+    assert "credential:agent-admin" not in json.dumps(readback)
 
 
 @pytest.mark.contract

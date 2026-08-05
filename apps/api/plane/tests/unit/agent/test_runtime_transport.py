@@ -2,6 +2,7 @@ import json
 import sqlite3
 import sys
 import textwrap
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -12,7 +13,13 @@ from plane.agent.runtime import (
     RuntimeDispatchError,
     SubprocessRuntimeTransport,
 )
-from plane.agent.runtime.subprocess import _HERMES_G1_CONTRACT_DIGESTS, _hermes_request_payload
+from plane.agent.runtime.subprocess import (
+    _HERMES_CREDENTIAL_PROTOCOL,
+    _HERMES_DISPATCH_PROTOCOL,
+    _HERMES_G1_CONTRACT_DIGESTS,
+    _hermes_bootstrap_payload,
+    _hermes_request_payload,
+)
 
 
 SNAPSHOT = json.dumps(
@@ -67,6 +74,44 @@ def test_hermes_request_projects_plane_code_mode_policy_without_mutating_plane_r
     assert projected["contractDigests"] == _HERMES_G1_CONTRACT_DIGESTS
     assert projected_envelope["runSnapshotDigest"] == projected["contentDigest"]
     assert snapshot["runtimePolicy"]["maxCodeModeCalls"] == 4
+
+
+def test_hermes_bootstrap_payload_is_bounded_three_frame_private_handoff():
+    snapshot = json.dumps(
+        {
+            "actorRef": "actor:test",
+            "contentDigest": "snapshot:test",
+            "runId": "run:test",
+            "workspaceRef": "workspace:test",
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    envelope = json.dumps(
+        {
+            "correlationId": "correlation:test",
+            "invocationId": "invocation:test",
+            "remainingBudget": {"outputTokens": 11},
+            "runId": "run:test",
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+    payload, run_id, invocation_id, digest = _hermes_bootstrap_payload(
+        snapshot,
+        envelope,
+        credentials={"api_key": "credential-canary"},
+    )
+    frames = [json.loads(frame) for frame in payload.decode().splitlines()]
+
+    assert (run_id, invocation_id) == ("run:test", "invocation:test")
+    assert len(digest) == 64
+    assert len(frames) == 3
+    assert frames[0] == {"modelCallAllowance": 11, "protocol": _HERMES_DISPATCH_PROTOCOL}
+    assert frames[1] == {"credentials": {"api_key": "credential-canary"}, "protocol": _HERMES_CREDENTIAL_PROTOCOL}
+    assert frames[2]["invocation"]["invocationId"] == "invocation:test"
+    assert "credential-canary" not in json.dumps(frames[2], sort_keys=True)
 
 
 def _command(source: str, *arguments: str) -> tuple[str, ...]:
@@ -174,6 +219,27 @@ def test_host_bound_transport_passes_socket_and_cleans_invocation_endpoint(tmp_p
     assert not host_dir.exists()
 
 
+def test_host_bound_transport_observes_cancellation_before_ledger_claim(tmp_path, monkeypatch):
+    class FakeRuntimeInvocation:
+        objects = SimpleNamespace(get=lambda **kwargs: SimpleNamespace(**kwargs))
+
+    monkeypatch.setattr("plane.db.models.RuntimeInvocation", FakeRuntimeInvocation)
+    transport = HostBoundSubprocessRuntimeTransport(
+        command=_command("print('{}')"),
+        ledger_path=tmp_path / "ledger.sqlite",
+        gateway="trusted-gateway",
+        is_cancelled=lambda: True,
+    )
+    monkeypatch.setattr(
+        transport._ledger,
+        "claim",
+        lambda **kwargs: pytest.fail("a cancelled invocation must not claim the dispatch ledger"),
+    )
+
+    with pytest.raises(RuntimeDispatchError, match="cancelled"):
+        transport.dispatch(SNAPSHOT, ENVELOPE)
+
+
 def test_changed_replay_is_denied_without_starting_another_process(tmp_path):
     counter = tmp_path / "counter"
     command = _command(
@@ -218,6 +284,33 @@ def test_timeout_marks_outcome_unknown_and_never_blindly_replays(tmp_path):
         transport.dispatch(SNAPSHOT, ENVELOPE)
     with pytest.raises(RuntimeDispatchError, match="outcome is unknown"):
         transport.dispatch(SNAPSHOT, ENVELOPE)
+
+
+def test_durable_cancellation_sends_sigusr1_before_forced_termination(tmp_path):
+    command = _command(
+        """
+        import signal
+        import sys
+        import time
+
+        def cancel(_signum, _frame):
+            print('{}', flush=True)
+            raise SystemExit(0)
+
+        signal.signal(signal.SIGUSR1, cancel)
+        time.sleep(5)
+        """
+    )
+    started = time.monotonic()
+    transport = SubprocessRuntimeTransport(
+        command=command,
+        ledger_path=tmp_path / "ledger.sqlite",
+        timeout_seconds=5,
+        is_cancelled=lambda: time.monotonic() - started > 0.05,
+    )
+
+    assert transport.dispatch(SNAPSHOT, ENVELOPE) == ("{}",)
+    assert time.monotonic() - started < 1.0
 
 
 def test_diagnostics_are_bounded_and_never_persisted(tmp_path):

@@ -89,6 +89,8 @@ from .agent_admin import (
     RunInputEventAdminSerializer,
     RuntimeEventEvidenceSerializer,
     RuntimeExitEvidenceSerializer,
+    RuntimeInvocationControlAdminSerializer,
     RuntimeInvocationAdminSerializer,
+    RuntimeUsageObservationAdminSerializer,
     TerminalEventAdminSerializer,
 )

@@ -87,6 +87,13 @@ class InvocationState(models.TextChoices):
     OUTCOME_UNKNOWN = "outcome_unknown", "Outcome unknown"
 
 
+class RuntimeControlState(models.TextChoices):
+    AVAILABLE = "available", "Available"
+    LEASED = "leased", "Leased"
+    OUTCOME_UNKNOWN = "outcome_unknown", "Outcome unknown"
+    RELEASED = "released", "Released"
+
+
 class InputEventKind(models.TextChoices):
     HUMAN_INPUT = "human_input", "Human input"
     CONTINUATION = "continuation", "Continuation"
@@ -569,6 +576,109 @@ class RuntimeInvocation(AgentScopedModel):
         run = RunAttempt.objects.only("workspace_id", "project_id").get(pk=self.run_id)
         if (run.workspace_id, run.project_id) != (self.workspace_id, self.project_id):
             raise ValidationError("Runtime invocations must use their run's Plane scope")
+
+
+class RuntimeInvocationControl(AgentScopedModel):
+    """Durable worker lease and cancellation state for one runtime child."""
+
+    invocation = models.OneToOneField(
+        RuntimeInvocation,
+        on_delete=models.PROTECT,
+        related_name="runtime_control",
+    )
+    state = models.CharField(max_length=32, choices=RuntimeControlState.choices, default=RuntimeControlState.AVAILABLE)
+    lease_owner = models.CharField(max_length=128, null=True, blank=True, editable=False)
+    lease_expires_at = models.DateTimeField(null=True, blank=True, editable=False)
+    dispatch_started_at = models.DateTimeField(null=True, blank=True, editable=False)
+    cancellation_requested_at = models.DateTimeField(null=True, blank=True, editable=False)
+    cancellation_reason = models.CharField(max_length=4096, blank=True, default="", editable=False)
+    outcome_unknown_at = models.DateTimeField(null=True, blank=True, editable=False)
+    failure_code = models.CharField(max_length=64, blank=True, default="", editable=False)
+    failure_reason = models.CharField(max_length=4096, blank=True, default="", editable=False)
+
+    IMMUTABLE_FIELDS = ("workspace_id", "project_id", "invocation_id")
+    LIFECYCLE_FIELDS = (
+        "state",
+        "lease_owner",
+        "lease_expires_at",
+        "dispatch_started_at",
+        "cancellation_requested_at",
+        "cancellation_reason",
+        "outcome_unknown_at",
+        "failure_code",
+        "failure_reason",
+    )
+
+    class Meta:
+        db_table = "agent_runtime_invocation_controls"
+        indexes = [
+            models.Index(fields=["state", "lease_expires_at"], name="agent_rt_control_lease_idx"),
+            models.Index(fields=["workspace", "created_at"], name="agent_rt_control_workspace_idx"),
+        ]
+
+    def save(self, *args, **kwargs):
+        allowed = kwargs.pop("_allow_lifecycle", False)
+        _assert_immutable(self, self.IMMUTABLE_FIELDS)
+        _assert_lifecycle_mutation(self, self.LIFECYCLE_FIELDS, allowed=allowed)
+        super().save(*args, **kwargs)
+
+    def validate_agent_scope(self):
+        invocation = RuntimeInvocation.objects.only("run_id", "workspace_id", "project_id").get(pk=self.invocation_id)
+        if (
+            invocation.workspace_id != self.workspace_id
+            or invocation.project_id != self.project_id
+            or invocation.run_id is None
+        ):
+            raise ValidationError("Runtime control must use its invocation's Plane scope")
+
+
+class RuntimeUsageObservation(AgentScopedModel):
+    """One append-only, trusted usage reconciliation for a runtime invocation."""
+
+    invocation = models.OneToOneField(
+        RuntimeInvocation,
+        on_delete=models.PROTECT,
+        related_name="runtime_usage_observation",
+    )
+    run = models.ForeignKey(RunAttempt, on_delete=models.PROTECT, related_name="runtime_usage_observations")
+    actor = models.ForeignKey(AgentActor, on_delete=models.PROTECT, related_name="runtime_usage_observations")
+    usage = models.JSONField(default=default_dict, editable=False)
+    fingerprint = models.CharField(max_length=72, editable=False)
+
+    IMMUTABLE_FIELDS = (
+        "workspace_id",
+        "project_id",
+        "invocation_id",
+        "run_id",
+        "actor_id",
+        "usage",
+        "fingerprint",
+        "deleted_at",
+    )
+
+    class Meta:
+        db_table = "agent_runtime_usage_observations"
+        ordering = ("invocation_id", "created_at")
+        indexes = [
+            models.Index(fields=["run", "created_at"], name="agent_rt_usage_run_idx"),
+        ]
+
+    def save(self, *args, **kwargs):
+        _assert_immutable(self, self.IMMUTABLE_FIELDS)
+        super().save(*args, **kwargs)
+
+    def validate_agent_scope(self):
+        invocation = RuntimeInvocation.objects.only("run_id", "workspace_id", "project_id").get(pk=self.invocation_id)
+        run = RunAttempt.objects.only("workspace_id", "project_id", "actor_id").get(pk=self.run_id)
+        actor = AgentActor.objects.only("workspace_id", "project_id").get(pk=self.actor_id)
+        if (
+            invocation.run_id != self.run_id
+            or run.actor_id != self.actor_id
+            or (invocation.workspace_id, invocation.project_id) != (self.workspace_id, self.project_id)
+            or (run.workspace_id, run.project_id) != (self.workspace_id, self.project_id)
+            or (actor.workspace_id, actor.project_id) != (self.workspace_id, self.project_id)
+        ):
+            raise ValidationError("Runtime usage must bind one invocation, actor, run, and Plane scope")
 
 
 class RuntimeEventIngress(AgentScopedModel):

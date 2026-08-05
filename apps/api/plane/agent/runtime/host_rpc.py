@@ -698,16 +698,24 @@ def trusted_host_request(invocation: Any) -> Any:
     )
 
 
-def build_gateway_host_port(*, invocation: Any, gateway: Any) -> PlaneGatewayHostPort:
+def build_gateway_host_port(
+    *, invocation: Any, gateway: Any, is_cancelled: Callable[[], bool] | None = None
+) -> PlaneGatewayHostPort:
     """Build the trusted gateway-backed port for one persisted invocation."""
 
     from plane.agent.code_mode.host import CodeModeHostRPC
+
+    if is_cancelled is None:
+        from .supervisor import runtime_invocation_cancelled
+
+        def is_cancelled():
+            return runtime_invocation_cancelled(invocation.pk)
 
     host = CodeModeHostRPC.from_invocation(
         gateway=gateway,
         request=trusted_host_request(invocation),
         invocation=invocation,
-        is_cancelled=lambda: False,
+        is_cancelled=is_cancelled,
     )
     return PlaneGatewayHostPort(host)
 

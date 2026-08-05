@@ -6,6 +6,16 @@ from .dispatch import (
     ingest_runtime_frame,
 )
 from .subprocess import HostBoundSubprocessRuntimeTransport, SubprocessRuntimeTransport
+from .supervisor import (
+    DEFAULT_LEASE_SECONDS,
+    RuntimeLeaseBusy,
+    RuntimeSupervisorError,
+    SupervisorResult,
+    request_runtime_cancellation,
+    run_runtime_invocation,
+    runtime_invocation_cancelled,
+    runtime_invocation_cancellation_requested,
+)
 from .host_rpc import (
     HOST_PROTOCOL,
     PlaneGatewayHostPort,
@@ -24,6 +34,14 @@ __all__ = [
     "ingest_runtime_frame",
     "SubprocessRuntimeTransport",
     "HostBoundSubprocessRuntimeTransport",
+    "DEFAULT_LEASE_SECONDS",
+    "RuntimeLeaseBusy",
+    "RuntimeSupervisorError",
+    "SupervisorResult",
+    "request_runtime_cancellation",
+    "run_runtime_invocation",
+    "runtime_invocation_cancelled",
+    "runtime_invocation_cancellation_requested",
     "HOST_PROTOCOL",
     "PlaneGatewayHostPort",
     "PlaneHostCall",

@@ -21,7 +21,7 @@ import subprocess
 import tempfile
 import threading
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +33,7 @@ _DEFAULT_TIMEOUT_SECONDS = 30.0
 _DEFAULT_MAX_INPUT_BYTES = 256 * 1024
 _DEFAULT_MAX_OUTPUT_BYTES = 512 * 1024
 _DEFAULT_MAX_DIAGNOSTICS_BYTES = 64 * 1024
+_CANCELLATION_GRACE_SECONDS = 1.0
 _READ_CHUNK_BYTES = 16 * 1024
 _HERMES_RUNTIME_POLICY_FIELDS = frozenset(
     {
@@ -44,9 +45,7 @@ _HERMES_RUNTIME_POLICY_FIELDS = frozenset(
         "maxReceiptBytes",
     }
 )
-_PLANE_ONLY_HERMES_POLICY_FIELDS = frozenset(
-    {"maxCodeModeInputBytes", "maxCodeModeOutputBytes", "maxCodeModeCalls"}
-)
+_PLANE_ONLY_HERMES_POLICY_FIELDS = frozenset({"maxCodeModeInputBytes", "maxCodeModeOutputBytes", "maxCodeModeCalls"})
 _HERMES_G1_CONTRACT_DIGESTS = {
     # Frozen by the exact Hermes 2dd316df69afba586b99acda2f5aeb1529307b63
     # plane_runtime.g1_contract manifest accepted at this process boundary.
@@ -56,6 +55,8 @@ _HERMES_G1_CONTRACT_DIGESTS = {
     "runtimeExit": "055792eb1bf4931dafe19de456b15037522f0b5e8f6a0d2fedfe0e0d1d1d1c05",
     "runtimeDurableState": "444c944ec8a5054f33c8662470529a1f4565d42ff06138438beceeef7967a0da",
 }
+_HERMES_DISPATCH_PROTOCOL = "plane.agent-runtime/dispatch-control/v1"
+_HERMES_CREDENTIAL_PROTOCOL = "plane.agent-runtime/credential-control/v1"
 
 
 def _canonical_object(raw: str, name: str) -> dict[str, Any]:
@@ -129,15 +130,65 @@ def _hermes_request_payload(snapshot_json: str, envelope_json: str) -> tuple[byt
     projected["runtimePolicy"] = projected_policy
     projected["contractDigests"] = dict(_HERMES_G1_CONTRACT_DIGESTS)
     projected.pop("contentDigest", None)
-    projected["contentDigest"] = "snapshot:" + hashlib.sha256(
-        json.dumps(projected, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
+    projected["contentDigest"] = (
+        "snapshot:"
+        + hashlib.sha256(
+            json.dumps(projected, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+    )
     projected_envelope = dict(envelope)
     projected_envelope["runSnapshotDigest"] = projected["contentDigest"]
     return _request_payload(
         json.dumps(projected, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
         json.dumps(projected_envelope, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
     )
+
+
+def _hermes_bootstrap_payload(
+    snapshot_json: str,
+    envelope_json: str,
+    *,
+    model_call_allowance: int | None = None,
+    credentials: Mapping[str, str] | None = None,
+) -> tuple[bytes, str, str, str]:
+    """Frame the exact private bootstrap handoff for the marked Hermes child."""
+
+    request, run_id, invocation_id, _request_digest = _hermes_request_payload(snapshot_json, envelope_json)
+    envelope = _canonical_object(envelope_json, "runtime invocation")
+    if model_call_allowance is None:
+        remaining = envelope.get("remainingBudget", {})
+        allowance = remaining.get("outputTokens", 0) if isinstance(remaining, dict) else 0
+        model_call_allowance = min(4096, max(0, int(allowance)))
+    if (
+        isinstance(model_call_allowance, bool)
+        or not isinstance(model_call_allowance, int)
+        or not 0 <= model_call_allowance <= 4096
+    ):
+        raise RuntimeDispatchError("model-call allowance is outside the bootstrap bound")
+    credential_values = dict(credentials or {})
+    if len(credential_values) > 16 or any(
+        not isinstance(key, str)
+        or not isinstance(value, str)
+        or not key
+        or not value
+        or any(ord(char) < 0x20 or ord(char) == 0x7F for char in key + value)
+        or len(key.encode("utf-8")) > 128
+        or len(value.encode("utf-8")) > 16 * 1024
+        for key, value in credential_values.items()
+    ):
+        raise RuntimeDispatchError("credential control is invalid")
+    controls = b"".join(
+        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n"
+        for value in (
+            {"modelCallAllowance": model_call_allowance, "protocol": _HERMES_DISPATCH_PROTOCOL},
+            {"credentials": credential_values, "protocol": _HERMES_CREDENTIAL_PROTOCOL},
+        )
+    )
+    payload = controls + request
+    if len(payload) > _DEFAULT_MAX_INPUT_BYTES:
+        raise RuntimeDispatchError("runtime bootstrap request exceeds the process input bound")
+    digest = hashlib.sha256(b"plane.agent-runtime/hermes-bootstrap/v1\n" + payload).hexdigest()
+    return payload, run_id, invocation_id, digest
 
 
 def _encode_frames(frames: Sequence[str]) -> str:
@@ -282,6 +333,7 @@ class SubprocessRuntimeTransport(RuntimeTransport):
         max_input_bytes: int = _DEFAULT_MAX_INPUT_BYTES,
         max_output_bytes: int = _DEFAULT_MAX_OUTPUT_BYTES,
         max_diagnostics_bytes: int = _DEFAULT_MAX_DIAGNOSTICS_BYTES,
+        is_cancelled: Callable[[], bool] | None = None,
     ) -> None:
         if not command or any(not isinstance(part, str) or not part or "\x00" in part for part in command):
             raise ValueError("command must contain non-empty strings without NUL bytes")
@@ -302,6 +354,8 @@ class SubprocessRuntimeTransport(RuntimeTransport):
         self._max_input_bytes = max_input_bytes
         self._max_output_bytes = max_output_bytes
         self._max_diagnostics_bytes = max_diagnostics_bytes
+        self._cancellation_callback = is_cancelled
+        self._is_cancelled = is_cancelled or (lambda: False)
 
     @staticmethod
     def _terminate(process: subprocess.Popen[bytes]) -> None:
@@ -312,6 +366,18 @@ class SubprocessRuntimeTransport(RuntimeTransport):
         except (AttributeError, OSError):
             try:
                 process.kill()
+            except OSError:
+                pass
+
+    @staticmethod
+    def _request_cancellation(process: subprocess.Popen[bytes]) -> None:
+        if process.poll() is not None:
+            return
+        try:
+            os.killpg(process.pid, signal.SIGUSR1)
+        except (AttributeError, OSError):
+            try:
+                process.send_signal(signal.SIGUSR1)
             except OSError:
                 pass
 
@@ -377,10 +443,30 @@ class SubprocessRuntimeTransport(RuntimeTransport):
 
         deadline = time.monotonic() + self._timeout_seconds
         timed_out = False
+        cancellation_requested = False
+        forced_cancellation = False
+        cancellation_deadline = 0.0
         while process.poll() is None:
             if overflow.is_set():
                 self._terminate(process)
                 break
+            try:
+                cancelled = bool(self._is_cancelled())
+            except Exception as exc:
+                self._terminate(process)
+                raise RuntimeDispatchError("runtime cancellation state is unavailable") from exc
+            if cancelled:
+                if not cancellation_requested:
+                    cancellation_requested = True
+                    cancellation_deadline = time.monotonic() + _CANCELLATION_GRACE_SECONDS
+                    self._request_cancellation(process)
+                remaining = cancellation_deadline - time.monotonic()
+                if remaining <= 0:
+                    forced_cancellation = True
+                    self._terminate(process)
+                    break
+                time.sleep(min(0.01, remaining))
+                continue
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 timed_out = True
@@ -402,6 +488,8 @@ class SubprocessRuntimeTransport(RuntimeTransport):
                 except OSError:
                     pass
 
+        if forced_cancellation:
+            raise RuntimeDispatchError("runtime invocation was cancelled")
         if timed_out or overflow.is_set() or write_error.is_set() or process.returncode != 0:
             raise RuntimeDispatchError("runtime process did not produce a durable terminal result")
         if not stdout or not stdout.endswith(b"\n"):
@@ -419,6 +507,8 @@ class SubprocessRuntimeTransport(RuntimeTransport):
         payload, run_id, invocation_id, request_digest = _request_payload(snapshot_json, envelope_json)
         if len(payload) > self._max_input_bytes:
             raise RuntimeDispatchError("runtime request exceeds the process input bound")
+        if self._is_cancelled():
+            raise RuntimeDispatchError("runtime invocation was cancelled")
         replay = self._ledger.claim(run_id=run_id, invocation_id=invocation_id, request_digest=request_digest)
         if replay is not None:
             return replay
@@ -444,7 +534,16 @@ class SubprocessRuntimeTransport(RuntimeTransport):
 class HostBoundSubprocessRuntimeTransport(SubprocessRuntimeTransport):
     """Run Hermes with one trusted Plane host socket for the invocation."""
 
-    def __init__(self, *, gateway: Any, host_timeout_seconds: float = 5.0, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *,
+        gateway: Any,
+        host_timeout_seconds: float = 5.0,
+        bootstrap_command: bool | None = None,
+        model_call_allowance: int | Callable[[Any], int] | None = None,
+        credential_control: Callable[[Any], Mapping[str, str]] | None = None,
+        **kwargs: Any,
+    ) -> None:
         if gateway is None:
             raise ValueError("gateway is required")
         if host_timeout_seconds <= 0:
@@ -452,26 +551,64 @@ class HostBoundSubprocessRuntimeTransport(SubprocessRuntimeTransport):
         super().__init__(**kwargs)
         self._gateway = gateway
         self._host_timeout_seconds = float(host_timeout_seconds)
+        command = tuple(self._command)
+        self._bootstrap_command = (
+            any("plane_runtime.g1_runtime_image.bootstrap" in part for part in command)
+            if bootstrap_command is None
+            else bool(bootstrap_command)
+        )
+        self._model_call_allowance = model_call_allowance
+        self._credential_control = credential_control
 
     def dispatch(self, snapshot_json: str, envelope_json: str) -> tuple[str, ...]:
         payload, run_id, invocation_id, request_digest = _hermes_request_payload(snapshot_json, envelope_json)
         if len(payload) > self._max_input_bytes:
             raise RuntimeDispatchError("runtime request exceeds the process input bound")
-        replay = self._ledger.claim(run_id=run_id, invocation_id=invocation_id, request_digest=request_digest)
-        if replay is not None:
-            return replay
 
         from plane.agent.runtime.host_rpc import PlaneHostServer, build_gateway_host_port
         from plane.db.models import RuntimeInvocation
 
         temp_dir: str | None = None
         server: PlaneHostServer | None = None
+        ledger_claimed = False
         try:
             try:
                 invocation = RuntimeInvocation.objects.get(invocation_id=invocation_id)
             except RuntimeInvocation.DoesNotExist as exc:
                 raise RuntimeDispatchError("runtime invocation is unavailable for host binding") from exc
-            host_port = build_gateway_host_port(invocation=invocation, gateway=self._gateway)
+            if self._cancellation_callback is None and hasattr(invocation, "pk"):
+                from .supervisor import runtime_invocation_cancelled
+
+                invocation_ref = invocation.pk
+                self._is_cancelled = lambda: runtime_invocation_cancelled(invocation_ref)
+            if self._is_cancelled():
+                raise RuntimeDispatchError("runtime invocation was cancelled")
+            if self._credential_control is not None:
+                credentials = self._credential_control(invocation)
+            else:
+                credentials = {}
+            allowance = (
+                self._model_call_allowance(invocation)
+                if callable(self._model_call_allowance)
+                else self._model_call_allowance
+            )
+            if self._bootstrap_command:
+                payload, run_id, invocation_id, request_digest = _hermes_bootstrap_payload(
+                    snapshot_json,
+                    envelope_json,
+                    model_call_allowance=allowance,
+                    credentials=credentials,
+                )
+            if len(payload) > self._max_input_bytes:
+                raise RuntimeDispatchError("runtime bootstrap request exceeds the process input bound")
+            replay = self._ledger.claim(run_id=run_id, invocation_id=invocation_id, request_digest=request_digest)
+            if replay is not None:
+                return replay
+            ledger_claimed = True
+            host_kwargs = {"invocation": invocation, "gateway": self._gateway}
+            if self._cancellation_callback is not None:
+                host_kwargs["is_cancelled"] = self._cancellation_callback
+            host_port = build_gateway_host_port(**host_kwargs)
             temp_dir = tempfile.mkdtemp(prefix="plane-host-")
             socket_path = Path(temp_dir) / "host.sock"
             if len(os.fsencode(str(socket_path))) >= 104:
@@ -485,10 +622,11 @@ class HostBoundSubprocessRuntimeTransport(SubprocessRuntimeTransport):
             command = (*self._command, "--plane-host-socket", str(socket_path))
             frames = self._run_process(payload, command=command)
         except Exception:
-            try:
-                self._ledger.mark_unknown(invocation_id=invocation_id)
-            except RuntimeDispatchError as ledger_error:
-                raise ledger_error
+            if ledger_claimed:
+                try:
+                    self._ledger.mark_unknown(invocation_id=invocation_id)
+                except RuntimeDispatchError as ledger_error:
+                    raise ledger_error
             raise
         finally:
             if server is not None:
@@ -509,4 +647,4 @@ class HostBoundSubprocessRuntimeTransport(SubprocessRuntimeTransport):
         return frames
 
 
-__all__ = ["HostBoundSubprocessRuntimeTransport", "SubprocessRuntimeTransport"]
+__all__ = ["HostBoundSubprocessRuntimeTransport", "SubprocessRuntimeTransport", "_hermes_bootstrap_payload"]

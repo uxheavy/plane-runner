@@ -20,6 +20,8 @@ from plane.db.models import (
     RuntimeEventIngress,
     RuntimeExitEvidence,
     RuntimeInvocation,
+    RuntimeInvocationControl,
+    RuntimeUsageObservation,
 )
 from plane.db.models.operation_gateway import OperationGatewayAudit, OperationGatewayIdempotency
 
@@ -223,10 +225,69 @@ class RunInputEventAdminSerializer(BaseSerializer):
 
 
 class RuntimeInvocationAdminSerializer(BaseSerializer):
+    control = serializers.SerializerMethodField()
+    usage_observation = serializers.SerializerMethodField()
+
+    def get_control(self, instance):
+        control = getattr(instance, "runtime_control", None)
+        if control is None:
+            return None
+        return RuntimeInvocationControlAdminSerializer(control).data
+
+    def get_usage_observation(self, instance):
+        observation = getattr(instance, "runtime_usage_observation", None)
+        if observation is None:
+            return None
+        return RuntimeUsageObservationAdminSerializer(observation).data
+
     class Meta:
         model = RuntimeInvocation
-        fields = ["id", "ordinal", "invocation_id", "idempotency_key", "usage", "state", "created_at"]
+        fields = [
+            "id",
+            "ordinal",
+            "invocation_id",
+            "idempotency_key",
+            "usage",
+            "state",
+            "control",
+            "usage_observation",
+            "created_at",
+        ]
         read_only_fields = fields
+
+    def to_representation(self, instance):
+        return redact_admin_value(super().to_representation(instance))
+
+
+class RuntimeInvocationControlAdminSerializer(BaseSerializer):
+    class Meta:
+        model = RuntimeInvocationControl
+        fields = [
+            "id",
+            "state",
+            "lease_owner",
+            "lease_expires_at",
+            "dispatch_started_at",
+            "cancellation_requested_at",
+            "cancellation_reason",
+            "outcome_unknown_at",
+            "failure_code",
+            "failure_reason",
+        ]
+        read_only_fields = fields
+
+    def to_representation(self, instance):
+        return redact_admin_value(super().to_representation(instance))
+
+
+class RuntimeUsageObservationAdminSerializer(BaseSerializer):
+    class Meta:
+        model = RuntimeUsageObservation
+        fields = ["id", "invocation", "run", "usage", "fingerprint", "created_at"]
+        read_only_fields = fields
+
+    def to_representation(self, instance):
+        return redact_admin_value(super().to_representation(instance))
 
 
 class RuntimeEventEvidenceSerializer(BaseSerializer):
@@ -331,6 +392,9 @@ class GatewayReceiptAdminSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+    def to_representation(self, instance):
+        return redact_admin_value(super().to_representation(instance))
+
 
 class GatewayAuditAdminSerializer(serializers.ModelSerializer):
     class Meta:
@@ -352,10 +416,16 @@ class GatewayAuditAdminSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+    def to_representation(self, instance):
+        return redact_admin_value(super().to_representation(instance))
+
 
 class GatewayReadbackSerializer(serializers.Serializer):
     receipt = GatewayReceiptAdminSerializer()
     audit = GatewayAuditAdminSerializer(many=True)
+
+    def to_representation(self, instance):
+        return redact_admin_value(super().to_representation(instance))
 
 
 class TerminalEventAdminSerializer(BaseSerializer):
