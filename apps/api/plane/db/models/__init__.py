@@ -25,6 +25,24 @@ from .agent import (
     TerminalEventKind,
     TerminalEventSource,
 )
+from .agent_context import (
+    AgentChangeProposal,
+    AgentMemoryEntry,
+    AgentMemoryKind,
+    AgentMemoryRevision,
+    AgentMemoryVisibility,
+    AgentProposalKind,
+    AgentProposalState,
+    AgentProvenanceKind,
+    AgentRevisionState,
+    AgentSchedule,
+    AgentScheduleFire,
+    AgentScheduleFireState,
+    AgentScheduleState,
+    AgentSkillDefinition,
+    AgentSkillRevision,
+    AgentSkillVisibility,
+)
 from .api import APIActivityLog, APIToken
 from .operation_gateway import OperationGatewayAudit, OperationGatewayIdempotency, OperationGatewayPublication
 from .asset import FileAsset

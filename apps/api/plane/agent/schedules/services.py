@@ -1,0 +1,302 @@
+"""Plane-owned schedule control state and normal-assignment firing."""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone as dt_timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from django.core.exceptions import ValidationError
+from django.db import transaction
+from django.utils import timezone
+
+from plane.agent.lifecycle import AgentDomainError, create_assignment
+from plane.db.models import (
+    AgentActor,
+    AgentSchedule,
+    AgentScheduleFire,
+    AgentScheduleFireState,
+    AgentScheduleState,
+)
+
+
+class AgentScheduleError(ValidationError):
+    """Base error for schedule definitions and trigger control."""
+
+
+def _non_empty(value: str, field: str, limit: int = 65_536) -> str:
+    if not isinstance(value, str) or not value.strip() or len(value.encode("utf-8")) > limit:
+        raise AgentScheduleError(f"{field} must be a non-empty string within {limit} UTF-8 bytes")
+    return value
+
+
+def _get_zone(name: str) -> ZoneInfo:
+    name = _non_empty(name, "timezone_name", 64)
+    try:
+        return ZoneInfo(name)
+    except ZoneInfoNotFoundError as exc:
+        raise AgentScheduleError(f"Unknown schedule timezone: {name}") from exc
+
+
+def _field_values(field: str, lower: int, upper: int) -> set[int]:
+    values: set[int] = set()
+    for token in field.split(","):
+        token = token.strip()
+        if not token:
+            raise AgentScheduleError("Cron fields cannot contain empty values")
+        if token == "*":
+            values.update(range(lower, upper + 1))
+            continue
+        if token.startswith("*/"):
+            try:
+                step = int(token[2:])
+            except ValueError as exc:
+                raise AgentScheduleError("Cron step must be an integer") from exc
+            if step < 1:
+                raise AgentScheduleError("Cron step must be positive")
+            values.update(range(lower, upper + 1, step))
+            continue
+        if "-" in token:
+            parts = token.split("-")
+            if len(parts) != 2:
+                raise AgentScheduleError("Cron ranges must have one hyphen")
+            try:
+                start, end = (int(part) for part in parts)
+            except ValueError as exc:
+                raise AgentScheduleError("Cron range values must be integers") from exc
+            if start < lower or end > upper or start > end:
+                raise AgentScheduleError("Cron range is outside its field")
+            values.update(range(start, end + 1))
+            continue
+        try:
+            value = int(token)
+        except ValueError as exc:
+            raise AgentScheduleError("Cron values must be integers, ranges, or steps") from exc
+        if value < lower or value > upper:
+            raise AgentScheduleError("Cron value is outside its field")
+        values.add(value)
+    return values
+
+
+def parse_cron_expression(expression: str) -> tuple[set[int], set[int], set[int], set[int], set[int]]:
+    fields = _non_empty(expression, "cron_expression", 255).split()
+    if len(fields) != 5:
+        raise AgentScheduleError("Cron expressions must contain five fields")
+    return (
+        _field_values(fields[0], 0, 59),
+        _field_values(fields[1], 0, 23),
+        _field_values(fields[2], 1, 31),
+        _field_values(fields[3], 1, 12),
+        _field_values(fields[4], 0, 6),
+    )
+
+
+def next_schedule_fire(expression: str, timezone_name: str, after: datetime) -> datetime:
+    """Return the next matching local minute as an aware UTC datetime."""
+
+    minutes, hours, days, months, weekdays = parse_cron_expression(expression)
+    zone = _get_zone(timezone_name)
+    if after.tzinfo is None or after.utcoffset() is None:
+        raise AgentScheduleError("Schedule calculations require an aware datetime")
+    candidate = after.astimezone(zone).replace(second=0, microsecond=0, fold=0) + timedelta(minutes=1)
+    for _ in range(60 * 24 * 370):
+        if (
+            candidate.minute in minutes
+            and candidate.hour in hours
+            and candidate.day in days
+            and candidate.month in months
+            and candidate.weekday() in weekdays
+        ):
+            return candidate.astimezone(dt_timezone.utc)
+        candidate += timedelta(minutes=1)
+    raise AgentScheduleError("Cron expression has no fire within the supported horizon")
+
+
+def _retry_policy(value: dict | None) -> dict[str, int]:
+    value = value or {}
+    if not isinstance(value, dict):
+        raise AgentScheduleError("retry_policy must be an object")
+    max_attempts = value.get("maxAttempts", value.get("max_attempts", 3))
+    backoff = value.get("backoffSeconds", value.get("backoff_seconds", 60))
+    if (
+        not isinstance(max_attempts, int)
+        or isinstance(max_attempts, bool)
+        or max_attempts < 1
+        or max_attempts > 10
+        or not isinstance(backoff, int)
+        or isinstance(backoff, bool)
+        or backoff < 0
+        or backoff > 86_400
+    ):
+        raise AgentScheduleError("retry_policy must contain bounded maxAttempts and backoffSeconds")
+    return {"maxAttempts": max_attempts, "backoffSeconds": backoff}
+
+
+@transaction.atomic
+def create_schedule(
+    actor: AgentActor,
+    *,
+    name: str,
+    cron_expression: str,
+    timezone_name: str = "UTC",
+    target_ref: str,
+    objective: str,
+    acceptance_criteria: list | None = None,
+    context_refs: list | None = None,
+    retry_policy: dict | None = None,
+    starts_at: datetime | None = None,
+) -> AgentSchedule:
+    """Create Plane schedule control state; it creates no assignment yet."""
+
+    actor = AgentActor.objects.get(pk=actor.pk)
+    if not actor.is_active:
+        raise AgentScheduleError("Inactive Agent actors cannot own enabled schedules")
+    _get_zone(timezone_name)
+    parse_cron_expression(cron_expression)
+    starts_at = starts_at or timezone.now()
+    if starts_at.tzinfo is None or starts_at.utcoffset() is None:
+        raise AgentScheduleError("starts_at must be an aware datetime")
+    next_fire_at = next_schedule_fire(cron_expression, timezone_name, starts_at)
+    return AgentSchedule.objects.create(
+        workspace=actor.workspace,
+        project=actor.project,
+        actor=actor,
+        name=_non_empty(name, "name", 255),
+        cron_expression=_non_empty(cron_expression, "cron_expression", 255),
+        timezone_name=timezone_name,
+        target_ref=_non_empty(target_ref, "target_ref", 255),
+        objective=_non_empty(objective, "objective"),
+        acceptance_criteria=acceptance_criteria or [],
+        context_refs=context_refs or [],
+        retry_policy=_retry_policy(retry_policy),
+        next_fire_at=next_fire_at,
+    )
+
+
+def _fire_key(schedule: AgentSchedule, scheduled_for: datetime, idempotency_key: str | None) -> str:
+    if idempotency_key is not None:
+        return _non_empty(idempotency_key, "schedule fire idempotency_key", 128)
+    return f"schedule-fire:{schedule.id}:{int(scheduled_for.timestamp())}"
+
+
+def _record_failure(
+    fire: AgentScheduleFire,
+    *,
+    now: datetime,
+    error: Exception,
+    retry_policy: dict,
+) -> AgentScheduleFire:
+    fire.error = str(error)[:8_000]
+    if fire.attempt >= retry_policy["maxAttempts"]:
+        fire.state = AgentScheduleFireState.EXHAUSTED
+        fire.next_retry_at = None
+    else:
+        fire.state = AgentScheduleFireState.FAILED
+        fire.next_retry_at = now + timedelta(seconds=retry_policy["backoffSeconds"])
+    fire.save(update_fields=["state", "error", "next_retry_at", "updated_at"])
+    return fire
+
+
+@transaction.atomic
+def fire_schedule(
+    schedule: AgentSchedule,
+    *,
+    scheduled_for: datetime,
+    now: datetime | None = None,
+    idempotency_key: str | None = None,
+    created_by=None,
+) -> AgentScheduleFire:
+    """Fire or replay one schedule slot into exactly one normal assignment."""
+
+    if scheduled_for.tzinfo is None or scheduled_for.utcoffset() is None:
+        raise AgentScheduleError("scheduled_for must be an aware datetime")
+    now = now or timezone.now()
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise AgentScheduleError("now must be an aware datetime")
+    locked_schedule = AgentSchedule.objects.select_for_update().get(pk=schedule.pk)
+    key = _fire_key(locked_schedule, scheduled_for, idempotency_key)
+    existing_key = AgentScheduleFire.all_objects.filter(idempotency_key=key).first()
+    if existing_key and (existing_key.schedule_id != locked_schedule.id or existing_key.scheduled_for != scheduled_for):
+        raise AgentScheduleError("Schedule fire idempotency key is bound to another slot")
+    fire = (
+        AgentScheduleFire.objects.select_for_update()
+        .filter(schedule=locked_schedule, scheduled_for=scheduled_for)
+        .first()
+    )
+    if fire is None:
+        fire = AgentScheduleFire.objects.create(
+            workspace=locked_schedule.workspace,
+            project=locked_schedule.project,
+            schedule=locked_schedule,
+            scheduled_for=scheduled_for,
+            idempotency_key=key,
+            created_by=created_by,
+        )
+    elif fire.idempotency_key != key:
+        raise AgentScheduleError("Schedule slot is bound to another idempotency key")
+    if fire.state == AgentScheduleFireState.CREATED:
+        return fire
+    if fire.state == AgentScheduleFireState.EXHAUSTED:
+        return fire
+    if fire.state == AgentScheduleFireState.FAILED:
+        if fire.next_retry_at and now < fire.next_retry_at:
+            return fire
+        fire.attempt += 1
+        fire.state = AgentScheduleFireState.PENDING
+        fire.error = ""
+        fire.save(update_fields=["attempt", "state", "error", "updated_at"])
+    if locked_schedule.state != AgentScheduleState.ENABLED:
+        return _record_failure(
+            fire,
+            now=now,
+            error=AgentScheduleError(f"Schedule is {locked_schedule.state}"),
+            retry_policy=_retry_policy(locked_schedule.retry_policy),
+        )
+    retry_policy = _retry_policy(locked_schedule.retry_policy)
+    try:
+        with transaction.atomic():
+            assignment = create_assignment(
+                locked_schedule.actor,
+                project=locked_schedule.project,
+                target_ref=locked_schedule.target_ref,
+                objective=locked_schedule.objective,
+                acceptance_criteria=locked_schedule.acceptance_criteria,
+                context_refs=locked_schedule.context_refs,
+                created_by=created_by,
+            )
+    except (AgentDomainError, ValidationError) as exc:
+        return _record_failure(fire, now=now, error=exc, retry_policy=retry_policy)
+    fire.assignment = assignment
+    fire.state = AgentScheduleFireState.CREATED
+    fire.fired_at = now
+    fire.next_retry_at = None
+    fire.error = ""
+    fire.save(update_fields=["assignment", "state", "fired_at", "next_retry_at", "error", "updated_at"])
+    locked_schedule.last_fired_at = now
+    locked_schedule.next_fire_at = next_schedule_fire(
+        locked_schedule.cron_expression,
+        locked_schedule.timezone_name,
+        scheduled_for,
+    )
+    locked_schedule.save(update_fields=["last_fired_at", "next_fire_at", "updated_at"])
+    return fire
+
+
+def retry_schedule_fire(fire: AgentScheduleFire, *, now: datetime | None = None, created_by=None) -> AgentScheduleFire:
+    return fire_schedule(
+        fire.schedule,
+        scheduled_for=fire.scheduled_for,
+        now=now,
+        idempotency_key=fire.idempotency_key,
+        created_by=created_by,
+    )
+
+
+def fire_due_schedules(*, now: datetime | None = None, created_by=None) -> list[AgentScheduleFire]:
+    now = now or timezone.now()
+    schedules = AgentSchedule.objects.filter(state=AgentScheduleState.ENABLED, next_fire_at__lte=now).order_by(
+        "next_fire_at", "id"
+    )
+    return [
+        fire_schedule(schedule, scheduled_for=schedule.next_fire_at, now=now, created_by=created_by)
+        for schedule in schedules
+    ]
