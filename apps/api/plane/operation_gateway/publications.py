@@ -211,9 +211,7 @@ def _claim_publication(publication_id: str) -> PublicationClaim | None:
                     "state": OperationGatewayPublication.State.OUTCOME_UNKNOWN,
                     "reason": "worker_lease_expired_after_dispatch_started",
                 }
-                publication.save(
-                    update_fields=["state", "lease_until", "last_error", "delivery_result", "updated_at"]
-                )
+                publication.save(update_fields=["state", "lease_until", "last_error", "delivery_result", "updated_at"])
                 return None
 
         publication.state = OperationGatewayPublication.State.RUNNING
@@ -293,11 +291,7 @@ def _finalize_external_publication(publication_id: uuid.UUID, result: WebhookDel
 
 def _record_dispatch_failure(publication_id: uuid.UUID, error: Exception) -> None:
     retryable = getattr(error, "retryable", True)
-    state = (
-        OperationGatewayPublication.State.RETRYABLE
-        if retryable
-        else OperationGatewayPublication.State.FAILED
-    )
+    state = OperationGatewayPublication.State.RETRYABLE if retryable else OperationGatewayPublication.State.FAILED
     with transaction.atomic():
         publication = OperationGatewayPublication.objects.select_for_update().get(pk=publication_id)
         if publication.state not in (
@@ -348,12 +342,15 @@ def _dispatch_activity(payload: dict[str, Any]) -> None:
     activity_id = payload.get("activity_id")
     if not activity_id:
         raise PublicationDispatchFailure("Activity publication has no durable activity identity", retryable=False)
-    if activity_id and IssueActivity.objects.filter(
-        pk=activity_id,
-        issue_id=payload["issue_id"],
-        actor_id=payload["actor_id"],
-        field="name",
-    ).exists():
+    if (
+        activity_id
+        and IssueActivity.objects.filter(
+            pk=activity_id,
+            issue_id=payload["issue_id"],
+            actor_id=payload["actor_id"],
+            field="name",
+        ).exists()
+    ):
         return
     created_ids = issue_activity.run(
         type=payload["type"],

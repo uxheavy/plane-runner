@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import re
+from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
 from django.core.exceptions import ValidationError
@@ -44,6 +45,10 @@ from plane.db.models import (
     TerminalEventKind,
     TerminalEventSource,
 )
+from plane.db.models.project import ProjectMember
+from plane.db.models.user import User
+from plane.db.models.workspace import WorkspaceMember
+from plane.agent.tools.disclosure import compose_tool_catalog
 
 from .runtime_contract import (
     MAX_BOUNDED_BYTE_COUNT,
@@ -189,9 +194,23 @@ _INVOCATION_TERMINAL_STATES = {
     InvocationState.OUTCOME_UNKNOWN,
 }
 
+_CODE_MODE_USAGE_FIELDS = (
+    "inputTokens",
+    "outputTokens",
+    "durationMs",
+    "codeModeInputBytes",
+    "codeModeOutputBytes",
+    "codeModeCalls",
+    "codeModeSpillBytes",
+)
+_CODE_MODE_RESERVATION_TTL = timedelta(minutes=5)
+
 _RESERVED_PROFILE_KEYS = {
     "allowlist",
     "allowed_operations",
+    "allowedOperations",
+    "operation_allowlist",
+    "operationAllowlist",
     "authorization",
     "permissions",
     "denylist",
@@ -538,35 +557,11 @@ def _snapshot_context(profile):
     return contexts
 
 
-def _snapshot_tool_catalog(profile):
-    presentation = profile.tool_presentation
-    for key in _RESERVED_PROFILE_KEYS:
-        if key in presentation:
-            raise AgentDomainError("Profile presentation cannot define authorization or operation allowlists")
-    raw_operations = presentation.get("eager_operations", presentation.get("eagerOperations", []))
-    raw_operations = _as_list(raw_operations, "tool_presentation.eager_operations")
-    operations = []
-    for index, raw in enumerate(raw_operations):
-        if not isinstance(raw, dict):
-            raise AgentDomainError(f"tool_presentation.eager_operations[{index}] must be an object")
-        operation_ref = _normalise_ref(
-            raw.get("operationRef", raw.get("operation_ref")),
-            "operation",
-            f"tool_presentation.eager_operations[{index}].operationRef",
-        )
-        schema_digest = raw.get("schemaDigest", raw.get("schema_digest")) or content_digest(
-            {"operationRef": operation_ref}
-        )
-        disclosure = raw.get("disclosure", "progressive")
-        if not isinstance(disclosure, str) or disclosure not in {"eager", "progressive"}:
-            raise AgentDomainError("tool presentation disclosure is invalid")
-        operations.append({"operationRef": operation_ref, "schemaDigest": schema_digest, "disclosure": disclosure})
-    catalog = {"eagerOperations": operations}
-    return {
-        "catalogDigest": presentation.get("catalogDigest", presentation.get("catalog_digest"))
-        or content_digest(catalog),
-        "eagerOperations": operations,
-    }
+def _snapshot_tool_catalog(profile, assignment):
+    try:
+        return compose_tool_catalog(profile, assignment)
+    except ValueError as exc:
+        raise AgentDomainError(str(exc)) from exc
 
 
 def _runtime_policy(profile):
@@ -602,8 +597,22 @@ def _runtime_policy(profile):
             "maxArtifactBytes", defaults.get("max_artifact_bytes", MAX_BOUNDED_BYTE_COUNT)
         ),
         "maxReceiptBytes": defaults.get("maxReceiptBytes", defaults.get("max_receipt_bytes", 65_536)),
+        "maxCodeModeInputBytes": defaults.get(
+            "maxCodeModeInputBytes", defaults.get("max_code_mode_input_bytes", 65_536)
+        ),
+        "maxCodeModeOutputBytes": defaults.get(
+            "maxCodeModeOutputBytes", defaults.get("max_code_mode_output_bytes", 65_536)
+        ),
+        "maxCodeModeCalls": defaults.get("maxCodeModeCalls", defaults.get("max_code_mode_calls", 64)),
     }
-    for field in ("maxEventPayloadBytes", "maxArtifactBytes", "maxReceiptBytes"):
+    for field in (
+        "maxEventPayloadBytes",
+        "maxArtifactBytes",
+        "maxReceiptBytes",
+        "maxCodeModeInputBytes",
+        "maxCodeModeOutputBytes",
+        "maxCodeModeCalls",
+    ):
         value = policy[field]
         if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= MAX_BOUNDED_BYTE_COUNT:
             raise AgentDomainError(f"runtime_defaults.{field} is invalid")
@@ -648,7 +657,7 @@ def _build_snapshot(assignment, profile, run_id, snapshot=None):
             "behavioralPrompt": _profile_prompt(profile),
         },
         "context": _snapshot_context(profile),
-        "toolCatalog": _snapshot_tool_catalog(profile),
+        "toolCatalog": _snapshot_tool_catalog(profile, assignment),
         "runtimePolicy": runtime_policy,
         "totalBudget": total_budget,
         "contractDigests": contract_digests(),
@@ -687,13 +696,32 @@ def _transition_assignment_locked(assignment, target):
 
 
 @transaction.atomic
-def create_actor(*, workspace, display_name, project=None, credential_ref=None, created_by=None):
+def create_actor(*, workspace, display_name, project=None, credential_ref=None, principal=None, created_by=None):
     _ensure_scope(workspace, project)
     display_name = _ensure_non_empty(display_name, "display_name", limit=255)
+    if principal is None:
+        principal = User(
+            username=f"plane_agent_{uuid4().hex}",
+            email=f"plane-agent-{uuid4().hex}@plane.internal",
+            display_name=display_name,
+            is_bot=True,
+            is_active=True,
+            is_password_autoset=True,
+        )
+        principal.set_unusable_password()
+        principal.save(force_insert=True)
+        WorkspaceMember.objects.create(workspace=workspace, member=principal, role=15, is_active=True)
+        if project is not None:
+            ProjectMember.objects.create(project=project, member=principal, role=15, is_active=True)
+    else:
+        principal = User.objects.get(pk=getattr(principal, "pk", principal))
+        if not principal.is_active or not principal.is_bot:
+            raise AgentDomainError("AgentActor principal must be an active dedicated Plane Agent identity")
     return AgentActor.objects.create(
         workspace=workspace,
         project=project,
         display_name=display_name,
+        principal=principal,
         credential_ref=_credential_ref(credential_ref),
         created_by=created_by,
     )
@@ -1385,6 +1413,248 @@ def record_invocation(
     run.cumulative_usage = cumulative_usage
     run.save(_allow_lifecycle=True, created_by_id=run.created_by_id)
     return invocation
+
+
+def _code_mode_usage_fields(
+    *,
+    input_tokens=0,
+    output_tokens=0,
+    duration_ms=0,
+    input_bytes=0,
+    output_bytes=0,
+    calls=0,
+    spill_bytes=0,
+):
+    fields = {
+        "inputTokens": input_tokens,
+        "outputTokens": output_tokens,
+        "durationMs": duration_ms,
+        "codeModeInputBytes": input_bytes,
+        "codeModeOutputBytes": output_bytes,
+        "codeModeCalls": calls,
+        "codeModeSpillBytes": spill_bytes,
+    }
+    for field, value in fields.items():
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0 or value > MAX_INTEGER:
+            raise AgentDomainError(f"Code Mode usage {field} is invalid")
+    return fields
+
+
+def _code_mode_reservations(run):
+    value = run.code_mode_reserved_usage if isinstance(run.code_mode_reserved_usage, dict) else {}
+    reservations = value.get("reservations", [])
+    return reservations if isinstance(reservations, list) else []
+
+
+def _reservation_usage_totals(reservations):
+    totals = {field: 0 for field in _CODE_MODE_USAGE_FIELDS}
+    for reservation in reservations:
+        usage = reservation.get("usage", {}) if isinstance(reservation, dict) else {}
+        for field in totals:
+            amount = usage.get(field, 0)
+            if isinstance(amount, int) and not isinstance(amount, bool) and amount >= 0:
+                totals[field] += amount
+    return totals
+
+
+def code_mode_reserved_totals(run):
+    """Return the active pre-dispatch Code Mode reservations on a run."""
+
+    return _reservation_usage_totals(_code_mode_reservations(run))
+
+
+def _code_mode_stored_records(run, invocation):
+    locked_run = (
+        RunAttempt.objects.select_for_update()
+        .select_related("actor", "actor__principal", "profile_version", "assignment", "workspace")
+        .get(pk=run.pk)
+    )
+    locked_invocation = RuntimeInvocation.objects.select_related("run").get(pk=invocation.pk)
+    if locked_invocation.run_id != locked_run.id or locked_invocation.workspace_id != locked_run.workspace_id:
+        raise AgentDomainError("Code Mode usage is not bound to the stored run and invocation")
+    if locked_run.actor_id != locked_run.profile_version.actor_id:
+        raise AgentDomainError("Code Mode usage has an invalid Plane actor binding")
+    if locked_invocation.state in _INVOCATION_TERMINAL_STATES:
+        raise InvalidTransitionError("A terminal invocation cannot receive Code Mode usage")
+    try:
+        snapshot = validate_run_snapshot(locked_run.snapshot)
+        validate_invocation_envelope(locked_invocation.envelope)
+    except RuntimeContractError as exc:
+        raise AgentDomainError(f"Code Mode usage contract is invalid: {exc}") from exc
+    if locked_run.snapshot_content_digest != snapshot["contentDigest"]:
+        raise AgentDomainError("Code Mode usage snapshot digest does not match the stored run")
+    return locked_run, locked_invocation, snapshot
+
+
+def _code_mode_limits(snapshot):
+    runtime_policy = snapshot["runtimePolicy"]
+    limits = {
+        "codeModeInputBytes": runtime_policy.get("maxCodeModeInputBytes"),
+        "codeModeOutputBytes": runtime_policy.get("maxCodeModeOutputBytes"),
+        "codeModeCalls": runtime_policy.get("maxCodeModeCalls"),
+        "codeModeSpillBytes": runtime_policy.get("maxArtifactBytes"),
+    }
+    if any(value is None for value in limits.values()):
+        raise AgentDomainError("Code Mode limits are absent from the immutable run snapshot")
+    if any(isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in limits.values()):
+        raise AgentDomainError("Code Mode limits are invalid in the immutable run snapshot")
+    return limits
+
+
+def _code_mode_reservation_expired(reservation, now):
+    expires_at = reservation.get("expiresAt") if isinstance(reservation, dict) else None
+    if not isinstance(expires_at, str):
+        return True
+    try:
+        return datetime.fromisoformat(expires_at.replace("Z", "+00:00")) <= now
+    except ValueError:
+        return True
+
+
+@transaction.atomic
+def reap_code_mode_reservations(run):
+    """Drop abandoned reservations while holding the Plane run lifecycle lock."""
+
+    locked_run = RunAttempt.objects.select_for_update().get(pk=run.pk)
+    now = timezone.now()
+    active = [
+        reservation
+        for reservation in _code_mode_reservations(locked_run)
+        if not _code_mode_reservation_expired(reservation, now)
+    ]
+    if len(active) != len(_code_mode_reservations(locked_run)):
+        locked_run.code_mode_reserved_usage = {"reservations": active}
+        locked_run.save(_allow_lifecycle=True, update_fields=["code_mode_reserved_usage"])
+    return locked_run
+
+
+@transaction.atomic
+def reserve_code_mode_usage(run, invocation, **usage):
+    """Atomically reserve every cumulative Code Mode dimension before dispatch."""
+
+    fields = _code_mode_usage_fields(**usage)
+    locked_run, locked_invocation, snapshot = _code_mode_stored_records(run, invocation)
+    now = timezone.now()
+    reservations = [
+        reservation
+        for reservation in _code_mode_reservations(locked_run)
+        if not _code_mode_reservation_expired(reservation, now)
+    ]
+    reserved = _reservation_usage_totals(reservations)
+    actual = code_mode_usage_totals(locked_run)
+    cumulative = locked_run.cumulative_usage or {}
+    total_budget = snapshot["totalBudget"]
+    for field in ("inputTokens", "outputTokens", "durationMs"):
+        available = int(total_budget[field]) - int(cumulative.get(field, 0)) - reserved[field]
+        if fields[field] > available:
+            raise AgentDomainError(f"Code Mode {field} budget is exhausted")
+    limits = _code_mode_limits(snapshot)
+    for field, limit in limits.items():
+        available = limit - actual[field] - reserved[field]
+        if fields[field] > available:
+            raise AgentDomainError(f"Code Mode {field} budget is exhausted")
+    reservation = {
+        "reservationRef": namespaced_ref("reservation", str(uuid4())),
+        "invocationRef": locked_invocation.invocation_id,
+        "expiresAt": (now + _CODE_MODE_RESERVATION_TTL).isoformat().replace("+00:00", "Z"),
+        "usage": fields,
+    }
+    locked_run.code_mode_reserved_usage = {"reservations": [*reservations, reservation]}
+    locked_run.save(_allow_lifecycle=True, update_fields=["code_mode_reserved_usage"])
+    return locked_run, reservation
+
+
+@transaction.atomic
+def reconcile_code_mode_usage(run, invocation, reservation, **usage):
+    """Commit trusted actual usage and release its pre-dispatch reservation."""
+
+    fields = _code_mode_usage_fields(**usage)
+    locked_run, locked_invocation, _snapshot = _code_mode_stored_records(run, invocation)
+    reservation_ref = reservation.get("reservationRef") if isinstance(reservation, dict) else None
+    reservations = _code_mode_reservations(locked_run)
+    matching = next((row for row in reservations if row.get("reservationRef") == reservation_ref), None)
+    if matching is None:
+        existing = any(
+            isinstance(payload, dict) and payload.get("reservationRef") == reservation_ref
+            for payload in RunInputEvent.all_objects.filter(
+                run_id=locked_run.id,
+                kind=InputEventKind.CODE_MODE_USAGE,
+            ).values_list("payload", flat=True)
+        )
+        if existing:
+            return locked_run
+        raise AgentDomainError("Code Mode reservation is absent or already reaped")
+    if matching.get("invocationRef") != locked_invocation.invocation_id:
+        raise AgentDomainError("Code Mode reservation is bound to another invocation")
+    reserved_usage = matching.get("usage", {})
+    if any(fields[field] > int(reserved_usage.get(field, 0)) for field in _CODE_MODE_USAGE_FIELDS):
+        raise AgentDomainError("Code Mode actual usage exceeds its reservation")
+    remaining = [row for row in reservations if row.get("reservationRef") != reservation_ref]
+    cumulative_usage = deepcopy(locked_run.cumulative_usage or {})
+    for field in ("inputTokens", "outputTokens", "durationMs"):
+        cumulative_usage[field] = int(cumulative_usage.get(field, 0)) + fields[field]
+    if any(fields.values()):
+        actual = code_mode_usage_totals(locked_run)
+        usage_payload = {
+            "invocationRef": locked_invocation.invocation_id,
+            "reservationRef": reservation_ref,
+            "usage": fields,
+            "cumulative": {field: actual[field] + fields[field] for field in _CODE_MODE_USAGE_FIELDS},
+        }
+        max_sequence = RunInputEvent.all_objects.filter(run=locked_run).aggregate(max_sequence=Max("sequence"))[
+            "max_sequence"
+        ]
+        RunInputEvent.objects.create(
+            workspace=locked_run.workspace,
+            project=locked_run.project,
+            run=locked_run,
+            event_ref=namespaced_ref("event", str(uuid4())),
+            kind=InputEventKind.CODE_MODE_USAGE,
+            sequence=(max_sequence or 0) + 1,
+            payload=usage_payload,
+            payload_digest=content_digest(usage_payload),
+            created_by=locked_run.created_by,
+        )
+    # The integrated lifecycle guard derives cumulative usage from immutable
+    # runtime invocations and Code Mode usage events. Append the event before
+    # updating the aggregate so the guarded write observes the complete fact
+    # set in one transaction.
+    locked_run.code_mode_reserved_usage = {"reservations": remaining}
+    locked_run.cumulative_usage = cumulative_usage
+    locked_run.save(_allow_lifecycle=True, update_fields=["code_mode_reserved_usage", "cumulative_usage"])
+    return locked_run
+
+
+@transaction.atomic
+def record_code_mode_usage(run, invocation, **usage):
+    """Compatibility wrapper that reserves and reconciles one exact usage delta."""
+
+    locked_run, reservation = reserve_code_mode_usage(run, invocation, **usage)
+    return reconcile_code_mode_usage(locked_run, invocation, reservation, **usage)
+
+
+def code_mode_usage_totals(run):
+    """Derive persisted Code Mode counters from immutable Plane usage facts."""
+
+    totals = {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "durationMs": 0,
+        "codeModeInputBytes": 0,
+        "codeModeOutputBytes": 0,
+        "codeModeCalls": 0,
+        "codeModeSpillBytes": 0,
+    }
+    rows = RunInputEvent.all_objects.filter(run_id=run.pk, kind=InputEventKind.CODE_MODE_USAGE).values_list(
+        "payload", flat=True
+    )
+    for row in rows:
+        usage = row.get("usage", {}) if isinstance(row, dict) else {}
+        for field in totals:
+            amount = usage.get(field, 0)
+            if isinstance(amount, int) and not isinstance(amount, bool) and amount >= 0:
+                totals[field] += amount
+    return totals
 
 
 @transaction.atomic

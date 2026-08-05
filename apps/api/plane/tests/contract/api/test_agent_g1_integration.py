@@ -8,6 +8,7 @@ rows, and terminal product event are the expected artifacts.
 import copy
 import json
 import uuid
+from types import SimpleNamespace
 
 import pytest
 from django.core.exceptions import ValidationError
@@ -16,6 +17,7 @@ from rest_framework.test import APIClient
 
 from plane.agent.lifecycle import (
     IdempotencyConflictError,
+    code_mode_usage_totals,
     create_actor,
     create_assignment,
     create_profile,
@@ -23,6 +25,7 @@ from plane.agent.lifecycle import (
     propose_outcome,
     record_invocation,
 )
+from plane.agent.code_mode import CodeModeHostRPC, CodeModeIsolateRunner
 from plane.agent.lifecycle.runtime_contract import validate_invocation_envelope
 from plane.agent.runtime import RuntimeIngressError, dispatch_invocation, ingest_runtime_frame
 from plane.db.models import (
@@ -33,12 +36,14 @@ from plane.db.models import (
     OperationGatewayAudit,
     OperationGatewayIdempotency,
     OutcomeSubmission,
+    ProjectMember,
     RunAttempt,
     RunState,
     RunTerminalEvent,
     RuntimeEventIngress,
     RuntimeExitEvidence,
     User,
+    WorkspaceMember,
 )
 from plane.operation_gateway.contracts import MAX_RESPONSE_BYTES
 from plane.operation_gateway.gateway import OperationGateway
@@ -77,6 +82,274 @@ class DeterministicRuntimeAdapter:
     def dispatch(self, snapshot_json, envelope_json):
         self.calls.append((snapshot_json, envelope_json))
         return tuple(json.dumps(frame, separators=(",", ":")) for frame in self.frames)
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_code_mode_uses_persisted_binding_child_isolate_and_exact_replay(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    actor = create_actor(
+        workspace=workspace,
+        project=gateway_project,
+        display_name="Code Mode worker",
+        created_by=create_user,
+    )
+    profile = create_profile(actor, role=AgentRole.WORKER, instructions="Use the typed host.")
+    assignment = create_assignment(
+        actor,
+        project=gateway_project,
+        target_ref=f"issue:{gateway_issue.id}",
+        objective="Exercise the Code Mode host.",
+        acceptance_criteria=["The host stays bound and bounded."],
+        created_by=create_user,
+    )
+    run = create_run(assignment, profile, idempotency_key="idempotency:code-mode-run", created_by=create_user)
+    invocation = record_invocation(run, idempotency_key="idempotency:code-mode-invocation", trigger="initial")
+    request = SimpleNamespace(
+        user=actor.principal,
+        META={},
+        agent_actor_ref=run.snapshot["actorRef"],
+    )
+    host = CodeModeHostRPC(
+        gateway=OperationGateway(),
+        request=request,
+        run=run,
+        invocation=invocation,
+        is_cancelled=lambda: False,
+    )
+
+    first = host.call_operation(
+        "catalog.describe",
+        {"operation_id": "search_workspace"},
+        idempotency_key="idempotency:code-mode-call",
+        correlation_id="correlation:code-mode-call",
+    )
+    replay = host.call_operation(
+        "catalog.describe",
+        {"operation_id": "search_workspace"},
+        idempotency_key="idempotency:code-mode-call",
+        correlation_id="correlation:code-mode-call",
+    )
+    assert replay == first
+    assert first["actorRef"] == run.snapshot["actorRef"]
+    assert first["workspaceRef"] == f"workspace:{workspace.id}"
+    assert first["gatewayReceipt"] == first["auditReceipt"]
+
+    changed = host.call_operation(
+        "catalog.describe",
+        {"operation_id": "catalog.search"},
+        idempotency_key="idempotency:code-mode-call",
+        correlation_id="correlation:code-mode-call",
+    )
+    assert changed["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+
+    child_result = CodeModeIsolateRunner().run(
+        host,
+        """
+          export default async function ({host}: {host: any}) {
+            return await host.call_plane_operation(
+              "catalog.search", {query: "", limit: 5},
+              "idempotency:code-mode-child", "correlation:code-mode-child"
+            );
+          }
+        """,
+        {},
+    )
+    assert child_result["ok"] is True
+    assert child_result["actorRef"] == run.snapshot["actorRef"]
+    run.refresh_from_db()
+    usage = code_mode_usage_totals(run)
+    assert usage["codeModeCalls"] >= 4
+    assert usage["codeModeInputBytes"] > 0
+    assert usage["codeModeOutputBytes"] > 0
+    assert run.cumulative_usage["durationMs"] > 0
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_code_mode_cannot_substitute_authenticated_workspace_member(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    actor = create_actor(
+        workspace=workspace,
+        project=gateway_project,
+        display_name="Durably bound worker",
+        created_by=create_user,
+    )
+    profile = create_profile(actor, role=AgentRole.WORKER, instructions="Use the bound Plane principal.")
+    assignment = create_assignment(
+        actor,
+        project=gateway_project,
+        target_ref=f"issue:{gateway_issue.id}",
+        objective="Reject principal substitution.",
+        acceptance_criteria=["No unauthorized mutation."],
+    )
+    run = create_run(assignment, profile, idempotency_key="idempotency:principal-binding-run")
+    invocation = record_invocation(run, idempotency_key="idempotency:principal-binding-invocation", trigger="initial")
+    other_member = User.objects.create(
+        username=f"other-member-{uuid.uuid4().hex}",
+        email=f"other-member-{uuid.uuid4().hex}@plane.so",
+        display_name="Other member",
+    )
+    WorkspaceMember.objects.create(workspace=workspace, member=other_member, role=15, is_active=True)
+    ProjectMember.objects.create(project=gateway_project, member=other_member, role=15, is_active=True)
+    request = SimpleNamespace(
+        user=other_member,
+        META={},
+        agent_actor_ref=run.snapshot["actorRef"],
+    )
+    host = CodeModeHostRPC(
+        gateway=OperationGateway(),
+        request=request,
+        run=run,
+        invocation=invocation,
+        is_cancelled=lambda: False,
+    )
+
+    receipt = host.call_operation(
+        "work_item.rename",
+        {"project_id": str(gateway_project.id), "issue_id": str(gateway_issue.id), "name": "forged rename"},
+        idempotency_key="idempotency:principal-substitution",
+        correlation_id="correlation:principal-substitution",
+    )
+
+    gateway_issue.refresh_from_db()
+    assert receipt["ok"] is False
+    assert receipt["error"]["code"] == "NOT_AUTHORIZED"
+    assert receipt["actorRef"] == run.snapshot["actorRef"]
+    assert receipt["principalRef"] == str(actor.principal_id)
+    assert gateway_issue.name == "Gateway Issue"
+    assert not OperationGatewayIdempotency.objects.filter(idempotency_key="idempotency:principal-substitution").exists()
+    audits = OperationGatewayAudit.objects.filter(idempotency_key="idempotency:principal-substitution")
+    assert audits.count() == 2
+    assert set(audits.values_list("caller_id", flat=True)) == {actor.principal_id}
+    assert audits.filter(outcome=OperationGatewayAudit.Outcome.DENIED).count() == 1
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize(
+    ("budget_field", "runtime_defaults"),
+    [
+        ("output", {"maxCodeModeOutputBytes": 0}),
+        ("spill", {"maxArtifactBytes": 0}),
+        ("calls", {"maxCodeModeCalls": 0}),
+        ("input_tokens", {"totalBudget": {"inputTokens": 0}}),
+        ("output_tokens", {"totalBudget": {"outputTokens": 0}}),
+        ("duration", {"totalBudget": {"durationMs": 0}}),
+    ],
+)
+def test_code_mode_zero_limit_denies_mutation_before_gateway(
+    budget_field, runtime_defaults, workspace, gateway_project, gateway_issue, create_user
+):
+    actor = create_actor(
+        workspace=workspace,
+        project=gateway_project,
+        display_name=f"Zero {budget_field} worker",
+        created_by=create_user,
+    )
+    profile = create_profile(
+        actor,
+        role=AgentRole.WORKER,
+        instructions="Deny before dispatch when a cumulative dimension is exhausted.",
+        runtime_defaults=runtime_defaults,
+    )
+    assignment = create_assignment(
+        actor,
+        project=gateway_project,
+        target_ref=f"issue:{gateway_issue.id}",
+        objective="Reject zero budget mutation.",
+        acceptance_criteria=["No mutation commits."],
+    )
+    run = create_run(assignment, profile, idempotency_key=f"idempotency:zero-{budget_field}-run")
+    invocation = record_invocation(
+        run,
+        idempotency_key=f"idempotency:zero-{budget_field}-invocation",
+        trigger="initial",
+    )
+    host = CodeModeHostRPC(
+        gateway=OperationGateway(),
+        request=SimpleNamespace(user=actor.principal, META={}, agent_actor_ref=run.snapshot["actorRef"]),
+        run=run,
+        invocation=invocation,
+        is_cancelled=lambda: False,
+    )
+
+    receipt = host.call_operation(
+        "work_item.rename",
+        {"project_id": str(gateway_project.id), "issue_id": str(gateway_issue.id), "name": "must not commit"},
+        idempotency_key=f"idempotency:zero-{budget_field}-mutation",
+        correlation_id=f"correlation:zero-{budget_field}-mutation",
+    )
+
+    gateway_issue.refresh_from_db()
+    assert receipt["ok"] is False
+    assert receipt["error"]["code"] == "BUDGET_EXCEEDED"
+    assert gateway_issue.name == "Gateway Issue"
+    assert not OperationGatewayIdempotency.objects.filter(
+        idempotency_key=f"idempotency:zero-{budget_field}-mutation"
+    ).exists()
+    audits = OperationGatewayAudit.objects.filter(idempotency_key=f"idempotency:zero-{budget_field}-mutation")
+    assert audits.count() == 2
+    assert audits.filter(outcome=OperationGatewayAudit.Outcome.SUCCESS).count() == 0
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_code_mode_reservation_reconciles_to_actual_and_holds_exact_call_boundary(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    actor = create_actor(
+        workspace=workspace,
+        project=gateway_project,
+        display_name="Reservation worker",
+        created_by=create_user,
+    )
+    profile = create_profile(
+        actor,
+        role=AgentRole.WORKER,
+        instructions="Reserve and reconcile every callback dimension.",
+        runtime_defaults={"maxCodeModeOutputBytes": 12_288, "maxCodeModeCalls": 1},
+    )
+    assignment = create_assignment(
+        actor,
+        project=gateway_project,
+        target_ref=f"issue:{gateway_issue.id}",
+        objective="Prove exact reservation reconciliation.",
+        acceptance_criteria=["Reserved usage reconciles to actual usage."],
+    )
+    run = create_run(assignment, profile, idempotency_key="idempotency:reservation-run")
+    invocation = record_invocation(run, idempotency_key="idempotency:reservation-invocation", trigger="initial")
+    host = CodeModeHostRPC(
+        gateway=OperationGateway(),
+        request=SimpleNamespace(user=actor.principal, META={}, agent_actor_ref=run.snapshot["actorRef"]),
+        run=run,
+        invocation=invocation,
+        is_cancelled=lambda: False,
+    )
+
+    receipt = host.call_operation(
+        "catalog.describe",
+        {"operation_id": "search_workspace"},
+        idempotency_key="idempotency:reservation-call",
+        correlation_id="correlation:reservation-call",
+    )
+
+    assert receipt["ok"] is True
+    run.refresh_from_db()
+    usage = code_mode_usage_totals(run)
+    assert usage["codeModeCalls"] == 1
+    assert usage["codeModeOutputBytes"] > 0
+    assert run.code_mode_reserved_usage["reservations"] == []
+    second = host.call_operation(
+        "catalog.describe",
+        {"operation_id": "search_workspace"},
+        idempotency_key="idempotency:reservation-call-2",
+        correlation_id="correlation:reservation-call-2",
+    )
+    assert second["error"]["code"] == "BUDGET_EXCEEDED"
+    assert not OperationGatewayIdempotency.objects.filter(idempotency_key="idempotency:reservation-call-2").exists()
 
 
 @pytest.mark.contract

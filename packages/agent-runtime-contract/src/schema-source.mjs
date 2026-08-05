@@ -394,6 +394,9 @@ const runtimePolicy = {
     maxEventPayloadBytes: ref("boundedByteCount"),
     maxArtifactBytes: ref("boundedByteCount"),
     maxReceiptBytes: ref("boundedByteCount"),
+    maxCodeModeInputBytes: ref("boundedByteCount"),
+    maxCodeModeOutputBytes: ref("boundedByteCount"),
+    maxCodeModeCalls: ref("nonNegativeInteger"),
   },
 };
 

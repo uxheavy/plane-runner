@@ -274,6 +274,12 @@ PROFILE_RUNTIME_KEYS = {
     "max_artifact_bytes",
     "maxReceiptBytes",
     "max_receipt_bytes",
+    "maxCodeModeInputBytes",
+    "max_code_mode_input_bytes",
+    "maxCodeModeOutputBytes",
+    "max_code_mode_output_bytes",
+    "maxCodeModeCalls",
+    "max_code_mode_calls",
 }
 PROFILE_TOOL_KEYS = {
     "eager",

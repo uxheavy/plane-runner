@@ -13,7 +13,8 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from plane.agent.administration import ensure_fixture_profile, update_actor, validate_credential_ref
-from plane.db.models import AgentActor, AgentRole, Project, Workspace
+from plane.agent.lifecycle import create_actor
+from plane.db.models import AgentActor, AgentRole, Project, ProjectMember, Workspace, WorkspaceMember
 
 
 class Command(BaseCommand):
@@ -59,19 +60,42 @@ class Command(BaseCommand):
             raise CommandError(str(exc)) from exc
 
         with transaction.atomic():
-            actor, _ = AgentActor.objects.get_or_create(
-                workspace=workspace,
-                display_name=display_name,
-                defaults={
-                    "project": project,
-                    "credential_ref": credential_ref,
-                },
+            actor = (
+                AgentActor.objects.select_for_update()
+                .select_related("principal")
+                .filter(workspace=workspace, display_name=display_name)
+                .first()
             )
-            actor = AgentActor.objects.select_for_update().get(pk=actor.pk)
+            if actor is None:
+                actor = create_actor(
+                    workspace=workspace,
+                    project=project,
+                    display_name=display_name,
+                    credential_ref=credential_ref,
+                    created_by=workspace.owner,
+                )
+            else:
+                actor = AgentActor.objects.select_for_update().select_related("principal").get(pk=actor.pk)
             if actor.project_id != getattr(project, "id", None):
                 raise CommandError("Existing Agent actor has a different project scope")
             if credential_ref is not None and actor.credential_ref != credential_ref:
                 actor = update_actor(actor, credential_ref=credential_ref)
+            workspace_member, _ = WorkspaceMember.objects.get_or_create(
+                workspace=workspace,
+                member=actor.principal,
+                defaults={"role": 15, "is_active": True},
+            )
+            if not workspace_member.is_active:
+                WorkspaceMember.objects.filter(pk=workspace_member.pk).update(is_active=True)
+            if project is not None:
+                project_member, _ = ProjectMember.objects.get_or_create(
+                    workspace=workspace,
+                    project=project,
+                    member=actor.principal,
+                    defaults={"role": 15, "is_active": True},
+                )
+                if not project_member.is_active:
+                    ProjectMember.objects.filter(pk=project_member.pk).update(is_active=True)
 
             profile_data = {
                 "role": payload.get("role") or AgentRole.WORKER,
