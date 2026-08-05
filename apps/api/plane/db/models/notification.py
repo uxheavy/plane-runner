@@ -31,6 +31,9 @@ class Notification(BaseModel):
     read_at = models.DateTimeField(null=True)
     snoozed_till = models.DateTimeField(null=True)
     archived_at = models.DateTimeField(null=True)
+    # Stable per-effect key used by durable Operation Gateway retries. Legacy
+    # notification callers leave it null.
+    idempotency_key = models.CharField(max_length=255, blank=True, null=True, unique=True, editable=False)
 
     class Meta:
         verbose_name = "Notification"
@@ -141,6 +144,9 @@ class EmailNotificationLog(BaseModel):
     entity = models.CharField(max_length=200)
     old_value = models.CharField(max_length=300, blank=True, null=True)
     new_value = models.CharField(max_length=300, blank=True, null=True)
+    # Stable per-effect key used by durable Operation Gateway retries. Legacy
+    # email-log callers leave it null.
+    idempotency_key = models.CharField(max_length=255, blank=True, null=True, unique=True, editable=False)
 
     class Meta:
         verbose_name = "Email Notification Log"

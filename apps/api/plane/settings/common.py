@@ -44,7 +44,7 @@ if SECRET_KEY in _INSECURE_SECRET_KEYS:
         "This makes your installation vulnerable to session forgery, CSRF bypass, and "
         "password-reset token forging. Set a unique SECRET_KEY before deploying to production. "
         "Generate one with: "
-        "python3 -c \"from django.utils.crypto import get_random_secret_key; print(get_random_secret_key())\""
+        'python3 -c "from django.utils.crypto import get_random_secret_key; print(get_random_secret_key())"'
     )
 
 # SECURITY WARNING: don't run with debug turned on in production!
@@ -74,9 +74,7 @@ for _cidr in _webhook_allowed_ips_raw.split(","):
 # Example: "silo,silo.namespace.svc.cluster.local,internal-api.lan"
 _webhook_allowed_hosts_raw = os.environ.get("WEBHOOK_ALLOWED_HOSTS", "")
 WEBHOOK_ALLOWED_HOSTS = [
-    _host.strip().rstrip(".").lower()
-    for _host in _webhook_allowed_hosts_raw.split(",")
-    if _host.strip()
+    _host.strip().rstrip(".").lower() for _host in _webhook_allowed_hosts_raw.split(",") if _host.strip()
 ]
 
 # Webhook disallowed domains — comma-separated hostnames. Webhooks targeting
@@ -85,9 +83,7 @@ WEBHOOK_ALLOWED_HOSTS = [
 # for self-hosted deployments; set to e.g. "plane.so" to block specific domains.
 _webhook_disallowed_domains_raw = os.environ.get("WEBHOOK_DISALLOWED_DOMAINS", "")
 WEBHOOK_DISALLOWED_DOMAINS = [
-    _d.strip().rstrip(".").lower()
-    for _d in _webhook_disallowed_domains_raw.split(",")
-    if _d.strip()
+    _d.strip().rstrip(".").lower() for _d in _webhook_disallowed_domains_raw.split(",") if _d.strip()
 ]
 
 # Allowed Hosts
@@ -202,9 +198,23 @@ SITE_ID = 1
 AUTH_USER_MODEL = "db.User"
 
 # Database
-if bool(os.environ.get("DATABASE_URL")):
-    # Parse database configuration from $DATABASE_URL
-    DATABASES = {"default": dj_database_url.config()}
+PLANE_DB_MIGRATION_MODE = os.environ.get("PLANE_DB_MIGRATION_MODE") == "1"
+PLANE_DB_PROVISIONER_MODE = os.environ.get("PLANE_DB_PROVISIONER_MODE") == "1"
+_database_runtime_url = os.environ.get("DATABASE_RUNTIME_URL")
+DATABASE_RUNTIME_URL = _database_runtime_url or (None if PLANE_DB_MIGRATION_MODE else os.environ.get("DATABASE_URL"))
+# The migration URL is intentionally unavailable to normal application
+# settings. Only the explicit one-shot migration process may load it.
+DATABASE_MIGRATION_URL = os.environ.get("DATABASE_MIGRATION_URL") if PLANE_DB_MIGRATION_MODE else None
+DATABASE_PROVISIONER_URL = os.environ.get("DATABASE_PROVISIONER_URL") if PLANE_DB_PROVISIONER_MODE else None
+_database_url = (
+    DATABASE_PROVISIONER_URL
+    if PLANE_DB_PROVISIONER_MODE
+    else (DATABASE_MIGRATION_URL or os.environ.get("DATABASE_URL"))
+    if PLANE_DB_MIGRATION_MODE
+    else DATABASE_RUNTIME_URL
+)
+if _database_url:
+    DATABASES = {"default": dj_database_url.parse(_database_url)}
 else:
     DATABASES = {
         "default": {
@@ -217,7 +227,29 @@ else:
         }
     }
 
-
+# Operation Gateway audit storage is owned by a dedicated no-login role. Local
+# and test defaults keep the existing database user as the runtime role. In a
+# production topology the runtime and migration URLs are explicit, distinct
+# credentials; a separately configured provisioner/admin credential performs
+# the one-time role and authority-marker bootstrap.
+PLANE_AUDIT_SCHEMA = os.environ.get("PLANE_AUDIT_SCHEMA", "public")
+PLANE_AUDIT_RUNTIME_ROLE = os.environ.get("PLANE_AUDIT_RUNTIME_ROLE") or DATABASES["default"].get("USER", "")
+PLANE_AUDIT_GOVERNANCE_ROLE = os.environ.get("PLANE_AUDIT_GOVERNANCE_ROLE", "plane_audit_owner")
+PLANE_AUDIT_MIGRATION_ROLE = os.environ.get("PLANE_AUDIT_MIGRATION_ROLE") or "plane_migrator"
+PLANE_AUDIT_PROVISIONER_ROLE = os.environ.get("PLANE_AUDIT_PROVISIONER_ROLE", "")
+PLANE_AUDIT_RUNTIME_PASSWORD = os.environ.get("PLANE_AUDIT_RUNTIME_PASSWORD", "")
+PLANE_AUDIT_MIGRATION_PASSWORD = (
+    os.environ.get("PLANE_AUDIT_MIGRATION_PASSWORD", "") if PLANE_DB_PROVISIONER_MODE else ""
+)
+# Production fails closed by default. The local and test settings explicitly
+# disable this check while they use the repository's single bootstrap role.
+PLANE_AUDIT_ENFORCE_ROLE_SEPARATION = (
+    os.environ.get(
+        "PLANE_AUDIT_ENFORCE_ROLE_SEPARATION",
+        "0" if DEBUG else "1",
+    )
+    == "1"
+)
 if os.environ.get("ENABLE_READ_REPLICA", "0") == "1":
     if bool(os.environ.get("DATABASE_READ_REPLICA_URL")):
         # Parse database configuration from $DATABASE_URL
@@ -348,6 +380,8 @@ CELERY_IMPORTS = (
     # issue version tasks
     "plane.bgtasks.issue_version_sync",
     "plane.bgtasks.issue_description_version_sync",
+    # Durable Plane Operation Gateway publication intents
+    "plane.operation_gateway.tasks",
 )
 
 FILE_SIZE_LIMIT = int(os.environ.get("FILE_SIZE_LIMIT", 5242880))

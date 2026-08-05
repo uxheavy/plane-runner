@@ -337,11 +337,11 @@ function download() {
 function startServices() {
     /bin/bash -c "$COMPOSE_CMD -f $DOCKER_FILE_PATH --env-file=$DOCKER_ENV_PATH up -d --pull if_not_present --quiet-pull"
 
-    local migrator_container_id=$(docker container ls -aq -f "name=$SERVICE_FOLDER-migrator")
-    if [ -n "$migrator_container_id" ]; then
+    local provisioner_final_container_id=$(docker container ls -aq -f "name=$SERVICE_FOLDER-provisioner-final")
+    if [ -n "$provisioner_final_container_id" ]; then
         local idx=0
-        while docker inspect --format='{{.State.Status}}' $migrator_container_id | grep -q "running"; do
-            local message=">> Waiting for Data Migration to finish"
+        while docker inspect --format='{{.State.Status}}' $provisioner_final_container_id | grep -q "running"; do
+            local message=">> Waiting for database provisioning and migration to finish"
             local dots=$(printf '%*s' $idx | tr ' ' '.')
             echo -ne "\r$message$dots"
             ((idx++))
@@ -352,14 +352,14 @@ function startServices() {
     echo ""
     echo "   Data Migration completed successfully ✅"
 
-    # if migrator exit status is not 0, show error message and exit
-    if [ -n "$migrator_container_id" ]; then
-        local migrator_exit_code=$(docker inspect --format='{{.State.ExitCode}}' $migrator_container_id)
-        if [ $migrator_exit_code -ne 0 ]; then
+    # if the final provisioner phase failed, do not start runtime services.
+    if [ -n "$provisioner_final_container_id" ]; then
+        local provisioner_final_exit_code=$(docker inspect --format='{{.State.ExitCode}}' $provisioner_final_container_id)
+        if [ $provisioner_final_exit_code -ne 0 ]; then
             echo "Plane Server failed to start ❌"
             # stopServices
             echo
-            echo "Please check the logs for the 'migrator' service and resolve the issue(s)."
+            echo "Please check the logs for the 'provisioner-final' and 'migrator' services and resolve the issue(s)."
             echo "Stop the services by running the command: ./setup.sh stop"
             exit 1
         fi

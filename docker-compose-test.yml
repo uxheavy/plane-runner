@@ -112,6 +112,9 @@ services:
       # Override service hostnames to point at the test-only services above.
       POSTGRES_HOST: test-db
       DATABASE_URL: postgresql://${POSTGRES_USER:-plane}:${POSTGRES_PASSWORD:-plane}@test-db:5432/${POSTGRES_DB:-plane}
+      DATABASE_RUNTIME_URL: postgresql://${POSTGRES_USER:-plane}:${POSTGRES_PASSWORD:-plane}@test-db:5432/${POSTGRES_DB:-plane}
+      DATABASE_MIGRATION_URL: postgresql://${POSTGRES_USER:-plane}:${POSTGRES_PASSWORD:-plane}@test-db:5432/${POSTGRES_DB:-plane}
+      PLANE_AUDIT_MIGRATION_ROLE: ${POSTGRES_USER:-plane}
       REDIS_HOST: test-redis
       REDIS_URL: redis://test-redis:6379/
       RABBITMQ_HOST: test-mq
@@ -139,6 +142,7 @@ services:
       - |
         set -e
         pip install --no-cache-dir -r requirements/test.txt
+        python manage.py bootstrap_operation_gateway_audit
         # STATIC_ROOT must exist or Django's static middleware emits a
         # UserWarning on every request (~100 of the warnings in test runs).
         mkdir -p plane/static-assets/collected-static

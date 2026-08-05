@@ -1513,6 +1513,8 @@ def issue_activity(
     notification=False,
     origin=None,
     intake=None,
+    activity_id=None,
+    raise_on_error=False,
 ):
     try:
         issue_activities = []
@@ -1580,6 +1582,14 @@ def issue_activity(
                 epoch=epoch,
             )
 
+        # The Operation Gateway supplies one deterministic Activity identity
+        # for the rename slice. Legacy callers continue to receive generated
+        # IDs and do not need to know about this adapter contract.
+        if activity_id is not None and len(issue_activities) != 1:
+            raise ValueError("A gateway activity intent must produce exactly one activity")
+        if activity_id is not None:
+            issue_activities[0].id = activity_id
+
         # Save all the values to database
         issue_activities_created = IssueActivity.objects.bulk_create(issue_activities)
 
@@ -1598,7 +1608,9 @@ def issue_activity(
                 current_instance=current_instance,
             )
 
-        return
+        return [str(activity.id) for activity in issue_activities_created]
     except Exception as e:
         log_exception(e)
+        if raise_on_error:
+            raise
         return
