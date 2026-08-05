@@ -8,15 +8,16 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import timedelta
+from types import SimpleNamespace
 from typing import Any
 
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import DatabaseError, IntegrityError, transaction
 from django.utils import timezone
 
-from plane.api.views.issue import IssueDetailAPIEndpoint
+from plane.api.serializers.user import UserLiteSerializer
 from plane.api.serializers import IssueSerializer
-from plane.app.permissions import ProjectEntityPermission, WorkspaceMemberPermission
+from plane.app.permissions import WorkspaceMemberPermission
 from plane.db.models import (
     Issue,
     OperationGatewayAudit,
@@ -35,6 +36,11 @@ from .contracts import (
     MAX_RESPONSE_BYTES,
     MAX_RESULT_BYTES,
     SCHEMA_VERSION,
+    AttachmentListInputSerializer,
+    AttachmentReadInputSerializer,
+    AttachmentUploadFromUrlInputSerializer,
+    EmptyOperationInputSerializer,
+    GatewayOperationInputSerializer,
     WorkItemReadInputSerializer,
     WorkItemRenameInputSerializer,
     CatalogDescribeInputSerializer,
@@ -50,7 +56,8 @@ from .publications import (
     schedule_publications_on_commit,
 )
 from .role_boundary import audited_gateway_boundary
-from .work_items import WorkItemRenameFailure, WorkItemRenameOutcome, WorkItemRenameService
+from .mcp.attachments import AttachmentFailure, WorkItemAttachmentService, _assert_issue_permission
+from .operations import OperationAdapterFailure, OperationRequest, get_operation_handler
 
 READ_RESULT_FIELDS = ("id", "name", "sequence_id", "priority", "state", "project", "workspace")
 
@@ -61,6 +68,10 @@ ERROR_MESSAGES = {
     "CALLBACK_BINDING_INVALID": "The Code Mode callback is not bound to this run.",
     "CANCELLED": "The Code Mode run was cancelled.",
     "CATALOG_MISMATCH": "The operation catalog is not bound to this run.",
+    "ATTACHMENT_CONTENT_UNSUPPORTED": "This attachment content type cannot be read.",
+    "ATTACHMENT_NOT_FOUND": "The attachment could not be found.",
+    "ATTACHMENT_TOO_LARGE": "The attachment exceeds the size limit.",
+    "EXTERNAL_SOURCE_REJECTED": "The external attachment source was rejected.",
     "IDEMPOTENCY_CONFLICT": "The idempotency key was already used for another request.",
     "INTERNAL_ERROR": "The operation could not be completed.",
     "NOT_AUTHORIZED": "Operation is not authorized for this caller.",
@@ -99,17 +110,6 @@ class AttemptDecision:
     workspace: Workspace
     record: OperationGatewayIdempotency | None
     response: tuple[GatewayEnvelope, int] | None = None
-
-
-class GatewayServiceRequest:
-    """Minimal request adapter required by the existing read and permission code."""
-
-    def __init__(self, request: Any, *, method: str, data: dict[str, Any] | None = None):
-        self.user = request.user
-        self.method = method
-        self.data = data or {}
-        self.GET = {"fields": ",".join(READ_RESULT_FIELDS)} if method == "GET" else {}
-        self.META = request.META
 
 
 class OperationGateway:
@@ -596,8 +596,8 @@ class OperationGateway:
                         False,
                     )
                 result = self._bound_result(
+                    descriptor,
                     raw_result,
-                    descriptor=descriptor,
                     max_bytes=min(descriptor.max_result_bytes, MAX_RESULT_BYTES),
                 )
                 return (
@@ -613,6 +613,24 @@ class OperationGateway:
                 )
         except GatewayFailure as failure:
             return self._persist_failure(record, descriptor, workspace.slug, caller_id, request_digest, failure)
+        except AttachmentFailure as failure:
+            return self._persist_failure(
+                record,
+                descriptor,
+                workspace.slug,
+                caller_id,
+                request_digest,
+                GatewayFailure(failure.code, failure.http_status, failure.retryable),
+            )
+        except OperationAdapterFailure as failure:
+            return self._persist_failure(
+                record,
+                descriptor,
+                workspace.slug,
+                caller_id,
+                request_digest,
+                GatewayFailure(failure.code, failure.http_status, failure.retryable),
+            )
         except Issue.DoesNotExist:
             return self._persist_failure(
                 record,
@@ -644,20 +662,30 @@ class OperationGateway:
     def _parse_operation_input(
         self, descriptor: OperationDescriptor, value: dict[str, Any]
     ) -> tuple[dict[str, Any], GatewayFailure | None]:
-        serializer_class = (
-            WorkItemReadInputSerializer
-            if descriptor.operation_id == "work_item.read"
-            else WorkItemRenameInputSerializer
-        )
-        if descriptor.operation_id == "search_workspace":
-            serializer_class = WorkspaceSearchInputSerializer
-        elif descriptor.operation_id == "catalog.search":
-            serializer_class = CatalogSearchInputSerializer
-        elif descriptor.operation_id == "catalog.describe":
-            serializer_class = CatalogDescribeInputSerializer
-        elif descriptor.operation_id == "code_mode.spill":
-            serializer_class = CodeModeSpillInputSerializer
-        serializer = serializer_class(data=value)
+        serializer_class = {
+            "work_item.read": WorkItemReadInputSerializer,
+            "work_item.rename": WorkItemRenameInputSerializer,
+            "search_workspace": WorkspaceSearchInputSerializer,
+            "catalog.search": CatalogSearchInputSerializer,
+            "catalog.describe": CatalogDescribeInputSerializer,
+            "code_mode.spill": CodeModeSpillInputSerializer,
+            "user.me": EmptyOperationInputSerializer,
+            "work_item_attachment.list": AttachmentListInputSerializer,
+            "work_item_attachment.download_url": AttachmentReadInputSerializer,
+            "work_item_attachment.upload_from_url": AttachmentUploadFromUrlInputSerializer,
+            "work_item_attachment.delete": AttachmentReadInputSerializer,
+            "work_item_attachment.read": AttachmentReadInputSerializer,
+        }.get(descriptor.operation_id)
+        if serializer_class is None and get_operation_handler(descriptor.operation_id) is not None:
+            serializer = GatewayOperationInputSerializer(
+                data=value,
+                allowed_fields=descriptor.input_fields,
+                required_fields=descriptor.required_input,
+            )
+        elif serializer_class is None:
+            return {}, GatewayFailure("UNKNOWN_OPERATION", 404, False)
+        else:
+            serializer = serializer_class(data=value)
         if not serializer.is_valid():
             return {}, GatewayFailure("VALIDATION_ERROR", 400, False)
         # Keep the canonical parsed contract JSON-safe for durable reconciliation.
@@ -670,27 +698,37 @@ class OperationGateway:
         parsed_input: dict[str, Any],
         workspace_slug: str,
     ) -> GatewayFailure | None:
-        service_request = GatewayServiceRequest(
-            request,
-            method="GET" if descriptor.kind == "read" else "PATCH",
-        )
+        if descriptor.operation_id == "user.me":
+            return None
+        handler = get_operation_handler(descriptor.operation_id)
+        if handler is not None:
+            try:
+                if not handler.authorize(request, Workspace.objects.get(slug=workspace_slug), parsed_input):
+                    return GatewayFailure("NOT_AUTHORIZED", 403, False)
+            except Exception:
+                return GatewayFailure("AUTHORIZATION_UNAVAILABLE", 503, True)
+            return None
         if descriptor.authorization_scope == "workspace":
-            view = type("WorkspaceGatewayView", (), {"kwargs": {"slug": workspace_slug}})()
+            service_request = OperationRequest(request, method="GET")
+            view = SimpleNamespace(kwargs={"slug": workspace_slug})
             try:
                 allowed = WorkspaceMemberPermission().has_permission(service_request, view)
             except Exception:
                 return GatewayFailure("AUTHORIZATION_UNAVAILABLE", 503, True)
             return None if allowed else GatewayFailure("NOT_AUTHORIZED", 403, False)
-        view = IssueDetailAPIEndpoint()
-        view.request = service_request
-        view.kwargs = {"slug": workspace_slug, "project_id": str(parsed_input["project_id"])}
-        try:
-            allowed = ProjectEntityPermission().has_permission(service_request, view)
-        except Exception:
-            return GatewayFailure("AUTHORIZATION_UNAVAILABLE", 503, True)
-        if not allowed:
-            return GatewayFailure("NOT_AUTHORIZED", 403, False)
-        return None
+        if descriptor.operation_id.startswith("work_item_attachment."):
+            try:
+                _assert_issue_permission(
+                    request,
+                    Workspace.objects.get(slug=workspace_slug),
+                    str(parsed_input["project_id"]),
+                    str(parsed_input["issue_id"]),
+                    mutation=descriptor.kind == "mutation",
+                )
+            except AttachmentFailure as failure:
+                return GatewayFailure(failure.code, failure.http_status, failure.retryable)
+            return None
+        return GatewayFailure("UNKNOWN_OPERATION", 404, False)
 
     def _dispatch(
         self,
@@ -730,45 +768,86 @@ class OperationGateway:
                 },
                 None,
             )
+        if descriptor.operation_id == "user.me":
+            return 200, UserLiteSerializer(request.user).data, None
 
-        project_id = str(parsed_input["project_id"])
-        issue_id = str(parsed_input["issue_id"])
-        if descriptor.operation_id == "work_item.read":
-            service_request = GatewayServiceRequest(request, method="GET")
-            view = IssueDetailAPIEndpoint()
-            view.request = service_request
-            view.kwargs = {"slug": workspace.slug, "project_id": project_id}
-            response = view.get(service_request, slug=workspace.slug, project_id=project_id, pk=issue_id)
-            return response.status_code, response.data, None
+        handler = get_operation_handler(descriptor.operation_id)
+        if handler is not None:
+            return handler.execute(request, workspace, parsed_input)
 
-        try:
-            outcome = WorkItemRenameService().rename(
-                request=request,
-                workspace=workspace,
-                project_id=project_id,
-                issue_id=issue_id,
-                name=parsed_input["name"],
-            )
-        except WorkItemRenameFailure as failure:
-            raise GatewayFailure(failure.code, failure.http_status, failure.retryable) from None
-        if not isinstance(outcome, WorkItemRenameOutcome):
-            raise GatewayFailure("UPSTREAM_FAILURE", 503, True)
-        return 200, outcome.result, outcome.publication_payload
+        if descriptor.operation_id in {
+            "work_item_attachment.list",
+            "work_item_attachment.download_url",
+            "work_item_attachment.upload_from_url",
+            "work_item_attachment.delete",
+            "work_item_attachment.read",
+        }:
+            service = WorkItemAttachmentService()
+            project_id = str(parsed_input["project_id"])
+            issue_id = str(parsed_input["issue_id"])
+            attachment_id = str(parsed_input.get("attachment_id", ""))
+            if descriptor.operation_id == "work_item_attachment.list":
+                result = service.list(
+                    request=request,
+                    workspace=workspace,
+                    project_id=project_id,
+                    issue_id=issue_id,
+                )
+            elif descriptor.operation_id == "work_item_attachment.download_url":
+                result = service.download_url(
+                    request=request,
+                    workspace=workspace,
+                    project_id=project_id,
+                    issue_id=issue_id,
+                    attachment_id=attachment_id,
+                )
+            elif descriptor.operation_id == "work_item_attachment.upload_from_url":
+                result = service.upload_from_url(
+                    request=request,
+                    workspace=workspace,
+                    project_id=project_id,
+                    issue_id=issue_id,
+                    url=parsed_input["url"],
+                    name=parsed_input.get("name"),
+                )
+            elif descriptor.operation_id == "work_item_attachment.delete":
+                result = service.delete(
+                    request=request,
+                    workspace=workspace,
+                    project_id=project_id,
+                    issue_id=issue_id,
+                    attachment_id=attachment_id,
+                )
+            else:
+                result = service.authorize_read(
+                    request=request,
+                    workspace=workspace,
+                    project_id=project_id,
+                    issue_id=issue_id,
+                    attachment_id=attachment_id,
+                )
+            return 200, result, None
+
+        raise GatewayFailure("UNKNOWN_OPERATION", 404, False)
 
     def _bound_result(
         self,
+        descriptor: OperationDescriptor,
         raw_result: dict[str, Any],
         *,
-        descriptor: OperationDescriptor,
         max_bytes: int,
     ) -> dict[str, Any]:
-        if descriptor.operation_id not in {"work_item.read", "work_item.rename"}:
-            result = json.loads(canonical_json(raw_result))
-            if len(canonical_json(result).encode("utf-8")) > max_bytes:
-                raise GatewayFailure("RESULT_TOO_LARGE", 409, False)
-            return result
-        bounded = {field: raw_result.get(field) for field in READ_RESULT_FIELDS if field in raw_result}
-        result = json.loads(canonical_json({"work_item": bounded}))
+        if descriptor.operation_id == "work_item.read":
+            bounded = {field: raw_result.get(field) for field in READ_RESULT_FIELDS if field in raw_result}
+        elif isinstance(raw_result, dict) and descriptor.result_key in raw_result:
+            # Typed adapters may return a canonical product envelope already
+            # (search and relation creation do this); avoid nesting that
+            # envelope a second time at the gateway boundary while preserving
+            # cursor and other typed metadata alongside the primary result.
+            bounded = raw_result
+        else:
+            bounded = json.loads(canonical_json(raw_result))
+        result = json.loads(canonical_json({descriptor.result_key: bounded}))
         if len(canonical_json(result).encode("utf-8")) > max_bytes:
             raise GatewayFailure("RESULT_TOO_LARGE", 409, False)
         return result
@@ -1269,7 +1348,7 @@ class OperationGateway:
         if len(canonical_json(envelope).encode("utf-8")) <= MAX_RESPONSE_BYTES:
             return envelope
         bounded = dict(envelope)
-        bounded["result"] = {"work_item": {}}
+        bounded["result"] = {"work_item": {}} if envelope.get("operation_id", "").startswith("work_item.") else {}
         bounded["error"] = self._error("RESULT_TOO_LARGE", False)
         bounded["ok"] = False
         return bounded
@@ -1286,6 +1365,10 @@ class OperationGateway:
             "CALLBACK_BINDING_INVALID": 403,
             "CANCELLED": 409,
             "CATALOG_MISMATCH": 409,
+            "ATTACHMENT_CONTENT_UNSUPPORTED": 400,
+            "ATTACHMENT_NOT_FOUND": 404,
+            "ATTACHMENT_TOO_LARGE": 400,
+            "EXTERNAL_SOURCE_REJECTED": 400,
             "NOT_AUTHORIZED": 403,
             "AUTHORIZATION_UNAVAILABLE": 503,
             "IDEMPOTENCY_CONFLICT": 409,

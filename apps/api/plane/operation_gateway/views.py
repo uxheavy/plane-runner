@@ -9,7 +9,7 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from plane.api.middleware.api_authentication import APIKeyAuthentication
+from plane.api.middleware.api_authentication import APIKeyOrBearerAuthentication
 from plane.api.views.base import BaseAPIView
 
 from .contracts import OperationGatewayRequestSerializer
@@ -17,9 +17,9 @@ from .gateway import OperationGateway
 
 
 class OperationGatewayAPIEndpoint(BaseAPIView):
-    """POST one versioned gateway envelope using the live API-key caller."""
+    """POST one versioned gateway envelope using the live external caller."""
 
-    authentication_classes = [APIKeyAuthentication]
+    authentication_classes = [APIKeyOrBearerAuthentication]
     permission_classes = [AllowAny]
 
     def post(self, request: Any) -> Response:

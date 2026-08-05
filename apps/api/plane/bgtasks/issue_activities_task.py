@@ -563,20 +563,36 @@ def create_issue_activity(
     actor_id,
     issue_activities,
     epoch,
+    activity_id=None,
 ):
     issue = Issue.objects.get(pk=issue_id)
-    issue_activity = IssueActivity.objects.create(
-        issue_id=issue_id,
-        project_id=project_id,
-        workspace_id=workspace_id,
-        comment="created the issue",
-        verb="created",
-        actor_id=actor_id,
-        epoch=epoch,
-    )
-    issue_activity.created_at = issue.created_at
-    issue_activity.actor_id = issue.created_by_id
-    issue_activity.save(update_fields=["created_at", "actor_id"])
+    if activity_id is not None:
+        issue_activities.append(
+            IssueActivity(
+                id=activity_id,
+                issue_id=issue_id,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                comment="created the issue",
+                verb="created",
+                actor_id=issue.created_by_id,
+                epoch=epoch,
+                created_at=issue.created_at,
+            )
+        )
+    else:
+        issue_activity = IssueActivity.objects.create(
+            issue_id=issue_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            comment="created the issue",
+            verb="created",
+            actor_id=actor_id,
+            epoch=epoch,
+        )
+        issue_activity.created_at = issue.created_at
+        issue_activity.actor_id = issue.created_by_id
+        issue_activity.save(update_fields=["created_at", "actor_id"])
     requested_data = json.loads(requested_data) if requested_data is not None else None
     if requested_data.get("assignee_ids") is not None:
         track_assignees(
@@ -1571,21 +1587,27 @@ def issue_activity(
 
         func = ACTIVITY_MAPPER.get(type)
         if func is not None:
+            activity_kwargs = {
+                "requested_data": requested_data,
+                "current_instance": current_instance,
+                "issue_id": issue_id,
+                "project_id": project_id,
+                "workspace_id": workspace_id,
+                "actor_id": actor_id,
+                "issue_activities": issue_activities,
+                "epoch": epoch,
+            }
+            if type == "issue.activity.created" and activity_id is not None:
+                activity_kwargs["activity_id"] = activity_id
             func(
-                requested_data=requested_data,
-                current_instance=current_instance,
-                issue_id=issue_id,
-                project_id=project_id,
-                workspace_id=workspace_id,
-                actor_id=actor_id,
-                issue_activities=issue_activities,
-                epoch=epoch,
+                **activity_kwargs,
             )
 
-        # The Operation Gateway supplies one deterministic Activity identity
-        # for the rename slice. Legacy callers continue to receive generated
-        # IDs and do not need to know about this adapter contract.
-        if activity_id is not None and len(issue_activities) != 1:
+        # The Operation Gateway supplies one deterministic identity for the
+        # primary activity. Legacy callers continue to receive generated IDs,
+        # and secondary activities (for example assignee changes) retain their
+        # normal generated identities.
+        if activity_id is not None and not issue_activities:
             raise ValueError("A gateway activity intent must produce exactly one activity")
         if activity_id is not None:
             issue_activities[0].id = activity_id

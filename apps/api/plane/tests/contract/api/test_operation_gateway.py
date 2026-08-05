@@ -19,6 +19,7 @@ from plane.bgtasks.issue_activities_task import issue_activity
 from plane.db.models import (
     APIToken,
     Issue,
+    IssueComment,
     IssueActivity,
     IssueSubscriber,
     Notification,
@@ -26,6 +27,8 @@ from plane.db.models import (
     OperationGatewayAudit,
     OperationGatewayIdempotency,
     OperationGatewayPublication,
+    Page,
+    ProjectPage,
     Project,
     ProjectMember,
     State,
@@ -34,6 +37,7 @@ from plane.db.models import (
     Webhook,
     WebhookLog,
     Workspace,
+    WorkspaceMember,
 )
 from plane.operation_gateway.contracts import MAX_RESULT_BYTES
 from plane.operation_gateway.gateway import OperationGateway
@@ -277,6 +281,148 @@ def test_conflicting_key_denies_without_replaying_mutation(api_key_client, works
     assert conflict_audits.count() == 1
     assert conflict_audits.first().request_id == uuid.UUID(second.json()["request_id"])
     assert str(conflict_audits.first().request_id) != first.json()["request_id"]
+
+
+def family_body(workspace, operation_id, key, input_data):
+    return {
+        "schema_version": "plane.operation/v1",
+        "operation_id": operation_id,
+        "workspace_slug": workspace.slug,
+        "idempotency_key": key,
+        "correlation_id": f"corr-{key}",
+        "input": input_data,
+    }
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_direct_family_adapters_preserve_serializer_validation_and_gateway_audit(
+    api_key_client, workspace, gateway_project, gateway_issue, create_user
+):
+    gateway_project.cycle_view = True
+    gateway_project.module_view = True
+    gateway_project.intake_view = True
+    gateway_project.save(update_fields=["cycle_view", "module_view", "intake_view"])
+
+    def execute(operation_id, key, **input_data):
+        response = api_key_client.post(
+            "/api/v1/operations/",
+            family_body(workspace, operation_id, key, {"project_id": str(gateway_project.id), **input_data}),
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK or response.status_code == status.HTTP_201_CREATED
+        return response.json()
+
+    cycle = execute(
+        "cycle.create",
+        "family-cycle-create",
+        name="Gateway Cycle",
+        owned_by=str(create_user.id),
+    )["result"]["cycle"]
+    assert cycle["name"] == "Gateway Cycle"
+    assert execute("cycle.list", "family-cycle-list")["result"]["cycles"]["results"]
+
+    module = execute("module.create", "family-module-create", name="Gateway Module")["result"]["module"]
+    assert module["name"] == "Gateway Module"
+    state = execute("state.create", "family-state-create", name="Gateway State", color="#123456")["result"]["state"]
+    assert state["name"] == "Gateway State"
+    label = execute("label.create", "family-label-create", name="Gateway Label")["result"]["label"]
+    assert label["name"] == "Gateway Label"
+    comment = execute(
+        "comment.create",
+        "family-comment-create",
+        issue_id=str(gateway_issue.id),
+        comment_html="<p>Gateway comment</p>",
+    )["result"]["comment"]
+    assert comment["comment_html"] == "<p>Gateway comment</p>"
+    link = execute(
+        "link.create",
+        "family-link-create",
+        issue_id=str(gateway_issue.id),
+        url="https://example.com/gateway",
+    )["result"]["link"]
+    assert link["url"] == "https://example.com/gateway"
+    page = execute(
+        "page.create",
+        "family-page-create",
+        name="Gateway Page",
+        description_html="<p>Page</p>",
+    )["result"]["page"]
+    assert page["name"] == "Gateway Page"
+    members = execute("project_member.list", "family-member-list")["result"]["members"]
+    assert members["results"][0]["id"] == str(create_user.id)
+
+    assert OperationGatewayAudit.objects.filter(idempotency_key__startswith="family-").count() >= 16
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
+def test_direct_family_adapter_denies_non_member_without_resource_lookup(workspace, gateway_project, gateway_issue):
+    denied = User.objects.create(email="family-denied@plane.so", username="family-denied")
+    response = client_for_user(denied).post(
+        "/api/v1/operations/",
+        family_body(
+            workspace,
+            "comment.create",
+            "family-denied-comment",
+            {
+                "project_id": str(gateway_project.id),
+                "issue_id": str(gateway_issue.id),
+                "comment_html": "<p>must not write</p>",
+            },
+        ),
+        format="json",
+    )
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert not IssueComment.objects.filter(comment_html="<p>must not write</p>").exists()
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
+def test_project_and_page_adapters_preserve_private_visibility(workspace, gateway_project, create_user):
+    gateway_project.network = 0
+    gateway_project.save(update_fields=["network"])
+    viewer = User.objects.create(email="gateway-visibility@plane.so", username="gateway-visibility")
+    WorkspaceMember.objects.create(workspace=workspace, member=viewer, role=15)
+    page_viewer = User.objects.create(email="gateway-page-visibility@plane.so", username="gateway-page-visibility")
+    WorkspaceMember.objects.create(workspace=workspace, member=page_viewer, role=15)
+    ProjectMember.objects.create(project=gateway_project, member=page_viewer, role=15)
+    private_page = Page.objects.create(
+        workspace=workspace,
+        owned_by=create_user,
+        name="Owner-only gateway page",
+        access=Page.PRIVATE_ACCESS,
+    )
+    ProjectPage.objects.create(workspace=workspace, project=gateway_project, page=private_page)
+    client = client_for_user(viewer)
+
+    project_response = client.post(
+        "/api/v1/operations/",
+        family_body(
+            workspace,
+            "project.retrieve",
+            "visibility-project",
+            {"project_id": str(gateway_project.id)},
+        ),
+        format="json",
+    )
+    assert project_response.status_code == status.HTTP_400_BAD_REQUEST
+    assert project_response.json()["error"]["code"] == "OPERATION_REJECTED"
+    assert "Gateway Project" not in project_response.text
+
+    page_response = client_for_user(page_viewer).post(
+        "/api/v1/operations/",
+        family_body(
+            workspace,
+            "page.list",
+            "visibility-pages",
+            {"project_id": str(gateway_project.id)},
+        ),
+        format="json",
+    )
+    assert page_response.status_code == status.HTTP_200_OK
+    page_ids = {row["id"] for row in page_response.json()["result"]["pages"]["results"]}
+    assert str(private_page.id) not in page_ids
 
 
 @pytest.mark.contract
