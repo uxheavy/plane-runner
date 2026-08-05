@@ -5,6 +5,7 @@ from .dispatch import (
     dispatch_invocation,
     ingest_runtime_frame,
 )
+from .subprocess import SubprocessRuntimeTransport
 
 __all__ = [
     "RuntimeDispatchError",
@@ -12,4 +13,5 @@ __all__ = [
     "RuntimeTransport",
     "dispatch_invocation",
     "ingest_runtime_frame",
+    "SubprocessRuntimeTransport",
 ]
