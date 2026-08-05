@@ -1,6 +1,7 @@
 """Close durable publication, effect-idempotency, trigger, and role gaps."""
 
 import copy
+import hashlib
 import json
 import re
 import uuid
@@ -14,6 +15,7 @@ ROLE_NAME = re.compile(r"^[a-z_][a-z0-9_$]{0,62}$")
 PUBLICATION_NAMESPACE = uuid.UUID("8a1b4fd8-49a5-54ad-a49e-7f2e0c1a3f1c")
 REVERSE_MARKER = "__plane_0126_reverse__"
 CATALOG_SNAPSHOT_TABLE = "plane_0126_audit_catalog_snapshot"
+CATALOG_SNAPSHOT_BINDING_TABLE = "plane_0126_audit_catalog_snapshot_binding"
 CATALOG_SNAPSHOT_VERSION = 1
 
 CREATE_APPEND_ONLY_TRIGGERS = """
@@ -353,6 +355,163 @@ def _acl_entry(grantor, grantee, privilege, is_grantable):
     }
 
 
+def _canonical_snapshot_digest(snapshot):
+    canonical = json.dumps(snapshot, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _role_identity(cursor, role_name):
+    cursor.execute("SELECT oid::bigint, rolname FROM pg_roles WHERE rolname = %s", [role_name])
+    row = cursor.fetchone()
+    if row is None:
+        raise RuntimeError(f"Missing role in the 0126 audit catalog binding: {role_name}")
+    return {"oid": int(row[0]), "name": row[1]}
+
+
+def _object_identity(cursor, schema_name, object_name, *, kind, identity_arguments=None):
+    if kind == "table":
+        cursor.execute(
+            """
+            SELECT object_info.oid::bigint, object_info.relname,
+                   object_owner.oid::bigint, object_owner.rolname
+            FROM pg_class AS object_info
+            JOIN pg_namespace AS object_schema ON object_schema.oid = object_info.relnamespace
+            JOIN pg_roles AS object_owner ON object_owner.oid = object_info.relowner
+            WHERE object_schema.nspname = %s
+              AND object_info.relname = %s
+              AND object_info.relkind = 'r'
+            """,
+            [schema_name, object_name],
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT object_info.oid::bigint, object_info.proname,
+                   pg_get_function_identity_arguments(object_info.oid),
+                   function_owner.oid::bigint, function_owner.rolname
+            FROM pg_proc AS object_info
+            JOIN pg_namespace AS object_schema ON object_schema.oid = object_info.pronamespace
+            JOIN pg_roles AS function_owner ON function_owner.oid = object_info.proowner
+            WHERE object_schema.nspname = %s
+              AND object_info.proname = %s
+              AND pg_get_function_identity_arguments(object_info.oid) = %s
+            """,
+            [schema_name, object_name, identity_arguments or ""],
+        )
+    row = cursor.fetchone()
+    if row is None:
+        raise RuntimeError(f"Missing object in the 0126 audit catalog binding: {schema_name}.{object_name}")
+    if kind == "table":
+        oid, name, owner_oid, owner_name = row
+        return {"oid": int(oid), "name": name, "owner": {"oid": int(owner_oid), "name": owner_name}}
+    oid, name, actual_arguments, owner_oid, owner_name = row
+    return {
+        "oid": int(oid),
+        "name": name,
+        "identity_arguments": actual_arguments,
+        "owner": {"oid": int(owner_oid), "name": owner_name},
+    }
+
+
+def _capture_audit_catalog_binding(
+    cursor,
+    *,
+    schema_name,
+    runtime_role,
+    governance_role,
+    migration_role,
+    provisioner_role,
+):
+    cursor.execute(
+        """
+        SELECT database_info.oid::bigint, database_info.datname,
+               database_owner.oid::bigint, database_owner.rolname
+        FROM pg_database AS database_info
+        JOIN pg_roles AS database_owner ON database_owner.oid = database_info.datdba
+        WHERE database_info.datname = current_database()
+        """
+    )
+    database_oid, database_name, database_owner_oid, database_owner_name = cursor.fetchone()
+    cursor.execute(
+        """
+        SELECT schema_info.oid::bigint, schema_info.nspname,
+               schema_owner.oid::bigint, schema_owner.rolname
+        FROM pg_namespace AS schema_info
+        JOIN pg_roles AS schema_owner ON schema_owner.oid = schema_info.nspowner
+        WHERE schema_info.nspname = %s
+        """,
+        [schema_name],
+    )
+    schema_oid, actual_schema_name, schema_owner_oid, schema_owner_name = cursor.fetchone()
+    roles = {
+        "runtime": _role_identity(cursor, runtime_role),
+        "governance": _role_identity(cursor, governance_role),
+        "migration": _role_identity(cursor, migration_role),
+        "provisioner": _role_identity(cursor, provisioner_role),
+    }
+    cursor.execute(
+        """
+        SELECT object_info.oid::bigint, object_info.relname,
+               object_owner.oid::bigint, object_owner.rolname
+        FROM pg_class AS object_info
+        JOIN pg_namespace AS object_schema ON object_schema.oid = object_info.relnamespace
+        JOIN pg_roles AS object_owner ON object_owner.oid = object_info.relowner
+        WHERE object_info.oid = to_regclass(%s)
+        """,
+        [f"{schema_name}.{CATALOG_SNAPSHOT_TABLE}"],
+    )
+    snapshot_row = cursor.fetchone()
+    cursor.execute(
+        """
+        SELECT object_info.oid::bigint, object_info.relname,
+               object_owner.oid::bigint, object_owner.rolname
+        FROM pg_class AS object_info
+        JOIN pg_namespace AS object_schema ON object_schema.oid = object_info.relnamespace
+        JOIN pg_roles AS object_owner ON object_owner.oid = object_info.relowner
+        WHERE object_info.oid = to_regclass(%s)
+        """,
+        [f"{schema_name}.{CATALOG_SNAPSHOT_BINDING_TABLE}"],
+    )
+    binding_row = cursor.fetchone()
+    if snapshot_row is None or binding_row is None:
+        raise RuntimeError("The 0126 audit snapshot binding objects are missing")
+
+    def relation_identity(row):
+        oid, name, owner_oid, owner_name = row
+        return {"oid": int(oid), "name": name, "owner": {"oid": int(owner_oid), "name": owner_name}}
+
+    topology = {
+        "database": {
+            "oid": int(database_oid),
+            "name": database_name,
+            "owner": {"oid": int(database_owner_oid), "name": database_owner_name},
+        },
+        "schema": {
+            "oid": int(schema_oid),
+            "name": actual_schema_name,
+            "owner": {"oid": int(schema_owner_oid), "name": schema_owner_name},
+        },
+        "roles": roles,
+        "objects": {
+            "snapshot": relation_identity(snapshot_row),
+            "binding": relation_identity(binding_row),
+            "audit_table": _object_identity(cursor, schema_name, "operation_gateway_audit", kind="table"),
+            "audit_function": _object_identity(
+                cursor,
+                schema_name,
+                "operation_gateway_audit_append_only",
+                kind="function",
+                identity_arguments="",
+            ),
+        },
+    }
+    topology["objects"]["snapshot"]["owner"] = roles["provisioner"]
+    topology["objects"]["binding"]["owner"] = roles["provisioner"]
+    topology["objects"]["audit_table"]["owner"] = roles["governance"]
+    topology["objects"]["audit_function"]["owner"] = roles["governance"]
+    return topology
+
+
 def _capture_audit_catalog_snapshot(connection, *, runtime_role, governance_role, migration_role):
     """Capture the effective 0125 catalog before 0126 mutates any ACL.
 
@@ -383,6 +542,11 @@ def _capture_audit_catalog_snapshot(connection, *, runtime_role, governance_role
             [schema_name],
         )
         schema_owner = cursor.fetchone()[0]
+        cursor.execute("SELECT current_user")
+        current_user = cursor.fetchone()[0]
+        provisioner_role = settings.PLANE_AUDIT_PROVISIONER_ROLE or current_user
+        if not ROLE_NAME.fullmatch(provisioner_role or ""):
+            raise RuntimeError("PLANE_AUDIT_PROVISIONER_ROLE must be a simple PostgreSQL identifier")
         snapshot = {
             "version": CATALOG_SNAPSHOT_VERSION,
             "schema": {"name": schema_name, "owner": schema_owner, "acl": []},
@@ -542,14 +706,44 @@ def _capture_audit_catalog_snapshot(connection, *, runtime_role, governance_role
         cursor.execute(
             f"""
             CREATE TABLE {schema_ident}.{snapshot_ident} (
+                snapshot_id boolean PRIMARY KEY CHECK (snapshot_id),
                 snapshot jsonb NOT NULL,
                 CHECK (jsonb_typeof(snapshot) = 'object')
             )
             """
         )
         cursor.execute(
-            f"INSERT INTO {schema_ident}.{snapshot_ident} (snapshot) VALUES (%s::jsonb)",
+            f"INSERT INTO {schema_ident}.{snapshot_ident} (snapshot_id, snapshot) VALUES (TRUE, %s::jsonb)",
             [json.dumps(snapshot, sort_keys=True)],
+        )
+        cursor.execute(
+            f"""
+            CREATE TABLE {schema_ident}.{connection.ops.quote_name(CATALOG_SNAPSHOT_BINDING_TABLE)} (
+                binding_id boolean PRIMARY KEY CHECK (binding_id),
+                version integer NOT NULL CHECK (version = %s),
+                snapshot_digest text NOT NULL CHECK (snapshot_digest ~ '^[0-9a-f]{{64}}$'),
+                topology jsonb NOT NULL,
+                CHECK (jsonb_typeof(topology) = 'object')
+            )
+            """,
+            [CATALOG_SNAPSHOT_VERSION],
+        )
+        topology = _capture_audit_catalog_binding(
+            cursor,
+            schema_name=schema_name,
+            runtime_role=runtime_role,
+            governance_role=governance_role,
+            migration_role=migration_role,
+            provisioner_role=provisioner_role,
+        )
+        cursor.execute(
+            f"INSERT INTO {schema_ident}.{connection.ops.quote_name(CATALOG_SNAPSHOT_BINDING_TABLE)} "
+            "(binding_id, version, snapshot_digest, topology) VALUES (TRUE, %s, %s, %s::jsonb)",
+            [
+                CATALOG_SNAPSHOT_VERSION,
+                _canonical_snapshot_digest(snapshot),
+                json.dumps(topology, ensure_ascii=True, sort_keys=True, separators=(",", ":")),
+            ],
         )
 
 
@@ -566,8 +760,24 @@ def capture_audit_catalog_snapshot(apps, schema_editor):
 def drop_audit_catalog_snapshot(apps, schema_editor):
     schema_ident = schema_editor.quote_name(settings.PLANE_AUDIT_SCHEMA)
     snapshot_ident = schema_editor.quote_name(CATALOG_SNAPSHOT_TABLE)
+    binding_ident = schema_editor.quote_name(CATALOG_SNAPSHOT_BINDING_TABLE)
     with schema_editor.connection.cursor() as cursor:
-        cursor.execute(f"DROP TABLE IF EXISTS {schema_ident}.{snapshot_ident}")
+        cursor.execute("SELECT current_user, rolsuper FROM pg_roles WHERE rolname = current_user")
+        current_user, is_superuser = cursor.fetchone()
+        cursor.execute(
+            """
+            SELECT owner.rolname
+            FROM pg_class AS object_info
+            JOIN pg_namespace AS object_schema ON object_schema.oid = object_info.relnamespace
+            JOIN pg_roles AS owner ON owner.oid = object_info.relowner
+            WHERE object_schema.nspname = %s AND object_info.relname = %s
+            """,
+            [settings.PLANE_AUDIT_SCHEMA, CATALOG_SNAPSHOT_TABLE],
+        )
+        owner = cursor.fetchone()
+        if is_superuser or (owner is not None and owner[0] == current_user):
+            cursor.execute(f"DROP TABLE IF EXISTS {schema_ident}.{binding_ident}")
+            cursor.execute(f"DROP TABLE IF EXISTS {schema_ident}.{snapshot_ident}")
 
 
 def require_provisioned_reverse_state(apps, schema_editor):

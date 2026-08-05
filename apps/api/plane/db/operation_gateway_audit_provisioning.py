@@ -6,9 +6,12 @@ import re
 
 from django.conf import settings
 
+from plane.db.operation_gateway_audit_restore import verify_audit_catalog_snapshot
+
 
 ROLE_NAME = re.compile(r"^[a-z_][a-z0-9_$]{0,62}$")
 CATALOG_SNAPSHOT_TABLE = "plane_0126_audit_catalog_snapshot"
+CATALOG_SNAPSHOT_BINDING_TABLE = "plane_0126_audit_catalog_snapshot_binding"
 
 
 def _role_identifier(connection, value: str) -> str:
@@ -44,7 +47,7 @@ def _role_reachable(cursor, member_role: str, target_role: str) -> bool:
     return bool(cursor.fetchone()[0])
 
 
-def configure_audit_role_boundary(connection, *, runtime_role, governance_role, migration_role):
+def configure_audit_role_boundary(connection, *, runtime_role, governance_role, migration_role, provisioner_role):
     schema_name = settings.PLANE_AUDIT_SCHEMA
     if not runtime_role or not governance_role or not migration_role:
         raise RuntimeError("Operation Gateway audit runtime and governance roles must be distinct")
@@ -55,6 +58,7 @@ def configure_audit_role_boundary(connection, *, runtime_role, governance_role, 
     runtime_ident = _role_identifier(connection, runtime_role)
     governance_ident = _role_identifier(connection, governance_role)
     migration_ident = _role_identifier(connection, migration_role)
+    provisioner_ident = _role_identifier(connection, provisioner_role)
     schema_ident = _role_identifier(connection, schema_name)
 
     with connection.cursor() as cursor:
@@ -164,9 +168,19 @@ def configure_audit_role_boundary(connection, *, runtime_role, governance_role, 
             )
 
         snapshot_ident = connection.ops.quote_name(CATALOG_SNAPSHOT_TABLE)
+        binding_ident = connection.ops.quote_name(CATALOG_SNAPSHOT_BINDING_TABLE)
+        cursor.execute(f"ALTER TABLE {schema_ident}.{snapshot_ident} OWNER TO {provisioner_ident}")
+        cursor.execute(f"ALTER TABLE {schema_ident}.{binding_ident} OWNER TO {provisioner_ident}")
         cursor.execute(
-            f"REVOKE ALL ON TABLE {schema_ident}.{snapshot_ident} FROM PUBLIC, {runtime_ident}, {governance_ident}"
+            f"REVOKE ALL ON TABLE {schema_ident}.{snapshot_ident} FROM PUBLIC, {runtime_ident}, "
+            f"{migration_ident}, {governance_ident}"
         )
+        cursor.execute(f"GRANT SELECT ON TABLE {schema_ident}.{snapshot_ident} TO {migration_ident}")
+        cursor.execute(
+            f"REVOKE ALL ON TABLE {schema_ident}.{binding_ident} FROM PUBLIC, {runtime_ident}, "
+            f"{migration_ident}, {governance_ident}"
+        )
+        cursor.execute(f"GRANT SELECT ON TABLE {schema_ident}.{binding_ident} TO {migration_ident}")
 
         marker_ident = connection.ops.quote_name("plane_operation_gateway_authority_marker")
         cursor.execute(
@@ -210,3 +224,11 @@ def configure_audit_role_boundary(connection, *, runtime_role, governance_role, 
         for (sequence_name,) in cursor.fetchall():
             sequence_ident = _role_identifier(connection, sequence_name)
             cursor.execute(f"GRANT USAGE, SELECT ON SEQUENCE {schema_ident}.{sequence_ident} TO {runtime_ident}")
+
+        verify_audit_catalog_snapshot(
+            connection,
+            runtime_role=runtime_role,
+            governance_role=governance_role,
+            migration_role=migration_role,
+            provisioner_role=provisioner_role,
+        )

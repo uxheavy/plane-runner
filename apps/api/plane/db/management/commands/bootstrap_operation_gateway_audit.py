@@ -102,6 +102,7 @@ class Command(BaseCommand):
                     provisioner_role=effective_provisioner_role,
                 )
                 if phase == "before-migrate":
+                    self._drop_reversed_snapshot_if_migration_is_pending(cursor)
                     self._prepare_migration_boundary(
                         cursor,
                         runtime_role=runtime_role,
@@ -115,6 +116,7 @@ class Command(BaseCommand):
                             runtime_role=runtime_role,
                             governance_role=governance_role,
                             migration_role=migration_role,
+                            provisioner_role=effective_provisioner_role,
                         )
                     else:
                         self._prepare_migration_boundary(
@@ -123,6 +125,8 @@ class Command(BaseCommand):
                             governance_role=governance_role,
                             migration_role=migration_role,
                         )
+                elif phase == "after-reverse":
+                    self._drop_reversed_snapshot_if_migration_is_pending(cursor)
                 self._assert_authority_marker(
                     cursor,
                     marker_ident=f"{self._quote(settings.PLANE_AUDIT_SCHEMA)}.{self._quote(AUTHORITY_MARKER_TABLE)}",
@@ -133,6 +137,22 @@ class Command(BaseCommand):
                 )
 
         self.stdout.write(self.style.SUCCESS("Operation Gateway audit roles are provisioned and separated"))
+
+    def _drop_reversed_snapshot_if_migration_is_pending(self, cursor):
+        schema_name = settings.PLANE_AUDIT_SCHEMA
+        schema_ident = self._quote(schema_name)
+        snapshot_ident = self._quote("plane_0126_audit_catalog_snapshot")
+        binding_ident = self._quote("plane_0126_audit_catalog_snapshot_binding")
+        cursor.execute("SELECT to_regclass(%s)", ["django_migrations"])
+        if cursor.fetchone()[0] is None:
+            return
+        cursor.execute(
+            "SELECT 1 FROM django_migrations WHERE app = 'db' AND name = %s",
+            ["0126_operationgateway_delivery_and_audit_roles"],
+        )
+        if cursor.fetchone() is None:
+            cursor.execute(f"DROP TABLE IF EXISTS {schema_ident}.{binding_ident}")
+            cursor.execute(f"DROP TABLE IF EXISTS {schema_ident}.{snapshot_ident}")
 
     @staticmethod
     def _quote(role: str) -> str:
@@ -291,21 +311,28 @@ class Command(BaseCommand):
     def _audit_boundary_is_ready(cursor):
         cursor.execute(
             """
-            SELECT to_regclass(%s), to_regclass(%s), to_regprocedure(%s)
+            SELECT to_regclass(%s), to_regclass(%s), to_regclass(%s), to_regprocedure(%s)
             """,
             [
                 f"{settings.PLANE_AUDIT_SCHEMA}.{AUTHORITY_MARKER_TABLE}",
                 f"{settings.PLANE_AUDIT_SCHEMA}.plane_0126_audit_catalog_snapshot",
+                f"{settings.PLANE_AUDIT_SCHEMA}.plane_0126_audit_catalog_snapshot_binding",
                 f"{settings.PLANE_AUDIT_SCHEMA}.operation_gateway_audit_append_only()",
             ],
         )
-        marker, snapshot, function = cursor.fetchone()
+        marker, snapshot, binding, function = cursor.fetchone()
         cursor.execute(
             "SELECT to_regclass(%s)",
             [f"{settings.PLANE_AUDIT_SCHEMA}.operation_gateway_audit"],
         )
         audit_table = cursor.fetchone()[0]
-        return marker is not None and snapshot is not None and function is not None and audit_table is not None
+        return (
+            marker is not None
+            and snapshot is not None
+            and binding is not None
+            and function is not None
+            and audit_table is not None
+        )
 
     def _ensure_authority_marker(self, cursor, *, runtime_role, governance_role, migration_role, provisioner_role):
         schema_name = settings.PLANE_AUDIT_SCHEMA
