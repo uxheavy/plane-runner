@@ -15,6 +15,7 @@ from .work_item import urlpatterns as work_item_patterns
 from .invite import urlpatterns as invite_patterns
 from .sticky import urlpatterns as sticky_patterns
 from .operation_gateway import urlpatterns as operation_gateway_patterns
+from .agent_admin import urlpatterns as agent_admin_patterns
 
 urlpatterns = [
     *asset_patterns,
@@ -30,4 +31,5 @@ urlpatterns = [
     *invite_patterns,
     *sticky_patterns,
     *operation_gateway_patterns,
+    *agent_admin_patterns,
 ]
