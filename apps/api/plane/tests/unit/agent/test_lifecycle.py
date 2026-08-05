@@ -4,11 +4,13 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from django.core.exceptions import ValidationError
-from django.db import close_old_connections
+from django.db import DatabaseError, close_old_connections, connection
+from django.utils import timezone
 
 from plane.agent.lifecycle import (
     AgentDomainError,
@@ -27,17 +29,19 @@ from plane.agent.lifecycle import (
     record_invocation,
     request_revision,
     review_outcome,
-    transition_assignment,
     transition_run,
 )
 from plane.agent.lifecycle.runtime_contract import (
+    ARTIFACT_DIRECTORY,
     contract_digests,
     contract_manifest,
+    namespaced_ref,
     validate_invocation_envelope,
     validate_run_snapshot,
 )
 from plane.db.models import (
     AgentRole,
+    AssignmentContract,
     AssignmentState,
     InputEventKind,
     InvocationState,
@@ -45,8 +49,11 @@ from plane.db.models import (
     Project,
     RecoveryIntent,
     RunLineageReason,
+    RunAttempt,
     RunState,
     TerminalEventKind,
+    RuntimeInvocation,
+    ProfileVersion,
 )
 
 
@@ -142,6 +149,34 @@ def test_manifest_bytes_are_the_contract_source_of_truth():
 
 
 @pytest.mark.django_db
+def test_host_and_api_artifact_bytes_are_identical():
+    source_directory = Path(__file__).resolve().parents[6] / "packages/agent-runtime-contract/schemas/v1"
+    for artifact in ARTIFACT_DIRECTORY.glob("*.json"):
+        assert artifact.read_bytes() == (source_directory / artifact.name).read_bytes()
+
+
+@pytest.mark.django_db
+def test_missing_or_tampered_contract_artifacts_fail_closed(tmp_path, monkeypatch):
+    import shutil
+
+    artifact_directory = tmp_path / "v1"
+    shutil.copytree(ARTIFACT_DIRECTORY, artifact_directory)
+    monkeypatch.setattr("plane.agent.lifecycle.runtime_contract.ARTIFACT_DIRECTORY", artifact_directory)
+    contract_manifest.cache_clear()
+    (artifact_directory / "manifest.json").unlink()
+    with pytest.raises(ValueError, match="manifest is unavailable"):
+        contract_manifest()
+
+    shutil.copy2(ARTIFACT_DIRECTORY / "manifest.json", artifact_directory / "manifest.json")
+    (artifact_directory / "run-snapshot.schema.json").write_bytes(b"tampered")
+    contract_manifest.cache_clear()
+    with pytest.raises(ValueError, match="digest drifted"):
+        contract_manifest()
+    monkeypatch.setattr("plane.agent.lifecycle.runtime_contract.ARTIFACT_DIRECTORY", ARTIFACT_DIRECTORY)
+    contract_manifest.cache_clear()
+
+
+@pytest.mark.django_db
 def test_profile_and_snapshot_are_immutable_and_direct_state_changes_use_lifecycle(assignment, profile):
     run = create_run(assignment, profile)
 
@@ -157,6 +192,63 @@ def test_profile_and_snapshot_are_immutable_and_direct_state_changes_use_lifecyc
     assignment.state = AssignmentState.COMPLETED
     with pytest.raises(ValidationError):
         assignment.save()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_postgres_guards_reject_hostile_bulk_and_raw_mutations(assignment, profile, actor, project):
+    run = create_run(assignment, profile)
+    invocation = record_invocation(run, idempotency_key="idempotency:hostile-probe")
+    other_assignment = create_assignment(
+        actor,
+        project=project,
+        target_ref="issue:hostile",
+        objective="A second binding.",
+        acceptance_criteria=["The result is reviewable."],
+    )
+    other_run = create_run(other_assignment, profile)
+    other_actor = create_actor(workspace=assignment.workspace, display_name="Other worker")
+    with pytest.raises(DatabaseError):
+        ProfileVersion.objects.filter(pk=profile.pk).update(instructions="bulk rewrite")
+    with pytest.raises(DatabaseError):
+        RunAttempt.objects.filter(pk=run.pk).update(snapshot={"tampered": True})
+    with pytest.raises(DatabaseError):
+        RunAttempt.objects.filter(pk=run.pk).update(invocation_count=99)
+    with pytest.raises(DatabaseError):
+        RunAttempt.objects.filter(pk=run.pk).update(actor_id=other_actor.id)
+    with pytest.raises(DatabaseError):
+        AssignmentContract.objects.filter(pk=assignment.pk).update(state=AssignmentState.COMPLETED)
+    with pytest.raises(DatabaseError):
+        RunAttempt.objects.filter(pk=run.pk).update(state=RunState.SUCCEEDED)
+    with connection.cursor() as cursor:
+        with pytest.raises(DatabaseError):
+            cursor.execute(
+                "UPDATE agent_run_attempts SET snapshot_content_digest = %s WHERE id = %s",
+                ["snapshot:" + "0" * 64, run.id],
+            )
+        with pytest.raises(DatabaseError):
+            now = timezone.now()
+            cursor.execute(
+                """
+                INSERT INTO agent_run_terminal_events
+                    (id, created_at, updated_at, workspace_id, project_id, invocation_id, run_id,
+                     kind, source, product_ref, product_event_ref, idempotency_key, reason, visible)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, 'run_failure', 'supervisor',
+                        %s, %s, %s, %s, TRUE)
+                """,
+                [
+                    uuid4(),
+                    now,
+                    now,
+                    run.workspace_id,
+                    run.project_id,
+                    invocation.id,
+                    other_run.id,
+                    "product-event:hostile",
+                    "product-event:hostile",
+                    "idempotency:hostile-terminal",
+                    "mismatched run binding",
+                ],
+            )
 
 
 @pytest.mark.django_db
@@ -232,7 +324,10 @@ def test_invocation_and_outcome_commands_are_idempotent(assignment, profile):
     )
     assert repeated_outcome.id == outcome.id
     assert run.__class__.objects.get(pk=run.pk).terminal_events.count() == 1
-    assert run.__class__.objects.get(pk=run.pk).invocations.get(pk=first.pk).terminal_event.kind == TerminalEventKind.OUTCOME_SUBMISSION
+    assert (
+        run.__class__.objects.get(pk=run.pk).invocations.get(pk=first.pk).terminal_event.kind
+        == TerminalEventKind.OUTCOME_SUBMISSION
+    )
 
     with pytest.raises(IdempotencyConflictError):
         record_invocation(run, idempotency_key="idempotency:repeatable-outcome")
@@ -256,6 +351,35 @@ def test_concurrent_invocation_retries_share_one_idempotent_record(assignment, p
     assert first.id == second.id
     assert run.invocation_count == 1
     assert run.invocations.count() == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_concurrent_invocations_on_different_runs_return_typed_conflict(assignment, profile, actor, project):
+    other_assignment = create_assignment(
+        actor,
+        project=project,
+        target_ref="issue:124",
+        objective="Produce the requested result.",
+        acceptance_criteria=["The result is reviewable."],
+    )
+    first_run = create_run(assignment, profile)
+    second_run = create_run(other_assignment, profile)
+
+    def invoke(run):
+        close_old_connections()
+        try:
+            try:
+                return record_invocation(run, idempotency_key="idempotency:cross-run-race")
+            except IdempotencyConflictError:
+                return "conflict"
+        finally:
+            close_old_connections()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(invoke, (first_run, second_run)))
+    assert results.count("conflict") == 1
+    assert sum(result != "conflict" for result in results) == 1
+    assert RuntimeInvocation.objects.filter(idempotency_key="idempotency:cross-run-race").count() == 1
 
 
 @pytest.mark.django_db
@@ -288,7 +412,9 @@ def test_supervisor_failure_has_exactly_one_visible_terminal_event(assignment, p
 
 
 @pytest.mark.django_db
-def test_evaluator_review_precedes_human_acceptance_and_revision_has_lineage(assignment, profile, create_user, evaluator):
+def test_evaluator_review_precedes_human_acceptance_and_revision_has_lineage(
+    assignment, profile, create_user, evaluator
+):
     run = create_run(assignment, profile)
     record_invocation(run, idempotency_key="idempotency:review-invocation")
     outcome = propose_outcome(run, summary="Needs another pass", idempotency_key="idempotency:review-outcome")
@@ -369,3 +495,22 @@ def test_invalid_snapshot_digest_and_tool_allowlist_are_rejected(assignment, act
     invalid["contentDigest"] = "snapshot:" + "0" * 64
     with pytest.raises(AgentDomainError):
         validate_run_snapshot(invalid)
+
+
+@pytest.mark.django_db
+def test_identifiers_are_strict_and_target_references_are_lossless(assignment, profile, actor, project):
+    run = create_run(assignment, profile)
+    for malformed in ("client:key", "client key", "idempotency:client:key", "idempotency:" + "a" * 120):
+        with pytest.raises(AgentDomainError):
+            record_invocation(run, idempotency_key=malformed)
+
+    other_assignment = create_assignment(
+        actor,
+        project=project,
+        target_ref="issue 123",
+        objective="Produce the requested result.",
+        acceptance_criteria=["The result is reviewable."],
+    )
+    other_run = create_run(other_assignment, profile)
+    assert run.snapshot["assignment"]["targetRef"] != other_run.snapshot["assignment"]["targetRef"]
+    assert namespaced_ref("target", "literal-69737375653a313233") == run.snapshot["assignment"]["targetRef"]

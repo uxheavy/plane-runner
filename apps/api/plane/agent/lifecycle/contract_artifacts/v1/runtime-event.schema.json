@@ -1,0 +1,927 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://plane.dev/schemas/plane.agent-runtime/v1/RuntimeEvent.schema.json",
+  "title": "RuntimeEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol",
+    "trust",
+    "workspaceRef",
+    "actorRef",
+    "runId",
+    "invocationId",
+    "sequence",
+    "eventId",
+    "idempotencyKey",
+    "correlationId",
+    "causationRef",
+    "observedAt",
+    "body"
+  ],
+  "properties": {
+    "protocol": {
+      "const": "plane.agent-runtime/v1"
+    },
+    "trust": {
+      "const": "untrusted"
+    },
+    "workspaceRef": {
+      "$ref": "#/$defs/workspaceRef"
+    },
+    "actorRef": {
+      "$ref": "#/$defs/actorRef"
+    },
+    "runId": {
+      "$ref": "#/$defs/runId"
+    },
+    "invocationId": {
+      "$ref": "#/$defs/invocationId"
+    },
+    "sequence": {
+      "$ref": "#/$defs/nonNegativeInteger"
+    },
+    "eventId": {
+      "$ref": "#/$defs/eventRef"
+    },
+    "idempotencyKey": {
+      "$ref": "#/$defs/idempotencyKey"
+    },
+    "correlationId": {
+      "$ref": "#/$defs/correlationId"
+    },
+    "causationRef": {
+      "$ref": "#/$defs/causationRef"
+    },
+    "observedAt": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "body": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "payload", "publication"],
+          "properties": {
+            "kind": {
+              "const": "progress_observed"
+            },
+            "payload": {
+              "$ref": "#/$defs/boundedPayload"
+            },
+            "publication": {
+              "$ref": "#/$defs/observationPublication"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "payload", "publication"],
+          "properties": {
+            "kind": {
+              "const": "conversation_publication_observed"
+            },
+            "payload": {
+              "$ref": "#/$defs/boundedPayload"
+            },
+            "publication": {
+              "$ref": "#/$defs/conversationPublication"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "question", "publication"],
+          "properties": {
+            "kind": {
+              "const": "input_request_observed"
+            },
+            "question": {
+              "$ref": "#/$defs/boundedText"
+            },
+            "publication": {
+              "$ref": "#/$defs/inputRequestPublication"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "artifact", "publication"],
+          "properties": {
+            "kind": {
+              "const": "artifact_observed"
+            },
+            "artifact": {
+              "$ref": "#/$defs/artifactReference"
+            },
+            "publication": {
+              "$ref": "#/$defs/artifactPublication"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "usage", "publication"],
+          "properties": {
+            "kind": {
+              "const": "usage_observed"
+            },
+            "usage": {
+              "$ref": "#/$defs/runtimeUsage"
+            },
+            "publication": {
+              "$ref": "#/$defs/observationPublication"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "payload", "publication"],
+          "properties": {
+            "kind": {
+              "const": "outcome_submission_observed"
+            },
+            "payload": {
+              "$ref": "#/$defs/boundedPayload"
+            },
+            "publication": {
+              "$ref": "#/$defs/outcomeSubmissionPublication"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "failure", "publication"],
+          "properties": {
+            "kind": {
+              "const": "failure_observed"
+            },
+            "failure": {
+              "$ref": "#/$defs/runtimeFailure"
+            },
+            "publication": {
+              "$ref": "#/$defs/failurePublication"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "reason", "publication"],
+          "properties": {
+            "kind": {
+              "const": "blocker_observed"
+            },
+            "reason": {
+              "$ref": "#/$defs/boundedText"
+            },
+            "publication": {
+              "$ref": "#/$defs/blockerPublication"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "reason", "cancellationRef", "publication"],
+          "properties": {
+            "kind": {
+              "const": "cancellation_observed"
+            },
+            "reason": {
+              "$ref": "#/$defs/boundedText"
+            },
+            "cancellationRef": {
+              "$ref": "#/$defs/cancellationRef"
+            },
+            "publication": {
+              "$ref": "#/$defs/cancellationPublication"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "payload", "publication"],
+          "properties": {
+            "kind": {
+              "const": "transcript_evidence_observed"
+            },
+            "payload": {
+              "$ref": "#/$defs/boundedPayload"
+            },
+            "publication": {
+              "$ref": "#/$defs/observationPublication"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "x-serializedUtf8ByteMax": 1048576,
+  "$defs": {
+    "actorRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^actor:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "applicationServiceRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^application-service:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "artifactPublication": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "productKind", "productRef", "operationAttemptRef"],
+          "properties": {
+            "action": {
+              "const": "proposal"
+            },
+            "productKind": {
+              "const": "artifact"
+            },
+            "productRef": {
+              "$ref": "#/$defs/artifactRef"
+            },
+            "operationAttemptRef": {
+              "$ref": "#/$defs/operationAttemptRef"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action",
+            "productKind",
+            "productRef",
+            "operationAttemptRef",
+            "operationRef",
+            "applicationServiceRef",
+            "gatewayReceiptRef",
+            "receiptRef",
+            "auditReceiptRef",
+            "productEventRef"
+          ],
+          "properties": {
+            "action": {
+              "const": "applied"
+            },
+            "productKind": {
+              "const": "artifact"
+            },
+            "productRef": {
+              "$ref": "#/$defs/artifactRef"
+            },
+            "operationAttemptRef": {
+              "$ref": "#/$defs/operationAttemptRef"
+            },
+            "operationRef": {
+              "$ref": "#/$defs/operationRef"
+            },
+            "applicationServiceRef": {
+              "$ref": "#/$defs/applicationServiceRef"
+            },
+            "gatewayReceiptRef": {
+              "$ref": "#/$defs/gatewayReceiptRef"
+            },
+            "receiptRef": {
+              "$ref": "#/$defs/receiptRef"
+            },
+            "auditReceiptRef": {
+              "$ref": "#/$defs/auditReceiptRef"
+            },
+            "productEventRef": {
+              "$ref": "#/$defs/productEventRef"
+            }
+          }
+        }
+      ]
+    },
+    "artifactRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^artifact:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "artifactReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactRef", "contentDigest", "mediaType", "sizeBytes"],
+      "properties": {
+        "artifactRef": {
+          "$ref": "#/$defs/artifactRef"
+        },
+        "contentDigest": {
+          "$ref": "#/$defs/contentDigest"
+        },
+        "mediaType": {
+          "$ref": "#/$defs/boundedToken"
+        },
+        "sizeBytes": {
+          "$ref": "#/$defs/boundedByteCount"
+        }
+      }
+    },
+    "auditReceiptRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^audit-receipt:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "blockerPublication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "productKind",
+        "productRef",
+        "operationAttemptRef",
+        "operationRef",
+        "applicationServiceRef",
+        "gatewayReceiptRef",
+        "receiptRef",
+        "auditReceiptRef",
+        "productEventRef"
+      ],
+      "properties": {
+        "action": {
+          "const": "applied"
+        },
+        "productKind": {
+          "const": "run_blocker"
+        },
+        "productRef": {
+          "$ref": "#/$defs/productEventRef"
+        },
+        "operationAttemptRef": {
+          "$ref": "#/$defs/operationAttemptRef"
+        },
+        "operationRef": {
+          "$ref": "#/$defs/operationRef"
+        },
+        "applicationServiceRef": {
+          "$ref": "#/$defs/applicationServiceRef"
+        },
+        "gatewayReceiptRef": {
+          "$ref": "#/$defs/gatewayReceiptRef"
+        },
+        "receiptRef": {
+          "$ref": "#/$defs/receiptRef"
+        },
+        "auditReceiptRef": {
+          "$ref": "#/$defs/auditReceiptRef"
+        },
+        "productEventRef": {
+          "$ref": "#/$defs/productEventRef"
+        }
+      },
+      "x-equalProperties": [["productRef", "productEventRef"]]
+    },
+    "boundedByteCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1048576
+    },
+    "boundedPayload": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "contentType", "text"],
+          "properties": {
+            "kind": {
+              "const": "inline_text"
+            },
+            "contentType": {
+              "const": "text/plain"
+            },
+            "text": {
+              "$ref": "#/$defs/boundedText"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "payloadRef", "contentType", "contentDigest", "sizeBytes"],
+          "properties": {
+            "kind": {
+              "const": "payload_ref"
+            },
+            "payloadRef": {
+              "$ref": "#/$defs/payloadRef"
+            },
+            "contentType": {
+              "$ref": "#/$defs/boundedToken"
+            },
+            "contentDigest": {
+              "$ref": "#/$defs/contentDigest"
+            },
+            "sizeBytes": {
+              "$ref": "#/$defs/boundedByteCount"
+            }
+          }
+        }
+      ]
+    },
+    "boundedText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "x-utf8ByteMax": 4096
+    },
+    "boundedToken": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "x-utf8ByteMax": 256
+    },
+    "cancellationPublication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "productKind",
+        "productRef",
+        "operationAttemptRef",
+        "operationRef",
+        "applicationServiceRef",
+        "gatewayReceiptRef",
+        "receiptRef",
+        "auditReceiptRef",
+        "productEventRef",
+        "cancellationRef"
+      ],
+      "properties": {
+        "action": {
+          "const": "applied"
+        },
+        "productKind": {
+          "const": "run_cancellation"
+        },
+        "productRef": {
+          "$ref": "#/$defs/productEventRef"
+        },
+        "operationAttemptRef": {
+          "$ref": "#/$defs/operationAttemptRef"
+        },
+        "operationRef": {
+          "$ref": "#/$defs/operationRef"
+        },
+        "applicationServiceRef": {
+          "$ref": "#/$defs/applicationServiceRef"
+        },
+        "gatewayReceiptRef": {
+          "$ref": "#/$defs/gatewayReceiptRef"
+        },
+        "receiptRef": {
+          "$ref": "#/$defs/receiptRef"
+        },
+        "auditReceiptRef": {
+          "$ref": "#/$defs/auditReceiptRef"
+        },
+        "productEventRef": {
+          "$ref": "#/$defs/productEventRef"
+        },
+        "cancellationRef": {
+          "$ref": "#/$defs/cancellationRef"
+        }
+      },
+      "x-equalProperties": [["productRef", "productEventRef"]]
+    },
+    "cancellationRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^cancellation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "causationRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^causation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "contentDigest": {
+      "type": "string",
+      "minLength": 72,
+      "maxLength": 72,
+      "x-utf8ByteMax": 72,
+      "pattern": "^content:[a-f0-9]{64}$"
+    },
+    "conversationPublication": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "productKind", "productRef", "operationAttemptRef"],
+          "properties": {
+            "action": {
+              "const": "proposal"
+            },
+            "productKind": {
+              "const": "conversation"
+            },
+            "productRef": {
+              "$ref": "#/$defs/conversationRef"
+            },
+            "operationAttemptRef": {
+              "$ref": "#/$defs/operationAttemptRef"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action",
+            "productKind",
+            "productRef",
+            "operationAttemptRef",
+            "operationRef",
+            "applicationServiceRef",
+            "gatewayReceiptRef",
+            "receiptRef",
+            "auditReceiptRef",
+            "productEventRef"
+          ],
+          "properties": {
+            "action": {
+              "const": "applied"
+            },
+            "productKind": {
+              "const": "conversation"
+            },
+            "productRef": {
+              "$ref": "#/$defs/conversationRef"
+            },
+            "operationAttemptRef": {
+              "$ref": "#/$defs/operationAttemptRef"
+            },
+            "operationRef": {
+              "$ref": "#/$defs/operationRef"
+            },
+            "applicationServiceRef": {
+              "$ref": "#/$defs/applicationServiceRef"
+            },
+            "gatewayReceiptRef": {
+              "$ref": "#/$defs/gatewayReceiptRef"
+            },
+            "receiptRef": {
+              "$ref": "#/$defs/receiptRef"
+            },
+            "auditReceiptRef": {
+              "$ref": "#/$defs/auditReceiptRef"
+            },
+            "productEventRef": {
+              "$ref": "#/$defs/productEventRef"
+            }
+          }
+        }
+      ]
+    },
+    "conversationRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^conversation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^correlation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "eventRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^event:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "failurePublication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "productKind",
+        "productRef",
+        "operationAttemptRef",
+        "operationRef",
+        "applicationServiceRef",
+        "gatewayReceiptRef",
+        "receiptRef",
+        "auditReceiptRef",
+        "productEventRef"
+      ],
+      "properties": {
+        "action": {
+          "const": "applied"
+        },
+        "productKind": {
+          "const": "run_failure"
+        },
+        "productRef": {
+          "$ref": "#/$defs/productEventRef"
+        },
+        "operationAttemptRef": {
+          "$ref": "#/$defs/operationAttemptRef"
+        },
+        "operationRef": {
+          "$ref": "#/$defs/operationRef"
+        },
+        "applicationServiceRef": {
+          "$ref": "#/$defs/applicationServiceRef"
+        },
+        "gatewayReceiptRef": {
+          "$ref": "#/$defs/gatewayReceiptRef"
+        },
+        "receiptRef": {
+          "$ref": "#/$defs/receiptRef"
+        },
+        "auditReceiptRef": {
+          "$ref": "#/$defs/auditReceiptRef"
+        },
+        "productEventRef": {
+          "$ref": "#/$defs/productEventRef"
+        }
+      },
+      "x-equalProperties": [["productRef", "productEventRef"]]
+    },
+    "gatewayReceiptRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^gateway-receipt:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^idempotency:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "inputRequestPublication": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "productKind", "productRef", "operationAttemptRef"],
+          "properties": {
+            "action": {
+              "const": "proposal"
+            },
+            "productKind": {
+              "const": "input_request"
+            },
+            "productRef": {
+              "$ref": "#/$defs/inputRequestRef"
+            },
+            "operationAttemptRef": {
+              "$ref": "#/$defs/operationAttemptRef"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action",
+            "productKind",
+            "productRef",
+            "operationAttemptRef",
+            "operationRef",
+            "applicationServiceRef",
+            "gatewayReceiptRef",
+            "receiptRef",
+            "auditReceiptRef",
+            "productEventRef"
+          ],
+          "properties": {
+            "action": {
+              "const": "applied"
+            },
+            "productKind": {
+              "const": "input_request"
+            },
+            "productRef": {
+              "$ref": "#/$defs/inputRequestRef"
+            },
+            "operationAttemptRef": {
+              "$ref": "#/$defs/operationAttemptRef"
+            },
+            "operationRef": {
+              "$ref": "#/$defs/operationRef"
+            },
+            "applicationServiceRef": {
+              "$ref": "#/$defs/applicationServiceRef"
+            },
+            "gatewayReceiptRef": {
+              "$ref": "#/$defs/gatewayReceiptRef"
+            },
+            "receiptRef": {
+              "$ref": "#/$defs/receiptRef"
+            },
+            "auditReceiptRef": {
+              "$ref": "#/$defs/auditReceiptRef"
+            },
+            "productEventRef": {
+              "$ref": "#/$defs/productEventRef"
+            }
+          }
+        }
+      ]
+    },
+    "inputRequestRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^input-request:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "invocationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^invocation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "nonNegativeInteger": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "observationPublication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action"],
+      "properties": {
+        "action": {
+          "const": "observation_only"
+        }
+      }
+    },
+    "operationAttemptRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^operation-attempt:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "operationRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^operation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "outcomeSubmissionPublication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "productKind",
+        "productRef",
+        "operationAttemptRef",
+        "operationRef",
+        "applicationServiceRef",
+        "gatewayReceiptRef",
+        "receiptRef",
+        "auditReceiptRef",
+        "productEventRef"
+      ],
+      "properties": {
+        "action": {
+          "const": "applied"
+        },
+        "productKind": {
+          "const": "outcome_submission"
+        },
+        "productRef": {
+          "$ref": "#/$defs/outcomeSubmissionRef"
+        },
+        "operationAttemptRef": {
+          "$ref": "#/$defs/operationAttemptRef"
+        },
+        "operationRef": {
+          "$ref": "#/$defs/operationRef"
+        },
+        "applicationServiceRef": {
+          "$ref": "#/$defs/applicationServiceRef"
+        },
+        "gatewayReceiptRef": {
+          "$ref": "#/$defs/gatewayReceiptRef"
+        },
+        "receiptRef": {
+          "$ref": "#/$defs/receiptRef"
+        },
+        "auditReceiptRef": {
+          "$ref": "#/$defs/auditReceiptRef"
+        },
+        "productEventRef": {
+          "$ref": "#/$defs/productEventRef"
+        }
+      }
+    },
+    "outcomeSubmissionRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^outcome-submission:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "payloadRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^payload:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "productEventRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^product-event:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "receiptRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^receipt:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "runId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^run:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "runtimeFailure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "retryable"],
+      "properties": {
+        "code": {
+          "enum": ["runtime_error", "lease_expired", "invalid_continuation", "budget_exhausted", "cancelled"]
+        },
+        "message": {
+          "$ref": "#/$defs/boundedText"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "runtimeUsage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputTokens", "outputTokens", "durationMs"],
+      "properties": {
+        "inputTokens": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "outputTokens": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "durationMs": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        }
+      }
+    },
+    "timestamp": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "x-utf8ByteMax": 64
+    },
+    "workspaceRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^workspace:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    }
+  }
+}

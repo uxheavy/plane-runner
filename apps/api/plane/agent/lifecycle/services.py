@@ -8,7 +8,7 @@ from copy import deepcopy
 from uuid import UUID, uuid4
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, connection, transaction
 from django.utils import timezone
 
 from plane.db.models import (
@@ -125,9 +125,9 @@ _RESERVED_PROFILE_KEYS = {
 
 
 def _ensure_non_empty(value, field_name, *, limit=MAX_BOUNDED_TEXT_BYTES):
-    if not isinstance(value, str) or not value.strip() or len(value.strip().encode("utf-8")) > limit:
+    if not isinstance(value, str) or not value.strip() or len(value.encode("utf-8")) > limit:
         raise AgentDomainError(f"{field_name} must be a non-empty string within {limit} UTF-8 bytes")
-    return value.strip()
+    return value
 
 
 def _as_list(value, field_name):
@@ -172,10 +172,10 @@ def _ensure_actor_active(actor):
 
 
 def _normalise_ref(value, namespace, field_name):
-    if value is None or not str(value).strip():
+    if not isinstance(value, str) or not value.startswith(f"{namespace}:"):
         raise AgentDomainError(f"{field_name} is not a valid runtime reference")
     try:
-        result = namespaced_ref(namespace, str(value))
+        result = namespaced_ref(namespace, value)
     except RuntimeContractError as exc:
         raise AgentDomainError(f"{field_name} is not a valid runtime reference") from exc
     if not result.startswith(f"{namespace}:"):
@@ -188,6 +188,48 @@ def _normalise_idempotency(value, field_name):
         return namespaced_ref("idempotency", str(uuid4()))
     value = _ensure_non_empty(value, field_name, limit=MAX_BOUNDED_TOKEN_BYTES)
     return _normalise_ref(value, "idempotency", field_name)
+
+
+def _target_runtime_ref(value, field_name):
+    """Encode an exact caller target into the L1 target-ref namespace."""
+
+    value = _ensure_non_empty(value, field_name, limit=255)
+    if value.startswith("target:"):
+        return _normalise_ref(value, "target", field_name)
+    # Plane target identifiers may contain their own namespace and spaces.  A
+    # reversible byte encoding preserves those distinctions without lossy
+    # replacement or truncation in the L1 reference.
+    encoded = value.encode("utf-8").hex()
+    try:
+        return namespaced_ref("target", f"literal-{encoded}")
+    except RuntimeContractError as exc:
+        raise AgentDomainError(f"{field_name} cannot fit the accepted target reference") from exc
+
+
+def _lock_idempotency_key(key):
+    """Serialize all creators using one key before their check-and-insert."""
+
+    if connection.vendor != "postgresql":
+        return
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", [key])
+
+
+def _create_with_conflict_resolution(model, *, fields, key_lookup, alternate_lookup=None, compatible, message):
+    """Create under a savepoint and turn uniqueness races into typed results."""
+
+    try:
+        with transaction.atomic():
+            return model.objects.create(**fields)
+    except IntegrityError as exc:
+        existing = model.all_objects.filter(**key_lookup).first()
+        if existing is None and alternate_lookup is not None:
+            existing = model.all_objects.filter(**alternate_lookup).first()
+        if existing is None:
+            raise
+        if compatible(existing):
+            return existing
+        raise IdempotencyConflictError(message) from exc
 
 
 def _profile_prompt(profile):
@@ -209,8 +251,12 @@ def _snapshot_context(profile):
             revision = "1"
             digest = content_digest({"contextRef": context_ref, "source": raw})
         elif isinstance(raw, dict):
-            context_ref = _normalise_ref(raw.get("contextRef", raw.get("context_ref")), "context", f"context_refs[{index}]")
-            revision = _ensure_non_empty(str(raw.get("revision", "1")), f"context_refs[{index}].revision", limit=MAX_BOUNDED_TOKEN_BYTES)
+            context_ref = _normalise_ref(
+                raw.get("contextRef", raw.get("context_ref")), "context", f"context_refs[{index}]"
+            )
+            revision = _ensure_non_empty(
+                str(raw.get("revision", "1")), f"context_refs[{index}].revision", limit=MAX_BOUNDED_TOKEN_BYTES
+            )
             digest = raw.get("contentDigest", raw.get("content_digest")) or content_digest(raw)
         else:
             raise AgentDomainError(f"context_refs[{index}] must be a string or object")
@@ -234,14 +280,17 @@ def _snapshot_tool_catalog(profile):
             "operation",
             f"tool_presentation.eager_operations[{index}].operationRef",
         )
-        schema_digest = raw.get("schemaDigest", raw.get("schema_digest")) or content_digest({"operationRef": operation_ref})
+        schema_digest = raw.get("schemaDigest", raw.get("schema_digest")) or content_digest(
+            {"operationRef": operation_ref}
+        )
         disclosure = raw.get("disclosure", "progressive")
         if not isinstance(disclosure, str) or disclosure not in {"eager", "progressive"}:
             raise AgentDomainError("tool presentation disclosure is invalid")
         operations.append({"operationRef": operation_ref, "schemaDigest": schema_digest, "disclosure": disclosure})
     catalog = {"eagerOperations": operations}
     return {
-        "catalogDigest": presentation.get("catalogDigest", presentation.get("catalog_digest")) or content_digest(catalog),
+        "catalogDigest": presentation.get("catalogDigest", presentation.get("catalog_digest"))
+        or content_digest(catalog),
         "eagerOperations": operations,
     }
 
@@ -261,13 +310,23 @@ def _runtime_policy(profile):
             raise AgentDomainError(f"runtime_defaults.total_budget.{field} is invalid")
     policy = {
         "model": {
-            "provider": _ensure_non_empty(str(defaults.get("provider", "plane")), "runtime_defaults.provider", limit=MAX_BOUNDED_TOKEN_BYTES),
-            "model": _ensure_non_empty(str(defaults.get("model", "default")), "runtime_defaults.model", limit=MAX_BOUNDED_TOKEN_BYTES),
+            "provider": _ensure_non_empty(
+                str(defaults.get("provider", "plane")), "runtime_defaults.provider", limit=MAX_BOUNDED_TOKEN_BYTES
+            ),
+            "model": _ensure_non_empty(
+                str(defaults.get("model", "default")), "runtime_defaults.model", limit=MAX_BOUNDED_TOKEN_BYTES
+            ),
         },
-        "adapter": _ensure_non_empty(str(defaults.get("adapter", "plane-agent-runtime")), "runtime_defaults.adapter", limit=MAX_BOUNDED_TOKEN_BYTES),
+        "adapter": _ensure_non_empty(
+            str(defaults.get("adapter", "plane-agent-runtime")),
+            "runtime_defaults.adapter",
+            limit=MAX_BOUNDED_TOKEN_BYTES,
+        ),
         "isolation": "single-invocation",
         "maxEventPayloadBytes": defaults.get("maxEventPayloadBytes", defaults.get("max_event_payload_bytes", 65_536)),
-        "maxArtifactBytes": defaults.get("maxArtifactBytes", defaults.get("max_artifact_bytes", MAX_BOUNDED_BYTE_COUNT)),
+        "maxArtifactBytes": defaults.get(
+            "maxArtifactBytes", defaults.get("max_artifact_bytes", MAX_BOUNDED_BYTE_COUNT)
+        ),
         "maxReceiptBytes": defaults.get("maxReceiptBytes", defaults.get("max_receipt_bytes", 65_536)),
     }
     for field in ("maxEventPayloadBytes", "maxArtifactBytes", "maxReceiptBytes"):
@@ -295,7 +354,7 @@ def _build_snapshot(assignment, profile, run_id, snapshot=None):
     assignment_snapshot = {
         "assignmentRef": _normalise_ref(f"assignment:{assignment.id}", "assignment", "assignment_id"),
         "revision": str(assignment.revision),
-        "targetRef": _normalise_ref(assignment.target_ref, "target", "target_ref"),
+        "targetRef": _target_runtime_ref(assignment.target_ref, "target_ref"),
         "objective": _ensure_non_empty(assignment.objective, "objective"),
         "acceptanceCriteria": [
             _ensure_non_empty(item, f"acceptance_criteria[{index}]")
@@ -397,7 +456,9 @@ def create_profile(
     context_refs = _as_list(context_refs, "context_refs")
     memory_scopes = _as_list(memory_scopes, "memory_scopes")
     if version is None:
-        latest = ProfileVersion.objects.filter(actor=actor).order_by("-version").values_list("version", flat=True).first()
+        latest = (
+            ProfileVersion.objects.filter(actor=actor).order_by("-version").values_list("version", flat=True).first()
+        )
         version = (latest or 0) + 1
     if not isinstance(version, int) or isinstance(version, bool) or version < 1:
         raise AgentDomainError("Profile versions start at 1")
@@ -510,20 +571,31 @@ def create_run(
     creation_key = None
     if idempotency_key is not None:
         creation_key = _normalise_idempotency(idempotency_key, "run idempotency_key")
+        _lock_idempotency_key(creation_key)
         existing = RunAttempt.all_objects.filter(creation_idempotency_key=creation_key).first()
         if existing is not None:
             if existing.assignment_id != locked_assignment.id or existing.profile_version_id != profile.id:
                 raise IdempotencyConflictError("Run idempotency key is bound to another Plane command")
             return existing
 
-    recovery_intent = _state(recovery_intent, RecoveryIntent, "recovery intent") if recovery_intent is not None else None
-    lineage_reason = _state(lineage_reason, RunLineageReason, "run lineage reason") if lineage_reason is not None else None
+    recovery_intent = (
+        _state(recovery_intent, RecoveryIntent, "recovery intent") if recovery_intent is not None else None
+    )
+    lineage_reason = (
+        _state(lineage_reason, RunLineageReason, "run lineage reason") if lineage_reason is not None else None
+    )
     source = None
     if lineage_of is not None:
         source = RunAttempt.objects.select_for_update().get(pk=lineage_of.pk)
         if source.assignment_id != locked_assignment.id:
             raise RecoveryIntentRequiredError("Run lineage must name a run on this assignment")
-        if source.state not in {RunState.SUCCEEDED, RunState.FAILED, RunState.BLOCKED, RunState.CANCELLED, RunState.OUTCOME_UNKNOWN}:
+        if source.state not in {
+            RunState.SUCCEEDED,
+            RunState.FAILED,
+            RunState.BLOCKED,
+            RunState.CANCELLED,
+            RunState.OUTCOME_UNKNOWN,
+        }:
             raise RecoveryIntentRequiredError("Run lineage must name a terminal or unknown source run")
     if recovery_of is not None:
         recovery_source = RunAttempt.objects.select_for_update().get(pk=recovery_of.pk)
@@ -534,7 +606,9 @@ def create_run(
         source = recovery_source
         if recovery_intent is None:
             raise RecoveryIntentRequiredError("Recovery intent must be explicit")
-        lineage_reason = RunLineageReason.RECOVERY if recovery_intent == RecoveryIntent.RECONCILE else RunLineageReason.FRESH_RUN
+        lineage_reason = (
+            RunLineageReason.RECOVERY if recovery_intent == RecoveryIntent.RECONCILE else RunLineageReason.FRESH_RUN
+        )
     if recovery_intent is not None and recovery_of is None:
         raise RecoveryIntentRequiredError("Recovery intent requires an outcome-unknown source run")
 
@@ -552,16 +626,23 @@ def create_run(
     if source is not None:
         if lineage_reason is None:
             raise RecoveryIntentRequiredError("Run lineage reason must be explicit")
-        if source.state in {RunState.FAILED, RunState.BLOCKED, RunState.CANCELLED} and lineage_reason != RunLineageReason.FRESH_RUN:
+        if (
+            source.state in {RunState.FAILED, RunState.BLOCKED, RunState.CANCELLED}
+            and lineage_reason != RunLineageReason.FRESH_RUN
+        ):
             raise RecoveryIntentRequiredError("Terminal run continuation requires an explicit fresh-run lineage")
 
     if snapshot is not None and not isinstance(snapshot, dict):
         raise AgentDomainError("snapshot must be an object")
-    run_id = _uuid_from_ref(snapshot["runId"], "snapshot.runId") if snapshot is not None and snapshot.get("runId") else uuid4()
+    run_id = (
+        _uuid_from_ref(snapshot["runId"], "snapshot.runId")
+        if snapshot is not None and snapshot.get("runId")
+        else uuid4()
+    )
     resolved_snapshot = _build_snapshot(locked_assignment, profile, run_id, snapshot=snapshot)
     if locked_assignment.state in {AssignmentState.READY, AssignmentState.REVISION}:
         _transition_assignment_locked(locked_assignment, AssignmentState.ACTIVE)
-    return RunAttempt.objects.create(
+    run_fields = dict(
         id=run_id,
         workspace=locked_assignment.workspace,
         project=locked_assignment.project,
@@ -578,6 +659,17 @@ def create_run(
         recovery_of=source if recovery_of is not None else None,
         recovery_intent=recovery_intent,
         created_by=created_by,
+    )
+    if creation_key is None:
+        return RunAttempt.objects.create(**run_fields)
+    return _create_with_conflict_resolution(
+        RunAttempt,
+        fields=run_fields,
+        key_lookup={"creation_idempotency_key": creation_key},
+        compatible=lambda existing: (
+            existing.assignment_id == locked_assignment.id and existing.profile_version_id == profile.id
+        ),
+        message="Run idempotency key is bound to another Plane command",
     )
 
 
@@ -608,11 +700,16 @@ def _iso_timestamp():
 
 
 @transaction.atomic
-def record_input_event(run, *, payload, kind=InputEventKind.HUMAN_INPUT, pending_input_ref=None, idempotency_key=None, created_by=None):
+def record_input_event(
+    run, *, payload, kind=InputEventKind.HUMAN_INPUT, pending_input_ref=None, idempotency_key=None, created_by=None
+):
     run = RunAttempt.objects.select_for_update().get(pk=run.pk)
     kind = _state(kind, InputEventKind, "input event kind")
-    key = _normalise_idempotency(idempotency_key, "input event idempotency_key") if idempotency_key is not None else None
+    key = (
+        _normalise_idempotency(idempotency_key, "input event idempotency_key") if idempotency_key is not None else None
+    )
     if key is not None:
+        _lock_idempotency_key(key)
         existing = RunInputEvent.all_objects.filter(idempotency_key=key).first()
         if existing is not None:
             if existing.run_id != run.id:
@@ -624,8 +721,10 @@ def record_input_event(run, *, payload, kind=InputEventKind.HUMAN_INPUT, pending
         raise AgentDomainError("Input event payload must be JSON") from exc
     event_uuid = uuid4()
     event_ref = namespaced_ref("event", str(event_uuid))
-    pending_ref = _normalise_ref(pending_input_ref, "event", "pending_input_ref") if pending_input_ref else None
-    return RunInputEvent.objects.create(
+    pending_ref = (
+        _normalise_ref(pending_input_ref, "event", "pending_input_ref") if pending_input_ref is not None else None
+    )
+    fields = dict(
         workspace=run.workspace,
         project=run.project,
         run=run,
@@ -636,6 +735,15 @@ def record_input_event(run, *, payload, kind=InputEventKind.HUMAN_INPUT, pending
         pending_input_ref=pending_ref,
         idempotency_key=key,
         created_by=created_by,
+    )
+    if key is None:
+        return RunInputEvent.objects.create(**fields)
+    return _create_with_conflict_resolution(
+        RunInputEvent,
+        fields=fields,
+        key_lookup={"idempotency_key": key},
+        compatible=lambda existing: existing.run_id == run.id,
+        message="Input event idempotency key is bound to another run",
     )
 
 
@@ -680,6 +788,7 @@ def record_invocation(
 ):
     run = RunAttempt.objects.select_for_update().get(pk=run.pk)
     key = _normalise_idempotency(idempotency_key, "invocation idempotency_key")
+    _lock_idempotency_key(key)
     requested_invocation_ref = None
     if invocation_id is not None:
         if isinstance(invocation_id, UUID):
@@ -762,7 +871,7 @@ def record_invocation(
         cumulative_usage[field] = int(cumulative_usage.get(field, 0)) + usage_value.get(field, 0)
         if cumulative_usage[field] > MAX_INTEGER:
             raise AgentDomainError(f"cumulative_usage.{field} exceeds the accepted integer limit")
-    invocation = RuntimeInvocation.objects.create(
+    invocation_fields = dict(
         workspace=run.workspace,
         project=run.project,
         run=run,
@@ -771,6 +880,16 @@ def record_invocation(
         envelope=envelope,
         state=InvocationState.RUNNING,
         created_by=created_by,
+    )
+    invocation = _create_with_conflict_resolution(
+        RuntimeInvocation,
+        fields=invocation_fields,
+        key_lookup={"idempotency_key": key},
+        alternate_lookup={"invocation_id": invocation_ref_value},
+        compatible=lambda existing: existing.run_id == run.id
+        and existing.invocation_id == invocation_ref_value
+        and existing.idempotency_key == key,
+        message="Invocation idempotency key or invocation id is bound to another Plane command",
     )
     run.state = RunState.RUNNING
     run.invocation_count += 1
@@ -790,7 +909,9 @@ def transition_run(run, target):
         raise InvalidTransitionError(f"Run cannot move from {locked.state} to {target}")
     if target in {RunState.FAILED, RunState.BLOCKED, RunState.CANCELLED}:
         if not locked.last_invocation_id:
-            raise TerminalEventRequiredError("Terminal run state requires a runtime invocation and visible product event")
+            raise TerminalEventRequiredError(
+                "Terminal run state requires a runtime invocation and visible product event"
+            )
         invocation = RuntimeInvocation.objects.select_for_update().get(invocation_id=locked.last_invocation_id)
         kind = {
             RunState.FAILED: TerminalEventKind.RUN_FAILURE,
@@ -826,34 +947,44 @@ def _terminal_state(kind):
     }[kind]
 
 
-def _create_terminal_event_locked(invocation, run, *, kind, source, product_ref, reason, idempotency_key, cancellation_ref=None):
+def _create_terminal_event_locked(
+    invocation, run, *, kind, source, product_ref, reason, idempotency_key, cancellation_ref=None
+):
+    event_key = _normalise_idempotency(idempotency_key, "terminal event idempotency_key")
+    _lock_idempotency_key(event_key)
     existing = RunTerminalEvent.all_objects.filter(invocation=invocation).first()
     if existing is not None:
         if existing.kind != kind or existing.product_ref != product_ref:
             raise TerminalEventRequiredError("Invocation already has a different visible terminal event")
         return existing
-    event_key = _normalise_idempotency(idempotency_key, "terminal event idempotency_key")
     conflicting = RunTerminalEvent.all_objects.filter(idempotency_key=event_key).first()
     if conflicting is not None:
         if conflicting.invocation_id != invocation.id:
             raise IdempotencyConflictError("Terminal event idempotency key is bound to another invocation")
         return conflicting
     invocation_state, run_state = _terminal_state(kind)
-    event_ref = product_ref if kind in {
-        TerminalEventKind.RUN_FAILURE,
-        TerminalEventKind.RUN_BLOCKER,
-        TerminalEventKind.RUN_CANCELLATION,
-    } else namespaced_ref("product-event", str(uuid4()))
+    event_ref = (
+        product_ref
+        if kind
+        in {
+            TerminalEventKind.RUN_FAILURE,
+            TerminalEventKind.RUN_BLOCKER,
+            TerminalEventKind.RUN_CANCELLATION,
+        }
+        else namespaced_ref("product-event", str(uuid4()))
+    )
     cancellation = (
         _normalise_ref(cancellation_ref, "cancellation", "cancellation_ref")
         if cancellation_ref is not None
-        else namespaced_ref("cancellation", str(uuid4())) if kind == TerminalEventKind.RUN_CANCELLATION else None
+        else namespaced_ref("cancellation", str(uuid4()))
+        if kind == TerminalEventKind.RUN_CANCELLATION
+        else None
     )
     invocation.state = invocation_state
     invocation.save(_allow_lifecycle=True)
     run.state = run_state
     run.save(_allow_lifecycle=True)
-    return RunTerminalEvent.objects.create(
+    event_fields = dict(
         workspace=run.workspace,
         project=run.project,
         invocation=invocation,
@@ -866,6 +997,16 @@ def _create_terminal_event_locked(invocation, run, *, kind, source, product_ref,
         reason=_ensure_non_empty(reason, "terminal reason") if reason else "",
         cancellation_ref=cancellation,
         visible=True,
+    )
+    return _create_with_conflict_resolution(
+        RunTerminalEvent,
+        fields=event_fields,
+        key_lookup={"idempotency_key": event_key},
+        alternate_lookup={"product_event_ref": event_ref},
+        compatible=lambda existing: existing.invocation_id == invocation.id
+        and existing.kind == kind
+        and existing.product_ref == product_ref,
+        message="Terminal event idempotency key or product event is bound to another invocation",
     )
 
 
@@ -902,6 +1043,7 @@ def propose_outcome(run, *, summary, artifacts=None, evidence=None, idempotency_
     run = RunAttempt.objects.select_for_update().get(pk=run.pk)
     key = _normalise_idempotency(idempotency_key, "outcome idempotency_key") if idempotency_key is not None else None
     if key is not None:
+        _lock_idempotency_key(key)
         existing = OutcomeSubmission.all_objects.filter(submission_idempotency_key=key).first()
         if existing is not None:
             if existing.run_id != run.id:
@@ -912,9 +1054,12 @@ def propose_outcome(run, *, summary, artifacts=None, evidence=None, idempotency_
     if not run.last_invocation_id:
         raise TerminalEventRequiredError("Outcome submission requires a runtime invocation")
     invocation = RuntimeInvocation.objects.select_for_update().get(invocation_id=run.last_invocation_id)
-    if invocation.run_id != run.id or invocation.state not in {InvocationState.RUNNING, InvocationState.WAITING_FOR_INPUT}:
+    if invocation.run_id != run.id or invocation.state not in {
+        InvocationState.RUNNING,
+        InvocationState.WAITING_FOR_INPUT,
+    }:
         raise InvalidTransitionError("The current invocation cannot submit an outcome")
-    outcome = OutcomeSubmission.objects.create(
+    outcome_fields = dict(
         workspace=run.workspace,
         project=run.project,
         run=run,
@@ -925,6 +1070,17 @@ def propose_outcome(run, *, summary, artifacts=None, evidence=None, idempotency_
         submission_idempotency_key=key,
         created_by=created_by,
     )
+    if key is None:
+        outcome = OutcomeSubmission.objects.create(**outcome_fields)
+    else:
+        outcome = _create_with_conflict_resolution(
+            OutcomeSubmission,
+            fields=outcome_fields,
+            key_lookup={"submission_idempotency_key": key},
+            alternate_lookup={"run_id": run.id},
+            compatible=lambda existing: existing.run_id == run.id and existing.submission_idempotency_key == key,
+            message="Outcome idempotency key or run is bound to another Plane command",
+        )
     return_value = _create_terminal_event_locked(
         invocation,
         run,
@@ -961,7 +1117,11 @@ def review_outcome(outcome, *, evaluator, feedback=""):
 
 
 def _require_reviewed_outcome(outcome):
-    if outcome.state != OutcomeState.EVALUATOR_REVIEWED or outcome.evaluator_id is None or outcome.evaluator_reviewed_at is None:
+    if (
+        outcome.state != OutcomeState.EVALUATOR_REVIEWED
+        or outcome.evaluator_id is None
+        or outcome.evaluator_reviewed_at is None
+    ):
         raise InvalidTransitionError("Human outcome decisions require evaluator review")
 
 
