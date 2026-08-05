@@ -231,6 +231,7 @@ def create_schedule(
     if starts_at.tzinfo is None or starts_at.utcoffset() is None:
         raise AgentScheduleError("starts_at must be an aware datetime")
     next_fire_at = next_schedule_fire(cron_expression, timezone_name, starts_at)
+    acceptance_criteria = acceptance_criteria or [objective]
     return AgentSchedule.objects.create(
         workspace=actor.workspace,
         project=actor.project,

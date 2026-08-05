@@ -49,6 +49,9 @@ DROP TRIGGER IF EXISTS agent_input_sequence_immutable_guard ON agent_run_input_e
 
 ALTER TABLE agent_run_input_events ALTER COLUMN sequence DROP NOT NULL;
 
+UPDATE agent_run_input_events
+SET sequence = NULL;
+
 UPDATE agent_run_input_events AS event
 SET sequence = CASE
     WHEN metadata.original_sequence_was_null THEN NULL
@@ -261,6 +264,7 @@ class Migration(migrations.Migration):
     dependencies = [("db", "0134_agent_input_event_sequence")]
 
     operations = [
+        migrations.RunSQL(migrations.RunSQL.noop, SEQUENCE_METADATA_REVERSE_SQL),
         migrations.RemoveConstraint(
             model_name="runinputevent",
             name="agent_input_run_sequence_unique",
@@ -299,5 +303,4 @@ class Migration(migrations.Migration):
             INPUT_IMMUTABILITY_FORWARD_SQL + KEYED_BINDING_FORWARD_SQL,
             INPUT_IMMUTABILITY_REVERSE_SQL + KEYED_BINDING_REVERSE_SQL,
         ),
-        migrations.RunSQL(migrations.RunSQL.noop, SEQUENCE_METADATA_REVERSE_SQL),
     ]

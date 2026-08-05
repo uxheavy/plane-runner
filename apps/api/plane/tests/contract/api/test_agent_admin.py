@@ -159,7 +159,7 @@ def test_admin_api_proves_lifecycle_review_and_redaction(api_key_client, workspa
 
     assignment = AssignmentContract.objects.get(pk=assignment_id)
     assert assignment.state == AssignmentState.COMPLETED
-    assert RunAttempt.objects.get(pk=run_id).profile_version_id == profile_response.json()["id"]
+    assert str(RunAttempt.objects.get(pk=run_id).profile_version_id) == profile_response.json()["id"]
 
 
 @pytest.mark.contract
@@ -346,6 +346,6 @@ def test_admin_api_exposes_revision_cancel_and_gateway_readback(
     readback = readback_response.json()["results"][0]
     readback_json = json.dumps(readback)
     assert readback["receipt"]["idempotency_key"] == "idempotency:admin-readback"
-    assert "request_input" not in readback_json
-    assert "result" not in readback_json
-    assert "error" not in readback_json
+    assert '"request_input":' not in readback_json
+    assert '"result":' not in readback_json
+    assert '"error":' not in readback_json

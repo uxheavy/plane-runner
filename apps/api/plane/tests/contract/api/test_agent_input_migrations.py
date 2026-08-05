@@ -6,6 +6,7 @@ from django.core.management import call_command
 from django.db import DatabaseError, IntegrityError, connection, transaction
 from django.db.migrations.executor import MigrationExecutor
 from django.utils import timezone
+from psycopg.types.json import Json
 
 from plane.agent.lifecycle import create_actor, create_assignment, create_profile, create_run
 from plane.api.serializers.agent_admin import RunInputEventAdminSerializer
@@ -94,7 +95,7 @@ def _insert_legacy_event(run, *, sequence, pending_ref, index, created_at):
                 f"event:migration-{index}",
                 InputEventKind.HUMAN_INPUT,
                 sequence,
-                {"answer": f"legacy-{index}"},
+                Json({"answer": f"legacy-{index}"}),
                 f"content:{index:064d}",
                 pending_ref,
                 f"idempotency:migration-{index}",
