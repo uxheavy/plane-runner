@@ -3,27 +3,78 @@
 from django.db import migrations, models
 
 
-SEQUENCE_BACKFILL_SQL = """
+LEGACY_INPUT_DISPOSITION_SQL = """
 LOCK TABLE agent_run_input_events IN SHARE ROW EXCLUSIVE MODE;
+DROP TRIGGER IF EXISTS agent_input_keyed_binding_guard ON agent_run_input_events;
 WITH ranked AS (
     SELECT id,
-           row_number() OVER (PARTITION BY run_id ORDER BY created_at, id)::integer AS sequence
+           pending_input_ref,
+           row_number() OVER (
+               PARTITION BY run_id
+               ORDER BY sequence NULLS LAST, created_at, id
+           )::integer AS run_sequence,
+           row_number() OVER (
+               PARTITION BY run_id, pending_input_ref
+               ORDER BY sequence NULLS LAST, created_at, id
+           )::integer AS pending_rank
     FROM agent_run_input_events
 )
 UPDATE agent_run_input_events AS event
-SET sequence = ranked.sequence
+SET sequence = ranked.run_sequence,
+    is_authoritative = ranked.pending_input_ref IS NULL OR ranked.pending_rank = 1
 FROM ranked
 WHERE event.id = ranked.id;
 """
 
 
-SEQUENCE_BACKFILL_REVERSE_SQL = """
--- Reversal retains deterministic sequence values; the next forward migration
--- recomputes every row while holding the same table lock.
+INPUT_IMMUTABILITY_FORWARD_SQL = """
+CREATE OR REPLACE FUNCTION agent_guard_input_immutable() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.workspace_id IS DISTINCT FROM OLD.workspace_id OR NEW.project_id IS DISTINCT FROM OLD.project_id
+       OR NEW.run_id IS DISTINCT FROM OLD.run_id OR NEW.event_ref IS DISTINCT FROM OLD.event_ref
+       OR NEW.kind IS DISTINCT FROM OLD.kind OR NEW.payload IS DISTINCT FROM OLD.payload
+       OR NEW.payload_digest IS DISTINCT FROM OLD.payload_digest
+       OR NEW.pending_input_ref IS DISTINCT FROM OLD.pending_input_ref
+       OR NEW.is_authoritative IS DISTINCT FROM OLD.is_authoritative
+       OR NEW.idempotency_key IS DISTINCT FROM OLD.idempotency_key THEN
+        RAISE EXCEPTION 'RunInputEvent immutable fields cannot change' USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS agent_input_immutable_guard ON agent_run_input_events;
+CREATE TRIGGER agent_input_immutable_guard
+BEFORE UPDATE ON agent_run_input_events
+FOR EACH ROW EXECUTE FUNCTION agent_guard_input_immutable();
 """
 
 
-GUARD_FORWARD_SQL = """
+INPUT_IMMUTABILITY_REVERSE_SQL = """
+CREATE OR REPLACE FUNCTION agent_guard_input_immutable() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.workspace_id IS DISTINCT FROM OLD.workspace_id OR NEW.project_id IS DISTINCT FROM OLD.project_id
+       OR NEW.run_id IS DISTINCT FROM OLD.run_id OR NEW.event_ref IS DISTINCT FROM OLD.event_ref
+       OR NEW.kind IS DISTINCT FROM OLD.kind OR NEW.payload IS DISTINCT FROM OLD.payload
+       OR NEW.payload_digest IS DISTINCT FROM OLD.payload_digest
+       OR NEW.pending_input_ref IS DISTINCT FROM OLD.pending_input_ref
+       OR NEW.idempotency_key IS DISTINCT FROM OLD.idempotency_key THEN
+        RAISE EXCEPTION 'RunInputEvent immutable fields cannot change' USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS agent_input_immutable_guard ON agent_run_input_events;
+CREATE TRIGGER agent_input_immutable_guard
+BEFORE UPDATE ON agent_run_input_events
+FOR EACH ROW EXECUTE FUNCTION agent_guard_input_immutable();
+"""
+
+
+KEYED_BINDING_FORWARD_SQL = """
 CREATE OR REPLACE FUNCTION agent_guard_keyed_record_binding_immutable() RETURNS trigger
 LANGUAGE plpgsql AS $$
 DECLARE
@@ -53,6 +104,36 @@ FOR EACH ROW EXECUTE FUNCTION agent_guard_keyed_record_binding_immutable(
     'command_fingerprint,deleted_at,updated_at,updated_by_id,state,pending_input_ref,invocation_count,last_invocation_id,cumulative_usage'
 );
 
+DROP TRIGGER IF EXISTS agent_input_keyed_binding_guard ON agent_run_input_events;
+CREATE TRIGGER agent_input_keyed_binding_guard
+BEFORE UPDATE ON agent_run_input_events
+FOR EACH ROW EXECUTE FUNCTION agent_guard_keyed_record_binding_immutable(
+    'idempotency_key', 'command_fingerprint,deleted_at,updated_at,updated_by_id'
+);
+
+DROP TRIGGER IF EXISTS agent_invocation_keyed_binding_guard ON agent_runtime_invocations;
+CREATE TRIGGER agent_invocation_keyed_binding_guard
+BEFORE UPDATE ON agent_runtime_invocations
+FOR EACH ROW EXECUTE FUNCTION agent_guard_keyed_record_binding_immutable(
+    'idempotency_key', 'command_fingerprint,deleted_at,updated_at,updated_by_id,state'
+);
+
+DROP TRIGGER IF EXISTS agent_outcome_keyed_binding_guard ON agent_outcome_submissions;
+CREATE TRIGGER agent_outcome_keyed_binding_guard
+BEFORE UPDATE ON agent_outcome_submissions
+FOR EACH ROW EXECUTE FUNCTION agent_guard_keyed_record_binding_immutable(
+    'submission_idempotency_key',
+    'command_fingerprint,deleted_at,updated_at,updated_by_id,state,evaluator_id,evaluator_feedback,'
+    'evaluator_reviewed_at,human_reviewer_id,human_decision_note,human_decided_at'
+);
+
+DROP TRIGGER IF EXISTS agent_terminal_keyed_binding_guard ON agent_run_terminal_events;
+CREATE TRIGGER agent_terminal_keyed_binding_guard
+BEFORE UPDATE ON agent_run_terminal_events
+FOR EACH ROW EXECUTE FUNCTION agent_guard_keyed_record_binding_immutable(
+    'idempotency_key', 'command_fingerprint,deleted_at,updated_at,updated_by_id'
+);
+
 CREATE OR REPLACE FUNCTION agent_guard_input_sequence_immutable() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
@@ -64,21 +145,53 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS agent_input_sequence_immutable_guard ON agent_run_input_events;
 CREATE TRIGGER agent_input_sequence_immutable_guard
 BEFORE UPDATE ON agent_run_input_events
 FOR EACH ROW EXECUTE FUNCTION agent_guard_input_sequence_immutable();
 """
 
 
-GUARD_REVERSE_SQL = """
+KEYED_BINDING_REVERSE_SQL = """
 DROP TRIGGER IF EXISTS agent_input_sequence_immutable_guard ON agent_run_input_events;
 DROP FUNCTION IF EXISTS agent_guard_input_sequence_immutable();
+
 DROP TRIGGER IF EXISTS agent_run_keyed_binding_guard ON agent_run_attempts;
 CREATE TRIGGER agent_run_keyed_binding_guard
 BEFORE UPDATE ON agent_run_attempts
 FOR EACH ROW EXECUTE FUNCTION agent_guard_keyed_record_binding_immutable(
     'creation_idempotency_key',
     'command_fingerprint,deleted_at,updated_at,updated_by_id,state,invocation_count,last_invocation_id,cumulative_usage'
+);
+
+DROP TRIGGER IF EXISTS agent_input_keyed_binding_guard ON agent_run_input_events;
+CREATE TRIGGER agent_input_keyed_binding_guard
+BEFORE UPDATE ON agent_run_input_events
+FOR EACH ROW EXECUTE FUNCTION agent_guard_keyed_record_binding_immutable(
+    'idempotency_key', 'command_fingerprint,deleted_at,updated_at,updated_by_id'
+);
+
+DROP TRIGGER IF EXISTS agent_invocation_keyed_binding_guard ON agent_runtime_invocations;
+CREATE TRIGGER agent_invocation_keyed_binding_guard
+BEFORE UPDATE ON agent_runtime_invocations
+FOR EACH ROW EXECUTE FUNCTION agent_guard_keyed_record_binding_immutable(
+    'idempotency_key', 'command_fingerprint,deleted_at,updated_at,updated_by_id,state'
+);
+
+DROP TRIGGER IF EXISTS agent_outcome_keyed_binding_guard ON agent_outcome_submissions;
+CREATE TRIGGER agent_outcome_keyed_binding_guard
+BEFORE UPDATE ON agent_outcome_submissions
+FOR EACH ROW EXECUTE FUNCTION agent_guard_keyed_record_binding_immutable(
+    'submission_idempotency_key',
+    'command_fingerprint,deleted_at,updated_at,updated_by_id,state,evaluator_id,evaluator_feedback,'
+    'evaluator_reviewed_at,human_reviewer_id,human_decision_note,human_decided_at'
+);
+
+DROP TRIGGER IF EXISTS agent_terminal_keyed_binding_guard ON agent_run_terminal_events;
+CREATE TRIGGER agent_terminal_keyed_binding_guard
+BEFORE UPDATE ON agent_run_terminal_events
+FOR EACH ROW EXECUTE FUNCTION agent_guard_keyed_record_binding_immutable(
+    'idempotency_key', 'command_fingerprint,deleted_at,updated_at,updated_by_id'
 );
 """
 
@@ -91,7 +204,15 @@ class Migration(migrations.Migration):
             model_name="runinputevent",
             name="agent_input_run_sequence_unique",
         ),
-        migrations.RunSQL(SEQUENCE_BACKFILL_SQL, SEQUENCE_BACKFILL_REVERSE_SQL),
+        migrations.AddField(
+            model_name="runinputevent",
+            name="is_authoritative",
+            field=models.BooleanField(default=True, editable=False),
+        ),
+        migrations.RunSQL(
+            LEGACY_INPUT_DISPOSITION_SQL,
+            migrations.RunSQL.noop,
+        ),
         migrations.AlterField(
             model_name="runinputevent",
             name="sequence",
@@ -107,10 +228,13 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="runinputevent",
             constraint=models.UniqueConstraint(
-                condition=models.Q(pending_input_ref__isnull=False),
+                condition=models.Q(is_authoritative=True, pending_input_ref__isnull=False),
                 fields=("run", "pending_input_ref"),
                 name="agent_input_run_pending_ref_unique",
             ),
         ),
-        migrations.RunSQL(GUARD_FORWARD_SQL, GUARD_REVERSE_SQL),
+        migrations.RunSQL(
+            INPUT_IMMUTABILITY_FORWARD_SQL + KEYED_BINDING_FORWARD_SQL,
+            INPUT_IMMUTABILITY_REVERSE_SQL + KEYED_BINDING_REVERSE_SQL,
+        ),
     ]

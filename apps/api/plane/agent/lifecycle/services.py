@@ -1135,6 +1135,7 @@ def record_input_event(
         payload=deepcopy(payload),
         payload_digest=content_digest(payload),
         pending_input_ref=pending_ref,
+        is_authoritative=True,
         idempotency_key=key,
         command_fingerprint=event_fingerprint,
         created_by=created_by,
@@ -1235,6 +1236,8 @@ def record_invocation(
         input_event = RunInputEvent.objects.get(pk=input_event.pk)
         if input_event.run_id != run.id:
             raise AgentDomainError("Invocation input event belongs to another run")
+        if not input_event.is_authoritative:
+            raise AgentDomainError("Non-authoritative legacy input evidence cannot drive an invocation")
     trigger_binding = trigger
     if isinstance(trigger_binding, str):
         trigger_binding = {"kind": trigger_binding}

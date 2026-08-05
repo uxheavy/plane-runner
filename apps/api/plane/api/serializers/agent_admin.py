@@ -209,7 +209,16 @@ class RunAdminSerializer(BaseSerializer):
 class RunInputEventAdminSerializer(BaseSerializer):
     class Meta:
         model = RunInputEvent
-        fields = ["id", "event_ref", "sequence", "kind", "payload_digest", "pending_input_ref", "created_at"]
+        fields = [
+            "id",
+            "event_ref",
+            "sequence",
+            "kind",
+            "payload_digest",
+            "pending_input_ref",
+            "is_authoritative",
+            "created_at",
+        ]
         read_only_fields = fields
 
 

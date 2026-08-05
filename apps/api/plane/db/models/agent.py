@@ -450,6 +450,7 @@ class RunInputEvent(AgentScopedModel):
     payload = models.JSONField(default=default_dict)
     payload_digest = models.CharField(max_length=72, editable=False)
     pending_input_ref = models.CharField(max_length=128, null=True, blank=True, editable=False)
+    is_authoritative = models.BooleanField(default=True, editable=False)
     idempotency_key = models.CharField(max_length=128, unique=True, null=True, blank=True, editable=False)
     command_fingerprint = models.CharField(max_length=72, null=True, blank=True, editable=False)
 
@@ -463,7 +464,7 @@ class RunInputEvent(AgentScopedModel):
             ),
             models.UniqueConstraint(
                 fields=["run", "pending_input_ref"],
-                condition=models.Q(pending_input_ref__isnull=False),
+                condition=models.Q(is_authoritative=True, pending_input_ref__isnull=False),
                 name="agent_input_run_pending_ref_unique",
             ),
             models.CheckConstraint(
@@ -489,6 +490,7 @@ class RunInputEvent(AgentScopedModel):
         "payload",
         "payload_digest",
         "pending_input_ref",
+        "is_authoritative",
         "idempotency_key",
         "command_fingerprint",
     )

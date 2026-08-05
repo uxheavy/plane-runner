@@ -552,6 +552,7 @@ def test_input_events_require_current_waiting_question_and_converge_on_replay(as
         idempotency_key="idempotency:input-answer",
     )
     assert event.sequence == 1
+    assert event.is_authoritative is True
     run.refresh_from_db()
     initial.refresh_from_db()
     assert run.state == RunState.RUNNING
