@@ -173,6 +173,16 @@ class CodeModeHostRPC:
         invalid = self._preflight(raw)
         if invalid is not None:
             return invalid
+        if operation_id == "agent.outcome.publish":
+            self.invocation.refresh_from_db(fields=["state"])
+            if self.invocation.state in {
+                InvocationState.SUCCEEDED,
+                InvocationState.FAILED,
+                InvocationState.BLOCKED,
+                InvocationState.CANCELLED,
+                InvocationState.OUTCOME_UNKNOWN,
+            }:
+                return self._publish_terminal_outcome(raw)
         descriptor = get_operation(operation_id)
         if descriptor is None:
             return self._reject(raw, "UNKNOWN_OPERATION", 404)
@@ -190,29 +200,57 @@ class CodeModeHostRPC:
         except AgentDomainError:
             return self._reject(raw, "BUDGET_EXCEEDED", 429)
         reconciled = False
+        terminalizes_invocation = operation_id in {"agent.outcome.submit", "agent.outcome.publish"}
         try:
+            if terminalizes_invocation:
+                # Outcome callbacks can transition the current invocation to a
+                # terminal state. Commit this callback's bounded usage before
+                # entering that lifecycle transition; reconciliation after it
+                # would correctly reject usage on a terminal invocation.
+                self._reconcile(
+                    reservation,
+                    input_bytes=input_size,
+                    output_bytes=output_reservation,
+                    calls=1,
+                    duration_ms=max(1, int((time.monotonic() - self._started_at) * 1000)),
+                )
+                reconciled = True
             response, _status = self.gateway.execute(self.gateway_request, raw)
             response = self._stable_replay_response(raw, response)
             receipt = self._receipt(raw, response)
             encoded_size = len(canonical_json(receipt).encode("utf-8"))
             if encoded_size > output_reservation:
                 return self._receipt_error(raw, response, "RESULT_TOO_LARGE", 409)
-            self._reconcile(
-                reservation,
-                input_bytes=input_size,
-                output_bytes=encoded_size,
-                calls=1,
-                duration_ms=(
-                    0
-                    if self._execution_reservation is not None
-                    else max(1, int((time.monotonic() - self._started_at) * 1000))
-                ),
-            )
-            reconciled = True
+            if not terminalizes_invocation:
+                self._reconcile(
+                    reservation,
+                    input_bytes=input_size,
+                    output_bytes=encoded_size,
+                    calls=1,
+                    duration_ms=(
+                        0
+                        if self._execution_reservation is not None
+                        else max(1, int((time.monotonic() - self._started_at) * 1000))
+                    ),
+                )
+                reconciled = True
             return receipt
         finally:
             if not reconciled:
                 self._release(reservation)
+
+    def _publish_terminal_outcome(self, raw: Mapping[str, Any]) -> dict[str, Any]:
+        """Publish an existing outcome without adding usage after terminalization."""
+
+        response, _status = self.gateway.execute(self.gateway_request, raw)
+        response = self._stable_replay_response(raw, response)
+        receipt = self._receipt(raw, response)
+        descriptor = get_operation(raw["operation_id"])
+        if descriptor is None:
+            return self._receipt_error(raw, response, "UNKNOWN_OPERATION", 404)
+        if len(canonical_json(receipt).encode("utf-8")) > descriptor.max_result_bytes + 4096:
+            return self._receipt_error(raw, response, "RESULT_TOO_LARGE", 409)
+        return receipt
 
     def spill_result(self, payload: str | bytes) -> dict[str, Any]:
         """Route oversized bytes as bounded metadata through the audited gateway."""
@@ -377,6 +415,8 @@ class CodeModeHostRPC:
             META=getattr(self.request, "META", {}),
             agent_actor_ref=expected_actor_ref,
             agent_workspace_ref=expected_workspace_ref,
+            agent_run_ref=snapshot["runId"],
+            agent_invocation_ref=stored_invocation.invocation_id,
         )
         return stored_run, stored_invocation, binding, snapshot, gateway_request
 

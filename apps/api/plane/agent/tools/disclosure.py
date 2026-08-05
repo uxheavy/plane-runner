@@ -21,6 +21,25 @@ _RESERVED_PRESENTATION_KEYS = frozenset(
 )
 _PRESENTATION_KEYS = ("eager", "eager_operations", "eagerOperations")
 _TOKEN_PATTERN = re.compile(r"[a-z0-9_]+")
+_GENERIC_ASSIGNMENT_TOKENS = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "assigned",
+        "authorized",
+        "complete",
+        "for",
+        "gateway",
+        "item",
+        "plane",
+        "result",
+        "the",
+        "through",
+        "to",
+        "work",
+    }
+)
 
 
 def _value(source: Any, name: str, default: Any = None) -> Any:
@@ -61,12 +80,12 @@ def _objective_tokens(assignment: Any) -> set[str]:
 
 
 def _matches_assignment(descriptor: OperationDescriptor, tokens: set[str]) -> bool:
-    searchable = set(
-        _TOKEN_PATTERN.findall(" ".join((descriptor.name, descriptor.summary, *descriptor.tags)).casefold())
-    )
+    meaningful_tokens = tokens - _GENERIC_ASSIGNMENT_TOKENS
+    searchable = set(_TOKEN_PATTERN.findall(" ".join((descriptor.name, descriptor.summary, *descriptor.tags)).casefold()))
+    searchable -= _GENERIC_ASSIGNMENT_TOKENS
     if descriptor.operation_id == "work_item.read" and "issue" in tokens:
         return True
-    return bool(searchable & tokens)
+    return bool(searchable & meaningful_tokens)
 
 
 def _entry(descriptor: OperationDescriptor) -> dict[str, Any]:

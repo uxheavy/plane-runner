@@ -112,6 +112,28 @@ def test_catalog_search_is_complete_and_does_not_filter_by_profile_or_identity(a
 
 @pytest.mark.contract
 @pytest.mark.django_db
+def test_catalog_search_progressively_discovers_non_core_operation(api_key_client, workspace):
+    default_response = api_key_client.post(
+        "/api/v1/operations/",
+        _body(workspace, "catalog.search", "catalog-search-default-page", {"query": ""}),
+        format="json",
+    )
+    assert default_response.status_code == status.HTTP_200_OK
+    default_ids = {entry["operationId"] for entry in default_response.json()["result"]["operations"]}
+    assert "module.list" not in default_ids
+
+    filtered_response = api_key_client.post(
+        "/api/v1/operations/",
+        _body(workspace, "catalog.search", "catalog-search-module-filter", {"query": "module.list"}),
+        format="json",
+    )
+    assert filtered_response.status_code == status.HTTP_200_OK
+    filtered_ids = {entry["operationId"] for entry in filtered_response.json()["result"]["operations"]}
+    assert "module.list" in filtered_ids
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
 def test_search_workspace_does_not_leak_cross_project_pages_or_private_pages(
     api_key_client, workspace, gateway_project, create_user
 ):

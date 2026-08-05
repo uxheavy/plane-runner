@@ -1583,6 +1583,8 @@ _SPECIAL_GATEWAY_OPERATIONS = frozenset(
         "catalog.search",
         "catalog.describe",
         "code_mode.spill",
+        "agent.outcome.submit",
+        "agent.outcome.publish",
         "work_item_attachment.list",
         "work_item_attachment.download_url",
         "work_item_attachment.upload_from_url",

@@ -159,6 +159,8 @@ class CatalogDescribeInputSerializer(StrictSerializer):
 class CodeModeSpillInputSerializer(StrictSerializer):
     size_bytes = serializers.IntegerField(min_value=1, max_value=1_048_576)
     content_digest = serializers.CharField(max_length=128, min_length=8, allow_blank=False, trim_whitespace=True)
+
+
 class EmptyOperationInputSerializer(StrictSerializer):
     """The caller cannot smuggle identity or workspace fields into a read."""
 
@@ -203,6 +205,7 @@ class GatewayOperationInputSerializer(StrictSerializer):
     link_id = serializers.UUIDField(required=False)
     state_id = serializers.UUIDField(required=False)
     activity_id = serializers.UUIDField(required=False)
+    operation_id = serializers.CharField(max_length=128, allow_blank=False, required=False)
     relation_definition_id = serializers.UUIDField(required=False, allow_null=True)
     owned_by = serializers.UUIDField(required=False, allow_null=True)
     project_lead = serializers.UUIDField(required=False, allow_null=True)
@@ -236,6 +239,9 @@ class GatewayOperationInputSerializer(StrictSerializer):
     query = serializers.CharField(max_length=255, required=False, allow_blank=False)
     relation_type = serializers.CharField(max_length=64, required=False, allow_blank=False)
     relation_definition_label = serializers.CharField(max_length=255, required=False, allow_blank=False)
+    limit = serializers.IntegerField(min_value=1, max_value=50, required=False)
+    size_bytes = serializers.IntegerField(min_value=1, max_value=1_048_576, required=False)
+    content_digest = serializers.CharField(max_length=128, min_length=8, allow_blank=False, required=False)
 
     description_json = serializers.JSONField(required=False, allow_null=True)
     comment_json = serializers.JSONField(required=False, allow_null=True)
@@ -312,6 +318,19 @@ class GatewayOperationInputSerializer(StrictSerializer):
         if missing_fields:
             raise serializers.ValidationError("Required operation input is missing")
         return super().to_internal_value(data)
+
+
+class AgentOutcomeSubmitInputSerializer(StrictSerializer):
+    run_ref = serializers.CharField(max_length=128, allow_blank=False, trim_whitespace=True)
+    summary = serializers.CharField(max_length=4096, allow_blank=False, trim_whitespace=True)
+    artifacts = serializers.JSONField(required=False, default=list)
+    evidence = serializers.JSONField(required=False, default=list)
+
+
+class AgentOutcomePublishInputSerializer(StrictSerializer):
+    run_ref = serializers.CharField(max_length=128, allow_blank=False, trim_whitespace=True)
+    outcome_ref = serializers.CharField(max_length=128, allow_blank=False, trim_whitespace=True)
+    content = serializers.CharField(max_length=4096, allow_blank=False, trim_whitespace=True)
 
 
 def canonical_json(value: Any) -> str:

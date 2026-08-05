@@ -23,6 +23,8 @@ from plane.db.models import (
     OperationGatewayAudit,
     OperationGatewayIdempotency,
     OperationGatewayPublication,
+    OutcomeSubmission,
+    RunAttempt,
     Workspace,
 )
 
@@ -46,6 +48,8 @@ from .contracts import (
     CatalogDescribeInputSerializer,
     CatalogSearchInputSerializer,
     CodeModeSpillInputSerializer,
+    AgentOutcomePublishInputSerializer,
+    AgentOutcomeSubmitInputSerializer,
     WorkspaceSearchInputSerializer,
     canonical_json,
 )
@@ -588,6 +592,7 @@ class OperationGateway:
                     workspace=workspace,
                     descriptor=descriptor,
                     parsed_input=parsed_input,
+                    idempotency_key=record.idempotency_key,
                 )
                 if status_code >= 400:
                     raise GatewayFailure(
@@ -676,6 +681,10 @@ class OperationGateway:
             "work_item_attachment.delete": AttachmentReadInputSerializer,
             "work_item_attachment.read": AttachmentReadInputSerializer,
         }.get(descriptor.operation_id)
+        if descriptor.operation_id == "agent.outcome.submit":
+            serializer_class = AgentOutcomeSubmitInputSerializer
+        elif descriptor.operation_id == "agent.outcome.publish":
+            serializer_class = AgentOutcomePublishInputSerializer
         if serializer_class is None and get_operation_handler(descriptor.operation_id) is not None:
             serializer = GatewayOperationInputSerializer(
                 data=value,
@@ -737,6 +746,7 @@ class OperationGateway:
         workspace: Workspace,
         descriptor: OperationDescriptor,
         parsed_input: dict[str, Any],
+        idempotency_key: str,
     ) -> tuple[int, dict[str, Any], dict[str, Any] | None]:
         if descriptor.operation_id == "search_workspace":
             from plane.agent.tools.workspace_search import WorkspaceSearchService
@@ -770,6 +780,14 @@ class OperationGateway:
             )
         if descriptor.operation_id == "user.me":
             return 200, UserLiteSerializer(request.user).data, None
+        if descriptor.operation_id in {"agent.outcome.submit", "agent.outcome.publish"}:
+            return self._dispatch_agent_outcome(
+                request=request,
+                workspace=workspace,
+                descriptor=descriptor,
+                parsed_input=parsed_input,
+                idempotency_key=idempotency_key,
+            )
 
         handler = get_operation_handler(descriptor.operation_id)
         if handler is not None:
@@ -830,6 +848,102 @@ class OperationGateway:
 
         raise GatewayFailure("UNKNOWN_OPERATION", 404, False)
 
+    def _dispatch_agent_outcome(
+        self,
+        *,
+        request: Any,
+        workspace: Workspace,
+        descriptor: OperationDescriptor,
+        parsed_input: dict[str, Any],
+        idempotency_key: str,
+    ) -> tuple[int, dict[str, Any], dict[str, Any] | None]:
+        """Apply explicit outcome actions through the same live gateway."""
+
+        run_ref = parsed_input["run_ref"]
+        expected_run_ref = getattr(request, "agent_run_ref", None)
+        if run_ref != expected_run_ref:
+            raise GatewayFailure("CALLBACK_BINDING_INVALID", 403, False)
+        if not isinstance(run_ref, str) or not run_ref.startswith("run:"):
+            raise GatewayFailure("VALIDATION_ERROR", 400, False)
+        try:
+            run_id = run_ref.removeprefix("run:")
+            run = (
+                RunAttempt.objects.select_for_update()
+                .select_related("actor", "workspace")
+                .get(pk=run_id, workspace_id=workspace.id)
+            )
+        except (RunAttempt.DoesNotExist, ValueError):
+            raise GatewayFailure("CALLBACK_BINDING_INVALID", 403, False) from None
+        expected_actor_ref = getattr(request, "agent_actor_ref", None)
+        if expected_actor_ref != run.snapshot.get("actorRef"):
+            raise GatewayFailure("CALLBACK_BINDING_INVALID", 403, False)
+        expected_invocation_ref = getattr(request, "agent_invocation_ref", None)
+        if expected_invocation_ref != run.last_invocation_id:
+            raise GatewayFailure("CALLBACK_BINDING_INVALID", 403, False)
+        if run.actor.principal_id != request.user.id:
+            raise GatewayFailure("NOT_AUTHORIZED", 403, False)
+
+        from plane.agent.lifecycle import (
+            AgentDomainError,
+            IdempotencyConflictError,
+            InvalidTransitionError,
+            TerminalEventRequiredError,
+            propose_outcome,
+        )
+
+        try:
+            if descriptor.operation_id == "agent.outcome.submit":
+                lifecycle_key = f"idempotency:gateway-{hashlib.sha256(idempotency_key.encode()).hexdigest()}"
+                outcome = propose_outcome(
+                    run,
+                    summary=parsed_input["summary"],
+                    artifacts=parsed_input.get("artifacts", []),
+                    evidence=parsed_input.get("evidence", []),
+                    idempotency_key=lifecycle_key,
+                    created_by=request.user,
+                )
+                return (
+                    200,
+                    {
+                        "outcome": {
+                            "outcomeRef": f"outcome-submission:{outcome.id}",
+                            "state": outcome.state,
+                            "summary": outcome.summary,
+                            "artifacts": outcome.artifacts,
+                            "evidence": outcome.evidence,
+                            "productEventRef": run.terminal_events.get(
+                                invocation__invocation_id=run.last_invocation_id
+                            ).product_event_ref,
+                        }
+                    },
+                    None,
+                )
+
+            outcome_ref = parsed_input["outcome_ref"]
+            if not outcome_ref.startswith("outcome-submission:"):
+                raise GatewayFailure("VALIDATION_ERROR", 400, False)
+            outcome = OutcomeSubmission.objects.select_related("run").get(
+                pk=outcome_ref.removeprefix("outcome-submission:"), run=run
+            )
+            return (
+                200,
+                {
+                    "published": True,
+                    "outcome": {
+                        "outcomeRef": outcome_ref,
+                        "content": parsed_input["content"],
+                        "productEventRef": run.terminal_events.get(
+                            invocation__invocation_id=run.last_invocation_id
+                        ).product_event_ref,
+                    },
+                },
+                None,
+            )
+        except OutcomeSubmission.DoesNotExist:
+            raise GatewayFailure("OPERATION_REJECTED", 404, False) from None
+        except (AgentDomainError, IdempotencyConflictError, InvalidTransitionError, TerminalEventRequiredError) as exc:
+            raise GatewayFailure("PLANE_CONFLICT", 409, False) from exc
+
     def _bound_result(
         self,
         descriptor: OperationDescriptor,
@@ -847,7 +961,12 @@ class OperationGateway:
             bounded = raw_result
         else:
             bounded = json.loads(canonical_json(raw_result))
-        result = json.loads(canonical_json({descriptor.result_key: bounded}))
+        result = (
+            bounded
+            if descriptor.result_key in bounded
+            else {descriptor.result_key: bounded}
+        )
+        result = json.loads(canonical_json(result))
         if len(canonical_json(result).encode("utf-8")) > max_bytes:
             raise GatewayFailure("RESULT_TOO_LARGE", 409, False)
         return result

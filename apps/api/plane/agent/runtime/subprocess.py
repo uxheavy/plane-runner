@@ -18,6 +18,7 @@ import os
 import signal
 import sqlite3
 import subprocess
+import tempfile
 import threading
 import time
 from collections.abc import Mapping, Sequence
@@ -33,6 +34,28 @@ _DEFAULT_MAX_INPUT_BYTES = 256 * 1024
 _DEFAULT_MAX_OUTPUT_BYTES = 512 * 1024
 _DEFAULT_MAX_DIAGNOSTICS_BYTES = 64 * 1024
 _READ_CHUNK_BYTES = 16 * 1024
+_HERMES_RUNTIME_POLICY_FIELDS = frozenset(
+    {
+        "model",
+        "adapter",
+        "isolation",
+        "maxEventPayloadBytes",
+        "maxArtifactBytes",
+        "maxReceiptBytes",
+    }
+)
+_PLANE_ONLY_HERMES_POLICY_FIELDS = frozenset(
+    {"maxCodeModeInputBytes", "maxCodeModeOutputBytes", "maxCodeModeCalls"}
+)
+_HERMES_G1_CONTRACT_DIGESTS = {
+    # Frozen by the exact Hermes 2dd316df69afba586b99acda2f5aeb1529307b63
+    # plane_runtime.g1_contract manifest accepted at this process boundary.
+    "runSnapshot": "e538fe79ede53e6bb2e307600dbefea507e30b996c002c3dab32d543ca0e36a2",
+    "invocationEnvelope": "b7a15d74406f1624cdb7cd95b42edfd1ffee596abe57e4f00ed60e2e23ded995",
+    "runtimeEvent": "fcbf67ce71fa90dd9661a8f2a739b8119c59357c8bf01afabf4fe92a13de9425",
+    "runtimeExit": "055792eb1bf4931dafe19de456b15037522f0b5e8f6a0d2fedfe0e0d1d1d1c05",
+    "runtimeDurableState": "444c944ec8a5054f33c8662470529a1f4565d42ff06138438beceeef7967a0da",
+}
 
 
 def _canonical_object(raw: str, name: str) -> dict[str, Any]:
@@ -61,12 +84,15 @@ def _request_payload(snapshot_json: str, envelope_json: str) -> tuple[bytes, str
         raise RuntimeDispatchError("runtime invocation has no invocationId")
     if envelope.get("runId") != run_id:
         raise RuntimeDispatchError("runtime invocation is not bound to the runtime snapshot")
-    request = json.dumps(
-        {"invocation": envelope, "run": snapshot},
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8") + b"\n"
+    request = (
+        json.dumps(
+            {"invocation": envelope, "run": snapshot},
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        + b"\n"
+    )
     digest = hashlib.sha256(
         b"plane.agent-runtime/subprocess-request/v1\n"
         + snapshot_json.encode("utf-8")
@@ -74,6 +100,44 @@ def _request_payload(snapshot_json: str, envelope_json: str) -> tuple[bytes, str
         + envelope_json.encode("utf-8")
     ).hexdigest()
     return request, run_id, invocation_id, digest
+
+
+def _hermes_request_payload(snapshot_json: str, envelope_json: str) -> tuple[bytes, str, str, str]:
+    """Project Plane's richer immutable snapshot onto exact Hermes G1 wire fields.
+
+    Plane retains Code Mode limits in its authoritative snapshot. Hermes 2dd's
+    strict G1 contract intentionally does not accept those Plane-owned policy
+    fields, so the child receives a deterministic projection and a matching
+    invocation digest. The persisted Plane snapshot and invocation are never
+    modified; host callbacks remain bound to their original durable records.
+    """
+
+    snapshot = _canonical_object(snapshot_json, "runtime snapshot")
+    envelope = _canonical_object(envelope_json, "runtime invocation")
+    policy = snapshot.get("runtimePolicy")
+    if policy is None:
+        return _request_payload(snapshot_json, envelope_json)
+    if not isinstance(policy, dict):
+        raise RuntimeDispatchError("runtime snapshot has no runtime policy")
+    extras = set(policy).difference(_HERMES_RUNTIME_POLICY_FIELDS)
+    if extras != _PLANE_ONLY_HERMES_POLICY_FIELDS:
+        if extras:
+            raise RuntimeDispatchError("runtime snapshot has unprojectable Hermes policy fields")
+        return _request_payload(snapshot_json, envelope_json)
+    projected = dict(snapshot)
+    projected_policy = {key: policy[key] for key in _HERMES_RUNTIME_POLICY_FIELDS}
+    projected["runtimePolicy"] = projected_policy
+    projected["contractDigests"] = dict(_HERMES_G1_CONTRACT_DIGESTS)
+    projected.pop("contentDigest", None)
+    projected["contentDigest"] = "snapshot:" + hashlib.sha256(
+        json.dumps(projected, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    projected_envelope = dict(envelope)
+    projected_envelope["runSnapshotDigest"] = projected["contentDigest"]
+    return _request_payload(
+        json.dumps(projected, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+        json.dumps(projected_envelope, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+    )
 
 
 def _encode_frames(frames: Sequence[str]) -> str:
@@ -265,10 +329,11 @@ class SubprocessRuntimeTransport(RuntimeTransport):
         except (OSError, ValueError):
             overflow.set()
 
-    def _run_process(self, payload: bytes) -> tuple[str, ...]:
+    def _run_process(self, payload: bytes, *, command: Sequence[str] | None = None) -> tuple[str, ...]:
+        process_command = tuple(command or self._command)
         try:
             process = subprocess.Popen(
-                self._command,
+                process_command,
                 cwd=self._cwd,
                 env=self._environment,
                 shell=False,
@@ -376,4 +441,72 @@ class SubprocessRuntimeTransport(RuntimeTransport):
         return frames
 
 
-__all__ = ["SubprocessRuntimeTransport"]
+class HostBoundSubprocessRuntimeTransport(SubprocessRuntimeTransport):
+    """Run Hermes with one trusted Plane host socket for the invocation."""
+
+    def __init__(self, *, gateway: Any, host_timeout_seconds: float = 5.0, **kwargs: Any) -> None:
+        if gateway is None:
+            raise ValueError("gateway is required")
+        if host_timeout_seconds <= 0:
+            raise ValueError("host_timeout_seconds must be positive")
+        super().__init__(**kwargs)
+        self._gateway = gateway
+        self._host_timeout_seconds = float(host_timeout_seconds)
+
+    def dispatch(self, snapshot_json: str, envelope_json: str) -> tuple[str, ...]:
+        payload, run_id, invocation_id, request_digest = _hermes_request_payload(snapshot_json, envelope_json)
+        if len(payload) > self._max_input_bytes:
+            raise RuntimeDispatchError("runtime request exceeds the process input bound")
+        replay = self._ledger.claim(run_id=run_id, invocation_id=invocation_id, request_digest=request_digest)
+        if replay is not None:
+            return replay
+
+        from plane.agent.runtime.host_rpc import PlaneHostServer, build_gateway_host_port
+        from plane.db.models import RuntimeInvocation
+
+        temp_dir: str | None = None
+        server: PlaneHostServer | None = None
+        try:
+            try:
+                invocation = RuntimeInvocation.objects.get(invocation_id=invocation_id)
+            except RuntimeInvocation.DoesNotExist as exc:
+                raise RuntimeDispatchError("runtime invocation is unavailable for host binding") from exc
+            host_port = build_gateway_host_port(invocation=invocation, gateway=self._gateway)
+            temp_dir = tempfile.mkdtemp(prefix="plane-host-")
+            socket_path = Path(temp_dir) / "host.sock"
+            if len(os.fsencode(str(socket_path))) >= 104:
+                raise RuntimeDispatchError("host socket path exceeds the local Unix socket bound")
+            server = PlaneHostServer(
+                socket_path=socket_path,
+                invoke=host_port.invoke,
+                timeout_seconds=self._host_timeout_seconds,
+            )
+            server.start()
+            command = (*self._command, "--plane-host-socket", str(socket_path))
+            frames = self._run_process(payload, command=command)
+        except Exception:
+            try:
+                self._ledger.mark_unknown(invocation_id=invocation_id)
+            except RuntimeDispatchError as ledger_error:
+                raise ledger_error
+            raise
+        finally:
+            if server is not None:
+                server.close()
+            if temp_dir is not None:
+                try:
+                    os.rmdir(temp_dir)
+                except OSError:
+                    pass
+        try:
+            self._ledger.complete(invocation_id=invocation_id, frames=frames)
+        except Exception:
+            try:
+                self._ledger.mark_unknown(invocation_id=invocation_id)
+            except RuntimeDispatchError as ledger_error:
+                raise ledger_error
+            raise
+        return frames
+
+
+__all__ = ["HostBoundSubprocessRuntimeTransport", "SubprocessRuntimeTransport"]

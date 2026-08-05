@@ -317,6 +317,39 @@ _CODE_MODE_SPILL_RESULT = {
     "required": ["spill"],
     "properties": {"spill": {"type": "object"}},
 }
+_AGENT_OUTCOME_SUBMIT_INPUT = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["run_ref", "summary"],
+    "properties": {
+        "run_ref": {"type": "string", "pattern": "^run:"},
+        "summary": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "artifacts": {"type": "array", "maxItems": 64, "items": {}},
+        "evidence": {"type": "array", "maxItems": 64, "items": {}},
+    },
+}
+_AGENT_OUTCOME_SUBMIT_RESULT = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["outcome"],
+    "properties": {"outcome": {"type": "object"}},
+}
+_AGENT_OUTCOME_PUBLISH_INPUT = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["run_ref", "outcome_ref", "content"],
+    "properties": {
+        "run_ref": {"type": "string", "pattern": "^run:"},
+        "outcome_ref": {"type": "string", "pattern": "^outcome-submission:"},
+        "content": {"type": "string", "minLength": 1, "maxLength": 4096},
+    },
+}
+_AGENT_OUTCOME_PUBLISH_RESULT = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["published", "outcome"],
+    "properties": {"published": {"type": "boolean"}, "outcome": {"type": "object"}},
+}
 
 
 OPERATION_CATALOG.update(
@@ -392,6 +425,36 @@ OPERATION_CATALOG.update(
             input_schema=_CODE_MODE_SPILL_INPUT,
             result_schema=_CODE_MODE_SPILL_RESULT,
             tags=("code-mode", "spill", "read"),
+            authorization_scope="workspace",
+        ),
+        "agent.outcome.submit": OperationDescriptor(
+            operation_id="agent.outcome.submit",
+            schema_version=SCHEMA_VERSION,
+            kind="mutation",
+            summary="Submit one explicit Plane Agent outcome with artifacts and evidence.",
+            required_input=("run_ref", "summary"),
+            max_result_bytes=8 * 1024,
+            handler="agent_outcome_submit",
+            name="submit_agent_outcome",
+            result_key="outcome",
+            input_schema=_AGENT_OUTCOME_SUBMIT_INPUT,
+            result_schema=_AGENT_OUTCOME_SUBMIT_RESULT,
+            tags=("agent", "outcome", "publication", "mutation"),
+            authorization_scope="workspace",
+        ),
+        "agent.outcome.publish": OperationDescriptor(
+            operation_id="agent.outcome.publish",
+            schema_version=SCHEMA_VERSION,
+            kind="mutation",
+            summary="Explicitly publish an already submitted Plane Agent outcome.",
+            required_input=("run_ref", "outcome_ref", "content"),
+            max_result_bytes=8 * 1024,
+            handler="agent_outcome_publish",
+            name="publish_agent_outcome",
+            result_key="outcome",
+            input_schema=_AGENT_OUTCOME_PUBLISH_INPUT,
+            result_schema=_AGENT_OUTCOME_PUBLISH_RESULT,
+            tags=("agent", "outcome", "publication", "mutation"),
             authorization_scope="workspace",
         ),
     }
@@ -931,11 +994,31 @@ def operation_catalog_snapshot() -> dict[str, Any]:
     return {"catalogDigest": CATALOG_DIGEST, **_catalog_payload()}
 
 
-def catalog_search(query: str = "", *, limit: int = 20, cursor: str | None = None) -> dict[str, Any]:
-    if not isinstance(query, str) or not isinstance(limit, int) or isinstance(limit, bool):
+_CATALOG_SEARCH_PRIORITY = (
+    "user.me",
+    "search_workspace",
+    "work_item.read",
+    "work_item.rename",
+    "catalog.search",
+    "catalog.describe",
+    "code_mode.spill",
+)
+_CATALOG_SEARCH_FIELDS = ("operationId", "operationRef", "name", "kind", "family", "tags", "universal")
+
+
+def _catalog_search_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    return {field: entry[field] for field in _CATALOG_SEARCH_FIELDS if field in entry}
+
+
+def catalog_search(query: str = "", *, limit: int | None = None, cursor: str | None = None) -> dict[str, Any]:
+    if not isinstance(query, str) or (
+        limit is not None and (not isinstance(limit, int) or isinstance(limit, bool))
+    ):
         raise ValueError("catalog search input is invalid")
-    if not 1 <= limit <= 50:
+    if limit is not None and not 1 <= limit <= 50:
         raise ValueError("catalog search limit is invalid")
+    if limit is None and cursor is not None:
+        raise ValueError("catalog search cursor is invalid")
     offset = 0
     if cursor is not None:
         if not isinstance(cursor, str) or not cursor.startswith("cursor:"):
@@ -950,6 +1033,14 @@ def catalog_search(query: str = "", *, limit: int = 20, cursor: str | None = Non
     entries = [
         entry for entry in _catalog_payload()["operations"] if not needle or needle in canonical_json(entry).casefold()
     ]
+    if not needle:
+        by_id = {entry["operationId"]: entry for entry in entries}
+        entries = [by_id[operation_id] for operation_id in _CATALOG_SEARCH_PRIORITY if operation_id in by_id] + [
+            entry for entry in entries if entry["operationId"] not in _CATALOG_SEARCH_PRIORITY
+        ]
+    entries = [_catalog_search_entry(entry) for entry in entries]
+    if limit is None:
+        return {"operations": entries, "nextCursor": None}
     page = entries[offset : offset + limit]
     next_cursor = f"cursor:{offset + limit}" if offset + limit < len(entries) else None
     return {"operations": page, "nextCursor": next_cursor}
