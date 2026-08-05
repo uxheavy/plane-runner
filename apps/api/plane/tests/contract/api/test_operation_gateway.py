@@ -1361,6 +1361,12 @@ def test_audit_schema_owner_topology_is_catalog_bound_and_rejects_owner_changes(
     unrelated_no_login = f"gateway_schema_nologin_{uuid.uuid4().hex[:10]}"
     governance_role = settings.PLANE_AUDIT_GOVERNANCE_ROLE
     migration_role = settings.PLANE_AUDIT_MIGRATION_ROLE
+    configured_runtime_role = settings.PLANE_AUDIT_RUNTIME_ROLE
+    default_privileges = {
+        "TABLES": "SELECT, INSERT, UPDATE, DELETE",
+        "SEQUENCES": "USAGE, SELECT, UPDATE",
+        "FUNCTIONS": "EXECUTE",
+    }
     original_schema_owner = None
     with connection.cursor() as cursor:
         cursor.execute(
@@ -1372,7 +1378,7 @@ def test_audit_schema_owner_topology_is_catalog_bound_and_rejects_owner_changes(
             "WHERE schema_info.nspname = current_schema() "
             "AND database_info.datname = current_database()"
         )
-        original_schema_owner, database_owner = cursor.fetchone()
+        original_schema_owner, original_database_owner = cursor.fetchone()
         cursor.execute(f"CREATE ROLE \"{runtime_role}\" LOGIN NOINHERIT PASSWORD 'probe'")
         cursor.execute(f"CREATE ROLE \"{unrelated_login}\" LOGIN NOINHERIT PASSWORD 'probe'")
         cursor.execute(f'CREATE ROLE "{unrelated_no_login}" NOLOGIN NOINHERIT')
@@ -1384,9 +1390,26 @@ def test_audit_schema_owner_topology_is_catalog_bound_and_rejects_owner_changes(
             PLANE_AUDIT_MIGRATION_ROLE=migration_role,
         ):
             call_command("bootstrap_operation_gateway_audit")
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT database_owner_role FROM plane_operation_gateway_authority_marker WHERE marker_id = TRUE"
+                )
+                marker_database_owner = cursor.fetchone()[0]
+                cursor.execute(f'GRANT USAGE ON SCHEMA public TO "{runtime_role}"')
+                cursor.execute(f'GRANT SELECT, INSERT ON TABLE operation_gateway_audit TO "{runtime_role}"')
+                for object_type, privileges in default_privileges.items():
+                    cursor.execute(
+                        f'ALTER DEFAULT PRIVILEGES FOR ROLE "{migration_role}" IN SCHEMA public '
+                        f'REVOKE ALL ON {object_type} FROM "{configured_runtime_role}", "{runtime_role}"'
+                    )
+                    cursor.execute(
+                        f'ALTER DEFAULT PRIVILEGES FOR ROLE "{migration_role}" IN SCHEMA public '
+                        f'GRANT {privileges} ON {object_type} TO "{runtime_role}"'
+                    )
+            assert marker_database_owner == original_database_owner
             approved_owner_roles = {
                 "pg_database_owner",
-                database_owner,
+                marker_database_owner,
                 migration_role,
                 governance_role,
             }
@@ -1412,10 +1435,24 @@ def test_audit_schema_owner_topology_is_catalog_bound_and_rejects_owner_changes(
                     cursor.execute("RESET ROLE")
 
             with connection.cursor() as cursor:
+                cursor.execute(f'ALTER SCHEMA public OWNER TO "{original_schema_owner}"')
+                cursor.execute(f'ALTER DATABASE "{connection.settings_dict["NAME"]}" OWNER TO "{unrelated_no_login}"')
+                cursor.execute(f'ALTER SCHEMA public OWNER TO "{unrelated_no_login}"')
+                cursor.execute(f'SET ROLE "{runtime_role}"')
+            with pytest.raises(AuditRoleBoundaryError, match="authority marker|topology|schema"):
+                verify_audit_role_boundary()
+            with connection.cursor() as cursor:
+                cursor.execute("RESET ROLE")
+                cursor.execute(
+                    f'ALTER DATABASE "{connection.settings_dict["NAME"]}" OWNER TO "{original_database_owner}"'
+                )
+                cursor.execute(f'ALTER SCHEMA public OWNER TO "{original_schema_owner}"')
+
+            with connection.cursor() as cursor:
                 cursor.execute(f'ALTER SCHEMA public OWNER TO "{governance_role}"')
                 cursor.execute(f'GRANT "{governance_role}" TO "{runtime_role}"')
                 cursor.execute(f'SET ROLE "{runtime_role}"')
-            with pytest.raises(AuditRoleBoundaryError, match="protected role|schema owner"):
+            with pytest.raises(AuditRoleBoundaryError, match="protected role|schema owner|schema"):
                 verify_audit_role_boundary()
             with connection.cursor() as cursor:
                 cursor.execute("RESET ROLE")
@@ -1423,8 +1460,24 @@ def test_audit_schema_owner_topology_is_catalog_bound_and_rejects_owner_changes(
     finally:
         with connection.cursor() as cursor:
             cursor.execute("RESET ROLE")
+            if original_database_owner:
+                cursor.execute(
+                    f'ALTER DATABASE "{connection.settings_dict["NAME"]}" OWNER TO "{original_database_owner}"'
+                )
             if original_schema_owner:
                 cursor.execute(f'ALTER SCHEMA public OWNER TO "{original_schema_owner}"')
+            cursor.execute(f'REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM "{runtime_role}"')
+            cursor.execute(f'REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public FROM "{runtime_role}"')
+            cursor.execute(f'REVOKE ALL PRIVILEGES ON SCHEMA public FROM "{runtime_role}"')
+            for object_type, privileges in default_privileges.items():
+                cursor.execute(
+                    f'ALTER DEFAULT PRIVILEGES FOR ROLE "{migration_role}" IN SCHEMA public '
+                    f'REVOKE ALL ON {object_type} FROM "{runtime_role}"'
+                )
+                cursor.execute(
+                    f'ALTER DEFAULT PRIVILEGES FOR ROLE "{migration_role}" IN SCHEMA public '
+                    f'GRANT {privileges} ON {object_type} TO "{configured_runtime_role}"'
+                )
             cursor.execute(f'DROP ROLE IF EXISTS "{runtime_role}"')
             cursor.execute(f'DROP ROLE IF EXISTS "{unrelated_login}"')
             cursor.execute(f'DROP ROLE IF EXISTS "{unrelated_no_login}"')

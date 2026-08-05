@@ -395,10 +395,25 @@ def test_migration_settings_require_exact_configured_migration_role():
 
 @pytest.mark.contract
 def test_runtime_denylist_matches_the_independent_reviewed_libpq_baseline():
-    assert _production_libpq_environment_names() == LIBPQ_CONNECTION_ENVIRONMENT_NAMES_V1
+    production_names = _production_libpq_environment_names()
+    assert not LIBPQ_CONNECTION_ENVIRONMENT_NAMES_V1 - production_names
+    assert not production_names - LIBPQ_CONNECTION_ENVIRONMENT_NAMES_V1
     assert {"PGUSER", "PGPASSWORD", "PGHOST"} <= LIBPQ_CONNECTION_ENVIRONMENT_NAMES_V1
+    assert "PGCONNECTTIMEOUT" in LIBPQ_CONNECTION_ENVIRONMENT_NAMES_V1
     assert "PGCHANNELBINDING" in LIBPQ_CONNECTION_ENVIRONMENT_NAMES_V1
     assert "PGCHANNELBIND" in LIBPQ_CONNECTION_ENVIRONMENT_NAMES_V1
+
+
+@pytest.mark.contract
+def test_independent_libpq_inventory_detects_add_and_remove_mutations():
+    def assert_exact(actual):
+        assert not LIBPQ_CONNECTION_ENVIRONMENT_NAMES_V1 - actual
+        assert not actual - LIBPQ_CONNECTION_ENVIRONMENT_NAMES_V1
+
+    with pytest.raises(AssertionError):
+        assert_exact(LIBPQ_CONNECTION_ENVIRONMENT_NAMES_V1 - {"PGUSER"})
+    with pytest.raises(AssertionError):
+        assert_exact(LIBPQ_CONNECTION_ENVIRONMENT_NAMES_V1 | {"PG_UNREVIEWED_ALIAS"})
 
 
 @pytest.mark.contract

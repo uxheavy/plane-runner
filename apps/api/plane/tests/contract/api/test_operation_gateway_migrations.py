@@ -3,6 +3,7 @@ from datetime import timedelta
 
 import pytest
 from django.conf import settings
+from django.core.management import call_command
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.utils import timezone
@@ -35,26 +36,38 @@ def _audit_kwargs(*, request_id, operation_id, workspace_slug, caller_id, key, c
 
 
 def _safe_catalog_snapshot():
-    """Capture the 0125 audit catalog contract, excluding PUBLIC entries."""
+    """Capture the complete safe 0125 catalog, including PUBLIC entries."""
 
     with connection.cursor() as cursor:
         cursor.execute(
             """
-            SELECT table_owner.rolname, function_owner.rolname,
-                   schema_owner.rolname, audit_function.prosecdef,
-                   audit_function.proconfig
-            FROM pg_class AS audit_table
-            JOIN pg_namespace AS audit_schema ON audit_schema.oid = audit_table.relnamespace
-            JOIN pg_roles AS table_owner ON table_owner.oid = audit_table.relowner
-            JOIN pg_proc AS audit_function
-              ON audit_function.oid = to_regprocedure('operation_gateway_audit_append_only()')
-            JOIN pg_roles AS function_owner ON function_owner.oid = audit_function.proowner
-            JOIN pg_roles AS schema_owner ON schema_owner.oid = audit_schema.nspowner
-            WHERE audit_schema.nspname = current_schema()
-              AND audit_table.relname = 'operation_gateway_audit'
+            SELECT object_kind, object_name, object_owner
+            FROM (
+                SELECT 'table' AS object_kind, object_info.relname AS object_name,
+                       object_owner.rolname AS object_owner
+                FROM pg_class AS object_info
+                JOIN pg_namespace AS object_schema ON object_schema.oid = object_info.relnamespace
+                JOIN pg_roles AS object_owner ON object_owner.oid = object_info.relowner
+                WHERE object_schema.nspname = current_schema()
+                  AND object_info.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
+                UNION ALL
+                SELECT 'function', object_info.proname || '(' ||
+                       pg_get_function_identity_arguments(object_info.oid) || ')',
+                       function_owner.rolname
+                FROM pg_proc AS object_info
+                JOIN pg_namespace AS object_schema ON object_schema.oid = object_info.pronamespace
+                JOIN pg_roles AS function_owner ON function_owner.oid = object_info.proowner
+                WHERE object_schema.nspname = current_schema()
+                UNION ALL
+                SELECT 'schema', current_schema(), schema_owner.rolname
+                FROM pg_namespace AS object_schema
+                JOIN pg_roles AS schema_owner ON schema_owner.oid = object_schema.nspowner
+                WHERE object_schema.nspname = current_schema()
+            ) AS all_owners
+            ORDER BY 1, 2, 3
             """
         )
-        owners = cursor.fetchone()
+        owners = tuple(cursor.fetchall())
 
         def acl(query):
             cursor.execute(query)
@@ -62,44 +75,50 @@ def _safe_catalog_snapshot():
 
         table_acl = acl(
             """
-            SELECT grantor.rolname, grantee.rolname, exploded.privilege_type,
-                   exploded.is_grantable
+            SELECT object_info.relkind, object_info.relname, grantor.rolname,
+                   CASE WHEN exploded.grantee = 0 THEN 'PUBLIC' ELSE grantee.rolname END,
+                   exploded.privilege_type, exploded.is_grantable
             FROM pg_class AS object_info
             JOIN pg_namespace AS object_schema ON object_schema.oid = object_info.relnamespace
             JOIN LATERAL aclexplode(
                 COALESCE(object_info.relacl, acldefault('r', object_info.relowner))
-            ) AS exploded ON exploded.grantee <> 0
+            ) AS exploded ON TRUE
             JOIN pg_roles AS grantor ON grantor.oid = exploded.grantor
-            JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
+            LEFT JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
             WHERE object_schema.nspname = current_schema()
-              AND object_info.relname = 'operation_gateway_audit'
-            ORDER BY 1, 2, 3, 4
+              AND object_info.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
+            ORDER BY 1, 2, 3, 4, 5, 6
             """
         )
         function_acl = acl(
             """
-            SELECT grantor.rolname, grantee.rolname, exploded.privilege_type,
-                   exploded.is_grantable
+            SELECT object_info.proname,
+                   pg_get_function_identity_arguments(object_info.oid),
+                   grantor.rolname,
+                   CASE WHEN exploded.grantee = 0 THEN 'PUBLIC' ELSE grantee.rolname END,
+                   exploded.privilege_type, exploded.is_grantable
             FROM pg_proc AS object_info
             JOIN LATERAL aclexplode(
                 COALESCE(object_info.proacl, acldefault('f', object_info.proowner))
-            ) AS exploded ON exploded.grantee <> 0
+            ) AS exploded ON TRUE
             JOIN pg_roles AS grantor ON grantor.oid = exploded.grantor
-            JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
-            WHERE object_info.oid = to_regprocedure('operation_gateway_audit_append_only()')
-            ORDER BY 1, 2, 3, 4
+            LEFT JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
+            JOIN pg_namespace AS object_schema ON object_schema.oid = object_info.pronamespace
+            WHERE object_schema.nspname = current_schema()
+            ORDER BY 1, 2, 3, 4, 5, 6
             """
         )
         schema_acl = acl(
             """
-            SELECT grantor.rolname, grantee.rolname, exploded.privilege_type,
-                   exploded.is_grantable
+            SELECT grantor.rolname,
+                   CASE WHEN exploded.grantee = 0 THEN 'PUBLIC' ELSE grantee.rolname END,
+                   exploded.privilege_type, exploded.is_grantable
             FROM pg_namespace AS object_info
             JOIN LATERAL aclexplode(
                 COALESCE(object_info.nspacl, acldefault('n', object_info.nspowner))
-            ) AS exploded ON exploded.grantee <> 0
+            ) AS exploded ON TRUE
             JOIN pg_roles AS grantor ON grantor.oid = exploded.grantor
-            JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
+            LEFT JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
             WHERE object_info.nspname = current_schema()
             ORDER BY 1, 2, 3, 4
             """
@@ -107,31 +126,32 @@ def _safe_catalog_snapshot():
         sequence_acl = acl(
             """
             SELECT object_info.relname, object_owner.rolname, grantor.rolname,
-                   grantee.rolname, exploded.privilege_type, exploded.is_grantable
+                   CASE WHEN exploded.grantee = 0 THEN 'PUBLIC' ELSE grantee.rolname END,
+                   exploded.privilege_type, exploded.is_grantable
             FROM pg_class AS object_info
             JOIN pg_namespace AS object_schema ON object_schema.oid = object_info.relnamespace
             JOIN pg_roles AS object_owner ON object_owner.oid = object_info.relowner
             JOIN LATERAL aclexplode(
                 COALESCE(object_info.relacl, acldefault('S', object_info.relowner))
-            ) AS exploded ON exploded.grantee <> 0
+            ) AS exploded ON TRUE
             JOIN pg_roles AS grantor ON grantor.oid = exploded.grantor
-            JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
+            LEFT JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
             WHERE object_schema.nspname = current_schema()
               AND object_info.relkind = 'S'
-              AND object_info.relname LIKE 'operation_gateway_audit%'
             ORDER BY 1, 2, 3, 4, 5, 6
             """
         )
         cursor.execute(
             """
             SELECT default_owner.rolname, defaults.defaclnamespace,
-                   defaults.defaclobjtype, grantor.rolname, grantee.rolname,
+                   defaults.defaclobjtype, grantor.rolname,
+                   CASE WHEN exploded.grantee = 0 THEN 'PUBLIC' ELSE grantee.rolname END,
                    exploded.privilege_type, exploded.is_grantable
             FROM pg_default_acl AS defaults
             JOIN pg_roles AS default_owner ON default_owner.oid = defaults.defaclrole
-            JOIN LATERAL aclexplode(defaults.defaclacl) AS exploded ON exploded.grantee <> 0
+            JOIN LATERAL aclexplode(defaults.defaclacl) AS exploded ON TRUE
             JOIN pg_roles AS grantor ON grantor.oid = exploded.grantor
-            JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
+            LEFT JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
             WHERE defaults.defaclobjtype IN ('r', 'S', 'f')
               AND (
                   defaults.defaclnamespace = 0
@@ -163,12 +183,35 @@ def _safe_catalog_snapshot():
             ],
         )
         role_grants = tuple(cursor.fetchall())
-    return owners, table_acl, function_acl, schema_acl, sequence_acl, default_acl, role_grants
+        cursor.execute(
+            """
+            SELECT 1
+            FROM pg_class AS marker
+            JOIN pg_namespace AS marker_schema ON marker_schema.oid = marker.relnamespace
+            WHERE marker_schema.nspname = current_schema()
+              AND marker.relname = 'plane_operation_gateway_authority_marker'
+              AND marker.relkind = 'r'
+            """
+        )
+        if cursor.fetchone() is None:
+            authority_marker = ()
+        else:
+            cursor.execute(
+                """
+                SELECT version, database_owner_oid, database_owner_role,
+                       schema_name, schema_owner_oid, schema_owner_role
+                FROM plane_operation_gateway_authority_marker
+                WHERE marker_id = TRUE
+                """
+            )
+            authority_marker = tuple(cursor.fetchone() or ())
+    return owners, table_acl, function_acl, schema_acl, sequence_acl, default_acl, role_grants, authority_marker
 
 
 @pytest.mark.contract
 @pytest.mark.django_db(transaction=True)
 def test_historical_invocation_backfill_is_deterministic_across_directions():
+    call_command("bootstrap_operation_gateway_audit", verbosity=0)
     _, old_apps = _migrate_and_reload(BASE_MIGRATION)
     User = old_apps.get_model("db", "User")
     Workspace = old_apps.get_model("db", "Workspace")
@@ -283,12 +326,52 @@ def test_historical_invocation_backfill_is_deterministic_across_directions():
         state="succeeded",
         attempts=1,
     )
+    with connection.cursor() as cursor:
+        cursor.execute("REVOKE ALL ON SCHEMA public FROM PUBLIC")
+        cursor.execute("REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC")
+        cursor.execute("REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC")
+        cursor.execute("REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC")
+        cursor.execute(
+            f'GRANT USAGE ON SCHEMA public TO "{settings.PLANE_AUDIT_RUNTIME_ROLE}", '
+            f'"{settings.PLANE_AUDIT_GOVERNANCE_ROLE}"'
+        )
+        cursor.execute(f'GRANT SELECT ON TABLE operation_gateway_audit TO "{settings.PLANE_AUDIT_RUNTIME_ROLE}"')
+        cursor.execute(
+            f'GRANT EXECUTE ON FUNCTION operation_gateway_audit_append_only() TO "{settings.PLANE_AUDIT_RUNTIME_ROLE}"'
+        )
+        for object_type in ("TABLES", "SEQUENCES", "FUNCTIONS"):
+            cursor.execute(
+                f'ALTER DEFAULT PRIVILEGES FOR ROLE "{settings.PLANE_AUDIT_MIGRATION_ROLE}" '
+                f"IN SCHEMA public REVOKE ALL ON {object_type} FROM PUBLIC"
+            )
     pre_safe_catalog = _safe_catalog_snapshot()
 
     _, head_apps = _migrate_and_reload(HEAD_MIGRATION)
     NewIdempotency = head_apps.get_model("db", "OperationGatewayIdempotency")
     NewAudit = head_apps.get_model("db", "OperationGatewayAudit")
     NewPublication = head_apps.get_model("db", "OperationGatewayPublication")
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT COALESCE(
+                       array_agg(DISTINCT exploded.privilege_type ORDER BY exploded.privilege_type),
+                       ARRAY[]::text[]
+                   ),
+                   EXISTS (
+                       SELECT 1
+                       FROM aclexplode(
+                           (SELECT relacl FROM pg_class WHERE relname = 'plane_operation_gateway_authority_marker')
+                       ) AS public_acl
+                       WHERE public_acl.grantee = 0
+                   )
+            FROM pg_class AS marker
+            JOIN LATERAL aclexplode(marker.relacl) AS exploded ON TRUE
+            WHERE marker.relname = 'plane_operation_gateway_authority_marker'
+              AND exploded.grantee = (SELECT oid FROM pg_roles WHERE rolname = %s)
+            """,
+            [settings.PLANE_AUDIT_RUNTIME_ROLE],
+        )
+        assert cursor.fetchone() == (["SELECT"], False)
     first_ids = dict(NewIdempotency.objects.values_list("id", "invocation_id"))
     assert len(first_ids) == len(set(first_ids.values())) == len(records)
 
@@ -426,6 +509,52 @@ def test_historical_invocation_backfill_is_deterministic_across_directions():
     assert public_acl is False
     assert public_can_create is False
     assert public_can_use is False
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT count(*)
+            FROM (
+                SELECT exploded.privilege_type
+                FROM pg_namespace AS object_info
+                JOIN LATERAL aclexplode(
+                    COALESCE(object_info.nspacl, acldefault('n'::\"char\", object_info.nspowner))
+                ) AS exploded ON exploded.grantee = 0
+                WHERE object_info.nspname = current_schema()
+                UNION ALL
+                SELECT exploded.privilege_type
+                FROM pg_class AS object_info
+                JOIN pg_namespace AS object_schema ON object_schema.oid = object_info.relnamespace
+                JOIN LATERAL aclexplode(
+                    COALESCE(
+                        object_info.relacl,
+                        acldefault(
+                            CASE WHEN object_info.relkind = 'S' THEN 'S'::\"char\" ELSE 'r'::\"char\" END,
+                            object_info.relowner
+                        )
+                    )
+                ) AS exploded ON exploded.grantee = 0
+                WHERE object_schema.nspname = current_schema()
+                  AND object_info.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
+                UNION ALL
+                SELECT exploded.privilege_type
+                FROM pg_proc AS object_info
+                JOIN pg_namespace AS object_schema ON object_schema.oid = object_info.pronamespace
+                JOIN LATERAL aclexplode(
+                    COALESCE(object_info.proacl, acldefault('f'::\"char\", object_info.proowner))
+                ) AS exploded ON exploded.grantee = 0
+                WHERE object_schema.nspname = current_schema()
+                UNION ALL
+                SELECT exploded.privilege_type
+                FROM pg_default_acl AS defaults
+                JOIN LATERAL aclexplode(defaults.defaclacl) AS exploded ON exploded.grantee = 0
+                WHERE defaults.defaclnamespace = (
+                    SELECT oid FROM pg_namespace WHERE nspname = current_schema()
+                )
+                  AND defaults.defaclobjtype IN ('r', 'S', 'f')
+            ) AS public_privileges
+            """
+        )
+        assert cursor.fetchone()[0] == 0
     _, roundtrip_apps = _migrate_and_reload(HEAD_MIGRATION)
     RoundtripPublication = roundtrip_apps.get_model("db", "OperationGatewayPublication")
     assert publication_snapshot(RoundtripPublication, roundtrip_record.pk) == before_roundtrip

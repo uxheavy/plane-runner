@@ -13,6 +13,7 @@ LIBPQ_CONNECTION_ENVIRONMENT_NAMES_V1 = frozenset(
         # Retained as a denied legacy spelling for compatibility hardening.
         "PGCHANNELBIND",
         "PGCLIENTENCODING",
+        "PGCONNECTTIMEOUT",
         "PGCONNECT_TIMEOUT",
         "PGDATABASE",
         "PGDATESTYLE",

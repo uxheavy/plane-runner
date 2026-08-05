@@ -20,6 +20,8 @@ CREATE TRIGGER operation_gateway_audit_append_only_trigger
 BEFORE UPDATE OR DELETE ON operation_gateway_audit
 FOR EACH ROW
 EXECUTE FUNCTION operation_gateway_audit_append_only();
+
+REVOKE ALL ON FUNCTION operation_gateway_audit_append_only() FROM PUBLIC;
 """
 
 DROP_AUDIT_TRIGGER = """

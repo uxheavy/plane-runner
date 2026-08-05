@@ -1,6 +1,7 @@
 """Close durable publication, effect-idempotency, trigger, and role gaps."""
 
 import copy
+import json
 import re
 import uuid
 from datetime import datetime, timezone
@@ -12,6 +13,8 @@ from django.db import migrations, models
 ROLE_NAME = re.compile(r"^[a-z_][a-z0-9_$]{0,62}$")
 PUBLICATION_NAMESPACE = uuid.UUID("8a1b4fd8-49a5-54ad-a49e-7f2e0c1a3f1c")
 REVERSE_MARKER = "__plane_0126_reverse__"
+CATALOG_SNAPSHOT_TABLE = "plane_0126_audit_catalog_snapshot"
+CATALOG_SNAPSHOT_VERSION = 1
 
 CREATE_APPEND_ONLY_TRIGGERS = """
 DROP TRIGGER IF EXISTS operation_gateway_audit_append_only_trigger ON operation_gateway_audit;
@@ -341,6 +344,409 @@ def _restore_publication_timestamps(schema_editor, publication_id, created_at, u
             raise RuntimeError(f"Publication {publication_id} was not restored")
 
 
+def _acl_entry(grantor, grantee, privilege, is_grantable):
+    return {
+        "grantor": grantor,
+        "grantee": "PUBLIC" if grantee is None else grantee,
+        "privilege": privilege,
+        "is_grantable": bool(is_grantable),
+    }
+
+
+def _capture_audit_catalog_snapshot(connection, *, runtime_role, governance_role, migration_role):
+    """Capture the effective 0125 catalog before 0126 mutates any ACL.
+
+    PostgreSQL exposes ACLs as catalog arrays, but replaying those arrays is a
+    privileged catalog write. Store the effective grant rows instead and
+    restore them through ordinary GRANT/REVOKE statements during reverse.
+    The snapshot is durable in a migration-owned table, so a later Django
+    process can reverse the migration without relying on test state.
+    """
+
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT current_schema()")
+        schema_name = cursor.fetchone()[0]
+        schema_ident = connection.ops.quote_name(schema_name)
+
+        cursor.execute(
+            """
+            SELECT schema_owner.rolname
+            FROM pg_namespace AS audit_schema
+            JOIN pg_roles AS schema_owner ON schema_owner.oid = audit_schema.nspowner
+            WHERE audit_schema.nspname = current_schema()
+            """
+        )
+        schema_owner = cursor.fetchone()[0]
+        snapshot = {
+            "version": CATALOG_SNAPSHOT_VERSION,
+            "schema": {"name": schema_name, "owner": schema_owner, "acl": []},
+            "objects": [],
+            "default_privileges": [],
+            "memberships": [],
+        }
+
+        cursor.execute(
+            """
+            SELECT grantor.rolname,
+                   CASE WHEN exploded.grantee = 0 THEN NULL ELSE grantee.rolname END,
+                   exploded.privilege_type, exploded.is_grantable
+            FROM pg_namespace AS audit_schema
+            JOIN LATERAL aclexplode(
+                COALESCE(audit_schema.nspacl, acldefault('n'::\"char\", audit_schema.nspowner))
+            ) AS exploded ON TRUE
+            JOIN pg_roles AS grantor ON grantor.oid = exploded.grantor
+            LEFT JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
+            WHERE audit_schema.nspname = current_schema()
+            ORDER BY 1, 2, 3, 4
+            """
+        )
+        snapshot["schema"]["acl"] = [
+            _acl_entry(grantor, grantee, privilege, is_grantable)
+            for grantor, grantee, privilege, is_grantable in cursor.fetchall()
+        ]
+
+        objects = {}
+        cursor.execute(
+            """
+            SELECT object_info.relkind, object_info.relname, object_owner.rolname,
+                   grantor.rolname,
+                   CASE WHEN exploded.grantee = 0 THEN NULL ELSE grantee.rolname END,
+                   exploded.privilege_type, exploded.is_grantable
+            FROM pg_class AS object_info
+            JOIN pg_namespace AS object_schema ON object_schema.oid = object_info.relnamespace
+            JOIN pg_roles AS object_owner ON object_owner.oid = object_info.relowner
+            JOIN LATERAL aclexplode(
+                COALESCE(
+                    object_info.relacl,
+                    acldefault(
+                        CASE WHEN object_info.relkind = 'S' THEN 'S'::\"char\" ELSE 'r'::\"char\" END,
+                        object_info.relowner
+                    )
+                )
+            ) AS exploded ON TRUE
+            JOIN pg_roles AS grantor ON grantor.oid = exploded.grantor
+            LEFT JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
+            WHERE object_schema.nspname = current_schema()
+              AND object_info.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
+            ORDER BY 1, 2, 4, 5, 6, 7
+            """
+        )
+        for relkind, name, owner, grantor, grantee, privilege, is_grantable in cursor.fetchall():
+            kind = "sequence" if relkind == "S" else "table"
+            key = (kind, name)
+            objects.setdefault(key, {"kind": kind, "name": name, "owner": owner, "acl": []})["acl"].append(
+                _acl_entry(grantor, grantee, privilege, is_grantable)
+            )
+
+        cursor.execute(
+            """
+            SELECT object_info.proname, pg_get_function_identity_arguments(object_info.oid),
+                   function_owner.rolname, object_info.prosecdef, object_info.proconfig,
+                   grantor.rolname,
+                   CASE WHEN exploded.grantee = 0 THEN NULL ELSE grantee.rolname END,
+                   exploded.privilege_type, exploded.is_grantable
+            FROM pg_proc AS object_info
+            JOIN pg_namespace AS object_schema ON object_schema.oid = object_info.pronamespace
+            JOIN pg_roles AS function_owner ON function_owner.oid = object_info.proowner
+            JOIN LATERAL aclexplode(
+                COALESCE(object_info.proacl, acldefault('f'::\"char\", object_info.proowner))
+            ) AS exploded ON TRUE
+            JOIN pg_roles AS grantor ON grantor.oid = exploded.grantor
+            LEFT JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
+            WHERE object_schema.nspname = current_schema()
+            ORDER BY 1, 2, 6, 7, 8, 9
+            """
+        )
+        for (
+            name,
+            identity_arguments,
+            owner,
+            security_definer,
+            config,
+            grantor,
+            grantee,
+            privilege,
+            is_grantable,
+        ) in cursor.fetchall():
+            key = ("function", name, identity_arguments)
+            objects.setdefault(
+                key,
+                {
+                    "kind": "function",
+                    "name": name,
+                    "identity_arguments": identity_arguments,
+                    "owner": owner,
+                    "security_definer": bool(security_definer),
+                    "config": list(config) if config is not None else None,
+                    "acl": [],
+                },
+            )["acl"].append(_acl_entry(grantor, grantee, privilege, is_grantable))
+
+        cursor.execute(
+            """
+            SELECT default_owner.rolname, defaults.defaclobjtype,
+                   grantor.rolname,
+                   CASE WHEN exploded.grantee = 0 THEN NULL ELSE grantee.rolname END,
+                   exploded.privilege_type, exploded.is_grantable
+            FROM pg_default_acl AS defaults
+            JOIN pg_roles AS default_owner ON default_owner.oid = defaults.defaclrole
+            JOIN LATERAL aclexplode(defaults.defaclacl) AS exploded ON TRUE
+            JOIN pg_roles AS grantor ON grantor.oid = exploded.grantor
+            LEFT JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
+            WHERE defaults.defaclnamespace = (
+                SELECT oid FROM pg_namespace WHERE nspname = current_schema()
+            )
+              AND defaults.defaclobjtype IN ('r', 'S', 'f')
+            ORDER BY 1, 2, 3, 4, 5, 6
+            """
+        )
+        defaults = {}
+        for default_owner, object_type, grantor, grantee, privilege, is_grantable in cursor.fetchall():
+            key = (default_owner, object_type)
+            defaults.setdefault(
+                key,
+                {"owner": default_owner, "object_type": object_type, "acl": []},
+            )["acl"].append(_acl_entry(grantor, grantee, privilege, is_grantable))
+        snapshot["default_privileges"] = list(defaults.values())
+
+        role_names = (runtime_role, migration_role, governance_role)
+        cursor.execute(
+            """
+            SELECT role_name.rolname, member_name.rolname, memberships.admin_option
+            FROM pg_auth_members AS memberships
+            JOIN pg_roles AS role_name ON role_name.oid = memberships.roleid
+            JOIN pg_roles AS member_name ON member_name.oid = memberships.member
+            WHERE role_name.rolname IN (%s, %s, %s)
+               OR member_name.rolname IN (%s, %s, %s)
+            ORDER BY 1, 2
+            """,
+            [*role_names, *role_names],
+        )
+        snapshot["memberships"] = [
+            {"role": role, "member": member, "admin_option": bool(admin_option)}
+            for role, member, admin_option in cursor.fetchall()
+        ]
+
+        snapshot["objects"] = list(objects.values())
+        snapshot_ident = connection.ops.quote_name(CATALOG_SNAPSHOT_TABLE)
+        cursor.execute(
+            f"""
+            CREATE TABLE {schema_ident}.{snapshot_ident} (
+                snapshot jsonb NOT NULL,
+                CHECK (jsonb_typeof(snapshot) = 'object')
+            )
+            """
+        )
+        cursor.execute(
+            f"INSERT INTO {schema_ident}.{snapshot_ident} (snapshot) VALUES (%s::jsonb)",
+            [json.dumps(snapshot, sort_keys=True)],
+        )
+
+
+def capture_audit_catalog_snapshot(apps, schema_editor):
+    connection = schema_editor.connection
+    _capture_audit_catalog_snapshot(
+        connection,
+        runtime_role=settings.PLANE_AUDIT_RUNTIME_ROLE,
+        governance_role=settings.PLANE_AUDIT_GOVERNANCE_ROLE,
+        migration_role=settings.PLANE_AUDIT_MIGRATION_ROLE,
+    )
+
+
+def _snapshot_object_sql(connection, schema_name, object_info):
+    schema_ident = connection.ops.quote_name(schema_name)
+    name_ident = connection.ops.quote_name(object_info["name"])
+    qualified = f"{schema_ident}.{name_ident}"
+    if object_info["kind"] == "function":
+        return f"{qualified}({object_info['identity_arguments']})"
+    return qualified
+
+
+def _sql_grantee(connection, grantee):
+    return "PUBLIC" if grantee == "PUBLIC" else connection.ops.quote_name(grantee)
+
+
+def _restore_acl_entries(cursor, connection, target_type, target_sql, entries, known_grantees):
+    # PUBLIC is never restored by a downgrade. The 0125 predecessor contract
+    # is deliberately safe for every protected object kind, even when an
+    # older database carried PostgreSQL's broad default ACLs.
+    entries = [entry for entry in entries if entry["grantee"] != "PUBLIC"]
+    grantees = set(known_grantees)
+    grantees.update(entry["grantee"] for entry in entries)
+    for grantee in sorted(grantees):
+        cursor.execute(f"REVOKE ALL PRIVILEGES ON {target_type} {target_sql} FROM {_sql_grantee(connection, grantee)}")
+    grouped = {}
+    for entry in entries:
+        grouped.setdefault((entry["grantee"], entry["is_grantable"]), set()).add(entry["privilege"])
+    for (grantee, is_grantable), privileges in sorted(grouped.items()):
+        grant_option = " WITH GRANT OPTION" if is_grantable else ""
+        cursor.execute(
+            f"GRANT {', '.join(sorted(privileges))} ON {target_type} {target_sql} "
+            f"TO {_sql_grantee(connection, grantee)}{grant_option}"
+        )
+
+
+def _restore_default_privileges(cursor, connection, schema_name, snapshot, migration_role, runtime_role):
+    object_types = {"r": "TABLES", "S": "SEQUENCES", "f": "FUNCTIONS"}
+    defaults = {
+        default_acl["object_type"]: default_acl
+        for default_acl in snapshot["default_privileges"]
+        if default_acl["owner"] == migration_role
+    }
+    schema_ident = connection.ops.quote_name(schema_name)
+    owner_ident = connection.ops.quote_name(migration_role)
+    for object_type, sql_object_type in object_types.items():
+        entries = [entry for entry in defaults.get(object_type, {}).get("acl", []) if entry["grantee"] != "PUBLIC"]
+        grantees = {"PUBLIC", runtime_role}
+        grantees.update(entry["grantee"] for entry in entries)
+        for grantee in sorted(grantees):
+            cursor.execute(
+                f"ALTER DEFAULT PRIVILEGES FOR ROLE {owner_ident} IN SCHEMA {schema_ident} "
+                f"REVOKE ALL ON {sql_object_type} FROM {_sql_grantee(connection, grantee)}"
+            )
+        grouped = {}
+        for entry in entries:
+            grouped.setdefault((entry["grantee"], entry["is_grantable"]), set()).add(entry["privilege"])
+        for (grantee, is_grantable), privileges in sorted(grouped.items()):
+            grant_option = " WITH GRANT OPTION" if is_grantable else ""
+            cursor.execute(
+                f"ALTER DEFAULT PRIVILEGES FOR ROLE {owner_ident} IN SCHEMA {schema_ident} "
+                f"GRANT {', '.join(sorted(privileges))} ON {sql_object_type} "
+                f"TO {_sql_grantee(connection, grantee)}{grant_option}"
+            )
+
+
+def _restore_function_configuration(cursor, connection, schema_name, object_info):
+    function_sql = _snapshot_object_sql(connection, schema_name, object_info)
+    security = "SECURITY DEFINER" if object_info.get("security_definer") else "SECURITY INVOKER"
+    cursor.execute(f"ALTER FUNCTION {function_sql} {security}")
+    cursor.execute(f"ALTER FUNCTION {function_sql} RESET ALL")
+    for config in object_info.get("config") or []:
+        key, separator, value = config.partition("=")
+        if not separator or not re.fullmatch(r"[a-z_][a-z0-9_]*", key):
+            raise RuntimeError("Invalid 0126 function configuration snapshot")
+        cursor.execute("SELECT quote_literal(%s)", [value])
+        quoted_value = cursor.fetchone()[0]
+        cursor.execute(f"ALTER FUNCTION {function_sql} SET {key} = {quoted_value}")
+
+
+def _restore_audit_catalog_snapshot(connection, *, runtime_role, governance_role, migration_role):
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT current_schema()")
+        schema_name = cursor.fetchone()[0]
+        schema_ident = connection.ops.quote_name(schema_name)
+        snapshot_ident = connection.ops.quote_name(CATALOG_SNAPSHOT_TABLE)
+        cursor.execute(f"SELECT snapshot FROM {schema_ident}.{snapshot_ident}")
+        row = cursor.fetchone()
+        snapshot = row[0] if row is not None else None
+        if isinstance(snapshot, str):
+            snapshot = json.loads(snapshot)
+        if not isinstance(snapshot, dict) or snapshot.get("version") != CATALOG_SNAPSHOT_VERSION:
+            raise RuntimeError("Missing or invalid 0126 audit catalog snapshot")
+        if snapshot.get("schema", {}).get("name") != schema_name:
+            raise RuntimeError("0126 audit catalog snapshot belongs to another schema")
+
+        owner_roles = {
+            object_info["owner"]
+            for object_info in snapshot["objects"]
+            if object_info["kind"] in {"table", "function"} and object_info["name"] == "operation_gateway_audit"
+        }
+        owner_roles.update(
+            object_info["owner"]
+            for object_info in snapshot["objects"]
+            if object_info["kind"] == "function" and object_info["name"] == "operation_gateway_audit_append_only"
+        )
+        temporary_owner_memberships = set()
+        for owner_role in sorted(owner_roles - {migration_role}):
+            cursor.execute(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM pg_auth_members AS memberships
+                    JOIN pg_roles AS granted_role ON granted_role.oid = memberships.roleid
+                    JOIN pg_roles AS member_role ON member_role.oid = memberships.member
+                    WHERE granted_role.rolname = %s
+                      AND member_role.rolname = %s
+                )
+                """,
+                [owner_role, migration_role],
+            )
+            if not cursor.fetchone()[0]:
+                temporary_owner_memberships.add(owner_role)
+                cursor.execute(
+                    f"GRANT {connection.ops.quote_name(owner_role)} TO {connection.ops.quote_name(migration_role)}"
+                )
+
+        for object_info in snapshot["objects"]:
+            if object_info["kind"] == "table" and object_info["name"] == "operation_gateway_audit":
+                target_sql = _snapshot_object_sql(connection, schema_name, object_info)
+                cursor.execute(f"ALTER TABLE {target_sql} OWNER TO {connection.ops.quote_name(object_info['owner'])}")
+            elif object_info["kind"] == "function" and object_info["name"] == "operation_gateway_audit_append_only":
+                target_sql = _snapshot_object_sql(connection, schema_name, object_info)
+                cursor.execute(
+                    f"ALTER FUNCTION {target_sql} OWNER TO {connection.ops.quote_name(object_info['owner'])}"
+                )
+                _restore_function_configuration(cursor, connection, schema_name, object_info)
+
+        _restore_acl_entries(
+            cursor,
+            connection,
+            "SCHEMA",
+            schema_ident,
+            snapshot["schema"]["acl"],
+            {"PUBLIC", runtime_role, migration_role, governance_role},
+        )
+        for object_info in snapshot["objects"]:
+            target_type = {
+                "table": "TABLE",
+                "sequence": "SEQUENCE",
+                "function": "FUNCTION",
+            }[object_info["kind"]]
+            _restore_acl_entries(
+                cursor,
+                connection,
+                target_type,
+                _snapshot_object_sql(connection, schema_name, object_info),
+                object_info["acl"],
+                {"PUBLIC", runtime_role, migration_role, governance_role},
+            )
+        _restore_default_privileges(cursor, connection, schema_name, snapshot, migration_role, runtime_role)
+
+        affected_memberships = {
+            (governance_role, migration_role),
+            (governance_role, runtime_role),
+            (migration_role, runtime_role),
+        }
+        for role, member in affected_memberships:
+            cursor.execute(f"REVOKE {connection.ops.quote_name(role)} FROM {connection.ops.quote_name(member)}")
+        for membership in snapshot["memberships"]:
+            role = membership["role"]
+            member = membership["member"]
+            if (role, member) not in affected_memberships:
+                continue
+            admin_option = " WITH ADMIN OPTION" if membership["admin_option"] else ""
+            cursor.execute(
+                f"GRANT {connection.ops.quote_name(role)} TO {connection.ops.quote_name(member)}{admin_option}"
+            )
+
+        for owner_role in sorted(temporary_owner_memberships):
+            cursor.execute(
+                f"REVOKE {connection.ops.quote_name(owner_role)} FROM {connection.ops.quote_name(migration_role)}"
+            )
+
+        cursor.execute(f"DROP TABLE {schema_ident}.{snapshot_ident}")
+
+
+def restore_audit_catalog_snapshot(apps, schema_editor):
+    connection = schema_editor.connection
+    _restore_audit_catalog_snapshot(
+        connection,
+        runtime_role=settings.PLANE_AUDIT_RUNTIME_ROLE,
+        governance_role=settings.PLANE_AUDIT_GOVERNANCE_ROLE,
+        migration_role=settings.PLANE_AUDIT_MIGRATION_ROLE,
+    )
+
+
 def _role_identifier(connection, value: str) -> str:
     if not isinstance(value, str) or not ROLE_NAME.fullmatch(value):
         raise RuntimeError("Operation Gateway audit role names must be simple PostgreSQL identifiers")
@@ -429,6 +835,13 @@ def configure_audit_role_boundary(apps, schema_editor):
                 f"ALTER DEFAULT PRIVILEGES FOR ROLE {migration_ident} IN SCHEMA {schema_ident} "
                 f"REVOKE ALL ON {object_type} FROM PUBLIC"
             )
+
+        snapshot_ident = connection.ops.quote_name(CATALOG_SNAPSHOT_TABLE)
+        cursor.execute(f"REVOKE ALL ON TABLE {snapshot_ident} FROM PUBLIC, {runtime_ident}, {governance_ident}")
+
+        marker_ident = connection.ops.quote_name("plane_operation_gateway_authority_marker")
+        cursor.execute(f"REVOKE ALL ON TABLE {marker_ident} FROM PUBLIC, {runtime_ident}, {governance_ident}")
+        cursor.execute(f"GRANT SELECT ON TABLE {marker_ident} TO {runtime_ident}")
 
         # Audit storage is stricter than the ordinary application schema.
         cursor.execute("REVOKE ALL ON TABLE operation_gateway_audit FROM PUBLIC")
@@ -636,6 +1049,7 @@ class Migration(migrations.Migration):
             name="response_body_sha256",
             field=models.CharField(blank=True, max_length=64, null=True),
         ),
+        migrations.RunPython(capture_audit_catalog_snapshot, restore_audit_catalog_snapshot),
         migrations.RunSQL(
             CREATE_APPEND_ONLY_TRIGGERS,
             DROP_APPEND_ONLY_TRIGGERS + RESTORE_APPEND_ONLY_TRIGGER,

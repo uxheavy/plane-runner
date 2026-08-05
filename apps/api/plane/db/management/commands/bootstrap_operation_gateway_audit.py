@@ -10,6 +10,7 @@ from django.db import connection
 
 
 ROLE_NAME = re.compile(r"^[a-z_][a-z0-9_$]{0,62}$")
+AUTHORITY_MARKER_TABLE = "plane_operation_gateway_authority_marker"
 
 
 class Command(BaseCommand):
@@ -25,9 +26,7 @@ class Command(BaseCommand):
         with connection.cursor() as cursor:
             current_user, can_create_roles = self._current_role(cursor)
             if settings.PLANE_AUDIT_ENFORCE_ROLE_SEPARATION and current_user != migration_role:
-                raise CommandError(
-                    "Audit bootstrap must run with the configured migration database credential"
-                )
+                raise CommandError("Audit bootstrap must run with the configured migration database credential")
 
             self._ensure_role(
                 cursor,
@@ -56,6 +55,12 @@ class Command(BaseCommand):
                     raise CommandError("The governance role must be NOLOGIN NOINHERIT")
                 self._assert_role_safety(cursor, runtime_role, governance_role, migration_role)
 
+            self._ensure_authority_marker(
+                cursor,
+                runtime_role=runtime_role,
+                migration_role=migration_role,
+            )
+
         self.stdout.write(self.style.SUCCESS("Operation Gateway audit roles are provisioned and separated"))
 
     @staticmethod
@@ -64,9 +69,7 @@ class Command(BaseCommand):
 
     @staticmethod
     def _current_role(cursor):
-        cursor.execute(
-            "SELECT current_user, rolsuper OR rolcreaterole FROM pg_roles WHERE rolname = current_user"
-        )
+        cursor.execute("SELECT current_user, rolsuper OR rolcreaterole FROM pg_roles WHERE rolname = current_user")
         row = cursor.fetchone()
         if row is None:
             raise CommandError("The current PostgreSQL role does not exist")
@@ -103,6 +106,82 @@ class Command(BaseCommand):
                 raise CommandError("The Operation Gateway runtime role has governance powers")
             if not row[4] or row[5]:
                 raise CommandError("The Operation Gateway runtime role must be LOGIN NOINHERIT")
+
+    def _ensure_authority_marker(self, cursor, *, runtime_role, migration_role):
+        cursor.execute(
+            """
+            SELECT database_info.datdba, database_owner.rolname,
+                   schema_owner.oid, schema_owner.rolname, current_schema()
+            FROM pg_database AS database_info
+            JOIN pg_roles AS database_owner ON database_owner.oid = database_info.datdba
+            JOIN pg_namespace AS schema_info ON schema_info.nspname = current_schema()
+            JOIN pg_roles AS schema_owner ON schema_owner.oid = schema_info.nspowner
+            WHERE database_info.datname = current_database()
+            """
+        )
+        database_owner_oid, database_owner_role, schema_owner_oid, schema_owner_role, schema_name = cursor.fetchone()
+        marker_ident = self._quote(AUTHORITY_MARKER_TABLE)
+        cursor.execute(
+            """
+            SELECT marker_owner.rolname
+            FROM pg_class AS marker
+            JOIN pg_namespace AS marker_schema ON marker_schema.oid = marker.relnamespace
+            JOIN pg_roles AS marker_owner ON marker_owner.oid = marker.relowner
+            WHERE marker_schema.nspname = current_schema()
+              AND marker.relname = %s
+              AND marker.relkind = 'r'
+            """,
+            [AUTHORITY_MARKER_TABLE],
+        )
+        marker_owner = cursor.fetchone()
+        if marker_owner is None:
+            cursor.execute(
+                f"""
+                CREATE TABLE {marker_ident} (
+                    marker_id boolean PRIMARY KEY CHECK (marker_id),
+                    version integer NOT NULL CHECK (version = 1),
+                    database_owner_oid oid NOT NULL,
+                    database_owner_role name NOT NULL,
+                    schema_name name NOT NULL,
+                    schema_owner_oid oid NOT NULL,
+                    schema_owner_role name NOT NULL
+                )
+                """
+            )
+            cursor.execute(
+                f"""
+                INSERT INTO {marker_ident} (
+                    marker_id, version, database_owner_oid, database_owner_role,
+                    schema_name, schema_owner_oid, schema_owner_role
+                ) VALUES (TRUE, 1, %s, %s, %s, %s, %s)
+                """,
+                [database_owner_oid, database_owner_role, schema_name, schema_owner_oid, schema_owner_role],
+            )
+        else:
+            cursor.execute(
+                f"""
+                SELECT version, database_owner_oid, database_owner_role,
+                       schema_name, schema_owner_oid, schema_owner_role
+                FROM {marker_ident}
+                WHERE marker_id = TRUE
+                """
+            )
+            marker = cursor.fetchone()
+            if marker is None or marker != (
+                1,
+                database_owner_oid,
+                database_owner_role,
+                schema_name,
+                schema_owner_oid,
+                schema_owner_role,
+            ):
+                raise CommandError(
+                    "The Operation Gateway authority marker does not match the provisioned database topology"
+                )
+
+        cursor.execute(f"ALTER TABLE {marker_ident} OWNER TO {self._quote(migration_role)}")
+        cursor.execute(f"REVOKE ALL ON TABLE {marker_ident} FROM PUBLIC, {self._quote(runtime_role)}")
+        cursor.execute(f"GRANT SELECT ON TABLE {marker_ident} TO {self._quote(runtime_role)}")
 
     @staticmethod
     def _assert_role_safety(cursor, runtime_role, governance_role, migration_role):
