@@ -251,6 +251,225 @@ def test_postgres_guards_reject_hostile_bulk_and_raw_mutations(assignment, profi
             )
 
 
+@pytest.mark.django_db(transaction=True)
+def test_non_superuser_owner_cannot_truncate_or_rebind_keyed_records(assignment, profile):
+    run = create_run(assignment, profile, idempotency_key="idempotency:truncate-run")
+    input_event = record_input_event(
+        run,
+        payload={"answer": "original"},
+        idempotency_key="idempotency:truncate-input",
+    )
+    invocation = record_invocation(run, idempotency_key="idempotency:truncate-invocation")
+    propose_outcome(
+        run,
+        summary="original",
+        artifacts=["artifact:original"],
+        evidence=["evidence:original"],
+        idempotency_key="idempotency:truncate-outcome",
+    )
+    terminal_event = run.__class__.all_objects.get(pk=run.pk).terminal_events.get()
+    tables = (
+        ("agent_run_attempts", "creation_idempotency_key", run.id, "snapshot"),
+        ("agent_run_input_events", "idempotency_key", input_event.id, "payload"),
+        ("agent_runtime_invocations", "idempotency_key", invocation.id, "envelope"),
+        (
+            "agent_outcome_submissions",
+            "submission_idempotency_key",
+            run.outcome_submission.id,
+            "artifacts",
+        ),
+        ("agent_run_terminal_events", "idempotency_key", terminal_event.id, "product_ref"),
+    )
+
+    def quote_identifier(value):
+        return '"' + value.replace('"', '""') + '"'
+
+    expected = {}
+    owners = {}
+    owner_role = f"agent_truncate_owner_{uuid4().hex}"
+    role_identifier = quote_identifier(owner_role)
+    with connection.cursor() as cursor:
+        for table, key_column, row_id, material_column in tables:
+            cursor.execute(
+                f"""
+                SELECT pg_get_userbyid(c.relowner)
+                FROM pg_class AS c
+                JOIN pg_namespace AS n ON n.oid = c.relnamespace
+                WHERE n.nspname = current_schema() AND c.relname = %s
+                """,
+                [table],
+            )
+            owners[table] = cursor.fetchone()[0]
+            cursor.execute(
+                f"""
+                SELECT id::text, {quote_identifier(key_column)}::text,
+                       command_fingerprint, {quote_identifier(material_column)}::text
+                FROM {quote_identifier(table)} WHERE id = %s
+                """,
+                [row_id],
+            )
+            expected[table] = cursor.fetchone()
+
+        cursor.execute(
+            f"CREATE ROLE {role_identifier} NOLOGIN NOSUPERUSER NOREPLICATION NOBYPASSRLS NOINHERIT"
+        )
+        try:
+            cursor.execute(
+                """
+                SELECT c.relname, t.tgname, t.tgenabled
+                FROM pg_trigger AS t
+                JOIN pg_class AS c ON c.oid = t.tgrelid
+                WHERE tgname IN (
+                    'agent_run_keyed_truncate_guard',
+                    'agent_input_keyed_truncate_guard',
+                    'agent_invocation_keyed_truncate_guard',
+                    'agent_outcome_keyed_truncate_guard',
+                    'agent_terminal_keyed_truncate_guard'
+                )
+                """
+            )
+            assert {row for row in cursor.fetchall()} == {
+                ("agent_run_attempts", "agent_run_keyed_truncate_guard", "O"),
+                ("agent_run_input_events", "agent_input_keyed_truncate_guard", "O"),
+                ("agent_runtime_invocations", "agent_invocation_keyed_truncate_guard", "O"),
+                ("agent_outcome_submissions", "agent_outcome_keyed_truncate_guard", "O"),
+                ("agent_run_terminal_events", "agent_terminal_keyed_truncate_guard", "O"),
+            }
+            for table, _, _, _ in tables:
+                cursor.execute(f"ALTER TABLE {quote_identifier(table)} OWNER TO {role_identifier}")
+
+            cursor.execute(
+                """
+                SELECT r.rolsuper, r.rolreplication
+                FROM pg_roles AS r
+                WHERE r.rolname = %s
+                """,
+                [owner_role],
+            )
+            assert cursor.fetchone() == (False, False)
+
+            truncate_statements = [
+                *(
+                    f"TRUNCATE {quote_identifier(table)}"
+                    for table, _, _, _ in tables
+                ),
+                "TRUNCATE "
+                + ", ".join(quote_identifier(table) for table, _, _, _ in tables),
+                f"TRUNCATE {quote_identifier(tables[0][0])} CASCADE",
+                "TRUNCATE "
+                + ", ".join(quote_identifier(table) for table, _, _, _ in tables)
+                + " CASCADE",
+            ]
+
+            def assert_rows_remain_bound():
+                for table, key_column, _, material_column in tables:
+                    cursor.execute(f"SELECT count(*) FROM {quote_identifier(table)}")
+                    assert cursor.fetchone()[0] == 1
+                    cursor.execute(
+                        f"""
+                        SELECT id::text, {quote_identifier(key_column)}::text,
+                               command_fingerprint,
+                               {quote_identifier(material_column)}::text
+                        FROM {quote_identifier(table)}
+                        """
+                    )
+                    assert cursor.fetchone() == expected[table]
+
+            for statement in truncate_statements:
+                with pytest.raises(DatabaseError):
+                    with transaction.atomic():
+                        cursor.execute(f"SET LOCAL ROLE {role_identifier}")
+                        cursor.execute(
+                            "SELECT current_user, current_setting('session_replication_role'), "
+                            "rolsuper, rolreplication "
+                            "FROM pg_roles WHERE rolname = current_user"
+                        )
+                        assert cursor.fetchone() == (owner_role, "origin", False, False)
+                        cursor.execute(statement)
+                assert_rows_remain_bound()
+
+            reinsert_statements = {
+                "agent_run_attempts": """
+                    INSERT INTO agent_run_attempts
+                    SELECT (jsonb_populate_record(
+                        NULL::agent_run_attempts,
+                        to_jsonb(source) || jsonb_build_object(
+                            'id', %s::uuid,
+                            'snapshot', '{\"answer\":\"substituted\"}'::jsonb,
+                            'snapshot_content_digest', 'snapshot:' || repeat('0', 64),
+                            'command_fingerprint', 'command:' || repeat('1', 64)
+                        )
+                    )).*
+                    FROM agent_run_attempts AS source WHERE source.id = %s
+                """,
+                "agent_run_input_events": """
+                    INSERT INTO agent_run_input_events
+                    SELECT (jsonb_populate_record(
+                        NULL::agent_run_input_events,
+                        to_jsonb(source) || jsonb_build_object(
+                            'id', %s::uuid,
+                            'event_ref', 'event:substituted',
+                            'payload', '{\"answer\":\"substituted\"}'::jsonb,
+                            'payload_digest', 'content:' || repeat('0', 64),
+                            'command_fingerprint', 'command:' || repeat('1', 64)
+                        )
+                    )).*
+                    FROM agent_run_input_events AS source WHERE source.id = %s
+                """,
+                "agent_runtime_invocations": """
+                    INSERT INTO agent_runtime_invocations
+                    SELECT (jsonb_populate_record(
+                        NULL::agent_runtime_invocations,
+                        to_jsonb(source) || jsonb_build_object(
+                            'id', %s::uuid,
+                            'invocation_id', 'invocation:substituted',
+                            'envelope', '{\"substituted\":true}'::jsonb,
+                            'command_fingerprint', 'command:' || repeat('1', 64)
+                        )
+                    )).*
+                    FROM agent_runtime_invocations AS source WHERE source.id = %s
+                """,
+                "agent_outcome_submissions": """
+                    INSERT INTO agent_outcome_submissions
+                    SELECT (jsonb_populate_record(
+                        NULL::agent_outcome_submissions,
+                        to_jsonb(source) || jsonb_build_object(
+                            'id', %s::uuid,
+                            'summary', 'substituted',
+                            'artifacts', '[\"artifact:substituted\"]'::jsonb,
+                            'evidence', '[\"evidence:substituted\"]'::jsonb,
+                            'command_fingerprint', 'command:' || repeat('1', 64)
+                        )
+                    )).*
+                    FROM agent_outcome_submissions AS source WHERE source.id = %s
+                """,
+                "agent_run_terminal_events": """
+                    INSERT INTO agent_run_terminal_events
+                    SELECT (jsonb_populate_record(
+                        NULL::agent_run_terminal_events,
+                        to_jsonb(source) || jsonb_build_object(
+                            'id', %s::uuid,
+                            'product_ref', 'product-event:substituted',
+                            'product_event_ref', 'product-event:substituted',
+                            'command_fingerprint', 'command:' || repeat('1', 64)
+                        )
+                    )).*
+                    FROM agent_run_terminal_events AS source WHERE source.id = %s
+                """,
+            }
+            for table, _, row_id, _ in tables:
+                with pytest.raises(DatabaseError):
+                    with transaction.atomic():
+                        cursor.execute(f"SET LOCAL ROLE {role_identifier}")
+                        cursor.execute(reinsert_statements[table], [uuid4(), row_id])
+                assert_rows_remain_bound()
+        finally:
+            cursor.execute("RESET ROLE")
+            for table, _, _, _ in tables:
+                cursor.execute(f"ALTER TABLE {quote_identifier(table)} OWNER TO {quote_identifier(owners[table])}")
+            cursor.execute(f"DROP ROLE {role_identifier}")
+
+
 @pytest.mark.django_db
 def test_cross_workspace_profile_and_assignment_binding_is_rejected(assignment, profile, create_user):
     other_workspace = assignment.workspace.__class__.objects.create(

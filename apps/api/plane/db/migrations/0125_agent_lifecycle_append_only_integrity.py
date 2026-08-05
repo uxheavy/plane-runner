@@ -261,6 +261,13 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION agent_guard_keyed_record_truncate() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'Idempotency-bound Agent records cannot be truncated' USING ERRCODE = 'check_violation';
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION agent_guard_keyed_record_binding_immutable() RETURNS trigger
 LANGUAGE plpgsql AS $$
 DECLARE
@@ -433,6 +440,22 @@ BEFORE DELETE ON agent_run_terminal_events
 FOR EACH ROW WHEN (OLD.idempotency_key IS NOT NULL)
 EXECUTE FUNCTION agent_guard_keyed_record_delete();
 
+CREATE TRIGGER agent_run_keyed_truncate_guard
+BEFORE TRUNCATE ON agent_run_attempts
+FOR EACH STATEMENT EXECUTE FUNCTION agent_guard_keyed_record_truncate();
+CREATE TRIGGER agent_input_keyed_truncate_guard
+BEFORE TRUNCATE ON agent_run_input_events
+FOR EACH STATEMENT EXECUTE FUNCTION agent_guard_keyed_record_truncate();
+CREATE TRIGGER agent_invocation_keyed_truncate_guard
+BEFORE TRUNCATE ON agent_runtime_invocations
+FOR EACH STATEMENT EXECUTE FUNCTION agent_guard_keyed_record_truncate();
+CREATE TRIGGER agent_outcome_keyed_truncate_guard
+BEFORE TRUNCATE ON agent_outcome_submissions
+FOR EACH STATEMENT EXECUTE FUNCTION agent_guard_keyed_record_truncate();
+CREATE TRIGGER agent_terminal_keyed_truncate_guard
+BEFORE TRUNCATE ON agent_run_terminal_events
+FOR EACH STATEMENT EXECUTE FUNCTION agent_guard_keyed_record_truncate();
+
 CREATE TRIGGER agent_run_keyed_binding_guard
 BEFORE UPDATE ON agent_run_attempts
 FOR EACH ROW EXECUTE FUNCTION agent_guard_keyed_record_binding_immutable(
@@ -495,6 +518,11 @@ DROP TRIGGER IF EXISTS agent_outcome_keyed_delete_guard ON agent_outcome_submiss
 DROP TRIGGER IF EXISTS agent_invocation_keyed_delete_guard ON agent_runtime_invocations;
 DROP TRIGGER IF EXISTS agent_input_keyed_delete_guard ON agent_run_input_events;
 DROP TRIGGER IF EXISTS agent_run_keyed_delete_guard ON agent_run_attempts;
+DROP TRIGGER IF EXISTS agent_terminal_keyed_truncate_guard ON agent_run_terminal_events;
+DROP TRIGGER IF EXISTS agent_outcome_keyed_truncate_guard ON agent_outcome_submissions;
+DROP TRIGGER IF EXISTS agent_invocation_keyed_truncate_guard ON agent_runtime_invocations;
+DROP TRIGGER IF EXISTS agent_input_keyed_truncate_guard ON agent_run_input_events;
+DROP TRIGGER IF EXISTS agent_run_keyed_truncate_guard ON agent_run_attempts;
 DROP TRIGGER IF EXISTS agent_terminal_keyed_binding_guard ON agent_run_terminal_events;
 DROP TRIGGER IF EXISTS agent_outcome_keyed_binding_guard ON agent_outcome_submissions;
 DROP TRIGGER IF EXISTS agent_invocation_keyed_binding_guard ON agent_runtime_invocations;
@@ -509,6 +537,7 @@ DROP FUNCTION IF EXISTS agent_guard_invocation_append_only();
 DROP FUNCTION IF EXISTS agent_guard_command_fingerprint_immutable();
 DROP FUNCTION IF EXISTS agent_guard_keyed_record_binding_immutable();
 DROP FUNCTION IF EXISTS agent_guard_keyed_record_delete();
+DROP FUNCTION IF EXISTS agent_guard_keyed_record_truncate();
 DROP FUNCTION IF EXISTS agent_guard_assignment_commission_immutable();
 CREATE OR REPLACE FUNCTION agent_guard_terminal_append_only() RETURNS trigger
 LANGUAGE plpgsql AS $$
