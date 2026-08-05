@@ -5,7 +5,7 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="${ROOT_DIR}/docker-compose-test.yml"
 API_TEST_IMAGE="${PLANE_API_TEST_IMAGE:-plane-api-tests:latest}"
-PROJECT_NAME="plane-migration-verify-$$"
+PROJECT_NAME="plane-migration-verify-$$-${RANDOM}"
 NETWORK_NAME="${PROJECT_NAME}_test_env"
 CURRENT_STEP="preflight"
 
@@ -91,11 +91,24 @@ print(f"db_migration_leaf={sorted(leaves)[0]}")
 
 cleanup() {
     local status=$?
+    local cleanup_status=0
+    local leftover_containers leftover_networks
     trap - EXIT INT TERM
-    compose down -v --remove-orphans >/dev/null 2>&1 || true
-    if [[ ${status} -ne 0 ]]; then
+    compose down -v --remove-orphans >/dev/null 2>&1 || cleanup_status=$?
+    leftover_containers="$(docker ps -aq --filter "label=com.docker.compose.project=${PROJECT_NAME}")"
+    leftover_networks="$(docker network ls -q --filter "label=com.docker.compose.project=${PROJECT_NAME}")"
+    if [[ -n "${leftover_containers}" || -n "${leftover_networks}" ]]; then
+        cleanup_status=1
+    fi
+    if [[ ${status} -ne 0 || ${cleanup_status} -ne 0 ]]; then
         printf 'event=api.migration.verifier actor=release-engineering operation=cleanup expected=isolated project removed actual=verification failed at %s suggestion=inspect the preceding evidence and rerun after cleanup\n' \
             "${CURRENT_STEP}" >&2
+        if [[ ${status} -eq 0 ]]; then
+            status=${cleanup_status}
+        fi
+    else
+        printf 'event=api.migration.verifier actor=release-engineering operation=cleanup expected=isolated project removed actual=passed project=%s\n' \
+            "${PROJECT_NAME}"
     fi
     exit "${status}"
 }
