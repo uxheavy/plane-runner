@@ -131,5 +131,30 @@ class WorkItemRenameInputSerializer(WorkItemReadInputSerializer):
     name = serializers.CharField(max_length=255, allow_blank=False, trim_whitespace=True)
 
 
+class WorkspaceSearchInputSerializer(StrictSerializer):
+    query = serializers.CharField(max_length=255, required=True, allow_blank=True, trim_whitespace=True)
+    limit = serializers.IntegerField(min_value=1, max_value=50, required=False, default=20)
+    cursor = serializers.CharField(max_length=32, required=False, allow_blank=False, trim_whitespace=True)
+
+    def validate_cursor(self, value: str) -> str:
+        if not value.startswith("cursor:"):
+            raise serializers.ValidationError("Invalid cursor")
+        try:
+            offset = int(value.removeprefix("cursor:"))
+        except ValueError as exc:
+            raise serializers.ValidationError("Invalid cursor") from exc
+        if offset < 0:
+            raise serializers.ValidationError("Invalid cursor")
+        return value
+
+
+class CatalogSearchInputSerializer(WorkspaceSearchInputSerializer):
+    pass
+
+
+class CatalogDescribeInputSerializer(StrictSerializer):
+    operation_id = serializers.CharField(max_length=128, allow_blank=False, trim_whitespace=True)
+
+
 def canonical_json(value: Any) -> str:
     return json.dumps(value, cls=DjangoJSONEncoder, sort_keys=True, separators=(",", ":"))

@@ -16,7 +16,7 @@ from django.utils import timezone
 
 from plane.api.views.issue import IssueDetailAPIEndpoint
 from plane.api.serializers import IssueSerializer
-from plane.app.permissions import ProjectEntityPermission
+from plane.app.permissions import ProjectEntityPermission, WorkspaceMemberPermission
 from plane.db.models import (
     Issue,
     OperationGatewayAudit,
@@ -25,7 +25,7 @@ from plane.db.models import (
     Workspace,
 )
 
-from .catalog import OperationDescriptor, get_operation
+from .catalog import OperationDescriptor, catalog_search, describe_operation, get_operation
 from .contracts import (
     GatewayError,
     GatewayEnvelope,
@@ -37,6 +37,9 @@ from .contracts import (
     SCHEMA_VERSION,
     WorkItemReadInputSerializer,
     WorkItemRenameInputSerializer,
+    CatalogDescribeInputSerializer,
+    CatalogSearchInputSerializer,
+    WorkspaceSearchInputSerializer,
     canonical_json,
 )
 from .publications import (
@@ -53,6 +56,10 @@ READ_RESULT_FIELDS = ("id", "name", "sequence_id", "priority", "state", "project
 ERROR_MESSAGES = {
     "AUTHENTICATION_REQUIRED": "Authentication is required for this operation.",
     "AUTHORIZATION_UNAVAILABLE": "Authorization could not be evaluated.",
+    "BUDGET_EXCEEDED": "The Code Mode run budget has been exhausted.",
+    "CALLBACK_BINDING_INVALID": "The Code Mode callback is not bound to this run.",
+    "CANCELLED": "The Code Mode run was cancelled.",
+    "CATALOG_MISMATCH": "The operation catalog is not bound to this run.",
     "IDEMPOTENCY_CONFLICT": "The idempotency key was already used for another request.",
     "INTERNAL_ERROR": "The operation could not be completed.",
     "NOT_AUTHORIZED": "Operation is not authorized for this caller.",
@@ -255,8 +262,7 @@ class OperationGateway:
             descriptor = get_operation(record.operation_id)
             publications = list(record.publications.all())
             if not publications or any(
-                publication.state != OperationGatewayPublication.State.SUCCEEDED
-                for publication in publications
+                publication.state != OperationGatewayPublication.State.SUCCEEDED for publication in publications
             ):
                 return self._reconcile_unknown_locked(record, descriptor)
             audit_id = record.audit_receipt
@@ -489,10 +495,7 @@ class OperationGateway:
                     ),
                 )
 
-            if (
-                record.state == OperationGatewayIdempotency.State.FAILED_PRECOMMIT
-                and record.retryable
-            ):
+            if record.state == OperationGatewayIdempotency.State.FAILED_PRECOMMIT and record.retryable:
                 record.request_id = uuid.uuid4()
                 record.invocation_id = uuid.uuid4()
                 record.correlation_id = correlation_id
@@ -590,7 +593,11 @@ class OperationGateway:
                         409 if status_code == 409 else 400,
                         False,
                     )
-                result = self._bound_result(raw_result, max_bytes=min(descriptor.max_result_bytes, MAX_RESULT_BYTES))
+                result = self._bound_result(
+                    raw_result,
+                    descriptor=descriptor,
+                    max_bytes=min(descriptor.max_result_bytes, MAX_RESULT_BYTES),
+                )
                 return (
                     self._finish_success(
                         record,
@@ -640,6 +647,12 @@ class OperationGateway:
             if descriptor.operation_id == "work_item.read"
             else WorkItemRenameInputSerializer
         )
+        if descriptor.operation_id == "search_workspace":
+            serializer_class = WorkspaceSearchInputSerializer
+        elif descriptor.operation_id == "catalog.search":
+            serializer_class = CatalogSearchInputSerializer
+        elif descriptor.operation_id == "catalog.describe":
+            serializer_class = CatalogDescribeInputSerializer
         serializer = serializer_class(data=value)
         if not serializer.is_valid():
             return {}, GatewayFailure("VALIDATION_ERROR", 400, False)
@@ -657,6 +670,13 @@ class OperationGateway:
             request,
             method="GET" if descriptor.kind == "read" else "PATCH",
         )
+        if descriptor.authorization_scope == "workspace":
+            view = type("WorkspaceGatewayView", (), {"kwargs": {"slug": workspace_slug}})()
+            try:
+                allowed = WorkspaceMemberPermission().has_permission(service_request, view)
+            except Exception:
+                return GatewayFailure("AUTHORIZATION_UNAVAILABLE", 503, True)
+            return None if allowed else GatewayFailure("NOT_AUTHORIZED", 403, False)
         view = IssueDetailAPIEndpoint()
         view.request = service_request
         view.kwargs = {"slug": workspace_slug, "project_id": str(parsed_input["project_id"])}
@@ -676,6 +696,25 @@ class OperationGateway:
         descriptor: OperationDescriptor,
         parsed_input: dict[str, Any],
     ) -> tuple[int, dict[str, Any], dict[str, Any] | None]:
+        if descriptor.operation_id == "search_workspace":
+            from plane.agent.tools.workspace_search import WorkspaceSearchService
+
+            result = WorkspaceSearchService().search(
+                workspace=workspace,
+                user=request.user,
+                query=parsed_input["query"],
+                limit=parsed_input.get("limit", 20),
+                cursor=parsed_input.get("cursor"),
+            )
+            return 200, result, None
+        if descriptor.operation_id == "catalog.search":
+            return 200, catalog_search(**parsed_input), None
+        if descriptor.operation_id == "catalog.describe":
+            try:
+                return 200, describe_operation(parsed_input["operation_id"]), None
+            except KeyError:
+                raise GatewayFailure("UNKNOWN_OPERATION", 404, False) from None
+
         project_id = str(parsed_input["project_id"])
         issue_id = str(parsed_input["issue_id"])
         if descriptor.operation_id == "work_item.read":
@@ -700,7 +739,18 @@ class OperationGateway:
             raise GatewayFailure("UPSTREAM_FAILURE", 503, True)
         return 200, outcome.result, outcome.publication_payload
 
-    def _bound_result(self, raw_result: dict[str, Any], *, max_bytes: int) -> dict[str, Any]:
+    def _bound_result(
+        self,
+        raw_result: dict[str, Any],
+        *,
+        descriptor: OperationDescriptor,
+        max_bytes: int,
+    ) -> dict[str, Any]:
+        if descriptor.operation_id not in {"work_item.read", "work_item.rename"}:
+            result = json.loads(canonical_json(raw_result))
+            if len(canonical_json(result).encode("utf-8")) > max_bytes:
+                raise GatewayFailure("RESULT_TOO_LARGE", 409, False)
+            return result
         bounded = {field: raw_result.get(field) for field in READ_RESULT_FIELDS if field in raw_result}
         result = json.loads(canonical_json({"work_item": bounded}))
         if len(canonical_json(result).encode("utf-8")) > max_bytes:
@@ -1042,9 +1092,7 @@ class OperationGateway:
             ), 200
         failure = self._failure_from_record(record) or GatewayFailure("UPSTREAM_FAILURE", 503, False)
         status_code = (
-            403
-            if record.state == OperationGatewayIdempotency.State.DENIED
-            else self._status_for_code(failure.code)
+            403 if record.state == OperationGatewayIdempotency.State.DENIED else self._status_for_code(failure.code)
         )
         return self._failure_envelope(
             record,
@@ -1218,6 +1266,10 @@ class OperationGateway:
     @staticmethod
     def _status_for_code(code: str) -> int:
         return {
+            "BUDGET_EXCEEDED": 429,
+            "CALLBACK_BINDING_INVALID": 403,
+            "CANCELLED": 409,
+            "CATALOG_MISMATCH": 409,
             "NOT_AUTHORIZED": 403,
             "AUTHORIZATION_UNAVAILABLE": 503,
             "IDEMPOTENCY_CONFLICT": 409,

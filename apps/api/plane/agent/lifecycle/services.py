@@ -31,6 +31,7 @@ from plane.db.models import (
     TerminalEventKind,
     TerminalEventSource,
 )
+from plane.agent.tools.disclosure import compose_tool_catalog
 
 from .runtime_contract import (
     MAX_BOUNDED_BYTE_COUNT,
@@ -179,6 +180,9 @@ _INVOCATION_TERMINAL_STATES = {
 _RESERVED_PROFILE_KEYS = {
     "allowlist",
     "allowed_operations",
+    "allowedOperations",
+    "operation_allowlist",
+    "operationAllowlist",
     "authorization",
     "permissions",
     "denylist",
@@ -485,35 +489,11 @@ def _snapshot_context(profile):
     return contexts
 
 
-def _snapshot_tool_catalog(profile):
-    presentation = profile.tool_presentation
-    for key in _RESERVED_PROFILE_KEYS:
-        if key in presentation:
-            raise AgentDomainError("Profile presentation cannot define authorization or operation allowlists")
-    raw_operations = presentation.get("eager_operations", presentation.get("eagerOperations", []))
-    raw_operations = _as_list(raw_operations, "tool_presentation.eager_operations")
-    operations = []
-    for index, raw in enumerate(raw_operations):
-        if not isinstance(raw, dict):
-            raise AgentDomainError(f"tool_presentation.eager_operations[{index}] must be an object")
-        operation_ref = _normalise_ref(
-            raw.get("operationRef", raw.get("operation_ref")),
-            "operation",
-            f"tool_presentation.eager_operations[{index}].operationRef",
-        )
-        schema_digest = raw.get("schemaDigest", raw.get("schema_digest")) or content_digest(
-            {"operationRef": operation_ref}
-        )
-        disclosure = raw.get("disclosure", "progressive")
-        if not isinstance(disclosure, str) or disclosure not in {"eager", "progressive"}:
-            raise AgentDomainError("tool presentation disclosure is invalid")
-        operations.append({"operationRef": operation_ref, "schemaDigest": schema_digest, "disclosure": disclosure})
-    catalog = {"eagerOperations": operations}
-    return {
-        "catalogDigest": presentation.get("catalogDigest", presentation.get("catalog_digest"))
-        or content_digest(catalog),
-        "eagerOperations": operations,
-    }
+def _snapshot_tool_catalog(profile, assignment):
+    try:
+        return compose_tool_catalog(profile, assignment)
+    except ValueError as exc:
+        raise AgentDomainError(str(exc)) from exc
 
 
 def _runtime_policy(profile):
@@ -595,7 +575,7 @@ def _build_snapshot(assignment, profile, run_id, snapshot=None):
             "behavioralPrompt": _profile_prompt(profile),
         },
         "context": _snapshot_context(profile),
-        "toolCatalog": _snapshot_tool_catalog(profile),
+        "toolCatalog": _snapshot_tool_catalog(profile, assignment),
         "runtimePolicy": runtime_policy,
         "totalBudget": total_budget,
         "contractDigests": contract_digests(),
