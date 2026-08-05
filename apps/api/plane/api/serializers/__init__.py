@@ -68,3 +68,27 @@ from .member import (
     ProjectMemberLiteAPISerializer,
 )
 from .sticky import StickySerializer
+from .agent_admin import (
+    AgentActorAdminSerializer,
+    AgentActorCreateSerializer,
+    AgentActorPatchSerializer,
+    AssignmentAdminSerializer,
+    AssignmentCreateSerializer,
+    DispatchSerializer,
+    GatewayAuditAdminSerializer,
+    GatewayReadbackSerializer,
+    GatewayReceiptAdminSerializer,
+    InputEventCreateSerializer,
+    OutcomeAdminSerializer,
+    OutcomeCreateSerializer,
+    OutcomeDecisionSerializer,
+    OutcomeReviewSerializer,
+    ProfileVersionAdminSerializer,
+    ProfileVersionCreateSerializer,
+    RunAdminSerializer,
+    RunInputEventAdminSerializer,
+    RuntimeEventEvidenceSerializer,
+    RuntimeExitEvidenceSerializer,
+    RuntimeInvocationAdminSerializer,
+    TerminalEventAdminSerializer,
+)

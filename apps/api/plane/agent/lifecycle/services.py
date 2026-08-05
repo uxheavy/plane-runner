@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import re
 from uuid import UUID, uuid4
 
 from django.core.exceptions import ValidationError
@@ -183,11 +184,20 @@ _RESERVED_PROFILE_KEYS = {
     "permissions",
     "denylist",
 }
+_CREDENTIAL_REF_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9-]{0,31}:[A-Za-z0-9][A-Za-z0-9._~/-]{0,219}$")
 
 
 def _ensure_non_empty(value, field_name, *, limit=MAX_BOUNDED_TEXT_BYTES):
     if not isinstance(value, str) or not value.strip() or len(value.encode("utf-8")) > limit:
         raise AgentDomainError(f"{field_name} must be a non-empty string within {limit} UTF-8 bytes")
+    return value
+
+
+def _credential_ref(value):
+    if value is None:
+        return None
+    if not isinstance(value, str) or not _CREDENTIAL_REF_PATTERN.fullmatch(value):
+        raise AgentDomainError("credential_ref must be an opaque namespaced reference")
     return value
 
 
@@ -641,7 +651,7 @@ def create_actor(*, workspace, display_name, project=None, credential_ref=None, 
         workspace=workspace,
         project=project,
         display_name=display_name,
-        credential_ref=credential_ref,
+        credential_ref=_credential_ref(credential_ref),
         created_by=created_by,
     )
 
