@@ -83,13 +83,13 @@ def _command_fingerprint(operation, binding):
 
 
 def _is_legacy_fingerprint(value):
-    return isinstance(value, str) and value.startswith(("legacy1:", "legacy2:"))
+    return isinstance(value, str) and value.startswith("legacy1:")
 
 
-def _promote_legacy_binding(instance):
+def _promote_legacy_binding(instance, current_fingerprint):
     if not instance.command_fingerprint.startswith("legacy1:"):
         return
-    promoted = promote_legacy_command_fingerprint(instance.command_fingerprint)
+    promoted = promote_legacy_command_fingerprint(instance.command_fingerprint, current_fingerprint)
     updated = instance.__class__.all_objects.filter(
         pk=instance.pk, command_fingerprint=instance.command_fingerprint
     ).update(command_fingerprint=promoted)
@@ -101,23 +101,34 @@ def _promote_legacy_binding(instance):
         instance.command_fingerprint = promoted
 
 
-def _legacy_match(instance, matches, message):
+def _legacy_match(instance, matches, message, current_fingerprint):
     if not _is_legacy_fingerprint(instance.command_fingerprint) or not matches(instance):
         raise IdempotencyConflictError(message)
-    _promote_legacy_binding(instance)
+    _promote_legacy_binding(instance, current_fingerprint)
     return True
 
 
-def _legacy_created_by_matches(existing, created_by):
-    """Treat an unpersisted pre-0125 audit actor as unavailable, not guessed."""
+_LEGACY_ABSENT = object()
 
-    return existing.created_by_id is None or str(existing.created_by_id) == _command_id(created_by)
+
+def _legacy_optional(value):
+    return _LEGACY_ABSENT if value is None else value
+
+
+def _legacy_optional_matches(existing, requested):
+    existing_value = _legacy_optional(existing)
+    requested_value = _legacy_optional(requested)
+    if existing_value is _LEGACY_ABSENT or requested_value is _LEGACY_ABSENT:
+        return existing_value is requested_value
+    return existing_value == requested_value
+
+
+def _legacy_created_by_matches(existing, created_by):
+    return _legacy_optional_matches(existing.created_by_id, _command_id(created_by))
 
 
 def _legacy_foreign_key_matches(existing_id, requested):
-    if existing_id is None or requested is None:
-        return existing_id is None and requested is None
-    return str(existing_id) == _command_id(requested)
+    return _legacy_optional_matches(existing_id, _command_id(requested))
 
 
 _ASSIGNMENT_TRANSITIONS = {
@@ -211,17 +222,23 @@ def _same_json(left, right):
         return False
 
 
+def _legacy_json_matches(existing, requested):
+    if existing is None or requested is None:
+        return _legacy_optional_matches(existing, requested)
+    return _same_json(existing, requested)
+
+
 def _legacy_run_matches(
     existing, assignment, profile, snapshot, lineage_of, lineage_reason, recovery_of, recovery_intent, created_by
 ):
     return (
         existing.assignment_id == assignment.id
         and existing.profile_version_id == profile.id
-        and (snapshot is None or _same_json(snapshot, existing.snapshot))
+        and _legacy_json_matches(existing.snapshot, snapshot)
         and _legacy_foreign_key_matches(existing.lineage_of_id, lineage_of)
-        and existing.lineage_reason == lineage_reason
+        and _legacy_optional_matches(existing.lineage_reason, lineage_reason)
         and _legacy_foreign_key_matches(existing.recovery_of_id, recovery_of)
-        and existing.recovery_intent == recovery_intent
+        and _legacy_optional_matches(existing.recovery_intent, recovery_intent)
         and _legacy_created_by_matches(existing, created_by)
     )
 
@@ -230,8 +247,8 @@ def _legacy_input_matches(existing, run, kind, payload, pending_ref, created_by)
     return (
         existing.run_id == run.id
         and existing.kind == kind
-        and _same_json(existing.payload, payload)
-        and existing.pending_input_ref == pending_ref
+        and _legacy_json_matches(existing.payload, payload)
+        and _legacy_optional_matches(existing.pending_input_ref, pending_ref)
         and _legacy_created_by_matches(existing, created_by)
     )
 
@@ -284,21 +301,17 @@ def _legacy_invocation_usage(existing):
 
 def _legacy_trigger_matches(existing, trigger_binding, input_event, input_event_ref):
     persisted = existing.envelope.get("trigger")
-    if not isinstance(persisted, dict):
+    if not isinstance(persisted, dict) or trigger_binding is None:
         return False
-    if trigger_binding is None:
-        return True
     requested = {"kind": trigger_binding} if isinstance(trigger_binding, str) else trigger_binding
-    if not isinstance(requested, dict) or requested.get("kind") != persisted.get("kind"):
+    if not isinstance(requested, dict) or not _same_json(requested, persisted):
         return False
-    persisted_event_ref = (existing.envelope.get("newContextEventRefs") or [None])[0]
+    persisted_refs = existing.envelope.get("newContextEventRefs")
+    if not isinstance(persisted_refs, list) or len(persisted_refs) > 1:
+        return False
+    persisted_event_ref = persisted_refs[0] if persisted_refs else None
     requested_event_ref = input_event.event_ref if input_event is not None else input_event_ref
-    if requested_event_ref is not None and requested_event_ref != persisted_event_ref:
-        return False
-    return all(
-        key not in requested or requested[key] == persisted.get(key)
-        for key in ("eventRef", "pendingInputEventRef", "answerFactDigest")
-    )
+    return _legacy_optional_matches(persisted_event_ref, requested_event_ref)
 
 
 def _legacy_invocation_matches(
@@ -311,14 +324,17 @@ def _legacy_invocation_matches(
     usage_delta,
     created_by,
 ):
-    persisted_event_ref = (existing.envelope.get("newContextEventRefs") or [None])[0]
+    persisted_refs = existing.envelope.get("newContextEventRefs")
+    if not isinstance(persisted_refs, list) or len(persisted_refs) > 1:
+        return False
+    persisted_event_ref = persisted_refs[0] if persisted_refs else None
     requested_event_ref = input_event.event_ref if input_event is not None else input_event_ref
     return (
         existing.run_id == run.id
-        and (requested_invocation_ref is None or existing.invocation_id == requested_invocation_ref)
-        and (requested_event_ref is None or requested_event_ref == persisted_event_ref)
+        and _legacy_optional_matches(existing.invocation_id, requested_invocation_ref)
+        and _legacy_optional_matches(persisted_event_ref, requested_event_ref)
         and _legacy_trigger_matches(existing, trigger_binding, input_event, input_event_ref)
-        and _same_json(existing.usage, usage_delta)
+        and _legacy_json_matches(existing.usage, usage_delta)
         and _legacy_created_by_matches(existing, created_by)
         and _legacy_invocation_usage(existing) is not None
     )
@@ -328,8 +344,8 @@ def _legacy_outcome_matches(existing, run, summary, artifacts, evidence, created
     return (
         existing.run_id == run.id
         and existing.summary == summary
-        and _same_json(existing.artifacts, artifacts)
-        and _same_json(existing.evidence, evidence)
+        and _legacy_json_matches(existing.artifacts, artifacts)
+        and _legacy_json_matches(existing.evidence, evidence)
         and _legacy_created_by_matches(existing, created_by)
     )
 
@@ -340,20 +356,22 @@ def _legacy_terminal_matches(
     run,
     kind,
     source,
+    product_ref,
+    product_event_ref,
     reason,
     cancellation,
-    cancellation_supplied,
     event_key,
-    event_key_supplied,
 ):
     return (
         existing.invocation_id == invocation.id
         and existing.run_id == run.id
         and existing.kind == kind
         and existing.source == source
+        and existing.product_ref == product_ref
+        and existing.product_event_ref == product_event_ref
         and existing.reason == reason
-        and (not cancellation_supplied or existing.cancellation_ref == cancellation)
-        and (not event_key_supplied or existing.idempotency_key == event_key)
+        and _legacy_optional_matches(existing.cancellation_ref, cancellation)
+        and _legacy_optional_matches(existing.idempotency_key, event_key)
     )
 
 
@@ -814,6 +832,7 @@ def create_run(
                             created_by,
                         ),
                         "Run idempotency key is bound to another Plane command",
+                        creation_fingerprint,
                     )
                 else:
                     raise IdempotencyConflictError("Run idempotency key is bound to another Plane command")
@@ -917,6 +936,7 @@ def create_run(
                         created_by,
                     ),
                     "Run idempotency key is bound to another Plane command",
+                    creation_fingerprint,
                 )
             )
         ),
@@ -988,6 +1008,7 @@ def record_input_event(
                         existing,
                         lambda row: _legacy_input_matches(row, run, kind, payload, pending_ref, created_by),
                         "Input event idempotency key is bound to another Plane command",
+                        event_fingerprint,
                     )
                 else:
                     raise IdempotencyConflictError("Input event idempotency key is bound to another run")
@@ -1023,6 +1044,7 @@ def record_input_event(
                         existing,
                         lambda row: _legacy_input_matches(row, run, kind, payload, pending_ref, created_by),
                         "Input event idempotency key is bound to another Plane command",
+                        event_fingerprint,
                     )
                 )
             )
@@ -1129,6 +1151,7 @@ def record_invocation(
                         created_by,
                     ),
                     "Invocation idempotency key is bound to another Plane command",
+                    invocation_fingerprint,
                 )
             else:
                 raise IdempotencyConflictError("Invocation idempotency key is bound to another Plane command")
@@ -1226,6 +1249,7 @@ def record_invocation(
                             created_by,
                         ),
                         "Invocation idempotency key or invocation id is bound to another Plane command",
+                        invocation_fingerprint,
                     )
                 )
             )
@@ -1298,11 +1322,9 @@ def _create_terminal_event_locked(
     reason,
     idempotency_key,
     cancellation_ref=None,
-    idempotency_key_supplied=True,
 ):
     event_key = _normalise_idempotency(idempotency_key, "terminal event idempotency_key")
     invocation_state, run_state = _terminal_state(kind)
-    cancellation_supplied = cancellation_ref is not None
     event_ref = (
         product_ref
         if kind
@@ -1330,6 +1352,7 @@ def _create_terminal_event_locked(
             "source": source,
             "productRef": product_ref,
             "productEventRef": event_ref,
+            "idempotencyKey": event_key,
             "reason": reason_value,
             "cancellationRef": cancellation,
         },
@@ -1347,13 +1370,14 @@ def _create_terminal_event_locked(
                         run,
                         kind,
                         source,
+                        product_ref,
+                        event_ref,
                         reason_value,
                         cancellation,
-                        cancellation_supplied,
                         event_key,
-                        idempotency_key_supplied,
                     ),
                     "Terminal event is bound to another Plane command",
+                    terminal_fingerprint,
                 )
             else:
                 raise IdempotencyConflictError("Terminal event is bound to another Plane command")
@@ -1370,13 +1394,14 @@ def _create_terminal_event_locked(
                         run,
                         kind,
                         source,
+                        product_ref,
+                        event_ref,
                         reason_value,
                         cancellation,
-                        cancellation_supplied,
                         event_key,
-                        idempotency_key_supplied,
                     ),
                     "Terminal event idempotency key is bound to another Plane command",
+                    terminal_fingerprint,
                 )
             else:
                 raise IdempotencyConflictError("Terminal event idempotency key is bound to another Plane command")
@@ -1418,13 +1443,14 @@ def _create_terminal_event_locked(
                         run,
                         kind,
                         source,
+                        product_ref,
+                        event_ref,
                         reason_value,
                         cancellation,
-                        cancellation_supplied,
                         event_key,
-                        idempotency_key_supplied,
                     ),
                     "Terminal event idempotency key or product event is bound to another invocation",
+                    terminal_fingerprint,
                 )
             )
         ),
@@ -1443,7 +1469,6 @@ def finalize_invocation(invocation, *, kind, reason="", source=TerminalEventSour
     if invocation.state in _INVOCATION_TERMINAL_STATES and not hasattr(invocation, "terminal_event"):
         raise TerminalEventRequiredError("Terminal invocation state has no visible Plane terminal event")
     product_event_ref = namespaced_ref("product-event", f"terminal-{invocation.id}-{kind}")
-    idempotency_key_supplied = idempotency_key is not None
     event_idempotency_key = idempotency_key or namespaced_ref("idempotency", f"terminal-{invocation.id}-{kind}")
     return _create_terminal_event_locked(
         invocation,
@@ -1453,7 +1478,6 @@ def finalize_invocation(invocation, *, kind, reason="", source=TerminalEventSour
         product_ref=product_event_ref,
         reason=reason,
         idempotency_key=event_idempotency_key,
-        idempotency_key_supplied=idempotency_key_supplied,
     )
 
 
@@ -1487,6 +1511,7 @@ def propose_outcome(run, *, summary, artifacts=None, evidence=None, idempotency_
                             row, run, summary, artifacts_value, evidence_value, created_by
                         ),
                         "Outcome idempotency key is bound to another Plane command",
+                        outcome_fingerprint,
                     )
                 else:
                     raise IdempotencyConflictError("Outcome idempotency key is bound to another Plane command")
@@ -1534,6 +1559,7 @@ def propose_outcome(run, *, summary, artifacts=None, evidence=None, idempotency_
                                 row, run, summary, artifacts_value, evidence_value, created_by
                             ),
                             "Outcome idempotency key or run is bound to another Plane command",
+                            outcome_fingerprint,
                         )
                     )
                 )

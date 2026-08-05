@@ -176,6 +176,7 @@ def _backfill_legacy_bindings(apps, schema_editor):
                     "source": row.source,
                     "productRef": row.product_ref,
                     "productEventRef": row.product_event_ref,
+                    "idempotencyKey": row.idempotency_key,
                     "reason": row.reason,
                     "cancellationRef": row.cancellation_ref,
                 },
@@ -244,10 +245,38 @@ LANGUAGE plpgsql AS $$
 BEGIN
     IF NEW.command_fingerprint IS DISTINCT FROM OLD.command_fingerprint THEN
         IF OLD.command_fingerprint ~ '^legacy1:[0-9a-f]{64}$'
-           AND NEW.command_fingerprint = 'legacy2:' || substring(OLD.command_fingerprint FROM 9) THEN
+           AND NEW.command_fingerprint ~ '^command:[0-9a-f]{64}$' THEN
             RETURN NEW;
         END IF;
         RAISE EXCEPTION 'Idempotent command fingerprints are immutable' USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION agent_guard_keyed_record_delete() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'Idempotency-bound Agent records cannot be deleted' USING ERRCODE = 'check_violation';
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION agent_guard_keyed_record_binding_immutable() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+    is_keyed boolean;
+    excluded_columns text[];
+BEGIN
+    EXECUTE format('SELECT ($1).%I IS NOT NULL', TG_ARGV[0])
+    INTO is_keyed
+    USING OLD;
+    IF NOT is_keyed THEN
+        RETURN NEW;
+    END IF;
+    excluded_columns := string_to_array(TG_ARGV[1], ',');
+    IF (to_jsonb(NEW) - excluded_columns) IS DISTINCT FROM (to_jsonb(OLD) - excluded_columns) THEN
+        RAISE EXCEPTION 'Idempotency-bound Agent record fields are immutable'
+            USING ERRCODE = 'check_violation';
     END IF;
     RETURN NEW;
 END;
@@ -304,7 +333,7 @@ LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_OP = 'UPDATE'
        AND OLD.command_fingerprint ~ '^legacy1:[0-9a-f]{64}$'
-       AND NEW.command_fingerprint = 'legacy2:' || substring(OLD.command_fingerprint FROM 9)
+       AND NEW.command_fingerprint ~ '^command:[0-9a-f]{64}$'
     THEN
         RETURN NEW;
     END IF;
@@ -383,6 +412,56 @@ CREATE TRIGGER agent_terminal_command_fingerprint_guard
 BEFORE UPDATE ON agent_run_terminal_events
 FOR EACH ROW EXECUTE FUNCTION agent_guard_command_fingerprint_immutable();
 
+CREATE TRIGGER agent_run_keyed_delete_guard
+BEFORE DELETE ON agent_run_attempts
+FOR EACH ROW WHEN (OLD.creation_idempotency_key IS NOT NULL)
+EXECUTE FUNCTION agent_guard_keyed_record_delete();
+CREATE TRIGGER agent_input_keyed_delete_guard
+BEFORE DELETE ON agent_run_input_events
+FOR EACH ROW WHEN (OLD.idempotency_key IS NOT NULL)
+EXECUTE FUNCTION agent_guard_keyed_record_delete();
+CREATE TRIGGER agent_invocation_keyed_delete_guard
+BEFORE DELETE ON agent_runtime_invocations
+FOR EACH ROW WHEN (OLD.idempotency_key IS NOT NULL)
+EXECUTE FUNCTION agent_guard_keyed_record_delete();
+CREATE TRIGGER agent_outcome_keyed_delete_guard
+BEFORE DELETE ON agent_outcome_submissions
+FOR EACH ROW WHEN (OLD.submission_idempotency_key IS NOT NULL)
+EXECUTE FUNCTION agent_guard_keyed_record_delete();
+CREATE TRIGGER agent_terminal_keyed_delete_guard
+BEFORE DELETE ON agent_run_terminal_events
+FOR EACH ROW WHEN (OLD.idempotency_key IS NOT NULL)
+EXECUTE FUNCTION agent_guard_keyed_record_delete();
+
+CREATE TRIGGER agent_run_keyed_binding_guard
+BEFORE UPDATE ON agent_run_attempts
+FOR EACH ROW EXECUTE FUNCTION agent_guard_keyed_record_binding_immutable(
+    'creation_idempotency_key',
+    'command_fingerprint,deleted_at,updated_at,updated_by_id,state,invocation_count,last_invocation_id,cumulative_usage'
+);
+CREATE TRIGGER agent_input_keyed_binding_guard
+BEFORE UPDATE ON agent_run_input_events
+FOR EACH ROW EXECUTE FUNCTION agent_guard_keyed_record_binding_immutable(
+    'idempotency_key', 'command_fingerprint,deleted_at,updated_at,updated_by_id'
+);
+CREATE TRIGGER agent_invocation_keyed_binding_guard
+BEFORE UPDATE ON agent_runtime_invocations
+FOR EACH ROW EXECUTE FUNCTION agent_guard_keyed_record_binding_immutable(
+    'idempotency_key', 'command_fingerprint,deleted_at,updated_at,updated_by_id,state'
+);
+CREATE TRIGGER agent_outcome_keyed_binding_guard
+BEFORE UPDATE ON agent_outcome_submissions
+FOR EACH ROW EXECUTE FUNCTION agent_guard_keyed_record_binding_immutable(
+    'submission_idempotency_key',
+    'command_fingerprint,deleted_at,updated_at,updated_by_id,state,evaluator_id,evaluator_feedback,'
+    'evaluator_reviewed_at,human_reviewer_id,human_decision_note,human_decided_at'
+);
+CREATE TRIGGER agent_terminal_keyed_binding_guard
+BEFORE UPDATE ON agent_run_terminal_events
+FOR EACH ROW EXECUTE FUNCTION agent_guard_keyed_record_binding_immutable(
+    'idempotency_key', 'command_fingerprint,deleted_at,updated_at,updated_by_id'
+);
+
 CREATE TRIGGER agent_invocation_append_guard
 BEFORE UPDATE OR DELETE ON agent_runtime_invocations
 FOR EACH ROW EXECUTE FUNCTION agent_guard_invocation_append_only();
@@ -411,6 +490,16 @@ DROP TRIGGER IF EXISTS agent_outcome_command_fingerprint_guard ON agent_outcome_
 DROP TRIGGER IF EXISTS agent_invocation_command_fingerprint_guard ON agent_runtime_invocations;
 DROP TRIGGER IF EXISTS agent_input_command_fingerprint_guard ON agent_run_input_events;
 DROP TRIGGER IF EXISTS agent_run_command_fingerprint_guard ON agent_run_attempts;
+DROP TRIGGER IF EXISTS agent_terminal_keyed_delete_guard ON agent_run_terminal_events;
+DROP TRIGGER IF EXISTS agent_outcome_keyed_delete_guard ON agent_outcome_submissions;
+DROP TRIGGER IF EXISTS agent_invocation_keyed_delete_guard ON agent_runtime_invocations;
+DROP TRIGGER IF EXISTS agent_input_keyed_delete_guard ON agent_run_input_events;
+DROP TRIGGER IF EXISTS agent_run_keyed_delete_guard ON agent_run_attempts;
+DROP TRIGGER IF EXISTS agent_terminal_keyed_binding_guard ON agent_run_terminal_events;
+DROP TRIGGER IF EXISTS agent_outcome_keyed_binding_guard ON agent_outcome_submissions;
+DROP TRIGGER IF EXISTS agent_invocation_keyed_binding_guard ON agent_runtime_invocations;
+DROP TRIGGER IF EXISTS agent_input_keyed_binding_guard ON agent_run_input_events;
+DROP TRIGGER IF EXISTS agent_run_keyed_binding_guard ON agent_run_attempts;
 DROP TRIGGER IF EXISTS agent_assignment_commission_guard ON agent_assignment_contracts;
 DROP TRIGGER IF EXISTS agent_run_assignment_lock ON agent_run_attempts;
 DROP FUNCTION IF EXISTS agent_check_run_invocation_aggregate();
@@ -418,6 +507,8 @@ DROP FUNCTION IF EXISTS agent_lock_assignment_for_run();
 DROP FUNCTION IF EXISTS agent_guard_invocation_progress();
 DROP FUNCTION IF EXISTS agent_guard_invocation_append_only();
 DROP FUNCTION IF EXISTS agent_guard_command_fingerprint_immutable();
+DROP FUNCTION IF EXISTS agent_guard_keyed_record_binding_immutable();
+DROP FUNCTION IF EXISTS agent_guard_keyed_record_delete();
 DROP FUNCTION IF EXISTS agent_guard_assignment_commission_immutable();
 CREATE OR REPLACE FUNCTION agent_guard_terminal_append_only() RETURNS trigger
 LANGUAGE plpgsql AS $$
