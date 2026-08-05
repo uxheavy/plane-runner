@@ -1324,17 +1324,19 @@ def _create_terminal_event_locked(
     cancellation_ref=None,
 ):
     event_key = _normalise_idempotency(idempotency_key, "terminal event idempotency_key")
+    _lock_idempotency_key(event_key)
     invocation_state, run_state = _terminal_state(kind)
-    event_ref = (
-        product_ref
-        if kind
-        in {
-            TerminalEventKind.RUN_FAILURE,
-            TerminalEventKind.RUN_BLOCKER,
-            TerminalEventKind.RUN_CANCELLATION,
-        }
-        else namespaced_ref("product-event", str(uuid4()))
-    )
+    existing = RunTerminalEvent.all_objects.select_for_update().filter(invocation=invocation).first()
+    if kind in {
+        TerminalEventKind.RUN_FAILURE,
+        TerminalEventKind.RUN_BLOCKER,
+        TerminalEventKind.RUN_CANCELLATION,
+    }:
+        event_ref = product_ref
+    elif existing is not None:
+        event_ref = existing.product_event_ref
+    else:
+        event_ref = namespaced_ref("product-event", str(uuid4()))
     cancellation = (
         _normalise_ref(cancellation_ref, "cancellation", "cancellation_ref")
         if cancellation_ref is not None
@@ -1357,8 +1359,6 @@ def _create_terminal_event_locked(
             "cancellationRef": cancellation,
         },
     )
-    _lock_idempotency_key(event_key)
-    existing = RunTerminalEvent.all_objects.filter(invocation=invocation).first()
     if existing is not None:
         if existing.command_fingerprint != terminal_fingerprint:
             if _is_legacy_fingerprint(existing.command_fingerprint):
@@ -1458,6 +1458,24 @@ def _create_terminal_event_locked(
     )
 
 
+def _replay_outcome_terminal_locked(run, outcome):
+    if not run.last_invocation_id:
+        raise TerminalEventRequiredError("Outcome submission requires a runtime invocation")
+    invocation = RuntimeInvocation.objects.select_for_update().get(invocation_id=run.last_invocation_id)
+    terminal = RunTerminalEvent.all_objects.filter(invocation=invocation).first()
+    if terminal is None:
+        raise TerminalEventRequiredError("Outcome submission is missing its terminal product event")
+    return _create_terminal_event_locked(
+        invocation,
+        run,
+        kind=TerminalEventKind.OUTCOME_SUBMISSION,
+        source=TerminalEventSource.RUNTIME,
+        product_ref=namespaced_ref("outcome-submission", str(outcome.id)),
+        reason="",
+        idempotency_key=namespaced_ref("idempotency", f"outcome-{outcome.id}"),
+    )
+
+
 @transaction.atomic
 def finalize_invocation(invocation, *, kind, reason="", source=TerminalEventSource.SUPERVISOR, idempotency_key=None):
     invocation = RuntimeInvocation.objects.select_for_update().get(pk=invocation.pk)
@@ -1515,6 +1533,7 @@ def propose_outcome(run, *, summary, artifacts=None, evidence=None, idempotency_
                     )
                 else:
                     raise IdempotencyConflictError("Outcome idempotency key is bound to another Plane command")
+            _replay_outcome_terminal_locked(run, existing)
             return existing
     if run.state not in {RunState.RUNNING, RunState.WAITING_FOR_INPUT}:
         raise InvalidTransitionError(f"Run cannot submit an outcome from {run.state}")

@@ -32,8 +32,10 @@ from plane.agent.lifecycle import (
 )
 from plane.agent.lifecycle.runtime_contract import (
     ARTIFACT_DIRECTORY,
+    command_fingerprint,
     contract_digests,
     contract_manifest,
+    legacy_command_fingerprint,
     namespaced_ref,
     snapshot_digest,
     validate_invocation_envelope,
@@ -52,6 +54,7 @@ from plane.db.models import (
     RunAttempt,
     RunState,
     TerminalEventKind,
+    RunTerminalEvent,
     RuntimeInvocation,
     ProfileVersion,
 )
@@ -291,7 +294,7 @@ def test_non_superuser_owner_cannot_truncate_or_rebind_keyed_records(assignment,
     with connection.cursor() as cursor:
         for table, key_column, row_id, material_column in tables:
             cursor.execute(
-                f"""
+                """
                 SELECT pg_get_userbyid(c.relowner)
                 FROM pg_class AS c
                 JOIN pg_namespace AS n ON n.oid = c.relnamespace
@@ -310,9 +313,7 @@ def test_non_superuser_owner_cannot_truncate_or_rebind_keyed_records(assignment,
             )
             expected[table] = cursor.fetchone()
 
-        cursor.execute(
-            f"CREATE ROLE {role_identifier} NOLOGIN NOSUPERUSER NOREPLICATION NOBYPASSRLS NOINHERIT"
-        )
+        cursor.execute(f"CREATE ROLE {role_identifier} NOLOGIN NOSUPERUSER NOREPLICATION NOBYPASSRLS NOINHERIT")
         try:
             cursor.execute(
                 """
@@ -349,16 +350,10 @@ def test_non_superuser_owner_cannot_truncate_or_rebind_keyed_records(assignment,
             assert cursor.fetchone() == (False, False)
 
             truncate_statements = [
-                *(
-                    f"TRUNCATE {quote_identifier(table)}"
-                    for table, _, _, _ in tables
-                ),
-                "TRUNCATE "
-                + ", ".join(quote_identifier(table) for table, _, _, _ in tables),
+                *(f"TRUNCATE {quote_identifier(table)}" for table, _, _, _ in tables),
+                "TRUNCATE " + ", ".join(quote_identifier(table) for table, _, _, _ in tables),
                 f"TRUNCATE {quote_identifier(tables[0][0])} CASCADE",
-                "TRUNCATE "
-                + ", ".join(quote_identifier(table) for table, _, _, _ in tables)
-                + " CASCADE",
+                "TRUNCATE " + ", ".join(quote_identifier(table) for table, _, _, _ in tables) + " CASCADE",
             ]
 
             def assert_rows_remain_bound():
@@ -550,6 +545,109 @@ def test_invocation_and_outcome_commands_are_idempotent(assignment, profile):
 
     with pytest.raises(IdempotencyConflictError):
         record_invocation(run, idempotency_key="idempotency:repeatable-outcome")
+
+
+@pytest.mark.django_db(transaction=True)
+def test_migrated_outcome_terminal_replay_promotes_legacy_binding_without_duplication(assignment, profile):
+    """Exercise the real 0125 reverse/reapply boundary before replaying the terminal command."""
+
+    from django.db.migrations.executor import MigrationExecutor
+
+    executor = MigrationExecutor(connection)
+    try:
+        applied = executor.recorder.applied_migrations()
+    except DatabaseError:
+        pytest.skip("requires a migration-backed test database; pytest --nomigrations is a known environment gap")
+    if ("db", "0125_agent_lifecycle_append_only_integrity") not in applied:
+        pytest.skip("requires a migration-backed test database; pytest --nomigrations is a known environment gap")
+
+    run = create_run(assignment, profile, idempotency_key="idempotency:migration-replay-run")
+    invocation = record_invocation(run, idempotency_key="idempotency:migration-replay-invocation")
+    outcome = propose_outcome(
+        run,
+        summary="A migrated result",
+        artifacts=["artifact:migrated"],
+        evidence=["evidence:migrated"],
+        idempotency_key="idempotency:migration-replay-outcome",
+    )
+    terminal = RunTerminalEvent.all_objects.get(invocation=invocation)
+    original_id = terminal.id
+    original_event_ref = terminal.product_event_ref
+
+    executor.migrate([("db", "0124_agent_lifecycle_database_integrity")])
+    executor = MigrationExecutor(connection)
+    executor.migrate([("db", "0125_agent_lifecycle_append_only_integrity")])
+
+    migrated_terminal = RunTerminalEvent.all_objects.get(pk=original_id)
+    assert migrated_terminal.command_fingerprint == legacy_command_fingerprint(
+        "record_terminal_event",
+        {
+            "invocationId": str(invocation.id),
+            "runId": str(run.id),
+            "kind": TerminalEventKind.OUTCOME_SUBMISSION,
+            "source": "runtime",
+            "productRef": namespaced_ref("outcome-submission", str(outcome.id)),
+            "productEventRef": original_event_ref,
+            "idempotencyKey": namespaced_ref("idempotency", f"outcome-{outcome.id}"),
+            "reason": "",
+            "cancellationRef": None,
+        },
+    )
+
+    replayed_outcome = propose_outcome(
+        run,
+        summary="A migrated result",
+        artifacts=["artifact:migrated"],
+        evidence=["evidence:migrated"],
+        idempotency_key="idempotency:migration-replay-outcome",
+    )
+
+    replayed_outcome.refresh_from_db()
+    replayed = RunTerminalEvent.all_objects.get(pk=original_id)
+    assert replayed_outcome.id == outcome.id
+    assert replayed_outcome.command_fingerprint == command_fingerprint(
+        "propose_outcome",
+        {
+            "runId": str(run.id),
+            "summary": "A migrated result",
+            "artifacts": ["artifact:migrated"],
+            "evidence": ["evidence:migrated"],
+            "createdBy": None,
+        },
+    )
+    assert replayed.id == original_id
+    assert replayed.product_event_ref == original_event_ref
+    assert replayed.command_fingerprint == command_fingerprint(
+        "record_terminal_event",
+        {
+            "invocationId": str(invocation.id),
+            "runId": str(run.id),
+            "kind": TerminalEventKind.OUTCOME_SUBMISSION,
+            "source": "runtime",
+            "productRef": namespaced_ref("outcome-submission", str(outcome.id)),
+            "productEventRef": original_event_ref,
+            "idempotencyKey": namespaced_ref("idempotency", f"outcome-{outcome.id}"),
+            "reason": "",
+            "cancellationRef": None,
+        },
+    )
+    assert RunTerminalEvent.all_objects.filter(invocation=invocation).count() == 1
+
+    with pytest.raises(IdempotencyConflictError):
+        propose_outcome(
+            run,
+            summary="Changed material",
+            artifacts=["artifact:migrated"],
+            evidence=["evidence:migrated"],
+            idempotency_key="idempotency:migration-replay-outcome",
+        )
+
+    with pytest.raises(IdempotencyConflictError):
+        finalize_invocation(
+            invocation,
+            kind=TerminalEventKind.RUN_FAILURE,
+            idempotency_key=namespaced_ref("idempotency", f"outcome-{outcome.id}"),
+        )
 
 
 @pytest.mark.django_db(transaction=True)
