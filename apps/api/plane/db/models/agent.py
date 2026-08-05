@@ -509,6 +509,139 @@ class RuntimeInvocation(AgentScopedModel):
             raise ValidationError("Runtime invocations must use their run's Plane scope")
 
 
+class RuntimeEventIngress(AgentScopedModel):
+    """Immutable untrusted runtime event evidence accepted by Plane ingress."""
+
+    invocation = models.ForeignKey(RuntimeInvocation, on_delete=models.PROTECT, related_name="runtime_events")
+    run = models.ForeignKey(RunAttempt, on_delete=models.PROTECT, related_name="runtime_event_ingress")
+    actor = models.ForeignKey(AgentActor, on_delete=models.PROTECT, related_name="runtime_event_ingress")
+    snapshot_content_digest = models.CharField(max_length=73, editable=False)
+    event_id = models.CharField(max_length=128, unique=True, editable=False)
+    idempotency_key = models.CharField(max_length=128, unique=True, editable=False)
+    correlation_id = models.CharField(max_length=128, editable=False)
+    causation_ref = models.CharField(max_length=128, editable=False)
+    sequence = models.PositiveIntegerField(editable=False)
+    fingerprint = models.CharField(max_length=72, editable=False)
+    kind = models.CharField(max_length=64, editable=False)
+    observed_at = models.CharField(max_length=64, editable=False)
+    raw_payload = models.JSONField(editable=False)
+
+    IMMUTABLE_FIELDS = (
+        "workspace_id",
+        "project_id",
+        "invocation_id",
+        "run_id",
+        "actor_id",
+        "snapshot_content_digest",
+        "event_id",
+        "idempotency_key",
+        "correlation_id",
+        "causation_ref",
+        "sequence",
+        "fingerprint",
+        "kind",
+        "observed_at",
+        "raw_payload",
+        "deleted_at",
+    )
+
+    class Meta:
+        db_table = "agent_runtime_event_ingress"
+        ordering = ("invocation_id", "sequence")
+        indexes = [
+            models.Index(fields=["invocation", "sequence"], name="agent_rt_event_seq"),
+            models.Index(fields=["run", "created_at"], name="agent_rt_event_run"),
+        ]
+        constraints = [
+            models.UniqueConstraint(fields=["invocation", "sequence"], name="agent_rt_event_inv_seq"),
+            models.CheckConstraint(condition=models.Q(sequence__gte=0), name="agent_rt_event_seq_nonnegative"),
+        ]
+
+    def save(self, *args, **kwargs):
+        _assert_immutable(self, self.IMMUTABLE_FIELDS)
+        super().save(*args, **kwargs)
+
+    def validate_agent_scope(self):
+        invocation = RuntimeInvocation.objects.only("run_id", "workspace_id", "project_id").get(pk=self.invocation_id)
+        run = RunAttempt.objects.only("workspace_id", "project_id", "actor_id", "snapshot_content_digest").get(
+            pk=self.run_id
+        )
+        actor = AgentActor.objects.only("workspace_id", "project_id").get(pk=self.actor_id)
+        if (
+            invocation.run_id != self.run_id
+            or run.actor_id != self.actor_id
+            or (invocation.workspace_id, invocation.project_id) != (self.workspace_id, self.project_id)
+            or (run.workspace_id, run.project_id) != (self.workspace_id, self.project_id)
+            or (actor.workspace_id, actor.project_id) != (self.workspace_id, self.project_id)
+            or run.snapshot_content_digest != self.snapshot_content_digest
+        ):
+            raise ValidationError("Runtime event evidence must bind one invocation, actor, run, and snapshot")
+
+
+class RuntimeExitEvidence(AgentScopedModel):
+    """Immutable runtime exit evidence; it is not a Plane lifecycle transition."""
+
+    invocation = models.OneToOneField(RuntimeInvocation, on_delete=models.PROTECT, related_name="runtime_exit")
+    run = models.ForeignKey(RunAttempt, on_delete=models.PROTECT, related_name="runtime_exit_evidence")
+    actor = models.ForeignKey(AgentActor, on_delete=models.PROTECT, related_name="runtime_exit_evidence")
+    snapshot_content_digest = models.CharField(max_length=73, editable=False)
+    idempotency_key = models.CharField(max_length=128, unique=True, editable=False)
+    correlation_id = models.CharField(max_length=128, editable=False)
+    causation_ref = models.CharField(max_length=128, editable=False)
+    final_sequence = models.PositiveIntegerField(editable=False)
+    fingerprint = models.CharField(max_length=72, editable=False)
+    kind = models.CharField(max_length=32, editable=False)
+    raw_payload = models.JSONField(editable=False)
+
+    IMMUTABLE_FIELDS = (
+        "workspace_id",
+        "project_id",
+        "invocation_id",
+        "run_id",
+        "actor_id",
+        "snapshot_content_digest",
+        "idempotency_key",
+        "correlation_id",
+        "causation_ref",
+        "final_sequence",
+        "fingerprint",
+        "kind",
+        "raw_payload",
+        "deleted_at",
+    )
+
+    class Meta:
+        db_table = "agent_runtime_exit_evidence"
+        ordering = ("invocation_id", "created_at")
+        indexes = [
+            models.Index(fields=["run", "created_at"], name="agent_rt_exit_run"),
+            models.Index(fields=["kind", "created_at"], name="agent_rt_exit_kind"),
+        ]
+        constraints = [
+            models.CheckConstraint(condition=models.Q(final_sequence__gte=0), name="agent_rt_exit_seq_nonnegative"),
+        ]
+
+    def save(self, *args, **kwargs):
+        _assert_immutable(self, self.IMMUTABLE_FIELDS)
+        super().save(*args, **kwargs)
+
+    def validate_agent_scope(self):
+        invocation = RuntimeInvocation.objects.only("run_id", "workspace_id", "project_id").get(pk=self.invocation_id)
+        run = RunAttempt.objects.only("workspace_id", "project_id", "actor_id", "snapshot_content_digest").get(
+            pk=self.run_id
+        )
+        actor = AgentActor.objects.only("workspace_id", "project_id").get(pk=self.actor_id)
+        if (
+            invocation.run_id != self.run_id
+            or run.actor_id != self.actor_id
+            or (invocation.workspace_id, invocation.project_id) != (self.workspace_id, self.project_id)
+            or (run.workspace_id, run.project_id) != (self.workspace_id, self.project_id)
+            or (actor.workspace_id, actor.project_id) != (self.workspace_id, self.project_id)
+            or run.snapshot_content_digest != self.snapshot_content_digest
+        ):
+            raise ValidationError("Runtime exit evidence must bind one invocation, actor, run, and snapshot")
+
+
 class OutcomeSubmission(AgentScopedModel):
     """A submitted result and its independent evaluator/human review lifecycle."""
 

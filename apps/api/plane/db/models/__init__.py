@@ -19,6 +19,8 @@ from .agent import (
     RunLineageReason,
     RunState,
     RunTerminalEvent,
+    RuntimeEventIngress,
+    RuntimeExitEvidence,
     RuntimeInvocation,
     TerminalEventKind,
     TerminalEventSource,

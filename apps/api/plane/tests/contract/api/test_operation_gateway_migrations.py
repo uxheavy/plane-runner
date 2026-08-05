@@ -11,23 +11,28 @@ from django.utils import timezone
 
 BASE_MIGRATION = ("db", "0126_operationgatewayaudit_operationgatewayidempotency")
 PRE_HEAD_MIGRATION = ("db", "0128_operationgateway_publications_and_audit_trigger")
-HEAD_MIGRATION = ("db", "0129_operationgateway_delivery_and_audit_roles")
+HEAD_MIGRATION = ("db", "0130_agent_runtime_ingress_evidence")
 COMBINED_MIGRATION_CHAIN = (
-    ("db", "0123_agent_lifecycle_foundation", ("db", "0122_alter_draftissue_assignees_alter_issue_assignees_and_more")),
-    ("db", "0124_agent_lifecycle_database_integrity", ("db", "0123_agent_lifecycle_foundation")),
-    ("db", "0125_agent_lifecycle_append_only_integrity", ("db", "0124_agent_lifecycle_database_integrity")),
     (
-        "db",
-        "0126_operationgatewayaudit_operationgatewayidempotency",
+        ("db", "0123_agent_lifecycle_foundation"),
+        ("db", "0122_alter_draftissue_assignees_alter_issue_assignees_and_more"),
+    ),
+    (("db", "0124_agent_lifecycle_database_integrity"), ("db", "0123_agent_lifecycle_foundation")),
+    (("db", "0125_agent_lifecycle_append_only_integrity"), ("db", "0124_agent_lifecycle_database_integrity")),
+    (
+        ("db", "0126_operationgatewayaudit_operationgatewayidempotency"),
         ("db", "0125_agent_lifecycle_append_only_integrity"),
     ),
-    ("db", "0127_operationgateway_hardening", ("db", "0126_operationgatewayaudit_operationgatewayidempotency")),
-    ("db", "0128_operationgateway_publications_and_audit_trigger", ("db", "0127_operationgateway_hardening")),
+    (("db", "0127_operationgateway_hardening"), ("db", "0126_operationgatewayaudit_operationgatewayidempotency")),
     (
-        "db",
-        "0129_operationgateway_delivery_and_audit_roles",
+        ("db", "0128_operationgateway_publications_and_audit_trigger"),
+        ("db", "0127_operationgateway_hardening"),
+    ),
+    (
+        ("db", "0129_operationgateway_delivery_and_audit_roles"),
         ("db", "0128_operationgateway_publications_and_audit_trigger"),
     ),
+    (("db", "0130_agent_runtime_ingress_evidence"), ("db", "0129_operationgateway_delivery_and_audit_roles")),
 )
 
 
@@ -37,7 +42,7 @@ def test_combined_agent_migration_chain_has_one_linear_leaf():
     graph = MigrationExecutor(connection).loader.graph
 
     assert set(graph.leaf_nodes("db")) == {HEAD_MIGRATION}
-    assert all(node in graph.node_map for node, _ in COMBINED_MIGRATION_CHAIN)
+    assert all(node in graph.node_map and dependency in graph.node_map for node, dependency in COMBINED_MIGRATION_CHAIN)
     for node, dependency in COMBINED_MIGRATION_CHAIN:
         assert graph.node_map[node].parents == {dependency}
 

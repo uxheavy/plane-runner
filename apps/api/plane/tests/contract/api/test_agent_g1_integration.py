@@ -11,7 +11,7 @@ import uuid
 
 import pytest
 from django.core.exceptions import ValidationError
-from django.db import connection
+from django.db import DatabaseError, connection, transaction
 from rest_framework.test import APIClient
 
 from plane.agent.lifecycle import (
@@ -24,6 +24,7 @@ from plane.agent.lifecycle import (
     record_invocation,
 )
 from plane.agent.lifecycle.runtime_contract import validate_invocation_envelope
+from plane.agent.runtime import RuntimeIngressError, dispatch_invocation, ingest_runtime_frame
 from plane.db.models import (
     APIToken,
     AgentRole,
@@ -35,6 +36,8 @@ from plane.db.models import (
     RunAttempt,
     RunState,
     RunTerminalEvent,
+    RuntimeEventIngress,
+    RuntimeExitEvidence,
     User,
 )
 from plane.operation_gateway.contracts import MAX_RESPONSE_BYTES
@@ -62,6 +65,18 @@ def _api_client_for_user(user):
     client = APIClient()
     client.credentials(HTTP_X_API_KEY=token.token)
     return client
+
+
+class DeterministicRuntimeAdapter:
+    """Test-only adapter that exposes the production serialized transport seam."""
+
+    def __init__(self, frames):
+        self.frames = frames
+        self.calls = []
+
+    def dispatch(self, snapshot_json, envelope_json):
+        self.calls.append((snapshot_json, envelope_json))
+        return tuple(json.dumps(frame, separators=(",", ":")) for frame in self.frames)
 
 
 @pytest.mark.contract
@@ -120,6 +135,147 @@ def test_combined_g1_plane_lifecycle_and_gateway_contract(
     assert invocation.state == InvocationState.RUNNING
     assert invocation.envelope["protocol"] == "plane.agent-runtime/v1"
     run.refresh_from_db()
+    runtime_event = {
+        "protocol": "plane.agent-runtime/v1",
+        "trust": "untrusted",
+        "workspaceRef": invocation.envelope["workspaceRef"],
+        "actorRef": invocation.envelope["actorRef"],
+        "runId": invocation.envelope["runId"],
+        "invocationId": invocation.envelope["invocationId"],
+        "sequence": 0,
+        "eventId": "event:g1-runtime-observation",
+        "idempotencyKey": "idempotency:g1-runtime-observation",
+        "correlationId": invocation.envelope["correlationId"],
+        "causationRef": invocation.envelope["causationRef"],
+        "observedAt": "2026-08-05T00:00:00Z",
+        "body": {
+            "kind": "progress_observed",
+            "payload": {"kind": "inline_text", "contentType": "text/plain", "text": "Observed."},
+            "publication": {"action": "observation_only"},
+        },
+    }
+    runtime_exit = {
+        "protocol": "plane.agent-runtime/v1",
+        "authority": "runtime_evidence_only",
+        "workspaceRef": invocation.envelope["workspaceRef"],
+        "actorRef": invocation.envelope["actorRef"],
+        "runId": invocation.envelope["runId"],
+        "invocationId": invocation.envelope["invocationId"],
+        "finalSequence": 0,
+        "idempotencyKey": invocation.envelope["idempotencyKey"],
+        "correlationId": invocation.envelope["correlationId"],
+        "causationRef": invocation.envelope["causationRef"],
+        "kind": "completed",
+    }
+    adapter = DeterministicRuntimeAdapter((runtime_event, runtime_exit))
+    frames = dispatch_invocation(invocation, adapter)
+    assert len(adapter.calls) == 1
+    dispatched_snapshot, dispatched_envelope = adapter.calls[0]
+    assert isinstance(dispatched_snapshot, str)
+    assert isinstance(dispatched_envelope, str)
+    assert json.loads(dispatched_snapshot) == run.snapshot
+    assert json.loads(dispatched_envelope) == invocation.envelope
+
+    runtime_state_before_ingress = (
+        run.state,
+        run.invocation_count,
+        run.last_invocation_id,
+        copy.deepcopy(run.cumulative_usage),
+        OutcomeSubmission.objects.filter(run=run).count(),
+        RunTerminalEvent.objects.filter(run=run).count(),
+    )
+    with pytest.raises(RuntimeIngressError, match="finalSequence"):
+        ingest_runtime_frame(invocation, json.dumps({**runtime_exit, "finalSequence": 1}))
+    event_record = ingest_runtime_frame(invocation, frames[0])
+    assert isinstance(event_record, RuntimeEventIngress)
+    assert event_record.raw_payload == runtime_event
+    with pytest.raises(RuntimeIngressError, match="already bound"):
+        ingest_runtime_frame(
+            invocation,
+            json.dumps(
+                {
+                    **runtime_event,
+                    "body": {
+                        **runtime_event["body"],
+                        "payload": {"kind": "inline_text", "contentType": "text/plain", "text": "Changed."},
+                    },
+                }
+            ),
+        )
+    with pytest.raises(RuntimeIngressError, match="sequence"):
+        ingest_runtime_frame(
+            invocation,
+            json.dumps(
+                {
+                    **runtime_event,
+                    "sequence": 2,
+                    "eventId": "event:g1-runtime-gap",
+                    "idempotencyKey": "idempotency:g1-runtime-gap",
+                }
+            ),
+        )
+    with pytest.raises(RuntimeIngressError, match="actorRef"):
+        ingest_runtime_frame(
+            invocation,
+            json.dumps(
+                {
+                    **runtime_event,
+                    "actorRef": "actor:wrong-runtime-actor",
+                    "eventId": "event:g1-runtime-binding",
+                    "idempotencyKey": "idempotency:g1-runtime-binding",
+                }
+            ),
+        )
+    assert RuntimeEventIngress.objects.filter(invocation=invocation).count() == 1
+    replayed_event = ingest_runtime_frame(invocation, frames[0])
+    assert replayed_event.pk == event_record.pk
+
+    exit_record = ingest_runtime_frame(invocation, frames[1])
+    assert isinstance(exit_record, RuntimeExitEvidence)
+    assert exit_record.raw_payload == runtime_exit
+    replayed_exit = ingest_runtime_frame(invocation, frames[1])
+    assert replayed_exit.pk == exit_record.pk
+    with pytest.raises(RuntimeIngressError, match="different evidence"):
+        ingest_runtime_frame(
+            invocation,
+            json.dumps(
+                {
+                    **runtime_exit,
+                    "kind": "failed",
+                    "failure": {"code": "runtime_error", "message": "Changed.", "retryable": False},
+                }
+            ),
+        )
+    with pytest.raises(DatabaseError, match="append-only"):
+        with transaction.atomic():
+            RuntimeEventIngress.objects.filter(pk=event_record.pk).update(raw_payload={"tampered": True})
+    with pytest.raises(DatabaseError, match="append-only"):
+        with transaction.atomic():
+            RuntimeExitEvidence.objects.filter(pk=exit_record.pk).delete()
+    assert RuntimeEventIngress.objects.get(pk=event_record.pk).raw_payload == runtime_event
+    assert RuntimeExitEvidence.objects.get(pk=exit_record.pk).raw_payload == runtime_exit
+    with pytest.raises(RuntimeIngressError, match="after an exit"):
+        ingest_runtime_frame(
+            invocation,
+            json.dumps(
+                {
+                    **runtime_event,
+                    "sequence": 1,
+                    "eventId": "event:g1-runtime-post-exit",
+                    "idempotencyKey": "idempotency:g1-runtime-post-exit",
+                }
+            ),
+        )
+    run.refresh_from_db()
+    invocation.refresh_from_db()
+    assert (
+        run.state,
+        run.invocation_count,
+        run.last_invocation_id,
+        run.cumulative_usage,
+        OutcomeSubmission.objects.filter(run=run).count(),
+        RunTerminalEvent.objects.filter(run=run).count(),
+    ) == runtime_state_before_ingress
     plane_run_state_before_gateway = (
         run.state,
         run.invocation_count,
