@@ -6,6 +6,7 @@
 import hashlib
 import hmac
 import logging
+import re
 import time
 
 # Django imports
@@ -86,10 +87,32 @@ class APITokenLogMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        start_time = time.time()
         request_body = request.body
         response = self.get_response(request)
-        self.process_request(request, response, request_body)
+        self.process_request(request, response, request_body, duration_ms=int((time.time() - start_time) * 1000))
         return response
+
+    @staticmethod
+    def _is_agent_route(request):
+        path = request.path_info or request.path
+        return "/agent-admin/" in path or "/agent-runtime/" in path or "/agent_runtime/" in path
+
+    @staticmethod
+    def _digest_metadata(content):
+        content = content or b""
+        return {
+            "bytes": len(content),
+            "sha256": hashlib.sha256(content).hexdigest(),
+        }
+
+    @staticmethod
+    def _safe_request_id(request):
+        value = request.META.get("HTTP_X_REQUEST_ID") or request.META.get("HTTP_X_CORRELATION_ID")
+        if value is None:
+            return None
+        value = str(value)
+        return value[:128]
 
     def _safe_decode_body(self, content):
         """
@@ -127,7 +150,7 @@ class APITokenLogMiddleware:
         }
         return str(redacted)
 
-    def process_request(self, request, response, request_body):
+    def process_request(self, request, response, request_body, *, duration_ms=None):
         api_key_header = "X-Api-Key"
         api_key = request.headers.get(api_key_header)
 
@@ -136,24 +159,44 @@ class APITokenLogMiddleware:
             return
 
         try:
-            log_data = {
-                # Tokenize the (high-entropy) API key into a stable, non-reversible
-                # identifier so logs can be correlated to a token without ever
-                # persisting the raw key. A keyed HMAC is used rather than a bare
-                # hash so the digest cannot be precomputed from a known key value.
-                "token_identifier": hmac.new(
-                    settings.SECRET_KEY.encode(), api_key.encode(), hashlib.sha256
-                ).hexdigest(),
-                "path": request.path,
-                "method": request.method,
-                "query_params": request.META.get("QUERY_STRING", ""),
-                "headers": self._redacted_headers(request),
-                "body": self._safe_decode_body(request_body) if request_body else None,
-                "response_body": self._safe_decode_body(response.content) if response.content else None,
-                "response_code": response.status_code,
-                "ip_address": get_client_ip(request=request),
-                "user_agent": request.META.get("HTTP_USER_AGENT", None),
-            }
+            if self._is_agent_route(request):
+                path = request.path_info or request.path
+                workspace_match = re.search(r"/workspaces/([^/]+)/agent-(?:admin|runtime)(?:/|$)", path)
+                log_data = {
+                    "token_identifier": hmac.new(
+                        settings.SECRET_KEY.encode(), api_key.encode(), hashlib.sha256
+                    ).hexdigest(),
+                    "path": path,
+                    "method": request.method,
+                    "status_code": response.status_code,
+                    "response_code": response.status_code,
+                    "duration_ms": duration_ms,
+                    "workspace_slug": workspace_match.group(1) if workspace_match else None,
+                    "request_id": self._safe_request_id(request),
+                    "user_id": getattr(getattr(request, "user", None), "id", None),
+                    "request_body": self._digest_metadata(request_body),
+                    "response_body": self._digest_metadata(response.content),
+                    "query_params": self._digest_metadata(request.META.get("QUERY_STRING", "").encode("utf-8")),
+                }
+            else:
+                log_data = {
+                    # Tokenize the (high-entropy) API key into a stable, non-reversible
+                    # identifier so logs can be correlated to a token without ever
+                    # persisting the raw key. A keyed HMAC is used rather than a bare
+                    # hash so the digest cannot be precomputed from a known key value.
+                    "token_identifier": hmac.new(
+                        settings.SECRET_KEY.encode(), api_key.encode(), hashlib.sha256
+                    ).hexdigest(),
+                    "path": request.path,
+                    "method": request.method,
+                    "query_params": request.META.get("QUERY_STRING", ""),
+                    "headers": self._redacted_headers(request),
+                    "body": self._safe_decode_body(request_body) if request_body else None,
+                    "response_body": self._safe_decode_body(response.content) if response.content else None,
+                    "response_code": response.status_code,
+                    "ip_address": get_client_ip(request=request),
+                    "user_agent": request.META.get("HTTP_USER_AGENT", None),
+                }
 
             process_logs.delay(log_data=log_data)
 

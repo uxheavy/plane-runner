@@ -173,7 +173,11 @@ def test_admin_api_is_idempotent_paged_and_denies_without_side_effect(api_key_cl
     )
     assignment_response = api_key_client.post(
         _admin_url(workspace, f"actors/{actor_id}/assignments/"),
-        {"target_ref": "issue:idempotent", "objective": "Run once."},
+        {
+            "target_ref": "issue:idempotent",
+            "objective": "Run once.",
+            "acceptance_criteria": ["The result is reviewable."],
+        },
         format="json",
     )
     assignment_id = assignment_response.json()["id"]
@@ -256,7 +260,11 @@ def test_admin_api_exposes_revision_cancel_and_gateway_readback(
     assert profile_response.status_code == 201
     assignment_response = api_key_client.post(
         _admin_url(workspace, f"actors/{actor_id}/assignments/"),
-        {"target_ref": "issue:revision", "objective": "Produce a revisable result."},
+        {
+            "target_ref": "issue:revision",
+            "objective": "Produce a revisable result.",
+            "acceptance_criteria": ["The result is reviewable."],
+        },
         format="json",
     )
     assignment_id = assignment_response.json()["id"]

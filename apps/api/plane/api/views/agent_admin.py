@@ -11,6 +11,7 @@ from rest_framework import status
 from rest_framework.response import Response
 
 from plane.agent.administration import update_actor
+from plane.agent.validation import MAX_AGENT_READBACK_BYTES
 from plane.agent.lifecycle import (
     AgentDomainError,
     IdempotencyConflictError,
@@ -84,6 +85,20 @@ class AgentAdminAPIView(BaseAPIView):
                 status=status.HTTP_409_CONFLICT,
             )
         return super().handle_exception(exc)
+
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        try:
+            response_size = len(response.rendered_content)
+        except Exception:
+            response_size = MAX_AGENT_READBACK_BYTES + 1
+        if response_size > MAX_AGENT_READBACK_BYTES:
+            response = Response(
+                {"error": {"code": "READBACK_TOO_LARGE", "message": "The Agent readback exceeds its bound."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+            response = super().finalize_response(request, response, *args, **kwargs)
+        return response
 
     def workspace(self):
         return get_object_or_404(Workspace, slug=self.kwargs["slug"])
@@ -434,8 +449,15 @@ class AgentGatewayReadbackListAPIEndpoint(AgentAdminAPIView):
 
     def _readback(self, receipt):
         audit = OperationGatewayAudit.objects.filter(
+            workspace_id=receipt.workspace_id,
             workspace_slug=receipt.workspace_slug,
+            request_id=receipt.request_id,
+            invocation_id=receipt.invocation_id,
+            caller_id=receipt.caller_id,
+            operation_id=receipt.operation_id,
             idempotency_key=receipt.idempotency_key,
+            correlation_id=receipt.correlation_id,
+            request_digest=receipt.request_digest,
         ).order_by("created_at", "id")
         return GatewayReadbackSerializer({"receipt": receipt, "audit": audit}).data
 
@@ -444,7 +466,14 @@ class AgentGatewayReadbackDetailAPIEndpoint(AgentAdminAPIView):
     def get(self, request, slug, pk):
         receipt = get_object_or_404(OperationGatewayIdempotency, workspace_slug=slug, pk=pk)
         audit = OperationGatewayAudit.objects.filter(
+            workspace_id=receipt.workspace_id,
             workspace_slug=receipt.workspace_slug,
+            request_id=receipt.request_id,
+            invocation_id=receipt.invocation_id,
+            caller_id=receipt.caller_id,
+            operation_id=receipt.operation_id,
             idempotency_key=receipt.idempotency_key,
+            correlation_id=receipt.correlation_id,
+            request_digest=receipt.request_digest,
         ).order_by("created_at", "id")
         return Response(GatewayReadbackSerializer({"receipt": receipt, "audit": audit}).data)

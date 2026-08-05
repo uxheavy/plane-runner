@@ -9,6 +9,16 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 from .base import BaseModel
+from plane.agent.validation import (
+    PROFILE_MODEL_KEYS,
+    PROFILE_RUNTIME_KEYS,
+    PROFILE_TOOL_KEYS,
+    AgentValueError,
+    validate_bounded_list,
+    validate_bounded_json,
+    validate_profile_dictionary,
+    validate_bounded_string_list,
+)
 
 
 def default_list():
@@ -245,6 +255,20 @@ class ProfileVersion(AgentScopedModel):
         ]
 
     def save(self, *args, **kwargs):
+        try:
+            validate_profile_dictionary(self.model_defaults, "model_defaults", allowed_keys=PROFILE_MODEL_KEYS)
+            validate_profile_dictionary(self.runtime_defaults, "runtime_defaults", allowed_keys=PROFILE_RUNTIME_KEYS)
+            validate_bounded_json(
+                self.tool_presentation,
+                "tool_presentation",
+                reject_credentials=True,
+                allowed_keys=PROFILE_TOOL_KEYS,
+            )
+            validate_bounded_string_list(self.expected_outcomes, "expected_outcomes", max_items=32)
+            validate_bounded_list(self.context_refs, "context_refs", max_items=64)
+            validate_bounded_list(self.memory_scopes, "memory_scopes", max_items=64)
+        except AgentValueError as exc:
+            raise ValidationError(str(exc)) from exc
         _assert_immutable(self, self.IMMUTABLE_FIELDS)
         super().save(*args, **kwargs)
 
@@ -285,6 +309,16 @@ class AssignmentContract(AgentScopedModel):
 
     def save(self, *args, **kwargs):
         allowed = kwargs.pop("_allow_lifecycle", False)
+        try:
+            validate_bounded_string_list(
+                self.acceptance_criteria,
+                "acceptance_criteria",
+                min_items=1,
+                max_items=32,
+            )
+            validate_bounded_list(self.context_refs, "context_refs", max_items=64)
+        except AgentValueError as exc:
+            raise ValidationError(str(exc)) from exc
         _assert_lifecycle_mutation(self, ("state", "revision"), allowed=allowed)
         super().save(*args, **kwargs)
 
@@ -312,6 +346,7 @@ class RunAttempt(AgentScopedModel):
     snapshot = models.JSONField()
     snapshot_content_digest = models.CharField(max_length=73, editable=False)
     state = models.CharField(max_length=32, choices=RunState.choices, default=RunState.QUEUED)
+    pending_input_ref = models.CharField(max_length=128, null=True, blank=True, editable=False)
     invocation_count = models.PositiveIntegerField(default=0)
     last_invocation_id = models.CharField(max_length=128, null=True, blank=True)
     cumulative_usage = models.JSONField(default=default_dict)
@@ -349,7 +384,7 @@ class RunAttempt(AgentScopedModel):
         "recovery_of_id",
         "recovery_intent",
     )
-    LIFECYCLE_FIELDS = ("state", "invocation_count", "last_invocation_id", "cumulative_usage")
+    LIFECYCLE_FIELDS = ("state", "pending_input_ref", "invocation_count", "last_invocation_id", "cumulative_usage")
 
     class Meta:
         db_table = "agent_run_attempts"
@@ -411,6 +446,7 @@ class RunInputEvent(AgentScopedModel):
     run = models.ForeignKey(RunAttempt, on_delete=models.PROTECT, related_name="input_events")
     event_ref = models.CharField(max_length=128, unique=True, editable=False)
     kind = models.CharField(max_length=32, choices=InputEventKind.choices)
+    sequence = models.PositiveIntegerField(null=True, blank=True, editable=False)
     payload = models.JSONField(default=default_dict)
     payload_digest = models.CharField(max_length=72, editable=False)
     pending_input_ref = models.CharField(max_length=128, null=True, blank=True, editable=False)
@@ -421,6 +457,11 @@ class RunInputEvent(AgentScopedModel):
         db_table = "agent_run_input_events"
         ordering = ("created_at",)
         constraints = [
+            models.UniqueConstraint(
+                fields=["run", "sequence"],
+                condition=models.Q(sequence__isnull=False),
+                name="agent_input_run_sequence_unique",
+            ),
             models.CheckConstraint(
                 condition=(
                     models.Q(idempotency_key__isnull=True, command_fingerprint__isnull=True)
@@ -431,7 +472,7 @@ class RunInputEvent(AgentScopedModel):
                     )
                 ),
                 name="agent_input_command_fingerprint_binding",
-            )
+            ),
         ]
 
     IMMUTABLE_FIELDS = (

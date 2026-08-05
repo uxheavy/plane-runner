@@ -12,6 +12,17 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection, transaction
 from django.utils import timezone
 
+from plane.agent.validation import (
+    MAX_AGENT_COLLECTION_ITEMS,
+    PROFILE_MODEL_KEYS,
+    PROFILE_RUNTIME_KEYS,
+    PROFILE_TOOL_KEYS,
+    AgentValueError,
+    validate_bounded_json,
+    validate_bounded_list,
+    validate_bounded_string_list,
+    validate_profile_dictionary,
+)
 from plane.db.models import (
     AgentActor,
     AgentRole,
@@ -201,28 +212,53 @@ def _credential_ref(value):
     return value
 
 
-def _as_list(value, field_name):
-    if value is None:
-        return []
-    if not isinstance(value, list):
-        raise AgentDomainError(f"{field_name} must be a list")
+def _as_list(
+    value,
+    field_name,
+    *,
+    min_items=0,
+    max_items=MAX_AGENT_COLLECTION_ITEMS,
+    max_bytes=MAX_BOUNDED_BYTE_COUNT,
+    max_string_bytes=MAX_BOUNDED_TEXT_BYTES,
+    reject_credentials=False,
+):
     try:
-        canonical_json(value)
-    except RuntimeContractError as exc:
-        raise AgentDomainError(f"{field_name} must contain JSON values") from exc
-    return deepcopy(value)
+        return validate_bounded_list(
+            value,
+            field_name,
+            min_items=min_items,
+            max_items=max_items,
+            max_bytes=max_bytes,
+            max_string_bytes=max_string_bytes,
+            reject_credentials=reject_credentials,
+        )
+    except AgentValueError as exc:
+        raise AgentDomainError(str(exc)) from exc
 
 
-def _as_dict(value, field_name):
-    if value is None:
-        return {}
-    if not isinstance(value, dict):
+def _as_dict(
+    value,
+    field_name,
+    *,
+    max_items=MAX_AGENT_COLLECTION_ITEMS,
+    max_bytes=MAX_BOUNDED_BYTE_COUNT,
+    max_string_bytes=MAX_BOUNDED_TEXT_BYTES,
+    reject_credentials=False,
+):
+    try:
+        result = validate_bounded_json(
+            value or {},
+            field_name,
+            max_items=max_items,
+            max_bytes=max_bytes,
+            max_string_bytes=max_string_bytes,
+            reject_credentials=reject_credentials,
+        )
+    except AgentValueError as exc:
+        raise AgentDomainError(str(exc)) from exc
+    if not isinstance(result, dict):
         raise AgentDomainError(f"{field_name} must be an object")
-    try:
-        canonical_json(value)
-    except RuntimeContractError as exc:
-        raise AgentDomainError(f"{field_name} must contain JSON values") from exc
-    return deepcopy(value)
+    return result
 
 
 def _same_json(left, right):
@@ -678,14 +714,35 @@ def create_profile(
     role = _state(role, AgentRole, "Agent role")
     instructions = _ensure_non_empty(instructions, "instructions", limit=MAX_BOUNDED_PROMPT_BYTES)
     display_name = _ensure_non_empty(display_name or actor.display_name, "display_name", limit=255)
-    model_defaults = _as_dict(model_defaults, "model_defaults")
-    runtime_defaults = _as_dict(runtime_defaults, "runtime_defaults")
-    tool_presentation = _as_dict(tool_presentation, "tool_presentation")
+    persona = persona or ""
+    if not isinstance(persona, str) or len(persona.encode("utf-8")) > MAX_BOUNDED_PROMPT_BYTES:
+        raise AgentDomainError(f"persona must fit within {MAX_BOUNDED_PROMPT_BYTES} UTF-8 bytes")
+    try:
+        model_defaults = validate_profile_dictionary(model_defaults, "model_defaults", allowed_keys=PROFILE_MODEL_KEYS)
+        runtime_defaults = validate_profile_dictionary(
+            runtime_defaults,
+            "runtime_defaults",
+            allowed_keys=PROFILE_RUNTIME_KEYS,
+        )
+    except AgentValueError as exc:
+        raise AgentDomainError(str(exc)) from exc
+    try:
+        tool_presentation = validate_bounded_json(
+            tool_presentation or {},
+            "tool_presentation",
+            reject_credentials=True,
+            allowed_keys=PROFILE_TOOL_KEYS,
+        )
+    except AgentValueError as exc:
+        raise AgentDomainError(str(exc)) from exc
     if _RESERVED_PROFILE_KEYS.intersection(tool_presentation):
         raise AgentDomainError("Profile presentation cannot define authorization or operation allowlists")
-    expected_outcomes = _as_list(expected_outcomes, "expected_outcomes")
-    context_refs = _as_list(context_refs, "context_refs")
-    memory_scopes = _as_list(memory_scopes, "memory_scopes")
+    try:
+        expected_outcomes = validate_bounded_string_list(expected_outcomes, "expected_outcomes", max_items=32)
+    except AgentValueError as exc:
+        raise AgentDomainError(str(exc)) from exc
+    context_refs = _as_list(context_refs, "context_refs", max_items=64, max_string_bytes=MAX_BOUNDED_TOKEN_BYTES)
+    memory_scopes = _as_list(memory_scopes, "memory_scopes", max_items=64, max_string_bytes=MAX_BOUNDED_TOKEN_BYTES)
     if version is None:
         latest = (
             ProfileVersion.objects.filter(actor=actor).order_by("-version").values_list("version", flat=True).first()
@@ -737,6 +794,17 @@ def create_assignment(
         lineage_of = AssignmentContract.objects.get(pk=lineage_of.pk)
         if (lineage_of.workspace_id, lineage_of.project_id) != (assignee.workspace_id, project.id if project else None):
             raise AgentDomainError("Assignment lineage is outside the Agent's Plane scope")
+    try:
+        acceptance_criteria = validate_bounded_string_list(
+            acceptance_criteria,
+            "acceptance_criteria",
+            min_items=1,
+            max_items=32,
+            max_string_bytes=MAX_BOUNDED_TEXT_BYTES,
+        )
+    except AgentValueError as exc:
+        raise AgentDomainError(str(exc)) from exc
+    context_refs = _as_list(context_refs, "context_refs", max_items=64, max_string_bytes=MAX_BOUNDED_TOKEN_BYTES)
     return AssignmentContract.objects.create(
         workspace=assignee.workspace,
         project=project,
@@ -744,8 +812,8 @@ def create_assignment(
         lineage_of=lineage_of,
         target_ref=target_ref,
         objective=objective,
-        acceptance_criteria=_as_list(acceptance_criteria, "acceptance_criteria"),
-        context_refs=_as_list(context_refs, "context_refs"),
+        acceptance_criteria=acceptance_criteria,
+        context_refs=context_refs,
         state=AssignmentState.READY,
         created_by=created_by,
     )
@@ -989,13 +1057,12 @@ def record_input_event(
     key = (
         _normalise_idempotency(idempotency_key, "input event idempotency_key") if idempotency_key is not None else None
     )
-    try:
-        canonical_json(payload)
-    except RuntimeContractError as exc:
-        raise AgentDomainError("Input event payload must be JSON") from exc
+    payload = _as_dict(payload, "Input event payload")
     pending_ref = (
         _normalise_ref(pending_input_ref, "event", "pending_input_ref") if pending_input_ref is not None else None
     )
+    if pending_ref is None:
+        raise AgentDomainError("Input events require the exact pending input reference")
     event_fingerprint = None
     if key is not None:
         event_fingerprint = _command_fingerprint(
@@ -1023,6 +1090,12 @@ def record_input_event(
                 else:
                     raise IdempotencyConflictError("Input event idempotency key is bound to another run")
             return existing
+    if run.state != RunState.WAITING_FOR_INPUT:
+        raise InvalidTransitionError("Input events require a run that is explicitly waiting for input")
+    if run.pending_input_ref != pending_ref:
+        raise AgentDomainError("Input event does not match the run's pending input reference")
+    _ensure_actor_active(run.actor)
+    sequence = RunInputEvent.all_objects.filter(run=run).count() + 1
     event_uuid = uuid4()
     event_ref = namespaced_ref("event", str(event_uuid))
     fields = dict(
@@ -1031,6 +1104,7 @@ def record_input_event(
         run=run,
         event_ref=event_ref,
         kind=kind,
+        sequence=sequence,
         payload=deepcopy(payload),
         payload_digest=content_digest(payload),
         pending_input_ref=pending_ref,
@@ -1168,8 +1242,6 @@ def record_invocation(
         return existing
     if run.state not in {RunState.QUEUED, RunState.RUNNING, RunState.WAITING_FOR_INPUT}:
         raise InvalidTransitionError(f"Run {run.id} cannot receive an invocation from {run.state}")
-    if trigger is None and run.invocation_count > 0 and input_event is None:
-        input_event = record_input_event(run, payload={"kind": "continuation"}, kind=InputEventKind.CONTINUATION)
     trigger_value = _make_trigger(run, trigger, input_event)
     invocation_uuid = None
     if requested_invocation_ref is not None:
@@ -1267,6 +1339,8 @@ def record_invocation(
         message="Invocation idempotency key or invocation id is bound to another Plane command",
     )
     run.state = RunState.RUNNING
+    if input_event is not None:
+        run.pending_input_ref = None
     run.invocation_count += 1
     run.last_invocation_id = invocation_ref_value
     run.cumulative_usage = cumulative_usage
@@ -1275,13 +1349,18 @@ def record_invocation(
 
 
 @transaction.atomic
-def transition_run(run, target):
+def transition_run(run, target, *, pending_input_ref=None):
     target = _state(target, RunState, "run state")
     locked = RunAttempt.objects.select_for_update().get(pk=run.pk)
     if target == RunState.SUCCEEDED:
         raise InvalidTransitionError("Runs succeed only when an outcome is explicitly submitted")
     if target not in _RUN_TRANSITIONS[locked.state]:
         raise InvalidTransitionError(f"Run cannot move from {locked.state} to {target}")
+    pending_ref = None
+    if target == RunState.WAITING_FOR_INPUT:
+        if pending_input_ref is None:
+            raise AgentDomainError("Waiting runs require an explicit pending input reference")
+        pending_ref = _normalise_ref(pending_input_ref, "event", "pending_input_ref")
     if target in {RunState.FAILED, RunState.BLOCKED, RunState.CANCELLED}:
         if not locked.last_invocation_id:
             raise TerminalEventRequiredError(
@@ -1304,6 +1383,7 @@ def transition_run(run, target):
         )
         return locked
     locked.state = target
+    locked.pending_input_ref = pending_ref if target == RunState.WAITING_FOR_INPUT else None
     locked.save(_allow_lifecycle=True)
     if locked.last_invocation_id and target == RunState.WAITING_FOR_INPUT:
         invocation = RuntimeInvocation.objects.select_for_update().get(invocation_id=locked.last_invocation_id)
@@ -1419,6 +1499,7 @@ def _create_terminal_event_locked(
     invocation.state = invocation_state
     invocation.save(_allow_lifecycle=True)
     run.state = run_state
+    run.pending_input_ref = None
     run.save(_allow_lifecycle=True)
     event_fields = dict(
         workspace=run.workspace,
@@ -1512,8 +1593,8 @@ def finalize_invocation(invocation, *, kind, reason="", source=TerminalEventSour
 @transaction.atomic
 def propose_outcome(run, *, summary, artifacts=None, evidence=None, idempotency_key=None, created_by=None):
     summary = _ensure_non_empty(summary, "summary")
-    artifacts_value = _as_list(artifacts, "artifacts")
-    evidence_value = _as_list(evidence, "evidence")
+    artifacts_value = _as_list(artifacts, "artifacts", max_items=64)
+    evidence_value = _as_list(evidence, "evidence", max_items=64)
     run = RunAttempt.objects.select_for_update().get(pk=run.pk)
     key = _normalise_idempotency(idempotency_key, "outcome idempotency_key") if idempotency_key is not None else None
     outcome_fingerprint = None

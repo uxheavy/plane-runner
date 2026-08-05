@@ -257,12 +257,20 @@ def test_postgres_guards_reject_hostile_bulk_and_raw_mutations(assignment, profi
 @pytest.mark.django_db(transaction=True)
 def test_non_superuser_owner_cannot_truncate_or_rebind_keyed_records(assignment, profile):
     run = create_run(assignment, profile, idempotency_key="idempotency:truncate-run")
+    record_invocation(run, idempotency_key="idempotency:truncate-initial")
+    transition_run(run, RunState.WAITING_FOR_INPUT, pending_input_ref="event:truncate-question")
     input_event = record_input_event(
         run,
         payload={"answer": "original"},
+        pending_input_ref="event:truncate-question",
         idempotency_key="idempotency:truncate-input",
     )
-    invocation = record_invocation(run, idempotency_key="idempotency:truncate-invocation")
+    invocation = record_invocation(
+        run,
+        trigger="human_input",
+        input_event=input_event,
+        idempotency_key="idempotency:truncate-invocation",
+    )
     propose_outcome(
         run,
         summary="original",
@@ -488,11 +496,12 @@ def test_invocations_resume_the_same_run_and_keep_the_frozen_snapshot(assignment
     run = create_run(assignment, profile)
     snapshot = deepcopy(run.snapshot)
     first = record_invocation(run, idempotency_key="idempotency:first-invocation", usage={"inputTokens": 4})
-    transition_run(run, RunState.WAITING_FOR_INPUT)
+    transition_run(run, RunState.WAITING_FOR_INPUT, pending_input_ref="event:input-question")
     answer = record_input_event(
         run,
         payload={"answer": "Continue"},
         kind=InputEventKind.HUMAN_INPUT,
+        pending_input_ref="event:input-question",
         idempotency_key="idempotency:answer",
     )
     second = record_invocation(
@@ -513,6 +522,91 @@ def test_invocations_resume_the_same_run_and_keep_the_frozen_snapshot(assignment
     assert run.cumulative_usage == {"inputTokens": 4, "outputTokens": 6, "durationMs": 0}
     assert second.state == InvocationState.RUNNING
     validate_invocation_envelope(second.envelope)
+
+
+@pytest.mark.django_db
+def test_input_events_require_current_waiting_question_and_converge_on_replay(assignment, profile):
+    run = create_run(assignment, profile)
+    with pytest.raises(AgentDomainError):
+        record_input_event(
+            run,
+            payload={"answer": "too early"},
+            pending_input_ref="event:question-before-waiting",
+            idempotency_key="idempotency:input-before-waiting",
+        )
+    initial = record_invocation(run, idempotency_key="idempotency:input-initial")
+    pending_ref = "event:current-question"
+    transition_run(run, RunState.WAITING_FOR_INPUT, pending_input_ref=pending_ref)
+    with pytest.raises(AgentDomainError):
+        record_input_event(
+            run,
+            payload={"answer": "wrong question"},
+            pending_input_ref="event:stale-question",
+            idempotency_key="idempotency:input-wrong-question",
+        )
+    event = record_input_event(
+        run,
+        payload={"answer": "accepted"},
+        pending_input_ref=pending_ref,
+        idempotency_key="idempotency:input-answer",
+    )
+    assert event.sequence == 1
+    assert (
+        record_input_event(
+            run,
+            payload={"answer": "accepted"},
+            pending_input_ref=pending_ref,
+            idempotency_key="idempotency:input-answer",
+        ).id
+        == event.id
+    )
+    continued = record_invocation(
+        run,
+        trigger="human_input",
+        input_event=event,
+        idempotency_key="idempotency:input-continuation",
+    )
+    assert continued.run_id == initial.run_id == run.id
+    run.refresh_from_db()
+    assert run.state == RunState.RUNNING
+    assert run.pending_input_ref is None
+
+    with pytest.raises(InvalidTransitionError):
+        record_input_event(
+            run,
+            payload={"answer": "terminal or nonwaiting mutation"},
+            pending_input_ref=pending_ref,
+            idempotency_key="idempotency:input-nonwaiting",
+        )
+
+
+@pytest.mark.django_db
+def test_assignment_and_profile_boundaries_reject_unrunnable_or_credential_data(actor, assignment, profile):
+    before_assignments = AssignmentContract.objects.filter(assignee=actor).count()
+    for criteria in ([], ["criterion"] * 33, [{"criterion": "not a string"}]):
+        with pytest.raises(AgentDomainError):
+            create_assignment(
+                actor,
+                target_ref="issue:invalid-criteria",
+                objective="Must not persist.",
+                acceptance_criteria=criteria,
+            )
+    assert AssignmentContract.objects.filter(assignee=actor).count() == before_assignments
+
+    before_profiles = ProfileVersion.objects.filter(actor=actor).count()
+    for defaults in (
+        {"stop": [{"X-API-Key": "canary"}]},
+        {"totalBudget": {"Cookie": "canary"}},
+        {"headers": {"Authorization": "Bearer canary"}},
+    ):
+        with pytest.raises(AgentDomainError):
+            create_profile(
+                actor,
+                role=AgentRole.WORKER,
+                instructions="Credential-shaped profile data is forbidden.",
+                model_defaults=defaults,
+            )
+    assert ProfileVersion.objects.filter(actor=actor).count() == before_profiles
 
 
 @pytest.mark.django_db
@@ -797,9 +891,12 @@ def test_idempotency_fingerprints_reject_material_command_changes(assignment, pr
             idempotency_key="idempotency:fingerprint-run",
         )
 
+    record_invocation(run, idempotency_key="idempotency:fingerprint-initial")
+    transition_run(run, RunState.WAITING_FOR_INPUT, pending_input_ref="event:fingerprint-question")
     input_event = record_input_event(
         run,
         payload={"answer": "one"},
+        pending_input_ref="event:fingerprint-question",
         idempotency_key="idempotency:fingerprint-input",
     )
     assert (
@@ -814,17 +911,23 @@ def test_idempotency_fingerprints_reject_material_command_changes(assignment, pr
         record_input_event(
             run,
             payload={"answer": "two"},
+            pending_input_ref="event:fingerprint-question",
             idempotency_key="idempotency:fingerprint-input",
         )
     with pytest.raises(IdempotencyConflictError):
         record_input_event(
             run,
             payload={"answer": "one"},
-            pending_input_ref="event:00000000-0000-0000-0000-000000000001",
+            pending_input_ref="event:another-question",
             idempotency_key="idempotency:fingerprint-input",
         )
 
-    invocation = record_invocation(run, idempotency_key="idempotency:fingerprint-invocation")
+    invocation = record_invocation(
+        run,
+        trigger="human_input",
+        input_event=input_event,
+        idempotency_key="idempotency:fingerprint-invocation",
+    )
     with pytest.raises(IdempotencyConflictError):
         record_invocation(
             run,

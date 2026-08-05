@@ -11,22 +11,15 @@ from typing import Any, Protocol
 
 from django.db import transaction
 
+from plane.agent.validation import is_credential_key
 from plane.agent.lifecycle import create_profile
 from plane.db.models import AgentActor, ProfileVersion
 
 
 _CREDENTIAL_REF_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9-]{0,31}:[A-Za-z0-9][A-Za-z0-9._~/-]{0,219}$")
-_SENSITIVE_KEYS = frozenset(
-    {
-        "api_key",
-        "apikey",
-        "authorization",
-        "credential",
-        "credential_ref",
-        "password",
-        "secret",
-        "token",
-    }
+_EMBEDDED_CREDENTIAL_PATTERN = re.compile(
+    r"(?:^[a-z][a-z0-9+.-]*://[^/\s:@]+:[^@\s/]+@|\b(?:bearer|basic|api[\W_]*key|secret|password)\s*[:=]\s*\S+)",
+    re.IGNORECASE,
 )
 
 
@@ -80,7 +73,7 @@ def validate_credential_ref(value: str | None) -> str | None:
 def redact_admin_value(value: Any, *, key: str | None = None) -> Any:
     """Redact secret-shaped values before they cross the admin read boundary."""
 
-    if key is not None and key.lower() in _SENSITIVE_KEYS:
+    if key is not None and is_credential_key(key):
         return "[redacted]"
     if isinstance(value, dict):
         return {
@@ -88,6 +81,8 @@ def redact_admin_value(value: Any, *, key: str | None = None) -> Any:
         }
     if isinstance(value, list):
         return [redact_admin_value(item) for item in value]
+    if isinstance(value, str) and _EMBEDDED_CREDENTIAL_PATTERN.search(value):
+        return "[redacted]"
     return value
 
 

@@ -6,6 +6,7 @@
 from rest_framework import serializers
 
 from plane.agent.administration import redact_admin_value, validate_credential_ref
+from plane.agent.validation import AgentValueError, validate_bounded_json
 from plane.db.models import (
     AgentActor,
     AgentRole,
@@ -69,15 +70,20 @@ class AgentActorPatchSerializer(serializers.Serializer):
 
 class ProfileVersionCreateSerializer(serializers.Serializer):
     role = serializers.ChoiceField(choices=AgentRole.choices)
-    instructions = serializers.CharField(allow_blank=False, trim_whitespace=True)
+    instructions = serializers.CharField(max_length=32768, allow_blank=False, trim_whitespace=True)
     display_name = serializers.CharField(max_length=255, required=False, allow_blank=False, trim_whitespace=True)
-    persona = serializers.CharField(required=False, allow_blank=True)
-    expected_outcomes = serializers.ListField(required=False, child=serializers.CharField(), default=list)
+    persona = serializers.CharField(max_length=32768, required=False, allow_blank=True)
+    expected_outcomes = serializers.ListField(
+        required=False,
+        child=serializers.CharField(max_length=4096),
+        max_length=32,
+        default=list,
+    )
     model_defaults = serializers.DictField(required=False, default=dict)
     runtime_defaults = serializers.DictField(required=False, default=dict)
-    context_refs = serializers.ListField(required=False, default=list)
+    context_refs = serializers.ListField(required=False, max_length=64, default=list)
     tool_presentation = serializers.DictField(required=False, default=dict)
-    memory_scopes = serializers.ListField(required=False, default=list)
+    memory_scopes = serializers.ListField(required=False, max_length=64, default=list)
 
 
 class ProfileVersionAdminSerializer(BaseSerializer):
@@ -107,9 +113,14 @@ class ProfileVersionAdminSerializer(BaseSerializer):
 
 class AssignmentCreateSerializer(serializers.Serializer):
     target_ref = serializers.CharField(max_length=255, allow_blank=False, trim_whitespace=True)
-    objective = serializers.CharField(allow_blank=False, trim_whitespace=True)
-    acceptance_criteria = serializers.ListField(required=False, child=serializers.CharField(), default=list)
-    context_refs = serializers.ListField(required=False, default=list)
+    objective = serializers.CharField(max_length=4096, allow_blank=False, trim_whitespace=True)
+    acceptance_criteria = serializers.ListField(
+        required=True,
+        min_length=1,
+        max_length=32,
+        child=serializers.CharField(max_length=4096),
+    )
+    context_refs = serializers.ListField(required=False, max_length=64, default=list)
 
 
 class AssignmentAdminSerializer(BaseSerializer):
@@ -153,7 +164,13 @@ class InputEventCreateSerializer(serializers.Serializer):
     idempotency_key = serializers.CharField(max_length=128, allow_blank=False, trim_whitespace=True)
     payload = serializers.DictField()
     kind = serializers.ChoiceField(choices=InputEventKind.choices, required=False, default=InputEventKind.HUMAN_INPUT)
-    pending_input_ref = serializers.CharField(max_length=128, required=False, allow_blank=False)
+    pending_input_ref = serializers.CharField(max_length=128, required=True, allow_blank=False)
+
+    def validate_payload(self, value):
+        try:
+            return validate_bounded_json(value, "payload", max_items=64)
+        except AgentValueError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
 
 
 class RunAdminSerializer(BaseSerializer):
@@ -192,7 +209,7 @@ class RunAdminSerializer(BaseSerializer):
 class RunInputEventAdminSerializer(BaseSerializer):
     class Meta:
         model = RunInputEvent
-        fields = ["id", "event_ref", "kind", "payload_digest", "pending_input_ref", "created_at"]
+        fields = ["id", "event_ref", "sequence", "kind", "payload_digest", "pending_input_ref", "created_at"]
         read_only_fields = fields
 
 
@@ -260,9 +277,9 @@ class OutcomeAdminSerializer(BaseSerializer):
 
 
 class OutcomeCreateSerializer(serializers.Serializer):
-    summary = serializers.CharField(allow_blank=False, trim_whitespace=True)
-    artifacts = serializers.ListField(required=False, default=list)
-    evidence = serializers.ListField(required=False, default=list)
+    summary = serializers.CharField(max_length=32768, allow_blank=False, trim_whitespace=True)
+    artifacts = serializers.ListField(required=False, max_length=64, default=list)
+    evidence = serializers.ListField(required=False, max_length=64, default=list)
     idempotency_key = serializers.CharField(max_length=128, required=False, allow_blank=False, trim_whitespace=True)
 
 
