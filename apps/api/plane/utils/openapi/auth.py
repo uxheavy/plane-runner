@@ -32,3 +32,18 @@ class APIKeyAuthenticationExtension(OpenApiAuthenticationExtension):
             "name": "X-API-Key",
             "description": "API key authentication. Provide your API key in the X-API-Key header.",  # noqa: E501
         }
+
+
+class APIKeyOrBearerAuthenticationExtension(OpenApiAuthenticationExtension):
+    """OpenAPI declaration for the gateway's dual credential wire."""
+
+    target_class = "plane.api.middleware.api_authentication.APIKeyOrBearerAuthentication"
+    name = "ApiKeyOrBearerAuthentication"
+    priority = 1
+
+    def get_security_definition(self, auto_schema):
+        return {
+            "type": "http",
+            "scheme": "bearer",
+            "description": "Plane API key (X-API-Key) or OAuth bearer credential.",
+        }
