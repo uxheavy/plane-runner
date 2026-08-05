@@ -113,4 +113,4 @@ def progressive_operation_ids(eager_catalog: Mapping[str, Any]) -> tuple[str, ..
         for item in eager_catalog.get("eagerOperations", [])
         if isinstance(item, Mapping)
     }
-    return tuple(operation_id for operation_id in OPERATION_CATALOG if f"operation:{operation_id}" not in eager_refs)
+    return tuple(operation_id for operation_id in OPERATION_CATALOG if operation_id not in eager_refs)

@@ -156,5 +156,10 @@ class CatalogDescribeInputSerializer(StrictSerializer):
     operation_id = serializers.CharField(max_length=128, allow_blank=False, trim_whitespace=True)
 
 
+class CodeModeSpillInputSerializer(StrictSerializer):
+    size_bytes = serializers.IntegerField(min_value=1, max_value=1_048_576)
+    content_digest = serializers.CharField(max_length=128, min_length=8, allow_blank=False, trim_whitespace=True)
+
+
 def canonical_json(value: Any) -> str:
     return json.dumps(value, cls=DjangoJSONEncoder, sort_keys=True, separators=(",", ":"))

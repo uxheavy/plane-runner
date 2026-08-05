@@ -529,8 +529,22 @@ def _runtime_policy(profile):
             "maxArtifactBytes", defaults.get("max_artifact_bytes", MAX_BOUNDED_BYTE_COUNT)
         ),
         "maxReceiptBytes": defaults.get("maxReceiptBytes", defaults.get("max_receipt_bytes", 65_536)),
+        "maxCodeModeInputBytes": defaults.get(
+            "maxCodeModeInputBytes", defaults.get("max_code_mode_input_bytes", 65_536)
+        ),
+        "maxCodeModeOutputBytes": defaults.get(
+            "maxCodeModeOutputBytes", defaults.get("max_code_mode_output_bytes", 65_536)
+        ),
+        "maxCodeModeCalls": defaults.get("maxCodeModeCalls", defaults.get("max_code_mode_calls", 64)),
     }
-    for field in ("maxEventPayloadBytes", "maxArtifactBytes", "maxReceiptBytes"):
+    for field in (
+        "maxEventPayloadBytes",
+        "maxArtifactBytes",
+        "maxReceiptBytes",
+        "maxCodeModeInputBytes",
+        "maxCodeModeOutputBytes",
+        "maxCodeModeCalls",
+    ):
         value = policy[field]
         if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= MAX_BOUNDED_BYTE_COUNT:
             raise AgentDomainError(f"runtime_defaults.{field} is invalid")
@@ -1242,6 +1256,126 @@ def record_invocation(
     run.cumulative_usage = cumulative_usage
     run.save(_allow_lifecycle=True)
     return invocation
+
+
+@transaction.atomic
+def record_code_mode_usage(
+    run,
+    invocation,
+    *,
+    input_tokens=0,
+    output_tokens=0,
+    duration_ms=0,
+    input_bytes=0,
+    output_bytes=0,
+    calls=0,
+    spill_bytes=0,
+):
+    """Persist one bounded Code Mode usage delta on its Plane-owned run.
+
+    Byte/call accounting is deliberately separate from model token accounting.
+    The locked run is the sole cumulative budget authority; a host process never
+    gets to reset or extend these values from an untrusted callback payload.
+    """
+
+    fields = {
+        "inputTokens": input_tokens,
+        "outputTokens": output_tokens,
+        "durationMs": duration_ms,
+        "codeModeInputBytes": input_bytes,
+        "codeModeOutputBytes": output_bytes,
+        "codeModeCalls": calls,
+        "codeModeSpillBytes": spill_bytes,
+    }
+    for field, value in fields.items():
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0 or value > MAX_INTEGER:
+            raise AgentDomainError(f"Code Mode usage {field} is invalid")
+
+    locked_run = (
+        RunAttempt.objects.select_for_update()
+        .select_related("actor", "profile_version", "assignment", "workspace")
+        .get(pk=run.pk)
+    )
+    locked_invocation = RuntimeInvocation.objects.select_related("run").get(pk=invocation.pk)
+    if locked_invocation.run_id != locked_run.id or locked_invocation.workspace_id != locked_run.workspace_id:
+        raise AgentDomainError("Code Mode usage is not bound to the stored run and invocation")
+    if locked_run.actor_id != locked_run.profile_version.actor_id:
+        raise AgentDomainError("Code Mode usage has an invalid Plane actor binding")
+    if locked_invocation.state in _INVOCATION_TERMINAL_STATES:
+        raise InvalidTransitionError("A terminal invocation cannot receive Code Mode usage")
+
+    try:
+        snapshot = validate_run_snapshot(locked_run.snapshot)
+        validate_invocation_envelope(locked_invocation.envelope)
+    except RuntimeContractError as exc:
+        raise AgentDomainError(f"Code Mode usage contract is invalid: {exc}") from exc
+    if locked_run.snapshot_content_digest != snapshot["contentDigest"]:
+        raise AgentDomainError("Code Mode usage snapshot digest does not match the stored run")
+
+    cumulative_usage = deepcopy(locked_run.cumulative_usage or {})
+    code_mode_usage = code_mode_usage_totals(locked_run)
+    runtime_budget = snapshot["totalBudget"]
+    for field in ("inputTokens", "outputTokens", "durationMs"):
+        current = int(cumulative_usage.get(field, 0)) + code_mode_usage[field]
+        next_value = current + fields[field]
+        if next_value > runtime_budget[field] or next_value > MAX_INTEGER:
+            raise AgentDomainError(f"Code Mode {field} budget is exhausted")
+
+    runtime_policy = snapshot["runtimePolicy"]
+    limits = {
+        "codeModeInputBytes": runtime_policy.get("maxCodeModeInputBytes"),
+        "codeModeOutputBytes": runtime_policy.get("maxCodeModeOutputBytes"),
+        "codeModeCalls": runtime_policy.get("maxCodeModeCalls"),
+        "codeModeSpillBytes": runtime_policy.get("maxArtifactBytes"),
+    }
+    if any(value is None for value in limits.values()):
+        raise AgentDomainError("Code Mode limits are absent from the immutable run snapshot")
+    for field, limit in limits.items():
+        current = code_mode_usage[field]
+        next_value = current + fields[field]
+        if next_value > limit or next_value > MAX_INTEGER:
+            raise AgentDomainError(f"Code Mode {field} budget is exhausted")
+
+    usage_payload = {
+        "invocationRef": locked_invocation.invocation_id,
+        "usage": fields,
+        "cumulative": {field: code_mode_usage[field] + fields[field] for field in limits},
+    }
+    RunInputEvent.objects.create(
+        workspace=locked_run.workspace,
+        project=locked_run.project,
+        run=locked_run,
+        event_ref=namespaced_ref("event", str(uuid4())),
+        kind=InputEventKind.CODE_MODE_USAGE,
+        payload=usage_payload,
+        payload_digest=content_digest(usage_payload),
+        created_by=locked_run.created_by,
+    )
+    return locked_run
+
+
+def code_mode_usage_totals(run):
+    """Derive persisted Code Mode counters from immutable Plane usage facts."""
+
+    totals = {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "durationMs": 0,
+        "codeModeInputBytes": 0,
+        "codeModeOutputBytes": 0,
+        "codeModeCalls": 0,
+        "codeModeSpillBytes": 0,
+    }
+    rows = RunInputEvent.all_objects.filter(run_id=run.pk, kind=InputEventKind.CODE_MODE_USAGE).values_list(
+        "payload", flat=True
+    )
+    for row in rows:
+        usage = row.get("usage", {}) if isinstance(row, dict) else {}
+        for field in totals:
+            amount = usage.get(field, 0)
+            if isinstance(amount, int) and not isinstance(amount, bool) and amount >= 0:
+                totals[field] += amount
+    return totals
 
 
 @transaction.atomic

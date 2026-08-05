@@ -29,9 +29,19 @@ class CodeModeBudget:
     duration_ms: int
     calls: int
     spill_bytes: int = 64 * 1024
+    input_tokens: int = 0
+    output_tokens: int = 0
 
     def __post_init__(self) -> None:
-        values = (self.input_bytes, self.output_bytes, self.duration_ms, self.calls, self.spill_bytes)
+        values = (
+            self.input_bytes,
+            self.output_bytes,
+            self.duration_ms,
+            self.calls,
+            self.spill_bytes,
+            self.input_tokens,
+            self.output_tokens,
+        )
         if any(isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in values):
             raise ValueError("Code Mode budgets must be non-negative integers")
 
@@ -41,12 +51,12 @@ class SandboxPolicy:
     """The only capabilities the existing restricted child isolate may receive."""
 
     network: Literal["none"] = "none"
-    filesystem: Literal["run-scoped"] = "run-scoped"
+    filesystem: Literal["none"] = "none"
     process: Literal["none"] = "none"
     max_spill_bytes: int = 64 * 1024
 
     def __post_init__(self) -> None:
-        if self.network != "none" or self.filesystem != "run-scoped" or self.process != "none":
+        if self.network != "none" or self.filesystem != "none" or self.process != "none":
             raise ValueError("Code Mode sandbox capabilities are not permitted")
         if (
             isinstance(self.max_spill_bytes, bool)
@@ -56,4 +66,4 @@ class SandboxPolicy:
             raise ValueError("Code Mode spill bound is invalid")
 
 
-CallbackKind = Literal["search", "describe", "operation"]
+CallbackKind = Literal["search", "describe", "operation", "spill"]

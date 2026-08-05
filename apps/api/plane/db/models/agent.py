@@ -80,6 +80,7 @@ class InvocationState(models.TextChoices):
 class InputEventKind(models.TextChoices):
     HUMAN_INPUT = "human_input", "Human input"
     CONTINUATION = "continuation", "Continuation"
+    CODE_MODE_USAGE = "code_mode_usage", "Code Mode usage"
 
 
 class TerminalEventKind(models.TextChoices):

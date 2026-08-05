@@ -16,13 +16,14 @@ from .contracts import SCHEMA_VERSION, canonical_json
 
 CatalogKind = Literal["read", "mutation"]
 AuthorizationScope = Literal["workspace", "project"]
-CodeModeCallbackKind = Literal["search", "describe", "operation"]
+CodeModeCallbackKind = Literal["search", "describe", "operation", "spill"]
 
 CODE_MODE_CALLBACK_NAMES: Mapping[CodeModeCallbackKind, str] = MappingProxyType(
     {
         "search": "search_plane_operations",
         "describe": "describe_plane_operation",
         "operation": "call_plane_operation",
+        "spill": "spill_plane_result",
     }
 )
 
@@ -142,6 +143,21 @@ _CATALOG_DESCRIBE_RESULT = {
     "required": ["operation"],
     "properties": {"operation": {"type": "object"}},
 }
+_CODE_MODE_SPILL_INPUT = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["size_bytes", "content_digest"],
+    "properties": {
+        "size_bytes": {"type": "integer", "minimum": 1, "maximum": 1_048_576},
+        "content_digest": {"type": "string", "minLength": 8, "maxLength": 128},
+    },
+}
+_CODE_MODE_SPILL_RESULT = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["spill"],
+    "properties": {"spill": {"type": "object"}},
+}
 
 
 OPERATION_CATALOG: Mapping[str, OperationDescriptor] = MappingProxyType(
@@ -215,6 +231,20 @@ OPERATION_CATALOG: Mapping[str, OperationDescriptor] = MappingProxyType(
             input_schema=_CATALOG_DESCRIBE_INPUT,
             result_schema=_CATALOG_DESCRIBE_RESULT,
             tags=("catalog", "discovery", "read"),
+            authorization_scope="workspace",
+        ),
+        "code_mode.spill": OperationDescriptor(
+            operation_id="code_mode.spill",
+            schema_version=SCHEMA_VERSION,
+            kind="read",
+            summary="Accept bounded Code Mode result metadata at the audited host boundary.",
+            required_input=("size_bytes", "content_digest"),
+            max_result_bytes=1024,
+            handler="code_mode_spill",
+            name="spill_plane_result",
+            input_schema=_CODE_MODE_SPILL_INPUT,
+            result_schema=_CODE_MODE_SPILL_RESULT,
+            tags=("code-mode", "spill", "read"),
             authorization_scope="workspace",
         ),
     }

@@ -20,8 +20,11 @@ TypeScript running in an existing restricted child isolate.
 - The callback layer does not authorize operations or maintain an allowlist;
   live Plane authorization is evaluated by the gateway for each operation.
 - Keep cumulative budget, cancellation, output/spill bounds, and the restricted
-  network/filesystem/process policy at this seam. Do not import Hermes or add a
-  direct network, subprocess, or filesystem client here.
+  network/filesystem/process policy at this seam. The only subprocess allowed
+  here is the checked-in `runner.mjs` child boundary; generated code receives
+  none of its process, filesystem, network, environment, or module access.
+  Do not import Hermes or add a direct network, filesystem, credential, or
+  subprocess client to the generated-code surface.
 
 ## Local Verification
 

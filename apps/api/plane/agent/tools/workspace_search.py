@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 
+from plane.app.permissions import ROLE
 from plane.db.models import Cycle, Issue, Module, Page, Project, Workspace
+from plane.db.models.page import ProjectPage
 
 
 MAX_SEARCH_ITEMS = 20
@@ -18,6 +20,22 @@ def _reference(namespace: str, value: Any) -> str:
 
 def _project_membership(user: Any):
     return Q(project__project_projectmember__member=user, project__project_projectmember__is_active=True)
+
+
+def _work_item_visibility(user: Any):
+    """Match Plane's issue endpoint policy, including guest-created-only access."""
+
+    member = Q(project__project_projectmember__member=user, project__project_projectmember__is_active=True)
+    return (
+        (member & Q(project__project_projectmember__role__gt=ROLE.GUEST.value))
+        | (member & Q(project__project_projectmember__role=ROLE.GUEST.value) & Q(project__guest_view_all_features=True))
+        | (
+            member
+            & Q(project__project_projectmember__role=ROLE.GUEST.value)
+            & Q(project__guest_view_all_features=False)
+            & Q(created_by=user)
+        )
+    )
 
 
 class WorkspaceSearchService:
@@ -104,7 +122,7 @@ class WorkspaceSearchService:
     @staticmethod
     def _work_item_results(workspace: Workspace, user: Any, query: str) -> list[dict[str, Any]]:
         issues = Issue.issue_objects.filter(
-            _project_membership(user),
+            _work_item_visibility(user),
             workspace=workspace,
             project__archived_at__isnull=True,
         ).distinct()
@@ -170,10 +188,30 @@ class WorkspaceSearchService:
 
     @staticmethod
     def _page_results(workspace: Workspace, user: Any, query: str) -> list[dict[str, Any]]:
-        pages = Page.objects.filter(workspace=workspace).filter(
-            Q(access=Page.PUBLIC_ACCESS)
-            | Q(owned_by=user)
-            | Q(projects__project_projectmember__member=user, projects__project_projectmember__is_active=True)
+        linked_project = ProjectPage.objects.filter(
+            page_id=OuterRef("pk"),
+            deleted_at__isnull=True,
+            project__workspace=workspace,
+            project__archived_at__isnull=True,
+            project__project_projectmember__member=user,
+            project__project_projectmember__is_active=True,
+        )
+        full_feature_project = linked_project.filter(
+            Q(project__project_projectmember__role__gt=ROLE.GUEST.value)
+            | Q(
+                project__project_projectmember__role=ROLE.GUEST.value,
+                project__guest_view_all_features=True,
+            )
+        )
+        pages = (
+            Page.objects.filter(
+                workspace=workspace,
+                parent__isnull=True,
+                archived_at__isnull=True,
+            )
+            .annotate(has_member_project=Exists(linked_project), has_full_feature_project=Exists(full_feature_project))
+            .filter(has_member_project=True)
+            .filter(Q(owned_by=user) | Q(access=Page.PUBLIC_ACCESS, has_full_feature_project=True))
         )
         if query:
             pages = pages.filter(Q(name__icontains=query) | Q(description_stripped__icontains=query))

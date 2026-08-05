@@ -405,6 +405,9 @@ export type RuntimePolicy = Readonly<{
   maxEventPayloadBytes: number;
   maxArtifactBytes: number;
   maxReceiptBytes: number;
+  maxCodeModeInputBytes?: number;
+  maxCodeModeOutputBytes?: number;
+  maxCodeModeCalls?: number;
 }>;
 
 export type RuntimeBudgetPolicy = Readonly<{
@@ -1544,6 +1547,33 @@ function parseSnapshotContent(value: unknown, path: string): RunSnapshotContent 
         `${path}.runtimePolicy.maxReceiptBytes`,
         MAX_BOUNDED_BYTE_COUNT
       ),
+      ...(runtimePolicyObject.maxCodeModeInputBytes === undefined
+        ? {}
+        : {
+            maxCodeModeInputBytes: parseInteger(
+              runtimePolicyObject.maxCodeModeInputBytes,
+              `${path}.runtimePolicy.maxCodeModeInputBytes`,
+              MAX_BOUNDED_BYTE_COUNT
+            ),
+          }),
+      ...(runtimePolicyObject.maxCodeModeOutputBytes === undefined
+        ? {}
+        : {
+            maxCodeModeOutputBytes: parseInteger(
+              runtimePolicyObject.maxCodeModeOutputBytes,
+              `${path}.runtimePolicy.maxCodeModeOutputBytes`,
+              MAX_BOUNDED_BYTE_COUNT
+            ),
+          }),
+      ...(runtimePolicyObject.maxCodeModeCalls === undefined
+        ? {}
+        : {
+            maxCodeModeCalls: parseInteger(
+              runtimePolicyObject.maxCodeModeCalls,
+              `${path}.runtimePolicy.maxCodeModeCalls`,
+              2_147_483_647
+            ),
+          }),
     },
     totalBudget: parseBudget(object.totalBudget, `${path}.totalBudget`),
     contractDigests: parseContractDigests(object.contractDigests, `${path}.contractDigests`),

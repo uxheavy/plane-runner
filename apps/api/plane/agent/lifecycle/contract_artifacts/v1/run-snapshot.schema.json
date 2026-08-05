@@ -159,6 +159,15 @@
         },
         "maxReceiptBytes": {
           "$ref": "#/$defs/boundedByteCount"
+        },
+        "maxCodeModeInputBytes": {
+          "$ref": "#/$defs/boundedByteCount"
+        },
+        "maxCodeModeOutputBytes": {
+          "$ref": "#/$defs/boundedByteCount"
+        },
+        "maxCodeModeCalls": {
+          "$ref": "#/$defs/nonNegativeInteger"
         }
       }
     },

@@ -39,6 +39,7 @@ from .contracts import (
     WorkItemRenameInputSerializer,
     CatalogDescribeInputSerializer,
     CatalogSearchInputSerializer,
+    CodeModeSpillInputSerializer,
     WorkspaceSearchInputSerializer,
     canonical_json,
 )
@@ -70,6 +71,7 @@ ERROR_MESSAGES = {
     "PLANE_VALIDATION_ERROR": "Plane rejected the operation.",
     "REQUEST_TOO_LARGE": "The operation request exceeds its size limit.",
     "RESULT_TOO_LARGE": "The operation result exceeded its limit.",
+    "SPILL_EXCEEDED": "The Code Mode spill exceeded its run bound.",
     "THROTTLED": "Too many operation requests.",
     "UNKNOWN_OPERATION": "Operation is not available.",
     "UPSTREAM_FAILURE": "The operation could not be completed.",
@@ -653,6 +655,8 @@ class OperationGateway:
             serializer_class = CatalogSearchInputSerializer
         elif descriptor.operation_id == "catalog.describe":
             serializer_class = CatalogDescribeInputSerializer
+        elif descriptor.operation_id == "code_mode.spill":
+            serializer_class = CodeModeSpillInputSerializer
         serializer = serializer_class(data=value)
         if not serializer.is_valid():
             return {}, GatewayFailure("VALIDATION_ERROR", 400, False)
@@ -714,6 +718,18 @@ class OperationGateway:
                 return 200, describe_operation(parsed_input["operation_id"]), None
             except KeyError:
                 raise GatewayFailure("UNKNOWN_OPERATION", 404, False) from None
+        if descriptor.operation_id == "code_mode.spill":
+            return (
+                200,
+                {
+                    "spill": {
+                        "payloadRef": f"spill:{parsed_input['content_digest']}",
+                        "contentDigest": parsed_input["content_digest"],
+                        "sizeBytes": parsed_input["size_bytes"],
+                    }
+                },
+                None,
+            )
 
         project_id = str(parsed_input["project_id"])
         issue_id = str(parsed_input["issue_id"])

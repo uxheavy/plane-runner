@@ -63,12 +63,18 @@ class NativeToolAdapter:
                 status_code=403,
             )
         request_actor_ref = getattr(self.request, "agent_actor_ref", None)
-        if self.actor_ref is not None and request_actor_ref is not None:
-            if self.actor_ref != request_actor_ref:
-                return self.gateway.record_invalid_request(
-                    self.request,
-                    envelope,
-                    code="CALLBACK_BINDING_INVALID",
-                    status_code=403,
-                )
+        if not isinstance(request_actor_ref, str) or not request_actor_ref:
+            return self.gateway.record_invalid_request(
+                self.request,
+                envelope,
+                code="CALLBACK_BINDING_INVALID",
+                status_code=403,
+            )
+        if self.actor_ref != request_actor_ref:
+            return self.gateway.record_invalid_request(
+                self.request,
+                envelope,
+                code="CALLBACK_BINDING_INVALID",
+                status_code=403,
+            )
         return None

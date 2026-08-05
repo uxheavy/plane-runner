@@ -8,6 +8,7 @@ rows, and terminal product event are the expected artifacts.
 import copy
 import json
 import uuid
+from types import SimpleNamespace
 
 import pytest
 from django.core.exceptions import ValidationError
@@ -16,6 +17,7 @@ from rest_framework.test import APIClient
 
 from plane.agent.lifecycle import (
     IdempotencyConflictError,
+    code_mode_usage_totals,
     create_actor,
     create_assignment,
     create_profile,
@@ -23,6 +25,7 @@ from plane.agent.lifecycle import (
     propose_outcome,
     record_invocation,
 )
+from plane.agent.code_mode import CodeModeHostRPC, CodeModeIsolateRunner
 from plane.agent.lifecycle.runtime_contract import validate_invocation_envelope
 from plane.agent.runtime import RuntimeIngressError, dispatch_invocation, ingest_runtime_frame
 from plane.db.models import (
@@ -77,6 +80,88 @@ class DeterministicRuntimeAdapter:
     def dispatch(self, snapshot_json, envelope_json):
         self.calls.append((snapshot_json, envelope_json))
         return tuple(json.dumps(frame, separators=(",", ":")) for frame in self.frames)
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_code_mode_uses_persisted_binding_child_isolate_and_exact_replay(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    actor = create_actor(
+        workspace=workspace,
+        project=gateway_project,
+        display_name="Code Mode worker",
+        created_by=create_user,
+    )
+    profile = create_profile(actor, role=AgentRole.WORKER, instructions="Use the typed host.")
+    assignment = create_assignment(
+        actor,
+        project=gateway_project,
+        target_ref=f"issue:{gateway_issue.id}",
+        objective="Exercise the Code Mode host.",
+        acceptance_criteria=["The host stays bound and bounded."],
+        created_by=create_user,
+    )
+    run = create_run(assignment, profile, idempotency_key="idempotency:code-mode-run", created_by=create_user)
+    invocation = record_invocation(run, idempotency_key="idempotency:code-mode-invocation", trigger="initial")
+    request = SimpleNamespace(
+        user=create_user,
+        META={},
+        agent_actor_ref=run.snapshot["actorRef"],
+    )
+    host = CodeModeHostRPC(
+        gateway=OperationGateway(),
+        request=request,
+        run=run,
+        invocation=invocation,
+        is_cancelled=lambda: False,
+    )
+
+    first = host.call_operation(
+        "catalog.describe",
+        {"operation_id": "search_workspace"},
+        idempotency_key="idempotency:code-mode-call",
+        correlation_id="correlation:code-mode-call",
+    )
+    replay = host.call_operation(
+        "catalog.describe",
+        {"operation_id": "search_workspace"},
+        idempotency_key="idempotency:code-mode-call",
+        correlation_id="correlation:code-mode-call",
+    )
+    assert replay == first
+    assert first["actorRef"] == run.snapshot["actorRef"]
+    assert first["workspaceRef"] == f"workspace:{workspace.id}"
+    assert first["gatewayReceipt"] == first["auditReceipt"]
+
+    changed = host.call_operation(
+        "catalog.describe",
+        {"operation_id": "catalog.search"},
+        idempotency_key="idempotency:code-mode-call",
+        correlation_id="correlation:code-mode-call",
+    )
+    assert changed["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+
+    child_result = CodeModeIsolateRunner().run(
+        host,
+        """
+          export default async function ({host}: {host: any}) {
+            return await host.call_plane_operation(
+              "catalog.search", {query: "", limit: 5},
+              "idempotency:code-mode-child", "correlation:code-mode-child"
+            );
+          }
+        """,
+        {},
+    )
+    assert child_result["ok"] is True
+    assert child_result["actorRef"] == run.snapshot["actorRef"]
+    run.refresh_from_db()
+    usage = code_mode_usage_totals(run)
+    assert usage["codeModeCalls"] >= 4
+    assert usage["codeModeInputBytes"] > 0
+    assert usage["codeModeOutputBytes"] > 0
+    assert run.cumulative_usage["durationMs"] > 0
 
 
 @pytest.mark.contract
