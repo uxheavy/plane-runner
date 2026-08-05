@@ -470,12 +470,19 @@ def test_historical_invocation_backfill_is_deterministic_across_directions():
     # Exercise PostgreSQL's default PUBLIC function privilege after the
     # provisioner has restored the safe 0125 snapshot. The reverse migration
     # must make the recreated trigger function safe at its creation boundary.
-    with connection.cursor() as cursor:
-        cursor.execute(
-            f'ALTER DEFAULT PRIVILEGES FOR ROLE "{settings.PLANE_AUDIT_MIGRATION_ROLE}" '
-            "IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO PUBLIC"
-        )
-    _, reverse_apps = _migrate_and_reload(PRE_HEAD_MIGRATION)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f'ALTER DEFAULT PRIVILEGES FOR ROLE "{settings.PLANE_AUDIT_MIGRATION_ROLE}" '
+                "IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO PUBLIC"
+            )
+        _, reverse_apps = _migrate_and_reload(PRE_HEAD_MIGRATION)
+    finally:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f'ALTER DEFAULT PRIVILEGES FOR ROLE "{settings.PLANE_AUDIT_MIGRATION_ROLE}" '
+                "IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC"
+            )
     ReversePublication = reverse_apps.get_model("db", "OperationGatewayPublication")
     reverse_row = ReversePublication.objects.get(idempotency_id=roundtrip_record.pk, kind="webhook")
     assert reverse_row.state == "failed"
@@ -521,31 +528,24 @@ def test_historical_invocation_backfill_is_deterministic_across_directions():
     assert public_can_create is False
     assert public_can_use is False
     function_regprocedure = f"{settings.PLANE_AUDIT_SCHEMA}.operation_gateway_audit_append_only()"
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT has_function_privilege('public', %s::regprocedure, 'EXECUTE'), "
-                "has_function_privilege(%s, %s::regprocedure, 'EXECUTE'), "
-                "has_function_privilege(%s, %s::regprocedure, 'EXECUTE'), "
-                "has_function_privilege(%s, %s::regprocedure, 'EXECUTE')",
-                [
-                    function_regprocedure,
-                    settings.PLANE_AUDIT_RUNTIME_ROLE,
-                    function_regprocedure,
-                    settings.PLANE_AUDIT_MIGRATION_ROLE,
-                    function_regprocedure,
-                    settings.PLANE_AUDIT_GOVERNANCE_ROLE,
-                    function_regprocedure,
-                ],
-            )
-            final_0125_acl = cursor.fetchone()
-        assert final_0125_acl == (False, True, True, False)
-    finally:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                f'ALTER DEFAULT PRIVILEGES FOR ROLE "{settings.PLANE_AUDIT_MIGRATION_ROLE}" '
-                "IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC"
-            )
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT has_function_privilege('public', %s::regprocedure, 'EXECUTE'), "
+            "has_function_privilege(%s, %s::regprocedure, 'EXECUTE'), "
+            "has_function_privilege(%s, %s::regprocedure, 'EXECUTE'), "
+            "has_function_privilege(%s, %s::regprocedure, 'EXECUTE')",
+            [
+                function_regprocedure,
+                settings.PLANE_AUDIT_RUNTIME_ROLE,
+                function_regprocedure,
+                settings.PLANE_AUDIT_MIGRATION_ROLE,
+                function_regprocedure,
+                settings.PLANE_AUDIT_GOVERNANCE_ROLE,
+                function_regprocedure,
+            ],
+        )
+        final_0125_acl = cursor.fetchone()
+    assert final_0125_acl == (False, True, True, False)
     with connection.cursor() as cursor:
         cursor.execute(
             """
