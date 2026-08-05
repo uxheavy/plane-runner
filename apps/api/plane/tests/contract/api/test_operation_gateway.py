@@ -1067,6 +1067,7 @@ def test_postgres_audit_runtime_role_cannot_govern_or_bypass_trigger():
 def test_separated_audit_boot_and_runtime_probes_cover_membership_and_trigger_power():
     runtime_role = f"gateway_runtime_{uuid.uuid4().hex[:10]}"
     bridge_role = f"gateway_bridge_{uuid.uuid4().hex[:10]}"
+    hostile_schema = f"gateway_hostile_{uuid.uuid4().hex[:10]}"
     governance_role = settings.PLANE_AUDIT_GOVERNANCE_ROLE
     migration_role = settings.PLANE_AUDIT_MIGRATION_ROLE
 
@@ -1277,6 +1278,26 @@ def test_separated_audit_boot_and_runtime_probes_cover_membership_and_trigger_po
             verify_audit_role_boundary()
 
             with connection.cursor() as cursor:
+                cursor.execute(f'CREATE SCHEMA "{hostile_schema}" AUTHORIZATION "{bridge_role}"')
+                cursor.execute(f'GRANT USAGE ON SCHEMA "{hostile_schema}" TO "{runtime_role}"')
+                cursor.execute(f'CREATE TABLE "{hostile_schema}"."operation_gateway_audit" (id integer)')
+                cursor.execute(
+                    f"""
+                    CREATE FUNCTION "{hostile_schema}"."operation_gateway_audit_append_only"()
+                    RETURNS trigger
+                    LANGUAGE plpgsql
+                    AS $$ BEGIN RETURN NEW; END; $$
+                    """
+                )
+                cursor.execute(f'SET ROLE "{runtime_role}"')
+                cursor.execute(f'SET search_path = "{hostile_schema}", public')
+            with pytest.raises(AuditRoleBoundaryError, match="unapproved schema/search_path"):
+                verify_audit_role_boundary()
+            with connection.cursor() as cursor:
+                cursor.execute("RESET ROLE")
+                cursor.execute("RESET search_path")
+
+            with connection.cursor() as cursor:
                 cursor.execute("RESET ROLE")
                 cursor.execute(
                     """
@@ -1334,6 +1355,8 @@ def test_separated_audit_boot_and_runtime_probes_cover_membership_and_trigger_po
     finally:
         with connection.cursor() as cursor:
             cursor.execute("RESET ROLE")
+            cursor.execute("RESET search_path")
+            cursor.execute(f'DROP SCHEMA IF EXISTS "{hostile_schema}" CASCADE')
             if sequence_name:
                 cursor.execute(f'DROP SEQUENCE IF EXISTS "{sequence_name}"')
             cursor.execute(f'ALTER TABLE operation_gateway_audit OWNER TO "{governance_role}"')

@@ -74,6 +74,7 @@ def _role_reachable(cursor: Any, member: str, target: str) -> bool:
 _TABLE_PRIVILEGES = frozenset({"DELETE", "INSERT", "REFERENCES", "SELECT", "TRIGGER", "TRUNCATE", "UPDATE"})
 _SEQUENCE_PRIVILEGES = frozenset({"SELECT", "UPDATE", "USAGE"})
 _POSTGRES_DATABASE_OWNER_ROLE = "pg_database_owner"
+_IDENTIFIER = re.compile(r"^[a-z_][a-z0-9_$]{0,62}$")
 _AUTHORITY_MARKER_TABLE = "plane_operation_gateway_authority_marker"
 
 
@@ -116,68 +117,109 @@ def verify_audit_role_boundary() -> None:
     ):
         raise AuditRoleBoundaryError("Operation Gateway audit roles are not distinct and configured")
 
+    if not _IDENTIFIER.fullmatch(settings.PLANE_AUDIT_SCHEMA or ""):
+        raise AuditRoleBoundaryError("The configured audit schema is not a valid provisioned identifier")
+    schema_name = settings.PLANE_AUDIT_SCHEMA
+    schema_ident = connection.ops.quote_name(schema_name)
+    function_regprocedure = f"{schema_name}.operation_gateway_audit_append_only()"
+    audit_table_regclass = f"{schema_name}.operation_gateway_audit"
+    marker_regclass = f"{schema_name}.{_AUTHORITY_MARKER_TABLE}"
+
+    # Validate the session role independently. A missing protected object must
+    # never be reported as a missing runtime role.
     with connection.cursor() as cursor:
-        cursor.execute("SELECT current_schema()")
-        current_schema_name = cursor.fetchone()[0]
-    if not current_schema_name:
-        raise AuditRoleBoundaryError("The audit session has no usable schema")
-    function_regprocedure = f"{current_schema_name}.operation_gateway_audit_append_only()"
+        cursor.execute(
+            """
+            SELECT current_user, rolsuper, rolcreaterole, rolcreatedb,
+                   rolbypassrls, rolcanlogin, rolinherit
+            FROM pg_roles
+            WHERE rolname = current_user
+            """
+        )
+        role_row = cursor.fetchone()
+    if role_row is None:
+        raise AuditRoleBoundaryError("The current database session role does not exist")
+    current_user, is_superuser, can_create_roles, can_create_databases, bypasses_rls, can_login, inherits_roles = (
+        role_row
+    )
+    if current_user != runtime_role:
+        raise AuditRoleBoundaryError("The database session role is not the configured audit runtime role")
+    if is_superuser or can_create_roles or can_create_databases or bypasses_rls:
+        raise AuditRoleBoundaryError("The audit runtime role has governance privileges")
+    if not can_login or inherits_roles:
+        raise AuditRoleBoundaryError("The audit runtime role must be LOGIN NOINHERIT")
+
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT current_schema(), current_schemas(false)")
+        current_schema_name, search_path = cursor.fetchone()
+    if current_schema_name != schema_name or search_path != [schema_name]:
+        raise AuditRoleBoundaryError("The audit session uses an unapproved schema/search_path")
 
     with connection.cursor() as cursor:
         cursor.execute(
             """
-            SELECT current_user, runtime.rolsuper, runtime.rolcreaterole,
-                   runtime.rolcreatedb, runtime.rolbypassrls,
-                   runtime.rolcanlogin, runtime.rolinherit,
-                       table_info.tableowner, table_info.function_owner,
-                       table_info.schema_owner,
-                       (
-                           SELECT schema_owner_role.rolname
-                           FROM pg_database AS database_info
-                           JOIN pg_roles AS schema_owner_role ON schema_owner_role.oid = database_info.datdba
-                           WHERE database_info.datname = current_database()
-                       ) AS database_owner,
-                       table_info.function_security_definer,
-                   table_info.function_config,
-                   table_info.function_source,
+            SELECT rolname, rolcanlogin, rolinherit
+            FROM pg_roles
+            WHERE rolname = %s
+            """,
+            [governance_role],
+        )
+        governance_attributes = cursor.fetchone()
+    if governance_attributes != (governance_role, False, False):
+        raise AuditRoleBoundaryError("The governance role must be NOLOGIN NOINHERIT")
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT rolsuper, rolcreaterole, rolcreatedb, rolbypassrls, rolcanlogin, rolinherit
+            FROM pg_roles
+            WHERE rolname = %s
+            """,
+            [migration_role],
+        )
+        migration_attributes = cursor.fetchone()
+    if migration_attributes is None:
+        raise AuditRoleBoundaryError("The configured migration role does not exist")
+    if any(migration_attributes[:4]):
+        raise AuditRoleBoundaryError("The migration role has governance privileges")
+    if not migration_attributes[4] or migration_attributes[5]:
+        raise AuditRoleBoundaryError("The migration role must be LOGIN NOINHERIT")
+    provisioner_role = settings.PLANE_AUDIT_PROVISIONER_ROLE
+    if not _IDENTIFIER.fullmatch(provisioner_role or ""):
+        raise AuditRoleBoundaryError("The provisioned database-owner role is not configured")
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT table_owner.rolname, function_owner.rolname,
+                   schema_owner.rolname, schema_owner.oid, database_owner.rolname,
+                   audit_function.prosecdef, audit_function.proconfig,
+                   audit_function.prosrc,
                    has_function_privilege('public', %s::regprocedure, 'EXECUTE'),
                    has_function_privilege(%s, %s::regprocedure, 'EXECUTE'),
                    has_function_privilege(%s, %s::regprocedure, 'EXECUTE'),
                    has_function_privilege(%s, %s::regprocedure, 'EXECUTE'),
-                   has_schema_privilege(current_user, current_schema(), 'USAGE'),
-                   has_schema_privilege(current_user, current_schema(), 'CREATE'),
-                   has_table_privilege(current_user, 'operation_gateway_audit', 'SELECT'),
-                   has_table_privilege(current_user, 'operation_gateway_audit', 'INSERT'),
-                   has_table_privilege(current_user, 'operation_gateway_audit', 'UPDATE'),
-                   has_table_privilege(current_user, 'operation_gateway_audit', 'DELETE'),
-                   has_table_privilege(current_user, 'operation_gateway_audit', 'TRUNCATE'),
-                   has_table_privilege(current_user, 'operation_gateway_audit', 'REFERENCES'),
-                   has_table_privilege(current_user, 'operation_gateway_audit', 'TRIGGER'),
-                   has_function_privilege(
-                       current_user,
-                       %s::regprocedure,
-                       'EXECUTE'
-                   ),
+                   has_schema_privilege(current_user, %s, 'USAGE'),
+                   has_schema_privilege(current_user, %s, 'CREATE'),
+                   has_table_privilege(current_user, %s::regclass, 'SELECT'),
+                   has_table_privilege(current_user, %s::regclass, 'INSERT'),
+                   has_table_privilege(current_user, %s::regclass, 'UPDATE'),
+                   has_table_privilege(current_user, %s::regclass, 'DELETE'),
+                   has_table_privilege(current_user, %s::regclass, 'TRUNCATE'),
+                   has_table_privilege(current_user, %s::regclass, 'REFERENCES'),
+                   has_table_privilege(current_user, %s::regclass, 'TRIGGER'),
+                   has_function_privilege(current_user, %s::regprocedure, 'EXECUTE'),
                    has_database_privilege(current_user, current_database(), 'CREATE')
-            FROM pg_roles AS runtime
-            JOIN (
-                SELECT table_owner.rolname AS tableowner,
-                       function_owner.rolname AS function_owner,
-                       schema_owner.rolname AS schema_owner,
-                       audit_function.prosecdef AS function_security_definer,
-                       audit_function.proconfig AS function_config,
-                       audit_function.prosrc AS function_source
-                FROM pg_class AS audit_table
-                JOIN pg_namespace AS audit_schema ON audit_schema.oid = audit_table.relnamespace
-                JOIN pg_roles AS table_owner ON table_owner.oid = audit_table.relowner
-                JOIN pg_roles AS schema_owner ON schema_owner.oid = audit_schema.nspowner
-                JOIN pg_proc AS audit_function
-                  ON audit_function.oid = to_regprocedure(%s)
-                JOIN pg_roles AS function_owner ON function_owner.oid = audit_function.proowner
-                WHERE audit_schema.nspname = current_schema()
-                  AND audit_table.relname = 'operation_gateway_audit'
-            ) AS table_info ON TRUE
-            WHERE runtime.rolname = current_user
+            FROM pg_class AS audit_table
+            JOIN pg_namespace AS audit_schema ON audit_schema.oid = audit_table.relnamespace
+            JOIN pg_roles AS table_owner ON table_owner.oid = audit_table.relowner
+            JOIN pg_roles AS schema_owner ON schema_owner.oid = audit_schema.nspowner
+            JOIN pg_database AS database_info ON database_info.datname = current_database()
+            JOIN pg_roles AS database_owner ON database_owner.oid = database_info.datdba
+            JOIN pg_proc AS audit_function
+              ON audit_function.oid = to_regprocedure(%s)
+            JOIN pg_roles AS function_owner ON function_owner.oid = audit_function.proowner
+            WHERE audit_table.oid = to_regclass(%s)
+              AND audit_table.relkind = 'r'
             """,
             [
                 function_regprocedure,
@@ -187,26 +229,24 @@ def verify_audit_role_boundary() -> None:
                 function_regprocedure,
                 governance_role,
                 function_regprocedure,
+                schema_name,
+                schema_name,
+                *([audit_table_regclass] * 7),
                 function_regprocedure,
                 function_regprocedure,
+                audit_table_regclass,
             ],
         )
         row = cursor.fetchone()
 
     if row is None:
-        raise AuditRoleBoundaryError("The configured audit runtime role does not exist")
+        raise AuditRoleBoundaryError("The protected audit table/function identity is missing or unapproved")
 
     (
-        current_user,
-        is_superuser,
-        can_create_roles,
-        can_create_databases,
-        bypasses_rls,
-        can_login,
-        inherits_roles,
         table_owner,
         function_owner,
         schema_owner,
+        current_schema_owner_oid,
         database_owner,
         function_security_definer,
         function_config,
@@ -227,21 +267,18 @@ def verify_audit_role_boundary() -> None:
         can_execute_trigger_function,
         can_create_in_database,
     ) = row
-    if current_user != runtime_role:
-        raise AuditRoleBoundaryError("The database session role is not the configured audit runtime role")
-    if is_superuser or can_create_roles or can_create_databases or bypasses_rls:
-        raise AuditRoleBoundaryError("The audit runtime role has governance privileges")
-    if not can_login or inherits_roles:
-        raise AuditRoleBoundaryError("The audit runtime role must be LOGIN NOINHERIT")
     if table_owner != governance_role:
         raise AuditRoleBoundaryError("The audit table is not owned by the governed audit role")
     if function_owner != governance_role:
         raise AuditRoleBoundaryError("The append-only trigger function is not owned by the governed audit role")
     with connection.cursor() as cursor:
-        cursor.execute("SELECT current_schema()")
-        current_schema_name = cursor.fetchone()[0]
-        schema_ident = connection.ops.quote_name(current_schema_name)
-        marker_ident = connection.ops.quote_name(_AUTHORITY_MARKER_TABLE)
+        cursor.execute("SELECT to_regclass(%s)", [marker_regclass])
+        marker_oid = cursor.fetchone()[0]
+    if marker_oid is None:
+        raise AuditRoleBoundaryError("The provisioned audit authority marker has an unapproved object identity")
+
+    marker_ident = connection.ops.quote_name(_AUTHORITY_MARKER_TABLE)
+    with connection.cursor() as cursor:
         cursor.execute(
             f"""
             SELECT marker.version, marker.database_owner_oid, marker.database_owner_role,
@@ -250,7 +287,7 @@ def verify_audit_role_boundary() -> None:
                    database_info.datdba, database_owner.rolname
             FROM {schema_ident}.{marker_ident} AS marker
             JOIN pg_class AS marker_table
-              ON marker_table.relname = %s
+              ON marker_table.oid = to_regclass(%s)
             JOIN pg_namespace AS marker_schema ON marker_schema.oid = marker_table.relnamespace
             JOIN pg_roles AS marker_owner ON marker_owner.oid = marker_table.relowner
             JOIN pg_database AS database_info ON database_info.datname = current_database()
@@ -259,7 +296,7 @@ def verify_audit_role_boundary() -> None:
               AND marker_table.relkind = 'r'
               AND marker.marker_id = TRUE
             """,
-            [_AUTHORITY_MARKER_TABLE, current_schema_name],
+            [marker_regclass, schema_name],
         )
         marker_row = cursor.fetchone()
     if marker_row is None:
@@ -277,16 +314,19 @@ def verify_audit_role_boundary() -> None:
     ) = marker_row
     if (
         marker_version != 1
-        or marker_owner != migration_role
-        or marker_schema_name != current_schema_name
+        or marker_owner != governance_role
+        or marker_schema_name != schema_name
+        or marker_schema_owner_oid != current_schema_owner_oid
+        or marker_schema_owner_role != schema_owner
         or marker_database_owner_oid != current_database_owner_oid
         or marker_database_owner_role != current_database_owner_role
         or not marker_schema_owner_oid
         or not marker_schema_owner_role
     ):
         raise AuditRoleBoundaryError("The provisioned audit authority marker does not match the database topology")
+    if database_owner != provisioner_role or schema_owner not in {provisioner_role, _POSTGRES_DATABASE_OWNER_ROLE}:
+        raise AuditRoleBoundaryError("The database and audit schema owners do not match the provisioned topology")
     with connection.cursor() as cursor:
-        marker_regclass = f"{current_schema_name}.{_AUTHORITY_MARKER_TABLE}"
         cursor.execute(
             """
             SELECT has_table_privilege(current_user, %s::regclass, 'SELECT'),
@@ -309,23 +349,42 @@ def verify_audit_role_boundary() -> None:
         marker_privileges = cursor.fetchone()
     if marker_privileges != (True,) + (False,) * 13:
         raise AuditRoleBoundaryError("The provisioned audit authority marker is not immutable to the runtime role")
-
-    # PostgreSQL 15+ owns a fresh public schema by pg_database_owner. An
-    # upgraded database may retain the immutable bootstrap database owner or
-    # one of the explicit Plane migration/governance owners. The current
-    # pg_database.datdba is only compared with the marker; it never enlarges
-    # this allowlist.
-    approved_schema_owners = frozenset(
-        role
-        for role in (
-            _POSTGRES_DATABASE_OWNER_ROLE,
-            marker_database_owner_role,
-            marker_schema_owner_role,
-            migration_role,
-            governance_role,
+    with connection.cursor() as cursor:
+        marker_acl_entries = _fetch_acl_entries(
+            cursor,
+            """
+            SELECT CASE WHEN exploded.grantee = 0 THEN 'PUBLIC' ELSE grantee.rolname END,
+                   exploded.privilege_type, exploded.is_grantable
+            FROM pg_class AS marker_table
+            JOIN LATERAL aclexplode(marker_table.relacl) AS exploded ON TRUE
+            LEFT JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
+            WHERE marker_table.oid = to_regclass(%s)
+            """,
+            [marker_regclass],
         )
-        if role
-    )
+        _validate_acl_allowlist(
+            "authority marker",
+            marker_acl_entries,
+            {
+                runtime_role: frozenset({"SELECT"}),
+                migration_role: frozenset({"SELECT"}),
+            },
+        )
+        if _role_reachable(cursor, migration_role, governance_role):
+            raise AuditRoleBoundaryError("The migration role can reach the governance role")
+
+    # PostgreSQL 15+ owns a fresh public schema by pg_database_owner. The
+    # database owner is separately provisioned and explicitly configured; the
+    # marker can record it but cannot enlarge this allowlist after tampering.
+    approved_schema_owners = frozenset({provisioner_role, _POSTGRES_DATABASE_OWNER_ROLE})
+    if marker_database_owner_role in {runtime_role, migration_role, governance_role} or marker_schema_owner_role in {
+        runtime_role,
+        migration_role,
+        governance_role,
+    }:
+        raise AuditRoleBoundaryError(
+            "The database and audit schema owners must be separate from runtime and migration roles"
+        )
     if schema_owner not in approved_schema_owners or schema_owner == runtime_role:
         raise AuditRoleBoundaryError("The audit schema has an unapproved owner topology")
     if not function_security_definer or function_config != ["search_path=pg_catalog"]:
@@ -364,10 +423,10 @@ def verify_audit_role_boundary() -> None:
                 COALESCE(audit_table.relacl, acldefault('r', audit_table.relowner))
             ) AS exploded ON TRUE
             LEFT JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
-            WHERE audit_schema.nspname = current_schema()
-              AND audit_table.relname = 'operation_gateway_audit'
+            WHERE audit_table.oid = to_regclass(%s)
               AND audit_table.relkind = 'r'
             """,
+            [audit_table_regclass],
         )
         _validate_acl_allowlist(
             "audit table",
@@ -415,15 +474,16 @@ def verify_audit_role_boundary() -> None:
                 COALESCE(audit_schema.nspacl, acldefault('n', audit_schema.nspowner))
             ) AS exploded ON TRUE
             LEFT JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
-            WHERE audit_schema.nspname = current_schema()
+            WHERE audit_schema.nspname = %s
             """,
+            [schema_name],
         )
         schema_acl_allowlist = {
             runtime_role: frozenset({"USAGE"}),
             migration_role: frozenset({"CREATE", "USAGE"}),
             governance_role: frozenset({"USAGE"}),
             _POSTGRES_DATABASE_OWNER_ROLE: frozenset({"CREATE", "USAGE"}),
-            marker_database_owner_role: frozenset({"CREATE", "USAGE"}),
+            provisioner_role: frozenset({"CREATE", "USAGE"}),
         }
         # This only supplies owner privileges after schema_owner has passed the
         # explicit catalog-topology check above; it does not approve the value.
@@ -449,10 +509,11 @@ def verify_audit_role_boundary() -> None:
                 COALESCE(audit_sequence.relacl, acldefault('S', audit_sequence.relowner))
             ) AS exploded ON TRUE
             LEFT JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
-            WHERE audit_schema.nspname = current_schema()
+            WHERE audit_schema.nspname = %s
               AND audit_sequence.relkind = 'S'
               AND audit_sequence.relname LIKE 'operation_gateway_audit%%'
             """,
+            [schema_name],
         )
         sequence_entries_by_name: dict[str, list[tuple[Any, ...]]] = {}
         for sequence_name, sequence_owner, grantee, privilege, is_grantable in sequence_acl_entries:
@@ -490,9 +551,10 @@ def verify_audit_role_boundary() -> None:
             WHERE defaults.defaclobjtype IN ('r', 'S', 'f')
               AND (
                   defaults.defaclnamespace = 0
-                  OR defaults.defaclnamespace = (SELECT oid FROM pg_namespace WHERE nspname = current_schema())
+                  OR defaults.defaclnamespace = (SELECT oid FROM pg_namespace WHERE nspname = %s)
               )
             """,
+            [schema_name],
         )
         default_privileges = {
             "r": frozenset({"DELETE", "INSERT", "SELECT", "UPDATE"}),
@@ -529,11 +591,11 @@ def verify_audit_role_boundary() -> None:
             FROM pg_trigger
             JOIN pg_class ON pg_class.oid = pg_trigger.tgrelid
             JOIN pg_namespace ON pg_namespace.oid = pg_class.relnamespace
-            WHERE pg_namespace.nspname = current_schema()
-              AND pg_class.relname = 'operation_gateway_audit'
+              WHERE pg_class.oid = to_regclass(%s)
               AND NOT pg_trigger.tgisinternal
             ORDER BY tgname
-            """
+            """,
+            [audit_table_regclass],
         )
         trigger_rows = cursor.fetchall()
     trigger_names = {row[0] for row in trigger_rows}
