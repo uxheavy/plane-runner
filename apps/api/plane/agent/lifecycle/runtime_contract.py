@@ -32,6 +32,8 @@ MAX_INTEGER = 2_147_483_647
 # host checkouts and ``/code`` containers without a runtime package fallback.
 ARTIFACT_DIRECTORY = Path(__file__).resolve().parent / "contract_artifacts" / "v1"
 EXPECTED_MANIFEST_SHA256 = "4201921ecedb70c3e8e6b026f7f720e2459b6a128a2e7dc4fa32b296227051d5"
+LEGACY_COMMAND_FINGERPRINT_PREFIX = "legacy1:"
+PROMOTED_LEGACY_COMMAND_FINGERPRINT_PREFIX = "legacy2:"
 _SCHEMA_NAMES = frozenset(
     {
         "run-snapshot",
@@ -135,6 +137,21 @@ def command_fingerprint(operation: str, binding: Any) -> str:
 
     command = canonical_json({"operation": operation, "binding": binding})
     return f"command:{hashlib.sha256(command.encode('utf-8')).hexdigest()}"
+
+
+def legacy_command_fingerprint(operation: str, binding: Any) -> str:
+    """Bind a pre-0125 row to facts that survived the migration boundary."""
+
+    command = canonical_json({"version": "agent-lifecycle-0125-legacy-v1", "operation": operation, "binding": binding})
+    return f"{LEGACY_COMMAND_FINGERPRINT_PREFIX}{hashlib.sha256(command.encode('utf-8')).hexdigest()}"
+
+
+def promote_legacy_command_fingerprint(fingerprint: str) -> str:
+    """Advance a verified legacy binding without changing its digest."""
+
+    if not fingerprint.startswith(LEGACY_COMMAND_FINGERPRINT_PREFIX):
+        raise RuntimeContractError("Only legacy command fingerprints can be promoted")
+    return f"{PROMOTED_LEGACY_COMMAND_FINGERPRINT_PREFIX}{fingerprint[len(LEGACY_COMMAND_FINGERPRINT_PREFIX) :]}"
 
 
 def snapshot_digest(content: dict[str, Any]) -> str:

@@ -44,6 +44,7 @@ from .runtime_contract import (
     command_fingerprint,
     contract_digests,
     content_digest,
+    promote_legacy_command_fingerprint,
     namespaced_ref,
     snapshot_digest,
     validate_invocation_envelope,
@@ -79,6 +80,44 @@ def _command_id(value):
 
 def _command_fingerprint(operation, binding):
     return command_fingerprint(operation, binding)
+
+
+def _is_legacy_fingerprint(value):
+    return isinstance(value, str) and value.startswith(("legacy1:", "legacy2:"))
+
+
+def _promote_legacy_binding(instance):
+    if not instance.command_fingerprint.startswith("legacy1:"):
+        return
+    promoted = promote_legacy_command_fingerprint(instance.command_fingerprint)
+    updated = instance.__class__.all_objects.filter(
+        pk=instance.pk, command_fingerprint=instance.command_fingerprint
+    ).update(command_fingerprint=promoted)
+    if updated != 1:
+        instance.refresh_from_db(fields=["command_fingerprint"])
+        if instance.command_fingerprint != promoted:
+            raise IdempotencyConflictError("Legacy idempotency binding changed during retry")
+    else:
+        instance.command_fingerprint = promoted
+
+
+def _legacy_match(instance, matches, message):
+    if not _is_legacy_fingerprint(instance.command_fingerprint) or not matches(instance):
+        raise IdempotencyConflictError(message)
+    _promote_legacy_binding(instance)
+    return True
+
+
+def _legacy_created_by_matches(existing, created_by):
+    """Treat an unpersisted pre-0125 audit actor as unavailable, not guessed."""
+
+    return existing.created_by_id is None or str(existing.created_by_id) == _command_id(created_by)
+
+
+def _legacy_foreign_key_matches(existing_id, requested):
+    if existing_id is None or requested is None:
+        return existing_id is None and requested is None
+    return str(existing_id) == _command_id(requested)
 
 
 _ASSIGNMENT_TRANSITIONS = {
@@ -163,6 +202,159 @@ def _as_dict(value, field_name):
     except RuntimeContractError as exc:
         raise AgentDomainError(f"{field_name} must contain JSON values") from exc
     return deepcopy(value)
+
+
+def _same_json(left, right):
+    try:
+        return canonical_json(left) == canonical_json(right)
+    except RuntimeContractError:
+        return False
+
+
+def _legacy_run_matches(
+    existing, assignment, profile, snapshot, lineage_of, lineage_reason, recovery_of, recovery_intent, created_by
+):
+    return (
+        existing.assignment_id == assignment.id
+        and existing.profile_version_id == profile.id
+        and (snapshot is None or _same_json(snapshot, existing.snapshot))
+        and _legacy_foreign_key_matches(existing.lineage_of_id, lineage_of)
+        and existing.lineage_reason == lineage_reason
+        and _legacy_foreign_key_matches(existing.recovery_of_id, recovery_of)
+        and existing.recovery_intent == recovery_intent
+        and _legacy_created_by_matches(existing, created_by)
+    )
+
+
+def _legacy_input_matches(existing, run, kind, payload, pending_ref, created_by):
+    return (
+        existing.run_id == run.id
+        and existing.kind == kind
+        and _same_json(existing.payload, payload)
+        and existing.pending_input_ref == pending_ref
+        and _legacy_created_by_matches(existing, created_by)
+    )
+
+
+def _legacy_full_usage(value):
+    counters = ("inputTokens", "outputTokens", "durationMs")
+    if not isinstance(value, dict) or set(value) != set(counters):
+        return None
+    result = {}
+    for field in counters:
+        amount = value[field]
+        if not isinstance(amount, int) or isinstance(amount, bool) or amount < 0:
+            return None
+        result[field] = amount
+    return result
+
+
+def _legacy_invocation_usage(existing):
+    run = RunAttempt.all_objects.get(pk=existing.run_id)
+    invocations = list(RuntimeInvocation.all_objects.filter(run_id=run.id).order_by("ordinal", "id"))
+    total = _legacy_full_usage(run.snapshot.get("totalBudget"))
+    final = _legacy_full_usage(run.cumulative_usage)
+    if total is None or final is None:
+        return None
+    before = {field: 0 for field in total}
+    for index, invocation in enumerate(invocations):
+        remaining = invocation.envelope.get("remainingBudget")
+        remaining = _legacy_full_usage(remaining)
+        if remaining is None:
+            return None
+        observed_before = {field: total[field] - remaining[field] for field in before}
+        if observed_before != before or any(value < 0 for value in observed_before.values()):
+            return None
+        if index + 1 < len(invocations):
+            next_remaining = invocations[index + 1].envelope.get("remainingBudget")
+            next_remaining = _legacy_full_usage(next_remaining)
+            if next_remaining is None:
+                return None
+            after = {field: total[field] - next_remaining[field] for field in before}
+        else:
+            after = final
+        delta = {field: after[field] - before[field] for field in before}
+        if any(value < 0 for value in delta.values()):
+            return None
+        if invocation.id == existing.id:
+            return delta if _same_json(invocation.usage, delta) else None
+        before = after
+    return None
+
+
+def _legacy_trigger_matches(existing, trigger_binding, input_event, input_event_ref):
+    persisted = existing.envelope.get("trigger")
+    if not isinstance(persisted, dict):
+        return False
+    if trigger_binding is None:
+        return True
+    requested = {"kind": trigger_binding} if isinstance(trigger_binding, str) else trigger_binding
+    if not isinstance(requested, dict) or requested.get("kind") != persisted.get("kind"):
+        return False
+    persisted_event_ref = (existing.envelope.get("newContextEventRefs") or [None])[0]
+    requested_event_ref = input_event.event_ref if input_event is not None else input_event_ref
+    if requested_event_ref is not None and requested_event_ref != persisted_event_ref:
+        return False
+    return all(
+        key not in requested or requested[key] == persisted.get(key)
+        for key in ("eventRef", "pendingInputEventRef", "answerFactDigest")
+    )
+
+
+def _legacy_invocation_matches(
+    existing,
+    run,
+    requested_invocation_ref,
+    trigger_binding,
+    input_event,
+    input_event_ref,
+    usage_delta,
+    created_by,
+):
+    persisted_event_ref = (existing.envelope.get("newContextEventRefs") or [None])[0]
+    requested_event_ref = input_event.event_ref if input_event is not None else input_event_ref
+    return (
+        existing.run_id == run.id
+        and (requested_invocation_ref is None or existing.invocation_id == requested_invocation_ref)
+        and (requested_event_ref is None or requested_event_ref == persisted_event_ref)
+        and _legacy_trigger_matches(existing, trigger_binding, input_event, input_event_ref)
+        and _same_json(existing.usage, usage_delta)
+        and _legacy_created_by_matches(existing, created_by)
+        and _legacy_invocation_usage(existing) is not None
+    )
+
+
+def _legacy_outcome_matches(existing, run, summary, artifacts, evidence, created_by):
+    return (
+        existing.run_id == run.id
+        and existing.summary == summary
+        and _same_json(existing.artifacts, artifacts)
+        and _same_json(existing.evidence, evidence)
+        and _legacy_created_by_matches(existing, created_by)
+    )
+
+
+def _legacy_terminal_matches(
+    existing,
+    invocation,
+    run,
+    kind,
+    source,
+    reason,
+    cancellation,
+    cancellation_supplied,
+    event_key,
+    event_key_supplied,
+):
+    return (
+        existing.invocation_id == invocation.id
+        and existing.run_id == run.id
+        and existing.kind == kind
+        and existing.source == source
+        and existing.reason == reason
+        and (not cancellation_supplied or existing.cancellation_ref == cancellation)
+        and (not event_key_supplied or existing.idempotency_key == event_key)
+    )
 
 
 def _ensure_scope(workspace, project):
@@ -607,7 +799,24 @@ def create_run(
         existing = RunAttempt.all_objects.filter(creation_idempotency_key=creation_key).first()
         if existing is not None:
             if existing.command_fingerprint != creation_fingerprint:
-                raise IdempotencyConflictError("Run idempotency key is bound to another Plane command")
+                if _is_legacy_fingerprint(existing.command_fingerprint):
+                    _legacy_match(
+                        existing,
+                        lambda row: _legacy_run_matches(
+                            row,
+                            locked_assignment,
+                            profile,
+                            snapshot_value,
+                            lineage_of,
+                            lineage_reason,
+                            recovery_of,
+                            recovery_intent,
+                            created_by,
+                        ),
+                        "Run idempotency key is bound to another Plane command",
+                    )
+                else:
+                    raise IdempotencyConflictError("Run idempotency key is bound to another Plane command")
             return existing
     source = None
     if lineage_of is not None:
@@ -690,7 +899,27 @@ def create_run(
         RunAttempt,
         fields=run_fields,
         key_lookup={"creation_idempotency_key": creation_key},
-        compatible=lambda existing: existing.command_fingerprint == creation_fingerprint,
+        compatible=lambda existing: (
+            existing.command_fingerprint == creation_fingerprint
+            or (
+                _is_legacy_fingerprint(existing.command_fingerprint)
+                and _legacy_match(
+                    existing,
+                    lambda row: _legacy_run_matches(
+                        row,
+                        locked_assignment,
+                        profile,
+                        snapshot_value,
+                        lineage_of,
+                        lineage_reason,
+                        recovery_of,
+                        recovery_intent,
+                        created_by,
+                    ),
+                    "Run idempotency key is bound to another Plane command",
+                )
+            )
+        ),
         message="Run idempotency key is bound to another Plane command",
     )
 
@@ -753,8 +982,15 @@ def record_input_event(
         _lock_idempotency_key(key)
         existing = RunInputEvent.all_objects.filter(idempotency_key=key).first()
         if existing is not None:
-            if existing.run_id != run.id or existing.command_fingerprint != event_fingerprint:
-                raise IdempotencyConflictError("Input event idempotency key is bound to another run")
+            if existing.command_fingerprint != event_fingerprint:
+                if _is_legacy_fingerprint(existing.command_fingerprint):
+                    _legacy_match(
+                        existing,
+                        lambda row: _legacy_input_matches(row, run, kind, payload, pending_ref, created_by),
+                        "Input event idempotency key is bound to another Plane command",
+                    )
+                else:
+                    raise IdempotencyConflictError("Input event idempotency key is bound to another run")
             return existing
     event_uuid = uuid4()
     event_ref = namespaced_ref("event", str(event_uuid))
@@ -777,8 +1013,21 @@ def record_input_event(
         RunInputEvent,
         fields=fields,
         key_lookup={"idempotency_key": key},
-        compatible=lambda existing: existing.run_id == run.id and existing.command_fingerprint == event_fingerprint,
-        message="Input event idempotency key is bound to another run",
+        compatible=lambda existing: (
+            existing.run_id == run.id
+            and (
+                existing.command_fingerprint == event_fingerprint
+                or (
+                    _is_legacy_fingerprint(existing.command_fingerprint)
+                    and _legacy_match(
+                        existing,
+                        lambda row: _legacy_input_matches(row, run, kind, payload, pending_ref, created_by),
+                        "Input event idempotency key is bound to another Plane command",
+                    )
+                )
+            )
+        ),
+        message="Input event idempotency key is bound to another Plane command",
     )
 
 
@@ -865,8 +1114,24 @@ def record_invocation(
     _lock_idempotency_key(key)
     existing = RuntimeInvocation.all_objects.filter(idempotency_key=key).first()
     if existing is not None:
-        if existing.run_id != run.id or existing.command_fingerprint != invocation_fingerprint:
-            raise IdempotencyConflictError("Invocation idempotency key is bound to another Plane command")
+        if existing.command_fingerprint != invocation_fingerprint:
+            if _is_legacy_fingerprint(existing.command_fingerprint):
+                _legacy_match(
+                    existing,
+                    lambda row: _legacy_invocation_matches(
+                        row,
+                        run,
+                        requested_invocation_ref,
+                        trigger_binding,
+                        input_event,
+                        input_event_ref,
+                        usage_delta,
+                        created_by,
+                    ),
+                    "Invocation idempotency key is bound to another Plane command",
+                )
+            else:
+                raise IdempotencyConflictError("Invocation idempotency key is bound to another Plane command")
         return existing
     if run.state not in {RunState.QUEUED, RunState.RUNNING, RunState.WAITING_FOR_INPUT}:
         raise InvalidTransitionError(f"Run {run.id} cannot receive an invocation from {run.state}")
@@ -940,10 +1205,31 @@ def record_invocation(
         fields=invocation_fields,
         key_lookup={"idempotency_key": key},
         alternate_lookup={"invocation_id": invocation_ref_value},
-        compatible=lambda existing: existing.run_id == run.id
-        and existing.invocation_id == invocation_ref_value
-        and existing.idempotency_key == key
-        and existing.command_fingerprint == invocation_fingerprint,
+        compatible=lambda existing: (
+            existing.run_id == run.id
+            and existing.invocation_id == invocation_ref_value
+            and existing.idempotency_key == key
+            and (
+                existing.command_fingerprint == invocation_fingerprint
+                or (
+                    _is_legacy_fingerprint(existing.command_fingerprint)
+                    and _legacy_match(
+                        existing,
+                        lambda row: _legacy_invocation_matches(
+                            row,
+                            run,
+                            requested_invocation_ref,
+                            trigger_binding,
+                            input_event,
+                            input_event_ref,
+                            usage_delta,
+                            created_by,
+                        ),
+                        "Invocation idempotency key or invocation id is bound to another Plane command",
+                    )
+                )
+            )
+        ),
         message="Invocation idempotency key or invocation id is bound to another Plane command",
     )
     run.state = RunState.RUNNING
@@ -1003,10 +1289,20 @@ def _terminal_state(kind):
 
 
 def _create_terminal_event_locked(
-    invocation, run, *, kind, source, product_ref, reason, idempotency_key, cancellation_ref=None
+    invocation,
+    run,
+    *,
+    kind,
+    source,
+    product_ref,
+    reason,
+    idempotency_key,
+    cancellation_ref=None,
+    idempotency_key_supplied=True,
 ):
     event_key = _normalise_idempotency(idempotency_key, "terminal event idempotency_key")
     invocation_state, run_state = _terminal_state(kind)
+    cancellation_supplied = cancellation_ref is not None
     event_ref = (
         product_ref
         if kind
@@ -1042,12 +1338,48 @@ def _create_terminal_event_locked(
     existing = RunTerminalEvent.all_objects.filter(invocation=invocation).first()
     if existing is not None:
         if existing.command_fingerprint != terminal_fingerprint:
-            raise IdempotencyConflictError("Terminal event is bound to another Plane command")
+            if _is_legacy_fingerprint(existing.command_fingerprint):
+                _legacy_match(
+                    existing,
+                    lambda row: _legacy_terminal_matches(
+                        row,
+                        invocation,
+                        run,
+                        kind,
+                        source,
+                        reason_value,
+                        cancellation,
+                        cancellation_supplied,
+                        event_key,
+                        idempotency_key_supplied,
+                    ),
+                    "Terminal event is bound to another Plane command",
+                )
+            else:
+                raise IdempotencyConflictError("Terminal event is bound to another Plane command")
         return existing
     conflicting = RunTerminalEvent.all_objects.filter(idempotency_key=event_key).first()
     if conflicting is not None:
         if conflicting.command_fingerprint != terminal_fingerprint:
-            raise IdempotencyConflictError("Terminal event idempotency key is bound to another Plane command")
+            if _is_legacy_fingerprint(conflicting.command_fingerprint):
+                _legacy_match(
+                    conflicting,
+                    lambda row: _legacy_terminal_matches(
+                        row,
+                        invocation,
+                        run,
+                        kind,
+                        source,
+                        reason_value,
+                        cancellation,
+                        cancellation_supplied,
+                        event_key,
+                        idempotency_key_supplied,
+                    ),
+                    "Terminal event idempotency key is bound to another Plane command",
+                )
+            else:
+                raise IdempotencyConflictError("Terminal event idempotency key is bound to another Plane command")
         return conflicting
     invocation.state = invocation_state
     invocation.save(_allow_lifecycle=True)
@@ -1074,7 +1406,28 @@ def _create_terminal_event_locked(
         key_lookup={"idempotency_key": event_key},
         alternate_lookup={"product_event_ref": event_ref},
         compatible=lambda existing: existing.invocation_id == invocation.id
-        and existing.command_fingerprint == terminal_fingerprint,
+        and (
+            existing.command_fingerprint == terminal_fingerprint
+            or (
+                _is_legacy_fingerprint(existing.command_fingerprint)
+                and _legacy_match(
+                    existing,
+                    lambda row: _legacy_terminal_matches(
+                        row,
+                        invocation,
+                        run,
+                        kind,
+                        source,
+                        reason_value,
+                        cancellation,
+                        cancellation_supplied,
+                        event_key,
+                        idempotency_key_supplied,
+                    ),
+                    "Terminal event idempotency key or product event is bound to another invocation",
+                )
+            )
+        ),
         message="Terminal event idempotency key or product event is bound to another invocation",
     )
 
@@ -1090,6 +1443,7 @@ def finalize_invocation(invocation, *, kind, reason="", source=TerminalEventSour
     if invocation.state in _INVOCATION_TERMINAL_STATES and not hasattr(invocation, "terminal_event"):
         raise TerminalEventRequiredError("Terminal invocation state has no visible Plane terminal event")
     product_event_ref = namespaced_ref("product-event", f"terminal-{invocation.id}-{kind}")
+    idempotency_key_supplied = idempotency_key is not None
     event_idempotency_key = idempotency_key or namespaced_ref("idempotency", f"terminal-{invocation.id}-{kind}")
     return _create_terminal_event_locked(
         invocation,
@@ -1099,6 +1453,7 @@ def finalize_invocation(invocation, *, kind, reason="", source=TerminalEventSour
         product_ref=product_event_ref,
         reason=reason,
         idempotency_key=event_idempotency_key,
+        idempotency_key_supplied=idempotency_key_supplied,
     )
 
 
@@ -1124,8 +1479,17 @@ def propose_outcome(run, *, summary, artifacts=None, evidence=None, idempotency_
         _lock_idempotency_key(key)
         existing = OutcomeSubmission.all_objects.filter(submission_idempotency_key=key).first()
         if existing is not None:
-            if existing.run_id != run.id or existing.command_fingerprint != outcome_fingerprint:
-                raise IdempotencyConflictError("Outcome idempotency key is bound to another Plane command")
+            if existing.command_fingerprint != outcome_fingerprint:
+                if _is_legacy_fingerprint(existing.command_fingerprint):
+                    _legacy_match(
+                        existing,
+                        lambda row: _legacy_outcome_matches(
+                            row, run, summary, artifacts_value, evidence_value, created_by
+                        ),
+                        "Outcome idempotency key is bound to another Plane command",
+                    )
+                else:
+                    raise IdempotencyConflictError("Outcome idempotency key is bound to another Plane command")
             return existing
     if run.state not in {RunState.RUNNING, RunState.WAITING_FOR_INPUT}:
         raise InvalidTransitionError(f"Run cannot submit an outcome from {run.state}")
@@ -1157,9 +1521,23 @@ def propose_outcome(run, *, summary, artifacts=None, evidence=None, idempotency_
             fields=outcome_fields,
             key_lookup={"submission_idempotency_key": key},
             alternate_lookup={"run_id": run.id},
-            compatible=lambda existing: existing.run_id == run.id
-            and existing.submission_idempotency_key == key
-            and existing.command_fingerprint == outcome_fingerprint,
+            compatible=lambda existing: (
+                existing.run_id == run.id
+                and existing.submission_idempotency_key == key
+                and (
+                    existing.command_fingerprint == outcome_fingerprint
+                    or (
+                        _is_legacy_fingerprint(existing.command_fingerprint)
+                        and _legacy_match(
+                            existing,
+                            lambda row: _legacy_outcome_matches(
+                                row, run, summary, artifacts_value, evidence_value, created_by
+                            ),
+                            "Outcome idempotency key or run is bound to another Plane command",
+                        )
+                    )
+                )
+            ),
             message="Outcome idempotency key or run is bound to another Plane command",
         )
     return_value = _create_terminal_event_locked(

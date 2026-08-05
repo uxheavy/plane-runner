@@ -355,6 +355,19 @@ class RunAttempt(AgentScopedModel):
         db_table = "agent_run_attempts"
         ordering = ("-created_at",)
         indexes = [models.Index(fields=["assignment", "state"], name="agent_run_assignment_state_idx")]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(creation_idempotency_key__isnull=True, command_fingerprint__isnull=True)
+                    | models.Q(
+                        creation_idempotency_key__isnull=False,
+                        command_fingerprint__isnull=False,
+                        command_fingerprint__regex=r"^(command|legacy[12]):[0-9a-f]{64}$",
+                    )
+                ),
+                name="agent_run_command_fingerprint_binding",
+            )
+        ]
 
     def save(self, *args, **kwargs):
         allowed = kwargs.pop("_allow_lifecycle", False)
@@ -407,6 +420,19 @@ class RunInputEvent(AgentScopedModel):
     class Meta:
         db_table = "agent_run_input_events"
         ordering = ("created_at",)
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(idempotency_key__isnull=True, command_fingerprint__isnull=True)
+                    | models.Q(
+                        idempotency_key__isnull=False,
+                        command_fingerprint__isnull=False,
+                        command_fingerprint__regex=r"^(command|legacy[12]):[0-9a-f]{64}$",
+                    )
+                ),
+                name="agent_input_command_fingerprint_binding",
+            )
+        ]
 
     IMMUTABLE_FIELDS = (
         "workspace_id",
@@ -462,6 +488,13 @@ class RuntimeInvocation(AgentScopedModel):
         constraints = [
             models.UniqueConstraint(fields=["run", "ordinal"], name="agent_invocation_run_ordinal_unique"),
             models.CheckConstraint(condition=models.Q(ordinal__gte=1), name="agent_invocation_ordinal_positive"),
+            models.CheckConstraint(
+                condition=models.Q(
+                    command_fingerprint__isnull=False,
+                    command_fingerprint__regex=r"^(command|legacy[12]):[0-9a-f]{64}$",
+                ),
+                name="agent_invocation_command_fingerprint_binding",
+            ),
         ]
 
     def save(self, *args, **kwargs):
@@ -509,6 +542,19 @@ class OutcomeSubmission(AgentScopedModel):
         db_table = "agent_outcome_submissions"
         ordering = ("-created_at",)
         indexes = [models.Index(fields=["workspace", "state"], name="agent_outcome_scope_state_idx")]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(submission_idempotency_key__isnull=True, command_fingerprint__isnull=True)
+                    | models.Q(
+                        submission_idempotency_key__isnull=False,
+                        command_fingerprint__isnull=False,
+                        command_fingerprint__regex=r"^(command|legacy[12]):[0-9a-f]{64}$",
+                    )
+                ),
+                name="agent_outcome_command_fingerprint_binding",
+            )
+        ]
 
     def save(self, *args, **kwargs):
         allowed = kwargs.pop("_allow_lifecycle", False)
@@ -563,6 +609,13 @@ class RunTerminalEvent(AgentScopedModel):
         ordering = ("created_at",)
         constraints = [
             models.CheckConstraint(condition=models.Q(visible=True), name="agent_terminal_event_visible"),
+            models.CheckConstraint(
+                condition=models.Q(
+                    command_fingerprint__isnull=False,
+                    command_fingerprint__regex=r"^(command|legacy[12]):[0-9a-f]{64}$",
+                ),
+                name="agent_terminal_command_fingerprint_binding",
+            ),
         ]
 
     IMMUTABLE_FIELDS = (
