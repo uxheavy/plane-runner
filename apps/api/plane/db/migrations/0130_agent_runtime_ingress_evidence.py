@@ -32,15 +32,27 @@ BEFORE UPDATE OR DELETE ON agent_runtime_event_ingress
 FOR EACH ROW
 EXECUTE FUNCTION agent_runtime_event_ingress_append_only();
 
+CREATE TRIGGER agent_runtime_event_ingress_append_only_truncate
+BEFORE TRUNCATE ON agent_runtime_event_ingress
+FOR EACH STATEMENT
+EXECUTE FUNCTION agent_runtime_event_ingress_append_only();
+
 CREATE TRIGGER agent_runtime_exit_evidence_append_only
 BEFORE UPDATE OR DELETE ON agent_runtime_exit_evidence
 FOR EACH ROW
+EXECUTE FUNCTION agent_runtime_exit_evidence_append_only();
+
+CREATE TRIGGER agent_runtime_exit_evidence_append_only_truncate
+BEFORE TRUNCATE ON agent_runtime_exit_evidence
+FOR EACH STATEMENT
 EXECUTE FUNCTION agent_runtime_exit_evidence_append_only();
 """
 
 DROP_RUNTIME_EVIDENCE_GUARDS = """
 DROP TRIGGER IF EXISTS agent_runtime_event_ingress_append_only ON agent_runtime_event_ingress;
+DROP TRIGGER IF EXISTS agent_runtime_event_ingress_append_only_truncate ON agent_runtime_event_ingress;
 DROP TRIGGER IF EXISTS agent_runtime_exit_evidence_append_only ON agent_runtime_exit_evidence;
+DROP TRIGGER IF EXISTS agent_runtime_exit_evidence_append_only_truncate ON agent_runtime_exit_evidence;
 DROP FUNCTION IF EXISTS agent_runtime_event_ingress_append_only();
 DROP FUNCTION IF EXISTS agent_runtime_exit_evidence_append_only();
 """

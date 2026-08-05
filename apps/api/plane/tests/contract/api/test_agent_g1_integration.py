@@ -246,12 +246,18 @@ def test_combined_g1_plane_lifecycle_and_gateway_contract(
                 }
             ),
         )
-    with pytest.raises(DatabaseError, match="append-only"):
-        with transaction.atomic():
-            RuntimeEventIngress.objects.filter(pk=event_record.pk).update(raw_payload={"tampered": True})
-    with pytest.raises(DatabaseError, match="append-only"):
-        with transaction.atomic():
-            RuntimeExitEvidence.objects.filter(pk=exit_record.pk).delete()
+    for model, record in ((RuntimeEventIngress, event_record), (RuntimeExitEvidence, exit_record)):
+        with pytest.raises(DatabaseError, match="append-only"):
+            with transaction.atomic():
+                model.objects.filter(pk=record.pk).update(raw_payload={"tampered": True})
+        with pytest.raises(DatabaseError, match="append-only"):
+            with transaction.atomic():
+                model.objects.filter(pk=record.pk).delete()
+    for table_name in ("agent_runtime_event_ingress", "agent_runtime_exit_evidence"):
+        with pytest.raises(DatabaseError, match="append-only"):
+            with transaction.atomic():
+                with connection.cursor() as cursor:
+                    cursor.execute(f"TRUNCATE {table_name}")
     assert RuntimeEventIngress.objects.get(pk=event_record.pk).raw_payload == runtime_event
     assert RuntimeExitEvidence.objects.get(pk=exit_record.pk).raw_payload == runtime_exit
     with pytest.raises(RuntimeIngressError, match="after an exit"):

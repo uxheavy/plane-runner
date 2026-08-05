@@ -112,11 +112,12 @@ def _binding_error(frame: dict[str, Any], invocation: RuntimeInvocation) -> Runt
         "invocationId": envelope["invocationId"],
         "correlationId": envelope["correlationId"],
         "causationRef": envelope["causationRef"],
-        "idempotencyKey": envelope["idempotencyKey"],
     }
     for field, value in expected.items():
         if frame.get(field) != value:
             return RuntimeIngressError(f"runtime frame {field} is not bound to the invocation")
+    if frame.get("authority") == "runtime_evidence_only" and frame.get("idempotencyKey") != envelope["idempotencyKey"]:
+        return RuntimeIngressError("runtime exit idempotencyKey is not bound to the invocation")
     return None
 
 
@@ -228,8 +229,8 @@ def ingest_runtime_frame(
     """Validate, bind, sequence, and persist one serialized runtime frame."""
 
     stored = (
-        RuntimeInvocation.objects.select_for_update()
-        .select_related("run", "run__actor", "workspace", "project")
+        RuntimeInvocation.objects.select_for_update(of=("self",))
+        .select_related("run", "run__actor", "workspace")
         .get(pk=invocation.pk)
     )
     stored.run = RunAttempt.objects.select_for_update().get(pk=stored.run_id)
