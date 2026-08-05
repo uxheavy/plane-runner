@@ -4,8 +4,11 @@ import psycopg
 import pytest
 from django.conf import settings
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.db import connection
 from django.test import override_settings
+
+from plane.db.management.commands.verify_operation_gateway_migration_boundary import _assert_no_protected_membership
 
 
 def _quote(identifier):
@@ -101,3 +104,63 @@ def test_limited_migration_role_cannot_mutate_or_replace_authority_marker():
         with connection.cursor() as cursor:
             cursor.execute(f"DROP ROLE IF EXISTS {_quote(migration_probe)}")
             cursor.execute(f"DROP ROLE IF EXISTS {_quote(unrelated_owner)}")
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_migration_boundary_rejects_direct_noinherit_governance_membership():
+    governance_role = settings.PLANE_AUDIT_GOVERNANCE_ROLE
+    migration_probe = f"gateway_membership_probe_{uuid.uuid4().hex[:12]}"
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(f"CREATE ROLE {_quote(migration_probe)} LOGIN NOINHERIT PASSWORD 'probe'")
+            cursor.execute(f"GRANT {_quote(governance_role)} TO {_quote(migration_probe)}")
+            cursor.execute(
+                "SELECT pg_has_role(%s, %s, 'USAGE'), EXISTS ("
+                "SELECT 1 FROM pg_auth_members membership "
+                "JOIN pg_roles granted_role ON granted_role.oid = membership.roleid "
+                "JOIN pg_roles member_role ON member_role.oid = membership.member "
+                "WHERE granted_role.rolname = %s AND member_role.rolname = %s)",
+                [migration_probe, governance_role, governance_role, migration_probe],
+            )
+            inherited_usage, direct_membership = cursor.fetchone()
+            assert inherited_usage is False
+            assert direct_membership is True
+            with pytest.raises(CommandError, match="governance membership"):
+                _assert_no_protected_membership(cursor, migration_probe, governance_role)
+    finally:
+        with connection.cursor() as cursor:
+            cursor.execute(f"DROP ROLE IF EXISTS {_quote(migration_probe)}")
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_provisioner_owned_authority_marker_residue_converges_on_retry():
+    schema = settings.PLANE_AUDIT_SCHEMA
+    governance_role = settings.PLANE_AUDIT_GOVERNANCE_ROLE
+    marker = f"{_quote(schema)}.{_quote('plane_operation_gateway_authority_marker')}"
+    provisioner_probe = f"gateway_provisioner_probe_{uuid.uuid4().hex[:12]}"
+
+    try:
+        call_command("bootstrap_operation_gateway_audit", phase="before-migrate", verbosity=0)
+        with connection.cursor() as cursor:
+            cursor.execute(f"CREATE ROLE {_quote(provisioner_probe)} NOLOGIN NOINHERIT")
+            cursor.execute(f"ALTER TABLE {marker} OWNER TO {_quote(provisioner_probe)}")
+        with override_settings(
+            PLANE_AUDIT_ENFORCE_ROLE_SEPARATION=False,
+            PLANE_AUDIT_PROVISIONER_ROLE=provisioner_probe,
+        ):
+            call_command("bootstrap_operation_gateway_audit", phase="before-migrate", verbosity=0)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT owner.rolname FROM pg_class marker "
+                "JOIN pg_namespace namespace ON namespace.oid = marker.relnamespace "
+                "JOIN pg_roles owner ON owner.oid = marker.relowner "
+                "WHERE namespace.nspname = %s AND marker.relname = %s",
+                [schema, "plane_operation_gateway_authority_marker"],
+            )
+            assert cursor.fetchone() == (governance_role,)
+    finally:
+        with connection.cursor() as cursor:
+            cursor.execute(f"ALTER TABLE {marker} OWNER TO {_quote(governance_role)}")
+            cursor.execute(f"DROP ROLE IF EXISTS {_quote(provisioner_probe)}")

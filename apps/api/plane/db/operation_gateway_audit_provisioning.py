@@ -17,6 +17,33 @@ def _role_identifier(connection, value: str) -> str:
     return connection.ops.quote_name(value)
 
 
+def _role_reachable(cursor, member_role: str, target_role: str) -> bool:
+    """Check role membership edges without consulting inheritance behavior."""
+
+    cursor.execute(
+        """
+        WITH RECURSIVE role_graph(member_oid, role_oid, path) AS (
+            SELECT member, roleid, ARRAY[member, roleid]::oid[]
+            FROM pg_auth_members
+            UNION ALL
+            SELECT graph.member_oid, membership.roleid, graph.path || membership.roleid
+            FROM role_graph AS graph
+            JOIN pg_auth_members AS membership ON membership.member = graph.role_oid
+            WHERE NOT membership.roleid = ANY(graph.path)
+        )
+        SELECT EXISTS (
+            SELECT 1
+            FROM role_graph
+            JOIN pg_roles AS member ON member.oid = role_graph.member_oid
+            JOIN pg_roles AS target ON target.oid = role_graph.role_oid
+            WHERE member.rolname = %s AND target.rolname = %s
+        )
+        """,
+        [member_role, target_role],
+    )
+    return bool(cursor.fetchone()[0])
+
+
 def configure_audit_role_boundary(connection, *, runtime_role, governance_role, migration_role):
     schema_name = settings.PLANE_AUDIT_SCHEMA
     if not runtime_role or not governance_role or not migration_role:
@@ -44,8 +71,7 @@ def configure_audit_role_boundary(connection, *, runtime_role, governance_role, 
         cursor.execute("SELECT rolsuper FROM pg_roles WHERE rolname = %s", [migration_role])
         migration_is_superuser = bool(cursor.fetchone()[0])
         if settings.PLANE_AUDIT_ENFORCE_ROLE_SEPARATION or not migration_is_superuser:
-            cursor.execute("SELECT pg_has_role(%s, %s, 'USAGE')", [migration_role, governance_role])
-            if cursor.fetchone()[0]:
+            if _role_reachable(cursor, migration_role, governance_role):
                 raise RuntimeError("The migration role retains governance membership")
         marker_regclass = f"{schema_name}.plane_operation_gateway_authority_marker"
         cursor.execute(
@@ -88,9 +114,6 @@ def configure_audit_role_boundary(connection, *, runtime_role, governance_role, 
             ):
                 raise RuntimeError("The database and audit schema owners do not match the provisioned topology")
 
-        # The provisioner may use a transient membership to transfer ownership;
-        # the final role graph is checked again below and contains no edge.
-        cursor.execute(f"GRANT {governance_ident} TO {migration_ident}")
         cursor.execute(f"REVOKE {governance_ident} FROM {runtime_ident}")
         cursor.execute(f"REVOKE {migration_ident} FROM {runtime_ident}")
 
@@ -187,5 +210,3 @@ def configure_audit_role_boundary(connection, *, runtime_role, governance_role, 
         for (sequence_name,) in cursor.fetchall():
             sequence_ident = _role_identifier(connection, sequence_name)
             cursor.execute(f"GRANT USAGE, SELECT ON SEQUENCE {schema_ident}.{sequence_ident} TO {runtime_ident}")
-
-        cursor.execute(f"REVOKE {governance_ident} FROM {migration_ident}")

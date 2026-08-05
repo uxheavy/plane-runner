@@ -6,7 +6,7 @@ import re
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
-from django.db import connection
+from django.db import connection, transaction
 
 from plane.db.operation_gateway_audit_provisioning import configure_audit_role_boundary
 from plane.db.operation_gateway_audit_restore import restore_audit_catalog_snapshot
@@ -26,6 +26,7 @@ class Command(BaseCommand):
             default="after-migrate",
         )
 
+    @transaction.atomic
     def handle(self, *args, **options):
         phase = options["phase"]
         runtime_role = settings.PLANE_AUDIT_RUNTIME_ROLE
@@ -37,6 +38,7 @@ class Command(BaseCommand):
 
         with connection.cursor() as cursor:
             current_user, can_create_roles = self._current_role(cursor)
+            effective_provisioner_role = provisioner_role or current_user
             if settings.PLANE_AUDIT_ENFORCE_ROLE_SEPARATION:
                 if not ROLE_NAME.fullmatch(provisioner_role or ""):
                     raise CommandError("PLANE_AUDIT_PROVISIONER_ROLE is required for enforced bootstrap")
@@ -84,7 +86,6 @@ class Command(BaseCommand):
                 self._ensure_database_topology(cursor, provisioner_role)
 
             if phase == "before-reverse":
-                effective_provisioner_role = provisioner_role or current_user
                 self._restore_reverse_catalog(
                     cursor,
                     runtime_role=runtime_role,
@@ -98,6 +99,7 @@ class Command(BaseCommand):
                     runtime_role=runtime_role,
                     governance_role=governance_role,
                     migration_role=migration_role,
+                    provisioner_role=effective_provisioner_role,
                 )
                 if phase == "before-migrate":
                     self._prepare_migration_boundary(
@@ -305,7 +307,7 @@ class Command(BaseCommand):
         audit_table = cursor.fetchone()[0]
         return marker is not None and snapshot is not None and function is not None and audit_table is not None
 
-    def _ensure_authority_marker(self, cursor, *, runtime_role, governance_role, migration_role):
+    def _ensure_authority_marker(self, cursor, *, runtime_role, governance_role, migration_role, provisioner_role):
         schema_name = settings.PLANE_AUDIT_SCHEMA
         if not ROLE_NAME.fullmatch(schema_name or ""):
             raise CommandError("PLANE_AUDIT_SCHEMA must be a simple PostgreSQL identifier")
@@ -400,27 +402,20 @@ class Command(BaseCommand):
                     "The Operation Gateway authority marker does not match the provisioned database topology"
                 )
 
-        marker_owner = marker_owner[0] if marker_owner else migration_role
-        if marker_owner not in {governance_role, migration_role}:
+        marker_owner = marker_owner[0] if marker_owner else provisioner_role
+        if marker_owner not in {governance_role, provisioner_role}:
             raise CommandError("The authority marker has an unapproved owner")
         if self._role_reachable(cursor, migration_role, governance_role):
             raise CommandError("The migration role retains governance membership")
-        granted_transient_membership = False
-        try:
-            cursor.execute(f"GRANT {self._quote(governance_role)} TO {self._quote(migration_role)}")
-            granted_transient_membership = True
-            if marker_owner == migration_role:
-                cursor.execute(f"ALTER TABLE {marker_ident} OWNER TO {self._quote(governance_role)}")
-            cursor.execute(
-                f"REVOKE ALL ON TABLE {marker_ident} FROM PUBLIC, {self._quote(runtime_role)}, "
-                f"{self._quote(migration_role)}, {self._quote(governance_role)}"
-            )
-            cursor.execute(
-                f"GRANT SELECT ON TABLE {marker_ident} TO {self._quote(runtime_role)}, {self._quote(migration_role)}"
-            )
-        finally:
-            if granted_transient_membership:
-                cursor.execute(f"REVOKE {self._quote(governance_role)} FROM {self._quote(migration_role)}")
+        if marker_owner == provisioner_role:
+            cursor.execute(f"ALTER TABLE {marker_ident} OWNER TO {self._quote(governance_role)}")
+        cursor.execute(
+            f"REVOKE ALL ON TABLE {marker_ident} FROM PUBLIC, {self._quote(runtime_role)}, "
+            f"{self._quote(migration_role)}, {self._quote(governance_role)}"
+        )
+        cursor.execute(
+            f"GRANT SELECT ON TABLE {marker_ident} TO {self._quote(runtime_role)}, {self._quote(migration_role)}"
+        )
         self._assert_authority_marker(
             cursor,
             marker_ident=marker_ident,

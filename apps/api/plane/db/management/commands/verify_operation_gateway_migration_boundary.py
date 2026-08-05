@@ -13,6 +13,38 @@ ROLE_NAME = re.compile(r"^[a-z_][a-z0-9_$]{0,62}$")
 AUTHORITY_MARKER_TABLE = "plane_operation_gateway_authority_marker"
 
 
+def _role_reachable(cursor, member_role: str, target_role: str) -> bool:
+    """Check direct and transitive membership independently of NOINHERIT."""
+
+    cursor.execute(
+        """
+        WITH RECURSIVE role_graph(member_oid, role_oid, path) AS (
+            SELECT member, roleid, ARRAY[member, roleid]::oid[]
+            FROM pg_auth_members
+            UNION ALL
+            SELECT graph.member_oid, membership.roleid, graph.path || membership.roleid
+            FROM role_graph AS graph
+            JOIN pg_auth_members AS membership ON membership.member = graph.role_oid
+            WHERE NOT membership.roleid = ANY(graph.path)
+        )
+        SELECT EXISTS (
+            SELECT 1
+            FROM role_graph
+            JOIN pg_roles AS member ON member.oid = role_graph.member_oid
+            JOIN pg_roles AS target ON target.oid = role_graph.role_oid
+            WHERE member.rolname = %s AND target.rolname = %s
+        )
+        """,
+        [member_role, target_role],
+    )
+    return bool(cursor.fetchone()[0])
+
+
+def _assert_no_protected_membership(cursor, member_role: str, target_role: str) -> None:
+    if _role_reachable(cursor, member_role, target_role):
+        raise CommandError("The migration role retains governance membership")
+
+
 class Command(BaseCommand):
     help = "Verify the provisioned boundary before running ordinary migrations."
 
@@ -71,14 +103,12 @@ class Command(BaseCommand):
             if protected_roles.get(governance_role) != (False, False, False, False, False, False):
                 raise CommandError("The governance role must be NOLOGIN NOINHERIT without role powers")
 
+            _assert_no_protected_membership(cursor, migration_role, governance_role)
             cursor.execute(
-                "SELECT pg_has_role(%s, %s, 'USAGE'), has_schema_privilege(%s, %s, 'USAGE'), "
-                "has_schema_privilege(%s, %s, 'CREATE')",
-                [migration_role, governance_role, migration_role, schema_name, migration_role, schema_name],
+                "SELECT has_schema_privilege(%s, %s, 'USAGE'), has_schema_privilege(%s, %s, 'CREATE')",
+                [migration_role, schema_name, migration_role, schema_name],
             )
-            can_reach_governance, can_use_schema, can_create_in_schema = cursor.fetchone()
-            if can_reach_governance:
-                raise CommandError("The migration role retains governance membership")
+            can_use_schema, can_create_in_schema = cursor.fetchone()
             if not can_use_schema or not can_create_in_schema:
                 raise CommandError("The migration role is missing its provisioned schema boundary")
 
