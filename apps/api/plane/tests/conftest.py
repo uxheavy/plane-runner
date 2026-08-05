@@ -6,7 +6,15 @@ import pytest
 from rest_framework.test import APIClient
 from pytest_django.fixtures import django_db_setup
 
-from plane.db.models import User, Workspace, WorkspaceMember
+from plane.db.models import (
+    Issue,
+    Project,
+    ProjectMember,
+    State,
+    User,
+    Workspace,
+    WorkspaceMember,
+)
 from plane.db.models.api import APIToken
 
 
@@ -138,3 +146,36 @@ def workspace(create_user):
     WorkspaceMember.objects.create(workspace=created_workspace, member=create_user, role=20)
 
     return created_workspace
+
+
+@pytest.fixture
+def gateway_project(db, workspace, create_user):
+    """Create the shared project fixture used by the agent gateway contracts."""
+    project = Project.objects.create(
+        name="Gateway Project",
+        identifier="AGW",
+        workspace=workspace,
+        created_by=create_user,
+    )
+    ProjectMember.objects.create(project=project, member=create_user, role=20, is_active=True)
+    State.objects.create(
+        name="Backlog",
+        color="#000000",
+        group="backlog",
+        default=True,
+        project=project,
+        workspace=workspace,
+        created_by=create_user,
+    )
+    return project
+
+
+@pytest.fixture
+def gateway_issue(db, gateway_project, workspace, create_user):
+    """Create the shared issue fixture used by the agent gateway contracts."""
+    return Issue.objects.create(
+        name="Gateway Issue",
+        project=gateway_project,
+        workspace=workspace,
+        created_by=create_user,
+    )
