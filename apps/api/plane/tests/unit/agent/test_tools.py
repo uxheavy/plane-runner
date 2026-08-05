@@ -141,7 +141,15 @@ def test_native_adapter_routes_semantic_operation_through_gateway():
 
 class FakeIsolateHost:
     def __init__(self, *, duration_ms=1000):
-        self.budget = CodeModeBudget(input_bytes=4096, output_bytes=4096, duration_ms=duration_ms, calls=4)
+        self.budget = CodeModeBudget(
+            input_bytes=4096,
+            output_bytes=4096,
+            duration_ms=duration_ms,
+            calls=4,
+            spill_bytes=4096,
+            input_tokens=100,
+            output_tokens=100,
+        )
         self.cancelled = False
         self.callbacks = []
 
@@ -173,6 +181,12 @@ class FakeIsolateHost:
 
     def record_execution_usage(self, *, input_tokens, output_tokens, duration_ms):
         assert duration_ms > 0
+
+    def reserve_execution_budget(self, *, input_tokens, output_tokens):
+        return None
+
+    def release_execution_budget(self):
+        return None
 
 
 def test_code_mode_child_isolate_routes_only_typed_host_callbacks():

@@ -14,6 +14,7 @@ class HostBinding:
     """Trusted host state; this object is never serialized into generated code."""
 
     actor_ref: str
+    principal_ref: str
     workspace_slug: str
     run_ref: str
     invocation_ref: str

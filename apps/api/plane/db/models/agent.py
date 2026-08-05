@@ -156,6 +156,11 @@ class AgentActor(AgentScopedModel):
     """The sole Plane entitlement identity for an Agent."""
 
     display_name = models.CharField(max_length=255)
+    principal = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="plane_agent_actor",
+    )
     credential_ref = models.CharField(max_length=255, null=True, blank=True)
     is_active = models.BooleanField(default=True)
     active_profile = models.ForeignKey(
@@ -316,6 +321,7 @@ class RunAttempt(AgentScopedModel):
     invocation_count = models.PositiveIntegerField(default=0)
     last_invocation_id = models.CharField(max_length=128, null=True, blank=True)
     cumulative_usage = models.JSONField(default=default_dict)
+    code_mode_reserved_usage = models.JSONField(default=default_dict)
     creation_idempotency_key = models.CharField(max_length=128, null=True, blank=True, unique=True)
     command_fingerprint = models.CharField(max_length=72, null=True, blank=True, editable=False)
     lineage_of = models.ForeignKey(
@@ -350,7 +356,13 @@ class RunAttempt(AgentScopedModel):
         "recovery_of_id",
         "recovery_intent",
     )
-    LIFECYCLE_FIELDS = ("state", "invocation_count", "last_invocation_id", "cumulative_usage")
+    LIFECYCLE_FIELDS = (
+        "state",
+        "invocation_count",
+        "last_invocation_id",
+        "cumulative_usage",
+        "code_mode_reserved_usage",
+    )
 
     class Meta:
         db_table = "agent_run_attempts"

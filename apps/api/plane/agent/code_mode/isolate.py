@@ -53,8 +53,25 @@ class CodeModeIsolateRunner:
             raise CodeModeIsolateError("VALIDATION_ERROR", "Code Mode source must be non-empty TypeScript")
         if not isinstance(input_data, dict):
             raise CodeModeIsolateError("VALIDATION_ERROR", "Code Mode input must be an object")
-        if host.budget.duration_ms <= 0:
-            raise CodeModeIsolateError("BUDGET_EXCEEDED", "Code Mode duration budget is exhausted")
+        if any(
+            getattr(host.budget, field, 0) <= 0
+            for field in (
+                "input_tokens",
+                "output_tokens",
+                "duration_ms",
+                "input_bytes",
+                "output_bytes",
+                "calls",
+                "spill_bytes",
+            )
+        ):
+            raise CodeModeIsolateError("BUDGET_EXCEEDED", "Code Mode duration or cumulative budget is exhausted")
+        try:
+            reserve_execution_budget = getattr(host, "reserve_execution_budget", None)
+            if reserve_execution_budget is not None:
+                reserve_execution_budget(input_tokens=input_tokens, output_tokens=output_tokens)
+        except Exception as exc:
+            raise CodeModeIsolateError("BUDGET_EXCEEDED", "Code Mode execution budget is exhausted") from exc
         start = time.monotonic()
         env = {"PATH": os.path.dirname(self.node_path) or os.defpath, "NODE_NO_WARNINGS": "1"}
         permission_flag = self._permission_flag()
@@ -68,6 +85,7 @@ class CodeModeIsolateRunner:
             f"--allow-fs-read={self.runner_path}",
             str(self.runner_path),
         ]
+        completed = False
         try:
             process = subprocess.Popen(
                 command,
@@ -109,10 +127,15 @@ class CodeModeIsolateRunner:
                 output_tokens=output_tokens,
                 duration_ms=max(1, int((time.monotonic() - start) * 1000)),
             )
+            completed = True
             return result
         finally:
             selector.close()
             self._terminate(process)
+            if not completed:
+                release_execution_budget = getattr(host, "release_execution_budget", None)
+                if release_execution_budget is not None:
+                    release_execution_budget()
 
     def _read_protocol(self, process, selector, host, started: float) -> Any:
         assert process.stdout is not None
