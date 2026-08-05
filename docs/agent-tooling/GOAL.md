@@ -136,15 +136,17 @@ Each phase has one accountable lane. A lane may run in parallel with the lanes l
 ## Worker and review protocol
 
 - Use Luna xhigh workers for implementation lanes and bounded verification work.
-- After each completed lane, assign a fresh Sol Medium reviewer. Do not reuse a reviewer for a later completed lane.
-- A lane is complete only when its changed files, tests/checks, requirement evidence, unresolved risks, and exact commit are read by the fresh reviewer and accepted by the coordinator.
+- Let a worker iterate within its lane until the complete lane verifier is green and the coordinator judges the candidate coherent enough to integrate. Routine remediation commits, mechanical follow-ups, environment-only reruns, and documentation/status updates do not create new review gates.
+- Use Sol Medium reviewers only at meaningful independent gates: a lane-ready candidate, a material cross-lane integration candidate, and final completion. Batch related commits and compatible seams into one review when that gives the reviewer the complete behavior to assess.
+- One reviewer owns a review gate from initial assessment through verification of the findings raised at that gate. Return rejected work to Luna, accumulate the remediation, rerun the full lane verifier, and then ask the same reviewer to close the gate; do not spawn a fresh reviewer for every fix. Use a new reviewer for a later meaningful gate or when the original reviewer is unavailable.
+- A lane is complete only when its changed files, tests/checks, requirement evidence, unresolved risks, and exact candidate commit set are read and accepted at its lane-ready Sol gate, then accepted by the coordinator. Deterministic checks and coordinator readback may close narrow mechanical findings, but they do not replace independent review of material behavior or security boundaries.
 - Archive the implementation task after the lane review and preserve the commit/evidence handoff in the parent task. Do not maintain a second narrative worklog for routine progress.
 - Every future task packet must list its applicable ADRs by number, title, and path, along with the lane's objective, files/surfaces, dependencies, verifier, stop condition, and expected evidence.
 - Keep lane ownership disjoint. Reviewers may report boundary conflicts or missing proof, but they do not widen the lane without an explicit coordinator decision.
 
 ## Requirement-level completion proof
 
-The full outcome is complete only when every row below has executable evidence from the actual implementation and a coordinator/fresh-reviewer readback. Documentation, a fixture, or a generated artifact alone is not proof.
+The full outcome is complete only when every row below has executable evidence from the actual implementation, coordinator readback, and the applicable independent gate review. Documentation, a fixture, or a generated artifact alone is not proof.
 
 | Requirement                  | Passing proof                                                                                                                                                                                                                                                |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
