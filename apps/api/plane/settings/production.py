@@ -92,6 +92,8 @@ _MIGRATION_DATABASE_ENVIRONMENT_NAMES_V1 = frozenset(
         "DATABASE_READ_REPLICA_URL",
         # Migrator-only Plane credentials.
         "PLANE_AUDIT_RUNTIME_PASSWORD",
+        "PLANE_AUDIT_MIGRATION_PASSWORD",
+        "DATABASE_PROVISIONER_URL",
     }
 )
 _MIGRATION_DATABASE_ENVIRONMENT_PREFIXES = (
@@ -175,6 +177,32 @@ def _reject_migration_environment_leakage():
 
 
 def _validate_production_database_boundary():
+    if PLANE_DB_PROVISIONER_MODE:
+        provisioner_url = os.environ.get("DATABASE_PROVISIONER_URL")
+        required_provisioner_env = (
+            "DATABASE_PROVISIONER_URL",
+            "PGHOST",
+            "PGDATABASE",
+            "POSTGRES_PORT",
+            "POSTGRES_DB",
+            "POSTGRES_USER",
+            "POSTGRES_PASSWORD",
+        )
+        missing = [name for name in required_provisioner_env if not os.environ.get(name)]
+        if missing:
+            raise ImproperlyConfigured("Production provisioner mode requires " + ", ".join(missing))
+        if os.environ.get("DATABASE_RUNTIME_URL") or os.environ.get("DATABASE_MIGRATION_URL"):
+            raise ImproperlyConfigured("The provisioner must not receive runtime or migration database URLs")
+        provisioner_url_role = _database_url_user(provisioner_url)
+        if not provisioner_url_role:
+            raise ImproperlyConfigured("The provisioner database URL must declare the provisioner role")
+        _reject_confusable_privileged_role(provisioner_url_role)
+        if not _database_role_matches(provisioner_url_role, PLANE_AUDIT_PROVISIONER_ROLE):
+            raise ImproperlyConfigured("The provisioner database URL must use the configured provisioner role")
+        if not _database_role_matches(DATABASES["default"].get("USER"), provisioner_url_role):
+            raise ImproperlyConfigured("The provisioner database settings must use the provisioner role")
+        return
+
     if PLANE_DB_MIGRATION_MODE:
         migration_url = os.environ.get("DATABASE_MIGRATION_URL")
         required_migration_env = (
@@ -231,6 +259,7 @@ def _validate_production_database_boundary():
     privileged_roles = {
         PLANE_AUDIT_MIGRATION_ROLE,
         PLANE_AUDIT_GOVERNANCE_ROLE,
+        PLANE_AUDIT_PROVISIONER_ROLE,
         "postgres",
         "root",
     }

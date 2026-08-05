@@ -211,7 +211,7 @@ def _safe_catalog_snapshot():
 @pytest.mark.contract
 @pytest.mark.django_db(transaction=True)
 def test_historical_invocation_backfill_is_deterministic_across_directions():
-    call_command("bootstrap_operation_gateway_audit", verbosity=0)
+    call_command("bootstrap_operation_gateway_audit", phase="before-reverse", verbosity=0)
     _, old_apps = _migrate_and_reload(BASE_MIGRATION)
     User = old_apps.get_model("db", "User")
     Workspace = old_apps.get_model("db", "Workspace")
@@ -344,9 +344,11 @@ def test_historical_invocation_backfill_is_deterministic_across_directions():
                 f'ALTER DEFAULT PRIVILEGES FOR ROLE "{settings.PLANE_AUDIT_MIGRATION_ROLE}" '
                 f"IN SCHEMA public REVOKE ALL ON {object_type} FROM PUBLIC"
             )
+    call_command("bootstrap_operation_gateway_audit", phase="before-migrate", verbosity=0)
     pre_safe_catalog = _safe_catalog_snapshot()
 
     _, head_apps = _migrate_and_reload(HEAD_MIGRATION)
+    call_command("bootstrap_operation_gateway_audit", phase="after-migrate", verbosity=0)
     NewIdempotency = head_apps.get_model("db", "OperationGatewayIdempotency")
     NewAudit = head_apps.get_model("db", "OperationGatewayAudit")
     NewPublication = head_apps.get_model("db", "OperationGatewayPublication")
@@ -464,6 +466,7 @@ def test_historical_invocation_backfill_is_deterministic_across_directions():
         ]
 
     before_roundtrip = publication_snapshot(NewPublication, roundtrip_record.pk)
+    call_command("bootstrap_operation_gateway_audit", phase="before-reverse", verbosity=0)
     _, reverse_apps = _migrate_and_reload(PRE_HEAD_MIGRATION)
     ReversePublication = reverse_apps.get_model("db", "OperationGatewayPublication")
     reverse_row = ReversePublication.objects.get(idempotency_id=roundtrip_record.pk, kind="webhook")
@@ -555,16 +558,21 @@ def test_historical_invocation_backfill_is_deterministic_across_directions():
             """
         )
         assert cursor.fetchone()[0] == 0
+    call_command("bootstrap_operation_gateway_audit", phase="before-migrate", verbosity=0)
     _, roundtrip_apps = _migrate_and_reload(HEAD_MIGRATION)
+    call_command("bootstrap_operation_gateway_audit", phase="after-migrate", verbosity=0)
     RoundtripPublication = roundtrip_apps.get_model("db", "OperationGatewayPublication")
     assert publication_snapshot(RoundtripPublication, roundtrip_record.pk) == before_roundtrip
     assert set(MigrationExecutor(connection).loader.graph.leaf_nodes("db")) == {HEAD_MIGRATION}
 
+    call_command("bootstrap_operation_gateway_audit", phase="before-reverse", verbosity=0)
     _, base_again_apps = _migrate_and_reload(BASE_MIGRATION)
     # Recreating the historical registry after the backward direction proves
     # the test is not querying stale model state.
     assert base_again_apps.get_model("db", "OperationGatewayAudit")
+    call_command("bootstrap_operation_gateway_audit", phase="before-migrate", verbosity=0)
     _, head_again_apps = _migrate_and_reload(HEAD_MIGRATION)
+    call_command("bootstrap_operation_gateway_audit", phase="after-migrate", verbosity=0)
     AgainIdempotency = head_again_apps.get_model("db", "OperationGatewayIdempotency")
     AgainAudit = head_again_apps.get_model("db", "OperationGatewayAudit")
     second_ids = dict(AgainIdempotency.objects.values_list("id", "invocation_id"))

@@ -1,8 +1,8 @@
 x-db-env: &db-env
   PGHOST: ${PGHOST:-plane-db}
   PGDATABASE: ${PGDATABASE:-plane}
-  POSTGRES_USER: ${POSTGRES_USER:-plane_migrator}
-  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-this-migration-password}
+  POSTGRES_USER: ${POSTGRES_PROVISIONER_ROLE:-plane_provisioner}
+  POSTGRES_PASSWORD: ${POSTGRES_PROVISIONER_PASSWORD:-change-this-provisioner-password}
   POSTGRES_DB: ${POSTGRES_DB:-plane}
   POSTGRES_PORT: ${POSTGRES_PORT:-5432}
   PGDATA: ${PGDATA:-/var/lib/postgresql/data}
@@ -73,12 +73,23 @@ x-runtime-db-env: &runtime-db-env
 x-migration-db-env: &migration-db-env
   DATABASE_URL: ${DATABASE_MIGRATION_URL:-postgresql://plane_migrator:change-this-migration-password@plane-db/plane}
   DATABASE_MIGRATION_URL: ${DATABASE_MIGRATION_URL:-postgresql://plane_migrator:change-this-migration-password@plane-db/plane}
-  PLANE_AUDIT_RUNTIME_PASSWORD: ${PLANE_AUDIT_RUNTIME_PASSWORD:-change-this-runtime-password}
   PLANE_DB_MIGRATION_MODE: "1"
   PGHOST: ${PGHOST:-plane-db}
   PGDATABASE: ${PGDATABASE:-plane}
-  POSTGRES_USER: ${POSTGRES_USER:-plane_migrator}
-  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-this-migration-password}
+  POSTGRES_USER: ${PLANE_AUDIT_MIGRATION_ROLE:-plane_migrator}
+  POSTGRES_PASSWORD: ${PLANE_AUDIT_MIGRATION_PASSWORD:-change-this-migration-password}
+  POSTGRES_DB: ${POSTGRES_DB:-plane}
+  POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+
+x-provisioner-db-env: &provisioner-db-env
+  DATABASE_PROVISIONER_URL: ${DATABASE_PROVISIONER_URL:-postgresql://plane_provisioner:change-this-provisioner-password@plane-db/plane}
+  PLANE_AUDIT_RUNTIME_PASSWORD: ${PLANE_AUDIT_RUNTIME_PASSWORD:-change-this-runtime-password}
+  PLANE_AUDIT_MIGRATION_PASSWORD: ${PLANE_AUDIT_MIGRATION_PASSWORD:-change-this-migration-password}
+  PLANE_DB_PROVISIONER_MODE: "1"
+  PGHOST: ${PGHOST:-plane-db}
+  PGDATABASE: ${PGDATABASE:-plane}
+  POSTGRES_USER: ${POSTGRES_PROVISIONER_ROLE:-plane_provisioner}
+  POSTGRES_PASSWORD: ${POSTGRES_PROVISIONER_PASSWORD:-change-this-provisioner-password}
   POSTGRES_DB: ${POSTGRES_DB:-plane}
   POSTGRES_PORT: ${POSTGRES_PORT:-5432}
 
@@ -138,9 +149,14 @@ services:
     environment:
       <<: [*app-env, *runtime-db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
     depends_on:
-      - plane-db
-      - plane-redis
-      - plane-mq
+      plane-db:
+        condition: service_started
+      plane-redis:
+        condition: service_started
+      plane-mq:
+        condition: service_started
+      provisioner-final:
+        condition: service_completed_successfully
 
   worker:
     image: makeplane/plane-backend:${APP_RELEASE:-stable}
@@ -154,10 +170,16 @@ services:
     environment:
       <<: [*app-env, *runtime-db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
     depends_on:
-      - api
-      - plane-db
-      - plane-redis
-      - plane-mq
+      provisioner-final:
+        condition: service_completed_successfully
+      api:
+        condition: service_started
+      plane-db:
+        condition: service_started
+      plane-redis:
+        condition: service_started
+      plane-mq:
+        condition: service_started
 
   beat-worker:
     image: makeplane/plane-backend:${APP_RELEASE:-stable}
@@ -171,10 +193,14 @@ services:
     environment:
       <<: [*app-env, *runtime-db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
     depends_on:
-      - api
-      - plane-db
-      - plane-redis
-      - plane-mq
+      api:
+        condition: service_started
+      plane-db:
+        condition: service_started
+      plane-redis:
+        condition: service_started
+      plane-mq:
+        condition: service_started
 
   migrator:
     image: makeplane/plane-backend:${APP_RELEASE:-stable}
@@ -188,8 +214,41 @@ services:
     environment:
       <<: [*app-env, *migration-db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
     depends_on:
+      provisioner:
+        condition: service_completed_successfully
+      plane-db:
+        condition: service_started
+      plane-redis:
+        condition: service_started
+
+  provisioner:
+    image: makeplane/plane-backend:${APP_RELEASE:-stable}
+    command: ./bin/docker-entrypoint-provisioner.sh --phase=before-migrate
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    volumes:
+      - logs_provisioner:/code/plane/logs
+    environment:
+      <<: [*app-env, *provisioner-db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
+    depends_on:
       - plane-db
-      - plane-redis
+
+  provisioner-final:
+    image: makeplane/plane-backend:${APP_RELEASE:-stable}
+    command: ./bin/docker-entrypoint-provisioner.sh --phase=after-migrate
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    volumes:
+      - logs_provisioner:/code/plane/logs
+    environment:
+      <<: [*app-env, *provisioner-db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
 
   # Comment this if you already have a database running
   plane-db:
@@ -273,6 +332,7 @@ volumes:
   logs_worker:
   logs_beat-worker:
   logs_migrator:
+  logs_provisioner:
   rabbitmq_data:
   proxy_config:
   proxy_data:

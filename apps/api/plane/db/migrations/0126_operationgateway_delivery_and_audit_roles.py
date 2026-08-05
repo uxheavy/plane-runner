@@ -357,10 +357,10 @@ def _capture_audit_catalog_snapshot(connection, *, runtime_role, governance_role
     """Capture the effective 0125 catalog before 0126 mutates any ACL.
 
     PostgreSQL exposes ACLs as catalog arrays, but replaying those arrays is a
-    privileged catalog write. Store the effective grant rows instead and
-    restore them through ordinary GRANT/REVOKE statements during reverse.
-    The snapshot is durable in a migration-owned table, so a later Django
-    process can reverse the migration without relying on test state.
+    privileged catalog write. Store the effective grant rows instead; the
+    separately authenticated provisioner restores them before a reverse.
+    The snapshot is durable in a migration-owned table, so a later provisioner
+    phase can restore the migration without relying on test state.
     """
 
     with connection.cursor() as cursor:
@@ -563,499 +563,64 @@ def capture_audit_catalog_snapshot(apps, schema_editor):
     )
 
 
-def _snapshot_object_sql(connection, schema_name, object_info):
-    schema_ident = connection.ops.quote_name(schema_name)
-    name_ident = connection.ops.quote_name(object_info["name"])
-    qualified = f"{schema_ident}.{name_ident}"
-    if object_info["kind"] == "function":
-        return f"{qualified}({object_info['identity_arguments']})"
-    return qualified
+def drop_audit_catalog_snapshot(apps, schema_editor):
+    schema_ident = schema_editor.quote_name(settings.PLANE_AUDIT_SCHEMA)
+    snapshot_ident = schema_editor.quote_name(CATALOG_SNAPSHOT_TABLE)
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute(f"DROP TABLE IF EXISTS {schema_ident}.{snapshot_ident}")
 
 
-def _sql_grantee(connection, grantee):
-    return "PUBLIC" if grantee == "PUBLIC" else connection.ops.quote_name(grantee)
+def require_provisioned_reverse_state(apps, schema_editor):
+    """Reject a downgrade until the provisioner has restored the 0125 catalog."""
 
-
-def _restore_acl_entries(cursor, connection, target_type, target_sql, entries, known_grantees):
-    # PUBLIC is never restored by a downgrade. The 0125 predecessor contract
-    # is deliberately safe for every protected object kind, even when an
-    # older database carried PostgreSQL's broad default ACLs.
-    entries = [entry for entry in entries if entry["grantee"] != "PUBLIC"]
-    grantees = set(known_grantees)
-    grantees.update(entry["grantee"] for entry in entries)
-    for grantee in sorted(grantees):
-        cursor.execute(f"REVOKE ALL PRIVILEGES ON {target_type} {target_sql} FROM {_sql_grantee(connection, grantee)}")
-    grouped = {}
-    for entry in entries:
-        grouped.setdefault((entry["grantee"], entry["is_grantable"]), set()).add(entry["privilege"])
-    for (grantee, is_grantable), privileges in sorted(grouped.items()):
-        grant_option = " WITH GRANT OPTION" if is_grantable else ""
-        cursor.execute(
-            f"GRANT {', '.join(sorted(privileges))} ON {target_type} {target_sql} "
-            f"TO {_sql_grantee(connection, grantee)}{grant_option}"
-        )
-
-
-def _restore_default_privileges(cursor, connection, schema_name, snapshot, migration_role, runtime_role):
-    object_types = {"r": "TABLES", "S": "SEQUENCES", "f": "FUNCTIONS"}
-    defaults = {
-        default_acl["object_type"]: default_acl
-        for default_acl in snapshot["default_privileges"]
-        if default_acl["owner"] == migration_role
-    }
-    schema_ident = connection.ops.quote_name(schema_name)
-    owner_ident = connection.ops.quote_name(migration_role)
-    for object_type, sql_object_type in object_types.items():
-        entries = [entry for entry in defaults.get(object_type, {}).get("acl", []) if entry["grantee"] != "PUBLIC"]
-        grantees = {"PUBLIC", runtime_role}
-        grantees.update(entry["grantee"] for entry in entries)
-        for grantee in sorted(grantees):
-            cursor.execute(
-                f"ALTER DEFAULT PRIVILEGES FOR ROLE {owner_ident} IN SCHEMA {schema_ident} "
-                f"REVOKE ALL ON {sql_object_type} FROM {_sql_grantee(connection, grantee)}"
-            )
-        grouped = {}
-        for entry in entries:
-            grouped.setdefault((entry["grantee"], entry["is_grantable"]), set()).add(entry["privilege"])
-        for (grantee, is_grantable), privileges in sorted(grouped.items()):
-            grant_option = " WITH GRANT OPTION" if is_grantable else ""
-            cursor.execute(
-                f"ALTER DEFAULT PRIVILEGES FOR ROLE {owner_ident} IN SCHEMA {schema_ident} "
-                f"GRANT {', '.join(sorted(privileges))} ON {sql_object_type} "
-                f"TO {_sql_grantee(connection, grantee)}{grant_option}"
-            )
-
-
-def _restore_function_configuration(cursor, connection, schema_name, object_info):
-    function_sql = _snapshot_object_sql(connection, schema_name, object_info)
-    security = "SECURITY DEFINER" if object_info.get("security_definer") else "SECURITY INVOKER"
-    cursor.execute(f"ALTER FUNCTION {function_sql} {security}")
-    cursor.execute(f"ALTER FUNCTION {function_sql} RESET ALL")
-    for config in object_info.get("config") or []:
-        key, separator, value = config.partition("=")
-        if not separator or not re.fullmatch(r"[a-z_][a-z0-9_]*", key):
-            raise RuntimeError("Invalid 0126 function configuration snapshot")
-        cursor.execute("SELECT quote_literal(%s)", [value])
-        quoted_value = cursor.fetchone()[0]
-        cursor.execute(f"ALTER FUNCTION {function_sql} SET {key} = {quoted_value}")
-
-
-def _restore_audit_catalog_snapshot(connection, *, runtime_role, governance_role, migration_role):
+    connection = schema_editor.connection
+    schema_ident = connection.ops.quote_name(settings.PLANE_AUDIT_SCHEMA)
+    snapshot_ident = connection.ops.quote_name(CATALOG_SNAPSHOT_TABLE)
+    audit_ident = f"{schema_ident}.operation_gateway_audit"
+    function_ident = f"{schema_ident}.operation_gateway_audit_append_only()"
     with connection.cursor() as cursor:
-        schema_name = settings.PLANE_AUDIT_SCHEMA
-        if not ROLE_NAME.fullmatch(schema_name or ""):
-            raise RuntimeError("PLANE_AUDIT_SCHEMA must be a simple PostgreSQL identifier")
-        cursor.execute("SELECT current_schema(), current_schemas(false)")
-        current_schema, search_path = cursor.fetchone()
-        if current_schema != schema_name or search_path != [schema_name]:
-            raise RuntimeError("Operation Gateway audit uses an unapproved schema/search_path")
-        schema_ident = connection.ops.quote_name(schema_name)
-        snapshot_ident = connection.ops.quote_name(CATALOG_SNAPSHOT_TABLE)
         cursor.execute(f"SELECT snapshot FROM {schema_ident}.{snapshot_ident}")
         row = cursor.fetchone()
-        snapshot = row[0] if row is not None else None
+        if row is None:
+            raise RuntimeError("The provisioner must restore the 0125 audit catalog before reverse migration")
+        snapshot = row[0]
         if isinstance(snapshot, str):
             snapshot = json.loads(snapshot)
         if not isinstance(snapshot, dict) or snapshot.get("version") != CATALOG_SNAPSHOT_VERSION:
-            raise RuntimeError("Missing or invalid 0126 audit catalog snapshot")
-        if snapshot.get("schema", {}).get("name") != schema_name:
-            raise RuntimeError("0126 audit catalog snapshot belongs to another schema")
-
-        owner_roles = {
-            object_info["owner"]
-            for object_info in snapshot["objects"]
-            if object_info["kind"] in {"table", "function"} and object_info["name"] == "operation_gateway_audit"
+            raise RuntimeError("The provisioner must restore the 0125 audit catalog before reverse migration")
+        expected_objects = {
+            (item["kind"], item["name"], item.get("identity_arguments")): item["owner"]
+            for item in snapshot.get("objects", [])
+            if isinstance(item, dict) and {"kind", "name", "owner"} <= item.keys()
         }
-        owner_roles.update(
-            object_info["owner"]
-            for object_info in snapshot["objects"]
-            if object_info["kind"] == "function" and object_info["name"] == "operation_gateway_audit_append_only"
+        cursor.execute(
+            """
+            SELECT 'table', class.relname, NULL, owner.rolname
+            FROM pg_class AS class
+            JOIN pg_namespace AS namespace ON namespace.oid = class.relnamespace
+            JOIN pg_roles AS owner ON owner.oid = class.relowner
+            WHERE class.oid = to_regclass(%s)
+            UNION ALL
+            SELECT 'function', proc.proname, pg_get_function_identity_arguments(proc.oid), owner.rolname
+            FROM pg_proc AS proc
+            JOIN pg_namespace AS namespace ON namespace.oid = proc.pronamespace
+            JOIN pg_roles AS owner ON owner.oid = proc.proowner
+            WHERE proc.oid = to_regprocedure(%s)
+            """,
+            [audit_ident, function_ident],
         )
-        temporary_owner_memberships = set()
-        for owner_role in sorted(owner_roles - {migration_role}):
-            cursor.execute(
-                """
-                SELECT EXISTS (
-                    SELECT 1
-                    FROM pg_auth_members AS memberships
-                    JOIN pg_roles AS granted_role ON granted_role.oid = memberships.roleid
-                    JOIN pg_roles AS member_role ON member_role.oid = memberships.member
-                    WHERE granted_role.rolname = %s
-                      AND member_role.rolname = %s
-                )
-                """,
-                [owner_role, migration_role],
-            )
-            if not cursor.fetchone()[0]:
-                temporary_owner_memberships.add(owner_role)
-                cursor.execute(
-                    f"GRANT {connection.ops.quote_name(owner_role)} TO {connection.ops.quote_name(migration_role)}"
-                )
-
-        for object_info in snapshot["objects"]:
-            if object_info["kind"] == "table" and object_info["name"] == "operation_gateway_audit":
-                target_sql = _snapshot_object_sql(connection, schema_name, object_info)
-                cursor.execute(f"ALTER TABLE {target_sql} OWNER TO {connection.ops.quote_name(object_info['owner'])}")
-            elif object_info["kind"] == "function" and object_info["name"] == "operation_gateway_audit_append_only":
-                target_sql = _snapshot_object_sql(connection, schema_name, object_info)
-                cursor.execute(
-                    f"ALTER FUNCTION {target_sql} OWNER TO {connection.ops.quote_name(object_info['owner'])}"
-                )
-                _restore_function_configuration(cursor, connection, schema_name, object_info)
-
-        _restore_acl_entries(
-            cursor,
-            connection,
-            "SCHEMA",
-            schema_ident,
-            snapshot["schema"]["acl"],
-            {"PUBLIC", runtime_role, migration_role, governance_role},
-        )
-        for object_info in snapshot["objects"]:
-            target_type = {
-                "table": "TABLE",
-                "sequence": "SEQUENCE",
-                "function": "FUNCTION",
-            }[object_info["kind"]]
-            _restore_acl_entries(
-                cursor,
-                connection,
-                target_type,
-                _snapshot_object_sql(connection, schema_name, object_info),
-                object_info["acl"],
-                {"PUBLIC", runtime_role, migration_role, governance_role},
-            )
-        _restore_default_privileges(cursor, connection, schema_name, snapshot, migration_role, runtime_role)
-
-        affected_memberships = {
-            (governance_role, migration_role),
-            (governance_role, runtime_role),
-            (migration_role, runtime_role),
+        current_objects = {
+            (kind, name, identity_arguments): owner for kind, name, identity_arguments, owner in cursor.fetchall()
         }
-        for role, member in affected_memberships:
-            cursor.execute(f"REVOKE {connection.ops.quote_name(role)} FROM {connection.ops.quote_name(member)}")
-        for membership in snapshot["memberships"]:
-            role = membership["role"]
-            member = membership["member"]
-            if (role, member) not in affected_memberships:
-                continue
-            admin_option = " WITH ADMIN OPTION" if membership["admin_option"] else ""
-            cursor.execute(
-                f"GRANT {connection.ops.quote_name(role)} TO {connection.ops.quote_name(member)}{admin_option}"
-            )
-
-        for owner_role in sorted(temporary_owner_memberships):
-            cursor.execute(
-                f"REVOKE {connection.ops.quote_name(owner_role)} FROM {connection.ops.quote_name(migration_role)}"
-            )
-
-        cursor.execute(f"DROP TABLE {schema_ident}.{snapshot_ident}")
-
-
-def restore_audit_catalog_snapshot(apps, schema_editor):
-    connection = schema_editor.connection
-    _restore_audit_catalog_snapshot(
-        connection,
-        runtime_role=settings.PLANE_AUDIT_RUNTIME_ROLE,
-        governance_role=settings.PLANE_AUDIT_GOVERNANCE_ROLE,
-        migration_role=settings.PLANE_AUDIT_MIGRATION_ROLE,
-    )
-
-
-def _role_identifier(connection, value: str) -> str:
-    if not isinstance(value, str) or not ROLE_NAME.fullmatch(value):
-        raise RuntimeError("Operation Gateway audit role names must be simple PostgreSQL identifiers")
-    return connection.ops.quote_name(value)
-
-
-def configure_audit_role_boundary(apps, schema_editor):
-    connection = schema_editor.connection
-    schema_name = settings.PLANE_AUDIT_SCHEMA
-    runtime_role = settings.PLANE_AUDIT_RUNTIME_ROLE
-    governance_role = settings.PLANE_AUDIT_GOVERNANCE_ROLE
-    migration_role = settings.PLANE_AUDIT_MIGRATION_ROLE
-    if not runtime_role or not governance_role or not migration_role:
-        raise RuntimeError("Operation Gateway audit runtime and governance roles must be distinct")
-    if runtime_role == governance_role or (
-        settings.PLANE_AUDIT_ENFORCE_ROLE_SEPARATION and runtime_role == migration_role
-    ):
-        raise RuntimeError("Operation Gateway audit runtime, migration, and governance roles must be distinct")
-    runtime_ident = _role_identifier(connection, runtime_role)
-    governance_ident = _role_identifier(connection, governance_role)
-    migration_ident = _role_identifier(connection, migration_role)
-    schema_ident = _role_identifier(connection, schema_name)
-
-    with connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT current_user, current_user = %s, current_user = %s, current_user = %s",
-            [runtime_role, governance_role, migration_role],
-        )
-        current_user, is_runtime, is_governance, is_migration = cursor.fetchone()
-        if not is_migration:
-            raise RuntimeError("Operation Gateway audit migration must use the migration database credential")
-        cursor.execute(
-            "SELECT rolname FROM pg_roles WHERE rolname IN (%s, %s, %s)",
-            [runtime_role, governance_role, migration_role],
-        )
-        existing_roles = {row[0] for row in cursor.fetchall()}
-        missing_roles = {runtime_role, governance_role, migration_role} - existing_roles
-        if missing_roles:
-            raise RuntimeError("Operation Gateway audit roles are missing; run bootstrap_operation_gateway_audit first")
-        if settings.PLANE_AUDIT_ENFORCE_ROLE_SEPARATION:
-            cursor.execute(
-                """
-                SELECT rolsuper, rolcreaterole, rolcreatedb, rolbypassrls, rolcanlogin, rolinherit
-                FROM pg_roles
-                WHERE rolname = %s
-                """,
-                [migration_role],
-            )
-            migration_attributes = cursor.fetchone()
-            if migration_attributes is None:
-                raise RuntimeError("The configured migration role is missing; provision it separately")
-            if any(migration_attributes[:4]):
-                raise RuntimeError("The migration role has governance powers")
-            if not migration_attributes[4] or migration_attributes[5]:
-                raise RuntimeError("The migration role must be LOGIN NOINHERIT")
-        cursor.execute("SELECT current_schema(), current_schemas(false)")
-        current_schema, search_path = cursor.fetchone()
-        if current_schema != schema_name or search_path != [schema_name]:
-            raise RuntimeError("Operation Gateway audit uses an unapproved schema/search_path")
-        cursor.execute(
-            "SELECT rolname, rolcanlogin, rolinherit FROM pg_roles WHERE rolname = %s",
-            [governance_role],
-        )
-        if cursor.fetchone() != (governance_role, False, False):
-            raise RuntimeError("The Operation Gateway governance role must be NOLOGIN NOINHERIT")
-        cursor.execute("SELECT rolsuper FROM pg_roles WHERE rolname = %s", [migration_role])
-        migration_is_superuser = bool(cursor.fetchone()[0])
-        if settings.PLANE_AUDIT_ENFORCE_ROLE_SEPARATION or not migration_is_superuser:
-            cursor.execute("SELECT pg_has_role(%s, %s, 'USAGE')", [migration_role, governance_role])
-            if cursor.fetchone()[0]:
-                raise RuntimeError("The migration role retains governance membership")
-        marker_regclass = f"{schema_name}.plane_operation_gateway_authority_marker"
-        cursor.execute(
-            """
-            SELECT marker_owner.rolname
-            FROM pg_class AS marker
-            JOIN pg_namespace AS marker_schema ON marker_schema.oid = marker.relnamespace
-            JOIN pg_roles AS marker_owner ON marker_owner.oid = marker.relowner
-            WHERE marker.oid = to_regclass(%s)
-              AND marker_schema.nspname = %s
-            """,
-            [marker_regclass, schema_name],
-        )
-        if cursor.fetchone() != (governance_role,):
-            raise RuntimeError("The authority marker must be owned by the governance role")
-        if settings.PLANE_AUDIT_ENFORCE_ROLE_SEPARATION:
-            cursor.execute(
-                """
-                SELECT database_owner.rolname, schema_owner.rolname
-                FROM pg_database AS database_info
-                JOIN pg_roles AS database_owner ON database_owner.oid = database_info.datdba
-                JOIN pg_namespace AS audit_schema ON audit_schema.nspname = %s
-                JOIN pg_roles AS schema_owner ON schema_owner.oid = audit_schema.nspowner
-                WHERE database_info.datname = current_database()
-                """,
-                [schema_name],
-            )
-            owner_roles = cursor.fetchone()
-            provisioner_role = settings.PLANE_AUDIT_PROVISIONER_ROLE
-            if not ROLE_NAME.fullmatch(provisioner_role or ""):
-                raise RuntimeError("PLANE_AUDIT_PROVISIONER_ROLE is required for enforced migrations")
-            if (
-                owner_roles is None
-                or owner_roles[0] != provisioner_role
-                or owner_roles[1]
-                not in {
-                    provisioner_role,
-                    "pg_database_owner",
-                }
-            ):
-                raise RuntimeError("The database and audit schema owners do not match the provisioned topology")
-
-        # The explicit bootstrap command provisions the owner. This migration
-        # temporarily grants the migration authority membership in it so DDL
-        # can transfer ownership, but it never creates the governed role.
-        cursor.execute(f"GRANT {governance_ident} TO {migration_ident}")
-        cursor.execute(f"REVOKE {governance_ident} FROM {runtime_ident}")
-        cursor.execute(f"REVOKE {migration_ident} FROM {runtime_ident}")
-
-        # PostgreSQL requires the target owner to have CREATE on the schema
-        # during an ownership transfer. Keep this capability scoped to the
-        # transfer; the governance role is otherwise NOLOGIN and has no
-        # schema-creation responsibility.
-        cursor.execute(f"GRANT USAGE, CREATE ON SCHEMA {schema_ident} TO {governance_ident}")
-        cursor.execute(f"ALTER TABLE {schema_ident}.operation_gateway_audit OWNER TO {governance_ident}")
-        cursor.execute(
-            f"ALTER FUNCTION {schema_ident}.operation_gateway_audit_append_only() OWNER TO {governance_ident}"
-        )
-        cursor.execute(f"REVOKE CREATE ON SCHEMA {schema_ident} FROM {governance_ident}")
-        cursor.execute(f"ALTER FUNCTION {schema_ident}.operation_gateway_audit_append_only() SECURITY DEFINER")
-        cursor.execute(
-            f"ALTER FUNCTION {schema_ident}.operation_gateway_audit_append_only() SET search_path = pg_catalog"
-        )
-        cursor.execute(f"GRANT USAGE ON SCHEMA {schema_ident} TO {runtime_ident}")
-        cursor.execute(f"REVOKE CREATE ON SCHEMA {schema_ident} FROM {runtime_ident}")
-        cursor.execute(f"REVOKE ALL ON SCHEMA {schema_ident} FROM PUBLIC")
-        cursor.execute(f"GRANT USAGE, CREATE ON SCHEMA {schema_ident} TO {migration_ident}")
-        cursor.execute(f"GRANT USAGE ON SCHEMA {schema_ident} TO {governance_ident}")
-
-        # The runtime role needs ordinary Plane ORM access to the application
-        # schema. Keep this grant explicit rather than using ALL so it cannot
-        # acquire DDL, TRUNCATE, or role-governance powers through the schema.
-        cursor.execute(
-            f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {schema_ident} TO {runtime_ident}"
-        )
-        cursor.execute(f"GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA {schema_ident} TO {runtime_ident}")
-        cursor.execute(f"GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA {schema_ident} TO {runtime_ident}")
-        cursor.execute(
-            f"ALTER DEFAULT PRIVILEGES FOR ROLE {migration_ident} IN SCHEMA {schema_ident} "
-            f"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {runtime_ident}"
-        )
-        cursor.execute(
-            f"ALTER DEFAULT PRIVILEGES FOR ROLE {migration_ident} IN SCHEMA {schema_ident} "
-            f"GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO {runtime_ident}"
-        )
-        cursor.execute(
-            f"ALTER DEFAULT PRIVILEGES FOR ROLE {migration_ident} IN SCHEMA {schema_ident} "
-            f"GRANT EXECUTE ON FUNCTIONS TO {runtime_ident}"
-        )
-        for object_type in ("TABLES", "SEQUENCES", "FUNCTIONS"):
-            cursor.execute(
-                f"ALTER DEFAULT PRIVILEGES FOR ROLE {migration_ident} IN SCHEMA {schema_ident} "
-                f"REVOKE ALL ON {object_type} FROM PUBLIC"
-            )
-
-        snapshot_ident = connection.ops.quote_name(CATALOG_SNAPSHOT_TABLE)
-        cursor.execute(
-            f"REVOKE ALL ON TABLE {schema_ident}.{snapshot_ident} FROM PUBLIC, {runtime_ident}, {governance_ident}"
-        )
-
-        marker_ident = connection.ops.quote_name("plane_operation_gateway_authority_marker")
-        cursor.execute(
-            f"REVOKE ALL ON TABLE {schema_ident}.{marker_ident} FROM PUBLIC, "
-            f"{runtime_ident}, {migration_ident}, {governance_ident}"
-        )
-        cursor.execute(f"GRANT SELECT ON TABLE {schema_ident}.{marker_ident} TO {runtime_ident}, {migration_ident}")
-
-        # Audit storage is stricter than the ordinary application schema.
-        cursor.execute(f"REVOKE ALL ON TABLE {schema_ident}.operation_gateway_audit FROM PUBLIC")
-        cursor.execute(f"GRANT SELECT, INSERT ON TABLE {schema_ident}.operation_gateway_audit TO {runtime_ident}")
-        # The one-shot migrator still needs to inspect and append audit rows
-        # while running later migrations, but it does not receive mutation or
-        # trigger-control privileges through this grant.
-        cursor.execute(f"GRANT SELECT, INSERT ON TABLE {schema_ident}.operation_gateway_audit TO {migration_ident}")
-        cursor.execute(
-            f"REVOKE UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON TABLE {schema_ident}.operation_gateway_audit "
-            f"FROM {runtime_ident}"
-        )
-        cursor.execute(
-            f"REVOKE ALL ON FUNCTION {schema_ident}.operation_gateway_audit_append_only() FROM PUBLIC, {runtime_ident}"
-        )
-        cursor.execute(
-            f"GRANT EXECUTE ON FUNCTION {schema_ident}.operation_gateway_audit_append_only() TO {governance_ident}"
-        )
-        cursor.execute(
-            f"GRANT EXECUTE ON FUNCTION {schema_ident}.operation_gateway_audit_append_only() TO {migration_ident}"
-        )
-
-        cursor.execute(
-            """
-            SELECT c.relname
-            FROM pg_class AS c
-            JOIN pg_namespace AS n ON n.oid = c.relnamespace
-            WHERE n.nspname = %s
-              AND c.relkind = 'S'
-              AND c.relname LIKE 'operation_gateway_audit%%'
-        """,
-            [schema_name],
-        )
-        for (sequence_name,) in cursor.fetchall():
-            sequence_ident = _role_identifier(connection, sequence_name)
-            cursor.execute(f"GRANT USAGE, SELECT ON SEQUENCE {schema_ident}.{sequence_ident} TO {runtime_ident}")
-
-        cursor.execute(f"REVOKE {governance_ident} FROM {migration_ident}")
-
-
-def unconfigure_audit_role_boundary(apps, schema_editor):
-    connection = schema_editor.connection
-    schema_name = settings.PLANE_AUDIT_SCHEMA
-    runtime_ident = _role_identifier(connection, settings.PLANE_AUDIT_RUNTIME_ROLE)
-    governance_ident = _role_identifier(connection, settings.PLANE_AUDIT_GOVERNANCE_ROLE)
-    migration_ident = _role_identifier(connection, settings.PLANE_AUDIT_MIGRATION_ROLE)
-    schema_ident = _role_identifier(connection, schema_name)
-    with connection.cursor() as cursor:
-        cursor.execute(f"GRANT {governance_ident} TO {migration_ident}")
-        cursor.execute(
-            f"ALTER FUNCTION {schema_ident}.operation_gateway_audit_append_only() OWNER TO {migration_ident}"
-        )
-        cursor.execute(f"ALTER TABLE {schema_ident}.operation_gateway_audit OWNER TO {migration_ident}")
-        cursor.execute(f"REVOKE {governance_ident} FROM {migration_ident}")
-        cursor.execute(
-            """
-            SELECT schema_owner.rolname
-            FROM pg_namespace AS audit_schema
-            JOIN pg_roles AS schema_owner ON schema_owner.oid = audit_schema.nspowner
-            WHERE audit_schema.nspname = %s
-            """,
-            [schema_name],
-        )
-        schema_owner = cursor.fetchone()[0]
-        cursor.execute(
-            f"REVOKE SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {schema_ident} FROM {runtime_ident}"
-        )
-        cursor.execute(f"REVOKE USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA {schema_ident} FROM {runtime_ident}")
-        cursor.execute(f"REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA {schema_ident} FROM {runtime_ident}")
-        cursor.execute(
-            f"ALTER DEFAULT PRIVILEGES FOR ROLE {migration_ident} IN SCHEMA {schema_ident} "
-            f"REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLES FROM {runtime_ident}"
-        )
-        cursor.execute(
-            f"ALTER DEFAULT PRIVILEGES FOR ROLE {migration_ident} IN SCHEMA {schema_ident} "
-            f"REVOKE USAGE, SELECT, UPDATE ON SEQUENCES FROM {runtime_ident}"
-        )
-        cursor.execute(
-            f"ALTER DEFAULT PRIVILEGES FOR ROLE {migration_ident} IN SCHEMA {schema_ident} "
-            f"REVOKE EXECUTE ON FUNCTIONS FROM {runtime_ident}"
-        )
-        # Remove only the explicit 0126 grants. In particular, never restore
-        # PostgreSQL's broad PUBLIC schema defaults while downgrading: a
-        # rollback must remain safe even when 0125 was created on a fresh
-        # PostgreSQL 15+ database.
-        cursor.execute(
-            f"REVOKE SELECT, INSERT ON TABLE {schema_ident}.operation_gateway_audit "
-            f"FROM {runtime_ident}, {migration_ident}"
-        )
-        cursor.execute(
-            f"REVOKE ALL ON FUNCTION {schema_ident}.operation_gateway_audit_append_only() FROM {governance_ident}"
-        )
-        schema_grants_to_revoke = [runtime_ident]
-        if schema_owner != settings.PLANE_AUDIT_MIGRATION_ROLE:
-            schema_grants_to_revoke.append(migration_ident)
-        if schema_owner != settings.PLANE_AUDIT_GOVERNANCE_ROLE:
-            schema_grants_to_revoke.append(governance_ident)
-        cursor.execute(f"REVOKE USAGE, CREATE ON SCHEMA {schema_ident} FROM {', '.join(schema_grants_to_revoke)}")
-        if schema_owner == settings.PLANE_AUDIT_MIGRATION_ROLE:
-            cursor.execute(f"GRANT USAGE, CREATE ON SCHEMA {schema_ident} TO {migration_ident}")
-        elif schema_owner == settings.PLANE_AUDIT_GOVERNANCE_ROLE:
-            cursor.execute(f"GRANT USAGE, CREATE ON SCHEMA {schema_ident} TO {governance_ident}")
-        cursor.execute(f"ALTER FUNCTION {schema_ident}.operation_gateway_audit_append_only() SECURITY INVOKER")
-        cursor.execute(f"ALTER FUNCTION {schema_ident}.operation_gateway_audit_append_only() RESET search_path")
-        cursor.execute(
-            """
-            SELECT c.relname
-            FROM pg_class AS c
-            JOIN pg_namespace AS n ON n.oid = c.relnamespace
-            WHERE n.nspname = %s
-              AND c.relkind = 'S'
-              AND c.relname LIKE 'operation_gateway_audit%%'
-        """,
-            [schema_name],
-        )
-        for (sequence_name,) in cursor.fetchall():
-            sequence_ident = _role_identifier(connection, sequence_name)
-            cursor.execute(f"REVOKE USAGE, SELECT ON SEQUENCE {schema_ident}.{sequence_ident} FROM {runtime_ident}")
+        expected_audit = {
+            key: value
+            for key, value in expected_objects.items()
+            if key[1] in {"operation_gateway_audit", "operation_gateway_audit_append_only"}
+        }
+        if not expected_audit or set(expected_audit) - set(current_objects):
+            raise RuntimeError("The provisioner must restore the 0125 audit catalog before reverse migration")
+        if any(current_objects.get(key) != owner for key, owner in expected_audit.items()):
+            raise RuntimeError("The provisioner must restore the 0125 audit catalog before reverse migration")
 
 
 class Migration(migrations.Migration):
@@ -1160,11 +725,11 @@ class Migration(migrations.Migration):
             name="response_body_sha256",
             field=models.CharField(blank=True, max_length=64, null=True),
         ),
-        migrations.RunPython(capture_audit_catalog_snapshot, restore_audit_catalog_snapshot),
+        migrations.RunPython(capture_audit_catalog_snapshot, drop_audit_catalog_snapshot),
         migrations.RunSQL(
             CREATE_APPEND_ONLY_TRIGGERS,
             DROP_APPEND_ONLY_TRIGGERS + RESTORE_APPEND_ONLY_TRIGGER,
         ),
         migrations.RunPython(split_legacy_webhook_intents, merge_webhook_intents_for_reverse),
-        migrations.RunPython(configure_audit_role_boundary, unconfigure_audit_role_boundary),
+        migrations.RunPython(migrations.RunPython.noop, require_provisioned_reverse_state),
     ]

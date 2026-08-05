@@ -8,6 +8,9 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection
 
+from plane.db.operation_gateway_audit_provisioning import configure_audit_role_boundary
+from plane.db.operation_gateway_audit_restore import restore_audit_catalog_snapshot
+
 
 ROLE_NAME = re.compile(r"^[a-z_][a-z0-9_$]{0,62}$")
 AUTHORITY_MARKER_TABLE = "plane_operation_gateway_authority_marker"
@@ -16,7 +19,15 @@ AUTHORITY_MARKER_TABLE = "plane_operation_gateway_authority_marker"
 class Command(BaseCommand):
     help = "Provision and verify the Operation Gateway runtime, migration, and audit roles."
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--phase",
+            choices=("before-migrate", "after-migrate", "before-reverse", "after-reverse"),
+            default="after-migrate",
+        )
+
     def handle(self, *args, **options):
+        phase = options["phase"]
         runtime_role = settings.PLANE_AUDIT_RUNTIME_ROLE
         governance_role = settings.PLANE_AUDIT_GOVERNANCE_ROLE
         migration_role = settings.PLANE_AUDIT_MIGRATION_ROLE
@@ -44,6 +55,12 @@ class Command(BaseCommand):
                 can_create_roles=can_create_roles,
             )
             cursor.execute(f"ALTER ROLE {self._quote(governance_role)} NOLOGIN NOINHERIT")
+            self._ensure_migration_role(
+                cursor,
+                role=migration_role,
+                current_user=current_user,
+                can_create_roles=can_create_roles,
+            )
             self._ensure_runtime_role(
                 cursor,
                 role=runtime_role,
@@ -64,12 +81,54 @@ class Command(BaseCommand):
                 self._assert_migration_role_safety(cursor, migration_role)
                 self._assert_role_safety(cursor, runtime_role, governance_role, migration_role)
 
-            self._ensure_authority_marker(
-                cursor,
-                runtime_role=runtime_role,
-                governance_role=governance_role,
-                migration_role=migration_role,
-            )
+                self._ensure_database_topology(cursor, provisioner_role)
+
+            if phase == "before-reverse":
+                effective_provisioner_role = provisioner_role or current_user
+                self._restore_reverse_catalog(
+                    cursor,
+                    runtime_role=runtime_role,
+                    governance_role=governance_role,
+                    migration_role=migration_role,
+                    provisioner_role=effective_provisioner_role,
+                )
+            else:
+                self._ensure_authority_marker(
+                    cursor,
+                    runtime_role=runtime_role,
+                    governance_role=governance_role,
+                    migration_role=migration_role,
+                )
+                if phase == "before-migrate":
+                    self._prepare_migration_boundary(
+                        cursor,
+                        runtime_role=runtime_role,
+                        governance_role=governance_role,
+                        migration_role=migration_role,
+                    )
+                elif phase == "after-migrate":
+                    if self._audit_boundary_is_ready(cursor):
+                        configure_audit_role_boundary(
+                            connection,
+                            runtime_role=runtime_role,
+                            governance_role=governance_role,
+                            migration_role=migration_role,
+                        )
+                    else:
+                        self._prepare_migration_boundary(
+                            cursor,
+                            runtime_role=runtime_role,
+                            governance_role=governance_role,
+                            migration_role=migration_role,
+                        )
+                self._assert_authority_marker(
+                    cursor,
+                    marker_ident=f"{self._quote(settings.PLANE_AUDIT_SCHEMA)}.{self._quote(AUTHORITY_MARKER_TABLE)}",
+                    schema_name=settings.PLANE_AUDIT_SCHEMA,
+                    runtime_role=runtime_role,
+                    governance_role=governance_role,
+                    migration_role=migration_role,
+                )
 
         self.stdout.write(self.style.SUCCESS("Operation Gateway audit roles are provisioned and separated"))
 
@@ -92,6 +151,39 @@ class Command(BaseCommand):
         if not can_create_roles:
             raise CommandError(f"Missing {role} role and migration authority cannot create roles")
         cursor.execute(create_sql)
+
+    def _ensure_migration_role(self, cursor, *, role, current_user, can_create_roles):
+        cursor.execute(
+            "SELECT rolsuper, rolcreaterole, rolcreatedb, rolbypassrls, rolcanlogin, rolinherit "
+            "FROM pg_roles WHERE rolname = %s",
+            [role],
+        )
+        row = cursor.fetchone()
+        if row is None:
+            if not can_create_roles:
+                raise CommandError(f"Missing {role} role and provisioner cannot create roles")
+            password = settings.PLANE_AUDIT_MIGRATION_PASSWORD
+            if settings.PLANE_AUDIT_ENFORCE_ROLE_SEPARATION and not password:
+                raise CommandError("PLANE_AUDIT_MIGRATION_PASSWORD is required to provision the migration role")
+            password_clause = " PASSWORD %s" if password else ""
+            cursor.execute(
+                f"CREATE ROLE {self._quote(role)} LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE "
+                f"NOBYPASSRLS{password_clause}",
+                [password] if password else [],
+            )
+            return
+        if settings.PLANE_AUDIT_ENFORCE_ROLE_SEPARATION:
+            password = settings.PLANE_AUDIT_MIGRATION_PASSWORD
+            if password:
+                cursor.execute(
+                    f"ALTER ROLE {self._quote(role)} LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE "
+                    f"NOBYPASSRLS PASSWORD %s",
+                    [password],
+                )
+            else:
+                cursor.execute(
+                    f"ALTER ROLE {self._quote(role)} LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS"
+                )
 
     def _ensure_runtime_role(self, cursor, *, role, current_user, can_create_roles):
         cursor.execute(
@@ -116,6 +208,102 @@ class Command(BaseCommand):
                 raise CommandError("The Operation Gateway runtime role has governance powers")
             if not row[4] or row[5]:
                 raise CommandError("The Operation Gateway runtime role must be LOGIN NOINHERIT")
+
+    def _prepare_migration_boundary(self, cursor, *, runtime_role, governance_role, migration_role):
+        schema_ident = self._quote(settings.PLANE_AUDIT_SCHEMA)
+        runtime_ident = self._quote(runtime_role)
+        governance_ident = self._quote(governance_role)
+        migration_ident = self._quote(migration_role)
+        cursor.execute(f"REVOKE ALL ON SCHEMA {schema_ident} FROM PUBLIC")
+        cursor.execute(f"GRANT USAGE ON SCHEMA {schema_ident} TO {runtime_ident}, {governance_ident}")
+        cursor.execute(f"GRANT USAGE, CREATE ON SCHEMA {schema_ident} TO {migration_ident}")
+        cursor.execute(
+            f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {schema_ident} TO {runtime_ident}"
+        )
+        cursor.execute(f"GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA {schema_ident} TO {runtime_ident}")
+        cursor.execute(f"GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA {schema_ident} TO {runtime_ident}")
+        marker_ident = self._quote(AUTHORITY_MARKER_TABLE)
+        cursor.execute(
+            f"REVOKE ALL ON TABLE {schema_ident}.{marker_ident} FROM PUBLIC, "
+            f"{runtime_ident}, {governance_ident}, {migration_ident}"
+        )
+        cursor.execute(f"GRANT SELECT ON TABLE {schema_ident}.{marker_ident} TO {runtime_ident}, {migration_ident}")
+        cursor.execute(
+            f"ALTER DEFAULT PRIVILEGES FOR ROLE {migration_ident} IN SCHEMA {schema_ident} "
+            f"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {runtime_ident}"
+        )
+        cursor.execute(
+            f"ALTER DEFAULT PRIVILEGES FOR ROLE {migration_ident} IN SCHEMA {schema_ident} "
+            f"GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO {runtime_ident}"
+        )
+        cursor.execute(
+            f"ALTER DEFAULT PRIVILEGES FOR ROLE {migration_ident} IN SCHEMA {schema_ident} "
+            f"GRANT EXECUTE ON FUNCTIONS TO {runtime_ident}"
+        )
+        for object_type in ("TABLES", "SEQUENCES", "FUNCTIONS"):
+            cursor.execute(
+                f"ALTER DEFAULT PRIVILEGES FOR ROLE {migration_ident} IN SCHEMA {schema_ident} "
+                f"REVOKE ALL ON {object_type} FROM PUBLIC"
+            )
+
+    def _ensure_database_topology(self, cursor, provisioner_role):
+        schema_name = settings.PLANE_AUDIT_SCHEMA
+        schema_ident = self._quote(schema_name)
+        provisioner_ident = self._quote(provisioner_role)
+        cursor.execute(
+            """
+            SELECT current_database(), database_owner.rolname
+            FROM pg_database AS database_info
+            JOIN pg_roles AS database_owner ON database_owner.oid = database_info.datdba
+            WHERE database_info.datname = current_database()
+            """
+        )
+        database_name, database_owner = cursor.fetchone()
+        if database_owner != provisioner_role:
+            cursor.execute(f"ALTER DATABASE {self._quote(database_name)} OWNER TO {provisioner_ident}")
+        cursor.execute(
+            """
+            SELECT schema_owner.rolname
+            FROM pg_namespace AS audit_schema
+            JOIN pg_roles AS schema_owner ON schema_owner.oid = audit_schema.nspowner
+            WHERE audit_schema.nspname = %s
+            """,
+            [schema_name],
+        )
+        schema_owner = cursor.fetchone()
+        if schema_owner is None:
+            raise CommandError("The configured audit schema does not exist")
+        if schema_owner[0] != provisioner_role:
+            cursor.execute(f"ALTER SCHEMA {schema_ident} OWNER TO {provisioner_ident}")
+
+    def _restore_reverse_catalog(self, cursor, *, runtime_role, governance_role, migration_role, provisioner_role):
+        restore_audit_catalog_snapshot(
+            connection,
+            runtime_role=runtime_role,
+            governance_role=governance_role,
+            migration_role=migration_role,
+            provisioner_role=provisioner_role,
+        )
+
+    @staticmethod
+    def _audit_boundary_is_ready(cursor):
+        cursor.execute(
+            """
+            SELECT to_regclass(%s), to_regclass(%s), to_regprocedure(%s)
+            """,
+            [
+                f"{settings.PLANE_AUDIT_SCHEMA}.{AUTHORITY_MARKER_TABLE}",
+                f"{settings.PLANE_AUDIT_SCHEMA}.plane_0126_audit_catalog_snapshot",
+                f"{settings.PLANE_AUDIT_SCHEMA}.operation_gateway_audit_append_only()",
+            ],
+        )
+        marker, snapshot, function = cursor.fetchone()
+        cursor.execute(
+            "SELECT to_regclass(%s)",
+            [f"{settings.PLANE_AUDIT_SCHEMA}.operation_gateway_audit"],
+        )
+        audit_table = cursor.fetchone()[0]
+        return marker is not None and snapshot is not None and function is not None and audit_table is not None
 
     def _ensure_authority_marker(self, cursor, *, runtime_role, governance_role, migration_role):
         schema_name = settings.PLANE_AUDIT_SCHEMA

@@ -14,6 +14,7 @@ API_ROOT = Path(__file__).resolve().parents[4]
 REPOSITORY_ROOT = API_ROOT.parents[1]
 COMPOSE_FILE = REPOSITORY_ROOT / "deployments/cli/community/docker-compose.yml"
 MIGRATOR_ENTRYPOINT = API_ROOT / "bin/docker-entrypoint-migrator.sh"
+PROVISIONER_ENTRYPOINT = API_ROOT / "bin/docker-entrypoint-provisioner.sh"
 
 
 MIGRATION_POSTGRES_VARS = (
@@ -42,7 +43,9 @@ MIGRATION_ENV_VARS = (
     "POSTGRES_READ_REPLICA_PORT",
     "DATABASE_READ_REPLICA_URL",
     "PLANE_AUDIT_RUNTIME_PASSWORD",
+    "PLANE_AUDIT_MIGRATION_PASSWORD",
     "DATABASE_MIGRATION_URL",
+    "DATABASE_PROVISIONER_URL",
 )
 MIGRATION_DATABASE_PREFIXES = (
     "DATABASE_MIGRATION_",
@@ -58,7 +61,7 @@ def _settings_environment() -> dict[str, str]:
     for name in list(environment):
         if name in MIGRATION_ENV_VARS or name.startswith(MIGRATION_DATABASE_PREFIXES):
             environment.pop(name, None)
-    for name in ("DATABASE_URL", "DATABASE_RUNTIME_URL", "PLANE_DB_MIGRATION_MODE"):
+    for name in ("DATABASE_URL", "DATABASE_RUNTIME_URL", "PLANE_DB_MIGRATION_MODE", "PLANE_DB_PROVISIONER_MODE"):
         environment.pop(name, None)
     environment.update(
         {
@@ -68,6 +71,7 @@ def _settings_environment() -> dict[str, str]:
             "PLANE_AUDIT_RUNTIME_ROLE": "plane_runtime",
             "PLANE_AUDIT_GOVERNANCE_ROLE": "plane_audit_owner",
             "PLANE_AUDIT_MIGRATION_ROLE": "plane_migrator",
+            "PLANE_AUDIT_PROVISIONER_ROLE": "plane_provisioner",
             "REDIS_URL": "redis://127.0.0.1:6379/",
             "SECRET_KEY": "runtime-settings-test-key",
             "LIVE_SERVER_SECRET_KEY": "runtime-settings-test-key",
@@ -177,6 +181,31 @@ def test_migrator_boots_only_in_explicit_migration_mode():
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "plane_migrator"
+
+
+@pytest.mark.contract
+def test_provisioner_boots_only_with_explicit_provisioner_authority():
+    environment = _settings_environment()
+    provisioner_url = "postgresql://plane_provisioner:provisioner@db/plane"
+    environment.update(
+        {
+            "PLANE_DB_PROVISIONER_MODE": "1",
+            "DATABASE_URL": provisioner_url,
+            "DATABASE_PROVISIONER_URL": provisioner_url,
+            "PGHOST": "db",
+            "PGDATABASE": "plane",
+            "POSTGRES_PORT": "5432",
+            "POSTGRES_DB": "plane",
+            "POSTGRES_USER": "plane_provisioner",
+            "POSTGRES_PASSWORD": "provisioner",
+            "PLANE_AUDIT_MIGRATION_PASSWORD": "migration",
+        }
+    )
+
+    result = _boot_settings(environment)
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "plane_provisioner"
 
 
 @pytest.mark.contract
@@ -477,6 +506,7 @@ def test_migrator_sets_exact_migration_authority_before_every_python_call(tmp_pa
     assert all(f"DATABASE_URL={migration_url}" in call for call in calls[0::4])
     assert all(f"DATABASE_MIGRATION_URL={migration_url}" in call for call in calls[1::4])
     assert all("PLANE_DB_MIGRATION_MODE=1" in call for call in calls[2::4])
+    assert "verify_operation_gateway_migration_boundary" in calls[7]
 
 
 @pytest.mark.contract
@@ -505,6 +535,8 @@ def test_resolved_community_compose_scopes_database_credentials_by_process():
         environment = services[service]["environment"]
         assert environment["DATABASE_RUNTIME_URL"]
         assert "DATABASE_MIGRATION_URL" not in environment
+        assert "DATABASE_PROVISIONER_URL" not in environment
+        assert "PLANE_AUDIT_MIGRATION_PASSWORD" not in environment
         assert "PLANE_DB_MIGRATION_MODE" not in environment
         assert not any(name in environment for name in MIGRATION_ENV_VARS)
 
@@ -513,4 +545,15 @@ def test_resolved_community_compose_scopes_database_credentials_by_process():
     assert migrator_environment["DATABASE_MIGRATION_URL"]
     assert migrator_environment["DATABASE_URL"] == migrator_environment["DATABASE_MIGRATION_URL"]
     assert "DATABASE_RUNTIME_URL" not in migrator_environment
+    assert "DATABASE_PROVISIONER_URL" not in migrator_environment
+    assert "PLANE_AUDIT_MIGRATION_PASSWORD" not in migrator_environment
     assert all(name in migrator_environment for name in MIGRATION_POSTGRES_VARS)
+
+    provisioner_environment = services["provisioner"]["environment"]
+    assert provisioner_environment["PLANE_DB_PROVISIONER_MODE"] == "1"
+    assert provisioner_environment["DATABASE_PROVISIONER_URL"]
+    assert "DATABASE_MIGRATION_URL" not in provisioner_environment
+    assert "DATABASE_RUNTIME_URL" not in provisioner_environment
+    assert provisioner_environment["PLANE_AUDIT_MIGRATION_PASSWORD"]
+    assert services["migrator"]["depends_on"]["provisioner"]["condition"] == "service_completed_successfully"
+    assert services["provisioner-final"]["depends_on"]["migrator"]["condition"] == "service_completed_successfully"

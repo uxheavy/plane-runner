@@ -199,13 +199,19 @@ AUTH_USER_MODEL = "db.User"
 
 # Database
 PLANE_DB_MIGRATION_MODE = os.environ.get("PLANE_DB_MIGRATION_MODE") == "1"
+PLANE_DB_PROVISIONER_MODE = os.environ.get("PLANE_DB_PROVISIONER_MODE") == "1"
 _database_runtime_url = os.environ.get("DATABASE_RUNTIME_URL")
 DATABASE_RUNTIME_URL = _database_runtime_url or (None if PLANE_DB_MIGRATION_MODE else os.environ.get("DATABASE_URL"))
 # The migration URL is intentionally unavailable to normal application
 # settings. Only the explicit one-shot migration process may load it.
 DATABASE_MIGRATION_URL = os.environ.get("DATABASE_MIGRATION_URL") if PLANE_DB_MIGRATION_MODE else None
+DATABASE_PROVISIONER_URL = os.environ.get("DATABASE_PROVISIONER_URL") if PLANE_DB_PROVISIONER_MODE else None
 _database_url = (
-    (DATABASE_MIGRATION_URL or os.environ.get("DATABASE_URL")) if PLANE_DB_MIGRATION_MODE else DATABASE_RUNTIME_URL
+    DATABASE_PROVISIONER_URL
+    if PLANE_DB_PROVISIONER_MODE
+    else (DATABASE_MIGRATION_URL or os.environ.get("DATABASE_URL"))
+    if PLANE_DB_MIGRATION_MODE
+    else DATABASE_RUNTIME_URL
 )
 if _database_url:
     DATABASES = {"default": dj_database_url.parse(_database_url)}
@@ -232,6 +238,9 @@ PLANE_AUDIT_GOVERNANCE_ROLE = os.environ.get("PLANE_AUDIT_GOVERNANCE_ROLE", "pla
 PLANE_AUDIT_MIGRATION_ROLE = os.environ.get("PLANE_AUDIT_MIGRATION_ROLE") or "plane_migrator"
 PLANE_AUDIT_PROVISIONER_ROLE = os.environ.get("PLANE_AUDIT_PROVISIONER_ROLE", "")
 PLANE_AUDIT_RUNTIME_PASSWORD = os.environ.get("PLANE_AUDIT_RUNTIME_PASSWORD", "")
+PLANE_AUDIT_MIGRATION_PASSWORD = (
+    os.environ.get("PLANE_AUDIT_MIGRATION_PASSWORD", "") if PLANE_DB_PROVISIONER_MODE else ""
+)
 # Production fails closed by default. The local and test settings explicitly
 # disable this check while they use the repository's single bootstrap role.
 PLANE_AUDIT_ENFORCE_ROLE_SEPARATION = (
