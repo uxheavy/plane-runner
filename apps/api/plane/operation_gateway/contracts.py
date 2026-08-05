@@ -161,5 +161,18 @@ class CodeModeSpillInputSerializer(StrictSerializer):
     content_digest = serializers.CharField(max_length=128, min_length=8, allow_blank=False, trim_whitespace=True)
 
 
+class AgentOutcomeSubmitInputSerializer(StrictSerializer):
+    run_ref = serializers.CharField(max_length=128, allow_blank=False, trim_whitespace=True)
+    summary = serializers.CharField(max_length=4096, allow_blank=False, trim_whitespace=True)
+    artifacts = serializers.JSONField(required=False, default=list)
+    evidence = serializers.JSONField(required=False, default=list)
+
+
+class AgentOutcomePublishInputSerializer(StrictSerializer):
+    run_ref = serializers.CharField(max_length=128, allow_blank=False, trim_whitespace=True)
+    outcome_ref = serializers.CharField(max_length=128, allow_blank=False, trim_whitespace=True)
+    content = serializers.CharField(max_length=4096, allow_blank=False, trim_whitespace=True)
+
+
 def canonical_json(value: Any) -> str:
     return json.dumps(value, cls=DjangoJSONEncoder, sort_keys=True, separators=(",", ":"))

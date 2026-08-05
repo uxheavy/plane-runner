@@ -18,6 +18,7 @@ import os
 import signal
 import sqlite3
 import subprocess
+import tempfile
 import threading
 import time
 from collections.abc import Mapping, Sequence
@@ -61,12 +62,15 @@ def _request_payload(snapshot_json: str, envelope_json: str) -> tuple[bytes, str
         raise RuntimeDispatchError("runtime invocation has no invocationId")
     if envelope.get("runId") != run_id:
         raise RuntimeDispatchError("runtime invocation is not bound to the runtime snapshot")
-    request = json.dumps(
-        {"invocation": envelope, "run": snapshot},
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8") + b"\n"
+    request = (
+        json.dumps(
+            {"invocation": envelope, "run": snapshot},
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        + b"\n"
+    )
     digest = hashlib.sha256(
         b"plane.agent-runtime/subprocess-request/v1\n"
         + snapshot_json.encode("utf-8")
@@ -265,10 +269,11 @@ class SubprocessRuntimeTransport(RuntimeTransport):
         except (OSError, ValueError):
             overflow.set()
 
-    def _run_process(self, payload: bytes) -> tuple[str, ...]:
+    def _run_process(self, payload: bytes, *, command: Sequence[str] | None = None) -> tuple[str, ...]:
+        process_command = tuple(command or self._command)
         try:
             process = subprocess.Popen(
-                self._command,
+                process_command,
                 cwd=self._cwd,
                 env=self._environment,
                 shell=False,
@@ -376,4 +381,72 @@ class SubprocessRuntimeTransport(RuntimeTransport):
         return frames
 
 
-__all__ = ["SubprocessRuntimeTransport"]
+class HostBoundSubprocessRuntimeTransport(SubprocessRuntimeTransport):
+    """Run Hermes with one trusted Plane host socket for the invocation."""
+
+    def __init__(self, *, gateway: Any, host_timeout_seconds: float = 5.0, **kwargs: Any) -> None:
+        if gateway is None:
+            raise ValueError("gateway is required")
+        if host_timeout_seconds <= 0:
+            raise ValueError("host_timeout_seconds must be positive")
+        super().__init__(**kwargs)
+        self._gateway = gateway
+        self._host_timeout_seconds = float(host_timeout_seconds)
+
+    def dispatch(self, snapshot_json: str, envelope_json: str) -> tuple[str, ...]:
+        payload, run_id, invocation_id, request_digest = _request_payload(snapshot_json, envelope_json)
+        if len(payload) > self._max_input_bytes:
+            raise RuntimeDispatchError("runtime request exceeds the process input bound")
+        replay = self._ledger.claim(run_id=run_id, invocation_id=invocation_id, request_digest=request_digest)
+        if replay is not None:
+            return replay
+
+        from plane.agent.runtime.host_rpc import PlaneHostServer, build_gateway_host_port
+        from plane.db.models import RuntimeInvocation
+
+        temp_dir: str | None = None
+        server: PlaneHostServer | None = None
+        try:
+            try:
+                invocation = RuntimeInvocation.objects.get(invocation_id=invocation_id)
+            except RuntimeInvocation.DoesNotExist as exc:
+                raise RuntimeDispatchError("runtime invocation is unavailable for host binding") from exc
+            host_port = build_gateway_host_port(invocation=invocation, gateway=self._gateway)
+            temp_dir = tempfile.mkdtemp(prefix="plane-host-")
+            socket_path = Path(temp_dir) / "host.sock"
+            if len(os.fsencode(str(socket_path))) >= 104:
+                raise RuntimeDispatchError("host socket path exceeds the local Unix socket bound")
+            server = PlaneHostServer(
+                socket_path=socket_path,
+                invoke=host_port.invoke,
+                timeout_seconds=self._host_timeout_seconds,
+            )
+            server.start()
+            command = (*self._command, "--plane-host-socket", str(socket_path))
+            frames = self._run_process(payload, command=command)
+        except Exception:
+            try:
+                self._ledger.mark_unknown(invocation_id=invocation_id)
+            except RuntimeDispatchError as ledger_error:
+                raise ledger_error
+            raise
+        finally:
+            if server is not None:
+                server.close()
+            if temp_dir is not None:
+                try:
+                    os.rmdir(temp_dir)
+                except OSError:
+                    pass
+        try:
+            self._ledger.complete(invocation_id=invocation_id, frames=frames)
+        except Exception:
+            try:
+                self._ledger.mark_unknown(invocation_id=invocation_id)
+            except RuntimeDispatchError as ledger_error:
+                raise ledger_error
+            raise
+        return frames
+
+
+__all__ = ["HostBoundSubprocessRuntimeTransport", "SubprocessRuntimeTransport"]

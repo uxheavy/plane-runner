@@ -2,10 +2,16 @@ import json
 import sqlite3
 import sys
 import textwrap
+from types import SimpleNamespace
 
 import pytest
 
-from plane.agent.runtime import RuntimeDispatchError, SubprocessRuntimeTransport
+from plane.agent.runtime import (
+    HostBoundSubprocessRuntimeTransport,
+    PlaneHostResult,
+    RuntimeDispatchError,
+    SubprocessRuntimeTransport,
+)
 
 
 SNAPSHOT = json.dumps(
@@ -47,6 +53,82 @@ def test_subprocess_transport_commits_and_replays_exact_frames(tmp_path):
 
     assert first == replay == ('{"invocationId":"invocation:test"}',)
     assert counter.read_text() == "1"
+
+
+def test_host_bound_transport_passes_socket_and_cleans_invocation_endpoint(tmp_path, monkeypatch):
+    host_dir = tmp_path / "invocation-host"
+
+    def make_host_dir(*, prefix):
+        assert prefix == "plane-host-"
+        host_dir.mkdir()
+        return str(host_dir)
+
+    monkeypatch.setattr("plane.agent.runtime.subprocess.tempfile.mkdtemp", make_host_dir)
+
+    class FakeRuntimeInvocation:
+        objects = SimpleNamespace(get=lambda **kwargs: SimpleNamespace(**kwargs))
+
+    monkeypatch.setattr("plane.db.models.RuntimeInvocation", FakeRuntimeInvocation)
+
+    def fake_host_port(*, invocation, gateway):
+        assert gateway == "trusted-gateway"
+        assert invocation.invocation_id == "invocation:test"
+
+        def invoke(call):
+            return PlaneHostResult(
+                request_ref=call.request_ref,
+                correlation_id=call.correlation_id,
+                idempotency_key=call.idempotency_key,
+                status="ok",
+                replayed=False,
+                output={"accepted": True},
+            )
+
+        return SimpleNamespace(invoke=invoke)
+
+    monkeypatch.setattr("plane.agent.runtime.host_rpc.build_gateway_host_port", fake_host_port)
+    command = _command(
+        """
+        import json
+        import hashlib
+        import socket
+        import sys
+
+        request = json.load(sys.stdin)
+        assert sys.argv[1] == "--plane-host-socket"
+        call = {
+            "protocol": "plane.agent-runtime/v1",
+            "runId": request["run"]["runId"],
+            "invocationId": request["invocation"]["invocationId"],
+            "correlationId": "correlation:transport",
+            "action": "read",
+            "operationRef": "operation:catalog.describe",
+            "input": {"operation_id": "catalog.search"},
+            "source": "model",
+        }
+        identity = {key: call[key] for key in ("protocol", "runId", "invocationId", "action", "operationRef", "input")}
+        digest = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        call["requestRef"] = f"host-request:{digest}"
+        call["idempotencyKey"] = f"host-idempotency:{digest}"
+        payload = json.dumps({**call}, sort_keys=True, separators=(",", ":")).encode() + b"\\n"
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as channel:
+            channel.connect(sys.argv[2])
+            channel.sendall(payload)
+            response = bytearray()
+            while not response.endswith(b"\\n"):
+                response.extend(channel.recv(4096))
+        result = json.loads(bytes(response[:-1]))
+        print(json.dumps({"hostStatus": result["status"]}, separators=(",", ":")))
+        """
+    )
+    transport = HostBoundSubprocessRuntimeTransport(
+        command=command,
+        ledger_path=tmp_path / "ledger.sqlite",
+        gateway="trusted-gateway",
+    )
+
+    assert transport.dispatch(SNAPSHOT, ENVELOPE) == ('{"hostStatus":"ok"}',)
+    assert not host_dir.exists()
 
 
 def test_changed_replay_is_denied_without_starting_another_process(tmp_path):

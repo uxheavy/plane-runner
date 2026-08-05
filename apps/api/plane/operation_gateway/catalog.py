@@ -158,6 +158,39 @@ _CODE_MODE_SPILL_RESULT = {
     "required": ["spill"],
     "properties": {"spill": {"type": "object"}},
 }
+_AGENT_OUTCOME_SUBMIT_INPUT = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["run_ref", "summary"],
+    "properties": {
+        "run_ref": {"type": "string", "pattern": "^run:"},
+        "summary": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "artifacts": {"type": "array", "maxItems": 64, "items": {}},
+        "evidence": {"type": "array", "maxItems": 64, "items": {}},
+    },
+}
+_AGENT_OUTCOME_SUBMIT_RESULT = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["outcome"],
+    "properties": {"outcome": {"type": "object"}},
+}
+_AGENT_OUTCOME_PUBLISH_INPUT = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["run_ref", "outcome_ref", "content"],
+    "properties": {
+        "run_ref": {"type": "string", "pattern": "^run:"},
+        "outcome_ref": {"type": "string", "pattern": "^outcome-submission:"},
+        "content": {"type": "string", "minLength": 1, "maxLength": 4096},
+    },
+}
+_AGENT_OUTCOME_PUBLISH_RESULT = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["published", "outcome"],
+    "properties": {"published": {"type": "boolean"}, "outcome": {"type": "object"}},
+}
 
 
 OPERATION_CATALOG: Mapping[str, OperationDescriptor] = MappingProxyType(
@@ -245,6 +278,34 @@ OPERATION_CATALOG: Mapping[str, OperationDescriptor] = MappingProxyType(
             input_schema=_CODE_MODE_SPILL_INPUT,
             result_schema=_CODE_MODE_SPILL_RESULT,
             tags=("code-mode", "spill", "read"),
+            authorization_scope="workspace",
+        ),
+        "agent.outcome.submit": OperationDescriptor(
+            operation_id="agent.outcome.submit",
+            schema_version=SCHEMA_VERSION,
+            kind="mutation",
+            summary="Submit one explicit Plane Agent outcome with artifacts and evidence.",
+            required_input=("run_ref", "summary"),
+            max_result_bytes=8 * 1024,
+            handler="agent_outcome_submit",
+            name="submit_agent_outcome",
+            input_schema=_AGENT_OUTCOME_SUBMIT_INPUT,
+            result_schema=_AGENT_OUTCOME_SUBMIT_RESULT,
+            tags=("agent", "outcome", "publication", "mutation"),
+            authorization_scope="workspace",
+        ),
+        "agent.outcome.publish": OperationDescriptor(
+            operation_id="agent.outcome.publish",
+            schema_version=SCHEMA_VERSION,
+            kind="mutation",
+            summary="Explicitly publish an already submitted Plane Agent outcome.",
+            required_input=("run_ref", "outcome_ref", "content"),
+            max_result_bytes=8 * 1024,
+            handler="agent_outcome_publish",
+            name="publish_agent_outcome",
+            input_schema=_AGENT_OUTCOME_PUBLISH_INPUT,
+            result_schema=_AGENT_OUTCOME_PUBLISH_RESULT,
+            tags=("agent", "outcome", "publication", "mutation"),
             authorization_scope="workspace",
         ),
     }
