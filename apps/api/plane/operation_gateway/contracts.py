@@ -131,5 +131,27 @@ class WorkItemRenameInputSerializer(WorkItemReadInputSerializer):
     name = serializers.CharField(max_length=255, allow_blank=False, trim_whitespace=True)
 
 
+class EmptyOperationInputSerializer(StrictSerializer):
+    """The caller cannot smuggle identity or workspace fields into a read."""
+
+
+class AttachmentReadInputSerializer(StrictSerializer):
+    project_id = serializers.UUIDField()
+    issue_id = serializers.UUIDField()
+    attachment_id = serializers.UUIDField()
+
+
+class AttachmentListInputSerializer(StrictSerializer):
+    project_id = serializers.UUIDField()
+    issue_id = serializers.UUIDField()
+
+
+class AttachmentUploadFromUrlInputSerializer(StrictSerializer):
+    project_id = serializers.UUIDField()
+    issue_id = serializers.UUIDField()
+    url = serializers.URLField(max_length=2048, allow_blank=False)
+    name = serializers.CharField(max_length=255, allow_blank=False, required=False, allow_null=True)
+
+
 def canonical_json(value: Any) -> str:
     return json.dumps(value, cls=DjangoJSONEncoder, sort_keys=True, separators=(",", ":"))

@@ -1,23 +1,43 @@
-"""Compatibility metadata for the supported external Plane MCP surface."""
+"""Compatibility metadata and pure adapters for the external Plane MCP surface."""
 
-from .compatibility import (
-    MCP_ACTIONS,
-    MCP_COMPATIBILITY_MANIFEST,
-    MCPCompatibilityError,
-    MCPCompatibilityManifest,
-    MCPAction,
-    get_mcp_action,
-    gateway_operation_for,
-    require_gateway_operation,
-)
+from .adapter_registry import ADAPTER_REGISTRATIONS, ADAPTER_REGISTRY, get_registration
+from .attachment_adapter import AttachmentGatewayAdapter, AttachmentImage
+from .sdk_adapter import MCPAdapterError, MCPGatewayExecutionError, SharedSDKGatewayAdapter
 
 __all__ = [
+    "ADAPTER_REGISTRY",
+    "ADAPTER_REGISTRATIONS",
+    "AttachmentGatewayAdapter",
+    "AttachmentImage",
     "MCP_ACTIONS",
     "MCP_COMPATIBILITY_MANIFEST",
     "MCPAction",
+    "MCPAdapterError",
     "MCPCompatibilityError",
     "MCPCompatibilityManifest",
+    "MCPGatewayExecutionError",
+    "SharedSDKGatewayAdapter",
     "gateway_operation_for",
     "get_mcp_action",
+    "get_registration",
     "require_gateway_operation",
 ]
+
+
+def __getattr__(name: str):
+    """Load Django-backed compatibility metadata only for callers that need it."""
+
+    if name in {
+        "MCP_ACTIONS",
+        "MCP_COMPATIBILITY_MANIFEST",
+        "MCPAction",
+        "MCPCompatibilityError",
+        "MCPCompatibilityManifest",
+        "gateway_operation_for",
+        "get_mcp_action",
+        "require_gateway_operation",
+    }:
+        from . import compatibility
+
+        return getattr(compatibility, name)
+    raise AttributeError(name)

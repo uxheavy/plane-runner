@@ -16,6 +16,7 @@ from django.utils import timezone
 
 from plane.api.views.issue import IssueDetailAPIEndpoint
 from plane.api.serializers import IssueSerializer
+from plane.api.serializers.user import UserLiteSerializer
 from plane.app.permissions import ProjectEntityPermission
 from plane.db.models import (
     Issue,
@@ -35,6 +36,10 @@ from .contracts import (
     MAX_RESPONSE_BYTES,
     MAX_RESULT_BYTES,
     SCHEMA_VERSION,
+    AttachmentListInputSerializer,
+    AttachmentReadInputSerializer,
+    AttachmentUploadFromUrlInputSerializer,
+    EmptyOperationInputSerializer,
     WorkItemReadInputSerializer,
     WorkItemRenameInputSerializer,
     canonical_json,
@@ -46,6 +51,7 @@ from .publications import (
     schedule_publications_on_commit,
 )
 from .role_boundary import audited_gateway_boundary
+from .mcp.attachments import AttachmentFailure, WorkItemAttachmentService, _assert_issue_permission
 from .work_items import WorkItemRenameFailure, WorkItemRenameOutcome, WorkItemRenameService
 
 READ_RESULT_FIELDS = ("id", "name", "sequence_id", "priority", "state", "project", "workspace")
@@ -53,6 +59,10 @@ READ_RESULT_FIELDS = ("id", "name", "sequence_id", "priority", "state", "project
 ERROR_MESSAGES = {
     "AUTHENTICATION_REQUIRED": "Authentication is required for this operation.",
     "AUTHORIZATION_UNAVAILABLE": "Authorization could not be evaluated.",
+    "ATTACHMENT_CONTENT_UNSUPPORTED": "This attachment content type cannot be read.",
+    "ATTACHMENT_NOT_FOUND": "The attachment could not be found.",
+    "ATTACHMENT_TOO_LARGE": "The attachment exceeds the size limit.",
+    "EXTERNAL_SOURCE_REJECTED": "The external attachment source was rejected.",
     "IDEMPOTENCY_CONFLICT": "The idempotency key was already used for another request.",
     "INTERNAL_ERROR": "The operation could not be completed.",
     "NOT_AUTHORIZED": "Operation is not authorized for this caller.",
@@ -255,8 +265,7 @@ class OperationGateway:
             descriptor = get_operation(record.operation_id)
             publications = list(record.publications.all())
             if not publications or any(
-                publication.state != OperationGatewayPublication.State.SUCCEEDED
-                for publication in publications
+                publication.state != OperationGatewayPublication.State.SUCCEEDED for publication in publications
             ):
                 return self._reconcile_unknown_locked(record, descriptor)
             audit_id = record.audit_receipt
@@ -489,10 +498,7 @@ class OperationGateway:
                     ),
                 )
 
-            if (
-                record.state == OperationGatewayIdempotency.State.FAILED_PRECOMMIT
-                and record.retryable
-            ):
+            if record.state == OperationGatewayIdempotency.State.FAILED_PRECOMMIT and record.retryable:
                 record.request_id = uuid.uuid4()
                 record.invocation_id = uuid.uuid4()
                 record.correlation_id = correlation_id
@@ -590,7 +596,11 @@ class OperationGateway:
                         409 if status_code == 409 else 400,
                         False,
                     )
-                result = self._bound_result(raw_result, max_bytes=min(descriptor.max_result_bytes, MAX_RESULT_BYTES))
+                result = self._bound_result(
+                    descriptor,
+                    raw_result,
+                    max_bytes=min(descriptor.max_result_bytes, MAX_RESULT_BYTES),
+                )
                 return (
                     self._finish_success(
                         record,
@@ -604,6 +614,15 @@ class OperationGateway:
                 )
         except GatewayFailure as failure:
             return self._persist_failure(record, descriptor, workspace.slug, caller_id, request_digest, failure)
+        except AttachmentFailure as failure:
+            return self._persist_failure(
+                record,
+                descriptor,
+                workspace.slug,
+                caller_id,
+                request_digest,
+                GatewayFailure(failure.code, failure.http_status, failure.retryable),
+            )
         except Issue.DoesNotExist:
             return self._persist_failure(
                 record,
@@ -635,11 +654,18 @@ class OperationGateway:
     def _parse_operation_input(
         self, descriptor: OperationDescriptor, value: dict[str, Any]
     ) -> tuple[dict[str, Any], GatewayFailure | None]:
-        serializer_class = (
-            WorkItemReadInputSerializer
-            if descriptor.operation_id == "work_item.read"
-            else WorkItemRenameInputSerializer
-        )
+        serializer_class = {
+            "work_item.read": WorkItemReadInputSerializer,
+            "work_item.rename": WorkItemRenameInputSerializer,
+            "user.me": EmptyOperationInputSerializer,
+            "work_item_attachment.list": AttachmentListInputSerializer,
+            "work_item_attachment.download_url": AttachmentReadInputSerializer,
+            "work_item_attachment.upload_from_url": AttachmentUploadFromUrlInputSerializer,
+            "work_item_attachment.delete": AttachmentReadInputSerializer,
+            "work_item_attachment.read": AttachmentReadInputSerializer,
+        }.get(descriptor.operation_id)
+        if serializer_class is None:
+            return {}, GatewayFailure("UNKNOWN_OPERATION", 404, False)
         serializer = serializer_class(data=value)
         if not serializer.is_valid():
             return {}, GatewayFailure("VALIDATION_ERROR", 400, False)
@@ -653,6 +679,20 @@ class OperationGateway:
         parsed_input: dict[str, Any],
         workspace_slug: str,
     ) -> GatewayFailure | None:
+        if descriptor.operation_id == "user.me":
+            return None
+        if descriptor.operation_id.startswith("work_item_attachment."):
+            try:
+                _assert_issue_permission(
+                    request,
+                    Workspace.objects.get(slug=workspace_slug),
+                    str(parsed_input["project_id"]),
+                    str(parsed_input["issue_id"]),
+                    mutation=descriptor.kind == "mutation",
+                )
+            except AttachmentFailure as failure:
+                return GatewayFailure(failure.code, failure.http_status, failure.retryable)
+            return None
         service_request = GatewayServiceRequest(
             request,
             method="GET" if descriptor.kind == "read" else "PATCH",
@@ -676,6 +716,56 @@ class OperationGateway:
         descriptor: OperationDescriptor,
         parsed_input: dict[str, Any],
     ) -> tuple[int, dict[str, Any], dict[str, Any] | None]:
+        if descriptor.operation_id == "user.me":
+            return 200, UserLiteSerializer(request.user).data, None
+
+        if descriptor.operation_id.startswith("work_item_attachment."):
+            service = WorkItemAttachmentService()
+            project_id = str(parsed_input["project_id"])
+            issue_id = str(parsed_input["issue_id"])
+            attachment_id = str(parsed_input.get("attachment_id", ""))
+            if descriptor.operation_id == "work_item_attachment.list":
+                result = service.list(
+                    request=request,
+                    workspace=workspace,
+                    project_id=project_id,
+                    issue_id=issue_id,
+                )
+            elif descriptor.operation_id == "work_item_attachment.download_url":
+                result = service.download_url(
+                    request=request,
+                    workspace=workspace,
+                    project_id=project_id,
+                    issue_id=issue_id,
+                    attachment_id=attachment_id,
+                )
+            elif descriptor.operation_id == "work_item_attachment.upload_from_url":
+                result = service.upload_from_url(
+                    request=request,
+                    workspace=workspace,
+                    project_id=project_id,
+                    issue_id=issue_id,
+                    url=parsed_input["url"],
+                    name=parsed_input.get("name"),
+                )
+            elif descriptor.operation_id == "work_item_attachment.delete":
+                result = service.delete(
+                    request=request,
+                    workspace=workspace,
+                    project_id=project_id,
+                    issue_id=issue_id,
+                    attachment_id=attachment_id,
+                )
+            else:
+                result = service.authorize_read(
+                    request=request,
+                    workspace=workspace,
+                    project_id=project_id,
+                    issue_id=issue_id,
+                    attachment_id=attachment_id,
+                )
+            return 200, result, None
+
         project_id = str(parsed_input["project_id"])
         issue_id = str(parsed_input["issue_id"])
         if descriptor.operation_id == "work_item.read":
@@ -700,9 +790,18 @@ class OperationGateway:
             raise GatewayFailure("UPSTREAM_FAILURE", 503, True)
         return 200, outcome.result, outcome.publication_payload
 
-    def _bound_result(self, raw_result: dict[str, Any], *, max_bytes: int) -> dict[str, Any]:
-        bounded = {field: raw_result.get(field) for field in READ_RESULT_FIELDS if field in raw_result}
-        result = json.loads(canonical_json({"work_item": bounded}))
+    def _bound_result(
+        self,
+        descriptor: OperationDescriptor,
+        raw_result: dict[str, Any],
+        *,
+        max_bytes: int,
+    ) -> dict[str, Any]:
+        if descriptor.result_key == "work_item":
+            bounded = {field: raw_result.get(field) for field in READ_RESULT_FIELDS if field in raw_result}
+        else:
+            bounded = json.loads(canonical_json(raw_result))
+        result = json.loads(canonical_json({descriptor.result_key: bounded}))
         if len(canonical_json(result).encode("utf-8")) > max_bytes:
             raise GatewayFailure("RESULT_TOO_LARGE", 409, False)
         return result
@@ -1042,9 +1141,7 @@ class OperationGateway:
             ), 200
         failure = self._failure_from_record(record) or GatewayFailure("UPSTREAM_FAILURE", 503, False)
         status_code = (
-            403
-            if record.state == OperationGatewayIdempotency.State.DENIED
-            else self._status_for_code(failure.code)
+            403 if record.state == OperationGatewayIdempotency.State.DENIED else self._status_for_code(failure.code)
         )
         return self._failure_envelope(
             record,
@@ -1205,7 +1302,7 @@ class OperationGateway:
         if len(canonical_json(envelope).encode("utf-8")) <= MAX_RESPONSE_BYTES:
             return envelope
         bounded = dict(envelope)
-        bounded["result"] = {"work_item": {}}
+        bounded["result"] = {"work_item": {}} if envelope.get("operation_id", "").startswith("work_item.") else {}
         bounded["error"] = self._error("RESULT_TOO_LARGE", False)
         bounded["ok"] = False
         return bounded
@@ -1218,6 +1315,10 @@ class OperationGateway:
     @staticmethod
     def _status_for_code(code: str) -> int:
         return {
+            "ATTACHMENT_CONTENT_UNSUPPORTED": 400,
+            "ATTACHMENT_NOT_FOUND": 404,
+            "ATTACHMENT_TOO_LARGE": 400,
+            "EXTERNAL_SOURCE_REJECTED": 400,
             "NOT_AUTHORIZED": 403,
             "AUTHORIZATION_UNAVAILABLE": 503,
             "IDEMPOTENCY_CONFLICT": 409,

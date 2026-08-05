@@ -52,6 +52,8 @@ class MCPAction:
     preserves: tuple[str, ...]
     rationale_code: str
     rationale: str
+    sdk_entrypoints: tuple[str, ...]
+    blocker: dict[str, Any] | None
 
     @classmethod
     def from_manifest(cls, value: dict[str, Any]) -> "MCPAction":
@@ -73,6 +75,8 @@ class MCPAction:
             preserves=tuple(value["preserves"]),
             rationale_code=value["rationale_code"],
             rationale=value["rationale"],
+            sdk_entrypoints=tuple(value.get("sdk_entrypoints", ())),
+            blocker=value.get("blocker"),
         )
 
 
@@ -107,13 +111,20 @@ def _validate_manifest(manifest: MCPCompatibilityManifest) -> tuple[MCPAction, .
             raise RuntimeError(f"MCP action {action.name!r} has incomplete public schema metadata")
         if not action.preserves or not action.rationale_code or not action.rationale.strip():
             raise RuntimeError(f"MCP action {action.name!r} has incomplete compatibility evidence")
+        if action.disposition != "MCP-D-002" and not action.sdk_entrypoints:
+            raise RuntimeError(f"MCP action {action.name!r} has no generated SDK entrypoint")
         if "*" in action.mapping_kind or "sdk_http_intent" in action.mapping_kind:
             raise RuntimeError(f"MCP action {action.name!r} uses a non-exact mapping kind")
         if action.gateway_status == "supported":
             if action.gateway_operation_id not in OPERATION_CATALOG:
                 raise RuntimeError(f"MCP action {action.name!r} names an unregistered gateway operation")
+            if action.blocker is not None:
+                raise RuntimeError(f"Supported MCP action {action.name!r} cannot carry a blocker")
         elif action.gateway_operation_id is not None:
             raise RuntimeError(f"Deferred MCP action {action.name!r} cannot claim a gateway operation")
+        elif action.disposition != "MCP-D-002":
+            if not isinstance(action.blocker, dict) or not action.blocker.get("code"):
+                raise RuntimeError(f"Deferred MCP action {action.name!r} has no machine-readable blocker")
 
         expected_adapter = {
             "MCP-D-001": "shared_sdk_transport",

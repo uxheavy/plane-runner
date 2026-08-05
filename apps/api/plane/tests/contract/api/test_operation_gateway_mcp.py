@@ -35,6 +35,8 @@ def test_mcp_manifest_exhaustively_classifies_the_pinned_public_surface():
         assert action.preserves
         assert action.rationale_code
         assert action.rationale
+        if action.disposition != "MCP-D-002":
+            assert action.sdk_entrypoints
         assert "*" not in action.mapping_kind
         assert "sdk_http_intent" not in action.mapping_kind
 
@@ -49,8 +51,14 @@ def test_deferred_actions_cannot_claim_a_gateway_operation():
             assert action.behavior == "local_only"
             continue
 
+        if action.gateway_status == "supported":
+            assert action.gateway_operation_id
+            assert action.blocker is None
+            continue
+
         assert action.gateway_status == "deferred"
         assert action.gateway_operation_id is None
+        assert action.blocker["action"] == action.name
         assert action.mutation is (action.behavior == "mutation") or action.disposition == "MCP-D-003"
         assert "caller_identity" in action.preserves
         assert "oauth_and_api_key_auth" in action.preserves
@@ -64,6 +72,8 @@ def test_deferred_actions_cannot_claim_a_gateway_operation():
 
 @pytest.mark.contract
 def test_gateway_lookup_is_explicit_and_fail_closed():
+    assert gateway_operation_for("get_me") == "user.me"
+    assert gateway_operation_for("list_work_item_attachments") == "work_item_attachment.list"
     assert get_mcp_action("retrieve_work_item") is not None
     assert gateway_operation_for("retrieve_work_item") is None
 
