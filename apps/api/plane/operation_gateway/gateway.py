@@ -784,8 +784,13 @@ class OperationGateway:
         *,
         max_bytes: int,
     ) -> dict[str, Any]:
-        if descriptor.result_key == "work_item":
+        if descriptor.operation_id == "work_item.read":
             bounded = {field: raw_result.get(field) for field in READ_RESULT_FIELDS if field in raw_result}
+        elif isinstance(raw_result, dict) and descriptor.result_key in raw_result:
+            # Typed adapters may return a canonical product envelope already
+            # (search and relation creation do this); avoid nesting that
+            # envelope a second time at the gateway boundary.
+            bounded = raw_result[descriptor.result_key]
         else:
             bounded = json.loads(canonical_json(raw_result))
         result = json.loads(canonical_json({descriptor.result_key: bounded}))

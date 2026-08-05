@@ -9,11 +9,78 @@ reason.  No category or name wildcard is used for routing.
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
+import re
 from typing import Any
 
 
 GATEWAY_OVERRIDES: dict[str, dict[str, Any]] = {
     "get_me": {"operation_id": "user.me", "result_key": "user"},
+    "list_work_items": {"operation_id": "work_item.list", "result_key": "work_items"},
+    "create_work_item": {"operation_id": "work_item.create", "result_key": "work_item"},
+    "retrieve_work_item": {
+        "operation_id": "work_item.retrieve",
+        "result_key": "work_item",
+        "input_aliases": {"work_item_id": "issue_id"},
+    },
+    "update_work_item": {
+        "operation_id": "work_item.update",
+        "result_key": "work_item",
+        "input_aliases": {"work_item_id": "issue_id"},
+    },
+    "delete_work_item": {
+        "operation_id": "work_item.delete",
+        "result_key": "deleted",
+        "result_mode": "none",
+        "input_aliases": {"work_item_id": "issue_id"},
+    },
+    "search_work_items": {"operation_id": "work_item.search", "result_key": "issues"},
+    "list_work_item_activities": {
+        "operation_id": "work_item_activity.list",
+        "result_key": "activities",
+        "input_aliases": {"work_item_id": "issue_id"},
+    },
+    "retrieve_work_item_activity": {
+        "operation_id": "work_item_activity.retrieve",
+        "result_key": "activity",
+        "input_aliases": {"work_item_id": "issue_id"},
+    },
+    "list_work_item_relations": {
+        "operation_id": "work_item_relation.list",
+        "result_key": "relations",
+        "input_aliases": {"work_item_id": "issue_id"},
+    },
+    "create_work_item_relation": {
+        "operation_id": "work_item_relation.create",
+        "result_key": "relations",
+        "input_aliases": {"work_item_id": "issue_id"},
+    },
+    "delete_cycle": {"operation_id": "cycle.delete", "result_key": "deleted", "result_mode": "none"},
+    "list_cycle_work_items": {"operation_id": "cycle.work_item.list", "result_key": "work_items"},
+    "transfer_cycle_work_items": {"operation_id": "cycle.transfer", "result_key": "message"},
+    "delete_module": {"operation_id": "module.delete", "result_key": "deleted", "result_mode": "none"},
+    "list_module_work_items": {"operation_id": "module.work_item.list", "result_key": "work_items"},
+    "delete_intake_work_item": {
+        "operation_id": "intake.delete",
+        "result_key": "deleted",
+        "result_mode": "none",
+        "input_aliases": {"work_item_id": "issue_id"},
+    },
+    "delete_label": {"operation_id": "label.delete", "result_key": "deleted", "result_mode": "none"},
+    "delete_project": {"operation_id": "project.delete", "result_key": "deleted", "result_mode": "none"},
+    "delete_state": {"operation_id": "state.delete", "result_key": "deleted", "result_mode": "none"},
+    "delete_work_item_comment": {
+        "operation_id": "comment.delete",
+        "result_key": "deleted",
+        "result_mode": "none",
+        "input_aliases": {"work_item_id": "issue_id"},
+    },
+    "delete_work_item_link": {
+        "operation_id": "link.delete",
+        "result_key": "deleted",
+        "result_mode": "none",
+        "input_aliases": {"work_item_id": "issue_id"},
+    },
     "list_work_item_attachments": {"operation_id": "work_item_attachment.list", "result_key": "attachments"},
     "get_work_item_attachment_download_url": {
         "operation_id": "work_item_attachment.download_url",
@@ -99,8 +166,16 @@ GATEWAY_OVERRIDES: dict[str, dict[str, Any]] = {
     },
     "list_intake_work_items": {"operation_id": "intake.list", "result_key": "intake_work_items"},
     "create_intake_work_item": {"operation_id": "intake.create", "result_key": "intake_work_item"},
-    "retrieve_intake_work_item": {"operation_id": "intake.retrieve", "result_key": "intake_work_item"},
-    "update_intake_work_item": {"operation_id": "intake.update", "result_key": "intake_work_item"},
+    "retrieve_intake_work_item": {
+        "operation_id": "intake.retrieve",
+        "result_key": "intake_work_item",
+        "input_aliases": {"work_item_id": "issue_id"},
+    },
+    "update_intake_work_item": {
+        "operation_id": "intake.update",
+        "result_key": "intake_work_item",
+        "input_aliases": {"work_item_id": "issue_id"},
+    },
     "list_pages": {"operation_id": "page.list", "result_key": "pages"},
     "retrieve_page": {"operation_id": "page.retrieve", "result_key": "page"},
     "create_page": {"operation_id": "page.create", "result_key": "page"},
@@ -198,12 +273,20 @@ UNSUPPORTED_REASONS: dict[str, tuple[str, str]] = {
 
 
 def _unsupported_reason(action: dict[str, Any]) -> tuple[str, str]:
-    return UNSUPPORTED_REASONS.get(
+    category_code, category_reason = UNSUPPORTED_REASONS.get(
         action["category"],
         (
             f"{action['category'].upper().replace('.', '_')}_ADAPTER_UNAVAILABLE",
             f"No safe reusable {action['category']} application adapter is registered in this commit.",
         ),
+    )
+    action_slug = re.sub(r"[^A-Z0-9]+", "_", action["name"].upper()).strip("_")
+    action_code = f"{category_code}_{action_slug}_DEFERRED"
+    if len(action_code) > 64:
+        action_code = f"{category_code[:48]}_{hashlib.sha256(action['name'].encode()).hexdigest()[:12]}"
+    return action_code, (
+        f"Public action {action['name']} is individually deferred: {category_reason} "
+        "No exact semantic operation and caller-bound contract adapter is registered for this action."
     )
 
 
@@ -251,11 +334,19 @@ def effective_manifest(raw: dict[str, Any]) -> dict[str, Any]:
                     "return_annotation": action["return_annotation"],
                     "sdk_entrypoints": action.get("sdk_entrypoints", []),
                 },
-                "blocked_capabilities": [
-                    "live_gateway_authorization",
-                    "gateway_idempotency_reconciliation",
-                    "append_only_audit",
-                ],
+                "blocked_capabilities": (
+                    [
+                        "live_gateway_authorization",
+                        "gateway_idempotency_reconciliation",
+                        "append_only_audit",
+                    ]
+                    if action["mutation"]
+                    else [
+                        "live_gateway_authorization",
+                        "bounded_read_result",
+                        "append_only_audit_attribution",
+                    ]
+                ),
                 "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
             }
     missing = set(overrides) - seen

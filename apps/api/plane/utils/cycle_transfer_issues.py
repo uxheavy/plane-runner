@@ -39,6 +39,7 @@ def transfer_cycle_issues(
     new_cycle_id,
     request,
     user_id,
+    activity_publisher=None,
 ):
     """
     Transfer incomplete issues from one cycle to another and create progress snapshot.
@@ -179,6 +180,7 @@ def transfer_cycle_issues(
                             Value("/api/assets/v2/static/"),
                             "assignees__avatar_asset",
                             Value("/"),
+                            output_field=models.CharField(),
                         ),
                     ),
                     # If `avatar_asset` is None, fall back to using `avatar` field directly
@@ -301,6 +303,7 @@ def transfer_cycle_issues(
                         Value("/api/assets/v2/static/"),
                         "assignees__avatar_asset",
                         Value("/"),
+                        output_field=models.CharField(),
                     ),
                 ),
                 # If `avatar_asset` is None, fall back to using `avatar` field directly
@@ -457,22 +460,25 @@ def transfer_cycle_issues(
     # Bulk update cycle issues
     cycle_issues = CycleIssue.objects.bulk_update(updated_cycles, ["cycle_id"], batch_size=100)
 
-    # Capture Issue Activity
-    issue_activity.delay(
+    # Capture Issue Activity.  Gateway callers supply a durable publication
+    # boundary; the live HTTP path retains the historical Celery publisher.
+    publish_activity = activity_publisher or issue_activity.delay
+    activity_snapshot = {
+        "updated_cycle_issues": update_cycle_issue_activity,
+        # The canonical activity mapper expects this legacy field to contain
+        # its JSON-encoded list representation.
+        "created_cycle_issues": "[]",
+    }
+    publish_activity(
         type="cycle.activity.created",
         requested_data=json.dumps({"cycles_list": []}),
         actor_id=str(user_id),
         issue_id=None,
         project_id=str(project_id),
-        current_instance=json.dumps(
-            {
-                "updated_cycle_issues": update_cycle_issue_activity,
-                "created_cycle_issues": [],
-            }
-        ),
+        current_instance=json.dumps(activity_snapshot),
         epoch=int(timezone.now().timestamp()),
         notification=True,
         origin=base_host(request=request, is_app=True),
     )
 
-    return {"success": True}
+    return {"success": True, "activity_snapshot": activity_snapshot}

@@ -9,6 +9,7 @@ idempotency, result bounds, and durable audit.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
@@ -26,6 +27,10 @@ from plane.api.serializers import (
     IntakeIssueUpdateSerializer,
     IssueCommentCreateSerializer,
     IssueCommentSerializer,
+    IssueActivitySerializer,
+    IssueRelationCreateSerializer,
+    IssueRelationSerializer,
+    RelatedIssueSerializer,
     IssueLinkCreateSerializer,
     IssueLinkSerializer,
     IssueLinkUpdateSerializer,
@@ -62,6 +67,11 @@ from plane.db.models import (
     State,
     Workspace,
     WorkspaceMember,
+    CycleIssue,
+    ModuleIssue,
+    IssueRelation,
+    IssueActivity,
+    UserFavorite,
 )
 from plane.db.models.intake import SourceType
 from plane.utils.content_validator import validate_html_content
@@ -74,7 +84,16 @@ from plane.utils.order_queryset import (
 from plane.utils.paginator import Cursor, OffsetPaginator
 
 from .catalog import IMPLEMENTED_OPERATION_IDS
-from .work_items import WorkItemRenameFailure, WorkItemRenameOutcome, WorkItemRenameService
+from .work_items import (
+    WorkItemMutationService,
+    WorkItemRenameFailure,
+    WorkItemRenameOutcome,
+    WorkItemRenameService,
+    issue_publication_payload,
+)
+from plane.utils.cycle_transfer_issues import transfer_cycle_issues
+from plane.utils.issue_relation_mapper import get_actual_relation
+from plane.utils.host import base_host
 
 
 class OperationAdapterFailure(Exception):
@@ -195,6 +214,81 @@ def _authorize(
 
 def _serializer_data(data: dict[str, Any], *, drop: set[str]) -> dict[str, Any]:
     return {key: value for key, value in data.items() if key not in drop and value is not None}
+
+
+def _bind_audit_actor(instance: Any, actor_id: Any, *, created: bool) -> None:
+    """Persist the gateway caller without allowing BaseModel auto-user lookup to clear it."""
+
+    update_fields = ["updated_by"]
+    instance.updated_by_id = actor_id
+    if created:
+        instance.created_by_id = actor_id
+        update_fields.insert(0, "created_by")
+    instance.save(update_fields=update_fields, disable_auto_set_user=True)
+
+
+def _model_publication_payload(
+    *,
+    request: Any,
+    workspace: Workspace,
+    model_name: str,
+    model_id: str,
+    requested_data: dict[str, Any],
+    current_instance: dict[str, Any] | None,
+    deleted: bool = False,
+) -> dict[str, Any]:
+    return {
+        "model_activity": {
+            "model_name": model_name,
+            "model_id": str(model_id),
+            "requested_data": requested_data,
+            "current_instance": None
+            if deleted
+            else (json.dumps(current_instance) if current_instance is not None else None),
+            "actor_id": str(request.user.id),
+            "slug": workspace.slug,
+            "origin": base_host(request=request, is_app=True),
+            "verb": "deleted" if deleted else None,
+            "deleted": deleted,
+        }
+    }
+
+
+def _non_issue_activity_publication_payload(
+    *,
+    request: Any,
+    workspace: Workspace,
+    project_id: str,
+    event_type: str,
+    requested_data: dict[str, Any],
+    current_instance: dict[str, Any] | None,
+) -> dict[str, Any]:
+    requested_json = json.dumps(requested_data)
+    current_json = json.dumps(current_instance) if current_instance is not None else None
+    return {
+        "activity": {
+            "type": event_type,
+            "requested_data": requested_json,
+            "actor_id": str(request.user.id),
+            "issue_id": None,
+            "project_id": str(project_id),
+            "current_instance": current_json,
+            "epoch": int(timezone.now().timestamp()),
+            "origin": base_host(request=request, is_app=True),
+            "expected": True,
+            "deterministic_activity": False,
+        },
+        "notification": {
+            "skip": True,
+            "type": event_type,
+            "issue_id": None,
+            "project_id": str(project_id),
+            "actor_id": str(request.user.id),
+            "requested_data": requested_json,
+            "current_instance": current_json,
+        },
+        "webhook": {"skip": True},
+    }
 
 
 @dataclass(frozen=True)
@@ -327,10 +421,11 @@ class ResourceOperation:
                 drop_fields.add("issue_id")
             body = _serializer_data(data, drop=drop_fields)
             serializer = self.spec.create_serializer(data=body, context=self._context(request, workspace, data))
-            self._save(serializer, request, workspace, data, create=True)
-            return 201, self._serialize(serializer.instance, data), None
+            publication = self._save(serializer, request, workspace, data, create=True)
+            return 201, self._serialize(serializer.instance, data), publication
         if self.action == "update":
             instance = self._instance(workspace, data)
+            current_instance = self._serialize(instance, data)
             drop_fields = {
                 "project_id",
                 self.spec.id_field,
@@ -351,11 +446,24 @@ class ResourceOperation:
                 partial=True,
                 context=self._context(request, workspace, data),
             )
-            self._save(serializer, request, workspace, data, create=False)
-            return 200, self._serialize(serializer.instance, data), None
+            publication = self._save(
+                serializer, request, workspace, data, create=False, current_instance=current_instance
+            )
+            return 200, self._serialize(serializer.instance, data), publication
+        if self.action == "delete":
+            return self._delete(request, workspace, data)
         raise OperationAdapterFailure("UNKNOWN_OPERATION", 404)
 
-    def _save(self, serializer: Any, request: Any, workspace: Workspace, data: dict[str, Any], *, create: bool) -> None:
+    def _save(
+        self,
+        serializer: Any,
+        request: Any,
+        workspace: Workspace,
+        data: dict[str, Any],
+        *,
+        create: bool,
+        current_instance: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
         if not serializer.is_valid():
             raise OperationAdapterFailure("VALIDATION_ERROR", 400)
         if self.spec.prefix in {"comment", "label"}:
@@ -391,19 +499,21 @@ class ResourceOperation:
             if self.spec.prefix == "project" and create:
                 with transaction.atomic():
                     serializer.save(**kwargs)
-                    ProjectMember.objects.create(
+                    project_member = ProjectMember.objects.create(
                         project_id=serializer.instance.id,
                         member_id=request.user.id,
                         role=20,
                         created_by_id=request.user.id,
                     )
+                    _bind_audit_actor(project_member, request.user.id, created=True)
                     if serializer.instance.project_lead_id and serializer.instance.project_lead_id != request.user.id:
-                        ProjectMember.objects.create(
+                        lead_member = ProjectMember.objects.create(
                             project_id=serializer.instance.id,
                             member_id=serializer.instance.project_lead_id,
                             role=20,
                             created_by_id=request.user.id,
                         )
+                        _bind_audit_actor(lead_member, request.user.id, created=True)
                     State.objects.bulk_create(
                         [
                             State(
@@ -421,12 +531,110 @@ class ResourceOperation:
                     )
             else:
                 serializer.save(**kwargs)
+            _bind_audit_actor(serializer.instance, request.user.id, created=create)
         except serializers.ValidationError as failure:
             if self.spec.prefix == "project" and "taken" in str(failure).lower():
                 raise OperationAdapterFailure("PLANE_CONFLICT", 409) from None
             raise OperationAdapterFailure("VALIDATION_ERROR", 400) from None
         except IntegrityError:
             raise OperationAdapterFailure("PLANE_CONFLICT", 409) from None
+        if self.spec.prefix in {"link", "comment"}:
+            issue_id = str(data["issue_id"])
+            return issue_publication_payload(
+                request=request,
+                workspace=workspace,
+                issue_id=issue_id,
+                project_id=str(data["project_id"]),
+                event_type=f"{self.spec.prefix}.activity.{'created' if create else 'updated'}",
+                requested_data=_serializer_data(data, drop={"project_id", "issue_id", self.spec.id_field}),
+                current_instance_data=current_instance,
+                notification=False,
+                deterministic_activity=False,
+            )
+        return _model_publication_payload(
+            request=request,
+            workspace=workspace,
+            model_name=self.spec.prefix,
+            model_id=str(serializer.instance.id),
+            requested_data=_serializer_data(data, drop={"project_id", self.spec.id_field}),
+            current_instance=current_instance,
+        )
+
+    def _delete(self, request: Any, workspace: Workspace, data: dict[str, Any]):
+        instance = self._instance(workspace, data)
+        current_instance = self._serialize(instance, data)
+        prefix = self.spec.prefix
+        if prefix == "state":
+            if instance.default:
+                raise OperationAdapterFailure("VALIDATION_ERROR", 400)
+            if Issue.objects.filter(state_id=instance.id).exists():
+                raise OperationAdapterFailure("VALIDATION_ERROR", 400)
+        if prefix in {"cycle", "module"}:
+            creator_id = getattr(instance, "owned_by_id", None) if prefix == "cycle" else instance.created_by_id
+            if (
+                creator_id != request.user.id
+                and not ProjectMember.objects.filter(
+                    workspace_id=workspace.id,
+                    project_id=data["project_id"],
+                    member_id=request.user.id,
+                    role=20,
+                    is_active=True,
+                ).exists()
+            ):
+                raise OperationAdapterFailure("NOT_AUTHORIZED", 403)
+        if prefix == "project":
+            UserFavorite.objects.filter(project_id=instance.id, entity_identifier=instance.id).delete()
+        if prefix == "cycle":
+            UserFavorite.objects.filter(
+                entity_type="cycle", entity_identifier=instance.id, project_id=instance.project_id
+            ).delete()
+        if prefix == "module":
+            UserFavorite.objects.filter(
+                entity_type="module", entity_identifier=instance.id, project_id=instance.project_id
+            ).delete()
+        publication = None
+        if prefix in {"cycle", "module"}:
+            issue_model = CycleIssue if prefix == "cycle" else ModuleIssue
+            issue_field = "cycle_id" if prefix == "cycle" else "module_id"
+            issue_ids = list(
+                issue_model.objects.filter(**{issue_field: instance.id}).values_list("issue_id", flat=True)
+            )
+            publication = _non_issue_activity_publication_payload(
+                request=request,
+                workspace=workspace,
+                project_id=str(data["project_id"]),
+                event_type=f"{prefix}.activity.deleted",
+                requested_data={
+                    f"{prefix}_id": str(instance.id),
+                    f"{prefix}_name": str(instance.name),
+                    "issues": [str(issue_id) for issue_id in issue_ids],
+                },
+                current_instance={"name": str(instance.name)} if prefix == "module" else None,
+            )
+        if prefix in {"link", "comment"}:
+            publication = issue_publication_payload(
+                request=request,
+                workspace=workspace,
+                issue_id=str(data["issue_id"]),
+                project_id=str(data["project_id"]),
+                event_type=f"{prefix}.activity.deleted",
+                requested_data={self.spec.id_field: str(instance.id)},
+                current_instance_data=current_instance,
+                notification=False,
+                deterministic_activity=False,
+            )
+        instance.delete()
+        if publication is None:
+            publication = _model_publication_payload(
+                request=request,
+                workspace=workspace,
+                model_name=prefix,
+                model_id=str(instance.id),
+                requested_data={"id": str(instance.id)},
+                current_instance=current_instance,
+                deleted=True,
+            )
+        return 200, {"deleted": True, "id": str(instance.id)}, publication
 
 
 class WorkItemReadOperation:
@@ -470,6 +678,474 @@ class WorkItemRenameOperation:
         if not isinstance(outcome, WorkItemRenameOutcome):
             raise OperationAdapterFailure("UPSTREAM_FAILURE", 503, True)
         return 200, outcome.result, outcome.publication_payload
+
+
+def _work_item_body(data: dict[str, Any]) -> dict[str, Any]:
+    body = _serializer_data(
+        data,
+        drop={
+            "project_id",
+            "issue_id",
+            "work_item_id",
+            "cursor",
+            "per_page",
+            "order_by",
+            "fields",
+            "expand",
+            "params",
+            "query",
+            "pql",
+        },
+    )
+    stripped = body.pop("description_stripped", None)
+    if body.get("type_id") is None:
+        body.pop("type", None)
+    else:
+        body.pop("type", None)
+    if body.get("description_html") is None and stripped is not None:
+        from html import escape
+
+        body["description_html"] = f"<p>{escape(stripped).replace(chr(10), '<br/>')}</p>"
+    return body
+
+
+class WorkItemOperation:
+    """Typed work-item list/write family backed by the canonical issue serializer."""
+
+    def __init__(self, action: str):
+        self.action = action
+
+    def _queryset(self, workspace: Workspace, request: Any, data: dict[str, Any]):
+        queryset = (
+            Issue.issue_objects.filter(
+                workspace_id=workspace.id,
+                project__archived_at__isnull=True,
+            )
+            .filter(
+                Q(
+                    project__project_projectmember__member_id=request.user.id,
+                    project__project_projectmember__is_active=True,
+                )
+                | Q(project__network=2)
+            )
+            .distinct()
+        )
+        if data.get("project_id"):
+            queryset = queryset.filter(project_id=data["project_id"])
+        query = _query_data(data)
+        if query.get("external_id") is not None:
+            queryset = queryset.filter(external_id=query["external_id"])
+        if query.get("external_source") is not None:
+            queryset = queryset.filter(external_source=query["external_source"])
+        return queryset.select_related("project", "workspace", "state", "parent").prefetch_related(
+            "assignees", "labels"
+        )
+
+    def authorize(self, request: Any, workspace: Workspace, data: dict[str, Any]) -> bool:
+        if self.action == "list" or self.action == "search":
+            if self.action == "search" and not data.get("project_id"):
+                return bool(
+                    WorkspaceUserPermission().has_permission(
+                        OperationRequest(request, method="GET"), _permission_view(workspace, data)
+                    )
+                )
+            if self.action == "list" and not data.get("project_id"):
+                return bool(
+                    WorkspaceUserPermission().has_permission(
+                        OperationRequest(request, method="GET"), _permission_view(workspace, data)
+                    )
+                )
+            return _authorize(ProjectEntityPermission, request, workspace, data, "list")
+        if self.action == "create":
+            return _authorize(ProjectEntityPermission, request, workspace, data, "create")
+        if self.action in {"retrieve", "update"}:
+            return _authorize(
+                ProjectEntityPermission,
+                request,
+                workspace,
+                data,
+                "retrieve" if self.action == "retrieve" else "update",
+                resource_id=data.get("issue_id"),
+            )
+        if self.action == "delete":
+            issue = Issue.objects.filter(
+                workspace_id=workspace.id, project_id=data.get("project_id"), pk=data.get("issue_id")
+            ).first()
+            if issue is None:
+                return False
+            return bool(
+                _authorize(
+                    ProjectEntityPermission, request, workspace, data, "delete", resource_id=data.get("issue_id")
+                )
+                and (
+                    issue.created_by_id == request.user.id
+                    or ProjectMember.objects.filter(
+                        workspace_id=workspace.id,
+                        project_id=data.get("project_id"),
+                        member_id=request.user.id,
+                        role=20,
+                        is_active=True,
+                    ).exists()
+                )
+            )
+        return False
+
+    def execute(self, request: Any, workspace: Workspace, data: dict[str, Any]):
+        service = WorkItemMutationService()
+        if self.action == "list":
+            if data.get("pql"):
+                raise OperationAdapterFailure("PQL_QUERY_UNSUPPORTED", 400)
+            page = _bounded_page(
+                self._queryset(workspace, request, data),
+                data,
+                default_order="-created_at",
+                allowed_order={"created_at", "updated_at", "name", "sequence_id", "priority"},
+            )
+            page["results"] = [
+                IssueSerializer(item, fields=_fields(data), expand=_expand(data)).data for item in page["results"]
+            ]
+            page["total_count"] = page["total_results"]
+            return 200, page, None
+        if self.action == "retrieve":
+            issue = self._queryset(workspace, request, data).filter(pk=data["issue_id"]).first()
+            if issue is None:
+                raise OperationAdapterFailure("OPERATION_REJECTED", 400)
+            return 200, IssueSerializer(issue, fields=_fields(data), expand=_expand(data)).data, None
+        if self.action == "create":
+            outcome = service.create(
+                request=request,
+                workspace=workspace,
+                project_id=str(data["project_id"]),
+                data=_work_item_body(data),
+            )
+            return 201, outcome.result, outcome.publication_payload
+        if self.action == "update":
+            outcome = service.update(
+                request=request,
+                workspace=workspace,
+                project_id=str(data["project_id"]),
+                issue_id=str(data["issue_id"]),
+                data=_work_item_body(data),
+            )
+            return 200, outcome.result, outcome.publication_payload
+        if self.action == "delete":
+            try:
+                outcome = service.delete(
+                    request=request,
+                    workspace=workspace,
+                    project_id=str(data["project_id"]),
+                    issue_id=str(data["issue_id"]),
+                )
+            except WorkItemRenameFailure as failure:
+                raise OperationAdapterFailure(failure.code, failure.http_status, failure.retryable) from None
+            return 200, outcome.result, outcome.publication_payload
+        raise OperationAdapterFailure("UNKNOWN_OPERATION", 404)
+
+
+class WorkItemSearchOperation:
+    def authorize(self, request: Any, workspace: Workspace, data: dict[str, Any]) -> bool:
+        return bool(
+            WorkspaceUserPermission().has_permission(
+                OperationRequest(request, method="GET"), _permission_view(workspace, data)
+            )
+        )
+
+    def execute(self, request: Any, workspace: Workspace, data: dict[str, Any]):
+        query = str(data.get("query", "")).strip()
+        if not query:
+            return 200, {"issues": []}, None
+        terms = Q(name__icontains=query) | Q(project__identifier__icontains=query)
+        if query.isdigit():
+            terms |= Q(sequence_id=int(query))
+        queryset = (
+            Issue.issue_objects.filter(
+                terms,
+                workspace_id=workspace.id,
+                project__archived_at__isnull=True,
+            )
+            .filter(
+                Q(
+                    project__project_projectmember__member_id=request.user.id,
+                    project__project_projectmember__is_active=True,
+                )
+                | Q(project__network=2)
+            )
+            .distinct()
+            .order_by("-updated_at")[:10]
+        )
+        return (
+            200,
+            {
+                "issues": [
+                    {
+                        "name": issue.name,
+                        "id": str(issue.id),
+                        "sequence_id": issue.sequence_id,
+                        "project_identifier": issue.project.identifier,
+                        "project_id": str(issue.project_id),
+                        "workspace_slug": workspace.slug,
+                    }
+                    for issue in queryset
+                ]
+            },
+            None,
+        )
+
+
+class ActivityOperation:
+    def __init__(self, action: str):
+        self.action = action
+
+    def authorize(self, request: Any, workspace: Workspace, data: dict[str, Any]) -> bool:
+        return _authorize(ProjectEntityPermission, request, workspace, data, "retrieve")
+
+    def _queryset(self, request: Any, workspace: Workspace, data: dict[str, Any]):
+        return (
+            IssueActivity.objects.filter(
+                workspace_id=workspace.id,
+                project_id=data["project_id"],
+                issue_id=data["issue_id"],
+                project__project_projectmember__member_id=request.user.id,
+                project__project_projectmember__is_active=True,
+                project__archived_at__isnull=True,
+            )
+            .exclude(field__in=["comment", "vote", "reaction", "draft"])
+            .select_related("actor", "workspace", "issue", "project")
+        )
+
+    def execute(self, request: Any, workspace: Workspace, data: dict[str, Any]):
+        queryset = self._queryset(request, workspace, data)
+        if self.action == "list":
+            page = _bounded_page(queryset, data, default_order="created_at", allowed_order={"created_at", "updated_at"})
+            return (
+                200,
+                [
+                    IssueActivitySerializer(item, fields=_fields(data), expand=_expand(data)).data
+                    for item in page["results"]
+                ],
+                None,
+            )
+        activity = queryset.filter(pk=data["activity_id"]).first()
+        if activity is None:
+            raise OperationAdapterFailure("OPERATION_REJECTED", 400)
+        return 200, IssueActivitySerializer(activity, fields=_fields(data), expand=_expand(data)).data, None
+
+
+class RelationOperation:
+    def __init__(self, action: str):
+        self.action = action
+
+    def authorize(self, request: Any, workspace: Workspace, data: dict[str, Any]) -> bool:
+        return _authorize(
+            ProjectEntityPermission,
+            request,
+            workspace,
+            data,
+            "create" if self.action == "create" else "retrieve",
+            resource_id=data.get("issue_id"),
+        )
+
+    def _source(self, workspace: Workspace, data: dict[str, Any]):
+        return Issue.objects.filter(
+            workspace_id=workspace.id,
+            project_id=data["project_id"],
+            pk=data["issue_id"],
+            project__archived_at__isnull=True,
+        ).first()
+
+    def execute(self, request: Any, workspace: Workspace, data: dict[str, Any]):
+        source = self._source(workspace, data)
+        if source is None:
+            raise OperationAdapterFailure("OPERATION_REJECTED", 400)
+        if self.action == "list":
+            relations = IssueRelation.objects.filter(
+                Q(issue_id=source.id) | Q(related_issue_id=source.id),
+                workspace_id=workspace.id,
+            ).select_related("issue", "related_issue", "related_issue__state", "issue__state")
+            grouped = {
+                key: []
+                for key in (
+                    "blocking",
+                    "blocked_by",
+                    "duplicate",
+                    "relates_to",
+                    "start_after",
+                    "start_before",
+                    "finish_after",
+                    "finish_before",
+                )
+            }
+            seen = {"duplicate": set(), "relates_to": set()}
+            for relation in relations:
+                related = relation.related_issue if relation.issue_id == source.id else relation.issue
+                relation_type = relation.relation_type
+                key = relation_type
+                if relation_type == "blocked_by":
+                    key = "blocked_by" if relation.issue_id == source.id else "blocking"
+                elif relation_type == "start_before":
+                    key = "start_before" if relation.issue_id == source.id else "start_after"
+                elif relation_type == "finish_before":
+                    key = "finish_before" if relation.issue_id == source.id else "finish_after"
+                if key not in grouped:
+                    continue
+                if key in seen and str(related.id) in seen[key]:
+                    continue
+                if key in seen:
+                    seen[key].add(str(related.id))
+                grouped[key].append({"project_id": str(related.project_id), "issue_id": str(related.id)})
+            return 200, grouped, None
+        serializer = IssueRelationCreateSerializer(
+            data={"relation_type": data.get("relation_type"), "issues": data.get("work_item_ids") or []}
+        )
+        if data.get("relation_definition_id") or data.get("relation_definition_label"):
+            raise OperationAdapterFailure("RELATION_DEFINITION_UNSUPPORTED", 400)
+        if not serializer.is_valid():
+            raise OperationAdapterFailure("VALIDATION_ERROR", 400)
+        relation_type = serializer.validated_data["relation_type"]
+        target_ids = list(
+            Issue.issue_objects.filter(
+                workspace_id=workspace.id, pk__in=serializer.validated_data["issues"]
+            ).values_list("id", flat=True)
+        )
+        actual_relation = get_actual_relation(relation_type)
+        reverse = relation_type in {"blocking", "start_after", "finish_after"}
+        rows = [
+            IssueRelation(
+                issue_id=target_id if reverse else source.id,
+                related_issue_id=source.id if reverse else target_id,
+                relation_type=actual_relation,
+                project_id=source.project_id,
+                workspace_id=workspace.id,
+                created_by_id=request.user.id,
+                updated_by_id=request.user.id,
+            )
+            for target_id in target_ids
+        ]
+        IssueRelation.objects.bulk_create(rows, ignore_conflicts=True, batch_size=10)
+        relations = IssueRelation.objects.filter(
+            relation_type=actual_relation,
+            workspace_id=workspace.id,
+            **(
+                {"issue_id__in": target_ids, "related_issue_id": source.id}
+                if reverse
+                else {"issue_id": source.id, "related_issue_id__in": target_ids}
+            ),
+        ).select_related("issue", "related_issue", "related_issue__state", "issue__state")
+        serializer_class = RelatedIssueSerializer if reverse else IssueRelationSerializer
+        return (
+            201,
+            {"relations": serializer_class(relations, many=True).data},
+            issue_publication_payload(
+                request=request,
+                workspace=workspace,
+                issue_id=str(source.id),
+                project_id=str(source.project_id),
+                event_type="issue_relation.activity.created",
+                requested_data={"relation_type": relation_type, "issues": [str(value) for value in target_ids]},
+                current_instance_data=None,
+                notification=True,
+                deterministic_activity=False,
+            ),
+        )
+
+
+class AssociationOperation:
+    def __init__(self, family: str, action: str):
+        self.family = family
+        self.action = action
+
+    def authorize(self, request: Any, workspace: Workspace, data: dict[str, Any]) -> bool:
+        return _authorize(
+            ProjectEntityPermission, request, workspace, data, "create" if self.action == "transfer" else "retrieve"
+        )
+
+    def execute(self, request: Any, workspace: Workspace, data: dict[str, Any]):
+        if self.family == "cycle":
+            container = Cycle.objects.filter(
+                workspace_id=workspace.id, project_id=data["project_id"], pk=data["cycle_id"]
+            ).first()
+            relation = "issue_cycle__cycle_id"
+            serializer = IssueSerializer
+        else:
+            container = Module.objects.filter(
+                workspace_id=workspace.id, project_id=data["project_id"], pk=data["module_id"]
+            ).first()
+            relation = "issue_module__module_id"
+            serializer = IssueSerializer
+        if container is None:
+            raise OperationAdapterFailure("OPERATION_REJECTED", 400)
+        if self.action == "list":
+            if data.get("pql"):
+                raise OperationAdapterFailure("PQL_QUERY_UNSUPPORTED", 400)
+            queryset = (
+                Issue.issue_objects.filter(
+                    workspace_id=workspace.id,
+                    project_id=data["project_id"],
+                    **{relation: container.id},
+                )
+                .filter(
+                    **(
+                        {"issue_cycle__deleted_at__isnull": True}
+                        if self.family == "cycle"
+                        else {"issue_module__deleted_at__isnull": True}
+                    )
+                )
+                .distinct()
+                .select_related("project", "workspace", "state", "parent")
+                .prefetch_related("assignees", "labels")
+            )
+            page = _bounded_page(
+                queryset,
+                data,
+                default_order="created_at",
+                allowed_order={"created_at", "updated_at", "name", "sequence_id"},
+            )
+            page["results"] = [
+                serializer(item, fields=_fields(data), expand=_expand(data)).data for item in page["results"]
+            ]
+            page["total_count"] = page["total_results"]
+            return 200, page, None
+        if self.family == "cycle" and self.action == "transfer":
+            result = transfer_cycle_issues(
+                slug=workspace.slug,
+                project_id=str(data["project_id"]),
+                cycle_id=str(data["cycle_id"]),
+                new_cycle_id=str(data["new_cycle_id"]),
+                request=request,
+                user_id=request.user.id,
+                activity_publisher=lambda **_: None,
+            )
+            if not result.get("success"):
+                raise OperationAdapterFailure("VALIDATION_ERROR", 400)
+            return (
+                200,
+                {"message": "Success"},
+                {
+                    "activity": {
+                        "type": "cycle.activity.created",
+                        "requested_data": json.dumps({"cycles_list": []}),
+                        "actor_id": str(request.user.id),
+                        "issue_id": None,
+                        "project_id": str(data["project_id"]),
+                        "current_instance": json.dumps(result.get("activity_snapshot", {})),
+                        "epoch": int(timezone.now().timestamp()),
+                        "origin": base_host(request=request, is_app=True),
+                        "expected": True,
+                        "deterministic_activity": False,
+                    },
+                    "notification": {
+                        "skip": True,
+                        "type": "cycle.activity.created",
+                        "issue_id": None,
+                        "project_id": str(data["project_id"]),
+                        "actor_id": str(request.user.id),
+                        "requested_data": json.dumps({"cycles_list": []}),
+                        "current_instance": json.dumps(result.get("activity_snapshot", {})),
+                    },
+                    "webhook": {"skip": True},
+                },
+            )
+        raise OperationAdapterFailure("UNKNOWN_OPERATION", 404)
 
 
 class PageOperation:
@@ -577,6 +1253,7 @@ class PageOperation:
                 if project_id:
                     serializer.save(created_by_id=request.user.id, updated_by_id=request.user.id)
                     instance = serializer.instance
+                    _bind_audit_actor(instance, request.user.id, created=True)
                 else:
                     page_data = dict(serializer.validated_data)
                     instance = Page.objects.create(
@@ -589,6 +1266,7 @@ class PageOperation:
                         created_by_id=request.user.id,
                         is_global=True,
                     )
+                    _bind_audit_actor(instance, request.user.id, created=True)
             except serializers.ValidationError:
                 raise OperationAdapterFailure("VALIDATION_ERROR", 400) from None
             return 201, PageDetailSerializer(instance).data, None
@@ -639,7 +1317,7 @@ class IntakeOperation:
 
     def authorize(self, request: Any, workspace: Workspace, data: dict[str, Any]) -> bool:
         return _authorize(
-            self.permission_class, request, workspace, data, self.action, resource_id=data.get("work_item_id")
+            self.permission_class, request, workspace, data, self.action, resource_id=data.get("issue_id")
         )
 
     def _queryset(self, workspace: Workspace, data: dict[str, Any]):
@@ -667,7 +1345,7 @@ class IntakeOperation:
             page["results"] = [IntakeIssueSerializer(item).data for item in page["results"]]
             return 200, page, None
         if self.action == "retrieve":
-            item = self._queryset(workspace, data).filter(pk=data["work_item_id"]).first()
+            item = self._queryset(workspace, data).filter(issue_id=data["issue_id"]).first()
             if item is None:
                 raise OperationAdapterFailure("OPERATION_REJECTED", 400)
             return 200, IntakeIssueSerializer(item).data, None
@@ -677,7 +1355,7 @@ class IntakeOperation:
                 raise OperationAdapterFailure("OPERATION_REJECTED", 400)
             body = _serializer_data(
                 data,
-                drop={"project_id", "work_item_id", "cursor", "per_page", "order_by", "fields", "expand", "params"},
+                drop={"project_id", "issue_id", "cursor", "per_page", "order_by", "fields", "expand", "params"},
             )
             serializer = IntakeIssueUpdateSerializer(
                 item, data=body, partial=True, context={"project_id": str(data["project_id"])}
@@ -685,6 +1363,7 @@ class IntakeOperation:
             if not serializer.is_valid():
                 raise OperationAdapterFailure("VALIDATION_ERROR", 400)
             serializer.save(updated_by_id=request.user.id)
+            _bind_audit_actor(serializer.instance, request.user.id, created=False)
             return 200, IntakeIssueSerializer(serializer.instance).data, None
         if self.action == "create":
             project = Project.objects.filter(pk=data["project_id"], workspace_id=workspace.id).first()
@@ -732,7 +1411,69 @@ class IntakeOperation:
                     source=SourceType.IN_APP,
                     created_by_id=request.user.id,
                 )
-            return 201, IntakeIssueSerializer(item).data, None
+                _bind_audit_actor(issue, request.user.id, created=True)
+                _bind_audit_actor(item, request.user.id, created=True)
+            return (
+                201,
+                IntakeIssueSerializer(item).data,
+                issue_publication_payload(
+                    request=request,
+                    workspace=workspace,
+                    issue_id=str(issue.id),
+                    project_id=str(project.id),
+                    event_type="issue.activity.created",
+                    requested_data=issue_data,
+                    current_instance_data=None,
+                    notification=True,
+                    deterministic_activity=True,
+                ),
+            )
+        if self.action == "delete":
+            item = self._queryset(workspace, data).filter(issue_id=data["issue_id"]).select_related("issue").first()
+            if item is None:
+                raise OperationAdapterFailure("OPERATION_REJECTED", 400)
+            issue = item.issue
+            issue_publication = None
+            if item.status in {-2, -1, 0, 2}:
+                if (
+                    issue.created_by_id != request.user.id
+                    and not ProjectMember.objects.filter(
+                        workspace_id=workspace.id,
+                        project_id=data["project_id"],
+                        member_id=request.user.id,
+                        role=20,
+                        is_active=True,
+                    ).exists()
+                ):
+                    raise OperationAdapterFailure("NOT_AUTHORIZED", 403)
+                current = json.loads(json.dumps(IssueSerializer(issue).data))
+                issue.delete()
+                issue_publication = issue_publication_payload(
+                    request=request,
+                    workspace=workspace,
+                    issue_id=str(issue.id),
+                    project_id=str(data["project_id"]),
+                    event_type="issue.activity.deleted",
+                    requested_data={"issue_id": str(issue.id)},
+                    current_instance_data=current,
+                    notification=False,
+                    deterministic_activity=True,
+                )
+            item.delete()
+            return (
+                200,
+                {"deleted": True, "id": str(data["issue_id"])},
+                issue_publication
+                or _model_publication_payload(
+                    request=request,
+                    workspace=workspace,
+                    model_name="intake_issue",
+                    model_id=str(data["issue_id"]),
+                    requested_data={"id": str(data["issue_id"])},
+                    current_instance=None,
+                    deleted=True,
+                ),
+            )
         raise OperationAdapterFailure("UNKNOWN_OPERATION", 404)
 
 
@@ -801,6 +1542,19 @@ def _resource_handlers() -> dict[str, Any]:
         ),
     )
     handlers: dict[str, Any] = {
+        "work_item.list": WorkItemOperation("list"),
+        "work_item.create": WorkItemOperation("create"),
+        "work_item.retrieve": WorkItemOperation("retrieve"),
+        "work_item.update": WorkItemOperation("update"),
+        "work_item.delete": WorkItemOperation("delete"),
+        "work_item.search": WorkItemSearchOperation(),
+        "work_item_activity.list": ActivityOperation("list"),
+        "work_item_activity.retrieve": ActivityOperation("retrieve"),
+        "work_item_relation.list": RelationOperation("list"),
+        "work_item_relation.create": RelationOperation("create"),
+        "cycle.work_item.list": AssociationOperation("cycle", "list"),
+        "cycle.transfer": AssociationOperation("cycle", "transfer"),
+        "module.work_item.list": AssociationOperation("module", "list"),
         "work_item.read": WorkItemReadOperation(),
         "work_item.rename": WorkItemRenameOperation(),
         "project_member.list": MemberOperation(workspace_scope=False),
@@ -812,9 +1566,10 @@ def _resource_handlers() -> dict[str, Any]:
         "intake.retrieve": IntakeOperation("retrieve"),
         "intake.create": IntakeOperation("create"),
         "intake.update": IntakeOperation("update"),
+        "intake.delete": IntakeOperation("delete"),
     }
     for spec in specs:
-        for action in ("list", "create", "retrieve", "update"):
+        for action in ("list", "create", "retrieve", "update", "delete"):
             handlers[f"{spec.prefix}.{action}"] = ResourceOperation(spec, action)
     return handlers
 

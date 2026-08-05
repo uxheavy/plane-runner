@@ -65,8 +65,13 @@ class GeneratedAdapterTests(unittest.TestCase):
             {row.registration for row in ADAPTER_REGISTRATIONS},
             {"gateway", "blocked", "local"},
         )
-        self.assertEqual(sum(row.registration == "gateway" for row in ADAPTER_REGISTRATIONS), 43)
-        self.assertEqual(sum(row.registration == "blocked" for row in ADAPTER_REGISTRATIONS), 133)
+        gateway_tools = {row.tool_name for row in ADAPTER_REGISTRATIONS if row.registration == "gateway"}
+        manifest_tools = {action["name"] for action in manifest["actions"]}
+        self.assertEqual(gateway_tools, set(manifest["gateway_overrides"]))
+        self.assertEqual(
+            gateway_tools | {row.tool_name for row in ADAPTER_REGISTRATIONS if row.registration != "gateway"},
+            manifest_tools,
+        )
         for row in ADAPTER_REGISTRATIONS:
             self.assertEqual(
                 row.public_signature, next(a["signature"] for a in manifest["actions"] if a["name"] == row.tool_name)
@@ -115,12 +120,22 @@ class GeneratedAdapterTests(unittest.TestCase):
         )
 
     def test_deferred_and_unknown_actions_fail_closed_with_specific_codes(self):
+        gateway = FakeGateway(result_by_operation={"work_item.retrieve": {"work_item": {"id": "i1", "name": "one"}}})
+        self.assertEqual(
+            SharedSDKGatewayAdapter(gateway).invoke(
+                "retrieve_work_item",
+                {"project_id": "p1", "work_item_id": "i1"},
+                idempotency_key="k",
+                correlation_id="c",
+            ),
+            {"id": "i1", "name": "one"},
+        )
         with self.assertRaises(MCPAdapterError) as deferred:
             SharedSDKGatewayAdapter(FakeGateway()).invoke(
-                "retrieve_work_item", {}, idempotency_key="k", correlation_id="c"
+                "list_work_item_properties", {}, idempotency_key="k", correlation_id="c"
             )
         self.assertEqual(deferred.exception.code, "MCP_ACTION_GATEWAY_MAPPING_UNAVAILABLE")
-        self.assertIn("WORK_ITEM", deferred.exception.message)
+        self.assertIn("WORK_ITEM_PROPERTY", deferred.exception.message)
         with self.assertRaises(MCPAdapterError) as unknown:
             SharedSDKGatewayAdapter(FakeGateway()).invoke(
                 "not_a_public_plane_tool", {}, idempotency_key="k", correlation_id="c"

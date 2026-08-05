@@ -1,4 +1,3 @@
-from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -8,7 +7,6 @@ from plane.operation_gateway.mcp import (
     MCP_COMPATIBILITY_MANIFEST,
     MCPCompatibilityError,
     gateway_operation_for,
-    get_mcp_action,
     require_gateway_operation,
 )
 from plane.operation_gateway.catalog import IMPLEMENTED_OPERATION_IDS, OPERATION_CATALOG
@@ -26,12 +24,9 @@ def test_mcp_manifest_exhaustively_classifies_the_pinned_public_surface():
     assert MCP_COMPATIBILITY_MANIFEST["tool_count"] == 177
     assert len(MCP_ACTIONS) == 177
     assert len({action.name for action in MCP_ACTIONS}) == 177
-    assert len(MCP_COMPATIBILITY_MANIFEST["gateway_overrides"]) == 43
-    assert Counter(action.disposition for action in MCP_ACTIONS) == Counter(
-        {"MCP-D-001": 171, "MCP-D-002": 1, "MCP-D-003": 5}
-    )
-    assert sum(action.gateway_status == "supported" for action in MCP_ACTIONS) == 43
-    assert sum(action.gateway_status == "deferred" for action in MCP_ACTIONS) == 133
+    supported_names = {action.name for action in MCP_ACTIONS if action.gateway_status == "supported"}
+    assert supported_names == set(MCP_COMPATIBILITY_MANIFEST["gateway_overrides"])
+    assert sum(action.disposition == "MCP-D-002" for action in MCP_ACTIONS) == 1
 
     for action in MCP_ACTIONS:
         assert action.source_file.startswith("plane_mcp/tools/")
@@ -81,13 +76,8 @@ def test_deferred_actions_cannot_claim_a_gateway_operation():
 def test_gateway_lookup_is_explicit_and_fail_closed():
     assert gateway_operation_for("get_me") == "user.me"
     assert gateway_operation_for("list_work_item_attachments") == "work_item_attachment.list"
-    assert get_mcp_action("retrieve_work_item") is not None
-    assert gateway_operation_for("retrieve_work_item") is None
-
-    with pytest.raises(MCPCompatibilityError) as deferred:
-        require_gateway_operation("retrieve_work_item")
-    assert deferred.value.code == "MCP_ACTION_GATEWAY_MAPPING_UNAVAILABLE"
-    assert deferred.value.tool_name == "retrieve_work_item"
+    assert gateway_operation_for("retrieve_work_item") == "work_item.retrieve"
+    assert require_gateway_operation("retrieve_work_item") == "work_item.retrieve"
 
     with pytest.raises(MCPCompatibilityError) as unknown:
         gateway_operation_for("not_a_public_plane_tool")
@@ -102,6 +92,34 @@ def test_every_supported_action_reaches_an_explicit_executable_operation():
     assert all(action.mapping_kind == "semantic_gateway_operation_exact_v1" for action in supported)
     assert all(action.name in MCP_COMPATIBILITY_MANIFEST["gateway_overrides"] for action in supported)
     assert len({(action.name, action.gateway_operation_id) for action in supported}) == len(supported)
+
+
+@pytest.mark.contract
+def test_proven_live_action_families_have_one_explicit_operation_mapping():
+    expected = {
+        "list_work_items": "work_item.list",
+        "create_work_item": "work_item.create",
+        "retrieve_work_item": "work_item.retrieve",
+        "update_work_item": "work_item.update",
+        "delete_work_item": "work_item.delete",
+        "search_work_items": "work_item.search",
+        "list_work_item_activities": "work_item_activity.list",
+        "retrieve_work_item_activity": "work_item_activity.retrieve",
+        "list_work_item_relations": "work_item_relation.list",
+        "create_work_item_relation": "work_item_relation.create",
+        "delete_cycle": "cycle.delete",
+        "list_cycle_work_items": "cycle.work_item.list",
+        "transfer_cycle_work_items": "cycle.transfer",
+        "delete_module": "module.delete",
+        "list_module_work_items": "module.work_item.list",
+        "delete_intake_work_item": "intake.delete",
+        "delete_label": "label.delete",
+        "delete_project": "project.delete",
+        "delete_state": "state.delete",
+        "delete_work_item_comment": "comment.delete",
+        "delete_work_item_link": "link.delete",
+    }
+    assert {name: gateway_operation_for(name) for name in expected} == expected
 
 
 @pytest.mark.contract

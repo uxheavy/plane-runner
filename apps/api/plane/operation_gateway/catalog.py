@@ -166,62 +166,74 @@ def _add_resource_operations(
     list_required_input: tuple[str, ...] | None = None,
     create_required_input: tuple[str, ...] | None = None,
     list_result_key: str | None = None,
+    include_delete: bool = False,
 ) -> None:
     """Register one complete CRUD family with explicit typed descriptors."""
 
-    OPERATION_CATALOG.update(
-        {
-            f"{prefix}.list": _descriptor(
-                f"{prefix}.list",
-                kind="read",
-                family=family,
-                summary=f"List bounded {resource_label} records through a canonical Plane application adapter.",
-                required_input=list_required_input
-                if list_required_input is not None
-                else tuple(field for field in fields if field == "project_id"),
-                input_fields=fields,
-                result_key=list_result_key or f"{result_key}s",
-                permission=permission,
-                max_result_bytes=max_result_bytes,
-            ),
-            f"{prefix}.create": _descriptor(
-                f"{prefix}.create",
-                kind="mutation",
-                family=family,
-                summary=f"Create one {resource_label} through a canonical Plane application adapter.",
-                required_input=create_required_input
-                if create_required_input is not None
-                else tuple(field for field in fields if field == "project_id")
-                + tuple(field for field in fields if field == "name"),
-                input_fields=fields,
-                result_key=result_key,
-                permission=permission,
-                max_result_bytes=max_result_bytes,
-            ),
-            f"{prefix}.retrieve": _descriptor(
-                f"{prefix}.retrieve",
-                kind="read",
-                family=family,
-                summary=f"Retrieve one {resource_label} through a canonical Plane application adapter.",
-                required_input=("project_id", retrieve_id),
-                input_fields=fields + (retrieve_id,),
-                result_key=result_key,
-                permission=permission,
-                max_result_bytes=max_result_bytes,
-            ),
-            f"{prefix}.update": _descriptor(
-                f"{prefix}.update",
-                kind="mutation",
-                family=family,
-                summary=f"Update one {resource_label} through a canonical Plane application adapter.",
-                required_input=("project_id", retrieve_id),
-                input_fields=fields + (retrieve_id,),
-                result_key=result_key,
-                permission=permission,
-                max_result_bytes=max_result_bytes,
-            ),
-        }
-    )
+    operations = {
+        f"{prefix}.list": _descriptor(
+            f"{prefix}.list",
+            kind="read",
+            family=family,
+            summary=f"List bounded {resource_label} records through a canonical Plane application adapter.",
+            required_input=list_required_input
+            if list_required_input is not None
+            else tuple(field for field in fields if field == "project_id"),
+            input_fields=fields,
+            result_key=list_result_key or f"{result_key}s",
+            permission=permission,
+            max_result_bytes=max_result_bytes,
+        ),
+        f"{prefix}.create": _descriptor(
+            f"{prefix}.create",
+            kind="mutation",
+            family=family,
+            summary=f"Create one {resource_label} through a canonical Plane application adapter.",
+            required_input=create_required_input
+            if create_required_input is not None
+            else tuple(field for field in fields if field == "project_id")
+            + tuple(field for field in fields if field == "name"),
+            input_fields=fields,
+            result_key=result_key,
+            permission=permission,
+            max_result_bytes=max_result_bytes,
+        ),
+        f"{prefix}.retrieve": _descriptor(
+            f"{prefix}.retrieve",
+            kind="read",
+            family=family,
+            summary=f"Retrieve one {resource_label} through a canonical Plane application adapter.",
+            required_input=("project_id", retrieve_id),
+            input_fields=fields + (retrieve_id,),
+            result_key=result_key,
+            permission=permission,
+            max_result_bytes=max_result_bytes,
+        ),
+        f"{prefix}.update": _descriptor(
+            f"{prefix}.update",
+            kind="mutation",
+            family=family,
+            summary=f"Update one {resource_label} through a canonical Plane application adapter.",
+            required_input=("project_id", retrieve_id),
+            input_fields=fields + (retrieve_id,),
+            result_key=result_key,
+            permission=permission,
+            max_result_bytes=max_result_bytes,
+        ),
+    }
+    if include_delete:
+        operations[f"{prefix}.delete"] = _descriptor(
+            f"{prefix}.delete",
+            kind="mutation",
+            family=family,
+            summary=f"Delete one {resource_label} through a canonical Plane application adapter.",
+            required_input=("project_id", retrieve_id),
+            input_fields=fields + (retrieve_id,),
+            result_key="deleted",
+            permission=permission,
+            max_result_bytes=2048,
+        )
+    OPERATION_CATALOG.update(operations)
 
 
 _add_resource_operations(
@@ -232,6 +244,7 @@ _add_resource_operations(
     fields=COMMON_RESOURCE_FIELDS
     + (
         "issue_id",
+        "description_stripped",
         "assignees",
         "labels",
         "type_id",
@@ -245,8 +258,12 @@ _add_resource_operations(
         "state",
         "estimate_point",
         "type",
+        "pql",
     ),
     retrieve_id="issue_id",
+    list_required_input=(),
+    create_required_input=("project_id", "name"),
+    include_delete=True,
 )
 _add_resource_operations(
     prefix="cycle",
@@ -258,6 +275,7 @@ _add_resource_operations(
     retrieve_id="cycle_id",
     create_required_input=("project_id", "name", "owned_by"),
     list_result_key="cycles",
+    include_delete=True,
 )
 _add_resource_operations(
     prefix="module",
@@ -267,6 +285,7 @@ _add_resource_operations(
     fields=COMMON_RESOURCE_FIELDS + ("module_id", "start_date", "target_date", "status", "lead", "members", "archived"),
     retrieve_id="module_id",
     list_result_key="modules",
+    include_delete=True,
 )
 _add_resource_operations(
     prefix="project",
@@ -310,6 +329,7 @@ _add_resource_operations(
     list_required_input=(),
     create_required_input=("name", "identifier"),
     list_result_key="projects",
+    include_delete=True,
 )
 _add_resource_operations(
     prefix="state",
@@ -321,6 +341,7 @@ _add_resource_operations(
     retrieve_id="state_id",
     create_required_input=("project_id", "name", "color"),
     list_result_key="states",
+    include_delete=True,
 )
 _add_resource_operations(
     prefix="label",
@@ -332,6 +353,7 @@ _add_resource_operations(
     retrieve_id="label_id",
     create_required_input=("project_id", "name"),
     list_result_key="labels",
+    include_delete=True,
 )
 _add_resource_operations(
     prefix="link",
@@ -343,6 +365,7 @@ _add_resource_operations(
     list_required_input=("project_id", "issue_id"),
     create_required_input=("project_id", "issue_id", "url"),
     list_result_key="links",
+    include_delete=True,
 )
 _add_resource_operations(
     prefix="comment",
@@ -363,6 +386,7 @@ _add_resource_operations(
     list_required_input=("project_id", "issue_id"),
     create_required_input=("project_id", "issue_id"),
     list_result_key="comments",
+    include_delete=True,
 )
 _add_resource_operations(
     prefix="intake",
@@ -371,10 +395,147 @@ _add_resource_operations(
     result_key="intake_work_item",
     fields=COMMON_PROJECT_FIELDS
     + ("work_item_id", "data", "status", "snoozed_till", "duplicate_to", "source", "source_email"),
-    retrieve_id="work_item_id",
+    retrieve_id="issue_id",
     create_required_input=("project_id", "data"),
     list_result_key="intake_work_items",
+    include_delete=True,
 )
+
+
+for operation_id, descriptor in (
+    (
+        "work_item.search",
+        _descriptor(
+            "work_item.search",
+            kind="read",
+            family="work_item",
+            summary="Search visible Plane work items by name, identifier, or sequence.",
+            input_fields=("project_id", "query", "expand", "fields", "external_id", "external_source", "order_by"),
+            result_key="issues",
+            permission="workspace",
+            max_result_bytes=12 * 1024,
+        ),
+    ),
+    (
+        "work_item_activity.list",
+        _descriptor(
+            "work_item_activity.list",
+            kind="read",
+            family="work_item_activity",
+            summary="List visible non-comment work-item activity records.",
+            required_input=("project_id", "issue_id"),
+            input_fields=("project_id", "issue_id", "cursor", "per_page", "order_by", "fields", "expand", "params"),
+            result_key="activities",
+            max_result_bytes=12 * 1024,
+        ),
+    ),
+    (
+        "work_item_activity.retrieve",
+        _descriptor(
+            "work_item_activity.retrieve",
+            kind="read",
+            family="work_item_activity",
+            summary="Retrieve one visible non-comment work-item activity record.",
+            required_input=("project_id", "issue_id", "activity_id"),
+            input_fields=("project_id", "issue_id", "activity_id", "fields", "expand", "params"),
+            result_key="activity",
+            max_result_bytes=8 * 1024,
+        ),
+    ),
+    (
+        "work_item_relation.list",
+        _descriptor(
+            "work_item_relation.list",
+            kind="read",
+            family="work_item_relation",
+            summary="List visible relations grouped by Plane relation semantics.",
+            required_input=("project_id", "issue_id"),
+            input_fields=("project_id", "issue_id"),
+            result_key="relations",
+            max_result_bytes=12 * 1024,
+        ),
+    ),
+    (
+        "work_item_relation.create",
+        _descriptor(
+            "work_item_relation.create",
+            kind="mutation",
+            family="work_item_relation",
+            summary="Create visible work-item relations through Plane relation validation.",
+            required_input=("project_id", "issue_id", "work_item_ids"),
+            input_fields=(
+                "project_id",
+                "issue_id",
+                "work_item_ids",
+                "relation_type",
+                "relation_definition_id",
+                "relation_definition_label",
+            ),
+            result_key="relations",
+            max_result_bytes=12 * 1024,
+        ),
+    ),
+    (
+        "cycle.work_item.list",
+        _descriptor(
+            "cycle.work_item.list",
+            kind="read",
+            family="cycle_work_item",
+            summary="List bounded work items associated with one cycle.",
+            required_input=("project_id", "cycle_id"),
+            input_fields=(
+                "project_id",
+                "cycle_id",
+                "pql",
+                "cursor",
+                "per_page",
+                "order_by",
+                "fields",
+                "expand",
+                "params",
+            ),
+            result_key="work_items",
+            max_result_bytes=12 * 1024,
+        ),
+    ),
+    (
+        "cycle.transfer",
+        _descriptor(
+            "cycle.transfer",
+            kind="mutation",
+            family="cycle_work_item",
+            summary="Transfer cycle work items through Plane's canonical transfer helper.",
+            required_input=("project_id", "cycle_id", "new_cycle_id"),
+            input_fields=("project_id", "cycle_id", "new_cycle_id"),
+            result_key="message",
+            max_result_bytes=2048,
+        ),
+    ),
+    (
+        "module.work_item.list",
+        _descriptor(
+            "module.work_item.list",
+            kind="read",
+            family="module_work_item",
+            summary="List bounded work items associated with one module.",
+            required_input=("project_id", "module_id"),
+            input_fields=(
+                "project_id",
+                "module_id",
+                "pql",
+                "cursor",
+                "per_page",
+                "order_by",
+                "fields",
+                "expand",
+                "params",
+            ),
+            result_key="work_items",
+            max_result_bytes=12 * 1024,
+        ),
+    ),
+):
+    OPERATION_CATALOG[operation_id] = descriptor
 
 for operation_id, descriptor in (
     (
@@ -476,35 +637,11 @@ for operation_id, descriptor in (
     OPERATION_CATALOG[operation_id] = descriptor
 
 
-# This is the explicit executable seam used by the MCP generator and contract
-# tests.  Descriptors for other Plane-shaped families remain useful metadata,
-# but they are not executable until a direct adapter is registered here.
-IMPLEMENTED_OPERATION_IDS = frozenset(
-    {
-        "user.me",
-        "work_item.read",
-        "work_item.rename",
-        "work_item_attachment.list",
-        "work_item_attachment.download_url",
-        "work_item_attachment.upload_from_url",
-        "work_item_attachment.delete",
-        "work_item_attachment.read",
-        "page.list",
-        "page.retrieve",
-        "page.create",
-        "project_member.list",
-        "workspace_member.list",
-        "intake.list",
-        "intake.retrieve",
-        "intake.create",
-        "intake.update",
-    }
-    | {
-        f"{prefix}.{action}"
-        for prefix in ("cycle", "module", "project", "state", "label", "link", "comment")
-        for action in ("list", "create", "retrieve", "update")
-    }
-)
+# The executable seam is deliberately derived from the complete descriptor
+# table.  The operation handler module asserts that every non-special row has
+# one concrete registered adapter, so a descriptor cannot silently advertise
+# a false operation.
+IMPLEMENTED_OPERATION_IDS = frozenset(OPERATION_CATALOG)
 
 
 def get_operation(operation_id: str) -> OperationDescriptor | None:

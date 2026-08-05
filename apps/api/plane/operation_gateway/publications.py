@@ -16,7 +16,13 @@ from django.utils import timezone
 from plane.api.serializers import IssueActivitySerializer
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.bgtasks.notification_task import run_notifications
-from plane.bgtasks.webhook_task import WebhookDeliveryResult, deliver_webhook_target, get_model_data
+from plane.bgtasks.webhook_task import (
+    WebhookDeliveryResult,
+    deliver_webhook_target,
+    get_model_data,
+    model_activity,
+    webhook_activity,
+)
 from plane.db.models import IssueActivity, OperationGatewayIdempotency, OperationGatewayPublication, Webhook
 
 from .role_boundary import audited_gateway_boundary
@@ -24,6 +30,7 @@ from .role_boundary import audited_gateway_boundary
 
 PUBLICATION_LEASE_SECONDS = 300
 ACTIVITY_NAMESPACE = uuid.UUID("cbf3b03a-6bc3-4b09-89f1-04f3ffdecd38")
+MODEL_ACTIVITY_KIND = "model_activity"
 
 
 class PublicationDispatchFailure(Exception):
@@ -68,40 +75,56 @@ def create_publication_intents(
         return []
 
     publications: list[OperationGatewayPublication] = []
-    for kind in (
-        OperationGatewayPublication.Kind.ACTIVITY,
-        OperationGatewayPublication.Kind.NOTIFICATION,
-    ):
-        publication_payload = payload.get(kind)
-        if not isinstance(publication_payload, dict):
-            raise PublicationDispatchFailure(f"Missing {kind} publication payload", retryable=False)
-        publication_key = f"{record.id}:{kind}"
+    model_payload = payload.get("model_activity")
+    if isinstance(model_payload, dict):
+        kind = MODEL_ACTIVITY_KIND
         publication, _ = OperationGatewayPublication.objects.get_or_create(
             idempotency=record,
             kind=kind,
             target_id=None,
             defaults={
                 "invocation_id": record.invocation_id,
-                "publication_key": publication_key,
-                "payload": publication_payload,
+                "publication_key": f"{record.id}:{kind}",
+                "payload": model_payload,
             },
         )
-        changed = False
-        expected_activity_id = activity_id_for_publication(f"{record.id}:activity")
-        if kind == OperationGatewayPublication.Kind.ACTIVITY:
-            if publication.payload.get("activity_id") != expected_activity_id:
-                publication.payload["activity_id"] = expected_activity_id
-                changed = True
-        elif publication.payload.get("activity_id") != expected_activity_id:
-            publication.payload["activity_id"] = expected_activity_id
-            changed = True
-        if changed:
-            publication.save(update_fields=["payload", "updated_at"])
         publications.append(publication)
+    else:
+        for kind in (
+            OperationGatewayPublication.Kind.ACTIVITY,
+            OperationGatewayPublication.Kind.NOTIFICATION,
+        ):
+            publication_payload = payload.get(kind)
+            if not isinstance(publication_payload, dict):
+                raise PublicationDispatchFailure(f"Missing {kind} publication payload", retryable=False)
+            publication_key = f"{record.id}:{kind}"
+            publication, _ = OperationGatewayPublication.objects.get_or_create(
+                idempotency=record,
+                kind=kind,
+                target_id=None,
+                defaults={
+                    "invocation_id": record.invocation_id,
+                    "publication_key": publication_key,
+                    "payload": publication_payload,
+                },
+            )
+            changed = False
+            if publication_payload.get("deterministic_activity", True):
+                expected_activity_id = activity_id_for_publication(f"{record.id}:activity")
+                if publication.payload.get("activity_id") != expected_activity_id:
+                    publication.payload["activity_id"] = expected_activity_id
+                    changed = True
+            if changed:
+                publication.save(update_fields=["payload", "updated_at"])
+            publications.append(publication)
 
     webhook_payload = payload.get(OperationGatewayPublication.Kind.WEBHOOK)
+    if isinstance(model_payload, dict):
+        return publications
     if not isinstance(webhook_payload, dict):
         raise PublicationDispatchFailure("Missing webhook publication payload", retryable=False)
+    if webhook_payload.get("skip"):
+        return publications
 
     requested_webhook_id = webhook_payload.get("webhook_id")
     existing_target_ids = set(
@@ -165,9 +188,13 @@ def dispatch_publication_once(publication_id: str) -> None:
             if publication.state != OperationGatewayPublication.State.RUNNING:
                 return
             if publication.kind == OperationGatewayPublication.Kind.ACTIVITY:
-                _dispatch_activity(publication.payload)
+                activity_ids = _dispatch_activity(publication.payload)
+                if activity_ids:
+                    publication.payload["activity_ids"] = activity_ids[:32]
             elif publication.kind == OperationGatewayPublication.Kind.NOTIFICATION:
                 _dispatch_notification(publication)
+            elif publication.kind == MODEL_ACTIVITY_KIND:
+                _dispatch_model_activity(publication.payload)
             else:
                 raise PublicationDispatchFailure("Unknown publication kind", retryable=False)
             publication.state = OperationGatewayPublication.State.SUCCEEDED
@@ -182,6 +209,7 @@ def dispatch_publication_once(publication_id: str) -> None:
                     "lease_until",
                     "published_at",
                     "delivery_result",
+                    "payload",
                     "updated_at",
                 ]
             )
@@ -211,9 +239,7 @@ def _claim_publication(publication_id: str) -> PublicationClaim | None:
                     "state": OperationGatewayPublication.State.OUTCOME_UNKNOWN,
                     "reason": "worker_lease_expired_after_dispatch_started",
                 }
-                publication.save(
-                    update_fields=["state", "lease_until", "last_error", "delivery_result", "updated_at"]
-                )
+                publication.save(update_fields=["state", "lease_until", "last_error", "delivery_result", "updated_at"])
                 return None
 
         publication.state = OperationGatewayPublication.State.RUNNING
@@ -293,11 +319,7 @@ def _finalize_external_publication(publication_id: uuid.UUID, result: WebhookDel
 
 def _record_dispatch_failure(publication_id: uuid.UUID, error: Exception) -> None:
     retryable = getattr(error, "retryable", True)
-    state = (
-        OperationGatewayPublication.State.RETRYABLE
-        if retryable
-        else OperationGatewayPublication.State.FAILED
-    )
+    state = OperationGatewayPublication.State.RETRYABLE if retryable else OperationGatewayPublication.State.FAILED
     with transaction.atomic():
         publication = OperationGatewayPublication.objects.select_for_update().get(pk=publication_id)
         if publication.state not in (
@@ -342,19 +364,19 @@ def _mark_outcome_unknown(publication_id: uuid.UUID, reason: str) -> None:
         )
 
 
-def _dispatch_activity(payload: dict[str, Any]) -> None:
+def _dispatch_activity(payload: dict[str, Any]) -> list[str]:
     if not payload.get("expected", True):
-        return
+        return []
     activity_id = payload.get("activity_id")
-    if not activity_id:
-        raise PublicationDispatchFailure("Activity publication has no durable activity identity", retryable=False)
-    if activity_id and IssueActivity.objects.filter(
-        pk=activity_id,
-        issue_id=payload["issue_id"],
-        actor_id=payload["actor_id"],
-        field="name",
-    ).exists():
-        return
+    if (
+        activity_id
+        and IssueActivity.objects.filter(
+            pk=activity_id,
+            issue_id=payload["issue_id"],
+            actor_id=payload["actor_id"],
+        ).exists()
+    ):
+        return [str(activity_id)]
     created_ids = issue_activity.run(
         type=payload["type"],
         requested_data=payload["requested_data"],
@@ -373,14 +395,43 @@ def _dispatch_activity(payload: dict[str, Any]) -> None:
             pk=activity_id,
             issue_id=payload["issue_id"],
             actor_id=payload["actor_id"],
-            field="name",
         ).exists():
             raise PublicationDispatchFailure("Activity task completed without its durable activity row")
     if not created_ids:
         raise PublicationDispatchFailure("Activity task completed without an activity row")
+    return created_ids
+
+
+def _dispatch_model_activity(payload: dict[str, Any]) -> None:
+    if payload.get("deleted"):
+        webhook_activity.run(
+            event=payload["model_name"],
+            verb="deleted",
+            field=None,
+            old_value=None,
+            new_value=None,
+            actor_id=payload["actor_id"],
+            slug=payload["slug"],
+            current_site=payload.get("origin"),
+            event_id=payload["model_id"],
+            old_identifier=None,
+            new_identifier=None,
+        )
+        return
+    model_activity.run(
+        model_name=payload["model_name"],
+        model_id=payload["model_id"],
+        requested_data=payload.get("requested_data") or {},
+        current_instance=payload.get("current_instance"),
+        actor_id=payload["actor_id"],
+        slug=payload["slug"],
+        origin=payload.get("origin"),
+    )
 
 
 def _dispatch_notification(publication: OperationGatewayPublication) -> None:
+    if publication.payload.get("skip"):
+        return
     activity_publication = OperationGatewayPublication.objects.get(
         idempotency_id=publication.idempotency_id,
         kind=OperationGatewayPublication.Kind.ACTIVITY,
@@ -393,19 +444,30 @@ def _dispatch_notification(publication: OperationGatewayPublication) -> None:
         raise PublicationDispatchFailure("Activity publication is not resolved")
 
     payload = publication.payload
+    activity_ids = payload.get("activity_ids") or activity_publication.payload.get("activity_ids")
     activity_id = payload.get("activity_id") or activity_publication.payload.get("activity_id")
-    if not activity_id:
+    if activity_ids:
+        activity_queryset = IssueActivity.objects.filter(
+            pk__in=activity_ids,
+            issue_id=payload["issue_id"],
+            actor_id=payload["actor_id"],
+        )
+        activities = list(activity_queryset)
+    elif activity_id:
+        activities = list(
+            IssueActivity.objects.filter(
+                pk=activity_id,
+                issue_id=payload["issue_id"],
+                actor_id=payload["actor_id"],
+                field="name",
+            )
+        )
+    else:
         raise PublicationDispatchFailure("Notification intent has no activity identity", retryable=False)
-    activity = IssueActivity.objects.filter(
-        pk=activity_id,
-        issue_id=payload["issue_id"],
-        actor_id=payload["actor_id"],
-        field="name",
-    ).first()
-    if activity is None:
+    if not activities:
         raise PublicationDispatchFailure("Notification activity is missing", retryable=False)
     activity_data = json.dumps(
-        [IssueActivitySerializer(activity).data],
+        IssueActivitySerializer(activities, many=True).data,
         cls=DjangoJSONEncoder,
     )
     try:
@@ -419,7 +481,7 @@ def _dispatch_notification(publication: OperationGatewayPublication) -> None:
             requested_data=payload["requested_data"],
             current_instance=payload["current_instance"],
             idempotency_key=publication.publication_key,
-            activity_id=str(activity.id),
+            activity_id=str(activities[0].id),
         )
     except Exception as error:
         raise PublicationDispatchFailure(str(error)) from error

@@ -1,6 +1,6 @@
 {
   "schema_version": "plane.mcp-adapter-registry/v1",
-  "manifest_digest": "774768acb9a82aaea599b34a5f9735bdb44171a7854979c1aaa5ed39e1af5e56",
+  "manifest_digest": "a84b03c258c5b5c2b74aec1ed4b27a6468974ffbb6273a038bf5d9a452483c90",
   "source": {
     "repository": "https://github.com/makeplane/plane-mcp-server",
     "commit": "96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1",
@@ -24,7 +24,7 @@
         "plane_mcp.tools.customers.base:list_customers"
       ],
       "blocker": {
-        "code": "CUSTOMER_DOMAIN_ADAPTER_UNAVAILABLE",
+        "code": "CUSTOMER_DOMAIN_ADAPTER_UNAVAILABLE_LIST_CUSTOMERS_DEFERRED",
         "action": "list_customers",
         "required_semantic_shape": {
           "category": "customers.base",
@@ -38,11 +38,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Plane has no safe reusable customer application service in this commit."
+        "reason": "Public action list_customers is individually deferred: Plane has no safe reusable customer application service in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/customers/base.py",
       "source_line": 20,
@@ -62,7 +62,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CUSTOMER_DOMAIN_ADAPTER_UNAVAILABLE"
+      "rationale_code": "CUSTOMER_DOMAIN_ADAPTER_UNAVAILABLE_LIST_CUSTOMERS_DEFERRED"
     },
     {
       "tool_name": "create_customer",
@@ -79,7 +79,7 @@
         "plane_mcp.tools.customers.base:create_customer"
       ],
       "blocker": {
-        "code": "CUSTOMER_DOMAIN_ADAPTER_UNAVAILABLE",
+        "code": "CUSTOMER_DOMAIN_ADAPTER_UNAVAILABLE_CREATE_CUSTOMER_DEFERRED",
         "action": "create_customer",
         "required_semantic_shape": {
           "category": "customers.base",
@@ -97,7 +97,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Plane has no safe reusable customer application service in this commit."
+        "reason": "Public action create_customer is individually deferred: Plane has no safe reusable customer application service in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/customers/base.py",
       "source_line": 41,
@@ -116,7 +116,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CUSTOMER_DOMAIN_ADAPTER_UNAVAILABLE"
+      "rationale_code": "CUSTOMER_DOMAIN_ADAPTER_UNAVAILABLE_CREATE_CUSTOMER_DEFERRED"
     },
     {
       "tool_name": "retrieve_customer",
@@ -133,7 +133,7 @@
         "plane_mcp.tools.customers.base:retrieve_customer"
       ],
       "blocker": {
-        "code": "CUSTOMER_DOMAIN_ADAPTER_UNAVAILABLE",
+        "code": "CUSTOMER_DOMAIN_ADAPTER_UNAVAILABLE_RETRIEVE_CUSTOMER_DEFERRED",
         "action": "retrieve_customer",
         "required_semantic_shape": {
           "category": "customers.base",
@@ -147,11 +147,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Plane has no safe reusable customer application service in this commit."
+        "reason": "Public action retrieve_customer is individually deferred: Plane has no safe reusable customer application service in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/customers/base.py",
       "source_line": 100,
@@ -170,7 +170,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CUSTOMER_DOMAIN_ADAPTER_UNAVAILABLE"
+      "rationale_code": "CUSTOMER_DOMAIN_ADAPTER_UNAVAILABLE_RETRIEVE_CUSTOMER_DEFERRED"
     },
     {
       "tool_name": "update_customer",
@@ -187,7 +187,7 @@
         "plane_mcp.tools.customers.base:update_customer"
       ],
       "blocker": {
-        "code": "CUSTOMER_DOMAIN_ADAPTER_UNAVAILABLE",
+        "code": "CUSTOMER_DOMAIN_ADAPTER_UNAVAILABLE_UPDATE_CUSTOMER_DEFERRED",
         "action": "update_customer",
         "required_semantic_shape": {
           "category": "customers.base",
@@ -205,7 +205,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Plane has no safe reusable customer application service in this commit."
+        "reason": "Public action update_customer is individually deferred: Plane has no safe reusable customer application service in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/customers/base.py",
       "source_line": 114,
@@ -224,7 +224,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CUSTOMER_DOMAIN_ADAPTER_UNAVAILABLE"
+      "rationale_code": "CUSTOMER_DOMAIN_ADAPTER_UNAVAILABLE_UPDATE_CUSTOMER_DEFERRED"
     },
     {
       "tool_name": "delete_customer",
@@ -241,7 +241,7 @@
         "plane_mcp.tools.customers.base:delete_customer"
       ],
       "blocker": {
-        "code": "CUSTOMER_DOMAIN_ADAPTER_UNAVAILABLE",
+        "code": "CUSTOMER_DOMAIN_ADAPTER_UNAVAILABLE_DELETE_CUSTOMER_DEFERRED",
         "action": "delete_customer",
         "required_semantic_shape": {
           "category": "customers.base",
@@ -259,7 +259,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Plane has no safe reusable customer application service in this commit."
+        "reason": "Public action delete_customer is individually deferred: Plane has no safe reusable customer application service in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/customers/base.py",
       "source_line": 172,
@@ -278,7 +278,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CUSTOMER_DOMAIN_ADAPTER_UNAVAILABLE"
+      "rationale_code": "CUSTOMER_DOMAIN_ADAPTER_UNAVAILABLE_DELETE_CUSTOMER_DEFERRED"
     },
     {
       "tool_name": "list_customer_properties",
@@ -295,7 +295,7 @@
         "plane_mcp.tools.customers.properties:list_customer_properties"
       ],
       "blocker": {
-        "code": "CUSTOMER_PROPERTY_ADAPTER_UNAVAILABLE",
+        "code": "CUSTOMER_PROPERTY_ADAPTER_UNAVAILABLE_6addb0a5ca32",
         "action": "list_customer_properties",
         "required_semantic_shape": {
           "category": "customers.properties",
@@ -309,11 +309,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Customer property semantics require the unavailable customer domain adapter."
+        "reason": "Public action list_customer_properties is individually deferred: Customer property semantics require the unavailable customer domain adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/customers/properties.py",
       "source_line": 20,
@@ -333,7 +333,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CUSTOMER_PROPERTY_ADAPTER_UNAVAILABLE"
+      "rationale_code": "CUSTOMER_PROPERTY_ADAPTER_UNAVAILABLE_6addb0a5ca32"
     },
     {
       "tool_name": "create_customer_property",
@@ -350,7 +350,7 @@
         "plane_mcp.tools.customers.properties:create_customer_property"
       ],
       "blocker": {
-        "code": "CUSTOMER_PROPERTY_ADAPTER_UNAVAILABLE",
+        "code": "CUSTOMER_PROPERTY_ADAPTER_UNAVAILABLE_1b871332d324",
         "action": "create_customer_property",
         "required_semantic_shape": {
           "category": "customers.properties",
@@ -368,7 +368,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Customer property semantics require the unavailable customer domain adapter."
+        "reason": "Public action create_customer_property is individually deferred: Customer property semantics require the unavailable customer domain adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/customers/properties.py",
       "source_line": 43,
@@ -387,7 +387,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CUSTOMER_PROPERTY_ADAPTER_UNAVAILABLE"
+      "rationale_code": "CUSTOMER_PROPERTY_ADAPTER_UNAVAILABLE_1b871332d324"
     },
     {
       "tool_name": "retrieve_customer_property",
@@ -404,7 +404,7 @@
         "plane_mcp.tools.customers.properties:retrieve_customer_property"
       ],
       "blocker": {
-        "code": "CUSTOMER_PROPERTY_ADAPTER_UNAVAILABLE",
+        "code": "CUSTOMER_PROPERTY_ADAPTER_UNAVAILABLE_3be038efa8d4",
         "action": "retrieve_customer_property",
         "required_semantic_shape": {
           "category": "customers.properties",
@@ -418,11 +418,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Customer property semantics require the unavailable customer domain adapter."
+        "reason": "Public action retrieve_customer_property is individually deferred: Customer property semantics require the unavailable customer domain adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/customers/properties.py",
       "source_line": 105,
@@ -441,7 +441,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CUSTOMER_PROPERTY_ADAPTER_UNAVAILABLE"
+      "rationale_code": "CUSTOMER_PROPERTY_ADAPTER_UNAVAILABLE_3be038efa8d4"
     },
     {
       "tool_name": "update_customer_property",
@@ -458,7 +458,7 @@
         "plane_mcp.tools.customers.properties:update_customer_property"
       ],
       "blocker": {
-        "code": "CUSTOMER_PROPERTY_ADAPTER_UNAVAILABLE",
+        "code": "CUSTOMER_PROPERTY_ADAPTER_UNAVAILABLE_eb237d3c7b99",
         "action": "update_customer_property",
         "required_semantic_shape": {
           "category": "customers.properties",
@@ -476,7 +476,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Customer property semantics require the unavailable customer domain adapter."
+        "reason": "Public action update_customer_property is individually deferred: Customer property semantics require the unavailable customer domain adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/customers/properties.py",
       "source_line": 119,
@@ -495,7 +495,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CUSTOMER_PROPERTY_ADAPTER_UNAVAILABLE"
+      "rationale_code": "CUSTOMER_PROPERTY_ADAPTER_UNAVAILABLE_eb237d3c7b99"
     },
     {
       "tool_name": "delete_customer_property",
@@ -512,7 +512,7 @@
         "plane_mcp.tools.customers.properties:delete_customer_property"
       ],
       "blocker": {
-        "code": "CUSTOMER_PROPERTY_ADAPTER_UNAVAILABLE",
+        "code": "CUSTOMER_PROPERTY_ADAPTER_UNAVAILABLE_f3ec4efa53c0",
         "action": "delete_customer_property",
         "required_semantic_shape": {
           "category": "customers.properties",
@@ -530,7 +530,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Customer property semantics require the unavailable customer domain adapter."
+        "reason": "Public action delete_customer_property is individually deferred: Customer property semantics require the unavailable customer domain adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/customers/properties.py",
       "source_line": 169,
@@ -549,7 +549,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CUSTOMER_PROPERTY_ADAPTER_UNAVAILABLE"
+      "rationale_code": "CUSTOMER_PROPERTY_ADAPTER_UNAVAILABLE_f3ec4efa53c0"
     },
     {
       "tool_name": "get_customer_property_values",
@@ -566,7 +566,7 @@
         "plane_mcp.tools.customers.property_values:get_customer_property_values"
       ],
       "blocker": {
-        "code": "CUSTOMER_PROPERTY_VALUE_ADAPTER_UNAVAILABLE",
+        "code": "CUSTOMER_PROPERTY_VALUE_ADAPTER_UNAVAILABLE_bf7860b050e2",
         "action": "get_customer_property_values",
         "required_semantic_shape": {
           "category": "customers.property_values",
@@ -580,11 +580,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Customer property-value mutations require the unavailable customer domain adapter."
+        "reason": "Public action get_customer_property_values is individually deferred: Customer property-value mutations require the unavailable customer domain adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/customers/property_values.py",
       "source_line": 13,
@@ -603,7 +603,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CUSTOMER_PROPERTY_VALUE_ADAPTER_UNAVAILABLE"
+      "rationale_code": "CUSTOMER_PROPERTY_VALUE_ADAPTER_UNAVAILABLE_bf7860b050e2"
     },
     {
       "tool_name": "set_customer_property_values",
@@ -620,7 +620,7 @@
         "plane_mcp.tools.customers.property_values:set_customer_property_values"
       ],
       "blocker": {
-        "code": "CUSTOMER_PROPERTY_VALUE_ADAPTER_UNAVAILABLE",
+        "code": "CUSTOMER_PROPERTY_VALUE_ADAPTER_UNAVAILABLE_7b7951097e63",
         "action": "set_customer_property_values",
         "required_semantic_shape": {
           "category": "customers.property_values",
@@ -638,7 +638,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Customer property-value mutations require the unavailable customer domain adapter."
+        "reason": "Public action set_customer_property_values is individually deferred: Customer property-value mutations require the unavailable customer domain adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/customers/property_values.py",
       "source_line": 35,
@@ -657,7 +657,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CUSTOMER_PROPERTY_VALUE_ADAPTER_UNAVAILABLE"
+      "rationale_code": "CUSTOMER_PROPERTY_VALUE_ADAPTER_UNAVAILABLE_7b7951097e63"
     },
     {
       "tool_name": "list_customer_requests",
@@ -674,7 +674,7 @@
         "plane_mcp.tools.customers.requests:list_customer_requests"
       ],
       "blocker": {
-        "code": "CUSTOMER_REQUEST_ADAPTER_UNAVAILABLE",
+        "code": "CUSTOMER_REQUEST_ADAPTER_UNAVAILABLE_ec5c75737a47",
         "action": "list_customer_requests",
         "required_semantic_shape": {
           "category": "customers.requests",
@@ -688,11 +688,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Customer request semantics require the unavailable customer domain adapter."
+        "reason": "Public action list_customer_requests is individually deferred: Customer request semantics require the unavailable customer domain adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/customers/requests.py",
       "source_line": 19,
@@ -712,7 +712,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CUSTOMER_REQUEST_ADAPTER_UNAVAILABLE"
+      "rationale_code": "CUSTOMER_REQUEST_ADAPTER_UNAVAILABLE_ec5c75737a47"
     },
     {
       "tool_name": "create_customer_request",
@@ -729,7 +729,7 @@
         "plane_mcp.tools.customers.requests:create_customer_request"
       ],
       "blocker": {
-        "code": "CUSTOMER_REQUEST_ADAPTER_UNAVAILABLE",
+        "code": "CUSTOMER_REQUEST_ADAPTER_UNAVAILABLE_96fce50e1a51",
         "action": "create_customer_request",
         "required_semantic_shape": {
           "category": "customers.requests",
@@ -747,7 +747,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Customer request semantics require the unavailable customer domain adapter."
+        "reason": "Public action create_customer_request is individually deferred: Customer request semantics require the unavailable customer domain adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/customers/requests.py",
       "source_line": 49,
@@ -766,7 +766,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CUSTOMER_REQUEST_ADAPTER_UNAVAILABLE"
+      "rationale_code": "CUSTOMER_REQUEST_ADAPTER_UNAVAILABLE_96fce50e1a51"
     },
     {
       "tool_name": "retrieve_customer_request",
@@ -783,7 +783,7 @@
         "plane_mcp.tools.customers.requests:retrieve_customer_request"
       ],
       "blocker": {
-        "code": "CUSTOMER_REQUEST_ADAPTER_UNAVAILABLE",
+        "code": "CUSTOMER_REQUEST_ADAPTER_UNAVAILABLE_b8ef8e456ca1",
         "action": "retrieve_customer_request",
         "required_semantic_shape": {
           "category": "customers.requests",
@@ -797,11 +797,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Customer request semantics require the unavailable customer domain adapter."
+        "reason": "Public action retrieve_customer_request is individually deferred: Customer request semantics require the unavailable customer domain adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/customers/requests.py",
       "source_line": 82,
@@ -820,7 +820,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CUSTOMER_REQUEST_ADAPTER_UNAVAILABLE"
+      "rationale_code": "CUSTOMER_REQUEST_ADAPTER_UNAVAILABLE_b8ef8e456ca1"
     },
     {
       "tool_name": "update_customer_request",
@@ -837,7 +837,7 @@
         "plane_mcp.tools.customers.requests:update_customer_request"
       ],
       "blocker": {
-        "code": "CUSTOMER_REQUEST_ADAPTER_UNAVAILABLE",
+        "code": "CUSTOMER_REQUEST_ADAPTER_UNAVAILABLE_c8756393fdfa",
         "action": "update_customer_request",
         "required_semantic_shape": {
           "category": "customers.requests",
@@ -855,7 +855,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Customer request semantics require the unavailable customer domain adapter."
+        "reason": "Public action update_customer_request is individually deferred: Customer request semantics require the unavailable customer domain adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/customers/requests.py",
       "source_line": 99,
@@ -874,7 +874,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CUSTOMER_REQUEST_ADAPTER_UNAVAILABLE"
+      "rationale_code": "CUSTOMER_REQUEST_ADAPTER_UNAVAILABLE_c8756393fdfa"
     },
     {
       "tool_name": "delete_customer_request",
@@ -891,7 +891,7 @@
         "plane_mcp.tools.customers.requests:delete_customer_request"
       ],
       "blocker": {
-        "code": "CUSTOMER_REQUEST_ADAPTER_UNAVAILABLE",
+        "code": "CUSTOMER_REQUEST_ADAPTER_UNAVAILABLE_e8ad652ed309",
         "action": "delete_customer_request",
         "required_semantic_shape": {
           "category": "customers.requests",
@@ -909,7 +909,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Customer request semantics require the unavailable customer domain adapter."
+        "reason": "Public action delete_customer_request is individually deferred: Customer request semantics require the unavailable customer domain adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/customers/requests.py",
       "source_line": 132,
@@ -928,7 +928,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CUSTOMER_REQUEST_ADAPTER_UNAVAILABLE"
+      "rationale_code": "CUSTOMER_REQUEST_ADAPTER_UNAVAILABLE_e8ad652ed309"
     },
     {
       "tool_name": "list_customer_work_items",
@@ -945,7 +945,7 @@
         "plane_mcp.tools.customers.work_items:list_customer_work_items"
       ],
       "blocker": {
-        "code": "CUSTOMER_WORK_ITEM_ADAPTER_UNAVAILABLE",
+        "code": "CUSTOMER_WORK_ITEM_ADAPTER_UNAVAILABLE_95972f3fe672",
         "action": "list_customer_work_items",
         "required_semantic_shape": {
           "category": "customers.work_items",
@@ -959,11 +959,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Customer-scoped work-item semantics are not safely reusable from this commit."
+        "reason": "Public action list_customer_work_items is individually deferred: Customer-scoped work-item semantics are not safely reusable from this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/customers/work_items.py",
       "source_line": 16,
@@ -982,7 +982,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CUSTOMER_WORK_ITEM_ADAPTER_UNAVAILABLE"
+      "rationale_code": "CUSTOMER_WORK_ITEM_ADAPTER_UNAVAILABLE_95972f3fe672"
     },
     {
       "tool_name": "manage_customer_work_items",
@@ -999,7 +999,7 @@
         "plane_mcp.tools.customers.work_items:manage_customer_work_items"
       ],
       "blocker": {
-        "code": "CUSTOMER_WORK_ITEM_ADAPTER_UNAVAILABLE",
+        "code": "CUSTOMER_WORK_ITEM_ADAPTER_UNAVAILABLE_5fc6f0f23779",
         "action": "manage_customer_work_items",
         "required_semantic_shape": {
           "category": "customers.work_items",
@@ -1017,7 +1017,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Customer-scoped work-item semantics are not safely reusable from this commit."
+        "reason": "Public action manage_customer_work_items is individually deferred: Customer-scoped work-item semantics are not safely reusable from this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/customers/work_items.py",
       "source_line": 41,
@@ -1036,7 +1036,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CUSTOMER_WORK_ITEM_ADAPTER_UNAVAILABLE"
+      "rationale_code": "CUSTOMER_WORK_ITEM_ADAPTER_UNAVAILABLE_5fc6f0f23779"
     },
     {
       "tool_name": "list_cycles",
@@ -1174,38 +1174,17 @@
     {
       "tool_name": "delete_cycle",
       "adapter": "shared_sdk_transport",
-      "registration": "blocked",
-      "gateway_schema_version": null,
-      "gateway_operation_id": null,
-      "result_key": null,
-      "result_mode": "blocked",
+      "registration": "gateway",
+      "gateway_schema_version": "plane.operation/v1",
+      "gateway_operation_id": "cycle.delete",
+      "result_key": "deleted",
+      "result_mode": "none",
       "input_aliases": {},
       "public_signature": "project_id: str, cycle_id: str",
       "return_annotation": "None",
       "sdk_entrypoints": [
         "plane_mcp.tools.cycles:delete_cycle"
       ],
-      "blocker": {
-        "code": "CYCLES_ADAPTER_UNAVAILABLE",
-        "action": "delete_cycle",
-        "required_semantic_shape": {
-          "category": "cycles",
-          "behavior": "mutation",
-          "mutation": true,
-          "signature": "project_id: str, cycle_id: str",
-          "return_annotation": "None",
-          "sdk_entrypoints": [
-            "plane_mcp.tools.cycles:delete_cycle"
-          ]
-        },
-        "blocked_capabilities": [
-          "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
-        ],
-        "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable cycles application adapter is registered in this commit."
-      },
       "source_file": "plane_mcp/tools/cycles.py",
       "source_line": 179,
       "behavior": "mutation",
@@ -1223,7 +1202,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CYCLES_ADAPTER_UNAVAILABLE"
+      "rationale_code": "SEMANTIC_GATEWAY_OPERATION_EXACT"
     },
     {
       "tool_name": "manage_cycle_work_items",
@@ -1240,7 +1219,7 @@
         "plane_mcp.tools.cycles:manage_cycle_work_items"
       ],
       "blocker": {
-        "code": "CYCLES_ADAPTER_UNAVAILABLE",
+        "code": "CYCLES_ADAPTER_UNAVAILABLE_MANAGE_CYCLE_WORK_ITEMS_DEFERRED",
         "action": "manage_cycle_work_items",
         "required_semantic_shape": {
           "category": "cycles",
@@ -1258,7 +1237,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable cycles application adapter is registered in this commit."
+        "reason": "Public action manage_cycle_work_items is individually deferred: No safe reusable cycles application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/cycles.py",
       "source_line": 192,
@@ -1277,43 +1256,22 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CYCLES_ADAPTER_UNAVAILABLE"
+      "rationale_code": "CYCLES_ADAPTER_UNAVAILABLE_MANAGE_CYCLE_WORK_ITEMS_DEFERRED"
     },
     {
       "tool_name": "list_cycle_work_items",
       "adapter": "shared_sdk_transport",
-      "registration": "blocked",
-      "gateway_schema_version": null,
-      "gateway_operation_id": null,
-      "result_key": null,
-      "result_mode": "blocked",
+      "registration": "gateway",
+      "gateway_schema_version": "plane.operation/v1",
+      "gateway_operation_id": "cycle.work_item.list",
+      "result_key": "work_items",
+      "result_mode": "value",
       "input_aliases": {},
       "public_signature": "project_id: str, cycle_id: str, pql: Annotated[str | None, Field(description=PQL_FIELD_HINT)]=None, order_by: str | None=None, per_page: int | None=None, cursor: str | None=None, expand: str | None=None, fields: str | None=None",
       "return_annotation": "dict[str, Any]",
       "sdk_entrypoints": [
         "plane_mcp.tools.cycles:list_cycle_work_items"
       ],
-      "blocker": {
-        "code": "CYCLES_ADAPTER_UNAVAILABLE",
-        "action": "list_cycle_work_items",
-        "required_semantic_shape": {
-          "category": "cycles",
-          "behavior": "read",
-          "mutation": false,
-          "signature": "project_id: str, cycle_id: str, pql: Annotated[str | None, Field(description=PQL_FIELD_HINT)]=None, order_by: str | None=None, per_page: int | None=None, cursor: str | None=None, expand: str | None=None, fields: str | None=None",
-          "return_annotation": "dict[str, Any]",
-          "sdk_entrypoints": [
-            "plane_mcp.tools.cycles:list_cycle_work_items"
-          ]
-        },
-        "blocked_capabilities": [
-          "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
-        ],
-        "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable cycles application adapter is registered in this commit."
-      },
       "source_file": "plane_mcp/tools/cycles.py",
       "source_line": 229,
       "behavior": "read",
@@ -1332,43 +1290,22 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CYCLES_ADAPTER_UNAVAILABLE"
+      "rationale_code": "SEMANTIC_GATEWAY_OPERATION_EXACT"
     },
     {
       "tool_name": "transfer_cycle_work_items",
       "adapter": "shared_sdk_transport",
-      "registration": "blocked",
-      "gateway_schema_version": null,
-      "gateway_operation_id": null,
-      "result_key": null,
-      "result_mode": "blocked",
+      "registration": "gateway",
+      "gateway_schema_version": "plane.operation/v1",
+      "gateway_operation_id": "cycle.transfer",
+      "result_key": "message",
+      "result_mode": "value",
       "input_aliases": {},
       "public_signature": "project_id: str, cycle_id: str, new_cycle_id: str",
       "return_annotation": "None",
       "sdk_entrypoints": [
         "plane_mcp.tools.cycles:transfer_cycle_work_items"
       ],
-      "blocker": {
-        "code": "CYCLES_ADAPTER_UNAVAILABLE",
-        "action": "transfer_cycle_work_items",
-        "required_semantic_shape": {
-          "category": "cycles",
-          "behavior": "mutation",
-          "mutation": true,
-          "signature": "project_id: str, cycle_id: str, new_cycle_id: str",
-          "return_annotation": "None",
-          "sdk_entrypoints": [
-            "plane_mcp.tools.cycles:transfer_cycle_work_items"
-          ]
-        },
-        "blocked_capabilities": [
-          "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
-        ],
-        "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable cycles application adapter is registered in this commit."
-      },
       "source_file": "plane_mcp/tools/cycles.py",
       "source_line": 295,
       "behavior": "mutation",
@@ -1386,7 +1323,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CYCLES_ADAPTER_UNAVAILABLE"
+      "rationale_code": "SEMANTIC_GATEWAY_OPERATION_EXACT"
     },
     {
       "tool_name": "manage_cycle_archive",
@@ -1403,7 +1340,7 @@
         "plane_mcp.tools.cycles:manage_cycle_archive"
       ],
       "blocker": {
-        "code": "CYCLES_ADAPTER_UNAVAILABLE",
+        "code": "CYCLES_ADAPTER_UNAVAILABLE_MANAGE_CYCLE_ARCHIVE_DEFERRED",
         "action": "manage_cycle_archive",
         "required_semantic_shape": {
           "category": "cycles",
@@ -1421,7 +1358,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable cycles application adapter is registered in this commit."
+        "reason": "Public action manage_cycle_archive is individually deferred: No safe reusable cycles application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/cycles.py",
       "source_line": 321,
@@ -1440,7 +1377,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CYCLES_ADAPTER_UNAVAILABLE"
+      "rationale_code": "CYCLES_ADAPTER_UNAVAILABLE_MANAGE_CYCLE_ARCHIVE_DEFERRED"
     },
     {
       "tool_name": "complete_cycle",
@@ -1457,7 +1394,7 @@
         "plane_mcp.tools.cycles:complete_cycle"
       ],
       "blocker": {
-        "code": "CYCLES_ADAPTER_UNAVAILABLE",
+        "code": "CYCLES_ADAPTER_UNAVAILABLE_COMPLETE_CYCLE_DEFERRED",
         "action": "complete_cycle",
         "required_semantic_shape": {
           "category": "cycles",
@@ -1475,7 +1412,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable cycles application adapter is registered in this commit."
+        "reason": "Public action complete_cycle is individually deferred: No safe reusable cycles application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/cycles.py",
       "source_line": 356,
@@ -1494,7 +1431,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "CYCLES_ADAPTER_UNAVAILABLE"
+      "rationale_code": "CYCLES_ADAPTER_UNAVAILABLE_COMPLETE_CYCLE_DEFERRED"
     },
     {
       "tool_name": "list_initiatives",
@@ -1511,7 +1448,7 @@
         "plane_mcp.tools.initiatives:list_initiatives"
       ],
       "blocker": {
-        "code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE",
+        "code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE_LIST_INITIATIVES_DEFERRED",
         "action": "list_initiatives",
         "required_semantic_shape": {
           "category": "initiatives",
@@ -1525,11 +1462,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Plane has no safe reusable initiative application service in this commit."
+        "reason": "Public action list_initiatives is individually deferred: Plane has no safe reusable initiative application service in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/initiatives.py",
       "source_line": 39,
@@ -1548,7 +1485,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE"
+      "rationale_code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE_LIST_INITIATIVES_DEFERRED"
     },
     {
       "tool_name": "create_initiative",
@@ -1565,7 +1502,7 @@
         "plane_mcp.tools.initiatives:create_initiative"
       ],
       "blocker": {
-        "code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE",
+        "code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE_CREATE_INITIATIVE_DEFERRED",
         "action": "create_initiative",
         "required_semantic_shape": {
           "category": "initiatives",
@@ -1583,7 +1520,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Plane has no safe reusable initiative application service in this commit."
+        "reason": "Public action create_initiative is individually deferred: Plane has no safe reusable initiative application service in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/initiatives.py",
       "source_line": 68,
@@ -1602,7 +1539,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE"
+      "rationale_code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE_CREATE_INITIATIVE_DEFERRED"
     },
     {
       "tool_name": "retrieve_initiative",
@@ -1619,7 +1556,7 @@
         "plane_mcp.tools.initiatives:retrieve_initiative"
       ],
       "blocker": {
-        "code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE",
+        "code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE_85785f14823c",
         "action": "retrieve_initiative",
         "required_semantic_shape": {
           "category": "initiatives",
@@ -1633,11 +1570,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Plane has no safe reusable initiative application service in this commit."
+        "reason": "Public action retrieve_initiative is individually deferred: Plane has no safe reusable initiative application service in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/initiatives.py",
       "source_line": 122,
@@ -1656,7 +1593,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE"
+      "rationale_code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE_85785f14823c"
     },
     {
       "tool_name": "update_initiative",
@@ -1673,7 +1610,7 @@
         "plane_mcp.tools.initiatives:update_initiative"
       ],
       "blocker": {
-        "code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE",
+        "code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE_UPDATE_INITIATIVE_DEFERRED",
         "action": "update_initiative",
         "required_semantic_shape": {
           "category": "initiatives",
@@ -1691,7 +1628,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Plane has no safe reusable initiative application service in this commit."
+        "reason": "Public action update_initiative is individually deferred: Plane has no safe reusable initiative application service in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/initiatives.py",
       "source_line": 146,
@@ -1710,7 +1647,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE"
+      "rationale_code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE_UPDATE_INITIATIVE_DEFERRED"
     },
     {
       "tool_name": "delete_initiative",
@@ -1727,7 +1664,7 @@
         "plane_mcp.tools.initiatives:delete_initiative"
       ],
       "blocker": {
-        "code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE",
+        "code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE_DELETE_INITIATIVE_DEFERRED",
         "action": "delete_initiative",
         "required_semantic_shape": {
           "category": "initiatives",
@@ -1745,7 +1682,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Plane has no safe reusable initiative application service in this commit."
+        "reason": "Public action delete_initiative is individually deferred: Plane has no safe reusable initiative application service in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/initiatives.py",
       "source_line": 197,
@@ -1764,7 +1701,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE"
+      "rationale_code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE_DELETE_INITIATIVE_DEFERRED"
     },
     {
       "tool_name": "list_initiative_projects",
@@ -1781,7 +1718,7 @@
         "plane_mcp.tools.initiatives:list_initiative_projects"
       ],
       "blocker": {
-        "code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE",
+        "code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE_861b85c05056",
         "action": "list_initiative_projects",
         "required_semantic_shape": {
           "category": "initiatives",
@@ -1795,11 +1732,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Plane has no safe reusable initiative application service in this commit."
+        "reason": "Public action list_initiative_projects is individually deferred: Plane has no safe reusable initiative application service in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/initiatives.py",
       "source_line": 218,
@@ -1818,7 +1755,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE"
+      "rationale_code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE_861b85c05056"
     },
     {
       "tool_name": "manage_initiative_projects",
@@ -1835,7 +1772,7 @@
         "plane_mcp.tools.initiatives:manage_initiative_projects"
       ],
       "blocker": {
-        "code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE",
+        "code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE_d813fa6b279f",
         "action": "manage_initiative_projects",
         "required_semantic_shape": {
           "category": "initiatives",
@@ -1853,7 +1790,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Plane has no safe reusable initiative application service in this commit."
+        "reason": "Public action manage_initiative_projects is individually deferred: Plane has no safe reusable initiative application service in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/initiatives.py",
       "source_line": 240,
@@ -1872,7 +1809,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE"
+      "rationale_code": "INITIATIVE_DOMAIN_ADAPTER_UNAVAILABLE_d813fa6b279f"
     },
     {
       "tool_name": "list_intake_work_items",
@@ -1948,7 +1885,9 @@
       "gateway_operation_id": "intake.retrieve",
       "result_key": "intake_work_item",
       "result_mode": "value",
-      "input_aliases": {},
+      "input_aliases": {
+        "work_item_id": "issue_id"
+      },
       "public_signature": "project_id: str, work_item_id: str, params: dict[str, Any] | None=None",
       "return_annotation": "IntakeWorkItem",
       "sdk_entrypoints": [
@@ -1981,7 +1920,9 @@
       "gateway_operation_id": "intake.update",
       "result_key": "intake_work_item",
       "result_mode": "value",
-      "input_aliases": {},
+      "input_aliases": {
+        "work_item_id": "issue_id"
+      },
       "public_signature": "project_id: str, work_item_id: str, status: int | None=None, snoozed_till: str | None=None, duplicate_to: str | None=None, source: str | None=None, source_email: str | None=None",
       "return_annotation": "IntakeWorkItem",
       "sdk_entrypoints": [
@@ -2009,38 +1950,19 @@
     {
       "tool_name": "delete_intake_work_item",
       "adapter": "shared_sdk_transport",
-      "registration": "blocked",
-      "gateway_schema_version": null,
-      "gateway_operation_id": null,
-      "result_key": null,
-      "result_mode": "blocked",
-      "input_aliases": {},
+      "registration": "gateway",
+      "gateway_schema_version": "plane.operation/v1",
+      "gateway_operation_id": "intake.delete",
+      "result_key": "deleted",
+      "result_mode": "none",
+      "input_aliases": {
+        "work_item_id": "issue_id"
+      },
       "public_signature": "project_id: str, work_item_id: str",
       "return_annotation": "None",
       "sdk_entrypoints": [
         "plane_mcp.tools.intake:delete_intake_work_item"
       ],
-      "blocker": {
-        "code": "INTAKE_ADAPTER_UNAVAILABLE",
-        "action": "delete_intake_work_item",
-        "required_semantic_shape": {
-          "category": "intake",
-          "behavior": "mutation",
-          "mutation": true,
-          "signature": "project_id: str, work_item_id: str",
-          "return_annotation": "None",
-          "sdk_entrypoints": [
-            "plane_mcp.tools.intake:delete_intake_work_item"
-          ]
-        },
-        "blocked_capabilities": [
-          "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
-        ],
-        "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable intake application adapter is registered in this commit."
-      },
       "source_file": "plane_mcp/tools/intake.py",
       "source_line": 162,
       "behavior": "mutation",
@@ -2058,7 +1980,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "INTAKE_ADAPTER_UNAVAILABLE"
+      "rationale_code": "SEMANTIC_GATEWAY_OPERATION_EXACT"
     },
     {
       "tool_name": "list_labels",
@@ -2195,38 +2117,17 @@
     {
       "tool_name": "delete_label",
       "adapter": "shared_sdk_transport",
-      "registration": "blocked",
-      "gateway_schema_version": null,
-      "gateway_operation_id": null,
-      "result_key": null,
-      "result_mode": "blocked",
+      "registration": "gateway",
+      "gateway_schema_version": "plane.operation/v1",
+      "gateway_operation_id": "label.delete",
+      "result_key": "deleted",
+      "result_mode": "none",
       "input_aliases": {},
       "public_signature": "project_id: str, label_id: str",
       "return_annotation": "None",
       "sdk_entrypoints": [
         "plane_mcp.tools.labels:delete_label"
       ],
-      "blocker": {
-        "code": "LABELS_ADAPTER_UNAVAILABLE",
-        "action": "delete_label",
-        "required_semantic_shape": {
-          "category": "labels",
-          "behavior": "mutation",
-          "mutation": true,
-          "signature": "project_id: str, label_id: str",
-          "return_annotation": "None",
-          "sdk_entrypoints": [
-            "plane_mcp.tools.labels:delete_label"
-          ]
-        },
-        "blocked_capabilities": [
-          "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
-        ],
-        "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable labels application adapter is registered in this commit."
-      },
       "source_file": "plane_mcp/tools/labels.py",
       "source_line": 145,
       "behavior": "mutation",
@@ -2244,7 +2145,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "LABELS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "SEMANTIC_GATEWAY_OPERATION_EXACT"
     },
     {
       "tool_name": "list_milestones",
@@ -2261,7 +2162,7 @@
         "plane_mcp.tools.milestones:list_milestones"
       ],
       "blocker": {
-        "code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE",
+        "code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE_LIST_MILESTONES_DEFERRED",
         "action": "list_milestones",
         "required_semantic_shape": {
           "category": "milestones",
@@ -2275,11 +2176,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Plane has no safe reusable milestone application service in this commit."
+        "reason": "Public action list_milestones is individually deferred: Plane has no safe reusable milestone application service in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/milestones.py",
       "source_line": 22,
@@ -2298,7 +2199,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE"
+      "rationale_code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE_LIST_MILESTONES_DEFERRED"
     },
     {
       "tool_name": "create_milestone",
@@ -2315,7 +2216,7 @@
         "plane_mcp.tools.milestones:create_milestone"
       ],
       "blocker": {
-        "code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE",
+        "code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE_CREATE_MILESTONE_DEFERRED",
         "action": "create_milestone",
         "required_semantic_shape": {
           "category": "milestones",
@@ -2333,7 +2234,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Plane has no safe reusable milestone application service in this commit."
+        "reason": "Public action create_milestone is individually deferred: Plane has no safe reusable milestone application service in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/milestones.py",
       "source_line": 43,
@@ -2352,7 +2253,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE"
+      "rationale_code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE_CREATE_MILESTONE_DEFERRED"
     },
     {
       "tool_name": "retrieve_milestone",
@@ -2369,7 +2270,7 @@
         "plane_mcp.tools.milestones:retrieve_milestone"
       ],
       "blocker": {
-        "code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE",
+        "code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE_RETRIEVE_MILESTONE_DEFERRED",
         "action": "retrieve_milestone",
         "required_semantic_shape": {
           "category": "milestones",
@@ -2383,11 +2284,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Plane has no safe reusable milestone application service in this commit."
+        "reason": "Public action retrieve_milestone is individually deferred: Plane has no safe reusable milestone application service in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/milestones.py",
       "source_line": 75,
@@ -2406,7 +2307,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE"
+      "rationale_code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE_RETRIEVE_MILESTONE_DEFERRED"
     },
     {
       "tool_name": "update_milestone",
@@ -2423,7 +2324,7 @@
         "plane_mcp.tools.milestones:update_milestone"
       ],
       "blocker": {
-        "code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE",
+        "code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE_UPDATE_MILESTONE_DEFERRED",
         "action": "update_milestone",
         "required_semantic_shape": {
           "category": "milestones",
@@ -2441,7 +2342,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Plane has no safe reusable milestone application service in this commit."
+        "reason": "Public action update_milestone is individually deferred: Plane has no safe reusable milestone application service in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/milestones.py",
       "source_line": 92,
@@ -2460,7 +2361,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE"
+      "rationale_code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE_UPDATE_MILESTONE_DEFERRED"
     },
     {
       "tool_name": "delete_milestone",
@@ -2477,7 +2378,7 @@
         "plane_mcp.tools.milestones:delete_milestone"
       ],
       "blocker": {
-        "code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE",
+        "code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE_DELETE_MILESTONE_DEFERRED",
         "action": "delete_milestone",
         "required_semantic_shape": {
           "category": "milestones",
@@ -2495,7 +2396,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Plane has no safe reusable milestone application service in this commit."
+        "reason": "Public action delete_milestone is individually deferred: Plane has no safe reusable milestone application service in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/milestones.py",
       "source_line": 131,
@@ -2514,7 +2415,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE"
+      "rationale_code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE_DELETE_MILESTONE_DEFERRED"
     },
     {
       "tool_name": "manage_milestone_work_items",
@@ -2531,7 +2432,7 @@
         "plane_mcp.tools.milestones:manage_milestone_work_items"
       ],
       "blocker": {
-        "code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE",
+        "code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE_5c9fd0caa551",
         "action": "manage_milestone_work_items",
         "required_semantic_shape": {
           "category": "milestones",
@@ -2549,7 +2450,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Plane has no safe reusable milestone application service in this commit."
+        "reason": "Public action manage_milestone_work_items is individually deferred: Plane has no safe reusable milestone application service in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/milestones.py",
       "source_line": 143,
@@ -2568,7 +2469,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE"
+      "rationale_code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE_5c9fd0caa551"
     },
     {
       "tool_name": "list_milestone_work_items",
@@ -2585,7 +2486,7 @@
         "plane_mcp.tools.milestones:list_milestone_work_items"
       ],
       "blocker": {
-        "code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE",
+        "code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE_8fe60d71d090",
         "action": "list_milestone_work_items",
         "required_semantic_shape": {
           "category": "milestones",
@@ -2599,11 +2500,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Plane has no safe reusable milestone application service in this commit."
+        "reason": "Public action list_milestone_work_items is individually deferred: Plane has no safe reusable milestone application service in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/milestones.py",
       "source_line": 179,
@@ -2622,7 +2523,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE"
+      "rationale_code": "MILESTONE_DOMAIN_ADAPTER_UNAVAILABLE_8fe60d71d090"
     },
     {
       "tool_name": "list_modules",
@@ -2760,38 +2661,17 @@
     {
       "tool_name": "delete_module",
       "adapter": "shared_sdk_transport",
-      "registration": "blocked",
-      "gateway_schema_version": null,
-      "gateway_operation_id": null,
-      "result_key": null,
-      "result_mode": "blocked",
+      "registration": "gateway",
+      "gateway_schema_version": "plane.operation/v1",
+      "gateway_operation_id": "module.delete",
+      "result_key": "deleted",
+      "result_mode": "none",
       "input_aliases": {},
       "public_signature": "project_id: str, module_id: str",
       "return_annotation": "None",
       "sdk_entrypoints": [
         "plane_mcp.tools.modules:delete_module"
       ],
-      "blocker": {
-        "code": "MODULES_ADAPTER_UNAVAILABLE",
-        "action": "delete_module",
-        "required_semantic_shape": {
-          "category": "modules",
-          "behavior": "mutation",
-          "mutation": true,
-          "signature": "project_id: str, module_id: str",
-          "return_annotation": "None",
-          "sdk_entrypoints": [
-            "plane_mcp.tools.modules:delete_module"
-          ]
-        },
-        "blocked_capabilities": [
-          "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
-        ],
-        "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable modules application adapter is registered in this commit."
-      },
       "source_file": "plane_mcp/tools/modules.py",
       "source_line": 191,
       "behavior": "mutation",
@@ -2809,7 +2689,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "MODULES_ADAPTER_UNAVAILABLE"
+      "rationale_code": "SEMANTIC_GATEWAY_OPERATION_EXACT"
     },
     {
       "tool_name": "manage_module_work_items",
@@ -2826,7 +2706,7 @@
         "plane_mcp.tools.modules:manage_module_work_items"
       ],
       "blocker": {
-        "code": "MODULES_ADAPTER_UNAVAILABLE",
+        "code": "MODULES_ADAPTER_UNAVAILABLE_MANAGE_MODULE_WORK_ITEMS_DEFERRED",
         "action": "manage_module_work_items",
         "required_semantic_shape": {
           "category": "modules",
@@ -2844,7 +2724,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable modules application adapter is registered in this commit."
+        "reason": "Public action manage_module_work_items is individually deferred: No safe reusable modules application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/modules.py",
       "source_line": 204,
@@ -2863,43 +2743,22 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "MODULES_ADAPTER_UNAVAILABLE"
+      "rationale_code": "MODULES_ADAPTER_UNAVAILABLE_MANAGE_MODULE_WORK_ITEMS_DEFERRED"
     },
     {
       "tool_name": "list_module_work_items",
       "adapter": "shared_sdk_transport",
-      "registration": "blocked",
-      "gateway_schema_version": null,
-      "gateway_operation_id": null,
-      "result_key": null,
-      "result_mode": "blocked",
+      "registration": "gateway",
+      "gateway_schema_version": "plane.operation/v1",
+      "gateway_operation_id": "module.work_item.list",
+      "result_key": "work_items",
+      "result_mode": "value",
       "input_aliases": {},
       "public_signature": "project_id: str, module_id: str, pql: Annotated[str | None, Field(description=PQL_FIELD_HINT)]=None, order_by: str | None=None, per_page: int | None=None, cursor: str | None=None, expand: str | None=None, fields: str | None=None",
       "return_annotation": "dict[str, Any]",
       "sdk_entrypoints": [
         "plane_mcp.tools.modules:list_module_work_items"
       ],
-      "blocker": {
-        "code": "MODULES_ADAPTER_UNAVAILABLE",
-        "action": "list_module_work_items",
-        "required_semantic_shape": {
-          "category": "modules",
-          "behavior": "read",
-          "mutation": false,
-          "signature": "project_id: str, module_id: str, pql: Annotated[str | None, Field(description=PQL_FIELD_HINT)]=None, order_by: str | None=None, per_page: int | None=None, cursor: str | None=None, expand: str | None=None, fields: str | None=None",
-          "return_annotation": "dict[str, Any]",
-          "sdk_entrypoints": [
-            "plane_mcp.tools.modules:list_module_work_items"
-          ]
-        },
-        "blocked_capabilities": [
-          "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
-        ],
-        "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable modules application adapter is registered in this commit."
-      },
       "source_file": "plane_mcp/tools/modules.py",
       "source_line": 241,
       "behavior": "read",
@@ -2918,7 +2777,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "MODULES_ADAPTER_UNAVAILABLE"
+      "rationale_code": "SEMANTIC_GATEWAY_OPERATION_EXACT"
     },
     {
       "tool_name": "manage_module_archive",
@@ -2935,7 +2794,7 @@
         "plane_mcp.tools.modules:manage_module_archive"
       ],
       "blocker": {
-        "code": "MODULES_ADAPTER_UNAVAILABLE",
+        "code": "MODULES_ADAPTER_UNAVAILABLE_MANAGE_MODULE_ARCHIVE_DEFERRED",
         "action": "manage_module_archive",
         "required_semantic_shape": {
           "category": "modules",
@@ -2953,7 +2812,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable modules application adapter is registered in this commit."
+        "reason": "Public action manage_module_archive is individually deferred: No safe reusable modules application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/modules.py",
       "source_line": 307,
@@ -2972,7 +2831,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "MODULES_ADAPTER_UNAVAILABLE"
+      "rationale_code": "MODULES_ADAPTER_UNAVAILABLE_MANAGE_MODULE_ARCHIVE_DEFERRED"
     },
     {
       "tool_name": "list_pages",
@@ -3022,7 +2881,7 @@
         "plane_mcp.tools.pages:attach_page_to_work_item"
       ],
       "blocker": {
-        "code": "PAGES_ADAPTER_UNAVAILABLE",
+        "code": "PAGES_ADAPTER_UNAVAILABLE_ATTACH_PAGE_TO_WORK_ITEM_DEFERRED",
         "action": "attach_page_to_work_item",
         "required_semantic_shape": {
           "category": "pages",
@@ -3040,7 +2899,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable pages application adapter is registered in this commit."
+        "reason": "Public action attach_page_to_work_item is individually deferred: No safe reusable pages application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/pages.py",
       "source_line": 42,
@@ -3059,7 +2918,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "PAGES_ADAPTER_UNAVAILABLE"
+      "rationale_code": "PAGES_ADAPTER_UNAVAILABLE_ATTACH_PAGE_TO_WORK_ITEM_DEFERRED"
     },
     {
       "tool_name": "list_work_item_pages",
@@ -3076,7 +2935,7 @@
         "plane_mcp.tools.pages:list_work_item_pages"
       ],
       "blocker": {
-        "code": "PAGES_ADAPTER_UNAVAILABLE",
+        "code": "PAGES_ADAPTER_UNAVAILABLE_LIST_WORK_ITEM_PAGES_DEFERRED",
         "action": "list_work_item_pages",
         "required_semantic_shape": {
           "category": "pages",
@@ -3090,11 +2949,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable pages application adapter is registered in this commit."
+        "reason": "Public action list_work_item_pages is individually deferred: No safe reusable pages application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/pages.py",
       "source_line": 67,
@@ -3113,7 +2972,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "PAGES_ADAPTER_UNAVAILABLE"
+      "rationale_code": "PAGES_ADAPTER_UNAVAILABLE_LIST_WORK_ITEM_PAGES_DEFERRED"
     },
     {
       "tool_name": "detach_page_from_work_item",
@@ -3130,7 +2989,7 @@
         "plane_mcp.tools.pages:detach_page_from_work_item"
       ],
       "blocker": {
-        "code": "PAGES_ADAPTER_UNAVAILABLE",
+        "code": "PAGES_ADAPTER_UNAVAILABLE_DETACH_PAGE_FROM_WORK_ITEM_DEFERRED",
         "action": "detach_page_from_work_item",
         "required_semantic_shape": {
           "category": "pages",
@@ -3148,7 +3007,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable pages application adapter is registered in this commit."
+        "reason": "Public action detach_page_from_work_item is individually deferred: No safe reusable pages application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/pages.py",
       "source_line": 90,
@@ -3167,7 +3026,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "PAGES_ADAPTER_UNAVAILABLE"
+      "rationale_code": "PAGES_ADAPTER_UNAVAILABLE_DETACH_PAGE_FROM_WORK_ITEM_DEFERRED"
     },
     {
       "tool_name": "retrieve_page",
@@ -3394,38 +3253,17 @@
     {
       "tool_name": "delete_project",
       "adapter": "shared_sdk_transport",
-      "registration": "blocked",
-      "gateway_schema_version": null,
-      "gateway_operation_id": null,
-      "result_key": null,
-      "result_mode": "blocked",
+      "registration": "gateway",
+      "gateway_schema_version": "plane.operation/v1",
+      "gateway_operation_id": "project.delete",
+      "result_key": "deleted",
+      "result_mode": "none",
       "input_aliases": {},
       "public_signature": "project_id: str",
       "return_annotation": "None",
       "sdk_entrypoints": [
         "plane_mcp.tools.projects:delete_project"
       ],
-      "blocker": {
-        "code": "PROJECTS_ADAPTER_UNAVAILABLE",
-        "action": "delete_project",
-        "required_semantic_shape": {
-          "category": "projects",
-          "behavior": "mutation",
-          "mutation": true,
-          "signature": "project_id: str",
-          "return_annotation": "None",
-          "sdk_entrypoints": [
-            "plane_mcp.tools.projects:delete_project"
-          ]
-        },
-        "blocked_capabilities": [
-          "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
-        ],
-        "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable projects application adapter is registered in this commit."
-      },
       "source_file": "plane_mcp/tools/projects.py",
       "source_line": 257,
       "behavior": "mutation",
@@ -3443,7 +3281,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "SEMANTIC_GATEWAY_OPERATION_EXACT"
     },
     {
       "tool_name": "manage_project_archive",
@@ -3460,7 +3298,7 @@
         "plane_mcp.tools.projects:manage_project_archive"
       ],
       "blocker": {
-        "code": "PROJECTS_ADAPTER_UNAVAILABLE",
+        "code": "PROJECTS_ADAPTER_UNAVAILABLE_MANAGE_PROJECT_ARCHIVE_DEFERRED",
         "action": "manage_project_archive",
         "required_semantic_shape": {
           "category": "projects",
@@ -3478,7 +3316,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable projects application adapter is registered in this commit."
+        "reason": "Public action manage_project_archive is individually deferred: No safe reusable projects application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/projects.py",
       "source_line": 269,
@@ -3497,7 +3335,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE_MANAGE_PROJECT_ARCHIVE_DEFERRED"
     },
     {
       "tool_name": "get_project_worklog_summary",
@@ -3514,7 +3352,7 @@
         "plane_mcp.tools.projects:get_project_worklog_summary"
       ],
       "blocker": {
-        "code": "PROJECTS_ADAPTER_UNAVAILABLE",
+        "code": "PROJECTS_ADAPTER_UNAVAILABLE_7b58cf2b3f72",
         "action": "get_project_worklog_summary",
         "required_semantic_shape": {
           "category": "projects",
@@ -3528,11 +3366,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable projects application adapter is registered in this commit."
+        "reason": "Public action get_project_worklog_summary is individually deferred: No safe reusable projects application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/projects.py",
       "source_line": 287,
@@ -3551,7 +3389,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE_7b58cf2b3f72"
     },
     {
       "tool_name": "get_project_members",
@@ -3602,7 +3440,7 @@
         "plane_mcp.tools.projects:update_project_features"
       ],
       "blocker": {
-        "code": "PROJECTS_ADAPTER_UNAVAILABLE",
+        "code": "PROJECTS_ADAPTER_UNAVAILABLE_UPDATE_PROJECT_FEATURES_DEFERRED",
         "action": "update_project_features",
         "required_semantic_shape": {
           "category": "projects",
@@ -3620,7 +3458,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable projects application adapter is registered in this commit."
+        "reason": "Public action update_project_features is individually deferred: No safe reusable projects application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/projects.py",
       "source_line": 349,
@@ -3639,7 +3477,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE_UPDATE_PROJECT_FEATURES_DEFERRED"
     },
     {
       "tool_name": "get_project_estimate",
@@ -3656,7 +3494,7 @@
         "plane_mcp.tools.projects:get_project_estimate"
       ],
       "blocker": {
-        "code": "PROJECTS_ADAPTER_UNAVAILABLE",
+        "code": "PROJECTS_ADAPTER_UNAVAILABLE_GET_PROJECT_ESTIMATE_DEFERRED",
         "action": "get_project_estimate",
         "required_semantic_shape": {
           "category": "projects",
@@ -3670,11 +3508,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable projects application adapter is registered in this commit."
+        "reason": "Public action get_project_estimate is individually deferred: No safe reusable projects application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/projects.py",
       "source_line": 388,
@@ -3693,7 +3531,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE_GET_PROJECT_ESTIMATE_DEFERRED"
     },
     {
       "tool_name": "list_project_estimate_points",
@@ -3710,7 +3548,7 @@
         "plane_mcp.tools.projects:list_project_estimate_points"
       ],
       "blocker": {
-        "code": "PROJECTS_ADAPTER_UNAVAILABLE",
+        "code": "PROJECTS_ADAPTER_UNAVAILABLE_3ec969b15327",
         "action": "list_project_estimate_points",
         "required_semantic_shape": {
           "category": "projects",
@@ -3724,11 +3562,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable projects application adapter is registered in this commit."
+        "reason": "Public action list_project_estimate_points is individually deferred: No safe reusable projects application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/projects.py",
       "source_line": 405,
@@ -3747,7 +3585,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE_3ec969b15327"
     },
     {
       "tool_name": "create_project_estimate",
@@ -3764,7 +3602,7 @@
         "plane_mcp.tools.projects:create_project_estimate"
       ],
       "blocker": {
-        "code": "PROJECTS_ADAPTER_UNAVAILABLE",
+        "code": "PROJECTS_ADAPTER_UNAVAILABLE_CREATE_PROJECT_ESTIMATE_DEFERRED",
         "action": "create_project_estimate",
         "required_semantic_shape": {
           "category": "projects",
@@ -3782,7 +3620,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable projects application adapter is registered in this commit."
+        "reason": "Public action create_project_estimate is individually deferred: No safe reusable projects application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/projects.py",
       "source_line": 435,
@@ -3801,7 +3639,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE_CREATE_PROJECT_ESTIMATE_DEFERRED"
     },
     {
       "tool_name": "update_project_estimate",
@@ -3818,7 +3656,7 @@
         "plane_mcp.tools.projects:update_project_estimate"
       ],
       "blocker": {
-        "code": "PROJECTS_ADAPTER_UNAVAILABLE",
+        "code": "PROJECTS_ADAPTER_UNAVAILABLE_UPDATE_PROJECT_ESTIMATE_DEFERRED",
         "action": "update_project_estimate",
         "required_semantic_shape": {
           "category": "projects",
@@ -3836,7 +3674,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable projects application adapter is registered in this commit."
+        "reason": "Public action update_project_estimate is individually deferred: No safe reusable projects application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/projects.py",
       "source_line": 471,
@@ -3855,7 +3693,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE_UPDATE_PROJECT_ESTIMATE_DEFERRED"
     },
     {
       "tool_name": "delete_project_estimate",
@@ -3872,7 +3710,7 @@
         "plane_mcp.tools.projects:delete_project_estimate"
       ],
       "blocker": {
-        "code": "PROJECTS_ADAPTER_UNAVAILABLE",
+        "code": "PROJECTS_ADAPTER_UNAVAILABLE_DELETE_PROJECT_ESTIMATE_DEFERRED",
         "action": "delete_project_estimate",
         "required_semantic_shape": {
           "category": "projects",
@@ -3890,7 +3728,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable projects application adapter is registered in this commit."
+        "reason": "Public action delete_project_estimate is individually deferred: No safe reusable projects application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/projects.py",
       "source_line": 501,
@@ -3909,7 +3747,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE_DELETE_PROJECT_ESTIMATE_DEFERRED"
     },
     {
       "tool_name": "link_estimate_to_project",
@@ -3926,7 +3764,7 @@
         "plane_mcp.tools.projects:link_estimate_to_project"
       ],
       "blocker": {
-        "code": "PROJECTS_ADAPTER_UNAVAILABLE",
+        "code": "PROJECTS_ADAPTER_UNAVAILABLE_LINK_ESTIMATE_TO_PROJECT_DEFERRED",
         "action": "link_estimate_to_project",
         "required_semantic_shape": {
           "category": "projects",
@@ -3944,7 +3782,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable projects application adapter is registered in this commit."
+        "reason": "Public action link_estimate_to_project is individually deferred: No safe reusable projects application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/projects.py",
       "source_line": 512,
@@ -3963,7 +3801,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE_LINK_ESTIMATE_TO_PROJECT_DEFERRED"
     },
     {
       "tool_name": "create_project_estimate_points",
@@ -3980,7 +3818,7 @@
         "plane_mcp.tools.projects:create_project_estimate_points"
       ],
       "blocker": {
-        "code": "PROJECTS_ADAPTER_UNAVAILABLE",
+        "code": "PROJECTS_ADAPTER_UNAVAILABLE_4831a22848ec",
         "action": "create_project_estimate_points",
         "required_semantic_shape": {
           "category": "projects",
@@ -3998,7 +3836,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable projects application adapter is registered in this commit."
+        "reason": "Public action create_project_estimate_points is individually deferred: No safe reusable projects application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/projects.py",
       "source_line": 531,
@@ -4017,7 +3855,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE_4831a22848ec"
     },
     {
       "tool_name": "update_project_estimate_point",
@@ -4034,7 +3872,7 @@
         "plane_mcp.tools.projects:update_project_estimate_point"
       ],
       "blocker": {
-        "code": "PROJECTS_ADAPTER_UNAVAILABLE",
+        "code": "PROJECTS_ADAPTER_UNAVAILABLE_64749505e7db",
         "action": "update_project_estimate_point",
         "required_semantic_shape": {
           "category": "projects",
@@ -4052,7 +3890,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable projects application adapter is registered in this commit."
+        "reason": "Public action update_project_estimate_point is individually deferred: No safe reusable projects application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/projects.py",
       "source_line": 569,
@@ -4071,7 +3909,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE_64749505e7db"
     },
     {
       "tool_name": "delete_project_estimate_point",
@@ -4088,7 +3926,7 @@
         "plane_mcp.tools.projects:delete_project_estimate_point"
       ],
       "blocker": {
-        "code": "PROJECTS_ADAPTER_UNAVAILABLE",
+        "code": "PROJECTS_ADAPTER_UNAVAILABLE_4ca1da330fcd",
         "action": "delete_project_estimate_point",
         "required_semantic_shape": {
           "category": "projects",
@@ -4106,7 +3944,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable projects application adapter is registered in this commit."
+        "reason": "Public action delete_project_estimate_point is individually deferred: No safe reusable projects application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/projects.py",
       "source_line": 612,
@@ -4125,7 +3963,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "PROJECTS_ADAPTER_UNAVAILABLE_4ca1da330fcd"
     },
     {
       "tool_name": "list_releases",
@@ -4142,7 +3980,7 @@
         "plane_mcp.tools.releases.base:list_releases"
       ],
       "blocker": {
-        "code": "RELEASE_DOMAIN_ADAPTER_UNAVAILABLE",
+        "code": "RELEASE_DOMAIN_ADAPTER_UNAVAILABLE_LIST_RELEASES_DEFERRED",
         "action": "list_releases",
         "required_semantic_shape": {
           "category": "releases.base",
@@ -4156,11 +3994,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Plane has no safe reusable release application service in this commit."
+        "reason": "Public action list_releases is individually deferred: Plane has no safe reusable release application service in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/releases/base.py",
       "source_line": 23,
@@ -4180,7 +4018,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELEASE_DOMAIN_ADAPTER_UNAVAILABLE"
+      "rationale_code": "RELEASE_DOMAIN_ADAPTER_UNAVAILABLE_LIST_RELEASES_DEFERRED"
     },
     {
       "tool_name": "create_release",
@@ -4197,7 +4035,7 @@
         "plane_mcp.tools.releases.base:create_release"
       ],
       "blocker": {
-        "code": "RELEASE_DOMAIN_ADAPTER_UNAVAILABLE",
+        "code": "RELEASE_DOMAIN_ADAPTER_UNAVAILABLE_CREATE_RELEASE_DEFERRED",
         "action": "create_release",
         "required_semantic_shape": {
           "category": "releases.base",
@@ -4215,7 +4053,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Plane has no safe reusable release application service in this commit."
+        "reason": "Public action create_release is individually deferred: Plane has no safe reusable release application service in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/releases/base.py",
       "source_line": 42,
@@ -4234,7 +4072,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELEASE_DOMAIN_ADAPTER_UNAVAILABLE"
+      "rationale_code": "RELEASE_DOMAIN_ADAPTER_UNAVAILABLE_CREATE_RELEASE_DEFERRED"
     },
     {
       "tool_name": "retrieve_release",
@@ -4251,7 +4089,7 @@
         "plane_mcp.tools.releases.base:retrieve_release"
       ],
       "blocker": {
-        "code": "RELEASE_DOMAIN_ADAPTER_UNAVAILABLE",
+        "code": "RELEASE_DOMAIN_ADAPTER_UNAVAILABLE_RETRIEVE_RELEASE_DEFERRED",
         "action": "retrieve_release",
         "required_semantic_shape": {
           "category": "releases.base",
@@ -4265,11 +4103,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Plane has no safe reusable release application service in this commit."
+        "reason": "Public action retrieve_release is individually deferred: Plane has no safe reusable release application service in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/releases/base.py",
       "source_line": 90,
@@ -4288,7 +4126,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELEASE_DOMAIN_ADAPTER_UNAVAILABLE"
+      "rationale_code": "RELEASE_DOMAIN_ADAPTER_UNAVAILABLE_RETRIEVE_RELEASE_DEFERRED"
     },
     {
       "tool_name": "update_release",
@@ -4305,7 +4143,7 @@
         "plane_mcp.tools.releases.base:update_release"
       ],
       "blocker": {
-        "code": "RELEASE_DOMAIN_ADAPTER_UNAVAILABLE",
+        "code": "RELEASE_DOMAIN_ADAPTER_UNAVAILABLE_UPDATE_RELEASE_DEFERRED",
         "action": "update_release",
         "required_semantic_shape": {
           "category": "releases.base",
@@ -4323,7 +4161,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Plane has no safe reusable release application service in this commit."
+        "reason": "Public action update_release is individually deferred: Plane has no safe reusable release application service in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/releases/base.py",
       "source_line": 104,
@@ -4342,7 +4180,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELEASE_DOMAIN_ADAPTER_UNAVAILABLE"
+      "rationale_code": "RELEASE_DOMAIN_ADAPTER_UNAVAILABLE_UPDATE_RELEASE_DEFERRED"
     },
     {
       "tool_name": "delete_release",
@@ -4359,7 +4197,7 @@
         "plane_mcp.tools.releases.base:delete_release"
       ],
       "blocker": {
-        "code": "RELEASE_DOMAIN_ADAPTER_UNAVAILABLE",
+        "code": "RELEASE_DOMAIN_ADAPTER_UNAVAILABLE_DELETE_RELEASE_DEFERRED",
         "action": "delete_release",
         "required_semantic_shape": {
           "category": "releases.base",
@@ -4377,7 +4215,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Plane has no safe reusable release application service in this commit."
+        "reason": "Public action delete_release is individually deferred: Plane has no safe reusable release application service in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/releases/base.py",
       "source_line": 148,
@@ -4396,7 +4234,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELEASE_DOMAIN_ADAPTER_UNAVAILABLE"
+      "rationale_code": "RELEASE_DOMAIN_ADAPTER_UNAVAILABLE_DELETE_RELEASE_DEFERRED"
     },
     {
       "tool_name": "get_release_changelog",
@@ -4413,7 +4251,7 @@
         "plane_mcp.tools.releases.changelog:get_release_changelog"
       ],
       "blocker": {
-        "code": "RELEASE_CHANGELOG_ADAPTER_UNAVAILABLE",
+        "code": "RELEASE_CHANGELOG_ADAPTER_UNAVAILABLE_6afceefc3406",
         "action": "get_release_changelog",
         "required_semantic_shape": {
           "category": "releases.changelog",
@@ -4427,11 +4265,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Release changelog semantics require a release application adapter."
+        "reason": "Public action get_release_changelog is individually deferred: Release changelog semantics require a release application adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/releases/changelog.py",
       "source_line": 16,
@@ -4450,7 +4288,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELEASE_CHANGELOG_ADAPTER_UNAVAILABLE"
+      "rationale_code": "RELEASE_CHANGELOG_ADAPTER_UNAVAILABLE_6afceefc3406"
     },
     {
       "tool_name": "update_release_changelog",
@@ -4467,7 +4305,7 @@
         "plane_mcp.tools.releases.changelog:update_release_changelog"
       ],
       "blocker": {
-        "code": "RELEASE_CHANGELOG_ADAPTER_UNAVAILABLE",
+        "code": "RELEASE_CHANGELOG_ADAPTER_UNAVAILABLE_8ce1a0fe6bbc",
         "action": "update_release_changelog",
         "required_semantic_shape": {
           "category": "releases.changelog",
@@ -4485,7 +4323,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Release changelog semantics require a release application adapter."
+        "reason": "Public action update_release_changelog is individually deferred: Release changelog semantics require a release application adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/releases/changelog.py",
       "source_line": 31,
@@ -4504,7 +4342,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELEASE_CHANGELOG_ADAPTER_UNAVAILABLE"
+      "rationale_code": "RELEASE_CHANGELOG_ADAPTER_UNAVAILABLE_8ce1a0fe6bbc"
     },
     {
       "tool_name": "list_release_labels",
@@ -4521,7 +4359,7 @@
         "plane_mcp.tools.releases.labels:list_release_labels"
       ],
       "blocker": {
-        "code": "RELEASE_LABEL_ADAPTER_UNAVAILABLE",
+        "code": "RELEASE_LABEL_ADAPTER_UNAVAILABLE_LIST_RELEASE_LABELS_DEFERRED",
         "action": "list_release_labels",
         "required_semantic_shape": {
           "category": "releases.labels",
@@ -4535,11 +4373,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Release label semantics require a release application adapter."
+        "reason": "Public action list_release_labels is individually deferred: Release label semantics require a release application adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/releases/labels.py",
       "source_line": 28,
@@ -4559,7 +4397,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELEASE_LABEL_ADAPTER_UNAVAILABLE"
+      "rationale_code": "RELEASE_LABEL_ADAPTER_UNAVAILABLE_LIST_RELEASE_LABELS_DEFERRED"
     },
     {
       "tool_name": "create_release_label",
@@ -4576,7 +4414,7 @@
         "plane_mcp.tools.releases.labels:create_release_label"
       ],
       "blocker": {
-        "code": "RELEASE_LABEL_ADAPTER_UNAVAILABLE",
+        "code": "RELEASE_LABEL_ADAPTER_UNAVAILABLE_CREATE_RELEASE_LABEL_DEFERRED",
         "action": "create_release_label",
         "required_semantic_shape": {
           "category": "releases.labels",
@@ -4594,7 +4432,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Release label semantics require a release application adapter."
+        "reason": "Public action create_release_label is individually deferred: Release label semantics require a release application adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/releases/labels.py",
       "source_line": 55,
@@ -4613,7 +4451,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELEASE_LABEL_ADAPTER_UNAVAILABLE"
+      "rationale_code": "RELEASE_LABEL_ADAPTER_UNAVAILABLE_CREATE_RELEASE_LABEL_DEFERRED"
     },
     {
       "tool_name": "update_release_label",
@@ -4630,7 +4468,7 @@
         "plane_mcp.tools.releases.labels:update_release_label"
       ],
       "blocker": {
-        "code": "RELEASE_LABEL_ADAPTER_UNAVAILABLE",
+        "code": "RELEASE_LABEL_ADAPTER_UNAVAILABLE_UPDATE_RELEASE_LABEL_DEFERRED",
         "action": "update_release_label",
         "required_semantic_shape": {
           "category": "releases.labels",
@@ -4648,7 +4486,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Release label semantics require a release application adapter."
+        "reason": "Public action update_release_label is individually deferred: Release label semantics require a release application adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/releases/labels.py",
       "source_line": 78,
@@ -4667,7 +4505,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELEASE_LABEL_ADAPTER_UNAVAILABLE"
+      "rationale_code": "RELEASE_LABEL_ADAPTER_UNAVAILABLE_UPDATE_RELEASE_LABEL_DEFERRED"
     },
     {
       "tool_name": "delete_release_label",
@@ -4684,7 +4522,7 @@
         "plane_mcp.tools.releases.labels:delete_release_label"
       ],
       "blocker": {
-        "code": "RELEASE_LABEL_ADAPTER_UNAVAILABLE",
+        "code": "RELEASE_LABEL_ADAPTER_UNAVAILABLE_DELETE_RELEASE_LABEL_DEFERRED",
         "action": "delete_release_label",
         "required_semantic_shape": {
           "category": "releases.labels",
@@ -4702,7 +4540,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Release label semantics require a release application adapter."
+        "reason": "Public action delete_release_label is individually deferred: Release label semantics require a release application adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/releases/labels.py",
       "source_line": 101,
@@ -4721,7 +4559,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELEASE_LABEL_ADAPTER_UNAVAILABLE"
+      "rationale_code": "RELEASE_LABEL_ADAPTER_UNAVAILABLE_DELETE_RELEASE_LABEL_DEFERRED"
     },
     {
       "tool_name": "manage_release_labels",
@@ -4738,7 +4576,7 @@
         "plane_mcp.tools.releases.labels:manage_release_labels"
       ],
       "blocker": {
-        "code": "RELEASE_LABEL_ADAPTER_UNAVAILABLE",
+        "code": "RELEASE_LABEL_ADAPTER_UNAVAILABLE_MANAGE_RELEASE_LABELS_DEFERRED",
         "action": "manage_release_labels",
         "required_semantic_shape": {
           "category": "releases.labels",
@@ -4756,7 +4594,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Release label semantics require a release application adapter."
+        "reason": "Public action manage_release_labels is individually deferred: Release label semantics require a release application adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/releases/labels.py",
       "source_line": 115,
@@ -4775,7 +4613,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELEASE_LABEL_ADAPTER_UNAVAILABLE"
+      "rationale_code": "RELEASE_LABEL_ADAPTER_UNAVAILABLE_MANAGE_RELEASE_LABELS_DEFERRED"
     },
     {
       "tool_name": "list_release_tags",
@@ -4792,7 +4630,7 @@
         "plane_mcp.tools.releases.tags:list_release_tags"
       ],
       "blocker": {
-        "code": "RELEASE_TAG_ADAPTER_UNAVAILABLE",
+        "code": "RELEASE_TAG_ADAPTER_UNAVAILABLE_LIST_RELEASE_TAGS_DEFERRED",
         "action": "list_release_tags",
         "required_semantic_shape": {
           "category": "releases.tags",
@@ -4806,11 +4644,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Release tag semantics require a release application adapter."
+        "reason": "Public action list_release_tags is individually deferred: Release tag semantics require a release application adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/releases/tags.py",
       "source_line": 19,
@@ -4830,7 +4668,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELEASE_TAG_ADAPTER_UNAVAILABLE"
+      "rationale_code": "RELEASE_TAG_ADAPTER_UNAVAILABLE_LIST_RELEASE_TAGS_DEFERRED"
     },
     {
       "tool_name": "create_release_tag",
@@ -4847,7 +4685,7 @@
         "plane_mcp.tools.releases.tags:create_release_tag"
       ],
       "blocker": {
-        "code": "RELEASE_TAG_ADAPTER_UNAVAILABLE",
+        "code": "RELEASE_TAG_ADAPTER_UNAVAILABLE_CREATE_RELEASE_TAG_DEFERRED",
         "action": "create_release_tag",
         "required_semantic_shape": {
           "category": "releases.tags",
@@ -4865,7 +4703,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Release tag semantics require a release application adapter."
+        "reason": "Public action create_release_tag is individually deferred: Release tag semantics require a release application adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/releases/tags.py",
       "source_line": 41,
@@ -4884,7 +4722,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELEASE_TAG_ADAPTER_UNAVAILABLE"
+      "rationale_code": "RELEASE_TAG_ADAPTER_UNAVAILABLE_CREATE_RELEASE_TAG_DEFERRED"
     },
     {
       "tool_name": "retrieve_release_tag",
@@ -4901,7 +4739,7 @@
         "plane_mcp.tools.releases.tags:retrieve_release_tag"
       ],
       "blocker": {
-        "code": "RELEASE_TAG_ADAPTER_UNAVAILABLE",
+        "code": "RELEASE_TAG_ADAPTER_UNAVAILABLE_RETRIEVE_RELEASE_TAG_DEFERRED",
         "action": "retrieve_release_tag",
         "required_semantic_shape": {
           "category": "releases.tags",
@@ -4915,11 +4753,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Release tag semantics require a release application adapter."
+        "reason": "Public action retrieve_release_tag is individually deferred: Release tag semantics require a release application adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/releases/tags.py",
       "source_line": 64,
@@ -4938,7 +4776,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELEASE_TAG_ADAPTER_UNAVAILABLE"
+      "rationale_code": "RELEASE_TAG_ADAPTER_UNAVAILABLE_RETRIEVE_RELEASE_TAG_DEFERRED"
     },
     {
       "tool_name": "update_release_tag",
@@ -4955,7 +4793,7 @@
         "plane_mcp.tools.releases.tags:update_release_tag"
       ],
       "blocker": {
-        "code": "RELEASE_TAG_ADAPTER_UNAVAILABLE",
+        "code": "RELEASE_TAG_ADAPTER_UNAVAILABLE_UPDATE_RELEASE_TAG_DEFERRED",
         "action": "update_release_tag",
         "required_semantic_shape": {
           "category": "releases.tags",
@@ -4973,7 +4811,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Release tag semantics require a release application adapter."
+        "reason": "Public action update_release_tag is individually deferred: Release tag semantics require a release application adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/releases/tags.py",
       "source_line": 78,
@@ -4992,7 +4830,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELEASE_TAG_ADAPTER_UNAVAILABLE"
+      "rationale_code": "RELEASE_TAG_ADAPTER_UNAVAILABLE_UPDATE_RELEASE_TAG_DEFERRED"
     },
     {
       "tool_name": "delete_release_tag",
@@ -5009,7 +4847,7 @@
         "plane_mcp.tools.releases.tags:delete_release_tag"
       ],
       "blocker": {
-        "code": "RELEASE_TAG_ADAPTER_UNAVAILABLE",
+        "code": "RELEASE_TAG_ADAPTER_UNAVAILABLE_DELETE_RELEASE_TAG_DEFERRED",
         "action": "delete_release_tag",
         "required_semantic_shape": {
           "category": "releases.tags",
@@ -5027,7 +4865,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Release tag semantics require a release application adapter."
+        "reason": "Public action delete_release_tag is individually deferred: Release tag semantics require a release application adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/releases/tags.py",
       "source_line": 103,
@@ -5046,7 +4884,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELEASE_TAG_ADAPTER_UNAVAILABLE"
+      "rationale_code": "RELEASE_TAG_ADAPTER_UNAVAILABLE_DELETE_RELEASE_TAG_DEFERRED"
     },
     {
       "tool_name": "list_release_work_items",
@@ -5063,7 +4901,7 @@
         "plane_mcp.tools.releases.work_items:list_release_work_items"
       ],
       "blocker": {
-        "code": "RELEASE_WORK_ITEM_ADAPTER_UNAVAILABLE",
+        "code": "RELEASE_WORK_ITEM_ADAPTER_UNAVAILABLE_3682a68f0016",
         "action": "list_release_work_items",
         "required_semantic_shape": {
           "category": "releases.work_items",
@@ -5077,11 +4915,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Release-scoped work-item semantics require a release application adapter."
+        "reason": "Public action list_release_work_items is individually deferred: Release-scoped work-item semantics require a release application adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/releases/work_items.py",
       "source_line": 22,
@@ -5101,7 +4939,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELEASE_WORK_ITEM_ADAPTER_UNAVAILABLE"
+      "rationale_code": "RELEASE_WORK_ITEM_ADAPTER_UNAVAILABLE_3682a68f0016"
     },
     {
       "tool_name": "manage_release_work_items",
@@ -5118,7 +4956,7 @@
         "plane_mcp.tools.releases.work_items:manage_release_work_items"
       ],
       "blocker": {
-        "code": "RELEASE_WORK_ITEM_ADAPTER_UNAVAILABLE",
+        "code": "RELEASE_WORK_ITEM_ADAPTER_UNAVAILABLE_7f83c5171939",
         "action": "manage_release_work_items",
         "required_semantic_shape": {
           "category": "releases.work_items",
@@ -5136,7 +4974,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Release-scoped work-item semantics require a release application adapter."
+        "reason": "Public action manage_release_work_items is individually deferred: Release-scoped work-item semantics require a release application adapter. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/releases/work_items.py",
       "source_line": 45,
@@ -5155,7 +4993,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELEASE_WORK_ITEM_ADAPTER_UNAVAILABLE"
+      "rationale_code": "RELEASE_WORK_ITEM_ADAPTER_UNAVAILABLE_7f83c5171939"
     },
     {
       "tool_name": "list_roles",
@@ -5172,7 +5010,7 @@
         "plane_mcp.tools.roles:list_roles"
       ],
       "blocker": {
-        "code": "ROLE_DEFINITION_NOT_CALLER_MUTABLE",
+        "code": "ROLE_DEFINITION_NOT_CALLER_MUTABLE_LIST_ROLES_DEFERRED",
         "action": "list_roles",
         "required_semantic_shape": {
           "category": "roles",
@@ -5186,11 +5024,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Role definitions are administrative configuration and have no caller-safe gateway service."
+        "reason": "Public action list_roles is individually deferred: Role definitions are administrative configuration and have no caller-safe gateway service. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/roles.py",
       "source_line": 15,
@@ -5210,7 +5048,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "ROLE_DEFINITION_NOT_CALLER_MUTABLE"
+      "rationale_code": "ROLE_DEFINITION_NOT_CALLER_MUTABLE_LIST_ROLES_DEFERRED"
     },
     {
       "tool_name": "retrieve_role",
@@ -5227,7 +5065,7 @@
         "plane_mcp.tools.roles:retrieve_role"
       ],
       "blocker": {
-        "code": "ROLE_DEFINITION_NOT_CALLER_MUTABLE",
+        "code": "ROLE_DEFINITION_NOT_CALLER_MUTABLE_RETRIEVE_ROLE_DEFERRED",
         "action": "retrieve_role",
         "required_semantic_shape": {
           "category": "roles",
@@ -5241,11 +5079,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Role definitions are administrative configuration and have no caller-safe gateway service."
+        "reason": "Public action retrieve_role is individually deferred: Role definitions are administrative configuration and have no caller-safe gateway service. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/roles.py",
       "source_line": 45,
@@ -5264,7 +5102,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "ROLE_DEFINITION_NOT_CALLER_MUTABLE"
+      "rationale_code": "ROLE_DEFINITION_NOT_CALLER_MUTABLE_RETRIEVE_ROLE_DEFERRED"
     },
     {
       "tool_name": "list_states",
@@ -5401,38 +5239,17 @@
     {
       "tool_name": "delete_state",
       "adapter": "shared_sdk_transport",
-      "registration": "blocked",
-      "gateway_schema_version": null,
-      "gateway_operation_id": null,
-      "result_key": null,
-      "result_mode": "blocked",
+      "registration": "gateway",
+      "gateway_schema_version": "plane.operation/v1",
+      "gateway_operation_id": "state.delete",
+      "result_key": "deleted",
+      "result_mode": "none",
       "input_aliases": {},
       "public_signature": "project_id: str, state_id: str",
       "return_annotation": "None",
       "sdk_entrypoints": [
         "plane_mcp.tools.states:delete_state"
       ],
-      "blocker": {
-        "code": "STATES_ADAPTER_UNAVAILABLE",
-        "action": "delete_state",
-        "required_semantic_shape": {
-          "category": "states",
-          "behavior": "mutation",
-          "mutation": true,
-          "signature": "project_id: str, state_id: str",
-          "return_annotation": "None",
-          "sdk_entrypoints": [
-            "plane_mcp.tools.states:delete_state"
-          ]
-        },
-        "blocked_capabilities": [
-          "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
-        ],
-        "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable states application adapter is registered in this commit."
-      },
       "source_file": "plane_mcp/tools/states.py",
       "source_line": 168,
       "behavior": "mutation",
@@ -5450,7 +5267,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "STATES_ADAPTER_UNAVAILABLE"
+      "rationale_code": "SEMANTIC_GATEWAY_OPERATION_EXACT"
     },
     {
       "tool_name": "get_me",
@@ -5488,38 +5305,19 @@
     {
       "tool_name": "list_work_item_activities",
       "adapter": "shared_sdk_transport",
-      "registration": "blocked",
-      "gateway_schema_version": null,
-      "gateway_operation_id": null,
-      "result_key": null,
-      "result_mode": "blocked",
-      "input_aliases": {},
+      "registration": "gateway",
+      "gateway_schema_version": "plane.operation/v1",
+      "gateway_operation_id": "work_item_activity.list",
+      "result_key": "activities",
+      "result_mode": "value",
+      "input_aliases": {
+        "work_item_id": "issue_id"
+      },
       "public_signature": "project_id: str, work_item_id: str, params: dict[str, Any] | None=None",
       "return_annotation": "list[WorkItemActivity]",
       "sdk_entrypoints": [
         "plane_mcp.tools.work_item_activities:list_work_item_activities"
       ],
-      "blocker": {
-        "code": "ACTIVITY_PROJECTION_NOT_MUTATION_SAFE",
-        "action": "list_work_item_activities",
-        "required_semantic_shape": {
-          "category": "work_item_activities",
-          "behavior": "read",
-          "mutation": false,
-          "signature": "project_id: str, work_item_id: str, params: dict[str, Any] | None=None",
-          "return_annotation": "list[WorkItemActivity]",
-          "sdk_entrypoints": [
-            "plane_mcp.tools.work_item_activities:list_work_item_activities"
-          ]
-        },
-        "blocked_capabilities": [
-          "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
-        ],
-        "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Activity history is a derived projection and is not exposed as a gateway mutation family."
-      },
       "source_file": "plane_mcp/tools/work_item_activities.py",
       "source_line": 18,
       "behavior": "read",
@@ -5537,43 +5335,24 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "ACTIVITY_PROJECTION_NOT_MUTATION_SAFE"
+      "rationale_code": "SEMANTIC_GATEWAY_OPERATION_EXACT"
     },
     {
       "tool_name": "retrieve_work_item_activity",
       "adapter": "shared_sdk_transport",
-      "registration": "blocked",
-      "gateway_schema_version": null,
-      "gateway_operation_id": null,
-      "result_key": null,
-      "result_mode": "blocked",
-      "input_aliases": {},
+      "registration": "gateway",
+      "gateway_schema_version": "plane.operation/v1",
+      "gateway_operation_id": "work_item_activity.retrieve",
+      "result_key": "activity",
+      "result_mode": "value",
+      "input_aliases": {
+        "work_item_id": "issue_id"
+      },
       "public_signature": "project_id: str, work_item_id: str, activity_id: str",
       "return_annotation": "WorkItemActivity",
       "sdk_entrypoints": [
         "plane_mcp.tools.work_item_activities:retrieve_work_item_activity"
       ],
-      "blocker": {
-        "code": "ACTIVITY_PROJECTION_NOT_MUTATION_SAFE",
-        "action": "retrieve_work_item_activity",
-        "required_semantic_shape": {
-          "category": "work_item_activities",
-          "behavior": "read",
-          "mutation": false,
-          "signature": "project_id: str, work_item_id: str, activity_id: str",
-          "return_annotation": "WorkItemActivity",
-          "sdk_entrypoints": [
-            "plane_mcp.tools.work_item_activities:retrieve_work_item_activity"
-          ]
-        },
-        "blocked_capabilities": [
-          "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
-        ],
-        "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Activity history is a derived projection and is not exposed as a gateway mutation family."
-      },
       "source_file": "plane_mcp/tools/work_item_activities.py",
       "source_line": 44,
       "behavior": "read",
@@ -5591,7 +5370,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "ACTIVITY_PROJECTION_NOT_MUTATION_SAFE"
+      "rationale_code": "SEMANTIC_GATEWAY_OPERATION_EXACT"
     },
     {
       "tool_name": "list_work_item_attachments",
@@ -5909,38 +5688,19 @@
     {
       "tool_name": "delete_work_item_comment",
       "adapter": "shared_sdk_transport",
-      "registration": "blocked",
-      "gateway_schema_version": null,
-      "gateway_operation_id": null,
-      "result_key": null,
-      "result_mode": "blocked",
-      "input_aliases": {},
+      "registration": "gateway",
+      "gateway_schema_version": "plane.operation/v1",
+      "gateway_operation_id": "comment.delete",
+      "result_key": "deleted",
+      "result_mode": "none",
+      "input_aliases": {
+        "work_item_id": "issue_id"
+      },
       "public_signature": "project_id: str, work_item_id: str, comment_id: str",
       "return_annotation": "None",
       "sdk_entrypoints": [
         "plane_mcp.tools.work_item_comments:delete_work_item_comment"
       ],
-      "blocker": {
-        "code": "WORK_ITEM_COMMENTS_ADAPTER_UNAVAILABLE",
-        "action": "delete_work_item_comment",
-        "required_semantic_shape": {
-          "category": "work_item_comments",
-          "behavior": "mutation",
-          "mutation": true,
-          "signature": "project_id: str, work_item_id: str, comment_id: str",
-          "return_annotation": "None",
-          "sdk_entrypoints": [
-            "plane_mcp.tools.work_item_comments:delete_work_item_comment"
-          ]
-        },
-        "blocked_capabilities": [
-          "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
-        ],
-        "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable work_item_comments application adapter is registered in this commit."
-      },
       "source_file": "plane_mcp/tools/work_item_comments.py",
       "source_line": 169,
       "behavior": "mutation",
@@ -5958,7 +5718,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEM_COMMENTS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "SEMANTIC_GATEWAY_OPERATION_EXACT"
     },
     {
       "tool_name": "list_work_item_links",
@@ -6103,38 +5863,19 @@
     {
       "tool_name": "delete_work_item_link",
       "adapter": "shared_sdk_transport",
-      "registration": "blocked",
-      "gateway_schema_version": null,
-      "gateway_operation_id": null,
-      "result_key": null,
-      "result_mode": "blocked",
-      "input_aliases": {},
+      "registration": "gateway",
+      "gateway_schema_version": "plane.operation/v1",
+      "gateway_operation_id": "link.delete",
+      "result_key": "deleted",
+      "result_mode": "none",
+      "input_aliases": {
+        "work_item_id": "issue_id"
+      },
       "public_signature": "project_id: str, work_item_id: str, link_id: str",
       "return_annotation": "None",
       "sdk_entrypoints": [
         "plane_mcp.tools.work_item_links:delete_work_item_link"
       ],
-      "blocker": {
-        "code": "WORK_ITEM_LINKS_ADAPTER_UNAVAILABLE",
-        "action": "delete_work_item_link",
-        "required_semantic_shape": {
-          "category": "work_item_links",
-          "behavior": "mutation",
-          "mutation": true,
-          "signature": "project_id: str, work_item_id: str, link_id: str",
-          "return_annotation": "None",
-          "sdk_entrypoints": [
-            "plane_mcp.tools.work_item_links:delete_work_item_link"
-          ]
-        },
-        "blocked_capabilities": [
-          "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
-        ],
-        "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable work_item_links application adapter is registered in this commit."
-      },
       "source_file": "plane_mcp/tools/work_item_links.py",
       "source_line": 130,
       "behavior": "mutation",
@@ -6152,7 +5893,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEM_LINKS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "SEMANTIC_GATEWAY_OPERATION_EXACT"
     },
     {
       "tool_name": "list_work_item_properties",
@@ -6169,7 +5910,7 @@
         "plane_mcp.tools.work_item_properties:list_work_item_properties"
       ],
       "blocker": {
-        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_ef9e4b41cac9",
         "action": "list_work_item_properties",
         "required_semantic_shape": {
           "category": "work_item_properties",
@@ -6183,11 +5924,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-item property semantics require relationship-aware application services."
+        "reason": "Public action list_work_item_properties is individually deferred: Work-item property semantics require relationship-aware application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_properties.py",
       "source_line": 30,
@@ -6206,7 +5947,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_ef9e4b41cac9"
     },
     {
       "tool_name": "create_work_item_property",
@@ -6223,7 +5964,7 @@
         "plane_mcp.tools.work_item_properties:create_work_item_property"
       ],
       "blocker": {
-        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_3b5b8798864e",
         "action": "create_work_item_property",
         "required_semantic_shape": {
           "category": "work_item_properties",
@@ -6241,7 +5982,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-item property semantics require relationship-aware application services."
+        "reason": "Public action create_work_item_property is individually deferred: Work-item property semantics require relationship-aware application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_properties.py",
       "source_line": 123,
@@ -6260,7 +6001,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_3b5b8798864e"
     },
     {
       "tool_name": "retrieve_work_item_property",
@@ -6277,7 +6018,7 @@
         "plane_mcp.tools.work_item_properties:retrieve_work_item_property"
       ],
       "blocker": {
-        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_196ac79321c6",
         "action": "retrieve_work_item_property",
         "required_semantic_shape": {
           "category": "work_item_properties",
@@ -6291,11 +6032,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-item property semantics require relationship-aware application services."
+        "reason": "Public action retrieve_work_item_property is individually deferred: Work-item property semantics require relationship-aware application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_properties.py",
       "source_line": 221,
@@ -6314,7 +6055,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_196ac79321c6"
     },
     {
       "tool_name": "update_work_item_property",
@@ -6331,7 +6072,7 @@
         "plane_mcp.tools.work_item_properties:update_work_item_property"
       ],
       "blocker": {
-        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_8c2fe17ee6b9",
         "action": "update_work_item_property",
         "required_semantic_shape": {
           "category": "work_item_properties",
@@ -6349,7 +6090,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-item property semantics require relationship-aware application services."
+        "reason": "Public action update_work_item_property is individually deferred: Work-item property semantics require relationship-aware application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_properties.py",
       "source_line": 257,
@@ -6368,7 +6109,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_8c2fe17ee6b9"
     },
     {
       "tool_name": "delete_work_item_property",
@@ -6385,7 +6126,7 @@
         "plane_mcp.tools.work_item_properties:delete_work_item_property"
       ],
       "blocker": {
-        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_a1d717095a25",
         "action": "delete_work_item_property",
         "required_semantic_shape": {
           "category": "work_item_properties",
@@ -6403,7 +6144,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-item property semantics require relationship-aware application services."
+        "reason": "Public action delete_work_item_property is individually deferred: Work-item property semantics require relationship-aware application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_properties.py",
       "source_line": 353,
@@ -6422,7 +6163,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_a1d717095a25"
     },
     {
       "tool_name": "manage_work_item_type_properties",
@@ -6439,7 +6180,7 @@
         "plane_mcp.tools.work_item_properties:manage_work_item_type_properties"
       ],
       "blocker": {
-        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_869b17878e95",
         "action": "manage_work_item_type_properties",
         "required_semantic_shape": {
           "category": "work_item_properties",
@@ -6457,7 +6198,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-item property semantics require relationship-aware application services."
+        "reason": "Public action manage_work_item_type_properties is individually deferred: Work-item property semantics require relationship-aware application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_properties.py",
       "source_line": 387,
@@ -6476,7 +6217,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_869b17878e95"
     },
     {
       "tool_name": "list_work_item_property_options",
@@ -6493,7 +6234,7 @@
         "plane_mcp.tools.work_item_properties:list_work_item_property_options"
       ],
       "blocker": {
-        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_0cdff4eaeb55",
         "action": "list_work_item_property_options",
         "required_semantic_shape": {
           "category": "work_item_properties",
@@ -6507,11 +6248,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-item property semantics require relationship-aware application services."
+        "reason": "Public action list_work_item_property_options is individually deferred: Work-item property semantics require relationship-aware application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_properties.py",
       "source_line": 428,
@@ -6530,7 +6271,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_0cdff4eaeb55"
     },
     {
       "tool_name": "retrieve_work_item_property_option",
@@ -6547,7 +6288,7 @@
         "plane_mcp.tools.work_item_properties:retrieve_work_item_property_option"
       ],
       "blocker": {
-        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_796eb9aeca92",
         "action": "retrieve_work_item_property_option",
         "required_semantic_shape": {
           "category": "work_item_properties",
@@ -6561,11 +6302,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-item property semantics require relationship-aware application services."
+        "reason": "Public action retrieve_work_item_property_option is individually deferred: Work-item property semantics require relationship-aware application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_properties.py",
       "source_line": 458,
@@ -6584,7 +6325,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_796eb9aeca92"
     },
     {
       "tool_name": "create_work_item_property_option",
@@ -6601,7 +6342,7 @@
         "plane_mcp.tools.work_item_properties:create_work_item_property_option"
       ],
       "blocker": {
-        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_0e287e277691",
         "action": "create_work_item_property_option",
         "required_semantic_shape": {
           "category": "work_item_properties",
@@ -6619,7 +6360,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-item property semantics require relationship-aware application services."
+        "reason": "Public action create_work_item_property_option is individually deferred: Work-item property semantics require relationship-aware application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_properties.py",
       "source_line": 489,
@@ -6638,7 +6379,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_0e287e277691"
     },
     {
       "tool_name": "update_work_item_property_option",
@@ -6655,7 +6396,7 @@
         "plane_mcp.tools.work_item_properties:update_work_item_property_option"
       ],
       "blocker": {
-        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_8763828365f7",
         "action": "update_work_item_property_option",
         "required_semantic_shape": {
           "category": "work_item_properties",
@@ -6673,7 +6414,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-item property semantics require relationship-aware application services."
+        "reason": "Public action update_work_item_property_option is individually deferred: Work-item property semantics require relationship-aware application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_properties.py",
       "source_line": 538,
@@ -6692,7 +6433,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_8763828365f7"
     },
     {
       "tool_name": "delete_work_item_property_option",
@@ -6709,7 +6450,7 @@
         "plane_mcp.tools.work_item_properties:delete_work_item_property_option"
       ],
       "blocker": {
-        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_848979a1a9eb",
         "action": "delete_work_item_property_option",
         "required_semantic_shape": {
           "category": "work_item_properties",
@@ -6727,7 +6468,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-item property semantics require relationship-aware application services."
+        "reason": "Public action delete_work_item_property_option is individually deferred: Work-item property semantics require relationship-aware application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_properties.py",
       "source_line": 591,
@@ -6746,7 +6487,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_848979a1a9eb"
     },
     {
       "tool_name": "get_work_item_property_value",
@@ -6763,7 +6504,7 @@
         "plane_mcp.tools.work_item_properties:get_work_item_property_value"
       ],
       "blocker": {
-        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_8f4119b3558c",
         "action": "get_work_item_property_value",
         "required_semantic_shape": {
           "category": "work_item_properties",
@@ -6777,11 +6518,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-item property semantics require relationship-aware application services."
+        "reason": "Public action get_work_item_property_value is individually deferred: Work-item property semantics require relationship-aware application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_properties.py",
       "source_line": 620,
@@ -6800,7 +6541,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_8f4119b3558c"
     },
     {
       "tool_name": "set_work_item_property_value",
@@ -6817,7 +6558,7 @@
         "plane_mcp.tools.work_item_properties:set_work_item_property_value"
       ],
       "blocker": {
-        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_ce6ebcd536ba",
         "action": "set_work_item_property_value",
         "required_semantic_shape": {
           "category": "work_item_properties",
@@ -6835,7 +6576,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-item property semantics require relationship-aware application services."
+        "reason": "Public action set_work_item_property_value is individually deferred: Work-item property semantics require relationship-aware application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_properties.py",
       "source_line": 649,
@@ -6854,7 +6595,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_ce6ebcd536ba"
     },
     {
       "tool_name": "delete_work_item_property_value",
@@ -6871,7 +6612,7 @@
         "plane_mcp.tools.work_item_properties:delete_work_item_property_value"
       ],
       "blocker": {
-        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_c362cc627230",
         "action": "delete_work_item_property_value",
         "required_semantic_shape": {
           "category": "work_item_properties",
@@ -6889,7 +6630,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-item property semantics require relationship-aware application services."
+        "reason": "Public action delete_work_item_property_value is individually deferred: Work-item property semantics require relationship-aware application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_properties.py",
       "source_line": 699,
@@ -6908,7 +6649,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEM_PROPERTY_ADAPTER_UNAVAILABLE_c362cc627230"
     },
     {
       "tool_name": "list_work_item_relation_definitions",
@@ -6925,7 +6666,7 @@
         "plane_mcp.tools.work_item_relation_definitions:list_work_item_relation_definitions"
       ],
       "blocker": {
-        "code": "RELATION_DEFINITION_ADAPTER_UNAVAILABLE",
+        "code": "RELATION_DEFINITION_ADAPTER_UNAVAILABLE_b6268cae5a52",
         "action": "list_work_item_relation_definitions",
         "required_semantic_shape": {
           "category": "work_item_relation_definitions",
@@ -6939,11 +6680,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Relation-definition semantics require relationship-aware application services."
+        "reason": "Public action list_work_item_relation_definitions is individually deferred: Relation-definition semantics require relationship-aware application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_relation_definitions.py",
       "source_line": 21,
@@ -6962,7 +6703,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELATION_DEFINITION_ADAPTER_UNAVAILABLE"
+      "rationale_code": "RELATION_DEFINITION_ADAPTER_UNAVAILABLE_b6268cae5a52"
     },
     {
       "tool_name": "create_work_item_relation_definition",
@@ -6979,7 +6720,7 @@
         "plane_mcp.tools.work_item_relation_definitions:create_work_item_relation_definition"
       ],
       "blocker": {
-        "code": "RELATION_DEFINITION_ADAPTER_UNAVAILABLE",
+        "code": "RELATION_DEFINITION_ADAPTER_UNAVAILABLE_3805f9ac50f4",
         "action": "create_work_item_relation_definition",
         "required_semantic_shape": {
           "category": "work_item_relation_definitions",
@@ -6997,7 +6738,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Relation-definition semantics require relationship-aware application services."
+        "reason": "Public action create_work_item_relation_definition is individually deferred: Relation-definition semantics require relationship-aware application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_relation_definitions.py",
       "source_line": 62,
@@ -7016,7 +6757,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELATION_DEFINITION_ADAPTER_UNAVAILABLE"
+      "rationale_code": "RELATION_DEFINITION_ADAPTER_UNAVAILABLE_3805f9ac50f4"
     },
     {
       "tool_name": "update_work_item_relation_definition",
@@ -7033,7 +6774,7 @@
         "plane_mcp.tools.work_item_relation_definitions:update_work_item_relation_definition"
       ],
       "blocker": {
-        "code": "RELATION_DEFINITION_ADAPTER_UNAVAILABLE",
+        "code": "RELATION_DEFINITION_ADAPTER_UNAVAILABLE_833a209ad359",
         "action": "update_work_item_relation_definition",
         "required_semantic_shape": {
           "category": "work_item_relation_definitions",
@@ -7051,7 +6792,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Relation-definition semantics require relationship-aware application services."
+        "reason": "Public action update_work_item_relation_definition is individually deferred: Relation-definition semantics require relationship-aware application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_relation_definitions.py",
       "source_line": 99,
@@ -7070,7 +6811,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELATION_DEFINITION_ADAPTER_UNAVAILABLE"
+      "rationale_code": "RELATION_DEFINITION_ADAPTER_UNAVAILABLE_833a209ad359"
     },
     {
       "tool_name": "delete_work_item_relation_definition",
@@ -7087,7 +6828,7 @@
         "plane_mcp.tools.work_item_relation_definitions:delete_work_item_relation_definition"
       ],
       "blocker": {
-        "code": "RELATION_DEFINITION_ADAPTER_UNAVAILABLE",
+        "code": "RELATION_DEFINITION_ADAPTER_UNAVAILABLE_3d2e70d66be9",
         "action": "delete_work_item_relation_definition",
         "required_semantic_shape": {
           "category": "work_item_relation_definitions",
@@ -7105,7 +6846,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Relation-definition semantics require relationship-aware application services."
+        "reason": "Public action delete_work_item_relation_definition is individually deferred: Relation-definition semantics require relationship-aware application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_relation_definitions.py",
       "source_line": 135,
@@ -7124,43 +6865,24 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELATION_DEFINITION_ADAPTER_UNAVAILABLE"
+      "rationale_code": "RELATION_DEFINITION_ADAPTER_UNAVAILABLE_3d2e70d66be9"
     },
     {
       "tool_name": "list_work_item_relations",
       "adapter": "shared_sdk_transport",
-      "registration": "blocked",
-      "gateway_schema_version": null,
-      "gateway_operation_id": null,
-      "result_key": null,
-      "result_mode": "blocked",
-      "input_aliases": {},
+      "registration": "gateway",
+      "gateway_schema_version": "plane.operation/v1",
+      "gateway_operation_id": "work_item_relation.list",
+      "result_key": "relations",
+      "result_mode": "value",
+      "input_aliases": {
+        "work_item_id": "issue_id"
+      },
       "public_signature": "project_id: str, work_item_id: str",
       "return_annotation": "dict[str, Any]",
       "sdk_entrypoints": [
         "plane_mcp.tools.work_item_relations:list_work_item_relations"
       ],
-      "blocker": {
-        "code": "RELATION_ADAPTER_UNAVAILABLE",
-        "action": "list_work_item_relations",
-        "required_semantic_shape": {
-          "category": "work_item_relations",
-          "behavior": "read",
-          "mutation": false,
-          "signature": "project_id: str, work_item_id: str",
-          "return_annotation": "dict[str, Any]",
-          "sdk_entrypoints": [
-            "plane_mcp.tools.work_item_relations:list_work_item_relations"
-          ]
-        },
-        "blocked_capabilities": [
-          "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
-        ],
-        "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-item relation semantics require relationship-aware application services."
-      },
       "source_file": "plane_mcp/tools/work_item_relations.py",
       "source_line": 37,
       "behavior": "read",
@@ -7178,43 +6900,24 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELATION_ADAPTER_UNAVAILABLE"
+      "rationale_code": "SEMANTIC_GATEWAY_OPERATION_EXACT"
     },
     {
       "tool_name": "create_work_item_relation",
       "adapter": "shared_sdk_transport",
-      "registration": "blocked",
-      "gateway_schema_version": null,
-      "gateway_operation_id": null,
-      "result_key": null,
-      "result_mode": "blocked",
-      "input_aliases": {},
+      "registration": "gateway",
+      "gateway_schema_version": "plane.operation/v1",
+      "gateway_operation_id": "work_item_relation.create",
+      "result_key": "relations",
+      "result_mode": "value",
+      "input_aliases": {
+        "work_item_id": "issue_id"
+      },
       "public_signature": "project_id: str, work_item_id: str, work_item_ids: list[str], relation_type: str | None=None, relation_definition_id: str | None=None, relation_definition_label: str | None=None",
       "return_annotation": "list[WorkItemWithRelationType]",
       "sdk_entrypoints": [
         "plane_mcp.tools.work_item_relations:create_work_item_relation"
       ],
-      "blocker": {
-        "code": "RELATION_ADAPTER_UNAVAILABLE",
-        "action": "create_work_item_relation",
-        "required_semantic_shape": {
-          "category": "work_item_relations",
-          "behavior": "mutation",
-          "mutation": true,
-          "signature": "project_id: str, work_item_id: str, work_item_ids: list[str], relation_type: str | None=None, relation_definition_id: str | None=None, relation_definition_label: str | None=None",
-          "return_annotation": "list[WorkItemWithRelationType]",
-          "sdk_entrypoints": [
-            "plane_mcp.tools.work_item_relations:create_work_item_relation"
-          ]
-        },
-        "blocked_capabilities": [
-          "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
-        ],
-        "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-item relation semantics require relationship-aware application services."
-      },
       "source_file": "plane_mcp/tools/work_item_relations.py",
       "source_line": 68,
       "behavior": "mutation",
@@ -7232,7 +6935,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELATION_ADAPTER_UNAVAILABLE"
+      "rationale_code": "SEMANTIC_GATEWAY_OPERATION_EXACT"
     },
     {
       "tool_name": "remove_work_item_relation",
@@ -7249,7 +6952,7 @@
         "plane_mcp.tools.work_item_relations:remove_work_item_relation"
       ],
       "blocker": {
-        "code": "RELATION_ADAPTER_UNAVAILABLE",
+        "code": "RELATION_ADAPTER_UNAVAILABLE_REMOVE_WORK_ITEM_RELATION_DEFERRED",
         "action": "remove_work_item_relation",
         "required_semantic_shape": {
           "category": "work_item_relations",
@@ -7267,7 +6970,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-item relation semantics require relationship-aware application services."
+        "reason": "Public action remove_work_item_relation is individually deferred: Work-item relation semantics require relationship-aware application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_relations.py",
       "source_line": 130,
@@ -7286,7 +6989,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "RELATION_ADAPTER_UNAVAILABLE"
+      "rationale_code": "RELATION_ADAPTER_UNAVAILABLE_REMOVE_WORK_ITEM_RELATION_DEFERRED"
     },
     {
       "tool_name": "list_work_item_types",
@@ -7303,7 +7006,7 @@
         "plane_mcp.tools.work_item_types:list_work_item_types"
       ],
       "blocker": {
-        "code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE_LIST_WORK_ITEM_TYPES_DEFERRED",
         "action": "list_work_item_types",
         "required_semantic_shape": {
           "category": "work_item_types",
@@ -7317,11 +7020,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-item type semantics require project configuration application services."
+        "reason": "Public action list_work_item_types is individually deferred: Work-item type semantics require project configuration application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_types.py",
       "source_line": 20,
@@ -7340,7 +7043,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE_LIST_WORK_ITEM_TYPES_DEFERRED"
     },
     {
       "tool_name": "create_work_item_type",
@@ -7357,7 +7060,7 @@
         "plane_mcp.tools.work_item_types:create_work_item_type"
       ],
       "blocker": {
-        "code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE_713d0265f2b3",
         "action": "create_work_item_type",
         "required_semantic_shape": {
           "category": "work_item_types",
@@ -7375,7 +7078,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-item type semantics require project configuration application services."
+        "reason": "Public action create_work_item_type is individually deferred: Work-item type semantics require project configuration application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_types.py",
       "source_line": 38,
@@ -7394,7 +7097,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE_713d0265f2b3"
     },
     {
       "tool_name": "import_work_item_types_to_project",
@@ -7411,7 +7114,7 @@
         "plane_mcp.tools.work_item_types:import_work_item_types_to_project"
       ],
       "blocker": {
-        "code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE_e5833afcec65",
         "action": "import_work_item_types_to_project",
         "required_semantic_shape": {
           "category": "work_item_types",
@@ -7429,7 +7132,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-item type semantics require project configuration application services."
+        "reason": "Public action import_work_item_types_to_project is individually deferred: Work-item type semantics require project configuration application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_types.py",
       "source_line": 83,
@@ -7448,7 +7151,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE_e5833afcec65"
     },
     {
       "tool_name": "resolve_work_item_type",
@@ -7465,7 +7168,7 @@
         "plane_mcp.tools.work_item_types:resolve_work_item_type"
       ],
       "blocker": {
-        "code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE_fe73d7eebc22",
         "action": "resolve_work_item_type",
         "required_semantic_shape": {
           "category": "work_item_types",
@@ -7479,11 +7182,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-item type semantics require project configuration application services."
+        "reason": "Public action resolve_work_item_type is individually deferred: Work-item type semantics require project configuration application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_types.py",
       "source_line": 106,
@@ -7502,7 +7205,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE_fe73d7eebc22"
     },
     {
       "tool_name": "retrieve_work_item_type",
@@ -7519,7 +7222,7 @@
         "plane_mcp.tools.work_item_types:retrieve_work_item_type"
       ],
       "blocker": {
-        "code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE_625392c4d370",
         "action": "retrieve_work_item_type",
         "required_semantic_shape": {
           "category": "work_item_types",
@@ -7533,11 +7236,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-item type semantics require project configuration application services."
+        "reason": "Public action retrieve_work_item_type is individually deferred: Work-item type semantics require project configuration application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_types.py",
       "source_line": 189,
@@ -7556,7 +7259,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE_625392c4d370"
     },
     {
       "tool_name": "update_work_item_type",
@@ -7573,7 +7276,7 @@
         "plane_mcp.tools.work_item_types:update_work_item_type"
       ],
       "blocker": {
-        "code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE_54666c43c10d",
         "action": "update_work_item_type",
         "required_semantic_shape": {
           "category": "work_item_types",
@@ -7591,7 +7294,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-item type semantics require project configuration application services."
+        "reason": "Public action update_work_item_type is individually deferred: Work-item type semantics require project configuration application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_types.py",
       "source_line": 216,
@@ -7610,7 +7313,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE_54666c43c10d"
     },
     {
       "tool_name": "delete_work_item_type",
@@ -7627,7 +7330,7 @@
         "plane_mcp.tools.work_item_types:delete_work_item_type"
       ],
       "blocker": {
-        "code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE_cea0d1809893",
         "action": "delete_work_item_type",
         "required_semantic_shape": {
           "category": "work_item_types",
@@ -7645,7 +7348,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-item type semantics require project configuration application services."
+        "reason": "Public action delete_work_item_type is individually deferred: Work-item type semantics require project configuration application services. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_item_types.py",
       "source_line": 267,
@@ -7664,43 +7367,22 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEM_TYPE_ADAPTER_UNAVAILABLE_cea0d1809893"
     },
     {
       "tool_name": "list_work_items",
       "adapter": "shared_sdk_transport",
-      "registration": "blocked",
-      "gateway_schema_version": null,
-      "gateway_operation_id": null,
-      "result_key": null,
-      "result_mode": "blocked",
+      "registration": "gateway",
+      "gateway_schema_version": "plane.operation/v1",
+      "gateway_operation_id": "work_item.list",
+      "result_key": "work_items",
+      "result_mode": "value",
       "input_aliases": {},
       "public_signature": "project_id: str | None=None, pql: Annotated[str | None, Field(description=PQL_FIELD_HINT)]=None, order_by: str | None=None, per_page: int | None=None, cursor: str | None=None, expand: str | None=None, fields: str | None=None, external_id: str | None=None, external_source: str | None=None",
       "return_annotation": "dict[str, Any]",
       "sdk_entrypoints": [
         "plane_mcp.tools.work_items:list_work_items"
       ],
-      "blocker": {
-        "code": "WORK_ITEMS_ADAPTER_UNAVAILABLE",
-        "action": "list_work_items",
-        "required_semantic_shape": {
-          "category": "work_items",
-          "behavior": "read",
-          "mutation": false,
-          "signature": "project_id: str | None=None, pql: Annotated[str | None, Field(description=PQL_FIELD_HINT)]=None, order_by: str | None=None, per_page: int | None=None, cursor: str | None=None, expand: str | None=None, fields: str | None=None, external_id: str | None=None, external_source: str | None=None",
-          "return_annotation": "dict[str, Any]",
-          "sdk_entrypoints": [
-            "plane_mcp.tools.work_items:list_work_items"
-          ]
-        },
-        "blocked_capabilities": [
-          "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
-        ],
-        "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable work_items application adapter is registered in this commit."
-      },
       "source_file": "plane_mcp/tools/work_items.py",
       "source_line": 71,
       "behavior": "read",
@@ -7719,7 +7401,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEMS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "SEMANTIC_GATEWAY_OPERATION_EXACT"
     },
     {
       "tool_name": "count_work_items",
@@ -7736,7 +7418,7 @@
         "plane_mcp.tools.work_items:count_work_items"
       ],
       "blocker": {
-        "code": "WORK_ITEMS_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEMS_ADAPTER_UNAVAILABLE_COUNT_WORK_ITEMS_DEFERRED",
         "action": "count_work_items",
         "required_semantic_shape": {
           "category": "work_items",
@@ -7750,11 +7432,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable work_items application adapter is registered in this commit."
+        "reason": "Public action count_work_items is individually deferred: No safe reusable work_items application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_items.py",
       "source_line": 160,
@@ -7773,43 +7455,22 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEMS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEMS_ADAPTER_UNAVAILABLE_COUNT_WORK_ITEMS_DEFERRED"
     },
     {
       "tool_name": "create_work_item",
       "adapter": "shared_sdk_transport",
-      "registration": "blocked",
-      "gateway_schema_version": null,
-      "gateway_operation_id": null,
-      "result_key": null,
-      "result_mode": "blocked",
+      "registration": "gateway",
+      "gateway_schema_version": "plane.operation/v1",
+      "gateway_operation_id": "work_item.create",
+      "result_key": "work_item",
+      "result_mode": "value",
       "input_aliases": {},
       "public_signature": "project_id: str, name: str, assignees: list[str] | None=None, labels: list[str] | None=None, type_id: str | None=None, point: int | None=None, description_html: str | None=None, description_stripped: str | None=None, priority: str | None=None, start_date: str | None=None, target_date: str | None=None, sort_order: float | None=None, is_draft: bool | None=None, external_source: str | None=None, external_id: str | None=None, parent: str | None=None, state: str | None=None, estimate_point: str | None=None, type: str | None=None",
       "return_annotation": "WorkItem",
       "sdk_entrypoints": [
         "plane_mcp.tools.work_items:create_work_item"
       ],
-      "blocker": {
-        "code": "WORK_ITEMS_ADAPTER_UNAVAILABLE",
-        "action": "create_work_item",
-        "required_semantic_shape": {
-          "category": "work_items",
-          "behavior": "mutation",
-          "mutation": true,
-          "signature": "project_id: str, name: str, assignees: list[str] | None=None, labels: list[str] | None=None, type_id: str | None=None, point: int | None=None, description_html: str | None=None, description_stripped: str | None=None, priority: str | None=None, start_date: str | None=None, target_date: str | None=None, sort_order: float | None=None, is_draft: bool | None=None, external_source: str | None=None, external_id: str | None=None, parent: str | None=None, state: str | None=None, estimate_point: str | None=None, type: str | None=None",
-          "return_annotation": "WorkItem",
-          "sdk_entrypoints": [
-            "plane_mcp.tools.work_items:create_work_item"
-          ]
-        },
-        "blocked_capabilities": [
-          "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
-        ],
-        "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable work_items application adapter is registered in this commit."
-      },
       "source_file": "plane_mcp/tools/work_items.py",
       "source_line": 209,
       "behavior": "mutation",
@@ -7827,43 +7488,24 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEMS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "SEMANTIC_GATEWAY_OPERATION_EXACT"
     },
     {
       "tool_name": "retrieve_work_item",
       "adapter": "shared_sdk_transport",
-      "registration": "blocked",
-      "gateway_schema_version": null,
-      "gateway_operation_id": null,
-      "result_key": null,
-      "result_mode": "blocked",
-      "input_aliases": {},
+      "registration": "gateway",
+      "gateway_schema_version": "plane.operation/v1",
+      "gateway_operation_id": "work_item.retrieve",
+      "result_key": "work_item",
+      "result_mode": "value",
+      "input_aliases": {
+        "work_item_id": "issue_id"
+      },
       "public_signature": "project_id: str, work_item_id: str, expand: str | None=None, fields: str | None=None, external_id: str | None=None, external_source: str | None=None, order_by: str | None=None",
       "return_annotation": "WorkItemDetail",
       "sdk_entrypoints": [
         "plane_mcp.tools.work_items:retrieve_work_item"
       ],
-      "blocker": {
-        "code": "WORK_ITEMS_ADAPTER_UNAVAILABLE",
-        "action": "retrieve_work_item",
-        "required_semantic_shape": {
-          "category": "work_items",
-          "behavior": "read",
-          "mutation": false,
-          "signature": "project_id: str, work_item_id: str, expand: str | None=None, fields: str | None=None, external_id: str | None=None, external_source: str | None=None, order_by: str | None=None",
-          "return_annotation": "WorkItemDetail",
-          "sdk_entrypoints": [
-            "plane_mcp.tools.work_items:retrieve_work_item"
-          ]
-        },
-        "blocked_capabilities": [
-          "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
-        ],
-        "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable work_items application adapter is registered in this commit."
-      },
       "source_file": "plane_mcp/tools/work_items.py",
       "source_line": 288,
       "behavior": "read",
@@ -7881,7 +7523,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEMS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "SEMANTIC_GATEWAY_OPERATION_EXACT"
     },
     {
       "tool_name": "retrieve_work_item_by_identifier",
@@ -7898,7 +7540,7 @@
         "plane_mcp.tools.work_items:retrieve_work_item_by_identifier"
       ],
       "blocker": {
-        "code": "WORK_ITEMS_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEMS_ADAPTER_UNAVAILABLE_e3a57676bcaa",
         "action": "retrieve_work_item_by_identifier",
         "required_semantic_shape": {
           "category": "work_items",
@@ -7912,11 +7554,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable work_items application adapter is registered in this commit."
+        "reason": "Public action retrieve_work_item_by_identifier is individually deferred: No safe reusable work_items application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_items.py",
       "source_line": 330,
@@ -7935,43 +7577,24 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEMS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEMS_ADAPTER_UNAVAILABLE_e3a57676bcaa"
     },
     {
       "tool_name": "update_work_item",
       "adapter": "shared_sdk_transport",
-      "registration": "blocked",
-      "gateway_schema_version": null,
-      "gateway_operation_id": null,
-      "result_key": null,
-      "result_mode": "blocked",
-      "input_aliases": {},
+      "registration": "gateway",
+      "gateway_schema_version": "plane.operation/v1",
+      "gateway_operation_id": "work_item.update",
+      "result_key": "work_item",
+      "result_mode": "value",
+      "input_aliases": {
+        "work_item_id": "issue_id"
+      },
       "public_signature": "project_id: str, work_item_id: str, name: str | None=None, assignees: list[str] | None=None, labels: list[str] | None=None, type_id: str | None=None, point: int | None=None, description_html: str | None=None, description_stripped: str | None=None, priority: str | None=None, start_date: str | None=None, target_date: str | None=None, sort_order: float | None=None, is_draft: bool | None=None, external_source: str | None=None, external_id: str | None=None, parent: str | None=None, state: str | None=None, estimate_point: str | None=None, type: str | None=None",
       "return_annotation": "WorkItem",
       "sdk_entrypoints": [
         "plane_mcp.tools.work_items:update_work_item"
       ],
-      "blocker": {
-        "code": "WORK_ITEMS_ADAPTER_UNAVAILABLE",
-        "action": "update_work_item",
-        "required_semantic_shape": {
-          "category": "work_items",
-          "behavior": "mutation",
-          "mutation": true,
-          "signature": "project_id: str, work_item_id: str, name: str | None=None, assignees: list[str] | None=None, labels: list[str] | None=None, type_id: str | None=None, point: int | None=None, description_html: str | None=None, description_stripped: str | None=None, priority: str | None=None, start_date: str | None=None, target_date: str | None=None, sort_order: float | None=None, is_draft: bool | None=None, external_source: str | None=None, external_id: str | None=None, parent: str | None=None, state: str | None=None, estimate_point: str | None=None, type: str | None=None",
-          "return_annotation": "WorkItem",
-          "sdk_entrypoints": [
-            "plane_mcp.tools.work_items:update_work_item"
-          ]
-        },
-        "blocked_capabilities": [
-          "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
-        ],
-        "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable work_items application adapter is registered in this commit."
-      },
       "source_file": "plane_mcp/tools/work_items.py",
       "source_line": 390,
       "behavior": "mutation",
@@ -7989,43 +7612,24 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEMS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "SEMANTIC_GATEWAY_OPERATION_EXACT"
     },
     {
       "tool_name": "delete_work_item",
       "adapter": "shared_sdk_transport",
-      "registration": "blocked",
-      "gateway_schema_version": null,
-      "gateway_operation_id": null,
-      "result_key": null,
-      "result_mode": "blocked",
-      "input_aliases": {},
+      "registration": "gateway",
+      "gateway_schema_version": "plane.operation/v1",
+      "gateway_operation_id": "work_item.delete",
+      "result_key": "deleted",
+      "result_mode": "none",
+      "input_aliases": {
+        "work_item_id": "issue_id"
+      },
       "public_signature": "project_id: str, work_item_id: str",
       "return_annotation": "None",
       "sdk_entrypoints": [
         "plane_mcp.tools.work_items:delete_work_item"
       ],
-      "blocker": {
-        "code": "WORK_ITEMS_ADAPTER_UNAVAILABLE",
-        "action": "delete_work_item",
-        "required_semantic_shape": {
-          "category": "work_items",
-          "behavior": "mutation",
-          "mutation": true,
-          "signature": "project_id: str, work_item_id: str",
-          "return_annotation": "None",
-          "sdk_entrypoints": [
-            "plane_mcp.tools.work_items:delete_work_item"
-          ]
-        },
-        "blocked_capabilities": [
-          "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
-        ],
-        "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable work_items application adapter is registered in this commit."
-      },
       "source_file": "plane_mcp/tools/work_items.py",
       "source_line": 476,
       "behavior": "mutation",
@@ -8043,7 +7647,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEMS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "SEMANTIC_GATEWAY_OPERATION_EXACT"
     },
     {
       "tool_name": "manage_work_item_assignee",
@@ -8060,7 +7664,7 @@
         "plane_mcp.tools.work_items:manage_work_item_assignee"
       ],
       "blocker": {
-        "code": "WORK_ITEMS_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEMS_ADAPTER_UNAVAILABLE_391d68448895",
         "action": "manage_work_item_assignee",
         "required_semantic_shape": {
           "category": "work_items",
@@ -8078,7 +7682,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable work_items application adapter is registered in this commit."
+        "reason": "Public action manage_work_item_assignee is individually deferred: No safe reusable work_items application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_items.py",
       "source_line": 488,
@@ -8097,7 +7701,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEMS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEMS_ADAPTER_UNAVAILABLE_391d68448895"
     },
     {
       "tool_name": "manage_work_item_label",
@@ -8114,7 +7718,7 @@
         "plane_mcp.tools.work_items:manage_work_item_label"
       ],
       "blocker": {
-        "code": "WORK_ITEMS_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEMS_ADAPTER_UNAVAILABLE_MANAGE_WORK_ITEM_LABEL_DEFERRED",
         "action": "manage_work_item_label",
         "required_semantic_shape": {
           "category": "work_items",
@@ -8132,7 +7736,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable work_items application adapter is registered in this commit."
+        "reason": "Public action manage_work_item_label is individually deferred: No safe reusable work_items application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_items.py",
       "source_line": 527,
@@ -8151,7 +7755,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEMS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEMS_ADAPTER_UNAVAILABLE_MANAGE_WORK_ITEM_LABEL_DEFERRED"
     },
     {
       "tool_name": "list_archived_work_items",
@@ -8168,7 +7772,7 @@
         "plane_mcp.tools.work_items:list_archived_work_items"
       ],
       "blocker": {
-        "code": "WORK_ITEMS_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEMS_ADAPTER_UNAVAILABLE_LIST_ARCHIVED_WORK_ITEMS_DEFERRED",
         "action": "list_archived_work_items",
         "required_semantic_shape": {
           "category": "work_items",
@@ -8182,11 +7786,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable work_items application adapter is registered in this commit."
+        "reason": "Public action list_archived_work_items is individually deferred: No safe reusable work_items application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_items.py",
       "source_line": 566,
@@ -8206,7 +7810,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEMS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEMS_ADAPTER_UNAVAILABLE_LIST_ARCHIVED_WORK_ITEMS_DEFERRED"
     },
     {
       "tool_name": "manage_work_item_archive",
@@ -8223,7 +7827,7 @@
         "plane_mcp.tools.work_items:manage_work_item_archive"
       ],
       "blocker": {
-        "code": "WORK_ITEMS_ADAPTER_UNAVAILABLE",
+        "code": "WORK_ITEMS_ADAPTER_UNAVAILABLE_MANAGE_WORK_ITEM_ARCHIVE_DEFERRED",
         "action": "manage_work_item_archive",
         "required_semantic_shape": {
           "category": "work_items",
@@ -8241,7 +7845,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable work_items application adapter is registered in this commit."
+        "reason": "Public action manage_work_item_archive is individually deferred: No safe reusable work_items application adapter is registered in this commit. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_items.py",
       "source_line": 627,
@@ -8260,43 +7864,22 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEMS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_ITEMS_ADAPTER_UNAVAILABLE_MANAGE_WORK_ITEM_ARCHIVE_DEFERRED"
     },
     {
       "tool_name": "search_work_items",
       "adapter": "shared_sdk_transport",
-      "registration": "blocked",
-      "gateway_schema_version": null,
-      "gateway_operation_id": null,
-      "result_key": null,
-      "result_mode": "blocked",
+      "registration": "gateway",
+      "gateway_schema_version": "plane.operation/v1",
+      "gateway_operation_id": "work_item.search",
+      "result_key": "issues",
+      "result_mode": "value",
       "input_aliases": {},
       "public_signature": "query: str, expand: str | None=None, fields: str | None=None, external_id: str | None=None, external_source: str | None=None, order_by: str | None=None",
       "return_annotation": "WorkItemSearch",
       "sdk_entrypoints": [
         "plane_mcp.tools.work_items:search_work_items"
       ],
-      "blocker": {
-        "code": "WORK_ITEMS_ADAPTER_UNAVAILABLE",
-        "action": "search_work_items",
-        "required_semantic_shape": {
-          "category": "work_items",
-          "behavior": "read",
-          "mutation": false,
-          "signature": "query: str, expand: str | None=None, fields: str | None=None, external_id: str | None=None, external_source: str | None=None, order_by: str | None=None",
-          "return_annotation": "WorkItemSearch",
-          "sdk_entrypoints": [
-            "plane_mcp.tools.work_items:search_work_items"
-          ]
-        },
-        "blocked_capabilities": [
-          "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
-        ],
-        "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "No safe reusable work_items application adapter is registered in this commit."
-      },
       "source_file": "plane_mcp/tools/work_items.py",
       "source_line": 654,
       "behavior": "read",
@@ -8314,7 +7897,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_ITEMS_ADAPTER_UNAVAILABLE"
+      "rationale_code": "SEMANTIC_GATEWAY_OPERATION_EXACT"
     },
     {
       "tool_name": "list_work_logs",
@@ -8331,7 +7914,7 @@
         "plane_mcp.tools.work_logs:list_work_logs"
       ],
       "blocker": {
-        "code": "WORK_LOG_ADAPTER_UNAVAILABLE",
+        "code": "WORK_LOG_ADAPTER_UNAVAILABLE_LIST_WORK_LOGS_DEFERRED",
         "action": "list_work_logs",
         "required_semantic_shape": {
           "category": "work_logs",
@@ -8345,11 +7928,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-log semantics require a dedicated time-tracking application service."
+        "reason": "Public action list_work_logs is individually deferred: Work-log semantics require a dedicated time-tracking application service. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_logs.py",
       "source_line": 15,
@@ -8368,7 +7951,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_LOG_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_LOG_ADAPTER_UNAVAILABLE_LIST_WORK_LOGS_DEFERRED"
     },
     {
       "tool_name": "create_work_log",
@@ -8385,7 +7968,7 @@
         "plane_mcp.tools.work_logs:create_work_log"
       ],
       "blocker": {
-        "code": "WORK_LOG_ADAPTER_UNAVAILABLE",
+        "code": "WORK_LOG_ADAPTER_UNAVAILABLE_CREATE_WORK_LOG_DEFERRED",
         "action": "create_work_log",
         "required_semantic_shape": {
           "category": "work_logs",
@@ -8403,7 +7986,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-log semantics require a dedicated time-tracking application service."
+        "reason": "Public action create_work_log is individually deferred: Work-log semantics require a dedicated time-tracking application service. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_logs.py",
       "source_line": 40,
@@ -8422,7 +8005,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_LOG_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_LOG_ADAPTER_UNAVAILABLE_CREATE_WORK_LOG_DEFERRED"
     },
     {
       "tool_name": "update_work_log",
@@ -8439,7 +8022,7 @@
         "plane_mcp.tools.work_logs:update_work_log"
       ],
       "blocker": {
-        "code": "WORK_LOG_ADAPTER_UNAVAILABLE",
+        "code": "WORK_LOG_ADAPTER_UNAVAILABLE_UPDATE_WORK_LOG_DEFERRED",
         "action": "update_work_log",
         "required_semantic_shape": {
           "category": "work_logs",
@@ -8457,7 +8040,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-log semantics require a dedicated time-tracking application service."
+        "reason": "Public action update_work_log is individually deferred: Work-log semantics require a dedicated time-tracking application service. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_logs.py",
       "source_line": 74,
@@ -8476,7 +8059,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_LOG_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_LOG_ADAPTER_UNAVAILABLE_UPDATE_WORK_LOG_DEFERRED"
     },
     {
       "tool_name": "delete_work_log",
@@ -8493,7 +8076,7 @@
         "plane_mcp.tools.work_logs:delete_work_log"
       ],
       "blocker": {
-        "code": "WORK_LOG_ADAPTER_UNAVAILABLE",
+        "code": "WORK_LOG_ADAPTER_UNAVAILABLE_DELETE_WORK_LOG_DEFERRED",
         "action": "delete_work_log",
         "required_semantic_shape": {
           "category": "work_logs",
@@ -8511,7 +8094,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Work-log semantics require a dedicated time-tracking application service."
+        "reason": "Public action delete_work_log is individually deferred: Work-log semantics require a dedicated time-tracking application service. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/work_logs.py",
       "source_line": 111,
@@ -8530,7 +8113,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORK_LOG_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORK_LOG_ADAPTER_UNAVAILABLE_DELETE_WORK_LOG_DEFERRED"
     },
     {
       "tool_name": "get_workspace_members",
@@ -8581,7 +8164,7 @@
         "plane_mcp.tools.workspaces:get_features"
       ],
       "blocker": {
-        "code": "WORKSPACE_CONTROL_ADAPTER_UNAVAILABLE",
+        "code": "WORKSPACE_CONTROL_ADAPTER_UNAVAILABLE_GET_FEATURES_DEFERRED",
         "action": "get_features",
         "required_semantic_shape": {
           "category": "workspaces",
@@ -8595,11 +8178,11 @@
         },
         "blocked_capabilities": [
           "live_gateway_authorization",
-          "gateway_idempotency_reconciliation",
-          "append_only_audit"
+          "bounded_read_result",
+          "append_only_audit_attribution"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Workspace settings and feature mutations require a workspace-control application service."
+        "reason": "Public action get_features is individually deferred: Workspace settings and feature mutations require a workspace-control application service. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/workspaces.py",
       "source_line": 58,
@@ -8618,7 +8201,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORKSPACE_CONTROL_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORKSPACE_CONTROL_ADAPTER_UNAVAILABLE_GET_FEATURES_DEFERRED"
     },
     {
       "tool_name": "update_workspace_features",
@@ -8635,7 +8218,7 @@
         "plane_mcp.tools.workspaces:update_workspace_features"
       ],
       "blocker": {
-        "code": "WORKSPACE_CONTROL_ADAPTER_UNAVAILABLE",
+        "code": "WORKSPACE_CONTROL_ADAPTER_UNAVAILABLE_bfdfd1b565d5",
         "action": "update_workspace_features",
         "required_semantic_shape": {
           "category": "workspaces",
@@ -8653,7 +8236,7 @@
           "append_only_audit"
         ],
         "public_contract_risk": "none_until_an_exact_semantic_operation_and_contract_adapter_is_approved",
-        "reason": "Workspace settings and feature mutations require a workspace-control application service."
+        "reason": "Public action update_workspace_features is individually deferred: Workspace settings and feature mutations require a workspace-control application service. No exact semantic operation and caller-bound contract adapter is registered for this action."
       },
       "source_file": "plane_mcp/tools/workspaces.py",
       "source_line": 77,
@@ -8672,7 +8255,7 @@
         "bounded_results",
         "audit_attribution"
       ],
-      "rationale_code": "WORKSPACE_CONTROL_ADAPTER_UNAVAILABLE"
+      "rationale_code": "WORKSPACE_CONTROL_ADAPTER_UNAVAILABLE_bfdfd1b565d5"
     }
   ]
 }
