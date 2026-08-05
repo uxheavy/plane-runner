@@ -1,0 +1,1037 @@
+# Copyright (c) 2023-present Plane Software, Inc. and contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
+from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
+from pathlib import Path
+from uuid import uuid4
+
+import pytest
+from django.core.exceptions import ValidationError
+from django.db import DatabaseError, close_old_connections, connection, transaction
+from django.utils import timezone
+
+from plane.agent.lifecycle import (
+    AgentDomainError,
+    IdempotencyConflictError,
+    InvalidTransitionError,
+    RecoveryIntentRequiredError,
+    accept_outcome,
+    create_actor,
+    create_assignment,
+    create_profile,
+    create_run,
+    finalize_invocation,
+    propose_outcome,
+    record_input_event,
+    record_invocation,
+    request_revision,
+    review_outcome,
+    transition_run,
+)
+from plane.agent.lifecycle.runtime_contract import (
+    ARTIFACT_DIRECTORY,
+    command_fingerprint,
+    contract_digests,
+    contract_manifest,
+    legacy_command_fingerprint,
+    namespaced_ref,
+    snapshot_digest,
+    validate_invocation_envelope,
+    validate_run_snapshot,
+)
+from plane.db.models import (
+    AgentRole,
+    AssignmentContract,
+    AssignmentState,
+    InputEventKind,
+    InvocationState,
+    OutcomeState,
+    Project,
+    RecoveryIntent,
+    RunLineageReason,
+    RunAttempt,
+    RunState,
+    TerminalEventKind,
+    RunTerminalEvent,
+    RuntimeInvocation,
+    ProfileVersion,
+)
+
+
+@pytest.fixture
+def project(workspace):
+    return Project.objects.create(
+        workspace=workspace,
+        name="Agent project",
+        identifier="AGENT",
+        description="Agent domain test project",
+    )
+
+
+@pytest.fixture
+def actor(workspace, project):
+    return create_actor(workspace=workspace, project=project, display_name="Worker")
+
+
+@pytest.fixture
+def profile(actor):
+    return create_profile(actor, role=AgentRole.WORKER, instructions="Complete the assigned objective.")
+
+
+@pytest.fixture
+def assignment(actor, project, create_user):
+    return create_assignment(
+        actor,
+        project=project,
+        target_ref="issue:123",
+        objective="Produce the requested result.",
+        acceptance_criteria=["The result is reviewable."],
+        created_by=create_user,
+    )
+
+
+@pytest.fixture
+def evaluator(workspace):
+    evaluator = create_actor(workspace=workspace, display_name="Evaluator")
+    create_profile(evaluator, role=AgentRole.EVALUATOR, instructions="Review the submitted result.")
+    return evaluator
+
+
+@pytest.mark.django_db
+def test_five_plane_records_bind_to_one_actor_and_an_exact_l1_snapshot(assignment, profile):
+    run = create_run(assignment, profile, idempotency_key="idempotency:create-run")
+
+    assert assignment.workspace_id == profile.workspace_id == run.workspace_id
+    assert assignment.project_id == profile.project_id == run.project_id
+    assert run.assignment_id == assignment.id
+    assert run.profile_version_id == profile.id
+    assert run.state == RunState.QUEUED
+    assert assignment.state == AssignmentState.ACTIVE
+    assert profile.role == AgentRole.WORKER
+    assert profile.actor.active_profile_id == profile.id
+    assert set(run.snapshot) == {
+        "protocol",
+        "workspaceRef",
+        "runId",
+        "assignment",
+        "actorRef",
+        "profile",
+        "context",
+        "toolCatalog",
+        "runtimePolicy",
+        "totalBudget",
+        "contractDigests",
+        "contentDigest",
+    }
+    assert run.snapshot["contractDigests"] == contract_digests()
+    assert run.snapshot["assignment"]["targetRef"].startswith("target:")
+    assert run.snapshot["profile"]["profileRef"].startswith("profile-version:")
+    validate_run_snapshot(run.snapshot)
+
+
+@pytest.mark.django_db
+def test_manifest_bytes_are_the_contract_source_of_truth():
+    manifest = contract_manifest()
+    assert manifest["protocol"] == "plane.agent-runtime/v1"
+    assert set(manifest["schemas"]) == {
+        "run-snapshot",
+        "invocation-envelope",
+        "runtime-event",
+        "runtime-exit",
+        "runtime-durable-state",
+    }
+    assert contract_digests() == {
+        "runSnapshot": "e538fe79ede53e6bb2e307600dbefea507e30b996c002c3dab32d543ca0e36a2",
+        "invocationEnvelope": "b7a15d74406f1624cdb7cd95b42edfd1ffee596abe57e4f00ed60e2e23ded995",
+        "runtimeEvent": "fcbf67ce71fa90dd9661a8f2a739b8119c59357c8bf01afabf4fe92a13de9425",
+        "runtimeExit": "055792eb1bf4931dafe19de456b15037522f0b5e8f6a0d2fedfe0e0d1d1d1c05",
+        "runtimeDurableState": "444c944ec8a5054f33c8662470529a1f4565d42ff06138438beceeef7967a0da",
+    }
+
+
+@pytest.mark.django_db
+def test_host_and_api_artifact_bytes_are_identical():
+    source_directory = Path(__file__).resolve().parents[6] / "packages/agent-runtime-contract/schemas/v1"
+    for artifact in ARTIFACT_DIRECTORY.glob("*.json"):
+        assert artifact.read_bytes() == (source_directory / artifact.name).read_bytes()
+
+
+@pytest.mark.django_db
+def test_missing_or_tampered_contract_artifacts_fail_closed(tmp_path, monkeypatch):
+    import shutil
+
+    artifact_directory = tmp_path / "v1"
+    shutil.copytree(ARTIFACT_DIRECTORY, artifact_directory)
+    monkeypatch.setattr("plane.agent.lifecycle.runtime_contract.ARTIFACT_DIRECTORY", artifact_directory)
+    contract_manifest.cache_clear()
+    (artifact_directory / "manifest.json").unlink()
+    with pytest.raises(ValueError, match="manifest is unavailable"):
+        contract_manifest()
+
+    shutil.copy2(ARTIFACT_DIRECTORY / "manifest.json", artifact_directory / "manifest.json")
+    (artifact_directory / "run-snapshot.schema.json").write_bytes(b"tampered")
+    contract_manifest.cache_clear()
+    with pytest.raises(ValueError, match="digest drifted"):
+        contract_manifest()
+    monkeypatch.setattr("plane.agent.lifecycle.runtime_contract.ARTIFACT_DIRECTORY", ARTIFACT_DIRECTORY)
+    contract_manifest.cache_clear()
+
+
+@pytest.mark.django_db
+def test_profile_and_snapshot_are_immutable_and_direct_state_changes_use_lifecycle(assignment, profile):
+    run = create_run(assignment, profile)
+
+    profile.instructions = "Changed after resolution."
+    with pytest.raises(ValidationError):
+        profile.save()
+
+    run.snapshot = deepcopy(run.snapshot)
+    run.snapshot["assignment"]["objective"] = "Changed after resolution."
+    with pytest.raises(ValidationError):
+        run.save()
+
+    assignment.state = AssignmentState.COMPLETED
+    with pytest.raises(ValidationError):
+        assignment.save()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_postgres_guards_reject_hostile_bulk_and_raw_mutations(assignment, profile, actor, project):
+    run = create_run(assignment, profile)
+    invocation = record_invocation(run, idempotency_key="idempotency:hostile-probe")
+    other_assignment = create_assignment(
+        actor,
+        project=project,
+        target_ref="issue:hostile",
+        objective="A second binding.",
+        acceptance_criteria=["The result is reviewable."],
+    )
+    other_run = create_run(other_assignment, profile)
+    other_actor = create_actor(workspace=assignment.workspace, display_name="Other worker")
+    with pytest.raises(DatabaseError):
+        ProfileVersion.objects.filter(pk=profile.pk).update(instructions="bulk rewrite")
+    with pytest.raises(DatabaseError):
+        RunAttempt.objects.filter(pk=run.pk).update(snapshot={"tampered": True})
+    with pytest.raises(DatabaseError):
+        RunAttempt.objects.filter(pk=run.pk).update(invocation_count=99)
+    with pytest.raises(DatabaseError):
+        RunAttempt.objects.filter(pk=run.pk).update(actor_id=other_actor.id)
+    with pytest.raises(DatabaseError):
+        AssignmentContract.objects.filter(pk=assignment.pk).update(state=AssignmentState.COMPLETED)
+    with pytest.raises(DatabaseError):
+        RunAttempt.objects.filter(pk=run.pk).update(state=RunState.SUCCEEDED)
+    with connection.cursor() as cursor:
+        with pytest.raises(DatabaseError):
+            cursor.execute(
+                "UPDATE agent_run_attempts SET snapshot_content_digest = %s WHERE id = %s",
+                ["snapshot:" + "0" * 64, run.id],
+            )
+        with pytest.raises(DatabaseError):
+            now = timezone.now()
+            cursor.execute(
+                """
+                INSERT INTO agent_run_terminal_events
+                    (id, created_at, updated_at, workspace_id, project_id, invocation_id, run_id,
+                     kind, source, product_ref, product_event_ref, idempotency_key, reason, visible)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, 'run_failure', 'supervisor',
+                        %s, %s, %s, %s, TRUE)
+                """,
+                [
+                    uuid4(),
+                    now,
+                    now,
+                    run.workspace_id,
+                    run.project_id,
+                    invocation.id,
+                    other_run.id,
+                    "product-event:hostile",
+                    "product-event:hostile",
+                    "idempotency:hostile-terminal",
+                    "mismatched run binding",
+                ],
+            )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_non_superuser_owner_cannot_truncate_or_rebind_keyed_records(assignment, profile):
+    run = create_run(assignment, profile, idempotency_key="idempotency:truncate-run")
+    input_event = record_input_event(
+        run,
+        payload={"answer": "original"},
+        idempotency_key="idempotency:truncate-input",
+    )
+    invocation = record_invocation(run, idempotency_key="idempotency:truncate-invocation")
+    propose_outcome(
+        run,
+        summary="original",
+        artifacts=["artifact:original"],
+        evidence=["evidence:original"],
+        idempotency_key="idempotency:truncate-outcome",
+    )
+    terminal_event = run.__class__.all_objects.get(pk=run.pk).terminal_events.get()
+    tables = (
+        ("agent_run_attempts", "creation_idempotency_key", run.id, "snapshot"),
+        ("agent_run_input_events", "idempotency_key", input_event.id, "payload"),
+        ("agent_runtime_invocations", "idempotency_key", invocation.id, "envelope"),
+        (
+            "agent_outcome_submissions",
+            "submission_idempotency_key",
+            run.outcome_submission.id,
+            "artifacts",
+        ),
+        ("agent_run_terminal_events", "idempotency_key", terminal_event.id, "product_ref"),
+    )
+
+    def quote_identifier(value):
+        return '"' + value.replace('"', '""') + '"'
+
+    expected = {}
+    owners = {}
+    owner_role = f"agent_truncate_owner_{uuid4().hex}"
+    role_identifier = quote_identifier(owner_role)
+    with connection.cursor() as cursor:
+        for table, key_column, row_id, material_column in tables:
+            cursor.execute(
+                """
+                SELECT pg_get_userbyid(c.relowner)
+                FROM pg_class AS c
+                JOIN pg_namespace AS n ON n.oid = c.relnamespace
+                WHERE n.nspname = current_schema() AND c.relname = %s
+                """,
+                [table],
+            )
+            owners[table] = cursor.fetchone()[0]
+            cursor.execute(
+                f"""
+                SELECT id::text, {quote_identifier(key_column)}::text,
+                       command_fingerprint, {quote_identifier(material_column)}::text
+                FROM {quote_identifier(table)} WHERE id = %s
+                """,
+                [row_id],
+            )
+            expected[table] = cursor.fetchone()
+
+        cursor.execute(f"CREATE ROLE {role_identifier} NOLOGIN NOSUPERUSER NOREPLICATION NOBYPASSRLS NOINHERIT")
+        try:
+            cursor.execute(
+                """
+                SELECT c.relname, t.tgname, t.tgenabled
+                FROM pg_trigger AS t
+                JOIN pg_class AS c ON c.oid = t.tgrelid
+                WHERE tgname IN (
+                    'agent_run_keyed_truncate_guard',
+                    'agent_input_keyed_truncate_guard',
+                    'agent_invocation_keyed_truncate_guard',
+                    'agent_outcome_keyed_truncate_guard',
+                    'agent_terminal_keyed_truncate_guard'
+                )
+                """
+            )
+            assert {row for row in cursor.fetchall()} == {
+                ("agent_run_attempts", "agent_run_keyed_truncate_guard", "O"),
+                ("agent_run_input_events", "agent_input_keyed_truncate_guard", "O"),
+                ("agent_runtime_invocations", "agent_invocation_keyed_truncate_guard", "O"),
+                ("agent_outcome_submissions", "agent_outcome_keyed_truncate_guard", "O"),
+                ("agent_run_terminal_events", "agent_terminal_keyed_truncate_guard", "O"),
+            }
+            for table, _, _, _ in tables:
+                cursor.execute(f"ALTER TABLE {quote_identifier(table)} OWNER TO {role_identifier}")
+
+            cursor.execute(
+                """
+                SELECT r.rolsuper, r.rolreplication
+                FROM pg_roles AS r
+                WHERE r.rolname = %s
+                """,
+                [owner_role],
+            )
+            assert cursor.fetchone() == (False, False)
+
+            truncate_statements = [
+                *(f"TRUNCATE {quote_identifier(table)}" for table, _, _, _ in tables),
+                "TRUNCATE " + ", ".join(quote_identifier(table) for table, _, _, _ in tables),
+                f"TRUNCATE {quote_identifier(tables[0][0])} CASCADE",
+                "TRUNCATE " + ", ".join(quote_identifier(table) for table, _, _, _ in tables) + " CASCADE",
+            ]
+
+            def assert_rows_remain_bound():
+                for table, key_column, _, material_column in tables:
+                    cursor.execute(f"SELECT count(*) FROM {quote_identifier(table)}")
+                    assert cursor.fetchone()[0] == 1
+                    cursor.execute(
+                        f"""
+                        SELECT id::text, {quote_identifier(key_column)}::text,
+                               command_fingerprint,
+                               {quote_identifier(material_column)}::text
+                        FROM {quote_identifier(table)}
+                        """
+                    )
+                    assert cursor.fetchone() == expected[table]
+
+            for statement in truncate_statements:
+                with pytest.raises(DatabaseError):
+                    with transaction.atomic():
+                        cursor.execute(f"SET LOCAL ROLE {role_identifier}")
+                        cursor.execute(
+                            "SELECT current_user, current_setting('session_replication_role'), "
+                            "rolsuper, rolreplication "
+                            "FROM pg_roles WHERE rolname = current_user"
+                        )
+                        assert cursor.fetchone() == (owner_role, "origin", False, False)
+                        cursor.execute(statement)
+                assert_rows_remain_bound()
+
+            reinsert_statements = {
+                "agent_run_attempts": """
+                    INSERT INTO agent_run_attempts
+                    SELECT (jsonb_populate_record(
+                        NULL::agent_run_attempts,
+                        to_jsonb(source) || jsonb_build_object(
+                            'id', %s::uuid,
+                            'snapshot', '{\"answer\":\"substituted\"}'::jsonb,
+                            'snapshot_content_digest', 'snapshot:' || repeat('0', 64),
+                            'command_fingerprint', 'command:' || repeat('1', 64)
+                        )
+                    )).*
+                    FROM agent_run_attempts AS source WHERE source.id = %s
+                """,
+                "agent_run_input_events": """
+                    INSERT INTO agent_run_input_events
+                    SELECT (jsonb_populate_record(
+                        NULL::agent_run_input_events,
+                        to_jsonb(source) || jsonb_build_object(
+                            'id', %s::uuid,
+                            'event_ref', 'event:substituted',
+                            'payload', '{\"answer\":\"substituted\"}'::jsonb,
+                            'payload_digest', 'content:' || repeat('0', 64),
+                            'command_fingerprint', 'command:' || repeat('1', 64)
+                        )
+                    )).*
+                    FROM agent_run_input_events AS source WHERE source.id = %s
+                """,
+                "agent_runtime_invocations": """
+                    INSERT INTO agent_runtime_invocations
+                    SELECT (jsonb_populate_record(
+                        NULL::agent_runtime_invocations,
+                        to_jsonb(source) || jsonb_build_object(
+                            'id', %s::uuid,
+                            'invocation_id', 'invocation:substituted',
+                            'envelope', '{\"substituted\":true}'::jsonb,
+                            'command_fingerprint', 'command:' || repeat('1', 64)
+                        )
+                    )).*
+                    FROM agent_runtime_invocations AS source WHERE source.id = %s
+                """,
+                "agent_outcome_submissions": """
+                    INSERT INTO agent_outcome_submissions
+                    SELECT (jsonb_populate_record(
+                        NULL::agent_outcome_submissions,
+                        to_jsonb(source) || jsonb_build_object(
+                            'id', %s::uuid,
+                            'summary', 'substituted',
+                            'artifacts', '[\"artifact:substituted\"]'::jsonb,
+                            'evidence', '[\"evidence:substituted\"]'::jsonb,
+                            'command_fingerprint', 'command:' || repeat('1', 64)
+                        )
+                    )).*
+                    FROM agent_outcome_submissions AS source WHERE source.id = %s
+                """,
+                "agent_run_terminal_events": """
+                    INSERT INTO agent_run_terminal_events
+                    SELECT (jsonb_populate_record(
+                        NULL::agent_run_terminal_events,
+                        to_jsonb(source) || jsonb_build_object(
+                            'id', %s::uuid,
+                            'product_ref', 'product-event:substituted',
+                            'product_event_ref', 'product-event:substituted',
+                            'command_fingerprint', 'command:' || repeat('1', 64)
+                        )
+                    )).*
+                    FROM agent_run_terminal_events AS source WHERE source.id = %s
+                """,
+            }
+            for table, _, row_id, _ in tables:
+                with pytest.raises(DatabaseError):
+                    with transaction.atomic():
+                        cursor.execute(f"SET LOCAL ROLE {role_identifier}")
+                        cursor.execute(reinsert_statements[table], [uuid4(), row_id])
+                assert_rows_remain_bound()
+        finally:
+            cursor.execute("RESET ROLE")
+            for table, _, _, _ in tables:
+                cursor.execute(f"ALTER TABLE {quote_identifier(table)} OWNER TO {quote_identifier(owners[table])}")
+            cursor.execute(f"DROP ROLE {role_identifier}")
+
+
+@pytest.mark.django_db
+def test_cross_workspace_profile_and_assignment_binding_is_rejected(assignment, profile, create_user):
+    other_workspace = assignment.workspace.__class__.objects.create(
+        name="Other workspace",
+        owner=create_user,
+        slug=f"other-{uuid4().hex[:8]}",
+    )
+    other_actor = create_actor(workspace=other_workspace, display_name="Other")
+    other_profile = create_profile(other_actor, role=AgentRole.WORKER, instructions="Other work.")
+
+    with pytest.raises(AgentDomainError):
+        create_run(assignment, other_profile)
+
+    with pytest.raises(ValidationError):
+        profile.workspace_id = other_workspace.id
+        profile.save()
+
+
+@pytest.mark.django_db
+def test_invocations_resume_the_same_run_and_keep_the_frozen_snapshot(assignment, profile):
+    run = create_run(assignment, profile)
+    snapshot = deepcopy(run.snapshot)
+    first = record_invocation(run, idempotency_key="idempotency:first-invocation", usage={"inputTokens": 4})
+    transition_run(run, RunState.WAITING_FOR_INPUT)
+    answer = record_input_event(
+        run,
+        payload={"answer": "Continue"},
+        kind=InputEventKind.HUMAN_INPUT,
+        idempotency_key="idempotency:answer",
+    )
+    second = record_invocation(
+        run,
+        idempotency_key="idempotency:second-invocation",
+        trigger="human_input",
+        input_event=answer,
+        usage={"outputTokens": 6},
+    )
+
+    run.refresh_from_db()
+    assert first.run_id == second.run_id == run.id
+    assert run.invocation_count == 2
+    assert run.snapshot == snapshot
+    assert second.envelope["trigger"]["kind"] == "human_input"
+    assert second.envelope["trigger"]["eventRef"] == answer.event_ref
+    assert second.envelope["runSnapshotDigest"] == snapshot["contentDigest"]
+    assert run.cumulative_usage == {"inputTokens": 4, "outputTokens": 6, "durationMs": 0}
+    assert second.state == InvocationState.RUNNING
+    validate_invocation_envelope(second.envelope)
+
+
+@pytest.mark.django_db
+def test_invocation_and_outcome_commands_are_idempotent(assignment, profile):
+    run = create_run(assignment, profile)
+    first = record_invocation(run, idempotency_key="idempotency:repeatable-invocation")
+    repeated = record_invocation(run, idempotency_key="idempotency:repeatable-invocation")
+    assert repeated.id == first.id
+
+    outcome = propose_outcome(
+        run,
+        summary="A result",
+        artifacts=["artifact:1"],
+        evidence=["evidence:1"],
+        idempotency_key="idempotency:repeatable-outcome",
+    )
+    repeated_outcome = propose_outcome(
+        run,
+        summary="A result",
+        artifacts=["artifact:1"],
+        evidence=["evidence:1"],
+        idempotency_key="idempotency:repeatable-outcome",
+    )
+    assert repeated_outcome.id == outcome.id
+    assert run.__class__.objects.get(pk=run.pk).terminal_events.count() == 1
+    assert (
+        run.__class__.objects.get(pk=run.pk).invocations.get(pk=first.pk).terminal_event.kind
+        == TerminalEventKind.OUTCOME_SUBMISSION
+    )
+
+    with pytest.raises(IdempotencyConflictError):
+        record_invocation(run, idempotency_key="idempotency:repeatable-outcome")
+
+
+@pytest.mark.django_db(transaction=True)
+def test_migrated_outcome_terminal_replay_promotes_legacy_binding_without_duplication(assignment, profile):
+    """Exercise the real 0125 reverse/reapply boundary before replaying the terminal command."""
+
+    from django.db.migrations.executor import MigrationExecutor
+
+    executor = MigrationExecutor(connection)
+    try:
+        applied = executor.recorder.applied_migrations()
+    except DatabaseError:
+        pytest.skip("requires a migration-backed test database; pytest --nomigrations is a known environment gap")
+    if ("db", "0125_agent_lifecycle_append_only_integrity") not in applied:
+        pytest.skip("requires a migration-backed test database; pytest --nomigrations is a known environment gap")
+
+    run = create_run(assignment, profile, idempotency_key="idempotency:migration-replay-run")
+    invocation = record_invocation(run, idempotency_key="idempotency:migration-replay-invocation")
+    outcome = propose_outcome(
+        run,
+        summary="A migrated result",
+        artifacts=["artifact:migrated"],
+        evidence=["evidence:migrated"],
+        idempotency_key="idempotency:migration-replay-outcome",
+    )
+    terminal = RunTerminalEvent.all_objects.get(invocation=invocation)
+    original_id = terminal.id
+    original_event_ref = terminal.product_event_ref
+
+    executor.migrate([("db", "0124_agent_lifecycle_database_integrity")])
+    executor = MigrationExecutor(connection)
+    executor.migrate([("db", "0125_agent_lifecycle_append_only_integrity")])
+
+    migrated_terminal = RunTerminalEvent.all_objects.get(pk=original_id)
+    assert migrated_terminal.command_fingerprint == legacy_command_fingerprint(
+        "record_terminal_event",
+        {
+            "invocationId": str(invocation.id),
+            "runId": str(run.id),
+            "kind": TerminalEventKind.OUTCOME_SUBMISSION,
+            "source": "runtime",
+            "productRef": namespaced_ref("outcome-submission", str(outcome.id)),
+            "productEventRef": original_event_ref,
+            "idempotencyKey": namespaced_ref("idempotency", f"outcome-{outcome.id}"),
+            "reason": "",
+            "cancellationRef": None,
+        },
+    )
+
+    replayed_outcome = propose_outcome(
+        run,
+        summary="A migrated result",
+        artifacts=["artifact:migrated"],
+        evidence=["evidence:migrated"],
+        idempotency_key="idempotency:migration-replay-outcome",
+    )
+
+    replayed_outcome.refresh_from_db()
+    replayed = RunTerminalEvent.all_objects.get(pk=original_id)
+    assert replayed_outcome.id == outcome.id
+    assert replayed_outcome.command_fingerprint == command_fingerprint(
+        "propose_outcome",
+        {
+            "runId": str(run.id),
+            "summary": "A migrated result",
+            "artifacts": ["artifact:migrated"],
+            "evidence": ["evidence:migrated"],
+            "createdBy": None,
+        },
+    )
+    assert replayed.id == original_id
+    assert replayed.product_event_ref == original_event_ref
+    assert replayed.command_fingerprint == command_fingerprint(
+        "record_terminal_event",
+        {
+            "invocationId": str(invocation.id),
+            "runId": str(run.id),
+            "kind": TerminalEventKind.OUTCOME_SUBMISSION,
+            "source": "runtime",
+            "productRef": namespaced_ref("outcome-submission", str(outcome.id)),
+            "productEventRef": original_event_ref,
+            "idempotencyKey": namespaced_ref("idempotency", f"outcome-{outcome.id}"),
+            "reason": "",
+            "cancellationRef": None,
+        },
+    )
+    assert RunTerminalEvent.all_objects.filter(invocation=invocation).count() == 1
+
+    with pytest.raises(IdempotencyConflictError):
+        propose_outcome(
+            run,
+            summary="Changed material",
+            artifacts=["artifact:migrated"],
+            evidence=["evidence:migrated"],
+            idempotency_key="idempotency:migration-replay-outcome",
+        )
+
+    with pytest.raises(IdempotencyConflictError):
+        finalize_invocation(
+            invocation,
+            kind=TerminalEventKind.RUN_FAILURE,
+            idempotency_key=namespaced_ref("idempotency", f"outcome-{outcome.id}"),
+        )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_concurrent_invocation_retries_share_one_idempotent_record(assignment, profile):
+    run = create_run(assignment, profile)
+
+    def invoke():
+        close_old_connections()
+        try:
+            return record_invocation(run, idempotency_key="idempotency:concurrent-invocation")
+        finally:
+            close_old_connections()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first, second = executor.map(lambda _: invoke(), range(2))
+
+    run.refresh_from_db()
+    assert first.id == second.id
+    assert run.invocation_count == 1
+    assert run.invocations.count() == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_concurrent_invocations_on_different_runs_return_typed_conflict(assignment, profile, actor, project):
+    other_assignment = create_assignment(
+        actor,
+        project=project,
+        target_ref="issue:124",
+        objective="Produce the requested result.",
+        acceptance_criteria=["The result is reviewable."],
+    )
+    first_run = create_run(assignment, profile)
+    second_run = create_run(other_assignment, profile)
+
+    def invoke(run):
+        close_old_connections()
+        try:
+            try:
+                return record_invocation(run, idempotency_key="idempotency:cross-run-race")
+            except IdempotencyConflictError:
+                return "conflict"
+        finally:
+            close_old_connections()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(invoke, (first_run, second_run)))
+    assert results.count("conflict") == 1
+    assert sum(result != "conflict" for result in results) == 1
+    assert RuntimeInvocation.objects.filter(idempotency_key="idempotency:cross-run-race").count() == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_assignment_actor_can_rebind_before_execution_but_not_after(assignment, profile, actor, project):
+    other_actor = create_actor(workspace=assignment.workspace, project=project, display_name="Other worker")
+    other_profile = create_profile(other_actor, role=AgentRole.WORKER, instructions="Other instructions.")
+
+    AssignmentContract.objects.filter(pk=assignment.pk).update(assignee_id=other_actor.id)
+    assignment.refresh_from_db()
+    assert assignment.assignee_id == other_actor.id
+    run = create_run(assignment, other_profile)
+
+    assignment.assignee_id = actor.id
+    with pytest.raises(DatabaseError):
+        with transaction.atomic():
+            AssignmentContract.objects.bulk_update([assignment], ["assignee"])
+    with pytest.raises(DatabaseError):
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE agent_assignment_contracts SET assignee_id = %s WHERE id = %s",
+                    [actor.id, run.assignment_id],
+                )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_invocation_usage_and_ordinals_are_append_only_and_aggregated(assignment, profile):
+    run = create_run(assignment, profile)
+    first = record_invocation(
+        run,
+        idempotency_key="idempotency:append-only",
+        usage={"inputTokens": 4},
+    )
+    repeated = record_invocation(
+        run,
+        idempotency_key="idempotency:append-only",
+        usage={"inputTokens": 4},
+    )
+    assert repeated.id == first.id
+    run.refresh_from_db()
+    assert first.ordinal == 1
+    assert first.usage == {"inputTokens": 4, "outputTokens": 0, "durationMs": 0}
+    assert run.invocation_count == 1
+    assert run.cumulative_usage == {"inputTokens": 4, "outputTokens": 0, "durationMs": 0}
+
+    with pytest.raises(IdempotencyConflictError):
+        record_invocation(run, idempotency_key="idempotency:append-only", usage={"inputTokens": 5})
+    with pytest.raises(DatabaseError):
+        with transaction.atomic():
+            RuntimeInvocation.objects.filter(pk=first.pk).update(ordinal=2)
+    with pytest.raises(DatabaseError):
+        with transaction.atomic():
+            RuntimeInvocation.objects.filter(pk=first.pk).update(usage={"inputTokens": 999})
+    with pytest.raises(DatabaseError):
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE agent_run_attempts SET invocation_count = 2, last_invocation_id = %s WHERE id = %s",
+                    [first.invocation_id, run.id],
+                )
+    with pytest.raises(DatabaseError):
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM agent_runtime_invocations WHERE id = %s",
+                    [first.id],
+                )
+
+
+@pytest.mark.django_db
+def test_warm_contract_validator_rechecks_missing_and_tampered_artifacts(assignment, profile, tmp_path, monkeypatch):
+    run = create_run(assignment, profile)
+    validate_run_snapshot(run.snapshot)
+    import shutil
+
+    artifact_directory = tmp_path / "v1"
+    shutil.copytree(ARTIFACT_DIRECTORY, artifact_directory)
+    monkeypatch.setattr("plane.agent.lifecycle.runtime_contract.ARTIFACT_DIRECTORY", artifact_directory)
+    (artifact_directory / "run-snapshot.schema.json").unlink()
+    with pytest.raises(ValueError, match="schema is unavailable"):
+        validate_run_snapshot(run.snapshot)
+
+
+@pytest.mark.django_db
+def test_idempotency_fingerprints_reject_material_command_changes(assignment, profile):
+    run = create_run(assignment, profile, idempotency_key="idempotency:fingerprint-run")
+    assert create_run(assignment, profile, idempotency_key="idempotency:fingerprint-run").id == run.id
+    changed_snapshot = deepcopy(run.snapshot)
+    changed_snapshot["totalBudget"]["inputTokens"] += 1
+    changed_snapshot["contentDigest"] = snapshot_digest(
+        {key: value for key, value in changed_snapshot.items() if key != "contentDigest"}
+    )
+    with pytest.raises(IdempotencyConflictError):
+        create_run(
+            assignment,
+            profile,
+            snapshot=changed_snapshot,
+            idempotency_key="idempotency:fingerprint-run",
+        )
+
+    input_event = record_input_event(
+        run,
+        payload={"answer": "one"},
+        idempotency_key="idempotency:fingerprint-input",
+    )
+    assert (
+        record_input_event(
+            run,
+            payload={"answer": "one"},
+            idempotency_key="idempotency:fingerprint-input",
+        ).id
+        == input_event.id
+    )
+    with pytest.raises(IdempotencyConflictError):
+        record_input_event(
+            run,
+            payload={"answer": "two"},
+            idempotency_key="idempotency:fingerprint-input",
+        )
+    with pytest.raises(IdempotencyConflictError):
+        record_input_event(
+            run,
+            payload={"answer": "one"},
+            pending_input_ref="event:00000000-0000-0000-0000-000000000001",
+            idempotency_key="idempotency:fingerprint-input",
+        )
+
+    invocation = record_invocation(run, idempotency_key="idempotency:fingerprint-invocation")
+    with pytest.raises(IdempotencyConflictError):
+        record_invocation(
+            run,
+            invocation_id=invocation.invocation_id,
+            usage={"outputTokens": 1},
+            idempotency_key="idempotency:fingerprint-invocation",
+        )
+    with pytest.raises(IdempotencyConflictError):
+        record_invocation(
+            run,
+            trigger="continuation",
+            idempotency_key="idempotency:fingerprint-invocation",
+        )
+
+    outcome = propose_outcome(
+        run,
+        summary="first",
+        artifacts=["artifact:one"],
+        evidence=["evidence:one"],
+        idempotency_key="idempotency:fingerprint-outcome",
+    )
+    assert outcome.summary == "first"
+    assert (
+        propose_outcome(
+            run,
+            summary="first",
+            artifacts=["artifact:one"],
+            evidence=["evidence:one"],
+            idempotency_key="idempotency:fingerprint-outcome",
+        ).id
+        == outcome.id
+    )
+    with pytest.raises(IdempotencyConflictError):
+        propose_outcome(
+            run,
+            summary="second",
+            artifacts=["artifact:one"],
+            evidence=["evidence:one"],
+            idempotency_key="idempotency:fingerprint-outcome",
+        )
+    with pytest.raises(IdempotencyConflictError):
+        propose_outcome(
+            run,
+            summary="first",
+            artifacts=["artifact:two"],
+            evidence=["evidence:one"],
+            idempotency_key="idempotency:fingerprint-outcome",
+        )
+    with pytest.raises(IdempotencyConflictError):
+        propose_outcome(
+            run,
+            summary="first",
+            artifacts=["artifact:one"],
+            evidence=["evidence:two"],
+            idempotency_key="idempotency:fingerprint-outcome",
+        )
+
+
+@pytest.mark.django_db
+def test_cancellation_terminal_retry_reuses_the_same_event(assignment, profile):
+    run = create_run(assignment, profile)
+    invocation = record_invocation(run, idempotency_key="idempotency:retryable-cancellation")
+
+    first = finalize_invocation(invocation, kind=TerminalEventKind.RUN_CANCELLATION)
+    repeated = finalize_invocation(invocation, kind=TerminalEventKind.RUN_CANCELLATION)
+
+    assert repeated.id == first.id
+    assert repeated.cancellation_ref == f"cancellation:terminal-{invocation.id}"
+
+
+@pytest.mark.django_db
+def test_supervisor_failure_has_exactly_one_visible_terminal_event(assignment, profile):
+    run = create_run(assignment, profile)
+    invocation = record_invocation(run, idempotency_key="idempotency:supervised-invocation")
+    event = finalize_invocation(
+        invocation,
+        kind=TerminalEventKind.RUN_FAILURE,
+        reason="The isolated process died before it published an exit.",
+        idempotency_key="idempotency:supervised-failure",
+    )
+    repeated = finalize_invocation(
+        invocation,
+        kind=TerminalEventKind.RUN_FAILURE,
+        reason="The isolated process died before it published an exit.",
+        idempotency_key="idempotency:supervised-failure",
+    )
+    run.refresh_from_db()
+    invocation.refresh_from_db()
+    assert event.id == repeated.id
+    assert event.visible is True
+    assert event.product_ref == event.product_event_ref
+    assert run.state == RunState.FAILED
+    assert invocation.state == InvocationState.FAILED
+    assert run.terminal_events.count() == 1
+
+    with pytest.raises(IdempotencyConflictError):
+        finalize_invocation(
+            invocation,
+            kind=TerminalEventKind.RUN_FAILURE,
+            reason="A different reason is a different command.",
+            idempotency_key="idempotency:supervised-failure",
+        )
+
+    with pytest.raises(IdempotencyConflictError):
+        finalize_invocation(invocation, kind=TerminalEventKind.RUN_CANCELLATION)
+
+
+@pytest.mark.django_db
+def test_evaluator_review_precedes_human_acceptance_and_revision_has_lineage(
+    assignment, profile, create_user, evaluator
+):
+    run = create_run(assignment, profile)
+    record_invocation(run, idempotency_key="idempotency:review-invocation")
+    outcome = propose_outcome(run, summary="Needs another pass", idempotency_key="idempotency:review-outcome")
+
+    with pytest.raises(InvalidTransitionError):
+        accept_outcome(outcome, human_reviewer=create_user)
+
+    reviewed = review_outcome(outcome, evaluator=evaluator, feedback="Add evidence.")
+    revised = request_revision(reviewed, human_reviewer=create_user, decision_note="Please add evidence.")
+    assignment.refresh_from_db()
+    assert revised.state == OutcomeState.REVISION_REQUESTED
+    assert assignment.state == AssignmentState.REVISION
+    assert assignment.revision == 2
+
+    new_run = create_run(
+        assignment,
+        profile,
+        lineage_of=run,
+        lineage_reason=RunLineageReason.HUMAN_REVISION,
+        idempotency_key="idempotency:revision-run",
+    )
+    assert new_run.id != run.id
+    assert new_run.lineage_of_id == run.id
+    assert new_run.snapshot["assignment"]["revision"] == "2"
+
+
+@pytest.mark.django_db
+def test_failed_and_unknown_runs_require_deliberate_new_run_lineage(assignment, profile):
+    failed_run = create_run(assignment, profile)
+    record_invocation(failed_run, idempotency_key="idempotency:failed-invocation")
+    transition_run(failed_run, RunState.FAILED)
+    with pytest.raises(RecoveryIntentRequiredError):
+        create_run(assignment, profile)
+
+    fresh_run = create_run(
+        assignment,
+        profile,
+        lineage_of=failed_run,
+        lineage_reason=RunLineageReason.FRESH_RUN,
+        idempotency_key="idempotency:fresh-run",
+    )
+    assert fresh_run.lineage_of_id == failed_run.id
+
+    record_invocation(fresh_run, idempotency_key="idempotency:unknown-invocation")
+    unknown = transition_run(fresh_run, RunState.OUTCOME_UNKNOWN)
+    with pytest.raises(RecoveryIntentRequiredError):
+        create_run(assignment, profile)
+    with pytest.raises(RecoveryIntentRequiredError):
+        create_run(assignment, profile, recovery_of=unknown)
+
+    recovered = create_run(
+        assignment,
+        profile,
+        recovery_of=unknown,
+        recovery_intent=RecoveryIntent.RECONCILE,
+        idempotency_key="idempotency:recovered-run",
+    )
+    assert recovered.recovery_of_id == unknown.id
+    assert recovered.lineage_of_id == unknown.id
+    assert recovered.lineage_reason == RunLineageReason.RECOVERY
+    with pytest.raises(InvalidTransitionError):
+        record_invocation(unknown, idempotency_key="idempotency:blind-replay")
+
+
+@pytest.mark.django_db
+def test_invalid_snapshot_digest_and_tool_allowlist_are_rejected(assignment, actor):
+    with pytest.raises(AgentDomainError):
+        create_profile(
+            actor,
+            role=AgentRole.WORKER,
+            instructions="No hidden permissions.",
+            tool_presentation={"permissions": ["operation:secret"]},
+        )
+
+    profile = create_profile(actor, role=AgentRole.WORKER, instructions="Create a valid run.")
+    run = create_run(assignment, profile)
+    invalid = deepcopy(run.snapshot)
+    invalid["contentDigest"] = "snapshot:" + "0" * 64
+    with pytest.raises(AgentDomainError):
+        validate_run_snapshot(invalid)
+
+
+@pytest.mark.django_db
+def test_identifiers_are_strict_and_target_references_are_lossless(assignment, profile, actor, project):
+    run = create_run(assignment, profile)
+    for malformed in ("client:key", "client key", "idempotency:client:key", "idempotency:" + "a" * 120):
+        with pytest.raises(AgentDomainError):
+            record_invocation(run, idempotency_key=malformed)
+
+    other_assignment = create_assignment(
+        actor,
+        project=project,
+        target_ref="issue 123",
+        objective="Produce the requested result.",
+        acceptance_criteria=["The result is reviewable."],
+    )
+    other_run = create_run(other_assignment, profile)
+    assert run.snapshot["assignment"]["targetRef"] != other_run.snapshot["assignment"]["targetRef"]
+    assert namespaced_ref("target", "literal-69737375653a313233") == run.snapshot["assignment"]["targetRef"]

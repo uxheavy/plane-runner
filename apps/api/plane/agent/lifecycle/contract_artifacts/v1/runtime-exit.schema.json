@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://plane.dev/schemas/plane.agent-runtime/v1/RuntimeExit.schema.json",
+  "title": "RuntimeExit",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol",
+    "authority",
+    "workspaceRef",
+    "actorRef",
+    "runId",
+    "invocationId",
+    "finalSequence",
+    "idempotencyKey",
+    "correlationId",
+    "causationRef",
+    "kind"
+  ],
+  "properties": {
+    "protocol": {
+      "const": "plane.agent-runtime/v1"
+    },
+    "authority": {
+      "const": "runtime_evidence_only"
+    },
+    "workspaceRef": {
+      "$ref": "#/$defs/workspaceRef"
+    },
+    "actorRef": {
+      "$ref": "#/$defs/actorRef"
+    },
+    "runId": {
+      "$ref": "#/$defs/runId"
+    },
+    "invocationId": {
+      "$ref": "#/$defs/invocationId"
+    },
+    "finalSequence": {
+      "$ref": "#/$defs/nonNegativeInteger"
+    },
+    "idempotencyKey": {
+      "$ref": "#/$defs/idempotencyKey"
+    },
+    "correlationId": {
+      "$ref": "#/$defs/correlationId"
+    },
+    "causationRef": {
+      "$ref": "#/$defs/causationRef"
+    },
+    "kind": {
+      "enum": ["completed", "waiting_for_input", "failed", "blocked", "cancelled"]
+    },
+    "inputEventRef": {
+      "$ref": "#/$defs/eventRef"
+    },
+    "failure": {
+      "$ref": "#/$defs/runtimeFailure"
+    }
+  },
+  "oneOf": [
+    {
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "const": "completed"
+        }
+      },
+      "not": {
+        "anyOf": [
+          {
+            "required": ["failure"]
+          },
+          {
+            "required": ["inputEventRef"]
+          }
+        ]
+      }
+    },
+    {
+      "required": ["kind", "inputEventRef"],
+      "properties": {
+        "kind": {
+          "const": "waiting_for_input"
+        }
+      },
+      "not": {
+        "required": ["failure"]
+      }
+    },
+    {
+      "required": ["kind", "failure"],
+      "properties": {
+        "kind": {
+          "enum": ["failed", "blocked", "cancelled"]
+        }
+      },
+      "not": {
+        "required": ["inputEventRef"]
+      }
+    }
+  ],
+  "$defs": {
+    "actorRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^actor:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "boundedText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "x-utf8ByteMax": 4096
+    },
+    "causationRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^causation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^correlation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "eventRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^event:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^idempotency:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "invocationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^invocation:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "nonNegativeInteger": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "runId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^run:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    },
+    "runtimeFailure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "retryable"],
+      "properties": {
+        "code": {
+          "enum": ["runtime_error", "lease_expired", "invalid_continuation", "budget_exhausted", "cancelled"]
+        },
+        "message": {
+          "$ref": "#/$defs/boundedText"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "workspaceRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "x-utf8ByteMax": 128,
+      "pattern": "^workspace:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$"
+    }
+  }
+}
