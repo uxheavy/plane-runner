@@ -65,8 +65,8 @@ class GeneratedAdapterTests(unittest.TestCase):
             {row.registration for row in ADAPTER_REGISTRATIONS},
             {"gateway", "blocked", "local"},
         )
-        self.assertEqual(sum(row.registration == "gateway" for row in ADAPTER_REGISTRATIONS), 6)
-        self.assertEqual(sum(row.registration == "blocked" for row in ADAPTER_REGISTRATIONS), 170)
+        self.assertEqual(sum(row.registration == "gateway" for row in ADAPTER_REGISTRATIONS), 43)
+        self.assertEqual(sum(row.registration == "blocked" for row in ADAPTER_REGISTRATIONS), 133)
         for row in ADAPTER_REGISTRATIONS:
             self.assertEqual(
                 row.public_signature, next(a["signature"] for a in manifest["actions"] if a["name"] == row.tool_name)
@@ -120,7 +120,7 @@ class GeneratedAdapterTests(unittest.TestCase):
                 "retrieve_work_item", {}, idempotency_key="k", correlation_id="c"
             )
         self.assertEqual(deferred.exception.code, "MCP_ACTION_GATEWAY_MAPPING_UNAVAILABLE")
-        self.assertIn("SEMANTIC_OPERATION_NOT_REGISTERED", deferred.exception.message)
+        self.assertIn("WORK_ITEM", deferred.exception.message)
         with self.assertRaises(MCPAdapterError) as unknown:
             SharedSDKGatewayAdapter(FakeGateway()).invoke(
                 "not_a_public_plane_tool", {}, idempotency_key="k", correlation_id="c"

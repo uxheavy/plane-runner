@@ -1,4 +1,5 @@
 from collections import Counter
+from pathlib import Path
 
 import pytest
 
@@ -10,6 +11,8 @@ from plane.operation_gateway.mcp import (
     get_mcp_action,
     require_gateway_operation,
 )
+from plane.operation_gateway.catalog import IMPLEMENTED_OPERATION_IDS, OPERATION_CATALOG
+from plane.operation_gateway.contracts import GatewayOperationInputSerializer
 
 
 @pytest.mark.contract
@@ -23,9 +26,12 @@ def test_mcp_manifest_exhaustively_classifies_the_pinned_public_surface():
     assert MCP_COMPATIBILITY_MANIFEST["tool_count"] == 177
     assert len(MCP_ACTIONS) == 177
     assert len({action.name for action in MCP_ACTIONS}) == 177
+    assert len(MCP_COMPATIBILITY_MANIFEST["gateway_overrides"]) == 43
     assert Counter(action.disposition for action in MCP_ACTIONS) == Counter(
         {"MCP-D-001": 171, "MCP-D-002": 1, "MCP-D-003": 5}
     )
+    assert sum(action.gateway_status == "supported" for action in MCP_ACTIONS) == 43
+    assert sum(action.gateway_status == "deferred" for action in MCP_ACTIONS) == 133
 
     for action in MCP_ACTIONS:
         assert action.source_file.startswith("plane_mcp/tools/")
@@ -59,6 +65,7 @@ def test_deferred_actions_cannot_claim_a_gateway_operation():
         assert action.gateway_status == "deferred"
         assert action.gateway_operation_id is None
         assert action.blocker["action"] == action.name
+        assert action.blocker["code"] != "SEMANTIC_OPERATION_NOT_REGISTERED"
         assert action.mutation is (action.behavior == "mutation") or action.disposition == "MCP-D-003"
         assert "caller_identity" in action.preserves
         assert "oauth_and_api_key_auth" in action.preserves
@@ -85,3 +92,32 @@ def test_gateway_lookup_is_explicit_and_fail_closed():
     with pytest.raises(MCPCompatibilityError) as unknown:
         gateway_operation_for("not_a_public_plane_tool")
     assert unknown.value.code == "MCP_ACTION_NOT_INVENTORY"
+
+
+@pytest.mark.contract
+def test_every_supported_action_reaches_an_explicit_executable_operation():
+    supported = [action for action in MCP_ACTIONS if action.gateway_status == "supported"]
+    assert supported
+    assert all(action.gateway_operation_id in IMPLEMENTED_OPERATION_IDS for action in supported)
+    assert all(action.mapping_kind == "semantic_gateway_operation_exact_v1" for action in supported)
+    assert all(action.name in MCP_COMPATIBILITY_MANIFEST["gateway_overrides"] for action in supported)
+    assert len({(action.name, action.gateway_operation_id) for action in supported}) == len(supported)
+
+
+@pytest.mark.contract
+def test_catalog_input_fields_are_declared_by_the_typed_boundary_serializer():
+    declared = set(GatewayOperationInputSerializer().fields)
+    assert {
+        operation_id: sorted(set(descriptor.input_fields) - declared)
+        for operation_id, descriptor in OPERATION_CATALOG.items()
+        if set(descriptor.input_fields) - declared
+    } == {}
+
+
+@pytest.mark.contract
+def test_gateway_adapters_do_not_dispatch_drf_views_or_loopback_requests():
+    operation_gateway_root = Path(__file__).parents[3] / "operation_gateway"
+    for relative_path in ("operations.py", "gateway.py", "mcp/attachments.py"):
+        source = (operation_gateway_root / relative_path).read_text(encoding="utf-8")
+        assert "plane.api.views" not in source
+        assert ".as_view(" not in source

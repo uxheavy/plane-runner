@@ -13,7 +13,8 @@ from dataclasses import dataclass
 from importlib.resources import files
 from typing import Any, Literal
 
-from ..catalog import OPERATION_CATALOG
+from ..catalog import IMPLEMENTED_OPERATION_IDS, OPERATION_CATALOG
+from .manifest import effective_manifest
 
 MCPCompatibilityManifest = dict[str, Any]
 MCPDisposition = Literal["MCP-D-001", "MCP-D-002", "MCP-D-003"]
@@ -85,7 +86,7 @@ def _read_manifest() -> MCPCompatibilityManifest:
     manifest = json.loads(raw)
     if not isinstance(manifest, dict):
         raise RuntimeError("The MCP compatibility manifest must be an object")
-    return manifest
+    return effective_manifest(manifest)
 
 
 def _validate_manifest(manifest: MCPCompatibilityManifest) -> tuple[MCPAction, ...]:
@@ -118,6 +119,8 @@ def _validate_manifest(manifest: MCPCompatibilityManifest) -> tuple[MCPAction, .
         if action.gateway_status == "supported":
             if action.gateway_operation_id not in OPERATION_CATALOG:
                 raise RuntimeError(f"MCP action {action.name!r} names an unregistered gateway operation")
+            if action.gateway_operation_id not in IMPLEMENTED_OPERATION_IDS:
+                raise RuntimeError(f"MCP action {action.name!r} names a non-executable gateway operation")
             if action.blocker is not None:
                 raise RuntimeError(f"Supported MCP action {action.name!r} cannot carry a blocker")
         elif action.gateway_operation_id is not None:

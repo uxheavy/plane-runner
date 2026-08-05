@@ -13,37 +13,10 @@ import argparse
 from pathlib import Path
 from typing import Any
 
+from .manifest import effective_manifest
+
 REGISTRY_SCHEMA_VERSION = "plane.mcp-adapter-registry/v1"
 GATEWAY_SCHEMA_VERSION = "plane.operation/v1"
-
-SUPPORTED_OPERATION_KEYS = {
-    "get_me": ("user.me", "user", "value", {}),
-    "list_work_item_attachments": ("work_item_attachment.list", "attachments", "value", {"work_item_id": "issue_id"}),
-    "get_work_item_attachment_download_url": (
-        "work_item_attachment.download_url",
-        "attachment",
-        "value",
-        {"work_item_id": "issue_id"},
-    ),
-    "upload_work_item_attachment_from_url": (
-        "work_item_attachment.upload_from_url",
-        "attachment",
-        "value",
-        {"work_item_id": "issue_id"},
-    ),
-    "delete_work_item_attachment": (
-        "work_item_attachment.delete",
-        "deleted",
-        "none",
-        {"work_item_id": "issue_id"},
-    ),
-    "read_work_item_attachment": (
-        "work_item_attachment.read",
-        "attachment_read",
-        "content",
-        {"work_item_id": "issue_id"},
-    ),
-}
 
 
 def canonical_manifest_digest(manifest: dict[str, Any]) -> str:
@@ -54,16 +27,26 @@ def canonical_manifest_digest(manifest: dict[str, Any]) -> str:
 def build_adapter_registry(manifest: dict[str, Any]) -> dict[str, Any]:
     """Generate registrations and reject unsupported implicit mappings."""
 
+    manifest = effective_manifest(manifest)
     rows: list[dict[str, Any]] = []
+    overrides = manifest.get("gateway_overrides", {})
     for action in manifest.get("actions", []):
         name = action["name"]
-        supported = name in SUPPORTED_OPERATION_KEYS and action["gateway_status"] == "supported"
-        if action["gateway_status"] == "supported" and not supported:
-            raise ValueError(f"No exact generated operation mapping exists for supported action {name!r}")
+        override = overrides.get(name)
+        supported = action["gateway_status"] == "supported"
         if supported:
-            operation_id, result_key, result_mode, input_aliases = SUPPORTED_OPERATION_KEYS[name]
-            if action.get("gateway_operation_id") != operation_id:
+            if not isinstance(override, dict):
+                raise ValueError(f"No exact generated operation mapping exists for supported action {name!r}")
+            operation_id = override["operation_id"]
+            if (
+                action.get("gateway_operation_id") != operation_id
+                or not isinstance(operation_id, str)
+                or not operation_id
+            ):
                 raise ValueError(f"Manifest operation mismatch for {name!r}")
+            result_key = override["result_key"]
+            result_mode = override.get("result_mode", "value")
+            input_aliases = override.get("input_aliases", {})
             row = {
                 "tool_name": name,
                 "adapter": action["adapter"],

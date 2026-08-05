@@ -14,10 +14,8 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.db import DatabaseError, IntegrityError, transaction
 from django.utils import timezone
 
-from plane.api.views.issue import IssueDetailAPIEndpoint
-from plane.api.serializers import IssueSerializer
 from plane.api.serializers.user import UserLiteSerializer
-from plane.app.permissions import ProjectEntityPermission
+from plane.api.serializers import IssueSerializer
 from plane.db.models import (
     Issue,
     OperationGatewayAudit,
@@ -40,6 +38,7 @@ from .contracts import (
     AttachmentReadInputSerializer,
     AttachmentUploadFromUrlInputSerializer,
     EmptyOperationInputSerializer,
+    GatewayOperationInputSerializer,
     WorkItemReadInputSerializer,
     WorkItemRenameInputSerializer,
     canonical_json,
@@ -52,7 +51,7 @@ from .publications import (
 )
 from .role_boundary import audited_gateway_boundary
 from .mcp.attachments import AttachmentFailure, WorkItemAttachmentService, _assert_issue_permission
-from .work_items import WorkItemRenameFailure, WorkItemRenameOutcome, WorkItemRenameService
+from .operations import OperationAdapterFailure, get_operation_handler
 
 READ_RESULT_FIELDS = ("id", "name", "sequence_id", "priority", "state", "project", "workspace")
 
@@ -100,17 +99,6 @@ class AttemptDecision:
     workspace: Workspace
     record: OperationGatewayIdempotency | None
     response: tuple[GatewayEnvelope, int] | None = None
-
-
-class GatewayServiceRequest:
-    """Minimal request adapter required by the existing read and permission code."""
-
-    def __init__(self, request: Any, *, method: str, data: dict[str, Any] | None = None):
-        self.user = request.user
-        self.method = method
-        self.data = data or {}
-        self.GET = {"fields": ",".join(READ_RESULT_FIELDS)} if method == "GET" else {}
-        self.META = request.META
 
 
 class OperationGateway:
@@ -623,6 +611,15 @@ class OperationGateway:
                 request_digest,
                 GatewayFailure(failure.code, failure.http_status, failure.retryable),
             )
+        except OperationAdapterFailure as failure:
+            return self._persist_failure(
+                record,
+                descriptor,
+                workspace.slug,
+                caller_id,
+                request_digest,
+                GatewayFailure(failure.code, failure.http_status, failure.retryable),
+            )
         except Issue.DoesNotExist:
             return self._persist_failure(
                 record,
@@ -664,9 +661,16 @@ class OperationGateway:
             "work_item_attachment.delete": AttachmentReadInputSerializer,
             "work_item_attachment.read": AttachmentReadInputSerializer,
         }.get(descriptor.operation_id)
-        if serializer_class is None:
+        if serializer_class is None and get_operation_handler(descriptor.operation_id) is not None:
+            serializer = GatewayOperationInputSerializer(
+                data=value,
+                allowed_fields=descriptor.input_fields,
+                required_fields=descriptor.required_input,
+            )
+        elif serializer_class is None:
             return {}, GatewayFailure("UNKNOWN_OPERATION", 404, False)
-        serializer = serializer_class(data=value)
+        else:
+            serializer = serializer_class(data=value)
         if not serializer.is_valid():
             return {}, GatewayFailure("VALIDATION_ERROR", 400, False)
         # Keep the canonical parsed contract JSON-safe for durable reconciliation.
@@ -681,6 +685,14 @@ class OperationGateway:
     ) -> GatewayFailure | None:
         if descriptor.operation_id == "user.me":
             return None
+        handler = get_operation_handler(descriptor.operation_id)
+        if handler is not None:
+            try:
+                if not handler.authorize(request, Workspace.objects.get(slug=workspace_slug), parsed_input):
+                    return GatewayFailure("NOT_AUTHORIZED", 403, False)
+            except Exception:
+                return GatewayFailure("AUTHORIZATION_UNAVAILABLE", 503, True)
+            return None
         if descriptor.operation_id.startswith("work_item_attachment."):
             try:
                 _assert_issue_permission(
@@ -693,20 +705,7 @@ class OperationGateway:
             except AttachmentFailure as failure:
                 return GatewayFailure(failure.code, failure.http_status, failure.retryable)
             return None
-        service_request = GatewayServiceRequest(
-            request,
-            method="GET" if descriptor.kind == "read" else "PATCH",
-        )
-        view = IssueDetailAPIEndpoint()
-        view.request = service_request
-        view.kwargs = {"slug": workspace_slug, "project_id": str(parsed_input["project_id"])}
-        try:
-            allowed = ProjectEntityPermission().has_permission(service_request, view)
-        except Exception:
-            return GatewayFailure("AUTHORIZATION_UNAVAILABLE", 503, True)
-        if not allowed:
-            return GatewayFailure("NOT_AUTHORIZED", 403, False)
-        return None
+        return GatewayFailure("UNKNOWN_OPERATION", 404, False)
 
     def _dispatch(
         self,
@@ -719,7 +718,17 @@ class OperationGateway:
         if descriptor.operation_id == "user.me":
             return 200, UserLiteSerializer(request.user).data, None
 
-        if descriptor.operation_id.startswith("work_item_attachment."):
+        handler = get_operation_handler(descriptor.operation_id)
+        if handler is not None:
+            return handler.execute(request, workspace, parsed_input)
+
+        if descriptor.operation_id in {
+            "work_item_attachment.list",
+            "work_item_attachment.download_url",
+            "work_item_attachment.upload_from_url",
+            "work_item_attachment.delete",
+            "work_item_attachment.read",
+        }:
             service = WorkItemAttachmentService()
             project_id = str(parsed_input["project_id"])
             issue_id = str(parsed_input["issue_id"])
@@ -766,29 +775,7 @@ class OperationGateway:
                 )
             return 200, result, None
 
-        project_id = str(parsed_input["project_id"])
-        issue_id = str(parsed_input["issue_id"])
-        if descriptor.operation_id == "work_item.read":
-            service_request = GatewayServiceRequest(request, method="GET")
-            view = IssueDetailAPIEndpoint()
-            view.request = service_request
-            view.kwargs = {"slug": workspace.slug, "project_id": project_id}
-            response = view.get(service_request, slug=workspace.slug, project_id=project_id, pk=issue_id)
-            return response.status_code, response.data, None
-
-        try:
-            outcome = WorkItemRenameService().rename(
-                request=request,
-                workspace=workspace,
-                project_id=project_id,
-                issue_id=issue_id,
-                name=parsed_input["name"],
-            )
-        except WorkItemRenameFailure as failure:
-            raise GatewayFailure(failure.code, failure.http_status, failure.retryable) from None
-        if not isinstance(outcome, WorkItemRenameOutcome):
-            raise GatewayFailure("UPSTREAM_FAILURE", 503, True)
-        return 200, outcome.result, outcome.publication_payload
+        raise GatewayFailure("UNKNOWN_OPERATION", 404, False)
 
     def _bound_result(
         self,

@@ -19,9 +19,8 @@ import requests
 from django.conf import settings
 from django.utils import timezone
 from plane.api.serializers import IssueAttachmentSerializer
-from plane.api.views.issue import user_has_issue_permission
 from plane.app.permissions import ROLE
-from plane.db.models import FileAsset, Issue, Workspace
+from plane.db.models import FileAsset, Issue, ProjectMember, Workspace
 from plane.settings.storage import S3Storage
 from plane.utils.path_validator import sanitize_filename
 
@@ -90,11 +89,22 @@ def _find_attachment(
     return asset
 
 
+def _user_has_issue_permission(user_id, project_id, issue=None, allowed_roles=None, allow_creator=True):
+    """Apply Plane's issue membership rule without importing an endpoint module."""
+
+    if allow_creator and issue is not None and user_id == issue.created_by_id:
+        return True
+    queryset = ProjectMember.objects.filter(project_id=project_id, member_id=user_id, is_active=True)
+    if allowed_roles is not None:
+        queryset = queryset.filter(role__in=allowed_roles)
+    return queryset.exists()
+
+
 def _assert_issue_permission(request, workspace: Workspace, project_id: str, issue_id: str, *, mutation: bool) -> None:
     issue = Issue.objects.filter(workspace_id=workspace.id, project_id=project_id, pk=issue_id).first()
     if issue is None:
         raise AttachmentFailure("OPERATION_REJECTED", 400)
-    allowed = user_has_issue_permission(
+    allowed = _user_has_issue_permission(
         request.user.id,
         project_id=project_id,
         issue=issue if mutation else None,
