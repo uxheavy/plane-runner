@@ -4,7 +4,7 @@ This directory contains the compact execution control surface for the non-UI Pla
 
 ## Current status
 
-G0 through G3 are complete. The non-UI Plane Agent implementation at Plane commit `7c9d35f4c324865c27c84da5016be2c84e460bcc` passed the independently reviewed G3 gate: 253 tests with zero skips, reversible migrations through `0140`, the complete 177-action disposition, exact runtime/client revisions, credential-topology and result-boundary checks, and no-chat-UI fixtures. [GOAL.md](./GOAL.md) records the detailed evidence and the remaining G4/G5 work.
+G0 through G3 are complete. The integrated non-UI Plane Agent production candidate at Plane commit `afeca22acd8a0fb28f93823500a8515513c1b6f1` passes the complete 11-stage offline G4 verifier, including a 254-test G3 prerequisite, reversible migrations through `0141`, exact runtime/client/image pins, isolation and red-team checks, gateway load and quotas, operator readback, production configuration, and cleanup. G4 is not yet accepted: its single consolidated Sol Medium review and separately authorized live evaluation remain outstanding. [GOAL.md](./GOAL.md) records the detailed evidence and G5 rollout requirements.
 
 The authorization is local-only. Pilot, production, deployment, destructive, credential, purchase, external-write, and other separately governed actions remain gated independently.
 
