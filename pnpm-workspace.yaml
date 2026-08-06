@@ -4,6 +4,11 @@ packages:
   - "!apps/api"
   - "!apps/proxy"
 
+# Keep script dispatch reproducible: explicit installs remain available, while
+# invoking the offline verification lever never downloads pnpm or dependencies.
+pmOnFail: ignore
+verifyDepsBeforeRun: false
+
 catalog:
   ajv: 8.18.0
   "@atlaskit/pragmatic-drag-and-drop": "1.7.4"
