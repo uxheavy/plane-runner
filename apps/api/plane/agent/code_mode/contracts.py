@@ -55,6 +55,9 @@ class SandboxPolicy:
     filesystem: Literal["none"] = "none"
     process: Literal["none"] = "none"
     max_spill_bytes: int = 64 * 1024
+    cpu_seconds: int = 60
+    memory_bytes: int = 1024 * 1024 * 1024
+    pids_limit: int = 64
 
     def __post_init__(self) -> None:
         if self.network != "none" or self.filesystem != "none" or self.process != "none":
@@ -65,6 +68,13 @@ class SandboxPolicy:
             or self.max_spill_bytes < 0
         ):
             raise ValueError("Code Mode spill bound is invalid")
+        for name, value, maximum in (
+            ("cpu_seconds", self.cpu_seconds, 3600),
+            ("memory_bytes", self.memory_bytes, 2 * 1024 * 1024 * 1024),
+            ("pids_limit", self.pids_limit, 4096),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0 or value > maximum:
+                raise ValueError(f"Code Mode {name} bound is invalid")
 
 
 CallbackKind = Literal["search", "describe", "operation", "spill"]

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import resource
 import selectors
 import subprocess
 import time
@@ -74,6 +75,11 @@ class CodeModeIsolateRunner:
             raise CodeModeIsolateError("BUDGET_EXCEEDED", "Code Mode execution budget is exhausted") from exc
         start = time.monotonic()
         env = {"PATH": os.path.dirname(self.node_path) or os.defpath, "NODE_NO_WARNINGS": "1"}
+        sandbox = getattr(host, "sandbox", None)
+        if sandbox is None:
+            from .contracts import SandboxPolicy
+
+            sandbox = SandboxPolicy()
         permission_flag = self._permission_flag()
         command = [
             self.node_path,
@@ -96,8 +102,9 @@ class CodeModeIsolateRunner:
                 env=env,
                 start_new_session=True,
                 text=False,
+                preexec_fn=self._resource_limits(sandbox),
             )
-        except (OSError, ValueError) as exc:
+        except (OSError, ValueError, subprocess.SubprocessError) as exc:
             raise CodeModeIsolateError("ISOLATE_UNAVAILABLE", "Code Mode child could not start") from exc
 
         selector = selectors.DefaultSelector()
@@ -255,6 +262,20 @@ class CodeModeIsolateRunner:
         if "--experimental-permission" in help_text:
             return "--experimental-permission"
         raise CodeModeIsolateError("ISOLATE_UNAVAILABLE", "Node permission isolation is unavailable")
+
+    @staticmethod
+    def _resource_limits(sandbox) -> Any:
+        def apply_limits() -> None:
+            limits = (
+                (getattr(resource, "RLIMIT_CPU", None), sandbox.cpu_seconds),
+                (getattr(resource, "RLIMIT_AS", None), sandbox.memory_bytes),
+                (getattr(resource, "RLIMIT_NPROC", None), sandbox.pids_limit),
+            )
+            for resource_kind, limit in limits:
+                if resource_kind is not None:
+                    resource.setrlimit(resource_kind, (limit, limit))
+
+        return apply_limits
 
 
 class AgentProtocolError(ValueError):

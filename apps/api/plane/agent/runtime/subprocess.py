@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import resource
 import signal
 import sqlite3
 import subprocess
@@ -22,6 +23,7 @@ import tempfile
 import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +61,49 @@ _HERMES_G1_CONTRACT_DIGESTS = {
 }
 _HERMES_DISPATCH_PROTOCOL = "plane.agent-runtime/dispatch-control/v1"
 _HERMES_CREDENTIAL_PROTOCOL = "plane.agent-runtime/credential-control/v1"
+
+
+@dataclass(frozen=True)
+class RuntimeProcessPolicy:
+    """Resource and capability policy applied to every runtime child."""
+
+    network: str = "none"
+    filesystem: str = "runtime-workdir-readonly"
+    process: str = "single-invocation-child"
+    cpu_seconds: int = 300
+    memory_bytes: int = 512 * 1024 * 1024
+    pids_limit: int = 128
+
+    def __post_init__(self) -> None:
+        if self.network != "none":
+            raise ValueError("runtime child network policy must be none")
+        if self.filesystem != "runtime-workdir-readonly":
+            raise ValueError("runtime child filesystem policy is invalid")
+        if self.process != "single-invocation-child":
+            raise ValueError("runtime child process policy is invalid")
+        for name, value, maximum in (
+            ("cpu_seconds", self.cpu_seconds, 3600),
+            ("memory_bytes", self.memory_bytes, 2 * 1024 * 1024 * 1024),
+            ("pids_limit", self.pids_limit, 4096),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0 or value > maximum:
+                raise ValueError(f"runtime child {name} is outside its allowed range")
+
+    def preexec_fn(self) -> Callable[[], None]:
+        """Return a child-only callback that applies finite POSIX limits."""
+
+        def apply_limits() -> None:
+            limits = (
+                (getattr(resource, "RLIMIT_CPU", None), self.cpu_seconds),
+                (getattr(resource, "RLIMIT_AS", None), self.memory_bytes),
+                (getattr(resource, "RLIMIT_NPROC", None), self.pids_limit),
+            )
+            for resource_kind, limit in limits:
+                if resource_kind is None:
+                    continue
+                resource.setrlimit(resource_kind, (limit, limit))
+
+        return apply_limits
 
 
 def _canonical_object(raw: str, name: str) -> dict[str, Any]:
@@ -334,6 +379,7 @@ class SubprocessRuntimeTransport(RuntimeTransport):
         max_output_bytes: int = _DEFAULT_MAX_OUTPUT_BYTES,
         max_diagnostics_bytes: int = _DEFAULT_MAX_DIAGNOSTICS_BYTES,
         is_cancelled: Callable[[], bool] | None = None,
+        process_policy: RuntimeProcessPolicy | None = None,
     ) -> None:
         if not command or any(not isinstance(part, str) or not part or "\x00" in part for part in command):
             raise ValueError("command must contain non-empty strings without NUL bytes")
@@ -356,6 +402,12 @@ class SubprocessRuntimeTransport(RuntimeTransport):
         self._max_diagnostics_bytes = max_diagnostics_bytes
         self._cancellation_callback = is_cancelled
         self._is_cancelled = is_cancelled or (lambda: False)
+        self._process_policy = process_policy or RuntimeProcessPolicy()
+        if any(
+            not isinstance(key, str) or not key or "\x00" in key or not isinstance(value, str) or "\x00" in value
+            for key, value in self._environment.items()
+        ):
+            raise ValueError("runtime child environment must be a NUL-free string mapping")
 
     @staticmethod
     def _terminate(process: subprocess.Popen[bytes]) -> None:
@@ -407,8 +459,9 @@ class SubprocessRuntimeTransport(RuntimeTransport):
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                preexec_fn=self._process_policy.preexec_fn(),
             )
-        except (OSError, ValueError) as exc:
+        except (OSError, ValueError, subprocess.SubprocessError) as exc:
             raise RuntimeDispatchError("runtime process could not be started") from exc
 
         stdout = bytearray()
@@ -647,4 +700,9 @@ class HostBoundSubprocessRuntimeTransport(SubprocessRuntimeTransport):
         return frames
 
 
-__all__ = ["HostBoundSubprocessRuntimeTransport", "SubprocessRuntimeTransport", "_hermes_bootstrap_payload"]
+__all__ = [
+    "HostBoundSubprocessRuntimeTransport",
+    "RuntimeProcessPolicy",
+    "SubprocessRuntimeTransport",
+    "_hermes_bootstrap_payload",
+]

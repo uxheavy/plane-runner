@@ -1,0 +1,333 @@
+"""Fail-closed configuration for the separate Plane Agent runtime service.
+
+This module deliberately has no Django dependency.  The runtime health process
+and Plane settings both use the same parser, so a production process cannot
+silently turn a malformed URL or missing secret into a disabled integration.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import shlex
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Mapping
+from urllib.parse import urlsplit
+
+
+RUNTIME_PROTOCOL = "plane.agent-runtime/v1"
+DEFAULT_RUNTIME_COMMAND = (
+    "python3",
+    "-m",
+    "plane_runtime.g1_runtime_image.bootstrap",
+    "--once",
+    "--g1-production",
+)
+DEFAULT_HEALTH_PATH = "/health/ready"
+DEFAULT_SAFETY_STOP_FILE = "/run/plane-agent-runtime/safety-stop"
+
+_PLACEHOLDER_SECRETS = frozenset(
+    {
+        "change-this-key-on-deployment",
+        "change-this-runtime-password",
+        "change-this-migration-password",
+        "secret-key",
+        "runtime-secret",
+        "runtime-credential",
+        "password",
+    }
+)
+_SENSITIVE_ENV_MARKERS = (
+    "API_KEY",
+    "APITOKEN",
+    "AUTH",
+    "CREDENTIAL",
+    "DATABASE",
+    "PASSWORD",
+    "PG",
+    "SECRET",
+    "TOKEN",
+)
+
+
+class RuntimeConfigurationError(ValueError):
+    """A runtime configuration value is absent, invalid, or unsafe."""
+
+
+def _bounded_text(value: object, name: str, maximum: int) -> str:
+    if not isinstance(value, str) or not value or "\x00" in value:
+        raise RuntimeConfigurationError(f"{name} must be a non-empty string")
+    if len(value.encode("utf-8")) > maximum:
+        raise RuntimeConfigurationError(f"{name} exceeds its size bound")
+    if any(ord(char) < 0x20 and char not in "\t" for char in value):
+        raise RuntimeConfigurationError(f"{name} contains control characters")
+    return value
+
+
+def _positive_int(environment: Mapping[str, str], name: str, default: int, maximum: int) -> int:
+    raw = environment.get(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        value = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeConfigurationError(f"{name} must be a positive integer") from exc
+    if value <= 0 or value > maximum:
+        raise RuntimeConfigurationError(f"{name} is outside its allowed range")
+    return value
+
+
+def _positive_float(environment: Mapping[str, str], name: str, default: float, maximum: float) -> float:
+    raw = environment.get(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        value = float(raw)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeConfigurationError(f"{name} must be a positive number") from exc
+    if value <= 0 or value > maximum:
+        raise RuntimeConfigurationError(f"{name} is outside its allowed range")
+    return value
+
+
+def _reject_placeholder(value: str, name: str) -> str:
+    if value.strip().casefold() in _PLACEHOLDER_SECRETS:
+        raise RuntimeConfigurationError(f"{name} is a placeholder and cannot be used")
+    return value
+
+
+def _read_secret(environment: Mapping[str, str]) -> str:
+    direct = environment.get("PLANE_AGENT_RUNTIME_SECRET")
+    secret_file = environment.get("PLANE_AGENT_RUNTIME_SECRET_FILE")
+    if direct and secret_file:
+        raise RuntimeConfigurationError(
+            "PLANE_AGENT_RUNTIME_SECRET and PLANE_AGENT_RUNTIME_SECRET_FILE are mutually exclusive"
+        )
+    if secret_file:
+        path = Path(_bounded_text(secret_file, "PLANE_AGENT_RUNTIME_SECRET_FILE", 512))
+        if not path.is_absolute():
+            raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_SECRET_FILE must be absolute")
+        try:
+            raw = path.read_bytes()
+        except OSError as exc:
+            raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_SECRET_FILE cannot be read") from exc
+        if len(raw) > 4096:
+            raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_SECRET_FILE exceeds its size bound")
+        try:
+            value = raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_SECRET_FILE is not UTF-8") from exc
+        if not value or value != value.strip() or "\n" in value or "\r" in value:
+            raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_SECRET_FILE must contain one secret line")
+    else:
+        value = direct or ""
+    value = _bounded_text(value, "PLANE_AGENT_RUNTIME_SECRET", 4096)
+    if len(value.encode("utf-8")) < 32:
+        raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_SECRET must contain at least 32 UTF-8 bytes")
+    return _reject_placeholder(value, "PLANE_AGENT_RUNTIME_SECRET")
+
+
+def _parse_object(raw: str, name: str) -> dict[str, object]:
+    def reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for key, item in pairs:
+            if key in result:
+                raise ValueError("duplicate object key")
+            result[key] = item
+        return result
+
+    try:
+        value = json.loads(
+            raw,
+            object_pairs_hook=reject_duplicate_keys,
+            parse_constant=lambda constant: (_ for _ in ()).throw(ValueError(constant)),
+        )
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise RuntimeConfigurationError(f"{name} must be a JSON object") from exc
+    if not isinstance(value, dict) or any(not isinstance(key, str) for key in value):
+        raise RuntimeConfigurationError(f"{name} must be a JSON object")
+    return value
+
+
+def _validate_child_environment(environment: Mapping[str, object]) -> dict[str, str]:
+    validated: dict[str, str] = {}
+    for key, value in environment.items():
+        _bounded_text(key, "runtime child environment key", 128)
+        if any(marker in key.upper().replace("-", "_") for marker in _SENSITIVE_ENV_MARKERS):
+            raise RuntimeConfigurationError("runtime child environment contains a credential-shaped key")
+        if not isinstance(value, str) or "\x00" in value:
+            raise RuntimeConfigurationError("runtime child environment values must be NUL-free strings")
+        if len(value.encode("utf-8")) > 4096:
+            raise RuntimeConfigurationError("runtime child environment value exceeds its size bound")
+        validated[key] = value
+    if len(validated) > 32:
+        raise RuntimeConfigurationError("runtime child environment contains too many entries")
+    return validated
+
+
+def _validate_provider_credentials(value: Mapping[str, object]) -> dict[str, str]:
+    validated: dict[str, str] = {}
+    if len(value) > 16:
+        raise RuntimeConfigurationError("runtime provider credentials contain too many entries")
+    for key, item in value.items():
+        _bounded_text(key, "runtime provider credential key", 128)
+        if not isinstance(item, str) or not item or "\x00" in item:
+            raise RuntimeConfigurationError("runtime provider credentials must be non-empty strings")
+        if len(item.encode("utf-8")) > 16 * 1024:
+            raise RuntimeConfigurationError("runtime provider credential exceeds its size bound")
+        validated[key] = _reject_placeholder(item, "runtime provider credential")
+    return validated
+
+
+def _validate_runtime_url(value: object) -> str:
+    raw = _bounded_text(value, "PLANE_AGENT_RUNTIME_URL", 2048)
+    if raw != raw.strip() or any(char.isspace() for char in raw):
+        raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_URL contains whitespace")
+    try:
+        parsed = urlsplit(raw)
+        if parsed.port == 0:
+            raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_URL must not use port zero")
+    except ValueError as exc:
+        raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_URL has an invalid port") from exc
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_URL must be an absolute HTTP(S) URL")
+    if parsed.username is not None or parsed.password is not None:
+        raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_URL must not contain credentials")
+    if parsed.query or parsed.fragment:
+        raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_URL must not contain a query or fragment")
+    return raw.rstrip("/")
+
+
+def _validate_health_path(value: object) -> str:
+    path = _bounded_text(value, "PLANE_AGENT_RUNTIME_HEALTH_PATH", 128)
+    if not path.startswith("/") or "?" in path or "#" in path:
+        raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_HEALTH_PATH must be an absolute path")
+    return path
+
+
+@dataclass(frozen=True)
+class AgentRuntimeConfiguration:
+    """Validated runtime settings shared by Plane and the runtime service."""
+
+    url: str
+    shared_secret: str
+    health_path: str
+    safety_stop_file: str
+    command: tuple[str, ...]
+    child_environment: Mapping[str, str]
+    provider_credentials: Mapping[str, str]
+    timeout_seconds: float
+    max_request_bytes: int
+    max_response_bytes: int
+    max_concurrent_invocations: int
+    cpu_seconds: int
+    memory_bytes: int
+    pids_limit: int
+    network_policy: str
+    filesystem_policy: str
+    process_policy: str
+
+    @classmethod
+    def from_environment(cls, environment: Mapping[str, str] | None = None) -> "AgentRuntimeConfiguration":
+        source = os.environ if environment is None else environment
+        url = _validate_runtime_url(source.get("PLANE_AGENT_RUNTIME_URL"))
+        shared_secret = _read_secret(source)
+        health_path = _validate_health_path(source.get("PLANE_AGENT_RUNTIME_HEALTH_PATH", DEFAULT_HEALTH_PATH))
+        safety_stop_file = _bounded_text(
+            source.get("PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE", DEFAULT_SAFETY_STOP_FILE),
+            "PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE",
+            512,
+        )
+        if not Path(safety_stop_file).is_absolute():
+            raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE must be absolute")
+        raw_command = source.get("PLANE_AGENT_RUNTIME_COMMAND")
+        if raw_command:
+            try:
+                command = tuple(shlex.split(raw_command))
+            except ValueError as exc:
+                raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_COMMAND is malformed") from exc
+        else:
+            command = DEFAULT_RUNTIME_COMMAND
+        if not command or not any("plane_runtime.g1_runtime_image.bootstrap" in part for part in command):
+            raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_COMMAND must use the pinned Plane runtime bootstrap")
+        if any(not isinstance(part, str) or not part or "\x00" in part for part in command):
+            raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_COMMAND contains an invalid argument")
+        if len(command) > 16:
+            raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_COMMAND contains too many arguments")
+        child_environment = _validate_child_environment(
+            _parse_object(
+                source.get("PLANE_AGENT_RUNTIME_ENVIRONMENT_JSON", "{}"),
+                "PLANE_AGENT_RUNTIME_ENVIRONMENT_JSON",
+            )
+        )
+        provider_credentials = _validate_provider_credentials(
+            _parse_object(
+                source.get("PLANE_AGENT_RUNTIME_CREDENTIALS_JSON", "{}"),
+                "PLANE_AGENT_RUNTIME_CREDENTIALS_JSON",
+            )
+        )
+        network_policy = source.get("PLANE_AGENT_RUNTIME_NETWORK_POLICY", "none")
+        if network_policy != "none":
+            raise RuntimeConfigurationError("runtime network policy must be none")
+        return cls(
+            url=url,
+            shared_secret=shared_secret,
+            health_path=health_path,
+            safety_stop_file=safety_stop_file,
+            command=command,
+            child_environment=child_environment,
+            provider_credentials=provider_credentials,
+            timeout_seconds=_positive_float(source, "PLANE_AGENT_RUNTIME_TIMEOUT_SECONDS", 300.0, 3600.0),
+            max_request_bytes=_positive_int(
+                source, "PLANE_AGENT_RUNTIME_MAX_REQUEST_BYTES", 256 * 1024, 2 * 1024 * 1024
+            ),
+            max_response_bytes=_positive_int(
+                source, "PLANE_AGENT_RUNTIME_MAX_RESPONSE_BYTES", 512 * 1024, 2 * 1024 * 1024
+            ),
+            max_concurrent_invocations=_positive_int(source, "PLANE_AGENT_RUNTIME_MAX_CONCURRENT_INVOCATIONS", 1, 32),
+            cpu_seconds=_positive_int(source, "PLANE_AGENT_RUNTIME_CPU_SECONDS", 300, 3600),
+            memory_bytes=_positive_int(
+                source,
+                "PLANE_AGENT_RUNTIME_MEMORY_BYTES",
+                512 * 1024 * 1024,
+                2 * 1024 * 1024 * 1024,
+            ),
+            pids_limit=_positive_int(source, "PLANE_AGENT_RUNTIME_PIDS_LIMIT", 128, 4096),
+            network_policy="none",
+            filesystem_policy="runtime-workdir-readonly",
+            process_policy="single-invocation-child",
+        )
+
+    def public_summary(self) -> dict[str, object]:
+        """Return bounded non-secret configuration for health/readiness evidence."""
+
+        return {
+            "protocol": RUNTIME_PROTOCOL,
+            "url": self.url,
+            "healthPath": self.health_path,
+            "safetyStopFileConfigured": bool(self.safety_stop_file),
+            "commandConfigured": bool(self.command),
+            "childEnvironmentEntries": len(self.child_environment),
+            "providerCredentialEntries": len(self.provider_credentials),
+            "timeoutSeconds": self.timeout_seconds,
+            "maxRequestBytes": self.max_request_bytes,
+            "maxResponseBytes": self.max_response_bytes,
+            "maxConcurrentInvocations": self.max_concurrent_invocations,
+            "cpuSeconds": self.cpu_seconds,
+            "memoryBytes": self.memory_bytes,
+            "pidsLimit": self.pids_limit,
+            "networkPolicy": self.network_policy,
+            "filesystemPolicy": self.filesystem_policy,
+            "processPolicy": self.process_policy,
+        }
+
+
+__all__ = [
+    "AgentRuntimeConfiguration",
+    "DEFAULT_HEALTH_PATH",
+    "DEFAULT_RUNTIME_COMMAND",
+    "DEFAULT_SAFETY_STOP_FILE",
+    "RUNTIME_PROTOCOL",
+    "RuntimeConfigurationError",
+]

@@ -452,6 +452,21 @@ LIVE_BASE_PATH = os.environ.get("LIVE_BASE_PATH", "/live/")
 
 LIVE_URL = urljoin(LIVE_BASE_URL, LIVE_BASE_PATH) if LIVE_BASE_URL else None
 
+# Separate Plane Agent runtime boundary.  Production settings validate and
+# materialize the complete contract; common settings expose only non-secret
+# deployment knobs so local/test settings never inherit a runtime credential.
+PLANE_AGENT_RUNTIME_URL = os.environ.get("PLANE_AGENT_RUNTIME_URL", "")
+PLANE_AGENT_RUNTIME_SECRET_FILE = os.environ.get("PLANE_AGENT_RUNTIME_SECRET_FILE", "")
+PLANE_AGENT_RUNTIME_COMMAND = os.environ.get("PLANE_AGENT_RUNTIME_COMMAND", "")
+PLANE_AGENT_RUNTIME_CHECKOUT = os.environ.get("PLANE_AGENT_RUNTIME_CHECKOUT", "")
+PLANE_AGENT_RUNTIME_SHA = os.environ.get("PLANE_AGENT_RUNTIME_SHA", "")
+PLANE_AGENT_RUNTIME_CWD = os.environ.get("PLANE_AGENT_RUNTIME_CWD", "")
+PLANE_AGENT_RUNTIME_LEDGER_PATH = os.environ.get(
+    "PLANE_AGENT_RUNTIME_LEDGER_PATH", "/tmp/plane-agent-runtime-ledger.sqlite"
+)
+PLANE_AGENT_RUNTIME_ENVIRONMENT = {}
+PLANE_AGENT_RUNTIME_CREDENTIALS = {}
+
 # WEB URL
 WEB_URL = os.environ.get("WEB_URL")
 

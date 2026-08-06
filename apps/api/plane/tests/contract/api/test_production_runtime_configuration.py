@@ -76,6 +76,8 @@ def _settings_environment() -> dict[str, str]:
             "SECRET_KEY": "runtime-settings-test-key",
             "LIVE_SERVER_SECRET_KEY": "runtime-settings-test-key",
             "CORS_ALLOWED_ORIGINS": "http://localhost",
+            "PLANE_AGENT_RUNTIME_URL": "http://agent-runtime:8080",
+            "PLANE_AGENT_RUNTIME_SECRET": "runtime-settings-agent-secret-0123456789",
         }
     )
     return environment
@@ -570,3 +572,25 @@ def test_resolved_community_compose_scopes_database_credentials_by_process():
     assert provisioner_environment["PLANE_AUDIT_MIGRATION_PASSWORD"]
     assert services["migrator"]["depends_on"]["provisioner"]["condition"] == "service_completed_successfully"
     assert services["provisioner-final"]["depends_on"]["migrator"]["condition"] == "service_completed_successfully"
+
+
+@pytest.mark.contract
+def test_agent_runtime_production_compose_has_an_isolated_readiness_and_secret_boundary():
+    services = _resolved_community_services()
+    runtime = services["agent-runtime"]
+    runtime_environment = runtime["environment"]
+    assert runtime["network_mode"] == "none"
+    assert runtime["read_only"] is True
+    assert runtime["cap_drop"] == ["ALL"]
+    assert "no-new-privileges:true" in runtime["security_opt"]
+    assert runtime["pids_limit"] > 0
+    assert runtime["mem_limit"]
+    assert runtime["cpus"]
+    assert runtime_environment["PLANE_AGENT_RUNTIME_NETWORK_POLICY"] == "none"
+    assert runtime_environment["PLANE_AGENT_RUNTIME_SECRET_FILE"] == "/run/secrets/plane_agent_runtime"
+    assert "PLANE_AGENT_RUNTIME_SECRET" not in runtime_environment
+    healthcheck = runtime["healthcheck"]
+    assert healthcheck["test"][0] == "CMD-SHELL"
+    assert "/health/ready" in healthcheck["test"][1]
+    assert services["api"]["environment"]["PLANE_AGENT_RUNTIME_SECRET_FILE"] == "/run/secrets/plane_agent_runtime"
+    assert "PLANE_AGENT_RUNTIME_SECRET" not in services["api"]["environment"]

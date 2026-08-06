@@ -1,52 +1,65 @@
-from .dispatch import (
-    RuntimeDispatchError,
-    RuntimeIngressError,
-    RuntimeTransport,
-    dispatch_invocation,
-    ingest_runtime_frame,
-)
-from .subprocess import HostBoundSubprocessRuntimeTransport, SubprocessRuntimeTransport
-from .supervisor import (
-    DEFAULT_LEASE_SECONDS,
-    RuntimeLeaseBusy,
-    RuntimeSupervisorError,
-    SupervisorResult,
-    request_runtime_cancellation,
-    run_runtime_invocation,
-    runtime_invocation_cancelled,
-    runtime_invocation_cancellation_requested,
-)
-from .host_rpc import (
-    HOST_PROTOCOL,
-    PlaneGatewayHostPort,
-    PlaneHostCall,
-    PlaneHostRPCError,
-    PlaneHostResult,
-    PlaneHostServer,
-    build_gateway_host_port,
-)
+"""Plane Agent runtime exports with lazy imports across process boundaries."""
 
-__all__ = [
-    "RuntimeDispatchError",
-    "RuntimeIngressError",
-    "RuntimeTransport",
-    "dispatch_invocation",
-    "ingest_runtime_frame",
-    "SubprocessRuntimeTransport",
-    "HostBoundSubprocessRuntimeTransport",
-    "DEFAULT_LEASE_SECONDS",
-    "RuntimeLeaseBusy",
-    "RuntimeSupervisorError",
-    "SupervisorResult",
-    "request_runtime_cancellation",
-    "run_runtime_invocation",
-    "runtime_invocation_cancelled",
-    "runtime_invocation_cancellation_requested",
-    "HOST_PROTOCOL",
-    "PlaneGatewayHostPort",
-    "PlaneHostCall",
-    "PlaneHostRPCError",
-    "PlaneHostResult",
-    "PlaneHostServer",
-    "build_gateway_host_port",
-]
+from __future__ import annotations
+
+from importlib import import_module
+from typing import Any
+
+
+_EXPORTS: dict[str, tuple[str, str]] = {
+    "RuntimeDispatchError": ("dispatch", "RuntimeDispatchError"),
+    "RuntimeIngressError": ("dispatch", "RuntimeIngressError"),
+    "RuntimeTransport": ("dispatch", "RuntimeTransport"),
+    "dispatch_invocation": ("dispatch", "dispatch_invocation"),
+    "ingest_runtime_frame": ("dispatch", "ingest_runtime_frame"),
+    "SubprocessRuntimeTransport": ("subprocess", "SubprocessRuntimeTransport"),
+    "HostBoundSubprocessRuntimeTransport": ("subprocess", "HostBoundSubprocessRuntimeTransport"),
+    "RuntimeProcessPolicy": ("subprocess", "RuntimeProcessPolicy"),
+    "DEFAULT_LEASE_SECONDS": ("supervisor", "DEFAULT_LEASE_SECONDS"),
+    "RuntimeLeaseBusy": ("supervisor", "RuntimeLeaseBusy"),
+    "RuntimeSupervisorError": ("supervisor", "RuntimeSupervisorError"),
+    "SupervisorResult": ("supervisor", "SupervisorResult"),
+    "request_runtime_cancellation": ("supervisor", "request_runtime_cancellation"),
+    "run_runtime_invocation": ("supervisor", "run_runtime_invocation"),
+    "runtime_invocation_cancelled": ("supervisor", "runtime_invocation_cancelled"),
+    "runtime_invocation_cancellation_requested": ("supervisor", "runtime_invocation_cancellation_requested"),
+    "HOST_PROTOCOL": ("host_rpc", "HOST_PROTOCOL"),
+    "PlaneGatewayHostPort": ("host_rpc", "PlaneGatewayHostPort"),
+    "PlaneHostCall": ("host_rpc", "PlaneHostCall"),
+    "PlaneHostRPCError": ("host_rpc", "PlaneHostRPCError"),
+    "PlaneHostResult": ("host_rpc", "PlaneHostResult"),
+    "PlaneHostServer": ("host_rpc", "PlaneHostServer"),
+    "build_gateway_host_port": ("host_rpc", "build_gateway_host_port"),
+    "AgentRuntimeConfiguration": ("config", "AgentRuntimeConfiguration"),
+    "RuntimeConfigurationError": ("config", "RuntimeConfigurationError"),
+    "DEFAULT_HEALTH_PATH": ("config", "DEFAULT_HEALTH_PATH"),
+    "DEFAULT_RUNTIME_COMMAND": ("config", "DEFAULT_RUNTIME_COMMAND"),
+    "DEFAULT_SAFETY_STOP_FILE": ("config", "DEFAULT_SAFETY_STOP_FILE"),
+    "RUNTIME_PROTOCOL": ("config", "RUNTIME_PROTOCOL"),
+    "CredentialLease": ("credentials", "CredentialLease"),
+    "RuntimeCredentialBroker": ("credentials", "RuntimeCredentialBroker"),
+    "RuntimeCredentialError": ("credentials", "RuntimeCredentialError"),
+    "RuntimeHealthState": ("health", "RuntimeHealthState"),
+    "RuntimeHealthStatus": ("health", "RuntimeHealthStatus"),
+    "RuntimeSafetyStopError": ("health", "RuntimeSafetyStopError"),
+    "RuntimeSafetyController": ("health", "RuntimeSafetyController"),
+    "operator_health_readback": ("health", "operator_health_readback"),
+    "request_operator_safety_stop": ("health", "request_operator_safety_stop"),
+}
+
+
+def __getattr__(name: str) -> Any:
+    try:
+        module_name, attribute_name = _EXPORTS[name]
+    except KeyError as exc:
+        raise AttributeError(name) from exc
+    value = getattr(import_module(f"{__name__}.{module_name}"), attribute_name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()).union(_EXPORTS))
+
+
+__all__ = list(_EXPORTS)

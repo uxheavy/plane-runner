@@ -65,6 +65,18 @@ x-app-env: &app-env
   LIVE_SERVER_SECRET_KEY: ${LIVE_SERVER_SECRET_KEY}
   WEBHOOK_ALLOWED_IPS: ${WEBHOOK_ALLOWED_IPS:-}
   WEBHOOK_ALLOWED_HOSTS: ${WEBHOOK_ALLOWED_HOSTS:-}
+  PLANE_AGENT_RUNTIME_URL: ${PLANE_AGENT_RUNTIME_URL:-http://agent-runtime:8080}
+  PLANE_AGENT_RUNTIME_SECRET_FILE: /run/secrets/plane_agent_runtime
+
+x-agent-runtime-env: &agent-runtime-env
+  DJANGO_SETTINGS_MODULE: plane.settings.common
+  PLANE_AGENT_RUNTIME_URL: ${PLANE_AGENT_RUNTIME_URL:-http://agent-runtime:8080}
+  PLANE_AGENT_RUNTIME_SECRET_FILE: /run/secrets/plane_agent_runtime
+  PLANE_AGENT_RUNTIME_HEALTH_PATH: ${PLANE_AGENT_RUNTIME_HEALTH_PATH:-/health/ready}
+  PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE: ${PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE:-/run/plane-agent-runtime/safety-stop}
+  PLANE_AGENT_RUNTIME_NETWORK_POLICY: none
+  PLANE_AGENT_RUNTIME_BIND: 0.0.0.0
+  PLANE_AGENT_RUNTIME_PORT: 8080
 
 x-runtime-db-env: &runtime-db-env
   DATABASE_URL: ${DATABASE_URL:-postgresql://plane_runtime:change-this-runtime-password@plane-db/plane}
@@ -148,6 +160,8 @@ services:
       - logs_api:/code/plane/logs
     environment:
       <<: [*app-env, *runtime-db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
+    secrets:
+      - plane_agent_runtime
     depends_on:
       plane-db:
         condition: service_started
@@ -169,6 +183,8 @@ services:
       - logs_worker:/code/plane/logs
     environment:
       <<: [*app-env, *runtime-db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
+    secrets:
+      - plane_agent_runtime
     depends_on:
       provisioner-final:
         condition: service_completed_successfully
@@ -192,6 +208,8 @@ services:
       - logs_beat-worker:/code/plane/logs
     environment:
       <<: [*app-env, *runtime-db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
+    secrets:
+      - plane_agent_runtime
     depends_on:
       api:
         condition: service_started
@@ -201,6 +219,36 @@ services:
         condition: service_started
       plane-mq:
         condition: service_started
+
+  agent-runtime:
+    image: ${PLANE_AGENT_RUNTIME_IMAGE:-makeplane/plane-backend:${APP_RELEASE:-stable}}
+    command: ["python3", "-m", "plane.agent.runtime.service"]
+    user: "${PLANE_AGENT_RUNTIME_UID:-65532}:${PLANE_AGENT_RUNTIME_GID:-65532}"
+    read_only: true
+    network_mode: none
+    init: true
+    expose:
+      - "8080"
+    environment:
+      <<: *agent-runtime-env
+    secrets:
+      - plane_agent_runtime
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+      - /run/plane-agent-runtime:rw,noexec,nosuid,nodev,size=1m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    cpus: ${PLANE_AGENT_RUNTIME_CPUS:-1.0}
+    mem_limit: ${PLANE_AGENT_RUNTIME_MEMORY_LIMIT:-768m}
+    pids_limit: ${PLANE_AGENT_RUNTIME_PIDS_LIMIT:-128}
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/health/ready\", timeout=2)' "]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
 
   migrator:
     image: makeplane/plane-backend:${APP_RELEASE:-stable}
@@ -336,3 +384,7 @@ volumes:
   rabbitmq_data:
   proxy_config:
   proxy_data:
+
+secrets:
+  plane_agent_runtime:
+    environment: PLANE_AGENT_RUNTIME_SECRET

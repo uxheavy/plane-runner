@@ -16,10 +16,47 @@ from urllib.parse import urlparse
 
 from django.core.exceptions import ImproperlyConfigured
 
+from plane.agent.runtime.config import AgentRuntimeConfiguration, RuntimeConfigurationError
+
 from .common import *  # noqa
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = int(os.environ.get("DEBUG", 0)) == 1
+
+
+def _validate_agent_runtime_boundary():
+    # One-shot database processes deliberately do not receive the runtime
+    # secret or endpoint.  Their existing authority boundary is validated
+    # below, while normal API/worker processes must fail closed here.
+    if PLANE_DB_MIGRATION_MODE or PLANE_DB_PROVISIONER_MODE:
+        return
+    try:
+        runtime_configuration = AgentRuntimeConfiguration.from_environment(os.environ)
+    except RuntimeConfigurationError as exc:
+        raise ImproperlyConfigured(f"Production Agent runtime configuration is invalid: {exc}") from exc
+    globals().update(
+        {
+            "PLANE_AGENT_RUNTIME_URL": runtime_configuration.url,
+            "PLANE_AGENT_RUNTIME_SHARED_SECRET": runtime_configuration.shared_secret,
+            "PLANE_AGENT_RUNTIME_SECRET_FILE": os.environ.get("PLANE_AGENT_RUNTIME_SECRET_FILE", ""),
+            "PLANE_AGENT_RUNTIME_COMMAND": runtime_configuration.command,
+            "PLANE_AGENT_RUNTIME_ENVIRONMENT": dict(runtime_configuration.child_environment),
+            "PLANE_AGENT_RUNTIME_CREDENTIALS": dict(runtime_configuration.provider_credentials),
+            "PLANE_AGENT_RUNTIME_TIMEOUT_SECONDS": runtime_configuration.timeout_seconds,
+            "PLANE_AGENT_RUNTIME_MAX_REQUEST_BYTES": runtime_configuration.max_request_bytes,
+            "PLANE_AGENT_RUNTIME_MAX_RESPONSE_BYTES": runtime_configuration.max_response_bytes,
+            "PLANE_AGENT_RUNTIME_MAX_CONCURRENT_INVOCATIONS": runtime_configuration.max_concurrent_invocations,
+            "PLANE_AGENT_RUNTIME_CPU_SECONDS": runtime_configuration.cpu_seconds,
+            "PLANE_AGENT_RUNTIME_MEMORY_BYTES": runtime_configuration.memory_bytes,
+            "PLANE_AGENT_RUNTIME_PIDS_LIMIT": runtime_configuration.pids_limit,
+            "PLANE_AGENT_RUNTIME_NETWORK_POLICY": runtime_configuration.network_policy,
+            "PLANE_AGENT_RUNTIME_FILESYSTEM_POLICY": runtime_configuration.filesystem_policy,
+            "PLANE_AGENT_RUNTIME_PROCESS_POLICY": runtime_configuration.process_policy,
+        }
+    )
+
+
+_validate_agent_runtime_boundary()
 
 
 _MALFORMED_PERCENT_ESCAPE = re.compile(r"%(?![0-9a-fA-F]{2})")
