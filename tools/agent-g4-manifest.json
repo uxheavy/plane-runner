@@ -1,0 +1,80 @@
+{
+  "manifestVersion": "plane-agent-g4/v1",
+  "authority": [
+    "AGENTS.md",
+    "docs/agent-tooling/GOAL.md",
+    "docs/agent-tooling/README.md",
+    "docs/decisions/0001-plane-agent-tooling-architecture.md",
+    "docs/decisions/0002-autonomous-agent-operations.md",
+    "docs/decisions/0003-plane-agent-native-product-boundary.md",
+    "docs/decisions/0004-fork-hermes-as-hidden-execution-kernel.md",
+    "docs/decisions/0005-plane-owned-agent-profiles.md",
+    "docs/decisions/0006-assignment-and-run-lifecycle.md",
+    "docs/decisions/0007-adaptive-plane-tool-exposure.md",
+    "docs/decisions/0008-scoped-memory-and-context.md",
+    "docs/decisions/0009-workflows-and-agent-delegation.md",
+    "docs/decisions/0010-plane-runtime-contract.md",
+    "apps/api/plane/agent/AGENTS.md",
+    "apps/api/plane/agent/adapters/AGENTS.md",
+    "apps/api/plane/agent/runtime/AGENTS.md",
+    "apps/api/plane/agent/tools/AGENTS.md"
+  ],
+  "pins": {
+    "hermesCommit": "e573a46611e2cb988f1ab43ad34cd8cc3b2cb659",
+    "mcpGitlink": "2dc152e136d7ad952b901e5fe9364a37487297ba",
+    "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889",
+    "runtimeImageDigest": "sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e"
+  },
+  "retiredDocuments": [
+    "docs/agent-tooling/APPROVAL-MANIFEST.md",
+    "docs/agent-tooling/decision-register.md",
+    "docs/agent-tooling/GATEWAY-WIRE.md",
+    "docs/agent-tooling/RUNTIME-DESIGN.md",
+    "docs/agent-tooling/PILOT-CONTRACTS.md"
+  ],
+  "contracts": [
+    "apps/api/plane/agent/lifecycle/contract_artifacts/v1/manifest.json",
+    "packages/agent-runtime-contract/schemas/v1/manifest.json"
+  ],
+  "scripts": [
+    "tools/check-agent-settings-reuse.py",
+    "tools/verify-api-migrations.sh",
+    "tools/verify-agent-g3.sh",
+    "tools/verify-agent-g4.sh"
+  ],
+  "runbook": "docs/agent-tooling/operations/agent-runtime-operations.md",
+  "runbookEvidence": [
+    "## Readiness and bounded diagnostics",
+    "## Global safety stop and credential revocation",
+    "## Incident diagnosis",
+    "## Rollback",
+    "## Restore and reconciliation",
+    "## Evidence cleanup",
+    "outcome_unknown",
+    "request_runtime_cancellation",
+    "docker compose logs --tail=100 agent-runtime"
+  ],
+  "stages": [
+    "preflight",
+    "g3-prerequisite",
+    "static-scope",
+    "g4-runtime-contracts",
+    "g4-cross-process",
+    "g4-runtime-red-team",
+    "g4-gateway-workload",
+    "g4-operator-readback",
+    "g4-production-configuration",
+    "live-boundary",
+    "cleanup"
+  ],
+  "pytestPaths": [
+    "plane/tests/unit/agent/test_g4_runtime_boundary.py",
+    "plane/tests/unit/agent/test_g4_runtime_cross_process.py",
+    "plane/tests/contract/api/test_operation_gateway_g4.py",
+    "plane/tests/contract/api/test_agent_operator_readback_g4.py",
+    "plane/tests/contract/api/test_agent_runtime_production.py"
+  ],
+  "offlineFixtures": [
+    "tools/agent-g4-runtime-red-team.py"
+  ]
+}

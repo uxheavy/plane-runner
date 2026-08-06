@@ -214,7 +214,7 @@ cleanup() {
     local leftovers
     trap - EXIT INT TERM
     compose down -v --remove-orphans >/dev/null 2>&1 || cleanup_status=$?
-    if [[ ${CREATED_RUNTIME_LOG_DIR} -eq 1 ]]; then
+    if [[ -n "${RUNTIME_LOG_DIR}" && -d "${RUNTIME_LOG_DIR}" ]]; then
         rm -rf -- "${RUNTIME_LOG_DIR}"
     fi
     if [[ ${CREATED_API_LOG_DIR} -eq 1 ]]; then
@@ -273,7 +273,7 @@ emit "static-scope" passed "base=${G3_BASE_COMMIT}" "candidate=${CANDIDATE_COMMI
 
 CURRENT_STEP="migration-chain"
 PLANE_API_TEST_IMAGE="${API_TEST_IMAGE}" "${ROOT_DIR}/tools/verify-api-migrations.sh"
-emit "migration-chain" passed "apply=passed" "reverse_to=0138" "reapply=passed" "drift=passed" "leaf=0140"
+emit "migration-chain" passed "apply=passed" "reverse_to=0138" "reapply=passed" "drift=passed" "leaf=0141"
 
 CURRENT_STEP="start-stack"
 if [[ ! -d "${ROOT_DIR}/apps/api/plane/logs" ]]; then
@@ -306,10 +306,10 @@ python -m plane.operation_gateway.mcp.registry_generator plane/operation_gateway
 ruff check plane/agent plane/operation_gateway plane/tests/unit/agent plane/tests/contract/api
 ruff format --check plane/tests/contract/api/test_operation_gateway_mcp.py plane/tests/contract/api/test_operation_gateway_external_clients.py
 python -m compileall -q plane/agent plane/operation_gateway plane/tests/unit/agent plane/tests/contract/api
-python manage.py shell -c 'from django.db import connection; from django.db.migrations.executor import MigrationExecutor; e=MigrationExecutor(connection); leaves=set(e.loader.graph.leaf_nodes(\"db\")); applied=set(e.recorder.applied_migrations()); assert leaves == {(\"db\", \"0140_invocation_free_cancellation_integrity\")}; assert not leaves-applied; print(\"event=agent.g3.api.migration_leaf status=passed leaf=0140\")'
+python manage.py shell -c 'from django.db import connection; from django.db.migrations.executor import MigrationExecutor; e=MigrationExecutor(connection); leaves=set(e.loader.graph.leaf_nodes(\"db\")); applied=set(e.recorder.applied_migrations()); assert leaves == {(\"db\", \"0141_operationgateway_quotas\")}; assert not leaves-applied; print(\"event=agent.g3.api.migration_leaf status=passed leaf=0141\")'
 PLANE_AUDIT_ENFORCE_ROLE_SEPARATION=0 pytest -p plane.tests.g3_no_skips --migrations -q -o addopts='--strict-markers --reuse-db' -o cache_dir=/tmp/g3-pytest ${G3_TEST_PATHS[*]}
 "
 emit "g3-api-and-client-suite" passed "test_files=${#G3_TEST_PATHS[@]}" "external_mcp=${MCP_COMMIT}" "external_sdk=${SDK_COMMIT}" "hermes=${HERMES_COMMIT}" "result_limit=8192"
 
 CURRENT_STEP="complete"
-emit "complete" passed "base=${G3_BASE_COMMIT}" "candidate=${CANDIDATE_COMMIT}" "migration_leaf=0140" "mcp=177:86:90:1" "result_boundary=8192/8193" "readiness=ready_for_single_sol_medium_g3_assessment"
+emit "complete" passed "base=${G3_BASE_COMMIT}" "candidate=${CANDIDATE_COMMIT}" "migration_leaf=0141" "mcp=177:86:90:1" "result_boundary=8192/8193" "readiness=ready_for_single_sol_medium_g3_assessment"
