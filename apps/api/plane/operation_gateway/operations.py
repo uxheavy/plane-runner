@@ -53,7 +53,7 @@ from plane.api.serializers import (
 )
 from plane.app.permissions import ProjectEntityPermission, ProjectLitePermission, ProjectPagePermission
 from plane.app.permissions.project import ProjectBasePermission, ProjectMemberPermission
-from plane.app.permissions.workspace import WorkSpaceAdminPermission, WorkspaceUserPermission
+from plane.app.permissions.workspace import Admin, WorkSpaceAdminPermission, WorkspaceUserPermission
 from plane.app.serializers.page import PageDetailSerializer, PageSerializer
 from plane.db.models import (
     AgentActor,
@@ -157,7 +157,7 @@ def _human_admin(request: Any, workspace: Workspace) -> None:
     if (
         getattr(request.user, "is_bot", False)
         or not WorkspaceMember.objects.filter(
-            workspace=workspace, member=request.user, role__in=[20, 15], is_active=True
+            workspace=workspace, member=request.user, role=Admin, is_active=True
         ).exists()
     ):
         raise OperationAdapterFailure("NOT_AUTHORIZED", 403)
@@ -1994,14 +1994,14 @@ class AgentGovernanceOperation:
             return bool(
                 not getattr(request.user, "is_bot", False)
                 and WorkspaceMember.objects.filter(
-                    workspace=workspace, member=request.user, role__in=[20, 15], is_active=True
+                    workspace=workspace, member=request.user, role=Admin, is_active=True
                 ).exists()
             )
         if self.operation_id in {"agent.hr.decide", "agent.outcome.accept", "agent.outcome.request_revision"}:
             return bool(
                 not getattr(request.user, "is_bot", False)
                 and WorkspaceMember.objects.filter(
-                    workspace=workspace, member=request.user, role__in=[20, 15], is_active=True
+                    workspace=workspace, member=request.user, role=Admin, is_active=True
                 ).exists()
             )
         return bool(WorkspaceMember.objects.filter(workspace=workspace, member=request.user, is_active=True).exists())
@@ -2112,7 +2112,10 @@ class AgentGovernanceOperation:
                     assignment.delegated_by_id,
                 }:
                     raise OperationAdapterFailure("NOT_AUTHORIZED", 403)
-                assignment = cancel_assignment(assignment)
+                assignment = cancel_assignment(
+                    assignment,
+                    operator=None if getattr(request.user, "is_bot", False) else request.user,
+                )
                 return 200, {"assignment": self._assignment_payload(assignment)}, None
 
             if self.operation_id == "agent.hr.propose":

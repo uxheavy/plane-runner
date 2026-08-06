@@ -5,6 +5,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from pathlib import Path
+import threading
 from uuid import uuid4
 
 import pytest
@@ -12,6 +13,7 @@ from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.db import DatabaseError, close_old_connections, connection, transaction
 from django.db.migrations.executor import MigrationExecutor
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from plane.agent.lifecycle import (
@@ -25,6 +27,7 @@ from plane.agent.lifecycle import (
     create_profile,
     create_run,
     finalize_invocation,
+    lock_invocation_path,
     propose_outcome,
     record_input_event,
     record_invocation,
@@ -32,6 +35,7 @@ from plane.agent.lifecycle import (
     review_outcome,
     transition_run,
 )
+from plane.agent.runtime.supervisor import request_runtime_cancellation
 from plane.agent.lifecycle.runtime_contract import (
     ARTIFACT_DIRECTORY,
     command_fingerprint,
@@ -58,6 +62,8 @@ from plane.db.models import (
     RunState,
     TerminalEventKind,
     RunTerminalEvent,
+    RuntimeControlState,
+    RuntimeInvocationControl,
     RuntimeInvocation,
     ProfileVersion,
 )
@@ -818,6 +824,93 @@ def test_concurrent_invocations_on_different_runs_return_typed_conflict(assignme
     assert results.count("conflict") == 1
     assert sum(result != "conflict" for result in results) == 1
     assert RuntimeInvocation.objects.filter(idempotency_key="idempotency:cross-run-race").count() == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_runtime_lock_seam_acquires_assignment_run_invocation_in_order(assignment, profile):
+    run = create_run(assignment, profile)
+    invocation = record_invocation(run, idempotency_key="idempotency:lock-order-invocation")
+
+    with CaptureQueriesContext(connection) as captured:
+        with transaction.atomic():
+            locked_assignment, locked_run, locked_invocation = lock_invocation_path(invocation.pk)
+
+    assert locked_assignment.pk == assignment.pk
+    assert locked_run.pk == run.pk
+    assert locked_invocation.pk == invocation.pk
+    lock_queries = [query["sql"].lower() for query in captured.captured_queries if "for update" in query["sql"].lower()]
+    assignment_table = AssignmentContract._meta.db_table
+    run_table = RunAttempt._meta.db_table
+    invocation_table = RuntimeInvocation._meta.db_table
+    assignment_index = next(index for index, sql in enumerate(lock_queries) if assignment_table in sql)
+    run_index = next(index for index, sql in enumerate(lock_queries) if run_table in sql)
+    invocation_index = next(index for index, sql in enumerate(lock_queries) if invocation_table in sql)
+    assert assignment_index < run_index < invocation_index
+
+
+@pytest.mark.django_db(transaction=True)
+def test_concurrent_runtime_cancellation_and_transition_serialize_to_one_terminal_event(assignment, profile):
+    run = create_run(assignment, profile)
+    invocation = record_invocation(run, idempotency_key="idempotency:lock-race-invocation")
+    start = threading.Barrier(2)
+
+    def cancel():
+        close_old_connections()
+        try:
+            start.wait(timeout=10)
+            return request_runtime_cancellation(invocation, reason="concurrent cancellation")
+        finally:
+            close_old_connections()
+
+    def fail():
+        close_old_connections()
+        try:
+            start.wait(timeout=10)
+            return transition_run(run, RunState.FAILED)
+        finally:
+            close_old_connections()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        cancellation_future = executor.submit(cancel)
+        transition_future = executor.submit(fail)
+        cancellation_result = cancellation_future.result(timeout=15)
+        try:
+            transition_result = transition_future.result(timeout=15)
+        except InvalidTransitionError as exc:
+            transition_result = exc
+
+    assert not isinstance(cancellation_result, BaseException)
+    assert not isinstance(transition_result, DatabaseError)
+    assert transition_result is not None
+
+    run.refresh_from_db()
+    invocation.refresh_from_db()
+    control = RuntimeInvocationControl.objects.get(invocation=invocation)
+    terminal = RunTerminalEvent.objects.get(invocation=invocation)
+    final_state = (
+        run.state,
+        invocation.state,
+        terminal.kind,
+        control.state,
+        control.cancellation_requested_at is not None,
+    )
+    assert final_state in {
+        (
+            RunState.CANCELLED,
+            InvocationState.CANCELLED,
+            TerminalEventKind.RUN_CANCELLATION,
+            RuntimeControlState.RELEASED,
+            True,
+        ),
+        (
+            RunState.FAILED,
+            InvocationState.FAILED,
+            TerminalEventKind.RUN_FAILURE,
+            RuntimeControlState.AVAILABLE,
+            False,
+        ),
+    }
+    assert RunTerminalEvent.objects.filter(invocation=invocation, visible=True).count() == 1
 
 
 @pytest.mark.django_db(transaction=True)

@@ -229,7 +229,7 @@ class AgentAssignmentAdminDetailAPIEndpoint(AgentAdminAPIView):
 class AgentAssignmentCancelAPIEndpoint(AgentAdminAPIView):
     def post(self, request, slug, assignment_id):
         assignment = self.assignment(key="assignment_id")
-        cancelled = cancel_assignment(assignment)
+        cancelled = cancel_assignment(assignment, operator=request.user)
         return Response(AssignmentAdminSerializer(cancelled).data)
 
 
@@ -350,7 +350,7 @@ class AgentRunCancelAPIEndpoint(AgentAdminAPIView):
         invocation = get_object_or_404(RuntimeInvocation, run=run, invocation_id=run.last_invocation_id)
         from plane.agent.runtime import request_runtime_cancellation
 
-        request_runtime_cancellation(invocation, reason=reason)
+        request_runtime_cancellation(invocation, reason=reason, operator=request.user)
         run.refresh_from_db()
         return Response(RunAdminSerializer(run).data)
 

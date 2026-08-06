@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from django.contrib.auth.models import AnonymousUser
 
 import pytest
 from django.core.exceptions import ValidationError
@@ -354,6 +355,48 @@ def test_assignment_cancellation_signals_active_root_and_descendant_runtime_cont
 
 
 @pytest.mark.django_db
+def test_lifecycle_governance_requires_active_human_role20(workspace, project, create_user):
+    worker = _actor(workspace, name="Authorization worker", role=AgentRole.WORKER, project=project)
+    assignment = create_assignment(
+        worker,
+        project=project,
+        target_ref="issue:authorization-cancel",
+        objective="Remain unchanged when governance is denied.",
+        acceptance_criteria=["The assignment remains ready."],
+        created_by=create_user,
+    )
+    role15 = User.objects.create(username="role15-governance", email="role15-governance@plane.so", is_active=True)
+    role10 = User.objects.create(username="role10-governance", email="role10-governance@plane.so", is_active=True)
+    bot = User.objects.create(
+        username="bot-governance",
+        email="bot-governance@plane.so",
+        is_active=True,
+        is_bot=True,
+    )
+    wrong_workspace = User.objects.create(
+        username="wrong-workspace-governance",
+        email="wrong-workspace-governance@plane.so",
+        is_active=True,
+    )
+    WorkspaceMember.objects.create(workspace=workspace, member=role15, role=15, is_active=True)
+    WorkspaceMember.objects.create(workspace=workspace, member=role10, role=10, is_active=True)
+    WorkspaceMember.objects.create(workspace=workspace, member=bot, role=20, is_active=True)
+    other_workspace = Workspace.objects.create(
+        name="Governance authorization other workspace",
+        owner=create_user,
+        slug="governance-authorization-other-workspace",
+    )
+    WorkspaceMember.objects.create(workspace=other_workspace, member=wrong_workspace, role=20, is_active=True)
+
+    for operator in (role15, role10, bot, wrong_workspace, AnonymousUser()):
+        with pytest.raises(AgentDomainError, match="workspace administrator"):
+            cancel_assignment(assignment, operator=operator)
+
+    assignment.refresh_from_db()
+    assert assignment.state == AssignmentState.READY
+
+
+@pytest.mark.django_db
 def test_hr_proposal_requires_human_approval_and_fails_closed_on_stale_state(workspace, project, create_user):
     hr = _actor(workspace, name="HR", role=AgentRole.HR, created_by=create_user)
     subject = _actor(workspace, name="Subject", role=AgentRole.WORKER, created_by=create_user)
@@ -437,6 +480,99 @@ def test_hr_proposal_requires_human_approval_and_fails_closed_on_stale_state(wor
             rationale="This must not store credentials.",
             idempotency_key="idempotency:hr-credential",
         )
+
+
+@pytest.mark.django_db
+def test_governance_terminal_replays_recheck_live_role20_and_preserve_attribution(workspace, project, create_user):
+    hr = _actor(workspace, name="Replay HR", role=AgentRole.HR, created_by=create_user)
+    subject = _actor(workspace, name="Replay subject", role=AgentRole.WORKER, created_by=create_user)
+    proposal = propose_hr_change(
+        workspace=workspace,
+        proposed_by=hr,
+        kind=HRProposalKind.ROLE_CHANGE,
+        subject_actor=subject,
+        requested_role=AgentRole.EVALUATOR,
+        rationale="Record one terminal HR decision.",
+        idempotency_key="idempotency:replay-hr-proposal",
+        created_by=create_user,
+    )
+    decided = decide_hr_proposal(
+        proposal,
+        human_reviewer=create_user,
+        approved=True,
+        decision_note="Approved by the current administrator.",
+        idempotency_key="idempotency:replay-hr-decision",
+    )
+    with pytest.raises(IdempotencyConflictError):
+        decide_hr_proposal(
+            decided,
+            human_reviewer=create_user,
+            approved=True,
+            decision_note="Changed decision note.",
+            idempotency_key="idempotency:replay-hr-changed-key",
+        )
+    decided.refresh_from_db()
+    hr_state_before = (decided.state, decided.reviewed_by_id, decided.decision_idempotency_key)
+
+    producer = _actor(workspace, name="Replay producer", role=AgentRole.WORKER, project=project)
+    evaluator = _actor(workspace, name="Replay evaluator", role=AgentRole.EVALUATOR, created_by=create_user)
+
+    def reviewed_outcome(suffix):
+        assignment = create_assignment(
+            producer,
+            project=project,
+            target_ref=f"issue:replay-{suffix}",
+            objective=f"Produce the {suffix} replay outcome.",
+            acceptance_criteria=["The outcome has independent review."],
+            created_by=create_user,
+        )
+        run = create_run(assignment, producer.active_profile, created_by=create_user)
+        record_invocation(run, idempotency_key=f"idempotency:replay-{suffix}-invocation")
+        outcome = propose_outcome(
+            run,
+            summary=f"Replay {suffix} outcome.",
+            idempotency_key=f"idempotency:replay-{suffix}-outcome",
+            created_by=create_user,
+        )
+        review_outcome(
+            outcome,
+            evaluator=evaluator,
+            idempotency_key=f"idempotency:replay-{suffix}-review",
+        )
+        return outcome
+
+    accepted = accept_outcome(
+        reviewed_outcome("accepted"),
+        human_reviewer=create_user,
+        decision_note="Accept the reviewed result.",
+    )
+    revised = request_revision(
+        reviewed_outcome("revision"),
+        human_reviewer=create_user,
+        decision_note="Request one more bounded revision.",
+    )
+    outcome_states_before = {
+        accepted.id: (accepted.state, accepted.human_reviewer_id, accepted.updated_by_id),
+        revised.id: (revised.state, revised.human_reviewer_id, revised.updated_by_id),
+    }
+
+    WorkspaceMember.objects.filter(workspace=workspace, member=create_user).update(role=15)
+    for terminal, decision in ((accepted, accept_outcome), (revised, request_revision)):
+        with pytest.raises(AgentDomainError, match="workspace administrator"):
+            decision(terminal, human_reviewer=create_user, decision_note="Denied after demotion.")
+        terminal.refresh_from_db()
+        assert (terminal.state, terminal.human_reviewer_id, terminal.updated_by_id) == outcome_states_before[
+            terminal.id
+        ]
+    decided.refresh_from_db()
+    with pytest.raises(AgentDomainError, match="workspace administrator"):
+        decide_hr_proposal(
+            decided,
+            human_reviewer=create_user,
+            approved=True,
+            idempotency_key="idempotency:replay-hr-decision",
+        )
+    assert (decided.state, decided.reviewed_by_id, decided.decision_idempotency_key) == hr_state_before
 
 
 @pytest.mark.django_db

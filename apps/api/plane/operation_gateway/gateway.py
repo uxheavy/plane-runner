@@ -870,8 +870,7 @@ class OperationGateway:
         try:
             run_id = run_ref.removeprefix("run:")
             run = (
-                RunAttempt.objects.select_for_update()
-                .select_related("actor", "workspace")
+                RunAttempt.objects.select_related("actor", "workspace")
                 .get(pk=run_id, workspace_id=workspace.id)
             )
         except (RunAttempt.DoesNotExist, ValueError):

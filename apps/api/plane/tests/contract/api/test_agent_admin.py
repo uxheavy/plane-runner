@@ -5,6 +5,7 @@ import uuid
 
 import pytest
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.core.cache import cache
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -921,3 +922,24 @@ def test_governance_extension_api_cli_parity_and_l7_state_adapters(api_key_clien
     denied = denied_client.get(_admin_url(workspace, "governance/"))
     assert denied.status_code == 403
     assert str(proposal_id) not in denied.content.decode()
+    denied_command = denied_client.post(
+        command_url,
+        {
+            "action": "assignment.cancel",
+            "idempotency_key": "idempotency:governance-denied-api-cancel",
+            "payload": {"assignment_id": str(parent.id)},
+        },
+        format="json",
+    )
+    assert denied_command.status_code == 403
+    with pytest.raises(CommandError, match="current workspace administrator"):
+        call_command(
+            "agent_governance",
+            workspace_slug=workspace.slug,
+            action="assignment.cancel",
+            operator_id=str(denied_user.id),
+            idempotency_key="idempotency:governance-denied-cli-cancel",
+            payload=json.dumps({"assignment_id": str(parent.id)}),
+        )
+    parent.refresh_from_db()
+    assert parent.state == AssignmentState.CANCELLED

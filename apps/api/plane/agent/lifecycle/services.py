@@ -56,6 +56,7 @@ from plane.db.models import (
 from plane.db.models.project import ProjectMember
 from plane.db.models.user import User
 from plane.db.models.workspace import WorkspaceMember
+from plane.utils.permissions.workspace import Admin
 from plane.agent.tools.disclosure import compose_tool_catalog
 
 from .errors import AgentDomainError
@@ -100,6 +101,46 @@ _RUNTIME_LEASE_TTL = timedelta(minutes=5)
 MAX_DELEGATION_DEPTH = 8
 MAX_DELEGATION_FAN_OUT = 64
 MAX_DELEGATION_BUDGET = 2**63 - 1
+
+
+def _lock_assignment_run(run_id):
+    """Lock the lifecycle path in the canonical assignment-then-run order."""
+
+    run_ref = RunAttempt.objects.only("assignment_id").get(pk=run_id)
+    assignment = AssignmentContract.objects.select_for_update().get(pk=run_ref.assignment_id)
+    run = RunAttempt.objects.select_for_update().get(pk=run_id)
+    run.assignment = assignment
+    return assignment, run
+
+
+def lock_invocation_path(invocation_id):
+    """Lock assignment, run, and invocation before runtime control or terminal rows.
+
+    Every cross-record runtime path uses this seam.  The acquisition order is
+    intentionally structural: AssignmentContract, RunAttempt,
+    RuntimeInvocation, then RuntimeInvocationControl or RunTerminalEvent.
+    """
+
+    invocation_ref = RuntimeInvocation.objects.only("run_id").filter(invocation_id=str(invocation_id)).first()
+    if invocation_ref is None:
+        invocation_ref = RuntimeInvocation.objects.only("run_id").get(pk=invocation_id)
+    assignment, run = _lock_assignment_run(invocation_ref.run_id)
+    invocation = RuntimeInvocation.objects.select_for_update().get(pk=invocation_ref.pk)
+    invocation.run = run
+    return assignment, run, invocation
+
+
+def _lock_outcome_path(outcome_id):
+    """Lock an outcome after its assignment, run, and current invocation."""
+
+    outcome_ref = OutcomeSubmission.objects.only("run_id").get(pk=outcome_id)
+    assignment, run = _lock_assignment_run(outcome_ref.run_id)
+    invocation = None
+    if run.last_invocation_id:
+        invocation = RuntimeInvocation.objects.select_for_update().get(invocation_id=run.last_invocation_id)
+    outcome = OutcomeSubmission.objects.select_for_update().select_related("run").get(pk=outcome_id)
+    outcome.run = run
+    return assignment, run, invocation, outcome
 
 
 def _command_id(value):
@@ -1178,10 +1219,16 @@ def _ensure_human_workspace_admin(workspace, human):
     if not WorkspaceMember.objects.filter(
         workspace=workspace,
         member=human,
-        role__in=[20, 15],
+        role=Admin,
         is_active=True,
     ).exists():
         raise AgentDomainError("Human HR decisions require a current workspace administrator")
+
+
+def ensure_human_workspace_admin(workspace, human):
+    """Expose the one live human-governance check to non-HTTP lifecycle adapters."""
+
+    _ensure_human_workspace_admin(workspace, human)
 
 
 def _validate_hr_profile(profile):
@@ -1343,11 +1390,11 @@ def decide_hr_proposal(proposal, *, human_reviewer, approved, decision_note="", 
     """Apply or reject one proposal only after a live human admin decision."""
 
     proposal = AgentHRProposal.objects.select_for_update().get(pk=proposal.pk)
+    _ensure_human_workspace_admin(proposal.workspace, human_reviewer)
     if proposal.state != HRProposalState.PROPOSED:
         if idempotency_key is not None and proposal.decision_idempotency_key not in {None, idempotency_key}:
             raise IdempotencyConflictError("HR decision idempotency key is bound to another decision")
         return proposal
-    _ensure_human_workspace_admin(proposal.workspace, human_reviewer)
     decision_key = _normalise_idempotency(
         idempotency_key or f"idempotency:hr-decision-{proposal.id}",
         "HR decision idempotency_key",
@@ -1483,20 +1530,7 @@ def _cancel_run_without_invocation_locked(run):
 def _cancel_assignment_run(run):
     """Reconcile one non-terminal run through the canonical runtime control seam."""
 
-    if run.state in {
-        RunState.SUCCEEDED,
-        RunState.FAILED,
-        RunState.BLOCKED,
-        RunState.CANCELLED,
-        RunState.OUTCOME_UNKNOWN,
-    }:
-        return run
-    if run.last_invocation_id:
-        from plane.agent.runtime import request_runtime_cancellation
-
-        invocation = RuntimeInvocation.objects.get(invocation_id=run.last_invocation_id)
-        return request_runtime_cancellation(invocation, reason="The assignment tree was cancelled.")
-    locked_run = RunAttempt.objects.select_for_update().get(pk=run.pk)
+    _assignment, locked_run = _lock_assignment_run(run.pk)
     if locked_run.state in {
         RunState.SUCCEEDED,
         RunState.FAILED,
@@ -1510,6 +1544,14 @@ def _cancel_assignment_run(run):
 
         invocation = RuntimeInvocation.objects.get(invocation_id=locked_run.last_invocation_id)
         return request_runtime_cancellation(invocation, reason="The assignment tree was cancelled.")
+    if locked_run.state in {
+        RunState.SUCCEEDED,
+        RunState.FAILED,
+        RunState.BLOCKED,
+        RunState.CANCELLED,
+        RunState.OUTCOME_UNKNOWN,
+    }:
+        return locked_run
     return _cancel_run_without_invocation_locked(locked_run)
 
 
@@ -1517,9 +1559,9 @@ def _cancel_assignment_run(run):
 def cancel_assignment(assignment, *, operator=None):
     """Cancel an assignment subtree and reconcile every dispatchable descendant."""
 
-    locked = AssignmentContract.objects.select_for_update().get(pk=assignment.pk)
     if operator is not None:
-        _ensure_human_workspace_admin(locked.workspace, operator)
+        _ensure_human_workspace_admin(assignment.workspace, operator)
+    locked = AssignmentContract.objects.select_for_update().get(pk=assignment.pk)
     assignments = [locked]
     frontier = [locked.id]
     while frontier:
@@ -1766,8 +1808,7 @@ def _ensure_runtime_control(invocation, *, created_by=None):
 def record_input_event(
     run, *, payload, kind=InputEventKind.HUMAN_INPUT, pending_input_ref=None, idempotency_key=None, created_by=None
 ):
-    assignment = AssignmentContract.objects.select_for_update().get(pk=run.assignment_id)
-    run = RunAttempt.objects.select_for_update().get(pk=run.pk)
+    assignment, run = _lock_assignment_run(run.pk)
     kind = _state(kind, InputEventKind, "input event kind")
     key = (
         _normalise_idempotency(idempotency_key, "input event idempotency_key") if idempotency_key is not None else None
@@ -2111,8 +2152,7 @@ def reconcile_runtime_usage(run, invocation, usage=None, *, created_by=None):
 
     usage_value = _usage(usage)
     normalized = {field: int(usage_value.get(field, 0)) for field in ("inputTokens", "outputTokens", "durationMs")}
-    locked_run = RunAttempt.objects.select_for_update().get(pk=run.pk)
-    locked_invocation = RuntimeInvocation.objects.select_for_update().get(pk=invocation.pk)
+    _assignment, locked_run, locked_invocation = lock_invocation_path(invocation.pk)
     if locked_invocation.run_id != locked_run.id:
         raise AgentDomainError("Runtime usage is not bound to its stored run")
     existing = RuntimeUsageObservation.objects.filter(invocation=locked_invocation).first()
@@ -2190,12 +2230,7 @@ def code_mode_reserved_totals(run):
 
 
 def _code_mode_stored_records(run, invocation):
-    locked_run = (
-        RunAttempt.objects.select_for_update()
-        .select_related("actor", "actor__principal", "profile_version", "assignment", "workspace")
-        .get(pk=run.pk)
-    )
-    locked_invocation = RuntimeInvocation.objects.select_related("run").get(pk=invocation.pk)
+    _assignment, locked_run, locked_invocation = lock_invocation_path(invocation.pk)
     if locked_invocation.run_id != locked_run.id or locked_invocation.workspace_id != locked_run.workspace_id:
         raise AgentDomainError("Code Mode usage is not bound to the stored run and invocation")
     if locked_run.actor_id != locked_run.profile_version.actor_id:
@@ -2241,7 +2276,7 @@ def _code_mode_reservation_expired(reservation, now):
 def reap_code_mode_reservations(run):
     """Drop abandoned reservations while holding the Plane run lifecycle lock."""
 
-    locked_run = RunAttempt.objects.select_for_update().get(pk=run.pk)
+    _assignment, locked_run = _lock_assignment_run(run.pk)
     now = timezone.now()
     active = [
         reservation
@@ -2386,7 +2421,7 @@ def code_mode_usage_totals(run):
 @transaction.atomic
 def transition_run(run, target, *, pending_input_ref=None):
     target = _state(target, RunState, "run state")
-    locked = RunAttempt.objects.select_for_update().get(pk=run.pk)
+    _assignment, locked = _lock_assignment_run(run.pk)
     if target == RunState.SUCCEEDED:
         raise InvalidTransitionError("Runs succeed only when an outcome is explicitly submitted")
     if target not in _RUN_TRANSITIONS[locked.state]:
@@ -2401,7 +2436,9 @@ def transition_run(run, target, *, pending_input_ref=None):
             raise TerminalEventRequiredError(
                 "Terminal run state requires a runtime invocation and visible product event"
             )
-        invocation = RuntimeInvocation.objects.select_for_update().get(invocation_id=locked.last_invocation_id)
+        _assignment, invocation_run, invocation = lock_invocation_path(locked.last_invocation_id)
+        if invocation_run.id != locked.id:
+            raise AgentDomainError("The run's current invocation is bound to another run")
         kind = {
             RunState.FAILED: TerminalEventKind.RUN_FAILURE,
             RunState.BLOCKED: TerminalEventKind.RUN_BLOCKER,
@@ -2605,8 +2642,7 @@ def _replay_outcome_terminal_locked(run, outcome):
 
 @transaction.atomic
 def finalize_invocation(invocation, *, kind, reason="", source=TerminalEventSource.SUPERVISOR, idempotency_key=None):
-    invocation = RuntimeInvocation.objects.select_for_update().get(pk=invocation.pk)
-    run = RunAttempt.objects.select_for_update().get(pk=invocation.run_id)
+    _assignment, run, invocation = lock_invocation_path(invocation.pk)
     kind = _state(kind, TerminalEventKind, "terminal event kind")
     source = _state(source, TerminalEventSource, "terminal event source")
     if kind == TerminalEventKind.OUTCOME_SUBMISSION:
@@ -2631,7 +2667,7 @@ def propose_outcome(run, *, summary, artifacts=None, evidence=None, idempotency_
     summary = _ensure_non_empty(summary, "summary")
     artifacts_value = _as_list(artifacts, "artifacts", max_items=64)
     evidence_value = _as_list(evidence, "evidence", max_items=64)
-    run = RunAttempt.objects.select_for_update().get(pk=run.pk)
+    _assignment, run = _lock_assignment_run(run.pk)
     key = _normalise_idempotency(idempotency_key, "outcome idempotency_key") if idempotency_key is not None else None
     outcome_fingerprint = None
     if key is not None:
@@ -2739,7 +2775,7 @@ def review_outcome(
     idempotency_key=None,
 ):
     feedback = _ensure_bounded_text(feedback, "evaluator_feedback")
-    locked = OutcomeSubmission.objects.select_for_update().select_related("run").get(pk=outcome.pk)
+    _assignment, _run, _invocation, locked = _lock_outcome_path(outcome.pk)
     verdict = _state(verdict, EvaluatorVerdict, "evaluator verdict")
     if locked.state != OutcomeState.PROPOSED:
         existing_review = EvaluatorReview.objects.filter(outcome=locked).first()
@@ -2834,13 +2870,14 @@ def _require_reviewed_outcome(outcome):
 
 @transaction.atomic
 def accept_outcome(outcome, *, human_reviewer, decision_note=""):
-    decision_note = _ensure_bounded_text(decision_note, "human_decision_note")
-    locked = OutcomeSubmission.objects.select_for_update().select_related("run").get(pk=outcome.pk)
-    _require_reviewed_outcome(locked)
+    assignment, _run, _invocation, locked = _lock_outcome_path(outcome.pk)
     if human_reviewer is None:
         raise AgentDomainError("Human acceptance requires a reviewer")
     _ensure_human_workspace_admin(locked.workspace, human_reviewer)
-    assignment = AssignmentContract.objects.select_for_update().get(pk=locked.run.assignment_id)
+    if locked.state == OutcomeState.ACCEPTED:
+        return locked
+    decision_note = _ensure_bounded_text(decision_note, "human_decision_note")
+    _require_reviewed_outcome(locked)
     pending = {assignment.id}
     while pending:
         child_ids = set(AssignmentContract.objects.filter(lineage_of_id__in=pending).values_list("id", flat=True))
@@ -2864,18 +2901,19 @@ def accept_outcome(outcome, *, human_reviewer, decision_note=""):
 
 @transaction.atomic
 def request_revision(outcome, *, human_reviewer, decision_note=""):
-    decision_note = _ensure_bounded_text(decision_note, "human_decision_note")
-    locked = OutcomeSubmission.objects.select_for_update().select_related("run").get(pk=outcome.pk)
-    _require_reviewed_outcome(locked)
+    assignment, _run, _invocation, locked = _lock_outcome_path(outcome.pk)
     if human_reviewer is None:
         raise AgentDomainError("Revision requests require a reviewer")
     _ensure_human_workspace_admin(locked.workspace, human_reviewer)
+    if locked.state == OutcomeState.REVISION_REQUESTED:
+        return locked
+    decision_note = _ensure_bounded_text(decision_note, "human_decision_note")
+    _require_reviewed_outcome(locked)
     locked.state = OutcomeState.REVISION_REQUESTED
     locked.human_reviewer = human_reviewer
     locked.updated_by = human_reviewer
     locked.human_decision_note = decision_note
     locked.human_decided_at = timezone.now()
     locked.save(_allow_lifecycle=True, created_by_id=locked.created_by_id, disable_auto_set_user=True)
-    assignment = AssignmentContract.objects.select_for_update().get(pk=locked.run.assignment_id)
     _transition_assignment_locked(assignment, AssignmentState.REVISION, updated_by=human_reviewer)
     return locked

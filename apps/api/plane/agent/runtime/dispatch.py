@@ -21,7 +21,8 @@ from plane.agent.lifecycle.runtime_contract import (
     validate_runtime_event,
     validate_runtime_exit,
 )
-from plane.db.models import RuntimeEventIngress, RuntimeExitEvidence, RuntimeInvocation, RunAttempt
+from plane.agent.lifecycle import lock_invocation_path
+from plane.db.models import RuntimeEventIngress, RuntimeExitEvidence, RuntimeInvocation
 
 
 class RuntimeDispatchError(ValueError):
@@ -228,12 +229,8 @@ def ingest_runtime_frame(
 ) -> RuntimeEventIngress | RuntimeExitEvidence:
     """Validate, bind, sequence, and persist one serialized runtime frame."""
 
-    stored = (
-        RuntimeInvocation.objects.select_for_update(of=("self",))
-        .select_related("run", "run__actor", "workspace")
-        .get(pk=invocation.pk)
-    )
-    stored.run = RunAttempt.objects.select_for_update().get(pk=stored.run_id)
+    _assignment, run, stored = lock_invocation_path(invocation.pk)
+    stored.run = run
     frame = _decode_frame(serialized_frame)
     if "trust" in frame:
         try:

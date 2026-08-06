@@ -17,9 +17,11 @@ from django.utils import timezone
 
 from plane.agent.lifecycle import (
     AgentDomainError,
+    ensure_human_workspace_admin,
     InvalidTransitionError,
     TerminalEventRequiredError,
     finalize_invocation,
+    lock_invocation_path,
     reconcile_runtime_usage,
     transition_run,
 )
@@ -121,11 +123,8 @@ def _claim(invocation: RuntimeInvocation, worker_id: str, lease_seconds: int) ->
     if isinstance(lease_seconds, bool) or not isinstance(lease_seconds, int) or lease_seconds <= 0:
         raise RuntimeSupervisorError("lease_seconds must be a positive integer")
     with transaction.atomic():
-        stored = (
-            RuntimeInvocation.objects.select_for_update()
-            .select_related("run", "run__assignment", "run__actor", "run__profile_version")
-            .get(pk=invocation.pk)
-        )
+        _assignment, run, stored = lock_invocation_path(invocation.pk)
+        stored.run = run
         control = _control(stored, lock=True)
         if stored.state in _INVOCATION_TERMINAL_STATES or control.state == RuntimeControlState.RELEASED:
             return None
@@ -176,9 +175,9 @@ def _terminalize(
     outcome_unknown: bool = False,
 ) -> SupervisorResult:
     with transaction.atomic():
-        invocation = RuntimeInvocation.objects.select_for_update().get(pk=invocation_id)
-        terminal = RunTerminalEvent.objects.filter(invocation=invocation).first()
+        _assignment, _run, invocation = lock_invocation_path(invocation_id)
         control = _control(invocation, lock=True)
+        terminal = RunTerminalEvent.objects.filter(invocation=invocation).first()
         if terminal is None:
             terminal = finalize_invocation(invocation, kind=kind, reason=reason)
         _set_failure(control, code=code, reason=reason, unknown=outcome_unknown)
@@ -204,7 +203,7 @@ def _terminalize(
 
 def _release(invocation_id: Any, *, state: str | None = None) -> None:
     with transaction.atomic():
-        invocation = RuntimeInvocation.objects.select_for_update().get(pk=invocation_id)
+        _assignment, _run, invocation = lock_invocation_path(invocation_id)
         control = _control(invocation, lock=True)
         control.state = RuntimeControlState.RELEASED
         control.lease_owner = None
@@ -235,10 +234,15 @@ def runtime_invocation_cancellation_requested(invocation_id: Any) -> bool:
 
 
 @transaction.atomic
-def request_runtime_cancellation(invocation: RuntimeInvocation, *, reason: str = "Cancelled by an administrator"):
+def request_runtime_cancellation(
+    invocation: RuntimeInvocation, *, reason: str = "Cancelled by an administrator", operator=None
+):
     """Record cancellation durably and create the one visible event immediately."""
 
-    stored = RuntimeInvocation.objects.select_for_update().get(pk=invocation.pk)
+    _assignment, run, stored = lock_invocation_path(invocation.pk)
+    stored.run = run
+    if operator is not None:
+        ensure_human_workspace_admin(run.assignment, operator)
     if stored.state in _INVOCATION_TERMINAL_STATES:
         return stored
     control = _control(stored, lock=True)

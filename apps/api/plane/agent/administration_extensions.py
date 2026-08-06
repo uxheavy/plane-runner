@@ -35,7 +35,6 @@ from plane.db.models import (
     AgentHRProposal,
     AssignmentContract,
     EvaluatorReview,
-    OutcomeState,
     OutcomeSubmission,
     RuntimeInvocation,
     User,
@@ -412,22 +411,18 @@ class PlaneAgentAdministrationExtension:
                 run_id=outcome.run_id,
                 invocation_id=command.invocation_id,
             )
-            target_state = (
-                OutcomeState.ACCEPTED if command.action == "outcome.accept" else OutcomeState.REVISION_REQUESTED
-            )
-            if outcome.state != target_state:
-                if command.action == "outcome.accept":
-                    outcome = accept_outcome(
-                        outcome,
-                        human_reviewer=command.authenticated_user,
-                        decision_note=_safe_text(payload.get("decision_note")),
-                    )
-                else:
-                    outcome = request_revision(
-                        outcome,
-                        human_reviewer=command.authenticated_user,
-                        decision_note=_safe_text(payload.get("decision_note")),
-                    )
+            if command.action == "outcome.accept":
+                outcome = accept_outcome(
+                    outcome,
+                    human_reviewer=command.authenticated_user,
+                    decision_note=_safe_text(payload.get("decision_note")),
+                )
+            else:
+                outcome = request_revision(
+                    outcome,
+                    human_reviewer=command.authenticated_user,
+                    decision_note=_safe_text(payload.get("decision_note")),
+                )
             review = EvaluatorReview.objects.filter(outcome=outcome).select_related("outcome").first()
             return {
                 "evaluator_reviews": [evaluator_review_governance_projection(review)] if review else [],
