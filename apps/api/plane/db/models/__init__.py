@@ -5,9 +5,14 @@
 from .analytic import AnalyticView
 from .agent import (
     AgentActor,
+    AgentHRProposal,
     AgentRole,
     AssignmentContract,
     AssignmentState,
+    EvaluatorReview,
+    EvaluatorVerdict,
+    HRProposalKind,
+    HRProposalState,
     InputEventKind,
     InvocationState,
     OutcomeState,

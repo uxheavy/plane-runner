@@ -9,6 +9,7 @@ idempotency, result bounds, and durable audit.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -17,6 +18,7 @@ from typing import Any
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 from rest_framework import serializers
 
 from plane.api.serializers import (
@@ -54,6 +56,10 @@ from plane.app.permissions.project import ProjectBasePermission, ProjectMemberPe
 from plane.app.permissions.workspace import WorkSpaceAdminPermission, WorkspaceUserPermission
 from plane.app.serializers.page import PageDetailSerializer, PageSerializer
 from plane.db.models import (
+    AgentActor,
+    AgentHRProposal,
+    AgentRole,
+    AssignmentContract,
     Cycle,
     DEFAULT_STATES,
     Estimate,
@@ -71,6 +77,8 @@ from plane.db.models import (
     State,
     Workspace,
     WorkspaceMember,
+    OutcomeSubmission,
+    User,
     CycleIssue,
     ModuleIssue,
     IssueRelation,
@@ -100,6 +108,73 @@ from .work_items import (
 from plane.utils.cycle_transfer_issues import transfer_cycle_issues
 from plane.utils.issue_relation_mapper import get_actual_relation
 from plane.utils.host import base_host
+
+from plane.agent.lifecycle import (
+    AgentDomainError,
+    IdempotencyConflictError,
+    InvalidTransitionError,
+    TerminalEventRequiredError,
+    accept_outcome,
+    cancel_assignment,
+    decide_hr_proposal,
+    delegate_assignment,
+    propose_hr_change,
+    request_revision,
+    review_outcome,
+)
+from plane.agent.lifecycle.runtime_contract import namespaced_ref
+
+
+def _plane_ref(value: Any, prefix: str, field_name: str) -> str:
+    if not isinstance(value, str) or not value.startswith(f"{prefix}:"):
+        raise OperationAdapterFailure("VALIDATION_ERROR")
+    raw = value.removeprefix(f"{prefix}:")
+    if not raw:
+        raise OperationAdapterFailure("VALIDATION_ERROR")
+    return raw
+
+
+def _bound_actor(request: Any, workspace: Workspace, value: Any, *, role: str | None = None) -> AgentActor:
+    ref = value if isinstance(value, str) else ""
+    if getattr(request, "agent_actor_ref", None) != ref:
+        raise OperationAdapterFailure("CALLBACK_BINDING_INVALID", 403)
+    try:
+        actor = AgentActor.objects.select_related("active_profile").get(
+            pk=_plane_ref(ref, "agent-actor", "agent_actor_ref"), workspace=workspace
+        )
+    except (AgentActor.DoesNotExist, ValueError):
+        raise OperationAdapterFailure("CALLBACK_BINDING_INVALID", 403) from None
+    if actor.principal_id != request.user.id or not actor.is_active or actor.active_profile_id is None:
+        raise OperationAdapterFailure("NOT_AUTHORIZED", 403)
+    if role is not None and actor.active_profile.role != role:
+        raise OperationAdapterFailure("NOT_AUTHORIZED", 403)
+    if not WorkspaceMember.objects.filter(workspace=workspace, member=request.user, is_active=True).exists():
+        raise OperationAdapterFailure("NOT_AUTHORIZED", 403)
+    return actor
+
+
+def _human_admin(request: Any, workspace: Workspace) -> None:
+    if (
+        getattr(request.user, "is_bot", False)
+        or not WorkspaceMember.objects.filter(
+            workspace=workspace, member=request.user, role__in=[20, 15], is_active=True
+        ).exists()
+    ):
+        raise OperationAdapterFailure("NOT_AUTHORIZED", 403)
+
+
+def _gateway_key(data: dict[str, Any], prefix: str) -> str:
+    raw = str(data.get("_gateway_idempotency_key") or "")
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return f"idempotency:gateway-{prefix}-{digest}"
+
+
+def _raise_domain_error(error: Exception) -> None:
+    if isinstance(error, IdempotencyConflictError):
+        raise OperationAdapterFailure("IDEMPOTENCY_CONFLICT", 409) from error
+    if isinstance(error, (InvalidTransitionError, AgentDomainError, TerminalEventRequiredError, ValidationError)):
+        raise OperationAdapterFailure("PLANE_CONFLICT", 409) from error
+    raise error
 
 
 class OperationAdapterFailure(Exception):
@@ -1865,6 +1940,305 @@ class IntakeOperation:
         raise OperationAdapterFailure("UNKNOWN_OPERATION", 404)
 
 
+class AgentGovernanceOperation:
+    """Typed gateway adapter for Plane-owned Agent governance mutations."""
+
+    _ROLE_BY_OPERATION = {
+        "agent.assignment.delegate": AgentRole.DELEGATOR,
+        "agent.hr.propose": AgentRole.HR,
+        "agent.outcome.evaluate": AgentRole.EVALUATOR,
+    }
+
+    def __init__(self, operation_id: str):
+        self.operation_id = operation_id
+
+    @staticmethod
+    def _actor_authorized(request: Any, workspace: Workspace, data: dict[str, Any], role: str) -> bool:
+        ref = data.get(
+            {
+                AgentRole.DELEGATOR: "delegator_ref",
+                AgentRole.HR: "proposer_ref",
+                AgentRole.EVALUATOR: "evaluator_ref",
+            }[role]
+        )
+        if getattr(request, "agent_actor_ref", None) != ref or not isinstance(ref, str):
+            return False
+        try:
+            actor = AgentActor.objects.select_related("active_profile").get(
+                pk=_plane_ref(ref, "agent-actor", "agent_actor_ref"), workspace=workspace
+            )
+        except (AgentActor.DoesNotExist, OperationAdapterFailure, ValueError):
+            return False
+        return bool(
+            actor.is_active
+            and actor.principal_id == request.user.id
+            and actor.active_profile_id
+            and actor.active_profile.role == role
+            and WorkspaceMember.objects.filter(workspace=workspace, member=request.user, is_active=True).exists()
+        )
+
+    def authorize(self, request: Any, workspace: Workspace, data: dict[str, Any]) -> bool:
+        if self.operation_id in self._ROLE_BY_OPERATION:
+            return self._actor_authorized(request, workspace, data, self._ROLE_BY_OPERATION[self.operation_id])
+        if self.operation_id == "agent.assignment.cancel":
+            if getattr(request.user, "is_bot", False):
+                try:
+                    actor = _bound_actor(request, workspace, getattr(request, "agent_actor_ref", None))
+                    assignment = AssignmentContract.objects.get(
+                        pk=_plane_ref(data.get("assignment_ref"), "assignment", "assignment_ref"),
+                        workspace=workspace,
+                    )
+                except (AssignmentContract.DoesNotExist, OperationAdapterFailure, ValueError):
+                    return False
+                return actor.id in {assignment.assignee_id, assignment.delegated_by_id}
+            return bool(
+                not getattr(request.user, "is_bot", False)
+                and WorkspaceMember.objects.filter(
+                    workspace=workspace, member=request.user, role__in=[20, 15], is_active=True
+                ).exists()
+            )
+        if self.operation_id in {"agent.hr.decide", "agent.outcome.accept", "agent.outcome.request_revision"}:
+            return bool(
+                not getattr(request.user, "is_bot", False)
+                and WorkspaceMember.objects.filter(
+                    workspace=workspace, member=request.user, role__in=[20, 15], is_active=True
+                ).exists()
+            )
+        return bool(WorkspaceMember.objects.filter(workspace=workspace, member=request.user, is_active=True).exists())
+
+    @staticmethod
+    def _record_ref(record: Any, prefix: str) -> str:
+        return namespaced_ref(prefix, str(record.id))
+
+    @staticmethod
+    def _assignment_payload(assignment: AssignmentContract) -> dict[str, Any]:
+        return {
+            "assignmentRef": namespaced_ref("assignment", str(assignment.id)),
+            "parentAssignmentRef": (
+                namespaced_ref("assignment", str(assignment.lineage_of_id)) if assignment.lineage_of_id else None
+            ),
+            "rootAssignmentRef": (
+                namespaced_ref("assignment", str(assignment.root_assignment_id))
+                if assignment.root_assignment_id
+                else None
+            ),
+            "assigneeRef": namespaced_ref("agent-actor", str(assignment.assignee_id)),
+            "delegatedByRef": (
+                namespaced_ref("agent-actor", str(assignment.delegated_by_id)) if assignment.delegated_by_id else None
+            ),
+            "depth": assignment.delegation_depth,
+            "state": assignment.state,
+            "scope": assignment.scope,
+            "budget": assignment.budget,
+        }
+
+    @staticmethod
+    def _proposal_payload(proposal: AgentHRProposal) -> dict[str, Any]:
+        return {
+            "proposalRef": namespaced_ref("hr-proposal", str(proposal.id)),
+            "kind": proposal.kind,
+            "state": proposal.state,
+            "subjectActorRef": (
+                namespaced_ref("agent-actor", str(proposal.subject_actor_id)) if proposal.subject_actor_id else None
+            ),
+            "requestedRole": proposal.requested_role,
+            "appliedActorRef": (
+                namespaced_ref("agent-actor", str(proposal.applied_actor_id)) if proposal.applied_actor_id else None
+            ),
+            "reviewedAt": proposal.reviewed_at.isoformat() if proposal.reviewed_at else None,
+        }
+
+    @staticmethod
+    def _outcome_payload(outcome: OutcomeSubmission) -> dict[str, Any]:
+        review = getattr(outcome, "evaluator_review", None)
+        return {
+            "outcomeRef": namespaced_ref("outcome-submission", str(outcome.id)),
+            "state": outcome.state,
+            "evaluatorRef": namespaced_ref("agent-actor", str(outcome.evaluator_id)) if outcome.evaluator_id else None,
+            "evaluatorProfileRef": (
+                namespaced_ref("profile-version", str(review.evaluator_profile_id))
+                if review is not None and review.evaluator_profile_id
+                else None
+            ),
+            "review": {
+                "criteria": review.criteria,
+                "verdict": review.verdict,
+                "recommendation": review.recommendation,
+                "provenance": review.provenance,
+            }
+            if review is not None
+            else None,
+            "humanReviewerRef": namespaced_ref("user", str(outcome.human_reviewer_id))
+            if outcome.human_reviewer_id
+            else None,
+        }
+
+    def execute(self, request: Any, workspace: Workspace, data: dict[str, Any]):
+        try:
+            if self.operation_id == "agent.assignment.delegate":
+                parent = AssignmentContract.objects.get(
+                    pk=_plane_ref(data["parent_assignment_ref"], "assignment", "parent_assignment_ref"),
+                    workspace=workspace,
+                )
+                delegator = _bound_actor(request, workspace, data["delegator_ref"], role=AgentRole.DELEGATOR)
+                assignee = AgentActor.objects.get(
+                    pk=_plane_ref(data["assignee_ref"], "agent-actor", "assignee_ref"), workspace=workspace
+                )
+                assignment = delegate_assignment(
+                    parent,
+                    assignee,
+                    target_ref=data["target_ref"],
+                    objective=data["objective"],
+                    acceptance_criteria=data["acceptance_criteria"],
+                    context_refs=data.get("context_refs"),
+                    scope=data.get("scope"),
+                    budget=data.get("budget"),
+                    idempotency_key=_gateway_key(data, "delegate"),
+                    delegated_by=delegator,
+                    created_by=request.user,
+                )
+                return 200, {"assignment": self._assignment_payload(assignment)}, None
+
+            if self.operation_id == "agent.assignment.cancel":
+                if getattr(request.user, "is_bot", False):
+                    actor = _bound_actor(request, workspace, getattr(request, "agent_actor_ref", None))
+                else:
+                    _human_admin(request, workspace)
+                assignment = AssignmentContract.objects.get(
+                    pk=_plane_ref(data["assignment_ref"], "assignment", "assignment_ref"), workspace=workspace
+                )
+                if getattr(request.user, "is_bot", False) and actor.id not in {
+                    assignment.assignee_id,
+                    assignment.delegated_by_id,
+                }:
+                    raise OperationAdapterFailure("NOT_AUTHORIZED", 403)
+                assignment = cancel_assignment(assignment)
+                return 200, {"assignment": self._assignment_payload(assignment)}, None
+
+            if self.operation_id == "agent.hr.propose":
+                proposer = _bound_actor(request, workspace, data["proposer_ref"], role=AgentRole.HR)
+                subject_actor = self._get_actor(workspace, data.get("subject_actor_ref"))
+                subject_user = self._get_user(data.get("subject_user_ref"))
+                requested_principal = self._get_user(data.get("requested_principal_ref"))
+                target_assignment = self._get_assignment(workspace, data.get("target_assignment_ref"))
+                requested_assignee = self._get_actor(workspace, data.get("requested_assignee_ref"))
+                project = None
+                project_id = data.get("project_id")
+                if project_id:
+                    project = Project.objects.filter(pk=project_id, workspace=workspace).first()
+                    if project is None:
+                        raise OperationAdapterFailure("OPERATION_REJECTED", 400)
+                proposal = propose_hr_change(
+                    workspace=workspace,
+                    proposed_by=proposer,
+                    kind=data["kind"],
+                    rationale=data["rationale"],
+                    idempotency_key=_gateway_key(data, "hr-propose"),
+                    subject_actor=subject_actor,
+                    subject_user=subject_user,
+                    requested_principal=requested_principal,
+                    target_assignment=target_assignment,
+                    requested_assignee=requested_assignee,
+                    requested_role=data.get("requested_role"),
+                    requested_display_name=data.get("requested_display_name", ""),
+                    requested_profile=data.get("requested_profile"),
+                    project=project,
+                    created_by=request.user,
+                )
+                return 200, {"proposal": self._proposal_payload(proposal)}, None
+
+            if self.operation_id == "agent.hr.decide":
+                _human_admin(request, workspace)
+                proposal = AgentHRProposal.objects.get(
+                    pk=_plane_ref(data["proposal_ref"], "hr-proposal", "proposal_ref"), workspace=workspace
+                )
+                proposal = decide_hr_proposal(
+                    proposal,
+                    human_reviewer=request.user,
+                    approved=data["approved"],
+                    decision_note=data.get("decision_note", ""),
+                    idempotency_key=_gateway_key(data, "hr-decide"),
+                )
+                return 200, {"proposal": self._proposal_payload(proposal)}, None
+
+            if self.operation_id == "agent.outcome.evaluate":
+                evaluator = _bound_actor(request, workspace, data["evaluator_ref"], role=AgentRole.EVALUATOR)
+                outcome = OutcomeSubmission.objects.get(
+                    pk=_plane_ref(data["outcome_ref"], "outcome-submission", "outcome_ref"), workspace=workspace
+                )
+                outcome = review_outcome(
+                    outcome,
+                    evaluator=evaluator,
+                    criteria=data.get("criteria"),
+                    verdict=data["verdict"],
+                    feedback=data.get("feedback", ""),
+                    provenance=data.get("provenance"),
+                    idempotency_key=_gateway_key(data, "outcome-evaluate"),
+                )
+                outcome = OutcomeSubmission.objects.select_related("evaluator_review").get(pk=outcome.pk)
+                return 200, {"outcome": self._outcome_payload(outcome)}, None
+
+            _human_admin(request, workspace)
+            outcome = OutcomeSubmission.objects.get(
+                pk=_plane_ref(data["outcome_ref"], "outcome-submission", "outcome_ref"), workspace=workspace
+            )
+            if self.operation_id == "agent.outcome.accept":
+                outcome = accept_outcome(
+                    outcome, human_reviewer=request.user, decision_note=data.get("decision_note", "")
+                )
+            elif self.operation_id == "agent.outcome.request_revision":
+                outcome = request_revision(
+                    outcome, human_reviewer=request.user, decision_note=data.get("decision_note", "")
+                )
+            else:
+                raise OperationAdapterFailure("UNKNOWN_OPERATION", 404)
+            return 200, {"outcome": self._outcome_payload(outcome)}, None
+        except (
+            AgentHRProposal.DoesNotExist,
+            AssignmentContract.DoesNotExist,
+            AgentActor.DoesNotExist,
+            OutcomeSubmission.DoesNotExist,
+        ):
+            raise OperationAdapterFailure("OPERATION_REJECTED", 400) from None
+        except (
+            AgentDomainError,
+            IdempotencyConflictError,
+            InvalidTransitionError,
+            TerminalEventRequiredError,
+            ValidationError,
+        ) as error:
+            _raise_domain_error(error)
+
+    @staticmethod
+    def _get_actor(workspace: Workspace, value: Any) -> AgentActor | None:
+        if value is None:
+            return None
+        try:
+            return AgentActor.objects.get(pk=_plane_ref(value, "agent-actor", "actor_ref"), workspace=workspace)
+        except (AgentActor.DoesNotExist, ValueError):
+            raise OperationAdapterFailure("OPERATION_REJECTED", 400) from None
+
+    @staticmethod
+    def _get_assignment(workspace: Workspace, value: Any) -> AssignmentContract | None:
+        if value is None:
+            return None
+        try:
+            return AssignmentContract.objects.get(
+                pk=_plane_ref(value, "assignment", "assignment_ref"), workspace=workspace
+            )
+        except (AssignmentContract.DoesNotExist, ValueError):
+            raise OperationAdapterFailure("OPERATION_REJECTED", 400) from None
+
+    @staticmethod
+    def _get_user(value: Any) -> User | None:
+        if value is None:
+            return None
+        try:
+            return User.objects.get(pk=_plane_ref(value, "user", "user_ref"))
+        except (User.DoesNotExist, ValueError):
+            raise OperationAdapterFailure("OPERATION_REJECTED", 400) from None
+
+
 def _resource_handlers() -> dict[str, Any]:
     specs = (
         ResourceSpec(
@@ -1977,6 +2351,13 @@ def _resource_handlers() -> dict[str, Any]:
         "work_item.archive.list": NativeBreadthOperation("work_item.archive.list"),
         "work_item.archive": NativeBreadthOperation("work_item.archive"),
         "work_item_relation.remove": NativeBreadthOperation("work_item_relation.remove"),
+        "agent.assignment.delegate": AgentGovernanceOperation("agent.assignment.delegate"),
+        "agent.assignment.cancel": AgentGovernanceOperation("agent.assignment.cancel"),
+        "agent.hr.propose": AgentGovernanceOperation("agent.hr.propose"),
+        "agent.hr.decide": AgentGovernanceOperation("agent.hr.decide"),
+        "agent.outcome.evaluate": AgentGovernanceOperation("agent.outcome.evaluate"),
+        "agent.outcome.accept": AgentGovernanceOperation("agent.outcome.accept"),
+        "agent.outcome.request_revision": AgentGovernanceOperation("agent.outcome.request_revision"),
     }
     for spec in specs:
         for action in ("list", "create", "retrieve", "update", "delete"):

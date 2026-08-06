@@ -791,7 +791,9 @@ class OperationGateway:
 
         handler = get_operation_handler(descriptor.operation_id)
         if handler is not None:
-            return handler.execute(request, workspace, parsed_input)
+            handler_input = dict(parsed_input)
+            handler_input["_gateway_idempotency_key"] = idempotency_key
+            return handler.execute(request, workspace, handler_input)
 
         if descriptor.operation_id in {
             "work_item_attachment.list",
