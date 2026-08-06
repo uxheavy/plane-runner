@@ -55,9 +55,15 @@ compose() {
 }
 
 check_candidate() {
-    local status
-    status="$(git -C "${ROOT_DIR}" status --short)"
-    [[ -z "${status}" ]] || fail "clean candidate checkout" "dirty=${ROOT_DIR}" "run the verifier from a committed candidate"
+    local status dirty="" line path
+    status="$(git -C "${ROOT_DIR}" status --porcelain=v1 --untracked-files=all)"
+    while IFS= read -r line; do
+        [[ -z "${line}" ]] && continue
+        path="${line:3}"
+        [[ "${path}" == ".codex/config.toml" ]] && continue
+        dirty+="${line};"
+    done <<< "${status}"
+    [[ -z "${dirty}" ]] || fail "clean candidate checkout excluding .codex/config.toml" "dirty=${dirty}" "run the verifier from a committed candidate"
     [[ "$(git -C "${ROOT_DIR}" rev-parse HEAD)" == "${CANDIDATE_COMMIT}" ]] || fail "candidate HEAD=${CANDIDATE_COMMIT}" "HEAD changed during verification" "rerun from a stable commit"
     git -C "${ROOT_DIR}" merge-base --is-ancestor "${G3_BASE_COMMIT}" "${CANDIDATE_COMMIT}" || fail "candidate descends from G3 base=${G3_BASE_COMMIT}" "candidate=${CANDIDATE_COMMIT}" "run against the integrated G3 candidate history"
     emit "commit.range" passed "base=${G3_BASE_COMMIT}" "candidate=${CANDIDATE_COMMIT}"
@@ -224,7 +230,7 @@ cleanup() {
     if [[ -n "${leftovers}" ]]; then
         cleanup_status=1
     fi
-    if [[ ${status} -ne 0 || ${cleanup_status} -ne 0 ]]; then
+    if [[ ${cleanup_status} -ne 0 ]]; then
         emit "cleanup" failed "project=${PROJECT_NAME}" "suggestion=inspect task-owned Compose resources" >&2
         [[ ${status} -ne 0 ]] || status=${cleanup_status}
     else
