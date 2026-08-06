@@ -70,6 +70,9 @@ def test_hermes_request_projects_plane_code_mode_policy_without_mutating_plane_r
         "maxEventPayloadBytes",
         "maxArtifactBytes",
         "maxReceiptBytes",
+        "maxCodeModeInputBytes",
+        "maxCodeModeOutputBytes",
+        "maxCodeModeCalls",
     }
     assert projected["contractDigests"] == _HERMES_G1_CONTRACT_DIGESTS
     assert projected_envelope["runSnapshotDigest"] == projected["contentDigest"]

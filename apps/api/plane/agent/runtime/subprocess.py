@@ -43,11 +43,13 @@ _HERMES_RUNTIME_POLICY_FIELDS = frozenset(
         "maxEventPayloadBytes",
         "maxArtifactBytes",
         "maxReceiptBytes",
+        "maxCodeModeInputBytes",
+        "maxCodeModeOutputBytes",
+        "maxCodeModeCalls",
     }
 )
-_PLANE_ONLY_HERMES_POLICY_FIELDS = frozenset({"maxCodeModeInputBytes", "maxCodeModeOutputBytes", "maxCodeModeCalls"})
 _HERMES_G1_CONTRACT_DIGESTS = {
-    # Frozen by the exact Hermes 2dd316df69afba586b99acda2f5aeb1529307b63
+    # Frozen by the exact Hermes e573a46611e2cb988f1ab43ad34cd8cc3b2cb659
     # plane_runtime.g1_contract manifest accepted at this process boundary.
     "runSnapshot": "e538fe79ede53e6bb2e307600dbefea507e30b996c002c3dab32d543ca0e36a2",
     "invocationEnvelope": "b7a15d74406f1624cdb7cd95b42edfd1ffee596abe57e4f00ed60e2e23ded995",
@@ -106,11 +108,11 @@ def _request_payload(snapshot_json: str, envelope_json: str) -> tuple[bytes, str
 def _hermes_request_payload(snapshot_json: str, envelope_json: str) -> tuple[bytes, str, str, str]:
     """Project Plane's richer immutable snapshot onto exact Hermes G1 wire fields.
 
-    Plane retains Code Mode limits in its authoritative snapshot. Hermes 2dd's
-    strict G1 contract intentionally does not accept those Plane-owned policy
-    fields, so the child receives a deterministic projection and a matching
-    invocation digest. The persisted Plane snapshot and invocation are never
-    modified; host callbacks remain bound to their original durable records.
+    Plane retains Code Mode limits in its authoritative snapshot. The exact
+    Hermes G1 contract accepts those bounded policy fields, so the child
+    receives a deterministic projection and a matching invocation digest. The
+    persisted Plane snapshot and invocation are never modified; host callbacks
+    remain bound to their original durable records.
     """
 
     snapshot = _canonical_object(snapshot_json, "runtime snapshot")
@@ -121,10 +123,8 @@ def _hermes_request_payload(snapshot_json: str, envelope_json: str) -> tuple[byt
     if not isinstance(policy, dict):
         raise RuntimeDispatchError("runtime snapshot has no runtime policy")
     extras = set(policy).difference(_HERMES_RUNTIME_POLICY_FIELDS)
-    if extras != _PLANE_ONLY_HERMES_POLICY_FIELDS:
-        if extras:
-            raise RuntimeDispatchError("runtime snapshot has unprojectable Hermes policy fields")
-        return _request_payload(snapshot_json, envelope_json)
+    if extras:
+        raise RuntimeDispatchError("runtime snapshot has unprojectable Hermes policy fields")
     projected = dict(snapshot)
     projected_policy = {key: policy[key] for key in _HERMES_RUNTIME_POLICY_FIELDS}
     projected["runtimePolicy"] = projected_policy

@@ -65,6 +65,16 @@ class Command(BaseCommand):
         runtime_credentials = getattr(settings, "PLANE_AGENT_RUNTIME_CREDENTIALS", {})
         if not isinstance(runtime_credentials, dict):
             raise CommandError("PLANE_AGENT_RUNTIME_CREDENTIALS must be a host-only mapping")
+        runtime_environment = getattr(settings, "PLANE_AGENT_RUNTIME_ENVIRONMENT", {})
+        if not isinstance(runtime_environment, dict) or any(
+            not isinstance(key, str)
+            or not key
+            or "\x00" in key
+            or not isinstance(value, str)
+            or "\x00" in value
+            for key, value in runtime_environment.items()
+        ):
+            raise CommandError("PLANE_AGENT_RUNTIME_ENVIRONMENT must be a bounded host-only string mapping")
         ledger_path = options.get("ledger_path") or getattr(
             settings,
             "PLANE_AGENT_RUNTIME_LEDGER_PATH",
@@ -80,6 +90,7 @@ class Command(BaseCommand):
                 gateway=OperationGateway(),
                 bootstrap_command=True,
                 model_call_allowance=options.get("model_call_allowance"),
+                environment=dict(runtime_environment),
                 credential_control=lambda _invocation: dict(runtime_credentials),
             )
             result = run_runtime_invocation(

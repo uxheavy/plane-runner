@@ -70,6 +70,8 @@ def redact_admin_value(value: Any, *, key: str | None = None) -> Any:
     """Redact secret-shaped values before they cross the admin read boundary."""
 
     if key is not None and is_credential_key(key):
+        if isinstance(value, (bool, int, float)) or value is None:
+            return value
         return "[redacted]"
     if isinstance(value, dict):
         return {
