@@ -14,6 +14,7 @@ from plane.operation_gateway.mcp.adapter_registry import ADAPTER_REGISTRATIONS, 
 
 def gateway_status() -> dict[str, Any]:
     disposition = Counter(row.registration for row in ADAPTER_REGISTRATIONS)
+    unsupported = disposition.get("unsupported", disposition.get("blocked", 0))
     return {
         "catalog": {
             "digest": CATALOG_DIGEST,
@@ -24,7 +25,10 @@ def gateway_status() -> dict[str, Any]:
             "tool_count": len(ADAPTER_REGISTRATIONS),
             "disposition": {
                 "gateway": disposition.get("gateway", 0),
-                "blocked": disposition.get("blocked", 0),
+                # Keep the L10 field name as a compatibility alias while
+                # exposing the canonical matrix disposition explicitly.
+                "blocked": unsupported,
+                "unsupported": unsupported,
                 "local": disposition.get("local", 0),
             },
         },

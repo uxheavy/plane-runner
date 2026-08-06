@@ -554,8 +554,9 @@ def test_context_admin_reuses_governance_services_and_api_cli_projection(api_key
     assert status_response.status_code == catalog_response.status_code == 200
     assert status_response.json()["external_adapter_registry"]["tool_count"] == 177
     assert status_response.json()["external_adapter_registry"]["disposition"] == {
-        "gateway": 64,
-        "blocked": 112,
+        "gateway": 86,
+        "blocked": 90,
+        "unsupported": 90,
         "local": 1,
     }
     assert len(json.dumps(catalog_response.json()).encode()) <= 8 * 1024

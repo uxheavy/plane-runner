@@ -20,6 +20,7 @@ _RESERVED_PRESENTATION_KEYS = frozenset(
     }
 )
 _PRESENTATION_KEYS = ("eager", "eager_operations", "eagerOperations")
+MAX_EAGER_OPERATIONS = 64
 _TOKEN_PATTERN = re.compile(r"[a-z0-9_]+")
 _GENERIC_ASSIGNMENT_TOKENS = frozenset(
     {
@@ -81,7 +82,9 @@ def _objective_tokens(assignment: Any) -> set[str]:
 
 def _matches_assignment(descriptor: OperationDescriptor, tokens: set[str]) -> bool:
     meaningful_tokens = tokens - _GENERIC_ASSIGNMENT_TOKENS
-    searchable = set(_TOKEN_PATTERN.findall(" ".join((descriptor.name, descriptor.summary, *descriptor.tags)).casefold()))
+    searchable = set(
+        _TOKEN_PATTERN.findall(" ".join((descriptor.name, descriptor.summary, *descriptor.tags)).casefold())
+    )
     searchable -= _GENERIC_ASSIGNMENT_TOKENS
     if descriptor.operation_id == "work_item.read" and "issue" in tokens:
         return True
@@ -111,10 +114,14 @@ def compose_tool_catalog(profile: Any, assignment: Any) -> dict[str, Any]:
     # else is a presentation choice and remains globally discoverable.
     for operation_id in ("search_workspace", *_explicit_ids(presentation)):
         if operation_id in OPERATION_CATALOG and operation_id not in selected:
+            if len(selected) >= MAX_EAGER_OPERATIONS:
+                raise ValueError(f"eager operation presentation exceeds {MAX_EAGER_OPERATIONS} operations")
             selected.append(operation_id)
 
     tokens = _objective_tokens(assignment)
     for operation_id, descriptor in OPERATION_CATALOG.items():
+        if len(selected) >= MAX_EAGER_OPERATIONS:
+            break
         if descriptor.universal or operation_id in selected or descriptor.operation_id.startswith("catalog."):
             continue
         if _matches_assignment(descriptor, tokens):

@@ -13,7 +13,7 @@ from plane.agent.tools.catalog import (
     describe_operation,
     operation_catalog_snapshot,
 )
-from plane.agent.tools.disclosure import compose_tool_catalog, progressive_operation_ids
+from plane.agent.tools.disclosure import MAX_EAGER_OPERATIONS, compose_tool_catalog, progressive_operation_ids
 from plane.agent.tools.native import NativeToolAdapter
 from plane.operation_gateway.catalog import OPERATION_CATALOG
 
@@ -93,6 +93,13 @@ def test_disclosure_is_presentation_only_and_assignment_driven():
 
     with pytest.raises(ValueError, match="authorization|allowlist"):
         compose_tool_catalog(_profile(allowed_operations=["work_item.rename"]), _assignment())
+
+
+def test_assignment_disclosure_is_bounded_and_remaining_operations_stay_progressive():
+    catalog = compose_tool_catalog(_profile(), _assignment("Produce one reviewable outcome."))
+
+    assert len(catalog["eagerOperations"]) == MAX_EAGER_OPERATIONS
+    assert len(progressive_operation_ids(catalog)) == len(OPERATION_CATALOG) - MAX_EAGER_OPERATIONS
 
 
 def test_native_adapter_requires_trusted_actor_ref_before_gateway_execution():
