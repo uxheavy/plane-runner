@@ -4,16 +4,23 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="${ROOT_DIR}/docker-compose-test.yml"
-PLANE_COMMIT="9b4bad0b0b54c90c8d25e9af5f086971e6b9c93a"
+G3_BASE_COMMIT="9b4bad0b0b54c90c8d25e9af5f086971e6b9c93a"
+CANDIDATE_COMMIT="$(git -C "${ROOT_DIR}" rev-parse HEAD)"
 MCP_COMMIT="2dc152e136d7ad952b901e5fe9364a37487297ba"
 MCP_INVENTORY_COMMIT="96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1"
 SDK_COMMIT="7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
 HERMES_COMMIT="e573a46611e2cb988f1ab43ad34cd8cc3b2cb659"
-API_TEST_IMAGE="${PLANE_API_TEST_IMAGE:-plane-g3-external-client-api-tests:latest}"
-MCP_ROOT="${PLANE_MCP_EXTERNAL_ROOT:-/Users/nqh/Desktop/CODES/plane/external/plane-mcp-server}"
-SDK_ROOT="${PLANE_SDK_EXTERNAL_ROOT:-/Users/nqh/Desktop/CODES/plane/external/plane-python-sdk}"
-HERMES_ROOT="${PLANE_HERMES_EXTERNAL_ROOT:-/Users/nqh/Desktop/CODES/hermes-agent}"
-EXTERNAL_SUPERPROJECT_ROOT="${PLANE_EXTERNAL_SUPERPROJECT_ROOT:-/Users/nqh/Desktop/CODES/plane}"
+API_TEST_IMAGE="${PLANE_API_TEST_IMAGE:-plane-g3-external-client-api-tests:prepared}"
+GIT_COMMON_DIR="$(git -C "${ROOT_DIR}" rev-parse --git-common-dir)"
+if [[ "${GIT_COMMON_DIR}" != /* ]]; then
+    GIT_COMMON_DIR="${ROOT_DIR}/${GIT_COMMON_DIR}"
+fi
+GIT_COMMON_DIR="$(cd -- "${GIT_COMMON_DIR}" && pwd)"
+DEFAULT_SUPERPROJECT_ROOT="$(dirname -- "${GIT_COMMON_DIR}")"
+EXTERNAL_SUPERPROJECT_ROOT="${PLANE_EXTERNAL_SUPERPROJECT_ROOT:-${DEFAULT_SUPERPROJECT_ROOT}}"
+MCP_ROOT="${PLANE_MCP_EXTERNAL_ROOT:-${EXTERNAL_SUPERPROJECT_ROOT}/external/plane-mcp-server}"
+SDK_ROOT="${PLANE_SDK_EXTERNAL_ROOT:-${EXTERNAL_SUPERPROJECT_ROOT}/external/plane-python-sdk}"
+HERMES_ROOT="${PLANE_HERMES_EXTERNAL_ROOT:-${EXTERNAL_SUPERPROJECT_ROOT}/../hermes-agent}"
 PROJECT_NAME="plane-agent-g3-verify-$$-${RANDOM}"
 NETWORK_NAME="${PROJECT_NAME}_test_env"
 CURRENT_STEP="preflight"
@@ -45,6 +52,15 @@ compose() {
         docker compose -p "${PROJECT_NAME}" -f "${COMPOSE_FILE}" "$@"
 }
 
+check_candidate() {
+    local status
+    status="$(git -C "${ROOT_DIR}" status --short)"
+    [[ -z "${status}" ]] || fail "clean candidate checkout" "dirty=${ROOT_DIR}" "run the verifier from a committed candidate"
+    [[ "$(git -C "${ROOT_DIR}" rev-parse HEAD)" == "${CANDIDATE_COMMIT}" ]] || fail "candidate HEAD=${CANDIDATE_COMMIT}" "HEAD changed during verification" "rerun from a stable commit"
+    git -C "${ROOT_DIR}" merge-base --is-ancestor "${G3_BASE_COMMIT}" "${CANDIDATE_COMMIT}" || fail "candidate descends from G3 base=${G3_BASE_COMMIT}" "candidate=${CANDIDATE_COMMIT}" "run against the integrated G3 candidate history"
+    emit "commit.range" passed "base=${G3_BASE_COMMIT}" "candidate=${CANDIDATE_COMMIT}"
+}
+
 pin_external_tree() {
     local label="$1"
     local root="$2"
@@ -59,12 +75,11 @@ pin_external_tree() {
 
 check_gitlinks() {
     local mcp_link sdk_link
-    [[ "$(git -C "${ROOT_DIR}" rev-parse HEAD)" == "${PLANE_COMMIT}" ]] || fail "Plane HEAD=${PLANE_COMMIT}" "unexpected Plane HEAD" "run from the integrated Plane commit"
-    mcp_link="$(git -C "${EXTERNAL_SUPERPROJECT_ROOT}" ls-tree "${PLANE_COMMIT}" external/plane-mcp-server)"
-    sdk_link="$(git -C "${EXTERNAL_SUPERPROJECT_ROOT}" ls-tree "${PLANE_COMMIT}" external/plane-python-sdk)"
+    mcp_link="$(git -C "${ROOT_DIR}" ls-tree "${CANDIDATE_COMMIT}" external/plane-mcp-server)"
+    sdk_link="$(git -C "${ROOT_DIR}" ls-tree "${CANDIDATE_COMMIT}" external/plane-python-sdk)"
     [[ "${mcp_link}" == *"${MCP_COMMIT}"$'\texternal/plane-mcp-server' ]] || fail "MCP gitlink=${MCP_COMMIT}" "${mcp_link}" "inspect the integrated Plane tree"
     [[ "${sdk_link}" == *"${SDK_COMMIT}"$'\texternal/plane-python-sdk' ]] || fail "SDK gitlink=${SDK_COMMIT}" "${sdk_link}" "inspect the integrated Plane tree"
-    emit "plane.gitlinks" passed "plane=${PLANE_COMMIT}" "mcp=${MCP_COMMIT}" "sdk=${SDK_COMMIT}"
+    emit "plane.gitlinks" passed "candidate=${CANDIDATE_COMMIT}" "mcp=${MCP_COMMIT}" "sdk=${SDK_COMMIT}"
 }
 
 check_mcp_inventory() {
@@ -213,12 +228,28 @@ cleanup() {
     exit "${status}"
 }
 
+check_api_test_image() {
+    local image_id
+    image_id="$(docker image inspect "${API_TEST_IMAGE}" --format '{{.Id}}' 2>/dev/null)" || fail "prepared API test image=${API_TEST_IMAGE}" "image unavailable" "build or select a local prepared image with PLANE_API_TEST_IMAGE"
+    docker run --rm --network none --entrypoint sh "${API_TEST_IMAGE}" -c '
+        set -eu
+        command -v python >/dev/null
+        command -v pytest >/dev/null
+        command -v ruff >/dev/null
+        python -c "import django, psycopg, pytest"
+    ' || fail "offline API test dependencies are prepared in ${API_TEST_IMAGE}" "dependency probe failed" "prepare the image locally; this verifier never installs dependencies"
+    emit "api-image" passed "image=${API_TEST_IMAGE}" "digest=${image_id}" "network=none" "dependency_source=prepared-local"
+}
+
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 
 command -v docker >/dev/null 2>&1 || fail "Docker is available" "docker is unavailable" "enable Docker"
 command -v git >/dev/null 2>&1 || fail "Git is available" "git is unavailable" "install Git"
-docker image inspect "${API_TEST_IMAGE}" >/dev/null 2>&1 || fail "API test image=${API_TEST_IMAGE}" "image unavailable" "build the repository test image before running this verifier"
+check_api_test_image
+
+CURRENT_STEP="candidate-range"
+check_candidate
 
 CURRENT_STEP="source-pins"
 pin_external_tree mcp "${MCP_ROOT}" "${MCP_COMMIT}"
@@ -233,9 +264,9 @@ python3 "${ROOT_DIR}/tools/check-agent-settings-reuse.py"
 if rg --files apps/web apps/admin apps/space | rg -i 'agent[-_ ]settings|agent[-_ ]chat|agent[-_ ]composer|agent[-_ ]thread|agent[-_ ]inbox|agent[-_ ]sidecar|agent[-_ ]transcript'; then
     fail "no Agent chat/settings UI files" "forbidden UI path found" "keep G3 non-UI"
 fi
-git diff --check
-gitleaks detect --no-banner --redact --source "${ROOT_DIR}" --log-opts "${PLANE_COMMIT}^..${PLANE_COMMIT}" --exit-code 1
-emit "static-scope" passed "settings_reuse=passed" "secret_scan=integrated_commit_range_passed" "diff_check=passed"
+git -C "${ROOT_DIR}" diff --check "${G3_BASE_COMMIT}^" "${CANDIDATE_COMMIT}"
+gitleaks detect --no-banner --redact --source "${ROOT_DIR}" --log-opts "${G3_BASE_COMMIT}^..${CANDIDATE_COMMIT}" --exit-code 1
+emit "static-scope" passed "base=${G3_BASE_COMMIT}" "candidate=${CANDIDATE_COMMIT}" "settings_reuse=passed" "secret_scan=base_to_candidate_passed" "diff_check=base_to_candidate_passed"
 
 CURRENT_STEP="migration-chain"
 PLANE_API_TEST_IMAGE="${API_TEST_IMAGE}" "${ROOT_DIR}/tools/verify-api-migrations.sh"
@@ -249,14 +280,13 @@ fi
 RUNTIME_LOG_DIR="${ROOT_DIR}/.g3-runtime-logs-${PROJECT_NAME}"
 mkdir -p -- "${RUNTIME_LOG_DIR}"
 CREATED_RUNTIME_LOG_DIR=1
-compose up -d test-db test-redis test-mq test-minio >/dev/null
+compose up --pull never -d test-db test-redis test-mq test-minio >/dev/null
 wait_for_services
 
 CURRENT_STEP="g3-api-and-client-suite"
 run_api sh -c "
 set -Eeuo pipefail
 export RUFF_CACHE_DIR=/tmp/g3-ruff-cache
-pip install --no-cache-dir --disable-pip-version-check -q -r requirements/test.txt
 python manage.py bootstrap_operation_gateway_audit --phase=before-migrate
 python manage.py migrate --noinput --verbosity 0
 python manage.py bootstrap_operation_gateway_audit --phase=after-migrate
@@ -271,4 +301,4 @@ PLANE_AUDIT_ENFORCE_ROLE_SEPARATION=0 pytest --migrations -q -o addopts='--stric
 emit "g3-api-and-client-suite" passed "test_files=${#G3_TEST_PATHS[@]}" "external_mcp=${MCP_COMMIT}" "external_sdk=${SDK_COMMIT}" "hermes=${HERMES_COMMIT}" "result_limit=8192"
 
 CURRENT_STEP="complete"
-emit "complete" passed "plane=${PLANE_COMMIT}" "migration_leaf=0139" "mcp=177:86:90:1" "result_boundary=8192/8193" "readiness=ready_for_single_sol_medium_g3_assessment"
+emit "complete" passed "base=${G3_BASE_COMMIT}" "candidate=${CANDIDATE_COMMIT}" "migration_leaf=0139" "mcp=177:86:90:1" "result_boundary=8192/8193" "readiness=ready_for_single_sol_medium_g3_assessment"

@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="${ROOT_DIR}/docker-compose-test.yml"
-API_TEST_IMAGE="${PLANE_API_TEST_IMAGE:-plane-api-tests:latest}"
+API_TEST_IMAGE="${PLANE_API_TEST_IMAGE:-plane-g3-external-client-api-tests:prepared}"
 PROJECT_NAME="plane-migration-verify-$$-${RANDOM}"
 NETWORK_NAME="${PROJECT_NAME}_test_env"
 CURRENT_STEP="preflight"
@@ -139,7 +139,7 @@ command -v docker >/dev/null 2>&1 || fail "docker command" "docker is unavailabl
 docker image inspect "${API_TEST_IMAGE}" >/dev/null 2>&1 || fail "existing API test image" "${API_TEST_IMAGE} is unavailable" "build the repository API test image outside this verifier; this check never installs dependencies"
 
 CURRENT_STEP="start-empty-postgres"
-compose up -d test-db >/dev/null
+compose up --pull never -d test-db >/dev/null
 for attempt in $(seq 1 30); do
     if compose exec -T test-db pg_isready -U plane -d plane >/dev/null 2>&1; then
         break
