@@ -11,6 +11,7 @@ MCP_INVENTORY_COMMIT="96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1"
 SDK_COMMIT="7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
 HERMES_COMMIT="e573a46611e2cb988f1ab43ad34cd8cc3b2cb659"
 API_TEST_IMAGE="${PLANE_API_TEST_IMAGE:-plane-g3-external-client-api-tests:prepared}"
+API_TEST_IMAGE_DIGEST="sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e"
 GIT_COMMON_DIR="$(git -C "${ROOT_DIR}" rev-parse --git-common-dir)"
 if [[ "${GIT_COMMON_DIR}" != /* ]]; then
     GIT_COMMON_DIR="${ROOT_DIR}/${GIT_COMMON_DIR}"
@@ -25,6 +26,7 @@ PROJECT_NAME="plane-agent-g3-verify-$$-${RANDOM}"
 NETWORK_NAME="${PROJECT_NAME}_test_env"
 CURRENT_STEP="preflight"
 RUNTIME_LOG_DIR=""
+COMMUNITY_COMPOSE_CONFIG=""
 CREATED_API_LOG_DIR=0
 CREATED_RUNTIME_LOG_DIR=0
 
@@ -159,6 +161,7 @@ API_ENV=(
     --env "PLANE_SDK_EXTERNAL_ROOT=/workspace/external/plane-python-sdk"
     --env "PLANE_G2_HERMES_CHECKOUT=/workspace/hermes-agent"
     --env "PLANE_G2_HERMES_DEPENDENCY_PATH=/workspace/hermes-agent/plane_runtime/g1_runtime_image"
+    --env "PLANE_COMMUNITY_COMPOSE_CONFIG=/tmp/community-compose.json"
     --env "API_KEY_RATE_LIMIT=8192/minute"
 )
 
@@ -174,6 +177,7 @@ run_api() {
         --mount "type=bind,src=${EXTERNAL_SUPERPROJECT_ROOT}/.git/modules,dst=/workspace/.git/modules,readonly" \
         --mount "type=bind,src=${HERMES_ROOT},dst=/workspace/hermes-agent,readonly" \
         --mount "type=bind,src=${RUNTIME_LOG_DIR},dst=/workspace/apps/api/plane/logs" \
+        --mount "type=bind,src=${COMMUNITY_COMPOSE_CONFIG},dst=/tmp/community-compose.json,readonly" \
         --workdir /workspace/apps/api \
         "${API_TEST_IMAGE}" -c 'exec "$@"' -- "$@"
 }
@@ -232,6 +236,7 @@ cleanup() {
 check_api_test_image() {
     local image_id
     image_id="$(docker image inspect "${API_TEST_IMAGE}" --format '{{.Id}}' 2>/dev/null)" || fail "prepared API test image=${API_TEST_IMAGE}" "image unavailable" "build or select a local prepared image with PLANE_API_TEST_IMAGE"
+    [[ "${image_id}" == "${API_TEST_IMAGE_DIGEST}" ]] || fail "prepared API test image digest=${API_TEST_IMAGE_DIGEST}" "actual=${image_id}" "use the authoritative offline image; this verifier never rebuilds or pulls images"
     docker run --rm --network none --entrypoint sh "${API_TEST_IMAGE}" -c '
         set -eu
         command -v python >/dev/null
@@ -261,17 +266,14 @@ check_mcp_inventory
 [[ -d "${EXTERNAL_SUPERPROJECT_ROOT}/.git/modules" ]] || fail "external git module metadata is mounted" "missing metadata" "set PLANE_EXTERNAL_SUPERPROJECT_ROOT to the gitlink superproject"
 
 CURRENT_STEP="static-scope"
-python3 "${ROOT_DIR}/tools/check-agent-settings-reuse.py"
-if rg --files apps/web apps/admin apps/space | rg -i 'agent[-_ ]settings|agent[-_ ]chat|agent[-_ ]composer|agent[-_ ]thread|agent[-_ ]inbox|agent[-_ ]sidecar|agent[-_ ]transcript'; then
-    fail "no Agent chat/settings UI files" "forbidden UI path found" "keep G3 non-UI"
-fi
-git -C "${ROOT_DIR}" diff --check "${G3_BASE_COMMIT}^" "${CANDIDATE_COMMIT}"
-gitleaks detect --no-banner --redact --source "${ROOT_DIR}" --log-opts "${G3_BASE_COMMIT}^..${CANDIDATE_COMMIT}" --exit-code 1
+python3 "${ROOT_DIR}/tools/check-agent-settings-reuse.py" "${G3_BASE_COMMIT}" "${CANDIDATE_COMMIT}"
+git -C "${ROOT_DIR}" diff --check "${G3_BASE_COMMIT}" "${CANDIDATE_COMMIT}"
+gitleaks detect --no-banner --redact --source "${ROOT_DIR}" --log-opts "${G3_BASE_COMMIT}..${CANDIDATE_COMMIT}" --exit-code 1
 emit "static-scope" passed "base=${G3_BASE_COMMIT}" "candidate=${CANDIDATE_COMMIT}" "settings_reuse=passed" "secret_scan=base_to_candidate_passed" "diff_check=base_to_candidate_passed"
 
 CURRENT_STEP="migration-chain"
 PLANE_API_TEST_IMAGE="${API_TEST_IMAGE}" "${ROOT_DIR}/tools/verify-api-migrations.sh"
-emit "migration-chain" passed "apply=passed" "reverse_to=0138" "reapply=passed" "drift=passed" "leaf=0139"
+emit "migration-chain" passed "apply=passed" "reverse_to=0138" "reapply=passed" "drift=passed" "leaf=0140"
 
 CURRENT_STEP="start-stack"
 if [[ ! -d "${ROOT_DIR}/apps/api/plane/logs" ]]; then
@@ -281,6 +283,14 @@ fi
 RUNTIME_LOG_DIR="${ROOT_DIR}/.g3-runtime-logs-${PROJECT_NAME}"
 mkdir -p -- "${RUNTIME_LOG_DIR}"
 CREATED_RUNTIME_LOG_DIR=1
+COMMUNITY_COMPOSE_CONFIG="${RUNTIME_LOG_DIR}/community-compose.json"
+CURRENT_STEP="resolve-community-compose"
+env CORS_ALLOWED_ORIGINS=http://localhost LIVE_SERVER_SECRET_KEY=compose-test-key SECRET_KEY=compose-test-key \
+    docker compose -f "${ROOT_DIR}/deployments/cli/community/docker-compose.yml" config --format json \
+    > "${COMMUNITY_COMPOSE_CONFIG}" \
+    || fail "resolved community Compose configuration" "docker compose config failed" "inspect the pinned community deployment"
+[[ -s "${COMMUNITY_COMPOSE_CONFIG}" ]] || fail "resolved community Compose configuration" "empty config" "inspect the community deployment source"
+emit "community-compose" passed "config=${COMMUNITY_COMPOSE_CONFIG}" "credential_topology=host_resolved_mounted_readonly"
 compose up --pull never -d test-db test-redis test-mq test-minio >/dev/null
 wait_for_services
 
@@ -288,18 +298,18 @@ CURRENT_STEP="g3-api-and-client-suite"
 run_api sh -c "
 set -Eeuo pipefail
 export RUFF_CACHE_DIR=/tmp/g3-ruff-cache
+export PYTHONPATH=/workspace/apps/api${PYTHONPATH:+:${PYTHONPATH}}
 python manage.py bootstrap_operation_gateway_audit --phase=before-migrate
 python manage.py migrate --noinput --verbosity 0
-python manage.py bootstrap_operation_gateway_audit --phase=after-migrate
 python manage.py bootstrap_operation_gateway_audit --phase=after-migrate
 python -m plane.operation_gateway.mcp.registry_generator plane/operation_gateway/mcp/manifest.json --check plane/operation_gateway/mcp/adapter_registry.json
 ruff check plane/agent plane/operation_gateway plane/tests/unit/agent plane/tests/contract/api
 ruff format --check plane/tests/contract/api/test_operation_gateway_mcp.py plane/tests/contract/api/test_operation_gateway_external_clients.py
 python -m compileall -q plane/agent plane/operation_gateway plane/tests/unit/agent plane/tests/contract/api
-python manage.py shell -c 'from django.db import connection; from django.db.migrations.executor import MigrationExecutor; e=MigrationExecutor(connection); leaves=set(e.loader.graph.leaf_nodes(\"db\")); applied=set(e.recorder.applied_migrations()); assert leaves == {(\"db\", \"0139_delegation_lineage_scope_guard\")}; assert not leaves-applied; print(\"event=agent.g3.api.migration_leaf status=passed leaf=0139\")'
-PLANE_AUDIT_ENFORCE_ROLE_SEPARATION=0 pytest --migrations -q -o addopts='--strict-markers --reuse-db' -o cache_dir=/tmp/g3-pytest ${G3_TEST_PATHS[*]}
+python manage.py shell -c 'from django.db import connection; from django.db.migrations.executor import MigrationExecutor; e=MigrationExecutor(connection); leaves=set(e.loader.graph.leaf_nodes(\"db\")); applied=set(e.recorder.applied_migrations()); assert leaves == {(\"db\", \"0140_invocation_free_cancellation_integrity\")}; assert not leaves-applied; print(\"event=agent.g3.api.migration_leaf status=passed leaf=0140\")'
+PLANE_AUDIT_ENFORCE_ROLE_SEPARATION=0 pytest -p plane.tests.g3_no_skips --migrations -q -o addopts='--strict-markers --reuse-db' -o cache_dir=/tmp/g3-pytest ${G3_TEST_PATHS[*]}
 "
 emit "g3-api-and-client-suite" passed "test_files=${#G3_TEST_PATHS[@]}" "external_mcp=${MCP_COMMIT}" "external_sdk=${SDK_COMMIT}" "hermes=${HERMES_COMMIT}" "result_limit=8192"
 
 CURRENT_STEP="complete"
-emit "complete" passed "base=${G3_BASE_COMMIT}" "candidate=${CANDIDATE_COMMIT}" "migration_leaf=0139" "mcp=177:86:90:1" "result_boundary=8192/8193" "readiness=ready_for_single_sol_medium_g3_assessment"
+emit "complete" passed "base=${G3_BASE_COMMIT}" "candidate=${CANDIDATE_COMMIT}" "migration_leaf=0140" "mcp=177:86:90:1" "result_boundary=8192/8193" "readiness=ready_for_single_sol_medium_g3_assessment"

@@ -727,14 +727,22 @@ def _state(value, enum, field_name):
         raise AgentDomainError(f"Unknown {field_name}: {value}") from exc
 
 
-def _transition_assignment_locked(assignment, target):
+def _transition_assignment_locked(assignment, target, *, updated_by=None):
     target = _state(target, AssignmentState, "assignment state")
     if target not in _ASSIGNMENT_TRANSITIONS[assignment.state]:
         raise InvalidTransitionError(f"Assignment cannot move from {assignment.state} to {target}")
     if target == AssignmentState.REVISION:
         assignment.revision += 1
     assignment.state = target
-    assignment.save(_allow_lifecycle=True, created_by_id=assignment.created_by_id)
+    if updated_by is not None:
+        assignment.updated_by = updated_by
+        assignment.save(
+            _allow_lifecycle=True,
+            created_by_id=assignment.created_by_id,
+            disable_auto_set_user=True,
+        )
+    else:
+        assignment.save(_allow_lifecycle=True, created_by_id=assignment.created_by_id)
     return assignment
 
 
@@ -1074,6 +1082,8 @@ def create_assignment(
                 raise IdempotencyConflictError("Delegation idempotency key is bound to another Plane command")
             return existing
         _assert_idempotency_key_is_unclaimed(delegation_key, current_model=AssignmentContract)
+        if lineage_parent.state == AssignmentState.CANCELLED:
+            raise InvalidTransitionError("Cancelled assignments cannot receive delegated work")
         _ensure_delegation_bounds(
             lineage_parent,
             child_scope=scope_value,
@@ -1158,7 +1168,12 @@ def _hr_state_fingerprint(*, actor=None, assignment=None, subject_user=None):
 
 
 def _ensure_human_workspace_admin(workspace, human):
-    if human is None or getattr(human, "is_anonymous", False):
+    if (
+        human is None
+        or getattr(human, "is_anonymous", False)
+        or not getattr(human, "is_active", False)
+        or getattr(human, "is_bot", False)
+    ):
         raise AgentDomainError("Human HR decisions require an authenticated workspace administrator")
     if not WorkspaceMember.objects.filter(
         workspace=workspace,
@@ -1234,11 +1249,15 @@ def propose_hr_change(
         if kind == HRProposalKind.CHIEF_OF_STAFF:
             if subject_user is None:
                 raise AgentDomainError("Chief-of-staff provisioning requires a human subject")
-            if subject_user.is_bot or not subject_user.is_active or not WorkspaceMember.objects.filter(
-                workspace=workspace,
-                member=subject_user,
-                is_active=True,
-            ).exists():
+            if (
+                subject_user.is_bot
+                or not subject_user.is_active
+                or not WorkspaceMember.objects.filter(
+                    workspace=workspace,
+                    member=subject_user,
+                    is_active=True,
+                ).exists()
+            ):
                 raise AgentDomainError("Chief-of-staff provisioning requires the human's live workspace membership")
             if AgentActor.objects.filter(chief_of_staff_for=subject_user).exists():
                 raise AgentDomainError("The human already has a chief-of-staff Agent")
@@ -1450,38 +1469,75 @@ def transition_assignment(assignment, target, *, outcome=None):
     return _transition_assignment_locked(locked, target)
 
 
+def _cancel_run_without_invocation_locked(run):
+    """Cancel a queued run before it ever became a runtime dispatch."""
+
+    if run.state != RunState.QUEUED or run.last_invocation_id or run.invocation_count:
+        raise InvalidTransitionError("Only an invocation-free queued run may be cancelled without a terminal event")
+    run.state = RunState.CANCELLED
+    run.pending_input_ref = None
+    run.save(_allow_lifecycle=True, created_by_id=run.created_by_id)
+    return run
+
+
+def _cancel_assignment_run(run):
+    """Reconcile one non-terminal run through the canonical runtime control seam."""
+
+    if run.state in {
+        RunState.SUCCEEDED,
+        RunState.FAILED,
+        RunState.BLOCKED,
+        RunState.CANCELLED,
+        RunState.OUTCOME_UNKNOWN,
+    }:
+        return run
+    if run.last_invocation_id:
+        from plane.agent.runtime import request_runtime_cancellation
+
+        invocation = RuntimeInvocation.objects.get(invocation_id=run.last_invocation_id)
+        return request_runtime_cancellation(invocation, reason="The assignment tree was cancelled.")
+    locked_run = RunAttempt.objects.select_for_update().get(pk=run.pk)
+    if locked_run.state in {
+        RunState.SUCCEEDED,
+        RunState.FAILED,
+        RunState.BLOCKED,
+        RunState.CANCELLED,
+        RunState.OUTCOME_UNKNOWN,
+    }:
+        return locked_run
+    if locked_run.last_invocation_id:
+        from plane.agent.runtime import request_runtime_cancellation
+
+        invocation = RuntimeInvocation.objects.get(invocation_id=locked_run.last_invocation_id)
+        return request_runtime_cancellation(invocation, reason="The assignment tree was cancelled.")
+    return _cancel_run_without_invocation_locked(locked_run)
+
+
 @transaction.atomic
-def cancel_assignment(assignment):
-    def _cancel_tree(parent):
-        for child in list(
-            AssignmentContract.objects.select_for_update()
-            .filter(lineage_of=parent)
-            .exclude(state__in=[AssignmentState.COMPLETED, AssignmentState.CANCELLED])
-        ):
-            _transition_assignment_locked(child, AssignmentState.CANCELLED)
-            for run in (
-                RunAttempt.objects.select_for_update()
-                .filter(assignment=child)
-                .exclude(
-                    state__in=[
-                        RunState.SUCCEEDED,
-                        RunState.FAILED,
-                        RunState.BLOCKED,
-                        RunState.CANCELLED,
-                        RunState.OUTCOME_UNKNOWN,
-                    ]
-                )
-            ):
-                if run.last_invocation_id:
-                    transition_run(run, RunState.CANCELLED)
-            _cancel_tree(child)
+def cancel_assignment(assignment, *, operator=None):
+    """Cancel an assignment subtree and reconcile every dispatchable descendant."""
 
     locked = AssignmentContract.objects.select_for_update().get(pk=assignment.pk)
-    if locked.state == AssignmentState.CANCELLED:
-        return locked
-    result = _transition_assignment_locked(locked, AssignmentState.CANCELLED)
-    _cancel_tree(locked)
-    return result
+    if operator is not None:
+        _ensure_human_workspace_admin(locked.workspace, operator)
+    assignments = [locked]
+    frontier = [locked.id]
+    while frontier:
+        children = list(
+            AssignmentContract.objects.select_for_update().filter(lineage_of_id__in=frontier).order_by("id")
+        )
+        assignments.extend(children)
+        frontier = [child.id for child in children]
+
+    for current in assignments:
+        if current.state not in {AssignmentState.COMPLETED, AssignmentState.CANCELLED}:
+            _transition_assignment_locked(current, AssignmentState.CANCELLED, updated_by=operator)
+
+    for current in assignments:
+        runs = RunAttempt.objects.filter(assignment=current).order_by("id")
+        for run in runs:
+            _cancel_assignment_run(run)
+    return AssignmentContract.objects.get(pk=locked.pk)
 
 
 def _uuid_from_ref(value, field_name):
@@ -1710,6 +1766,7 @@ def _ensure_runtime_control(invocation, *, created_by=None):
 def record_input_event(
     run, *, payload, kind=InputEventKind.HUMAN_INPUT, pending_input_ref=None, idempotency_key=None, created_by=None
 ):
+    assignment = AssignmentContract.objects.select_for_update().get(pk=run.assignment_id)
     run = RunAttempt.objects.select_for_update().get(pk=run.pk)
     kind = _state(kind, InputEventKind, "input event kind")
     key = (
@@ -1750,6 +1807,8 @@ def record_input_event(
         _assert_idempotency_key_is_unclaimed(key, current_model=RunInputEvent)
     if pending_ref is None:
         raise AgentDomainError("Input events require the exact pending input reference")
+    if assignment.state == AssignmentState.CANCELLED:
+        raise InvalidTransitionError("Cancelled assignments cannot receive new input")
     if run.state != RunState.WAITING_FOR_INPUT:
         if RunInputEvent.all_objects.filter(run=run, pending_input_ref=pending_ref).exists():
             raise IdempotencyConflictError("The pending input question has already been answered")
@@ -1865,6 +1924,7 @@ def record_invocation(
     usage=None,
     created_by=None,
 ):
+    assignment = AssignmentContract.objects.select_for_update().get(pk=run.assignment_id)
     run = RunAttempt.objects.select_for_update().get(pk=run.pk)
     key = _normalise_idempotency(idempotency_key, "invocation idempotency_key")
     requested_invocation_ref = None
@@ -1933,6 +1993,8 @@ def record_invocation(
         _ensure_runtime_control(existing, created_by=created_by)
         return existing
     _assert_idempotency_key_is_unclaimed(key, current_model=RuntimeInvocation)
+    if assignment.state == AssignmentState.CANCELLED:
+        raise InvalidTransitionError("Cancelled assignments cannot receive new invocations")
     if run.state not in {RunState.QUEUED, RunState.RUNNING, RunState.WAITING_FOR_INPUT}:
         raise InvalidTransitionError(f"Run {run.id} cannot receive an invocation from {run.state}")
     trigger_value = _make_trigger(run, trigger, input_event)
@@ -2777,6 +2839,7 @@ def accept_outcome(outcome, *, human_reviewer, decision_note=""):
     _require_reviewed_outcome(locked)
     if human_reviewer is None:
         raise AgentDomainError("Human acceptance requires a reviewer")
+    _ensure_human_workspace_admin(locked.workspace, human_reviewer)
     assignment = AssignmentContract.objects.select_for_update().get(pk=locked.run.assignment_id)
     pending = {assignment.id}
     while pending:
@@ -2791,10 +2854,11 @@ def accept_outcome(outcome, *, human_reviewer, decision_note=""):
         pending = child_ids
     locked.state = OutcomeState.ACCEPTED
     locked.human_reviewer = human_reviewer
+    locked.updated_by = human_reviewer
     locked.human_decision_note = decision_note
     locked.human_decided_at = timezone.now()
-    locked.save(_allow_lifecycle=True, created_by_id=locked.created_by_id)
-    _transition_assignment_locked(assignment, AssignmentState.COMPLETED)
+    locked.save(_allow_lifecycle=True, created_by_id=locked.created_by_id, disable_auto_set_user=True)
+    _transition_assignment_locked(assignment, AssignmentState.COMPLETED, updated_by=human_reviewer)
     return locked
 
 
@@ -2805,11 +2869,13 @@ def request_revision(outcome, *, human_reviewer, decision_note=""):
     _require_reviewed_outcome(locked)
     if human_reviewer is None:
         raise AgentDomainError("Revision requests require a reviewer")
+    _ensure_human_workspace_admin(locked.workspace, human_reviewer)
     locked.state = OutcomeState.REVISION_REQUESTED
     locked.human_reviewer = human_reviewer
+    locked.updated_by = human_reviewer
     locked.human_decision_note = decision_note
     locked.human_decided_at = timezone.now()
-    locked.save(_allow_lifecycle=True, created_by_id=locked.created_by_id)
+    locked.save(_allow_lifecycle=True, created_by_id=locked.created_by_id, disable_auto_set_user=True)
     assignment = AssignmentContract.objects.select_for_update().get(pk=locked.run.assignment_id)
-    _transition_assignment_locked(assignment, AssignmentState.REVISION)
+    _transition_assignment_locked(assignment, AssignmentState.REVISION, updated_by=human_reviewer)
     return locked

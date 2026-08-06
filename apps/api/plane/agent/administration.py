@@ -51,6 +51,7 @@ class AgentAdminExtensionCommand:
     invocation_id: str | None
     idempotency_key: str
     payload: Mapping[str, Any]
+    authenticated_user: Any | None = None
 
     def __post_init__(self) -> None:
         if self.action not in AGENT_ADMIN_L7_ACTIONS:
@@ -71,6 +72,26 @@ class AgentAdminExtensionCommand:
             max_bytes=MAX_AGENT_READBACK_BYTES,
             reject_credentials=True,
         )
+        if self.action in {
+            "hr.proposal.decide",
+            "outcome.accept",
+            "outcome.request_revision",
+            "assignment.cancel",
+        }:
+            if self.authenticated_user is None or getattr(self.authenticated_user, "is_anonymous", False):
+                raise ValueError("governance decisions require the authenticated caller")
+            if any(
+                key in self.payload
+                for key in (
+                    "reviewer_id",
+                    "reviewerId",
+                    "human_reviewer_id",
+                    "humanReviewerId",
+                    "operator_id",
+                    "operatorId",
+                )
+            ):
+                raise ValueError("reviewer and operator identities must come from the authenticated caller")
 
 
 class AgentAdminExtensionSerializerPort(Protocol):

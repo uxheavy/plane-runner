@@ -486,13 +486,17 @@ class AgentGovernanceCommandAPIEndpoint(AgentAdminAPIView):
         serializer = AgentGovernanceCommandSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         values = serializer.validated_data
-        command = AgentAdminExtensionCommand(
-            action=values["action"],
-            workspace_id=str(self.workspace().id),
-            actor_id=str(values["actor_id"]) if values.get("actor_id") else None,
-            run_id=str(values["run_id"]) if values.get("run_id") else None,
-            invocation_id=str(values["invocation_id"]) if values.get("invocation_id") else None,
-            idempotency_key=values["idempotency_key"],
-            payload=values.get("payload", {}),
-        )
+        try:
+            command = AgentAdminExtensionCommand(
+                action=values["action"],
+                workspace_id=str(self.workspace().id),
+                actor_id=str(values["actor_id"]) if values.get("actor_id") else None,
+                run_id=str(values["run_id"]) if values.get("run_id") else None,
+                invocation_id=str(values["invocation_id"]) if values.get("invocation_id") else None,
+                idempotency_key=values["idempotency_key"],
+                payload=values.get("payload", {}),
+                authenticated_user=request.user,
+            )
+        except ValueError as exc:
+            raise AgentAdminExtensionError(str(exc)) from exc
         return Response(plane_agent_admin_extension().execute(command))

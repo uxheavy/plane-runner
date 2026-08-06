@@ -63,7 +63,7 @@ from plane.db.models import (
 )
 
 
-AGENT_TEST_HEAD = ("db", "0139_delegation_lineage_scope_guard")
+AGENT_TEST_HEAD = ("db", "0140_invocation_free_cancellation_integrity")
 
 
 def _restore_agent_test_head():

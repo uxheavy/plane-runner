@@ -10,7 +10,7 @@ from plane.agent.administration import AGENT_ADMIN_L7_ACTIONS, AgentAdminExtensi
 from plane.agent.administration_extensions import plane_agent_admin_extension
 from plane.agent.lifecycle import AgentDomainError
 from plane.agent.validation import MAX_AGENT_READBACK_BYTES
-from plane.db.models import Workspace
+from plane.db.models import User, Workspace
 
 
 class Command(BaseCommand):
@@ -23,6 +23,10 @@ class Command(BaseCommand):
         parser.add_argument("--actor-id")
         parser.add_argument("--run-id")
         parser.add_argument("--invocation-id")
+        parser.add_argument(
+            "--operator-id",
+            help="Authenticated human caller for governance decisions; never provide this in --payload.",
+        )
         parser.add_argument("--payload", default="{}")
 
     def handle(self, *args, **options):
@@ -35,6 +39,11 @@ class Command(BaseCommand):
             raise CommandError("--payload must contain one JSON object") from exc
         if not isinstance(payload, dict):
             raise CommandError("--payload must contain one JSON object")
+        authenticated_user = None
+        if options.get("operator_id"):
+            authenticated_user = User.objects.filter(pk=options["operator_id"], is_active=True, is_bot=False).first()
+            if authenticated_user is None:
+                raise CommandError("--operator-id must identify an active human User")
         try:
             command = AgentAdminExtensionCommand(
                 action=options["action"],
@@ -44,6 +53,7 @@ class Command(BaseCommand):
                 invocation_id=options.get("invocation_id"),
                 idempotency_key=options["idempotency_key"],
                 payload=payload,
+                authenticated_user=authenticated_user,
             )
             result = plane_agent_admin_extension().execute(command)
         except (AgentDomainError, ValueError, KeyError) as exc:

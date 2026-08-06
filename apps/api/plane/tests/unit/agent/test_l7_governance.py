@@ -20,6 +20,7 @@ from plane.agent.lifecycle import (
     request_revision,
     review_outcome,
     decide_hr_proposal,
+    cancel_assignment,
 )
 from plane.agent.lifecycle import InvalidTransitionError
 from plane.db.models import (
@@ -33,8 +34,15 @@ from plane.db.models import (
     OperationGatewayAudit,
     OutcomeState,
     Project,
+    RunState,
+    RunTerminalEvent,
+    RuntimeControlState,
+    RuntimeInvocation,
+    RuntimeInvocationControl,
     Workspace,
+    WorkspaceMember,
     AssignmentContract,
+    User,
 )
 from plane.operation_gateway.catalog import get_operation
 from plane.operation_gateway.gateway import OperationGateway
@@ -238,6 +246,114 @@ def test_delegation_scope_guard_allows_cross_actor_and_rejects_cross_scope_linea
 
 
 @pytest.mark.django_db
+def test_assignment_cancellation_reconciles_root_and_descendant_queued_runs(workspace, project, create_user):
+    delegator = _actor(workspace, name="Queued cancellation delegator", role=AgentRole.DELEGATOR, project=project)
+    worker = _actor(workspace, name="Queued cancellation worker", role=AgentRole.WORKER, project=project)
+    parent = create_assignment(
+        delegator,
+        project=project,
+        target_ref="issue:queued-cancel-parent",
+        objective="Cancel the queued assignment tree.",
+        acceptance_criteria=["Every queued run is terminal."],
+        created_by=create_user,
+    )
+    child = delegate_assignment(
+        parent,
+        worker,
+        target_ref="issue:queued-cancel-child",
+        objective="Remain queued under the cancelled parent.",
+        acceptance_criteria=["The child run is terminal."],
+        idempotency_key="idempotency:queued-cancel-child",
+        delegated_by=delegator,
+        created_by=create_user,
+    )
+    parent_run = create_run(parent, delegator.active_profile, created_by=create_user)
+    child_run = create_run(child, worker.active_profile, created_by=create_user)
+
+    cancel_assignment(parent, operator=create_user)
+    parent.refresh_from_db()
+    child.refresh_from_db()
+    parent_run.refresh_from_db()
+    child_run.refresh_from_db()
+    assert parent.state == child.state == AssignmentState.CANCELLED
+    assert parent_run.state == child_run.state == RunState.CANCELLED
+    assert parent_run.last_invocation_id is None
+    assert child_run.last_invocation_id is None
+    assert RuntimeInvocation.objects.filter(run_id__in=[parent_run.id, child_run.id]).count() == 0
+    assert RuntimeInvocationControl.objects.filter(invocation__run_id__in=[parent_run.id, child_run.id]).count() == 0
+
+    with pytest.raises(InvalidTransitionError, match="Cancelled assignments"):
+        delegate_assignment(
+            parent,
+            worker,
+            target_ref="issue:queued-cancel-after",
+            objective="This must never become dispatchable.",
+            acceptance_criteria=["Rejected."],
+            idempotency_key="idempotency:queued-cancel-after",
+            delegated_by=delegator,
+            created_by=create_user,
+        )
+    with pytest.raises(InvalidTransitionError, match="Cancelled assignments"):
+        record_invocation(parent_run, idempotency_key="idempotency:queued-cancel-replay", created_by=create_user)
+
+    cancel_assignment(parent, operator=create_user)
+    parent_run.refresh_from_db()
+    child_run.refresh_from_db()
+    assert parent_run.state == child_run.state == RunState.CANCELLED
+
+
+@pytest.mark.django_db
+def test_assignment_cancellation_signals_active_root_and_descendant_runtime_controls(workspace, project, create_user):
+    delegator = _actor(workspace, name="Active cancellation delegator", role=AgentRole.DELEGATOR, project=project)
+    worker = _actor(workspace, name="Active cancellation worker", role=AgentRole.WORKER, project=project)
+    parent = create_assignment(
+        delegator,
+        project=project,
+        target_ref="issue:active-cancel-parent",
+        objective="Cancel active runtime work.",
+        acceptance_criteria=["Both controls receive cancellation."],
+        created_by=create_user,
+    )
+    child = delegate_assignment(
+        parent,
+        worker,
+        target_ref="issue:active-cancel-child",
+        objective="Remain active under the cancelled parent.",
+        acceptance_criteria=["The child runtime is cancelled."],
+        idempotency_key="idempotency:active-cancel-child",
+        delegated_by=delegator,
+        created_by=create_user,
+    )
+    parent_run = create_run(parent, delegator.active_profile, created_by=create_user)
+    child_run = create_run(child, worker.active_profile, created_by=create_user)
+    parent_invocation = record_invocation(
+        parent_run,
+        idempotency_key="idempotency:active-cancel-parent",
+        created_by=create_user,
+    )
+    child_invocation = record_invocation(
+        child_run,
+        idempotency_key="idempotency:active-cancel-child-run",
+        created_by=create_user,
+    )
+
+    cancel_assignment(parent, operator=create_user)
+    for invocation in (parent_invocation, child_invocation):
+        invocation.refresh_from_db()
+        control = RuntimeInvocationControl.objects.get(invocation=invocation)
+        assert invocation.state == "cancelled"
+        assert control.state == RuntimeControlState.RELEASED
+        assert control.cancellation_requested_at is not None
+        assert RunTerminalEvent.objects.filter(invocation=invocation).count() == 1
+    parent_run.refresh_from_db()
+    child_run.refresh_from_db()
+    assert parent_run.state == child_run.state == RunState.CANCELLED
+
+    cancel_assignment(parent, operator=create_user)
+    assert RunTerminalEvent.objects.filter(invocation__in=[parent_invocation, child_invocation]).count() == 2
+
+
+@pytest.mark.django_db
 def test_hr_proposal_requires_human_approval_and_fails_closed_on_stale_state(workspace, project, create_user):
     hr = _actor(workspace, name="HR", role=AgentRole.HR, created_by=create_user)
     subject = _actor(workspace, name="Subject", role=AgentRole.WORKER, created_by=create_user)
@@ -277,6 +393,40 @@ def test_hr_proposal_requires_human_approval_and_fails_closed_on_stale_state(wor
         )
     proposal.refresh_from_db()
     assert proposal.state == HRProposalState.PROPOSED
+
+    demoted = User.objects.create(
+        username="demoted-governance-reviewer",
+        email="demoted-governance-reviewer@plane.so",
+        is_active=True,
+        is_bot=False,
+    )
+    WorkspaceMember.objects.create(workspace=workspace, member=demoted, role=10, is_active=True)
+    with pytest.raises(AgentDomainError, match="current workspace administrator"):
+        decide_hr_proposal(
+            proposal,
+            human_reviewer=demoted,
+            approved=True,
+            idempotency_key="idempotency:hr-demoted-reviewer",
+        )
+    other_workspace = Workspace.objects.create(
+        name="Governance reviewer other workspace",
+        owner=create_user,
+        slug="governance-reviewer-other-workspace",
+    )
+    wrong_workspace_admin = User.objects.create(
+        username="wrong-workspace-reviewer",
+        email="wrong-workspace-reviewer@plane.so",
+        is_active=True,
+        is_bot=False,
+    )
+    WorkspaceMember.objects.create(workspace=other_workspace, member=wrong_workspace_admin, role=20, is_active=True)
+    with pytest.raises(AgentDomainError, match="current workspace administrator"):
+        decide_hr_proposal(
+            proposal,
+            human_reviewer=wrong_workspace_admin,
+            approved=True,
+            idempotency_key="idempotency:hr-wrong-workspace-reviewer",
+        )
 
     with pytest.raises(AgentDomainError, match="credential"):
         propose_hr_change(

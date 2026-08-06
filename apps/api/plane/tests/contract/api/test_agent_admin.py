@@ -675,12 +675,23 @@ def test_governance_extension_api_cli_parity_and_l7_state_adapters(api_key_clien
         {
             "action": "outcome.request_revision",
             "idempotency_key": "idempotency:governance-revision",
-            "payload": {"outcome_id": outcome_id, "reviewer_id": str(workspace.owner_id)},
+            "payload": {"outcome_id": outcome_id},
         },
         format="json",
     )
     assert revision_response.status_code == 200
     assert revision_response.json()["evaluator_reviews"][0]["outcome_state"] == OutcomeState.REVISION_REQUESTED
+    outcome.refresh_from_db()
+    assert outcome.human_reviewer_id == workspace.owner_id
+    call_command(
+        "agent_governance",
+        workspace_slug=workspace.slug,
+        action="outcome.request_revision",
+        operator_id=str(workspace.owner_id),
+        idempotency_key="idempotency:governance-revision-cli-replay",
+        payload=json.dumps({"outcome_id": outcome_id}),
+    )
+    assert json.loads(capsys.readouterr().out) == revision_response.json()
 
     accepted_assignment = create_assignment(
         AgentActor.objects.get(pk=worker_id),
@@ -711,7 +722,7 @@ def test_governance_extension_api_cli_parity_and_l7_state_adapters(api_key_clien
         {
             "action": "outcome.accept",
             "idempotency_key": "idempotency:governance-accept",
-            "payload": {"outcome_id": str(accepted_outcome.id), "reviewer_id": str(workspace.owner_id)},
+            "payload": {"outcome_id": str(accepted_outcome.id)},
         },
         format="json",
     )
@@ -734,12 +745,14 @@ def test_governance_extension_api_cli_parity_and_l7_state_adapters(api_key_clien
         {
             "action": "outcome.accept",
             "idempotency_key": "idempotency:governance-accept",
-            "payload": {"outcome_id": str(accepted_outcome.id), "reviewer_id": str(workspace.owner_id)},
+            "payload": {"outcome_id": str(accepted_outcome.id)},
         },
         format="json",
     )
     assert accept_response.status_code == 200
     assert accept_response.json()["evaluator_reviews"][0]["outcome_state"] == OutcomeState.ACCEPTED
+    accepted_outcome.refresh_from_db()
+    assert accepted_outcome.human_reviewer_id == workspace.owner_id
 
     chief_response = api_key_client.post(
         command_url,
@@ -757,6 +770,20 @@ def test_governance_extension_api_cli_parity_and_l7_state_adapters(api_key_clien
     )
     assert chief_response.status_code == 200
     proposal_id = chief_response.json()["hr_proposals"][0]["id"]
+    spoofed_decision = api_key_client.post(
+        command_url,
+        {
+            "action": "hr.proposal.decide",
+            "idempotency_key": "idempotency:governance-chief-spoofed-reviewer",
+            "payload": {
+                "proposal_id": proposal_id,
+                "reviewer_id": "user:spoofed-reviewer",
+                "approved": True,
+            },
+        },
+        format="json",
+    )
+    assert spoofed_decision.status_code == 400
     decision_response = api_key_client.post(
         command_url,
         {
@@ -764,7 +791,6 @@ def test_governance_extension_api_cli_parity_and_l7_state_adapters(api_key_clien
             "idempotency_key": "idempotency:governance-chief-decision",
             "payload": {
                 "proposal_id": proposal_id,
-                "reviewer_id": str(workspace.owner_id),
                 "approved": True,
                 "decision_note": "Approved by the workspace owner.",
             },
@@ -821,7 +847,7 @@ def test_governance_extension_api_cli_parity_and_l7_state_adapters(api_key_clien
         {
             "action": "assignment.cancel",
             "idempotency_key": "idempotency:governance-cancel",
-            "payload": {"assignment_id": str(parent.id), "reviewer_id": str(workspace.owner_id)},
+            "payload": {"assignment_id": str(parent.id)},
         },
         format="json",
     )

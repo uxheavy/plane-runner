@@ -362,10 +362,9 @@ class PlaneAgentAdministrationExtension:
             if proposal is None:
                 raise AgentAdminExtensionError("The governance command is unavailable")
             _assert_binding(command, actor_id=proposal.proposed_by_id)
-            reviewer = _scoped_user(workspace, payload.get("reviewer_id"))
             proposal = decide_hr_proposal(
                 proposal,
-                human_reviewer=reviewer,
+                human_reviewer=command.authenticated_user,
                 approved=bool(payload.get("approved")),
                 decision_note=_safe_text(payload.get("decision_note")),
                 idempotency_key=command.idempotency_key,
@@ -374,8 +373,7 @@ class PlaneAgentAdministrationExtension:
         if command.action == "assignment.cancel":
             assignment = _scoped_assignment(workspace, payload.get("assignment_id"))
             _assert_binding(command, actor_id=assignment.assignee_id)
-            _scoped_user(workspace, payload.get("reviewer_id"))
-            cancelled = cancel_assignment(assignment)
+            cancelled = cancel_assignment(assignment, operator=command.authenticated_user)
             return {"assignments": [assignment_governance_projection(cancelled)]}
         if command.action == "evaluator.review":
             outcome = _scoped_outcome(workspace, payload.get("outcome_id"))
@@ -414,7 +412,6 @@ class PlaneAgentAdministrationExtension:
                 run_id=outcome.run_id,
                 invocation_id=command.invocation_id,
             )
-            _scoped_user(workspace, payload.get("reviewer_id"))
             target_state = (
                 OutcomeState.ACCEPTED if command.action == "outcome.accept" else OutcomeState.REVISION_REQUESTED
             )
@@ -422,13 +419,13 @@ class PlaneAgentAdministrationExtension:
                 if command.action == "outcome.accept":
                     outcome = accept_outcome(
                         outcome,
-                        human_reviewer=_scoped_user(workspace, payload.get("reviewer_id")),
+                        human_reviewer=command.authenticated_user,
                         decision_note=_safe_text(payload.get("decision_note")),
                     )
                 else:
                     outcome = request_revision(
                         outcome,
-                        human_reviewer=_scoped_user(workspace, payload.get("reviewer_id")),
+                        human_reviewer=command.authenticated_user,
                         decision_note=_safe_text(payload.get("decision_note")),
                     )
             review = EvaluatorReview.objects.filter(outcome=outcome).select_related("outcome").first()

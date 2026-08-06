@@ -81,6 +81,37 @@ def _settings_environment() -> dict[str, str]:
     return environment
 
 
+def _resolved_community_services() -> dict[str, dict]:
+    """Read the host-resolved Compose model when the verifier has provided it."""
+
+    configured_path = os.environ.get("PLANE_COMMUNITY_COMPOSE_CONFIG")
+    if configured_path:
+        path = Path(configured_path)
+        assert path.is_file(), f"required resolved Compose model is missing: {path}"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return payload["services"]
+
+    docker = shutil.which("docker")
+    assert docker is not None, (
+        "Docker is required for the production credential-topology proof; this check cannot be skipped"
+    )
+    result = subprocess.run(
+        [docker, "compose", "-f", str(COMPOSE_FILE), "config", "--format", "json"],
+        cwd=REPOSITORY_ROOT,
+        env={
+            **os.environ,
+            "CORS_ALLOWED_ORIGINS": "http://localhost",
+            "LIVE_SERVER_SECRET_KEY": "compose-test-key",
+            "SECRET_KEY": "compose-test-key",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)["services"]
+
+
 def _boot_settings(environment: dict[str, str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
@@ -511,25 +542,7 @@ def test_migrator_sets_exact_migration_authority_before_every_python_call(tmp_pa
 
 @pytest.mark.contract
 def test_resolved_community_compose_scopes_database_credentials_by_process():
-    docker = shutil.which("docker")
-    if docker is None:
-        pytest.skip("docker is not available in this test environment")
-
-    result = subprocess.run(
-        [docker, "compose", "-f", str(COMPOSE_FILE), "config", "--format", "json"],
-        cwd=REPOSITORY_ROOT,
-        env={
-            **os.environ,
-            "CORS_ALLOWED_ORIGINS": "http://localhost",
-            "LIVE_SERVER_SECRET_KEY": "compose-test-key",
-            "SECRET_KEY": "compose-test-key",
-        },
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr
-    services = json.loads(result.stdout)["services"]
+    services = _resolved_community_services()
 
     for service in ("api", "worker", "beat-worker"):
         environment = services[service]["environment"]
