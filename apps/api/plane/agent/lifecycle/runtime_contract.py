@@ -18,6 +18,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from .errors import AgentDomainError
+
 
 PROTOCOL = "plane.agent-runtime/v1"
 MAX_REF_BYTES = 128
@@ -45,7 +47,7 @@ _SCHEMA_NAMES = frozenset(
 _REF_PATTERN = re.compile(r"^(?P<namespace>[A-Za-z][A-Za-z0-9-]*):(?P<suffix>[A-Za-z0-9][A-Za-z0-9._~/-]{0,119})$")
 
 
-class RuntimeContractError(ValueError):
+class RuntimeContractError(AgentDomainError, ValueError):
     """Raised when Plane data cannot satisfy the accepted runtime contract."""
 
 

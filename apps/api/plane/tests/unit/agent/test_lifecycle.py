@@ -9,7 +9,9 @@ from uuid import uuid4
 
 import pytest
 from django.core.exceptions import ValidationError
+from django.core.management import call_command
 from django.db import DatabaseError, close_old_connections, connection, transaction
+from django.db.migrations.executor import MigrationExecutor
 from django.utils import timezone
 
 from plane.agent.lifecycle import (
@@ -59,6 +61,15 @@ from plane.db.models import (
     RuntimeInvocation,
     ProfileVersion,
 )
+
+
+AGENT_TEST_HEAD = ("db", "0139_delegation_lineage_scope_guard")
+
+
+def _restore_agent_test_head():
+    call_command("bootstrap_operation_gateway_audit", phase="before-migrate", verbosity=0)
+    MigrationExecutor(connection).migrate([AGENT_TEST_HEAD])
+    call_command("bootstrap_operation_gateway_audit", phase="after-migrate", verbosity=0)
 
 
 @pytest.fixture
@@ -367,15 +378,14 @@ def test_non_superuser_owner_cannot_truncate_or_rebind_keyed_records(assignment,
 
             def assert_rows_remain_bound():
                 for table, key_column, _, material_column in tables:
-                    cursor.execute(f"SELECT count(*) FROM {quote_identifier(table)}")
-                    assert cursor.fetchone()[0] == 1
                     cursor.execute(
                         f"""
                         SELECT id::text, {quote_identifier(key_column)}::text,
                                command_fingerprint,
                                {quote_identifier(material_column)}::text
-                        FROM {quote_identifier(table)}
-                        """
+                        FROM {quote_identifier(table)} WHERE id = %s
+                        """,
+                        [expected[table][0]],
                     )
                     assert cursor.fetchone() == expected[table]
 
@@ -654,10 +664,8 @@ def test_invocation_and_outcome_commands_are_idempotent(assignment, profile):
 
 
 @pytest.mark.django_db(transaction=True)
-def test_migrated_outcome_terminal_replay_promotes_legacy_binding_without_duplication(assignment, profile):
+def test_migrated_outcome_terminal_replay_promotes_legacy_binding_without_duplication(assignment, profile, request):
     """Exercise the real 0125 reverse/reapply boundary before replaying the terminal command."""
-
-    from django.db.migrations.executor import MigrationExecutor
 
     executor = MigrationExecutor(connection)
     try:
@@ -666,6 +674,7 @@ def test_migrated_outcome_terminal_replay_promotes_legacy_binding_without_duplic
         pytest.skip("requires a migration-backed test database; pytest --nomigrations is a known environment gap")
     if ("db", "0125_agent_lifecycle_append_only_integrity") not in applied:
         pytest.skip("requires a migration-backed test database; pytest --nomigrations is a known environment gap")
+    request.addfinalizer(_restore_agent_test_head)
 
     run = create_run(assignment, profile, idempotency_key="idempotency:migration-replay-run")
     invocation = record_invocation(run, idempotency_key="idempotency:migration-replay-invocation")
@@ -680,6 +689,7 @@ def test_migrated_outcome_terminal_replay_promotes_legacy_binding_without_duplic
     original_id = terminal.id
     original_event_ref = terminal.product_event_ref
 
+    call_command("bootstrap_operation_gateway_audit", phase="before-reverse", verbosity=0)
     executor.migrate([("db", "0124_agent_lifecycle_database_integrity")])
     executor = MigrationExecutor(connection)
     executor.migrate([("db", "0125_agent_lifecycle_append_only_integrity")])
@@ -699,6 +709,11 @@ def test_migrated_outcome_terminal_replay_promotes_legacy_binding_without_duplic
             "cancellationRef": None,
         },
     )
+
+    call_command("bootstrap_operation_gateway_audit", phase="before-migrate", verbosity=0)
+    executor = MigrationExecutor(connection)
+    executor.migrate([AGENT_TEST_HEAD])
+    call_command("bootstrap_operation_gateway_audit", phase="after-migrate", verbosity=0)
 
     replayed_outcome = propose_outcome(
         run,

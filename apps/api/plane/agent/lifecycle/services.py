@@ -9,7 +9,6 @@ import re
 from datetime import datetime, timedelta
 from uuid import UUID, uuid4
 
-from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection, transaction
 from django.db.models import Max
 from django.utils import timezone
@@ -46,6 +45,8 @@ from plane.db.models import (
     RunTerminalEvent,
     RuntimeInvocation,
     RuntimeInvocationControl,
+    RuntimeEventIngress,
+    RuntimeExitEvidence,
     RuntimeUsageObservation,
     HRProposalKind,
     HRProposalState,
@@ -57,6 +58,7 @@ from plane.db.models.user import User
 from plane.db.models.workspace import WorkspaceMember
 from plane.agent.tools.disclosure import compose_tool_catalog
 
+from .errors import AgentDomainError
 from .runtime_contract import (
     MAX_BOUNDED_BYTE_COUNT,
     MAX_BOUNDED_PROMPT_BYTES,
@@ -75,10 +77,6 @@ from .runtime_contract import (
     validate_invocation_envelope,
     validate_run_snapshot,
 )
-
-
-class AgentDomainError(ValidationError):
-    """Base error for invalid Plane Agent domain commands."""
 
 
 class InvalidTransitionError(AgentDomainError):
@@ -520,6 +518,37 @@ def _lock_idempotency_key(key):
         return
     with connection.cursor() as cursor:
         cursor.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", [key])
+
+
+_IDEMPOTENCY_BINDINGS = (
+    (AssignmentContract, "delegation_key"),
+    (AgentHRProposal, "idempotency_key"),
+    (RunAttempt, "creation_idempotency_key"),
+    (RunInputEvent, "idempotency_key"),
+    (RuntimeInvocation, "idempotency_key"),
+    (RuntimeEventIngress, "idempotency_key"),
+    (RuntimeExitEvidence, "idempotency_key"),
+    (OutcomeSubmission, "submission_idempotency_key"),
+    (RunTerminalEvent, "idempotency_key"),
+    (EvaluatorReview, "idempotency_key"),
+)
+_COMPOSITE_COMMAND_BINDINGS = frozenset(
+    {
+        frozenset({RunAttempt, RuntimeInvocation}),
+    }
+)
+
+
+def _assert_idempotency_key_is_unclaimed(key, *, current_model):
+    """Keep one caller key from binding to two different Plane commands."""
+
+    for model, field_name in _IDEMPOTENCY_BINDINGS:
+        if model is current_model:
+            continue
+        if frozenset({current_model, model}) in _COMPOSITE_COMMAND_BINDINGS:
+            continue
+        if model.all_objects.filter(**{field_name: key}).exists():
+            raise IdempotencyConflictError("Idempotency key is bound to another Plane command")
 
 
 def _create_with_conflict_resolution(model, *, fields, key_lookup, alternate_lookup=None, compatible, message):
@@ -1044,6 +1073,7 @@ def create_assignment(
             if existing.delegation_command_fingerprint != delegation_fingerprint:
                 raise IdempotencyConflictError("Delegation idempotency key is bound to another Plane command")
             return existing
+        _assert_idempotency_key_is_unclaimed(delegation_key, current_model=AssignmentContract)
         _ensure_delegation_bounds(
             lineage_parent,
             child_scope=scope_value,
@@ -1245,6 +1275,7 @@ def propose_hr_change(
         if existing.command_fingerprint != fingerprint:
             raise IdempotencyConflictError("HR proposal idempotency key is bound to another Plane command")
         return existing
+    _assert_idempotency_key_is_unclaimed(key, current_model=AgentHRProposal)
     return AgentHRProposal.objects.create(
         workspace=workspace,
         project=project,
@@ -1528,6 +1559,7 @@ def create_run(
                 else:
                     raise IdempotencyConflictError("Run idempotency key is bound to another Plane command")
             return existing
+        _assert_idempotency_key_is_unclaimed(creation_key, current_model=RunAttempt)
     source = None
     if lineage_of is not None:
         source = RunAttempt.objects.select_for_update().get(pk=lineage_of.pk)
@@ -1584,6 +1616,8 @@ def create_run(
     resolved_snapshot = _build_snapshot(locked_assignment, profile, run_id, snapshot=snapshot_value)
     if locked_assignment.state in {AssignmentState.READY, AssignmentState.REVISION}:
         _transition_assignment_locked(locked_assignment, AssignmentState.ACTIVE)
+        assignment.state = locked_assignment.state
+        assignment.revision = locked_assignment.revision
     run_fields = dict(
         id=run_id,
         workspace=locked_assignment.workspace,
@@ -1713,6 +1747,7 @@ def record_input_event(
                 else:
                     raise IdempotencyConflictError("Input event idempotency key is bound to another Plane command")
             return existing
+        _assert_idempotency_key_is_unclaimed(key, current_model=RunInputEvent)
     if pending_ref is None:
         raise AgentDomainError("Input events require the exact pending input reference")
     if run.state != RunState.WAITING_FOR_INPUT:
@@ -1897,6 +1932,7 @@ def record_invocation(
                 raise IdempotencyConflictError("Invocation idempotency key is bound to another Plane command")
         _ensure_runtime_control(existing, created_by=created_by)
         return existing
+    _assert_idempotency_key_is_unclaimed(key, current_model=RuntimeInvocation)
     if run.state not in {RunState.QUEUED, RunState.RUNNING, RunState.WAITING_FOR_INPUT}:
         raise InvalidTransitionError(f"Run {run.id} cannot receive an invocation from {run.state}")
     trigger_value = _make_trigger(run, trigger, input_event)
@@ -2433,6 +2469,7 @@ def _create_terminal_event_locked(
             else:
                 raise IdempotencyConflictError("Terminal event idempotency key is bound to another Plane command")
         return conflicting
+    _assert_idempotency_key_is_unclaimed(event_key, current_model=RunTerminalEvent)
     invocation.state = invocation_state
     invocation.save(_allow_lifecycle=True, created_by_id=invocation.created_by_id)
     run.state = run_state
@@ -2563,6 +2600,7 @@ def propose_outcome(run, *, summary, artifacts=None, evidence=None, idempotency_
                     raise IdempotencyConflictError("Outcome idempotency key is bound to another Plane command")
             _replay_outcome_terminal_locked(run, existing)
             return existing
+        _assert_idempotency_key_is_unclaimed(key, current_model=OutcomeSubmission)
     if run.state not in {RunState.RUNNING, RunState.WAITING_FOR_INPUT}:
         raise InvalidTransitionError(f"Run cannot submit an outcome from {run.state}")
     if not run.last_invocation_id:
@@ -2693,6 +2731,7 @@ def review_outcome(
         if existing.command_fingerprint != review_fingerprint or existing.outcome_id != locked.id:
             raise IdempotencyConflictError("Evaluator review idempotency key is bound to another Plane command")
         return locked
+    _assert_idempotency_key_is_unclaimed(review_key, current_model=EvaluatorReview)
     existing = EvaluatorReview.all_objects.filter(outcome=locked).first()
     if existing is not None:
         if existing.command_fingerprint != review_fingerprint:

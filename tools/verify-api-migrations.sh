@@ -83,10 +83,29 @@ executor = MigrationExecutor(connection)
 leaves = set(executor.loader.graph.leaf_nodes("db"))
 applied = set(executor.recorder.applied_migrations())
 missing = leaves - applied
-if len(leaves) != 1 or missing:
+expected = {("db", "0139_delegation_lineage_scope_guard")}
+if leaves != expected or missing:
     raise SystemExit(f"db migration leaf state is invalid: leaves={sorted(leaves)} missing={sorted(missing)}")
 print(f"db_migration_leaf={sorted(leaves)[0]}")
 '
+}
+
+assert_migration_leaf() {
+    local expected="$1"
+    run_api python manage.py shell -c "
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
+
+executor = MigrationExecutor(connection)
+applied = set(executor.recorder.applied_migrations())
+expected = {('db', '${expected}')}
+assert expected <= applied, (applied, expected)
+if '${expected}' == '0138_agentactor_chief_of_staff_for_and_more':
+    assert ('db', '0139_delegation_lineage_scope_guard') not in applied, applied
+else:
+    assert ('db', '0139_delegation_lineage_scope_guard') in applied, applied
+print(f'db_migration_applied={sorted(expected)[0]}')
+"
 }
 
 cleanup() {
@@ -153,6 +172,14 @@ run_api python manage.py bootstrap_operation_gateway_audit --phase=after-migrate
 CURRENT_STEP="post-agent-comment-reaction-catalog"
 check_comment_reaction_index
 verify_migration_state
+
+CURRENT_STEP="reverse-to-0138"
+run_api python manage.py migrate db 0138_agentactor_chief_of_staff_for_and_more --noinput --verbosity 1
+assert_migration_leaf "0138_agentactor_chief_of_staff_for_and_more"
+
+CURRENT_STEP="reapply-0139"
+run_api python manage.py migrate db 0139_delegation_lineage_scope_guard --noinput --verbosity 1
+assert_migration_leaf "0139_delegation_lineage_scope_guard"
 
 CURRENT_STEP="bootstrap-before-reverse"
 run_api python manage.py bootstrap_operation_gateway_audit --phase=before-reverse

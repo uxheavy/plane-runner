@@ -15,6 +15,7 @@ from plane.db.models import AgentRole, InputEventKind, Project, RunInputEvent
 
 PRE_HEAD = ("db", "0134_agent_input_event_sequence")
 HEAD = ("db", "0135_agent_input_durability")
+CURRENT_TEST_HEAD = ("db", "0139_delegation_lineage_scope_guard")
 KEYED_TRIGGERS = {
     "agent_run_keyed_binding_guard",
     "agent_input_keyed_binding_guard",
@@ -39,6 +40,12 @@ def _move(target):
     MigrationExecutor(connection).migrate([target])
     if target == HEAD:
         call_command("bootstrap_operation_gateway_audit", phase="after-migrate", verbosity=0)
+
+
+def _restore_current_test_head():
+    call_command("bootstrap_operation_gateway_audit", phase="before-migrate", verbosity=0)
+    MigrationExecutor(connection).migrate([CURRENT_TEST_HEAD])
+    call_command("bootstrap_operation_gateway_audit", phase="after-migrate", verbosity=0)
 
 
 def _legacy_snapshot(run_id):
@@ -127,7 +134,8 @@ def _keyed_trigger_names():
 
 @pytest.mark.contract
 @pytest.mark.django_db(transaction=True)
-def test_0135_preserves_duplicate_input_evidence_and_recovers_keyed_guards(workspace):
+def test_0135_preserves_duplicate_input_evidence_and_recovers_keyed_guards(workspace, request):
+    request.addfinalizer(_restore_current_test_head)
     project = Project.objects.create(workspace=workspace, name="Agent migration contract", identifier="AMC")
     actor = create_actor(workspace=workspace, project=project, display_name="Migration contract actor")
     profile = create_profile(actor, role=AgentRole.WORKER, instructions="Migration contract")

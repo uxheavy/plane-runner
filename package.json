@@ -19,6 +19,7 @@
     "check:types": "turbo run check:types",
     "check:local-dev": "./tools/check-local-dev.sh",
     "check:local-dev:runtime": "./tools/check-local-dev.sh --runtime",
+    "verify:agent-g3": "./tools/verify-agent-g3.sh",
     "prepare": "husky",
     "doctor": "npx react-doctor@latest",
     "verify:api-migrations": "./tools/verify-api-migrations.sh",

@@ -11,7 +11,7 @@ from django.utils import timezone
 
 BASE_MIGRATION = ("db", "0126_operationgatewayaudit_operationgatewayidempotency")
 PRE_HEAD_MIGRATION = ("db", "0128_operationgateway_publications_and_audit_trigger")
-HEAD_MIGRATION = ("db", "0138_agentactor_chief_of_staff_for_and_more")
+HEAD_MIGRATION = ("db", "0139_delegation_lineage_scope_guard")
 COMBINED_MIGRATION_CHAIN = (
     (
         ("db", "0123_agent_lifecycle_foundation"),
@@ -50,6 +50,7 @@ COMBINED_MIGRATION_CHAIN = (
         ("db", "0138_agentactor_chief_of_staff_for_and_more"),
         ("db", "0137_runtime_supervisor_state"),
     ),
+    (("db", "0139_delegation_lineage_scope_guard"), ("db", "0138_agentactor_chief_of_staff_for_and_more")),
 )
 
 
@@ -82,6 +83,12 @@ def _migrate_and_reload(target):
     executor.migrate([target])
     executor = MigrationExecutor(connection)
     return executor, executor.loader.project_state([target]).apps
+
+
+def _restore_operation_gateway_test_head():
+    call_command("bootstrap_operation_gateway_audit", phase="before-migrate", verbosity=0)
+    MigrationExecutor(connection).migrate([HEAD_MIGRATION])
+    call_command("bootstrap_operation_gateway_audit", phase="after-migrate", verbosity=0)
 
 
 def _audit_kwargs(*, request_id, operation_id, workspace_slug, caller_id, key, correlation, digest):
@@ -271,7 +278,8 @@ def _safe_catalog_snapshot():
 
 @pytest.mark.contract
 @pytest.mark.django_db(transaction=True)
-def test_historical_invocation_backfill_is_deterministic_across_directions():
+def test_historical_invocation_backfill_is_deterministic_across_directions(request):
+    request.addfinalizer(_restore_operation_gateway_test_head)
     call_command("bootstrap_operation_gateway_audit", phase="before-reverse", verbosity=0)
     _, old_apps = _migrate_and_reload(BASE_MIGRATION)
     User = old_apps.get_model("db", "User")
@@ -544,6 +552,10 @@ def test_historical_invocation_backfill_is_deterministic_across_directions():
                 f'ALTER DEFAULT PRIVILEGES FOR ROLE "{settings.PLANE_AUDIT_MIGRATION_ROLE}" '
                 "IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC"
             )
+    # Re-establish the provisioner-owned migration boundary after the reverse
+    # recreated the 0128 trigger function. This is the safe hand-off point
+    # before any subsequent migration is applied.
+    call_command("bootstrap_operation_gateway_audit", phase="before-migrate", verbosity=0)
     ReversePublication = reverse_apps.get_model("db", "OperationGatewayPublication")
     reverse_row = ReversePublication.objects.get(idempotency_id=roundtrip_record.pk, kind="webhook")
     assert reverse_row.state == "failed"

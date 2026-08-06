@@ -248,6 +248,20 @@ def _validate_production_database_boundary():
     _reject_confusable_privileged_role(runtime_url_role)
     _reject_confusable_privileged_role(resolved_runtime_role)
     _reject_confusable_privileged_role(PLANE_AUDIT_RUNTIME_ROLE)
+    privileged_roles = {
+        PLANE_AUDIT_MIGRATION_ROLE,
+        PLANE_AUDIT_GOVERNANCE_ROLE,
+        PLANE_AUDIT_PROVISIONER_ROLE,
+        "postgres",
+        "root",
+    }
+    privileged_role_names = {_canonical_database_role(role) for role in privileged_roles}
+    for name, value in (
+        ("DATABASE_RUNTIME_URL", DATABASE_RUNTIME_URL),
+        ("DATABASE_URL", os.environ.get("DATABASE_URL")),
+    ):
+        if _canonical_database_role(_database_url_user(value)) in privileged_role_names:
+            raise ImproperlyConfigured(f"{name} must use the non-privileged runtime database role")
     if (
         not runtime_url_role
         or not resolved_runtime_role
@@ -256,25 +270,10 @@ def _validate_production_database_boundary():
     ):
         raise ImproperlyConfigured("The runtime database URL must declare the resolved runtime role")
 
-    privileged_roles = {
-        PLANE_AUDIT_MIGRATION_ROLE,
-        PLANE_AUDIT_GOVERNANCE_ROLE,
-        PLANE_AUDIT_PROVISIONER_ROLE,
-        "postgres",
-        "root",
-    }
-    for name, value in (
-        ("DATABASE_RUNTIME_URL", DATABASE_RUNTIME_URL),
-        ("DATABASE_URL", os.environ.get("DATABASE_URL")),
-    ):
-        if _canonical_database_role(_database_url_user(value)) in {
-            _canonical_database_role(role) for role in privileged_roles
-        }:
-            raise ImproperlyConfigured(f"{name} must use the non-privileged runtime database role")
     database_url_role = _database_url_user(os.environ.get("DATABASE_URL"))
     if database_url_role and not _database_role_matches(database_url_role, runtime_url_role):
         raise ImproperlyConfigured("DATABASE_URL must use the configured runtime database role")
-    if _canonical_database_role(resolved_runtime_role) in {_canonical_database_role(role) for role in privileged_roles}:
+    if _canonical_database_role(resolved_runtime_role) in privileged_role_names:
         raise ImproperlyConfigured("The resolved production database must use the non-privileged runtime database role")
 
 

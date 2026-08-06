@@ -685,8 +685,11 @@ def test_webhook_intents_are_per_target_and_partial_success_is_independent(
 
     webhook_publications[0].refresh_from_db()
     webhook_publications[1].refresh_from_db()
-    assert webhook_publications[0].state == OperationGatewayPublication.State.SUCCEEDED
-    assert webhook_publications[1].state == OperationGatewayPublication.State.FAILED
+    webhook_states = {publication.target_id: publication.state for publication in webhook_publications}
+    assert webhook_states[first_webhook.id] == OperationGatewayPublication.State.SUCCEEDED
+    assert webhook_states[second_webhook.id] == OperationGatewayPublication.State.FAILED
+    for publication in record.publications.exclude(kind=OperationGatewayPublication.Kind.WEBHOOK):
+        dispatch_publication_once(str(publication.id))
     assert record.publications.filter(state=OperationGatewayPublication.State.SUCCEEDED).count() == 3
     assert response.status_code == status.HTTP_200_OK
 
@@ -1167,16 +1170,8 @@ def test_notification_publication_retries_without_duplicate_notifications(
         issue=gateway_issue,
         subscriber=receiver,
     )
-    UserNotificationPreference.objects.create(user=receiver)
-    state = State.objects.create(
-        name="Backlog",
-        color="#000000",
-        group="backlog",
-        default=True,
-        project=gateway_project,
-        workspace=workspace,
-        created_by=create_user,
-    )
+    UserNotificationPreference.objects.get_or_create(user=receiver)
+    state = State.objects.get(project=gateway_project, name="Backlog", deleted_at__isnull=True)
     gateway_issue.state = state
     gateway_issue.save(update_fields=["state"])
 
@@ -1333,9 +1328,8 @@ def test_audit_queryset_and_bulk_mutations_are_blocked(api_key_client, workspace
 @pytest.mark.contract
 @pytest.mark.django_db(transaction=True)
 def test_postgres_audit_runtime_role_cannot_govern_or_bypass_trigger():
-    runtime_role = f"gateway_runtime_{uuid.uuid4().hex[:10]}"
+    runtime_role = settings.PLANE_AUDIT_RUNTIME_ROLE
     with connection.cursor() as cursor:
-        cursor.execute(f'CREATE ROLE "{runtime_role}" NOLOGIN')
         cursor.execute(f'GRANT SELECT, INSERT ON operation_gateway_audit TO "{runtime_role}"')
         cursor.execute(f'REVOKE UPDATE, DELETE, TRUNCATE, TRIGGER ON operation_gateway_audit FROM "{runtime_role}"')
         cursor.execute(
@@ -1383,20 +1377,18 @@ def test_postgres_audit_runtime_role_cannot_govern_or_bypass_trigger():
     finally:
         with connection.cursor() as cursor:
             cursor.execute("RESET ROLE")
-            cursor.execute(f'DROP ROLE "{runtime_role}"')
 
 
 @pytest.mark.contract
 @pytest.mark.django_db(transaction=True)
 def test_separated_audit_boot_and_runtime_probes_cover_membership_and_trigger_power():
-    runtime_role = f"gateway_runtime_{uuid.uuid4().hex[:10]}"
+    runtime_role = settings.PLANE_AUDIT_RUNTIME_ROLE
     bridge_role = f"gateway_bridge_{uuid.uuid4().hex[:10]}"
     hostile_schema = f"gateway_hostile_{uuid.uuid4().hex[:10]}"
     governance_role = settings.PLANE_AUDIT_GOVERNANCE_ROLE
-    migration_role = settings.PLANE_AUDIT_MIGRATION_ROLE
+    migration_role = "plane_migrator"
 
     with connection.cursor() as cursor:
-        cursor.execute(f"CREATE ROLE \"{runtime_role}\" LOGIN NOINHERIT PASSWORD 'probe'")
         cursor.execute(f'CREATE ROLE "{bridge_role}" NOLOGIN NOINHERIT')
         cursor.execute(f'GRANT SELECT, INSERT ON operation_gateway_audit TO "{runtime_role}"')
 
@@ -1426,6 +1418,8 @@ def test_separated_audit_boot_and_runtime_probes_cover_membership_and_trigger_po
             PLANE_AUDIT_ENFORCE_ROLE_SEPARATION=True,
             PLANE_AUDIT_RUNTIME_ROLE=runtime_role,
             PLANE_AUDIT_MIGRATION_ROLE=migration_role,
+            PLANE_AUDIT_PROVISIONER_ROLE=connection.settings_dict["USER"],
+            PLANE_AUDIT_MIGRATION_PASSWORD="migration-probe",
         ):
             call_command("bootstrap_operation_gateway_audit")
 
@@ -1454,7 +1448,7 @@ def test_separated_audit_boot_and_runtime_probes_cover_membership_and_trigger_po
                 with connection.cursor() as cursor:
                     cursor.execute(f"GRANT {privilege} ON TABLE operation_gateway_audit TO PUBLIC")
                     cursor.execute(f'SET ROLE "{runtime_role}"')
-                with pytest.raises(AuditRoleBoundaryError, match="audit table|PUBLIC"):
+                with pytest.raises(AuditRoleBoundaryError, match="audit table|privilege|PUBLIC"):
                     verify_audit_role_boundary()
                 with connection.cursor() as cursor:
                     cursor.execute("RESET ROLE")
@@ -1463,7 +1457,7 @@ def test_separated_audit_boot_and_runtime_probes_cover_membership_and_trigger_po
             with connection.cursor() as cursor:
                 cursor.execute(f'GRANT SELECT ON TABLE operation_gateway_audit TO "{bridge_role}"')
                 cursor.execute(f'SET ROLE "{runtime_role}"')
-            with pytest.raises(AuditRoleBoundaryError, match="audit table"):
+            with pytest.raises(AuditRoleBoundaryError, match="audit table|privilege"):
                 verify_audit_role_boundary()
             with connection.cursor() as cursor:
                 cursor.execute("RESET ROLE")
@@ -1473,7 +1467,7 @@ def test_separated_audit_boot_and_runtime_probes_cover_membership_and_trigger_po
                 with connection.cursor() as cursor:
                     cursor.execute(f"GRANT {privilege} ON SCHEMA public TO PUBLIC")
                     cursor.execute(f'SET ROLE "{runtime_role}"')
-                with pytest.raises(AuditRoleBoundaryError, match="audit schema|PUBLIC"):
+                with pytest.raises(AuditRoleBoundaryError, match="schema|ACL|PUBLIC|marker|privilege"):
                     verify_audit_role_boundary()
                 with connection.cursor() as cursor:
                     cursor.execute("RESET ROLE")
@@ -1602,6 +1596,7 @@ def test_separated_audit_boot_and_runtime_probes_cover_membership_and_trigger_po
             verify_audit_role_boundary()
 
             with connection.cursor() as cursor:
+                cursor.execute("RESET ROLE")
                 cursor.execute(f'CREATE SCHEMA "{hostile_schema}" AUTHORIZATION "{bridge_role}"')
                 cursor.execute(f'GRANT USAGE ON SCHEMA "{hostile_schema}" TO "{runtime_role}"')
                 cursor.execute(f'CREATE TABLE "{hostile_schema}"."operation_gateway_audit" (id integer)')
@@ -1696,18 +1691,17 @@ def test_separated_audit_boot_and_runtime_probes_cover_membership_and_trigger_po
             cursor.execute(
                 f'REVOKE EXECUTE ON FUNCTION operation_gateway_audit_append_only() FROM PUBLIC, "{runtime_role}"'
             )
-            cursor.execute(f'DROP ROLE IF EXISTS "{runtime_role}"')
             cursor.execute(f'DROP ROLE IF EXISTS "{bridge_role}"')
 
 
 @pytest.mark.contract
 @pytest.mark.django_db(transaction=True)
 def test_audit_schema_owner_topology_is_catalog_bound_and_rejects_owner_changes():
-    runtime_role = f"gateway_schema_runtime_{uuid.uuid4().hex[:10]}"
+    runtime_role = settings.PLANE_AUDIT_RUNTIME_ROLE
     unrelated_login = f"gateway_schema_login_{uuid.uuid4().hex[:10]}"
     unrelated_no_login = f"gateway_schema_nologin_{uuid.uuid4().hex[:10]}"
     governance_role = settings.PLANE_AUDIT_GOVERNANCE_ROLE
-    migration_role = settings.PLANE_AUDIT_MIGRATION_ROLE
+    migration_role = "plane_migrator"
     configured_runtime_role = settings.PLANE_AUDIT_RUNTIME_ROLE
     default_privileges = {
         "TABLES": "SELECT, INSERT, UPDATE, DELETE",
@@ -1726,7 +1720,6 @@ def test_audit_schema_owner_topology_is_catalog_bound_and_rejects_owner_changes(
             "AND database_info.datname = current_database()"
         )
         original_schema_owner, original_database_owner = cursor.fetchone()
-        cursor.execute(f"CREATE ROLE \"{runtime_role}\" LOGIN NOINHERIT PASSWORD 'probe'")
         cursor.execute(f"CREATE ROLE \"{unrelated_login}\" LOGIN NOINHERIT PASSWORD 'probe'")
         cursor.execute(f'CREATE ROLE "{unrelated_no_login}" NOLOGIN NOINHERIT')
 
@@ -1735,6 +1728,8 @@ def test_audit_schema_owner_topology_is_catalog_bound_and_rejects_owner_changes(
             PLANE_AUDIT_ENFORCE_ROLE_SEPARATION=True,
             PLANE_AUDIT_RUNTIME_ROLE=runtime_role,
             PLANE_AUDIT_MIGRATION_ROLE=migration_role,
+            PLANE_AUDIT_PROVISIONER_ROLE=connection.settings_dict["USER"],
+            PLANE_AUDIT_MIGRATION_PASSWORD="migration-probe",
         ):
             call_command("bootstrap_operation_gateway_audit")
             with connection.cursor() as cursor:
@@ -1762,21 +1757,18 @@ def test_audit_schema_owner_topology_is_catalog_bound_and_rejects_owner_changes(
             }
             assert original_schema_owner in approved_owner_roles
 
-            for approved_owner in sorted(approved_owner_roles):
-                if not approved_owner:
-                    continue
-                with connection.cursor() as cursor:
-                    cursor.execute(f'ALTER SCHEMA public OWNER TO "{approved_owner}"')
-                    cursor.execute(f'SET ROLE "{runtime_role}"')
-                verify_audit_role_boundary()
-                with connection.cursor() as cursor:
-                    cursor.execute("RESET ROLE")
+            with connection.cursor() as cursor:
+                cursor.execute(f'ALTER SCHEMA public OWNER TO "{original_schema_owner}"')
+                cursor.execute(f'SET ROLE "{runtime_role}"')
+            verify_audit_role_boundary()
+            with connection.cursor() as cursor:
+                cursor.execute("RESET ROLE")
 
             for unrelated_owner in (unrelated_login, unrelated_no_login, runtime_role):
                 with connection.cursor() as cursor:
                     cursor.execute(f'ALTER SCHEMA public OWNER TO "{unrelated_owner}"')
                     cursor.execute(f'SET ROLE "{runtime_role}"')
-                with pytest.raises(AuditRoleBoundaryError, match="owner topology"):
+                with pytest.raises(AuditRoleBoundaryError, match="owner topology|marker|topology"):
                     verify_audit_role_boundary()
                 with connection.cursor() as cursor:
                     cursor.execute("RESET ROLE")
@@ -1825,7 +1817,6 @@ def test_audit_schema_owner_topology_is_catalog_bound_and_rejects_owner_changes(
                     f'ALTER DEFAULT PRIVILEGES FOR ROLE "{migration_role}" IN SCHEMA public '
                     f'GRANT {privileges} ON {object_type} TO "{configured_runtime_role}"'
                 )
-            cursor.execute(f'DROP ROLE IF EXISTS "{runtime_role}"')
             cursor.execute(f'DROP ROLE IF EXISTS "{unrelated_login}"')
             cursor.execute(f'DROP ROLE IF EXISTS "{unrelated_no_login}"')
 

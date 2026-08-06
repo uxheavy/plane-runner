@@ -355,7 +355,8 @@ def run_notifications(
 
                 for issue_activity in issue_activities_created:
                     # If activity done in blocking then blocked by email should not go
-                    if issue_activity.get("issue_detail").get("id") != issue_id:
+                    issue_detail = issue_activity.get("issue_detail")
+                    if issue_detail and issue_detail.get("id") != issue_id:
                         continue
 
                     # Do not send notification for description update

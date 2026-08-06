@@ -28,6 +28,14 @@ def django_db_setup(django_db_setup):  # noqa: F811
 
 
 @pytest.fixture(scope="session", autouse=True)
+def bootstrap_operation_gateway_audit_for_test_database(django_db_setup, django_db_blocker):
+    """Apply the audit boundary to pytest's cloned database, not only its template."""
+
+    with django_db_blocker.unblock():
+        call_command("bootstrap_operation_gateway_audit", phase="after-migrate", verbosity=0)
+
+
+@pytest.fixture(scope="session", autouse=True)
 def clear_migration_metadata_before_django_flush(django_db_setup):
     """Clear the reverse-migration metadata table before Django flushes fixtures.
 

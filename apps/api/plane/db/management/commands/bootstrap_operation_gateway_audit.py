@@ -240,6 +240,15 @@ class Command(BaseCommand):
         cursor.execute(f"GRANT USAGE ON SCHEMA {schema_ident} TO {runtime_ident}, {governance_ident}")
         cursor.execute(f"GRANT USAGE, CREATE ON SCHEMA {schema_ident} TO {migration_ident}")
         cursor.execute(
+            "SELECT to_regprocedure(%s)",
+            [f"{settings.PLANE_AUDIT_SCHEMA}.operation_gateway_audit_append_only()"],
+        )
+        if cursor.fetchone()[0] is not None:
+            cursor.execute(
+                f"GRANT EXECUTE ON FUNCTION {schema_ident}.operation_gateway_audit_append_only() "
+                f"TO {migration_ident}"
+            )
+        cursor.execute(
             f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {schema_ident} TO {runtime_ident}"
         )
         cursor.execute(f"GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA {schema_ident} TO {runtime_ident}")
@@ -295,7 +304,11 @@ class Command(BaseCommand):
         schema_owner = cursor.fetchone()
         if schema_owner is None:
             raise CommandError("The configured audit schema does not exist")
-        if schema_owner[0] != provisioner_role:
+        # PostgreSQL 15 assigns a fresh public schema to the virtual
+        # pg_database_owner role. That topology is explicitly accepted by
+        # the authority marker and runtime verifier; do not rewrite it merely
+        # because the configured provisioner is a different role.
+        if schema_owner[0] not in {provisioner_role, "pg_database_owner"}:
             cursor.execute(f"ALTER SCHEMA {schema_ident} OWNER TO {provisioner_ident}")
 
     def _restore_reverse_catalog(self, cursor, *, runtime_role, governance_role, migration_role, provisioner_role):
@@ -436,6 +449,19 @@ class Command(BaseCommand):
             raise CommandError("The migration role retains governance membership")
         if marker_owner == provisioner_role:
             cursor.execute(f"ALTER TABLE {marker_ident} OWNER TO {self._quote(governance_role)}")
+        cursor.execute(
+            """
+            SELECT DISTINCT grantee.rolname
+            FROM pg_class AS marker
+            JOIN LATERAL aclexplode(marker.relacl) AS exploded ON TRUE
+            JOIN pg_roles AS grantee ON grantee.oid = exploded.grantee
+            WHERE marker.oid = to_regclass(%s)
+              AND grantee.rolname NOT IN (%s, %s, %s)
+            """,
+            [marker_ident, runtime_role, migration_role, governance_role],
+        )
+        for (stale_grantee,) in cursor.fetchall():
+            cursor.execute(f"REVOKE ALL ON TABLE {marker_ident} FROM {self._quote(stale_grantee)}")
         cursor.execute(
             f"REVOKE ALL ON TABLE {marker_ident} FROM PUBLIC, {self._quote(runtime_role)}, "
             f"{self._quote(migration_role)}, {self._quote(governance_role)}"

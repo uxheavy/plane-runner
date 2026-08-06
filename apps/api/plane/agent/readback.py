@@ -50,6 +50,42 @@ def validate_readback_limit(limit: int) -> int:
     return limit
 
 
+def _bounded_snapshot_projection(snapshot: Any) -> dict[str, Any]:
+    """Keep run identity and policy while avoiding duplicate tool/prompt payloads."""
+
+    if not isinstance(snapshot, dict):
+        return {}
+    projection = {
+        key: snapshot[key]
+        for key in (
+            "protocol",
+            "workspaceRef",
+            "runId",
+            "actorRef",
+            "runtimePolicy",
+            "totalBudget",
+            "contractDigests",
+            "contentDigest",
+        )
+        if key in snapshot
+    }
+    for key in ("assignment", "profile"):
+        value = snapshot.get(key)
+        if isinstance(value, dict):
+            projection[key] = {
+                field: value[field]
+                for field in ("assignmentRef", "profileRef", "revision", "targetRef", "role")
+                if field in value
+            }
+    return projection
+
+
+def _run_readback(run: RunAttempt) -> dict[str, Any]:
+    serialized = RunAdminSerializer(run).data
+    serialized["snapshot"] = _bounded_snapshot_projection(serialized.get("snapshot"))
+    return serialized
+
+
 def _gateway_readback(run: RunAttempt, *, limit: int) -> list[dict[str, Any]]:
     """Read only receipts emitted for this persisted run's canonical correlation."""
 
@@ -85,7 +121,7 @@ def build_run_readback(run: RunAttempt, *, limit: int) -> dict[str, Any]:
         "actor": AgentActorAdminSerializer(run.actor).data,
         "profile": ProfileVersionAdminSerializer(run.profile_version).data,
         "assignment": AssignmentAdminSerializer(run.assignment).data,
-        "run": RunAdminSerializer(run).data,
+        "run": _run_readback(run),
         "input_events": RunInputEventAdminSerializer(
             RunInputEvent.objects.filter(run=run).order_by("sequence", "id")[:limit], many=True
         ).data,

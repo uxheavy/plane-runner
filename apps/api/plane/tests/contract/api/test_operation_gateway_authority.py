@@ -63,7 +63,7 @@ def test_limited_migration_role_cannot_mutate_or_replace_authority_marker():
             cursor.execute(f"GRANT CONNECT ON DATABASE {_quote(database_name)} TO {_quote(migration_probe)}")
             cursor.execute(f"GRANT USAGE ON SCHEMA {_quote(schema)} TO {_quote(migration_probe)}")
         with override_settings(PLANE_AUDIT_MIGRATION_ROLE=migration_probe):
-            call_command("bootstrap_operation_gateway_audit", verbosity=0)
+            call_command("bootstrap_operation_gateway_audit", phase="before-migrate", verbosity=0)
         with connection.cursor() as cursor:
             cursor.execute(
                 """

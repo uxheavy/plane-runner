@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 from django.core.exceptions import ValidationError
+from django.db import DatabaseError, transaction
 
 from plane.agent.lifecycle import (
     AgentDomainError,
@@ -32,6 +33,8 @@ from plane.db.models import (
     OperationGatewayAudit,
     OutcomeState,
     Project,
+    Workspace,
+    AssignmentContract,
 )
 from plane.operation_gateway.catalog import get_operation
 from plane.operation_gateway.gateway import OperationGateway
@@ -150,6 +153,88 @@ def test_delegation_is_replay_safe_bounded_and_lineage_immutable(workspace, proj
             idempotency_key="idempotency:delegation-depth",
             delegated_by=worker,
         )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_delegation_scope_guard_allows_cross_actor_and_rejects_cross_scope_lineage(workspace, project, create_user):
+    delegator = _actor(
+        workspace, name="Scope delegator", role=AgentRole.DELEGATOR, project=project, created_by=create_user
+    )
+    worker = _actor(workspace, name="Scope worker", role=AgentRole.WORKER, project=project, created_by=create_user)
+    parent = create_assignment(
+        delegator,
+        project=project,
+        target_ref="issue:scope-parent",
+        objective="Create a scoped child.",
+        acceptance_criteria=["The child remains in scope."],
+        created_by=create_user,
+    )
+    child = delegate_assignment(
+        parent,
+        worker,
+        target_ref="issue:scope-child",
+        objective="Complete the scoped child.",
+        acceptance_criteria=["The child is complete."],
+        idempotency_key="idempotency:scope-child",
+        delegated_by=delegator,
+        created_by=create_user,
+    )
+    assert child.assignee_id == worker.id
+    assert child.lineage_of_id == parent.id
+
+    other_workspace = Workspace.objects.create(
+        name="Other Scope Workspace",
+        owner=create_user,
+        slug="other-scope-workspace",
+    )
+    other_project = Project.objects.create(
+        name="Other Scope Project",
+        identifier="OSP",
+        workspace=other_workspace,
+        created_by=create_user,
+    )
+    other_actor = _actor(
+        other_workspace,
+        name="Other scope actor",
+        role=AgentRole.WORKER,
+        project=other_project,
+        created_by=create_user,
+    )
+    other_parent = create_assignment(
+        other_actor,
+        project=other_project,
+        target_ref="issue:other-parent",
+        objective="Remain in the other scope.",
+        acceptance_criteria=["The scope is isolated."],
+        created_by=create_user,
+    )
+
+    def forged_assignment(**overrides):
+        values = {
+            "workspace": workspace,
+            "project": project,
+            "assignee": worker,
+            "lineage_of": parent,
+            "root_assignment": parent,
+            "delegated_by": delegator,
+            "scope": {},
+            "budget": {},
+            "target_ref": "issue:forged-scope",
+            "objective": "Must be rejected by the database guard.",
+            "acceptance_criteria": ["Never accepted."],
+        }
+        values.update(overrides)
+        return AssignmentContract.objects.bulk_create([AssignmentContract(**values)])[0]
+
+    with pytest.raises(DatabaseError, match="lineage"):
+        with transaction.atomic():
+            forged_assignment(lineage_of=other_parent)
+    with pytest.raises(DatabaseError, match="root"):
+        with transaction.atomic():
+            forged_assignment(root_assignment=other_parent)
+    with pytest.raises(DatabaseError, match="delegator"):
+        with transaction.atomic():
+            forged_assignment(delegated_by=other_actor)
 
 
 @pytest.mark.django_db
