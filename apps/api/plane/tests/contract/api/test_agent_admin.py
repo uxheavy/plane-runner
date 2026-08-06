@@ -5,6 +5,7 @@ import uuid
 
 import pytest
 from django.core.management import call_command
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from plane.db.models import (
@@ -25,6 +26,8 @@ from plane.db.models import (
     User,
     WorkspaceMember,
 )
+from plane.agent.runtime.host_rpc import trusted_host_request
+from plane.operation_gateway.gateway import OperationGateway
 
 
 def _admin_url(workspace, suffix):
@@ -163,10 +166,12 @@ def test_admin_api_proves_lifecycle_review_and_redaction(api_key_client, workspa
     assert run_body["run"]["id"] == run_id
     assert run_body["outcome"]["state"] == OutcomeState.ACCEPTED
     assert run_body["invocations"][0]["id"] == invocation_id
-    assert run_body["invocations"][0]["control"]["state"]
-    assert "raw_payload" not in json.dumps(run_body)
-    assert "envelope" not in json.dumps(run_body)
-    assert "original_sequence" not in json.dumps(run_body)
+    run_json = json.dumps(run_body, sort_keys=True)
+    assert "control" not in run_body["invocations"][0]
+    assert "socket" not in run_json.casefold()
+    assert "raw_payload" not in run_json
+    assert "envelope" not in run_json
+    assert "original_sequence" not in run_json
 
     assignment = AssignmentContract.objects.get(pk=assignment_id)
     assert assignment.state == AssignmentState.COMPLETED
@@ -374,3 +379,177 @@ def test_admin_api_exposes_revision_cancel_and_gateway_readback(
     assert '"request_input":' not in readback_json
     assert '"result":' not in readback_json
     assert '"error":' not in readback_json
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
+def test_run_readback_returns_only_run_correlated_gateway_receipts_and_matches_cli(
+    api_key_client,
+    workspace,
+    agent_admin_gateway_project,
+    agent_admin_gateway_issue,
+    capsys,
+):
+    actor_response = _actor(api_key_client, workspace, "Correlated worker")
+    actor_id = actor_response.json()["id"]
+    actor = AgentActor.objects.select_related("principal").get(pk=actor_id)
+    ProjectMember.objects.create(project=agent_admin_gateway_project, member=actor.principal, role=15, is_active=True)
+    assert (
+        api_key_client.post(
+            _admin_url(workspace, f"actors/{actor_id}/profiles/"),
+            {"role": AgentRole.WORKER, "instructions": "Read correlated work."},
+            format="json",
+        ).status_code
+        == 201
+    )
+    assignment_response = api_key_client.post(
+        _admin_url(workspace, f"actors/{actor_id}/assignments/"),
+        {
+            "target_ref": "issue:correlation",
+            "objective": "Read only the current run's receipts.",
+            "acceptance_criteria": ["No receipt from another run is returned."],
+        },
+        format="json",
+    )
+    assignment_id = assignment_response.json()["id"]
+    first_dispatch = api_key_client.post(
+        _admin_url(workspace, f"assignments/{assignment_id}/dispatch/"),
+        {"idempotency_key": "idempotency:correlation-first"},
+        format="json",
+    )
+    second_dispatch = api_key_client.post(
+        _admin_url(workspace, f"assignments/{assignment_id}/dispatch/"),
+        {"idempotency_key": "idempotency:correlation-second"},
+        format="json",
+    )
+    assert first_dispatch.status_code == second_dispatch.status_code == 201
+    first_run_id = first_dispatch.json()["run"]["id"]
+    second_run_id = second_dispatch.json()["run"]["id"]
+
+    for dispatch, run_id, label in (
+        (first_dispatch, first_run_id, "first"),
+        (second_dispatch, second_run_id, "second"),
+    ):
+        invocation = RuntimeInvocation.objects.get(pk=dispatch.json()["invocation"]["id"])
+        response, response_status = OperationGateway().execute(
+            trusted_host_request(invocation),
+            {
+                "schema_version": "plane.operation/v1",
+                "operation_id": "work_item.read",
+                "workspace_slug": workspace.slug,
+                "idempotency_key": f"idempotency:correlation-{label}",
+                "correlation_id": f"correlation:{run_id}",
+                "input": {
+                    "project_id": str(agent_admin_gateway_project.id),
+                    "issue_id": str(agent_admin_gateway_issue.id),
+                },
+            },
+        )
+        assert response_status == 200
+        assert response["correlation_id"] == f"correlation:{run_id}"
+
+    first_body = api_key_client.get(_admin_url(workspace, f"runs/{first_run_id}/?per_page=1"))
+    second_body = api_key_client.get(_admin_url(workspace, f"runs/{second_run_id}/?per_page=1"))
+    assert first_body.status_code == second_body.status_code == 200
+    first_readback = first_body.json()
+    second_readback = second_body.json()
+    assert [row["receipt"]["idempotency_key"] for row in first_readback["gateway_readback"]] == [
+        "idempotency:correlation-first"
+    ]
+    assert [row["receipt"]["idempotency_key"] for row in second_readback["gateway_readback"]] == [
+        "idempotency:correlation-second"
+    ]
+    for row, run_id in (
+        (first_readback["gateway_readback"][0], first_run_id),
+        (second_readback["gateway_readback"][0], second_run_id),
+    ):
+        assert row["receipt"]["correlation_id"] == f"correlation:{run_id}"
+        assert all(item["correlation_id"] == f"correlation:{run_id}" for item in row["audit"])
+
+    first_json = json.dumps(first_readback, sort_keys=True)
+    assert len(first_json.encode("utf-8")) <= 8 * 1024
+    assert "control" not in first_json
+    assert "socket" not in first_json.casefold()
+
+    call_command("agent_readback", workspace_slug=workspace.slug, run_id=first_run_id, limit=1)
+    cli_readback = json.loads(capsys.readouterr().out)
+    assert cli_readback == first_readback
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
+def test_context_admin_reuses_governance_services_and_api_cli_projection(api_key_client, workspace, capsys):
+    actor_response = _actor(api_key_client, workspace, "Context worker", credential_ref=None)
+    actor_id = actor_response.json()["id"]
+
+    memory_response = api_key_client.post(
+        _admin_url(workspace, f"actors/{actor_id}/memory/"),
+        {"key": "operating-preference", "content": "Prefer bounded readback."},
+        format="json",
+    )
+    assert memory_response.status_code == 201
+    memory_id = memory_response.json()["id"]
+    assert memory_response.json()["active_revision"]["state"] == "active"
+    assert (
+        api_key_client.get(_admin_url(workspace, f"actors/{actor_id}/memory/{memory_id}/revisions/")).status_code == 200
+    )
+
+    skill_response = api_key_client.post(
+        _admin_url(workspace, f"actors/{actor_id}/skills/"),
+        {"key": "bounded-readback", "package_files": {"SKILL.md": "Keep evidence bounded."}},
+        format="json",
+    )
+    assert skill_response.status_code == 201
+    skill_id = skill_response.json()["id"]
+    assert (
+        api_key_client.get(_admin_url(workspace, f"actors/{actor_id}/skills/{skill_id}/revisions/")).status_code == 200
+    )
+
+    schedule_response = api_key_client.post(
+        _admin_url(workspace, f"actors/{actor_id}/schedules/"),
+        {
+            "name": "Readback schedule",
+            "cron_expression": "* * * * *",
+            "target_ref": "issue:scheduled-readback",
+            "objective": "Run bounded scheduled work.",
+            "starts_at": timezone.now().isoformat(),
+        },
+        format="json",
+    )
+    assert schedule_response.status_code == 201
+    schedule_id = schedule_response.json()["id"]
+    fire_response = api_key_client.post(
+        _admin_url(workspace, f"schedules/{schedule_id}/fires/"),
+        {
+            "scheduled_for": schedule_response.json()["next_fire_at"],
+            "idempotency_key": "idempotency:scheduled-readback",
+        },
+        format="json",
+    )
+    assert fire_response.status_code == 201
+    replay_response = api_key_client.post(
+        _admin_url(workspace, f"schedules/{schedule_id}/fires/"),
+        {
+            "scheduled_for": schedule_response.json()["next_fire_at"],
+            "idempotency_key": "idempotency:scheduled-readback",
+        },
+        format="json",
+    )
+    assert replay_response.status_code == 201
+    assert replay_response.json()["id"] == fire_response.json()["id"]
+
+    status_response = api_key_client.get(_admin_url(workspace, "gateway/status/"))
+    catalog_response = api_key_client.get(_admin_url(workspace, "gateway/catalog/?limit=1"))
+    assert status_response.status_code == catalog_response.status_code == 200
+    assert status_response.json()["external_adapter_registry"]["tool_count"] == 177
+    assert status_response.json()["external_adapter_registry"]["disposition"] == {
+        "gateway": 64,
+        "blocked": 112,
+        "local": 1,
+    }
+    assert len(json.dumps(catalog_response.json()).encode()) <= 8 * 1024
+
+    context_response = api_key_client.get(_admin_url(workspace, f"actors/{actor_id}/context/?per_page=1"))
+    assert context_response.status_code == 200
+    call_command("agent_context_readback", workspace_slug=workspace.slug, actor_id=actor_id, limit=1)
+    assert json.loads(capsys.readouterr().out) == context_response.json()

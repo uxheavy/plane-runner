@@ -259,6 +259,35 @@ class RuntimeInvocationAdminSerializer(BaseSerializer):
         return redact_admin_value(super().to_representation(instance))
 
 
+class RuntimeInvocationReadbackSerializer(BaseSerializer):
+    """Safe invocation evidence for the bounded combined readback."""
+
+    usage_observation = serializers.SerializerMethodField()
+
+    def get_usage_observation(self, instance):
+        observation = getattr(instance, "runtime_usage_observation", None)
+        if observation is None:
+            return None
+        return RuntimeUsageObservationAdminSerializer(observation).data
+
+    class Meta:
+        model = RuntimeInvocation
+        fields = [
+            "id",
+            "ordinal",
+            "invocation_id",
+            "idempotency_key",
+            "usage",
+            "state",
+            "usage_observation",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+    def to_representation(self, instance):
+        return redact_admin_value(super().to_representation(instance))
+
+
 class RuntimeInvocationControlAdminSerializer(BaseSerializer):
     class Meta:
         model = RuntimeInvocationControl

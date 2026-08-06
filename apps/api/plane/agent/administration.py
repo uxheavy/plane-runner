@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Mapping, Protocol
 
 from django.db import transaction
 
@@ -19,6 +19,41 @@ from plane.db.models import AgentActor, ProfileVersion
 _CREDENTIAL_REF_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9-]{0,31}:[A-Za-z0-9][A-Za-z0-9._~/-]{0,219}$")
 
 
+AGENT_ADMIN_L7_ACTIONS = (
+    "delegation.lineage.read",
+    "hr.proposal.read",
+    "chief_of_staff.provision",
+    "evaluator.review",
+)
+
+
+@dataclass(frozen=True)
+class AgentAdminExtensionCommand:
+    """The only command envelope an L7 adapter may receive from administration."""
+
+    action: str
+    workspace_id: str
+    actor_id: str | None
+    run_id: str | None
+    invocation_id: str | None
+    idempotency_key: str
+    payload: Mapping[str, Any]
+
+    def __post_init__(self) -> None:
+        if self.action not in AGENT_ADMIN_L7_ACTIONS:
+            raise ValueError("unsupported Agent admin extension action")
+        if not self.workspace_id or not self.idempotency_key:
+            raise ValueError("workspace_id and idempotency_key are required")
+
+
+class AgentAdminExtensionSerializerPort(Protocol):
+    """L7 serializer seam: return only typed, redacted operator projections."""
+
+    resource_name: str
+
+    def serialize(self, value: Any) -> Mapping[str, Any]: ...
+
+
 class AgentAdminExtensionPort(Protocol):
     """Registration contract for later L6/L7 admin resources.
 
@@ -28,7 +63,13 @@ class AgentAdminExtensionPort(Protocol):
 
     resource_name: str
 
-    def read(self, *, workspace_id: str, resource_id: str) -> dict[str, Any] | None: ...
+    def read(self, *, workspace_id: str, resource_id: str) -> Mapping[str, Any] | None: ...
+
+
+class AgentAdminExtensionServicePort(AgentAdminExtensionPort, Protocol):
+    """L7 service seam for the four bounded actions listed above."""
+
+    def execute(self, command: AgentAdminExtensionCommand) -> Mapping[str, Any]: ...
 
 
 @dataclass(frozen=True)
