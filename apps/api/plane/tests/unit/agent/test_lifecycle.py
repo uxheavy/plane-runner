@@ -74,7 +74,11 @@ AGENT_TEST_HEAD = ("db", "0140_invocation_free_cancellation_integrity")
 
 def _restore_agent_test_head():
     call_command("bootstrap_operation_gateway_audit", phase="before-migrate", verbosity=0)
-    MigrationExecutor(connection).migrate([AGENT_TEST_HEAD])
+    executor = MigrationExecutor(connection)
+    current_leaves = tuple(executor.loader.graph.leaf_nodes("db"))
+    if len(current_leaves) != 1:
+        raise RuntimeError(f"requires one current db migration leaf, found {current_leaves}")
+    executor.migrate([current_leaves[0]])
     call_command("bootstrap_operation_gateway_audit", phase="after-migrate", verbosity=0)
 
 

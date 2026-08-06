@@ -15,16 +15,24 @@ def migration_context(django_db_setup, django_db_blocker):
 
     del django_db_setup
     with django_db_blocker.unblock():
-        applied = MigrationExecutor(connection).recorder.applied_migrations()
+        executor = MigrationExecutor(connection)
+        current_leaves = tuple(executor.loader.graph.leaf_nodes("db"))
+        if len(current_leaves) != 1:
+            raise RuntimeError(f"requires one current db migration leaf, found {current_leaves}")
+        current_leaf = current_leaves[0]
+        applied = executor.recorder.applied_migrations()
         if MIGRATION_0132 not in applied:
             pytest.skip("requires a migration-backed database at migration 0132")
+        _migrate(MIGRATION_0132)
         context = {}
         try:
             yield context
         finally:
-            if context.get("workspace_id"):
-                _cleanup_seed(context["workspace_id"])
-            _migrate(MIGRATION_0132)
+            try:
+                if context.get("workspace_id"):
+                    _cleanup_seed(context["workspace_id"])
+            finally:
+                _migrate(current_leaf)
 
 
 def _migrate(target):
