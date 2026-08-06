@@ -5,8 +5,13 @@
 
 from rest_framework import serializers
 
-from plane.agent.administration import redact_admin_value, validate_credential_ref
-from plane.agent.validation import MAX_BOUNDED_TEXT_BYTES, AgentValueError, validate_bounded_json
+from plane.agent.administration import AGENT_ADMIN_L7_ACTIONS, redact_admin_value, validate_credential_ref
+from plane.agent.validation import (
+    MAX_AGENT_READBACK_BYTES,
+    MAX_BOUNDED_TEXT_BYTES,
+    AgentValueError,
+    validate_bounded_json,
+)
 from plane.db.models import (
     AgentActor,
     AgentRole,
@@ -399,6 +404,26 @@ class OutcomeDecisionSerializer(serializers.Serializer):
         default="",
         max_length=MAX_BOUNDED_TEXT_BYTES,
     )
+
+
+class AgentGovernanceCommandSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=AGENT_ADMIN_L7_ACTIONS)
+    actor_id = serializers.UUIDField(required=False, allow_null=True)
+    run_id = serializers.UUIDField(required=False, allow_null=True)
+    invocation_id = serializers.CharField(required=False, allow_null=True, max_length=128, trim_whitespace=True)
+    idempotency_key = serializers.CharField(max_length=128, allow_blank=False, trim_whitespace=True)
+    payload = serializers.DictField(required=False, default=dict)
+
+    def validate_payload(self, value):
+        try:
+            return validate_bounded_json(
+                value,
+                "payload",
+                max_bytes=MAX_AGENT_READBACK_BYTES,
+                reject_credentials=True,
+            )
+        except AgentValueError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
 
 
 class GatewayReceiptAdminSerializer(serializers.ModelSerializer):

@@ -12,6 +12,8 @@ from plane.api.views.agent_admin import (
     AgentAssignmentDispatchAPIEndpoint,
     AgentGatewayReadbackDetailAPIEndpoint,
     AgentGatewayReadbackListAPIEndpoint,
+    AgentGovernanceCommandAPIEndpoint,
+    AgentGovernanceReadbackAPIEndpoint,
     AgentOutcomeAcceptAPIEndpoint,
     AgentOutcomeAdminCreateAPIEndpoint,
     AgentOutcomeAdminDetailAPIEndpoint,
@@ -139,6 +141,16 @@ urlpatterns = [
         "workspaces/<str:slug>/agent-admin/gateway/readback/<uuid:pk>/",
         AgentGatewayReadbackDetailAPIEndpoint.as_view(http_method_names=["get"]),
         name="agent-admin-gateway-receipt",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/governance/",
+        AgentGovernanceReadbackAPIEndpoint.as_view(http_method_names=["get"]),
+        name="agent-admin-governance-readback",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/governance/commands/",
+        AgentGovernanceCommandAPIEndpoint.as_view(http_method_names=["post"]),
+        name="agent-admin-governance-command",
     ),
     path(
         "workspaces/<str:slug>/agent-admin/actors/<uuid:actor_id>/memory/",

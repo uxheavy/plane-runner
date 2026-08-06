@@ -11,7 +11,12 @@ from typing import Any, Mapping, Protocol
 
 from django.db import transaction
 
-from plane.agent.validation import contains_credential_value, is_credential_key
+from plane.agent.validation import (
+    MAX_AGENT_READBACK_BYTES,
+    contains_credential_value,
+    is_credential_key,
+    validate_bounded_json,
+)
 from plane.agent.lifecycle import create_profile
 from plane.db.models import AgentActor, ProfileVersion
 
@@ -22,9 +27,17 @@ _CREDENTIAL_REF_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9-]{0,31}:[A-Za-z0-9][A
 AGENT_ADMIN_L7_ACTIONS = (
     "delegation.lineage.read",
     "hr.proposal.read",
+    "hr.proposal.decide",
     "chief_of_staff.provision",
     "evaluator.review",
+    "outcome.accept",
+    "outcome.request_revision",
+    "assignment.cancel",
 )
+
+
+class AgentAdminExtensionError(ValueError):
+    """Bounded failure for an unavailable or out-of-scope extension object."""
 
 
 @dataclass(frozen=True)
@@ -44,6 +57,20 @@ class AgentAdminExtensionCommand:
             raise ValueError("unsupported Agent admin extension action")
         if not self.workspace_id or not self.idempotency_key:
             raise ValueError("workspace_id and idempotency_key are required")
+        if not isinstance(self.idempotency_key, str) or len(self.idempotency_key) > 128:
+            raise ValueError("idempotency_key must be at most 128 characters")
+        if self.invocation_id is not None and (
+            not isinstance(self.invocation_id, str) or not self.invocation_id or len(self.invocation_id) > 128
+        ):
+            raise ValueError("invocation_id must be a bounded identifier")
+        if not isinstance(self.payload, Mapping):
+            raise ValueError("payload must be a JSON object")
+        validate_bounded_json(
+            dict(self.payload),
+            "payload",
+            max_bytes=MAX_AGENT_READBACK_BYTES,
+            reject_credentials=True,
+        )
 
 
 class AgentAdminExtensionSerializerPort(Protocol):
@@ -67,7 +94,7 @@ class AgentAdminExtensionPort(Protocol):
 
 
 class AgentAdminExtensionServicePort(AgentAdminExtensionPort, Protocol):
-    """L7 service seam for the four bounded actions listed above."""
+    """Service seam for the bounded L7 actions listed above."""
 
     def execute(self, command: AgentAdminExtensionCommand) -> Mapping[str, Any]: ...
 

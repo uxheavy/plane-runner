@@ -10,8 +10,9 @@ from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.agent.administration import update_actor
-from plane.agent.readback import AgentReadbackTooLarge, build_run_readback
+from plane.agent.administration import AgentAdminExtensionCommand, AgentAdminExtensionError, update_actor
+from plane.agent.administration_extensions import build_governance_readback, plane_agent_admin_extension
+from plane.agent.readback import AgentReadbackTooLarge, build_run_readback, validate_readback_limit
 from plane.agent.validation import MAX_AGENT_READBACK_BYTES
 from plane.agent.lifecycle import (
     AgentDomainError,
@@ -46,6 +47,7 @@ from plane.api.serializers import (
     RunAdminSerializer,
     RunInputEventAdminSerializer,
     RuntimeInvocationAdminSerializer,
+    AgentGovernanceCommandSerializer,
 )
 from plane.api.views.base import BaseAPIView
 from plane.db.models import (
@@ -80,6 +82,11 @@ class AgentAdminAPIView(BaseAPIView):
         if isinstance(exc, AgentReadbackTooLarge):
             return Response(
                 {"error": {"code": "READBACK_TOO_LARGE", "message": str(exc)}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if isinstance(exc, AgentAdminExtensionError):
+            return Response(
+                {"error": {"code": "GOVERNANCE_UNAVAILABLE", "message": str(exc)}},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return super().handle_exception(exc)
@@ -452,3 +459,40 @@ class AgentGatewayReadbackDetailAPIEndpoint(AgentAdminAPIView):
             request_digest=receipt.request_digest,
         ).order_by("created_at", "id")[:limit]
         return Response(GatewayReadbackSerializer({"receipt": receipt, "audit": audit}).data)
+
+
+class AgentGovernanceReadbackAPIEndpoint(AgentAdminAPIView):
+    def get(self, request, slug):
+        workspace = self.workspace()
+        raw_limit = request.query_params.get("limit") or request.query_params.get("per_page")
+        if raw_limit is None:
+            limit = 50
+        else:
+            try:
+                limit = validate_readback_limit(int(raw_limit))
+            except (TypeError, ValueError) as exc:
+                raise AgentAdminExtensionError(str(exc)) from exc
+        return Response(
+            build_governance_readback(
+                workspace,
+                limit=limit,
+                resource_id=request.query_params.get("resource_id"),
+            )
+        )
+
+
+class AgentGovernanceCommandAPIEndpoint(AgentAdminAPIView):
+    def post(self, request, slug):
+        serializer = AgentGovernanceCommandSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        values = serializer.validated_data
+        command = AgentAdminExtensionCommand(
+            action=values["action"],
+            workspace_id=str(self.workspace().id),
+            actor_id=str(values["actor_id"]) if values.get("actor_id") else None,
+            run_id=str(values["run_id"]) if values.get("run_id") else None,
+            invocation_id=str(values["invocation_id"]) if values.get("invocation_id") else None,
+            idempotency_key=values["idempotency_key"],
+            payload=values.get("payload", {}),
+        )
+        return Response(plane_agent_admin_extension().execute(command))
