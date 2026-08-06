@@ -3,16 +3,26 @@
 from __future__ import annotations
 
 import shlex
+import secrets
 import subprocess
+from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from plane.agent.runtime import (
     HostBoundSubprocessRuntimeTransport,
+    PlaneHostHTTPServer,
+    RemoteRuntimeTransport,
+    RuntimeCredentialBroker,
+    RuntimeDispatchError,
+    RuntimeHostEndpoint,
     RuntimeSupervisorError,
+    build_gateway_host_port,
     run_runtime_invocation,
+    validate_runtime_command,
 )
 from plane.db.models import RuntimeInvocation
 from plane.operation_gateway.gateway import OperationGateway
@@ -60,18 +70,16 @@ class Command(BaseCommand):
             command = ("python3", "-m", "plane_runtime.g1_runtime_image.bootstrap", "--once", "--g1-production")
         if not command:
             raise CommandError("Configure PLANE_AGENT_RUNTIME_COMMAND or pass --runtime-command")
-        if not any("plane_runtime.g1_runtime_image.bootstrap" in part for part in command):
-            raise CommandError("the production runtime command must use plane_runtime.g1_runtime_image.bootstrap")
+        try:
+            command = validate_runtime_command(tuple(command))
+        except (TypeError, ValueError) as exc:
+            raise CommandError("the production runtime command must use the exact pinned bootstrap argv") from exc
         runtime_credentials = getattr(settings, "PLANE_AGENT_RUNTIME_CREDENTIALS", {})
         if not isinstance(runtime_credentials, dict):
             raise CommandError("PLANE_AGENT_RUNTIME_CREDENTIALS must be a host-only mapping")
         runtime_environment = getattr(settings, "PLANE_AGENT_RUNTIME_ENVIRONMENT", {})
         if not isinstance(runtime_environment, dict) or any(
-            not isinstance(key, str)
-            or not key
-            or "\x00" in key
-            or not isinstance(value, str)
-            or "\x00" in value
+            not isinstance(key, str) or not key or "\x00" in key or not isinstance(value, str) or "\x00" in value
             for key, value in runtime_environment.items()
         ):
             raise CommandError("PLANE_AGENT_RUNTIME_ENVIRONMENT must be a bounded host-only string mapping")
@@ -81,18 +89,68 @@ class Command(BaseCommand):
             "/tmp/plane-agent-runtime-ledger.sqlite",
         )
         try:
-            transport = HostBoundSubprocessRuntimeTransport(
-                command=tuple(command),
-                cwd=options.get("runtime_cwd")
-                or getattr(settings, "PLANE_AGENT_RUNTIME_CWD", None)
-                or checkout,
-                ledger_path=Path(ledger_path),
-                gateway=OperationGateway(),
-                bootstrap_command=True,
-                model_call_allowance=options.get("model_call_allowance"),
-                environment=dict(runtime_environment),
-                credential_control=lambda _invocation: dict(runtime_credentials),
-            )
+            runtime_url = getattr(settings, "PLANE_AGENT_RUNTIME_URL", "")
+            shared_secret = getattr(settings, "PLANE_AGENT_RUNTIME_SHARED_SECRET", "")
+            if runtime_url and shared_secret:
+                host_url = getattr(settings, "PLANE_AGENT_RUNTIME_HOST_URL", "")
+                host_parsed = urlsplit(host_url)
+                if (
+                    host_parsed.scheme != "http"
+                    or not host_parsed.hostname
+                    or host_parsed.username
+                    or host_parsed.password
+                    or host_parsed.query
+                    or host_parsed.fragment
+                ):
+                    raise CommandError("PLANE_AGENT_RUNTIME_HOST_URL must be an internal HTTP URL")
+                host_port = getattr(settings, "PLANE_AGENT_RUNTIME_HOST_PORT", 8091)
+                if host_parsed.port is not None:
+                    host_port = host_parsed.port
+
+                @contextmanager
+                def host_endpoint(invocation_ref: str):
+                    if invocation_ref != invocation.invocation_id:
+                        raise RuntimeDispatchError("runtime host endpoint invocation binding is invalid")
+                    token = secrets.token_urlsafe(32)
+                    host_port_adapter = build_gateway_host_port(
+                        invocation=invocation,
+                        gateway=OperationGateway(),
+                    )
+                    server = PlaneHostHTTPServer(
+                        bind_host=getattr(settings, "PLANE_AGENT_RUNTIME_HOST_BIND", "0.0.0.0"),
+                        advertised_host=host_parsed.hostname,
+                        port=host_port,
+                        auth_token=token,
+                        invoke=host_port_adapter.invoke,
+                    )
+                    server.start()
+                    try:
+                        yield RuntimeHostEndpoint(url=server.url, token=token)
+                    finally:
+                        server.close()
+
+                transport = RemoteRuntimeTransport(
+                    runtime_url=runtime_url,
+                    shared_secret=shared_secret,
+                    dispatch_path=getattr(settings, "PLANE_AGENT_RUNTIME_DISPATCH_PATH", "/v1/runtime/dispatch"),
+                    timeout_seconds=getattr(settings, "PLANE_AGENT_RUNTIME_TIMEOUT_SECONDS", 300.0),
+                    max_request_bytes=getattr(settings, "PLANE_AGENT_RUNTIME_MAX_REQUEST_BYTES", 256 * 1024),
+                    max_response_bytes=getattr(settings, "PLANE_AGENT_RUNTIME_MAX_RESPONSE_BYTES", 512 * 1024),
+                    host_endpoint_factory=host_endpoint,
+                    credential_broker=RuntimeCredentialBroker({"runtime": dict(runtime_credentials)}),
+                    model_call_allowance=options.get("model_call_allowance"),
+                )
+            else:
+                transport = HostBoundSubprocessRuntimeTransport(
+                    command=tuple(command),
+                    cwd=options.get("runtime_cwd") or getattr(settings, "PLANE_AGENT_RUNTIME_CWD", None) or checkout,
+                    ledger_path=Path(ledger_path),
+                    gateway=OperationGateway(),
+                    bootstrap_command=True,
+                    model_call_allowance=options.get("model_call_allowance"),
+                    environment=dict(runtime_environment),
+                    credential_control=lambda _invocation: dict(runtime_credentials),
+                )
             result = run_runtime_invocation(
                 invocation,
                 transport=transport,

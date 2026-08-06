@@ -3,17 +3,208 @@
 from __future__ import annotations
 
 import hmac
+import hashlib
 import json
 import os
+import shutil
 import signal
 import sys
 import threading
+import tempfile
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 from .config import AgentRuntimeConfiguration, RuntimeConfigurationError
 from .health import RuntimeHealthStatus, RuntimeSafetyController, RuntimeSafetyStopError
+from .host_rpc import PlaneHostHTTPClient, PlaneHostServer
+from .subprocess import RuntimeProcessPolicy, SubprocessRuntimeTransport, _hermes_bootstrap_payload
+
+
+RUNTIME_DISPATCH_PROTOCOL = "plane.agent-runtime/dispatch/v1"
+_MAX_DISPATCH_FIELDS = {
+    "protocol",
+    "requestDigest",
+    "runId",
+    "invocationId",
+    "snapshot",
+    "invocation",
+    "host",
+    "credentials",
+    "modelCallAllowance",
+}
+
+
+def _canonical(value: Any, name: str) -> bytes:
+    try:
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode(
+            "utf-8"
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} is not JSON-compatible") from exc
+
+
+def _request_digest(snapshot: dict[str, Any], invocation: dict[str, Any]) -> str:
+    snapshot_json = _canonical(snapshot, "runtime snapshot")
+    invocation_json = _canonical(invocation, "runtime invocation")
+    return hashlib.sha256(b"plane.agent-runtime/dispatch/v1\n" + snapshot_json + b"\n" + invocation_json).hexdigest()
+
+
+def _duplicate_rejecting_pairs(items: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in items:
+        if key in value:
+            raise ValueError("duplicate JSON object key")
+        value[key] = item
+    return value
+
+
+def _strict_body(raw: bytes, maximum: int, allowed: set[str] | None = None) -> dict[str, Any]:
+    if len(raw) > maximum:
+        raise ValueError("request exceeds the size bound")
+    try:
+        value = json.loads(raw.decode("utf-8"), object_pairs_hook=_duplicate_rejecting_pairs)
+    except (UnicodeDecodeError, TypeError, ValueError) as exc:
+        raise ValueError("request is invalid") from exc
+    if not isinstance(value, dict) or _canonical(value, "runtime dispatch request") != raw:
+        raise ValueError("request is not canonical")
+    if set(value).difference(allowed or _MAX_DISPATCH_FIELDS):
+        raise ValueError("request contains unknown fields")
+    return value
+
+
+class RuntimeDispatchExecutor:
+    """Execute authenticated dispatches without importing Plane application code."""
+
+    def __init__(self, configuration: AgentRuntimeConfiguration, controller: RuntimeSafetyController) -> None:
+        self.configuration = configuration
+        self.controller = controller
+        self._slots = threading.BoundedSemaphore(configuration.max_concurrent_invocations)
+        child_environment = dict(configuration.child_environment)
+        child_environment.setdefault("DJANGO_SETTINGS_MODULE", "plane.settings.common")
+        child_environment.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+        child_environment.setdefault("PYTHONNOUSERSITE", "1")
+        child_environment.setdefault("REDIS_URL", "redis://127.0.0.1:6379/0")
+        self._transport = SubprocessRuntimeTransport(
+            command=configuration.command,
+            ledger_path=configuration.ledger_path,
+            environment=child_environment,
+            timeout_seconds=configuration.timeout_seconds,
+            max_input_bytes=configuration.max_request_bytes,
+            max_output_bytes=configuration.max_response_bytes,
+            is_cancelled=lambda: controller.health().safety_stop,
+            process_policy=RuntimeProcessPolicy(
+                cpu_seconds=configuration.cpu_seconds,
+                memory_bytes=configuration.memory_bytes,
+                pids_limit=configuration.pids_limit,
+                enforce_kernel_policy=True,
+            ),
+        )
+
+    def dispatch(self, value: dict[str, Any]) -> tuple[str, ...]:
+        if value.get("protocol") != RUNTIME_DISPATCH_PROTOCOL:
+            raise ValueError("runtime dispatch protocol is unsupported")
+        snapshot = value.get("snapshot")
+        invocation = value.get("invocation")
+        if not isinstance(snapshot, dict) or not isinstance(invocation, dict):
+            raise ValueError("runtime dispatch snapshot and invocation are required")
+        run_id = value.get("runId")
+        invocation_id = value.get("invocationId")
+        if (
+            not isinstance(run_id, str)
+            or not run_id
+            or not isinstance(invocation_id, str)
+            or not invocation_id
+            or snapshot.get("runId") != run_id
+            or invocation.get("runId") != run_id
+            or invocation.get("invocationId") != invocation_id
+        ):
+            raise ValueError("runtime dispatch identity is invalid")
+        digest = value.get("requestDigest")
+        if not isinstance(digest, str) or digest != _request_digest(snapshot, invocation):
+            raise ValueError("runtime dispatch digest is invalid")
+        credentials = value.get("credentials", {})
+        if not isinstance(credentials, dict) or any(
+            not isinstance(k, str) or not isinstance(v, str) for k, v in credentials.items()
+        ):
+            raise ValueError("runtime dispatch credentials are invalid")
+        allowance = value.get("modelCallAllowance")
+        if allowance is not None and (isinstance(allowance, bool) or not isinstance(allowance, int)):
+            raise ValueError("runtime model-call allowance is invalid")
+        host = value.get("host")
+        if host is not None:
+            if not isinstance(host, dict) or set(host) != {"url", "token"}:
+                raise ValueError("runtime host endpoint is invalid")
+            host_url = host.get("url")
+            host_token = host.get("token")
+            if not isinstance(host_url, str) or not isinstance(host_token, str):
+                raise ValueError("runtime host endpoint is invalid")
+        else:
+            host_url = host_token = None
+        if not self._slots.acquire(blocking=False):
+            raise RuntimeSafetyStopError("runtime invocation concurrency limit reached")
+        began = False
+        try:
+            self.controller.begin_invocation()
+            began = True
+            return self._execute(
+                snapshot,
+                invocation,
+                digest,
+                credentials=credentials,
+                allowance=allowance,
+                host_url=host_url,
+                host_token=host_token,
+            )
+        finally:
+            try:
+                if began:
+                    self.controller.finish_invocation()
+            finally:
+                self._slots.release()
+
+    def _execute(
+        self,
+        snapshot: dict[str, Any],
+        invocation: dict[str, Any],
+        digest: str,
+        *,
+        credentials: dict[str, str],
+        allowance: int | None,
+        host_url: str | None,
+        host_token: str | None,
+    ) -> tuple[str, ...]:
+        snapshot_json = _canonical(snapshot, "runtime snapshot").decode("utf-8")
+        invocation_json = _canonical(invocation, "runtime invocation").decode("utf-8")
+        payload, run_id, invocation_id, _bootstrap_digest = _hermes_bootstrap_payload(
+            snapshot_json,
+            invocation_json,
+            model_call_allowance=allowance,
+            credentials=credentials,
+        )
+        server: PlaneHostServer | None = None
+        temp_dir: str | None = None
+        command = self.configuration.command
+        try:
+            if host_url is not None and host_token is not None:
+                temp_dir = tempfile.mkdtemp(prefix="plane-agent-host-")
+                socket_path = os.path.join(temp_dir, "host.sock")
+                host_client = PlaneHostHTTPClient(url=host_url, auth_token=host_token)
+                server = PlaneHostServer(socket_path=socket_path, invoke=host_client.invoke)
+                server.start()
+                command = (*command, "--plane-host-socket", socket_path)
+            return self._transport.dispatch_payload(
+                payload=payload,
+                run_id=run_id,
+                invocation_id=invocation_id,
+                request_digest=digest,
+                command=command,
+            )
+        finally:
+            if server is not None:
+                server.close()
+            if temp_dir is not None:
+                shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def _bounded_reason(value: object) -> str:
@@ -54,35 +245,71 @@ class _RuntimeHTTPHandler(BaseHTTPRequestHandler):
         self._write_json(status, snapshot.as_dict())
 
     def do_POST(self) -> None:  # noqa: N802
-        if self.path != "/safety-stop":
+        if self.path not in {"/safety-stop", self.server.configuration.dispatch_path}:
             self._write_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
             return
         if not self._authorized():
             self._write_json(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
             return
-        length_header = self.headers.get("Content-Length", "0")
         try:
-            content_length = int(length_header)
-        except ValueError:
-            self._write_json(HTTPStatus.BAD_REQUEST, {"error": "invalid_content_length"})
+            raw = self._read_body()
+        except ValueError as exc:
+            status = HTTPStatus.REQUEST_ENTITY_TOO_LARGE if str(exc) == "request_too_large" else HTTPStatus.BAD_REQUEST
+            self._write_json(status, {"error": str(exc)})
             return
-        if content_length < 0 or content_length > self.server.configuration.max_request_bytes:
-            self._write_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": "request_too_large"})
+        if self.path == "/safety-stop":
+            try:
+                body = _strict_body(
+                    raw,
+                    self.server.configuration.max_request_bytes,
+                    {"workspaceId", "invocationId", "reason", "idempotencyKey"},
+                )
+                if set(body) != {"workspaceId", "invocationId", "reason", "idempotencyKey"}:
+                    raise ValueError("safety-stop request fields are invalid")
+                status, snapshot = self.server.request_targeted_stop(body)
+            except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+                self._write_json(HTTPStatus.BAD_REQUEST, {"error": "invalid_request"})
+                return
+            except RuntimeSafetyStopError:
+                self._write_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "safety_stop_unavailable"})
+                return
+            self._write_json(status, snapshot)
             return
         try:
-            raw = self.rfile.read(content_length)
-            body: Any = json.loads(raw.decode("utf-8")) if raw else {}
-            if not isinstance(body, dict):
-                raise ValueError("body must be an object")
-            reason = _bounded_reason(body.get("reason", "operator safety stop"))
-            snapshot = self.server.controller.request_safety_stop(reason)
-        except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
-            self._write_json(HTTPStatus.BAD_REQUEST, {"error": "invalid_request"})
-            return
+            body = _strict_body(raw, self.server.configuration.max_request_bytes)
+            if self.server.is_targeted_stop(body.get("invocationId")):
+                raise RuntimeSafetyStopError("runtime invocation has a targeted safety stop")
+            frames = self.server.dispatch_executor.dispatch(body)
+            response = {
+                "protocol": RUNTIME_DISPATCH_PROTOCOL,
+                "requestDigest": body["requestDigest"],
+                "runId": body["runId"],
+                "invocationId": body["invocationId"],
+                "frames": list(frames),
+            }
         except RuntimeSafetyStopError:
-            self._write_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "safety_stop_unavailable"})
+            self._write_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "runtime_not_ready"})
             return
-        self._write_json(HTTPStatus.ACCEPTED, snapshot.as_dict())
+        except Exception:
+            # A dispatch failure is deliberately opaque. The Plane supervisor
+            # records outcome-unknown and performs lifecycle reconciliation.
+            self._write_json(HTTPStatus.CONFLICT, {"error": "runtime_dispatch_failed"})
+            return
+        self._write_json(HTTPStatus.OK, response)
+
+    def _read_body(self) -> bytes:
+        try:
+            content_length = int(self.headers.get("Content-Length", "-1"))
+        except ValueError as exc:
+            raise ValueError("invalid_content_length") from exc
+        if content_length < 0:
+            raise ValueError("invalid_content_length")
+        if content_length > self.server.configuration.max_request_bytes:
+            raise ValueError("request_too_large")
+        raw = self.rfile.read(content_length)
+        if len(raw) != content_length:
+            raise ValueError("invalid_request")
+        return raw
 
     def _authorized(self) -> bool:
         authorization = self.headers.get("Authorization", "")
@@ -126,10 +353,55 @@ class _RuntimeHTTPServer(ThreadingHTTPServer):
         address: tuple[str, int],
         controller: RuntimeSafetyController,
         configuration: AgentRuntimeConfiguration,
+        executor: RuntimeDispatchExecutor | None = None,
     ):
         super().__init__(address, _RuntimeHTTPHandler)
         self.controller = controller
         self.configuration = configuration
+        self._dispatch_executor = executor
+        self._stop_lock = threading.RLock()
+        self._targeted_stops: dict[str, tuple[str, str, str, dict[str, object]]] = {}
+
+    @property
+    def dispatch_executor(self) -> RuntimeDispatchExecutor:
+        if self._dispatch_executor is None:
+            self._dispatch_executor = RuntimeDispatchExecutor(self.configuration, self.controller)
+        return self._dispatch_executor
+
+    def request_targeted_stop(self, body: dict[str, Any]) -> tuple[HTTPStatus, dict[str, object]]:
+        workspace_id = _bounded_reason(body.get("workspaceId"))
+        invocation_id = _bounded_reason(body.get("invocationId"))
+        reason = _bounded_reason(body.get("reason"))
+        idempotency_key = _bounded_reason(body.get("idempotencyKey"))
+        with self._stop_lock:
+            existing = self._targeted_stops.get(idempotency_key)
+            if existing is not None:
+                if existing[:3] != (workspace_id, invocation_id, reason):
+                    raise ValueError("safety-stop idempotency key is bound to another request")
+                result = dict(existing[3])
+                result["replayed"] = True
+                return HTTPStatus.OK, result
+            snapshot = self.controller.request_safety_stop(reason)
+            result = snapshot.as_dict()
+            result.update(
+                {
+                    "status": "accepted",
+                    "authority": "runtime_ephemeral_enforcement",
+                    "planeLifecycleAuthority": "required",
+                    "workspaceId": workspace_id,
+                    "invocationId": invocation_id,
+                    "idempotencyKey": idempotency_key,
+                    "replayed": False,
+                }
+            )
+            self._targeted_stops[idempotency_key] = (workspace_id, invocation_id, reason, result)
+            return HTTPStatus.ACCEPTED, result
+
+    def is_targeted_stop(self, invocation_id: object) -> bool:
+        if not isinstance(invocation_id, str) or not invocation_id:
+            return False
+        with self._stop_lock:
+            return any(record[1] == invocation_id for record in self._targeted_stops.values())
 
 
 def run_runtime_service(environment: dict[str, str] | None = None) -> int:
@@ -146,8 +418,9 @@ def run_runtime_service(environment: dict[str, str] | None = None) -> int:
     controller = RuntimeSafetyController(configured=True, stop_file=configuration.safety_stop_file)
     try:
         controller.mark_ready()
-        server = _RuntimeHTTPServer(address, controller, configuration)
-    except (OSError, RuntimeSafetyStopError):
+        executor = RuntimeDispatchExecutor(configuration, controller)
+        server = _RuntimeHTTPServer(address, controller, configuration, executor=executor)
+    except (OSError, RuntimeSafetyStopError, ValueError):
         sys.stderr.write("event=agent.runtime.startup status=failed reason=boundary_unavailable\n")
         return 78
 

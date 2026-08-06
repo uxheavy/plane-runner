@@ -12,13 +12,17 @@ run or outcome authority.
 
 from __future__ import annotations
 
+import ctypes
+import errno
 import hashlib
 import json
 import os
+import platform
 import resource
 import signal
 import sqlite3
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -27,7 +31,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .dispatch import RuntimeDispatchError, RuntimeTransport
+from .config import RuntimeConfigurationError, validate_runtime_command
+from .contracts import RuntimeDispatchError, RuntimeTransport
 
 
 _LEDGER_TABLE = "plane_runtime_dispatch_ledger"
@@ -73,6 +78,7 @@ class RuntimeProcessPolicy:
     cpu_seconds: int = 300
     memory_bytes: int = 512 * 1024 * 1024
     pids_limit: int = 128
+    enforce_kernel_policy: bool = False
 
     def __post_init__(self) -> None:
         if self.network != "none":
@@ -81,6 +87,8 @@ class RuntimeProcessPolicy:
             raise ValueError("runtime child filesystem policy is invalid")
         if self.process != "single-invocation-child":
             raise ValueError("runtime child process policy is invalid")
+        if not isinstance(self.enforce_kernel_policy, bool):
+            raise ValueError("runtime child kernel policy flag must be boolean")
         for name, value, maximum in (
             ("cpu_seconds", self.cpu_seconds, 3600),
             ("memory_bytes", self.memory_bytes, 2 * 1024 * 1024 * 1024),
@@ -102,8 +110,279 @@ class RuntimeProcessPolicy:
                 if resource_kind is None:
                     continue
                 resource.setrlimit(resource_kind, (limit, limit))
+            if self.enforce_kernel_policy:
+                _install_linux_kernel_policy()
 
         return apply_limits
+
+
+class _SockFilter(ctypes.Structure):
+    _fields_ = [("code", ctypes.c_ushort), ("jt", ctypes.c_ubyte), ("jf", ctypes.c_ubyte), ("k", ctypes.c_uint32)]
+
+
+class _SockFProg(ctypes.Structure):
+    _fields_ = [("len", ctypes.c_ushort), ("filter", ctypes.POINTER(_SockFilter))]
+
+
+_BPF_LD_W_ABS = 0x20
+_BPF_JMP_JEQ_K = 0x15
+_BPF_ALU_AND_K = 0x54
+_BPF_RET_K = 0x06
+_SECCOMP_SET_NO_NEW_PRIVS = 38
+_SECCOMP_SET_MODE_FILTER = 22
+_SECCOMP_RET_KILL_PROCESS = 0x80000000
+_SECCOMP_RET_ERRNO = 0x00050000
+_SECCOMP_RET_ALLOW = 0x7FFF0000
+_AUDIT_ARCH = {"x86_64": 0xC000003E, "aarch64": 0xC00000B7}
+_SYSCALLS = {
+    "x86_64": {
+        "socket": 41,
+        "connect": 42,
+        "bind": 49,
+        "listen": 50,
+        "accept": 43,
+        "accept4": 288,
+        "shutdown": 48,
+        "sendto": 44,
+        "recvfrom": 45,
+        "sendmsg": 46,
+        "recvmsg": 47,
+        "socketpair": 53,
+        "clone": 56,
+        "fork": 57,
+        "vfork": 58,
+        "execve": 59,
+        "ptrace": 101,
+        "open": 2,
+        "openat": 257,
+        "openat2": 437,
+        "creat": 85,
+        "unlink": 87,
+        "unlinkat": 263,
+        "rename": 82,
+        "renameat": 264,
+        "renameat2": 316,
+        "mkdir": 83,
+        "mkdirat": 258,
+        "rmdir": 84,
+        "truncate": 76,
+        "ftruncate": 77,
+        "clone3": 435,
+        "link": 86,
+        "linkat": 265,
+        "symlink": 88,
+        "symlinkat": 266,
+        "mknod": 133,
+        "mknodat": 259,
+        "chmod": 90,
+        "fchmod": 91,
+        "fchmodat": 268,
+        "fchmodat2": 452,
+        "chown": 92,
+        "fchown": 93,
+        "lchown": 94,
+        "fchownat": 260,
+        "utime": 132,
+        "utimensat": 280,
+        "utimes": 235,
+        "mount": 165,
+        "umount2": 166,
+        "pivot_root": 155,
+        "move_mount": 429,
+        "open_tree": 428,
+        "fsopen": 430,
+        "fsconfig": 431,
+        "fsmount": 432,
+        "fspick": 433,
+        "setxattr": 188,
+        "lsetxattr": 189,
+        "fsetxattr": 190,
+        "removexattr": 197,
+        "lremovexattr": 198,
+        "fremovexattr": 199,
+        "io_uring_setup": 425,
+    },
+    "aarch64": {
+        "socket": 198,
+        "connect": 203,
+        "bind": 200,
+        "listen": 201,
+        "accept": 202,
+        "accept4": 242,
+        "shutdown": 210,
+        "sendto": 206,
+        "recvfrom": 207,
+        "sendmsg": 211,
+        "recvmsg": 212,
+        "socketpair": 199,
+        "clone": 220,
+        "fork": 107,
+        "vfork": 58,
+        "execve": 221,
+        "ptrace": 117,
+        "openat": 56,
+        "openat2": 437,
+        "unlinkat": 35,
+        "renameat": 38,
+        "mkdirat": 34,
+        "rmdir": 39,
+        "truncate": 45,
+        "ftruncate": 46,
+        "clone3": 435,
+        "linkat": 37,
+        "symlinkat": 36,
+        "mknodat": 33,
+        "fchmod": 52,
+        "fchmodat": 53,
+        "fchownat": 54,
+        "utimensat": 88,
+        "mount": 40,
+        "umount2": 39,
+        "pivot_root": 41,
+        "move_mount": 429,
+        "open_tree": 428,
+        "fsopen": 430,
+        "fsconfig": 431,
+        "fsmount": 432,
+        "fspick": 433,
+        "setxattr": 5,
+        "lsetxattr": 6,
+        "fsetxattr": 7,
+        "removexattr": 14,
+        "lremovexattr": 15,
+        "fremovexattr": 16,
+        "io_uring_setup": 425,
+    },
+}
+_OPEN_WRITE_FLAGS = 1 | 2 | 64 | 512 | 1024 | 0x410000
+
+
+def _install_linux_kernel_policy() -> None:
+    """Install the child-only policy; failure is intentionally fail-closed."""
+
+    if sys.platform != "linux":
+        raise OSError("runtime child kernel isolation requires Linux")
+    machine = platform.machine()
+    arch = _AUDIT_ARCH.get(machine)
+    syscalls = _SYSCALLS.get(machine)
+    if arch is None or syscalls is None:
+        raise OSError("runtime child kernel isolation does not support this architecture")
+
+    instructions = [
+        _SockFilter(_BPF_LD_W_ABS, 0, 0, 4),
+        _SockFilter(_BPF_JMP_JEQ_K, 1, 0, arch),
+        _SockFilter(_BPF_RET_K, 0, 0, _SECCOMP_RET_KILL_PROCESS),
+        _SockFilter(_BPF_LD_W_ABS, 0, 0, 0),
+    ]
+
+    def deny(name: str) -> None:
+        number = syscalls.get(name)
+        if number is not None:
+            instructions.extend(
+                (
+                    _SockFilter(_BPF_JMP_JEQ_K, 0, 1, number),
+                    _SockFilter(_BPF_RET_K, 0, 0, _SECCOMP_RET_ERRNO | errno.EPERM),
+                )
+            )
+
+    for name in (
+        "socket",
+        "connect",
+        "bind",
+        "listen",
+        "accept",
+        "accept4",
+        "shutdown",
+        "sendto",
+        "recvfrom",
+        "sendmsg",
+        "recvmsg",
+        "socketpair",
+        "clone",
+        "fork",
+        "vfork",
+        "clone3",
+        "ptrace",
+        "openat2",
+        "creat",
+        "unlink",
+        "unlinkat",
+        "rename",
+        "renameat",
+        "renameat2",
+        "mkdir",
+        "mkdirat",
+        "rmdir",
+        "truncate",
+        "ftruncate",
+        "link",
+        "linkat",
+        "symlink",
+        "symlinkat",
+        "mknod",
+        "mknodat",
+        "chmod",
+        "fchmod",
+        "fchmodat",
+        "fchmodat2",
+        "chown",
+        "fchown",
+        "lchown",
+        "fchownat",
+        "utime",
+        "utimensat",
+        "utimes",
+        "mount",
+        "umount2",
+        "pivot_root",
+        "move_mount",
+        "open_tree",
+        "fsopen",
+        "fsconfig",
+        "fsmount",
+        "fspick",
+        "setxattr",
+        "lsetxattr",
+        "fsetxattr",
+        "removexattr",
+        "lremovexattr",
+        "fremovexattr",
+        "io_uring_setup",
+    ):
+        deny(name)
+
+    def deny_open_writes(name: str, flags_offset: int) -> None:
+        number = syscalls.get(name)
+        if number is None:
+            return
+        # A non-matching syscall jumps over the flag load, mask, zero test,
+        # and errno return. Read-only opens continue to the next rule.
+        instructions.extend(
+            (
+                _SockFilter(_BPF_JMP_JEQ_K, 0, 4, number),
+                _SockFilter(_BPF_LD_W_ABS, 0, 0, flags_offset),
+                _SockFilter(_BPF_ALU_AND_K, 0, 0, _OPEN_WRITE_FLAGS),
+                _SockFilter(_BPF_JMP_JEQ_K, 1, 0, 0),
+                _SockFilter(_BPF_RET_K, 0, 0, _SECCOMP_RET_ERRNO | errno.EPERM),
+            )
+        )
+
+    deny_open_writes("open", 24)
+    deny_open_writes("openat", 32)
+    instructions.append(_SockFilter(_BPF_RET_K, 0, 0, _SECCOMP_RET_ALLOW))
+    array_type = _SockFilter * len(instructions)
+    array = array_type(*instructions)
+    program = _SockFProg(len(instructions), array)
+    libc = ctypes.CDLL(None, use_errno=True)
+    libc.prctl.argtypes = [ctypes.c_int, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong]
+    libc.prctl.restype = ctypes.c_int
+    if libc.prctl(_SECCOMP_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0:
+        error = ctypes.get_errno()
+        raise OSError(error, "runtime child could not set no-new-privileges")
+    program_address = ctypes.cast(ctypes.pointer(program), ctypes.c_void_p).value
+    if program_address is None or libc.prctl(_SECCOMP_SET_MODE_FILTER, 2, program_address, 0, 0) != 0:
+        error = ctypes.get_errno()
+        raise OSError(error, "runtime child could not install seccomp policy")
 
 
 def _canonical_object(raw: str, name: str) -> dict[str, Any]:
@@ -449,18 +728,40 @@ class SubprocessRuntimeTransport(RuntimeTransport):
 
     def _run_process(self, payload: bytes, *, command: Sequence[str] | None = None) -> tuple[str, ...]:
         process_command = tuple(command or self._command)
-        try:
-            process = subprocess.Popen(
-                process_command,
-                cwd=self._cwd,
-                env=self._environment,
-                shell=False,
-                start_new_session=True,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                preexec_fn=self._process_policy.preexec_fn(),
+        child_preexec = None
+        if self._process_policy.enforce_kernel_policy:
+            process_command = (
+                sys.executable,
+                "-m",
+                "plane.agent.runtime.launcher",
+                "--cpu-seconds",
+                str(self._process_policy.cpu_seconds),
+                "--memory-bytes",
+                str(self._process_policy.memory_bytes),
+                "--pids-limit",
+                str(self._process_policy.pids_limit),
+                "--",
+                *process_command,
             )
+        else:
+            child_preexec = self._process_policy.preexec_fn()
+        popen_options: dict[str, Any] = {
+            "cwd": self._cwd,
+            "env": self._environment,
+            "shell": False,
+            "start_new_session": True,
+            "close_fds": True,
+            "stdin": subprocess.PIPE,
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
+        }
+        if child_preexec is not None:
+            # The legacy callback exists only for deterministic non-production
+            # adapters. Production launches the single-threaded launcher
+            # without a pre-exec callback.
+            popen_options["preexec_fn"] = child_preexec
+        try:
+            process = subprocess.Popen(process_command, **popen_options)
         except (OSError, ValueError, subprocess.SubprocessError) as exc:
             raise RuntimeDispatchError("runtime process could not be started") from exc
 
@@ -558,6 +859,26 @@ class SubprocessRuntimeTransport(RuntimeTransport):
 
     def dispatch(self, snapshot_json: str, envelope_json: str) -> tuple[str, ...]:
         payload, run_id, invocation_id, request_digest = _request_payload(snapshot_json, envelope_json)
+        return self.dispatch_payload(
+            payload=payload,
+            run_id=run_id,
+            invocation_id=invocation_id,
+            request_digest=request_digest,
+        )
+
+    def dispatch_payload(
+        self,
+        *,
+        payload: bytes,
+        run_id: str,
+        invocation_id: str,
+        request_digest: str,
+        command: Sequence[str] | None = None,
+    ) -> tuple[str, ...]:
+        """Execute one already-framed request behind the same durable ledger."""
+
+        if not isinstance(payload, bytes):
+            raise RuntimeDispatchError("runtime process payload must be bytes")
         if len(payload) > self._max_input_bytes:
             raise RuntimeDispatchError("runtime request exceeds the process input bound")
         if self._is_cancelled():
@@ -566,7 +887,7 @@ class SubprocessRuntimeTransport(RuntimeTransport):
         if replay is not None:
             return replay
         try:
-            frames = self._run_process(payload)
+            frames = self._run_process(payload, command=command)
         except Exception:
             try:
                 self._ledger.mark_unknown(invocation_id=invocation_id)
@@ -605,11 +926,14 @@ class HostBoundSubprocessRuntimeTransport(SubprocessRuntimeTransport):
         self._gateway = gateway
         self._host_timeout_seconds = float(host_timeout_seconds)
         command = tuple(self._command)
-        self._bootstrap_command = (
-            any("plane_runtime.g1_runtime_image.bootstrap" in part for part in command)
-            if bootstrap_command is None
-            else bool(bootstrap_command)
-        )
+        try:
+            validate_runtime_command(command)
+            exact_bootstrap_command = True
+        except RuntimeConfigurationError:
+            exact_bootstrap_command = False
+        if bootstrap_command is True and not exact_bootstrap_command:
+            raise ValueError("bootstrap_command requires the exact pinned runtime argv")
+        self._bootstrap_command = exact_bootstrap_command if bootstrap_command is None else bool(bootstrap_command)
         self._model_call_allowance = model_call_allowance
         self._credential_control = credential_control
 

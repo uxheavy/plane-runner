@@ -9,23 +9,28 @@ publication remain Plane-owned.
 from __future__ import annotations
 
 import hashlib
+import hmac
+import http.client
 import json
 import os
 import socket
 import stat
 import threading
+import urllib.parse
+import sys
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable, Mapping
 
-from plane.operation_gateway.contracts import MAX_RESULT_BYTES
-
 HOST_PROTOCOL = "plane.agent-runtime/v1"
 PLANE_DISCOVERY_OPERATION = "plane.operations.discover@1"
 MAX_HOST_REQUEST_BYTES = 16 * 1024
 # The host carries the public operation result and cannot widen its contract.
-MAX_HOST_RESULT_BYTES = MAX_RESULT_BYTES
+# Keep the same 8 KiB result ceiling as the dependency-free gateway limits
+# without importing Django/DRF into the separate runtime process.
+MAX_HOST_RESULT_BYTES = 8 * 1024
 MAX_HOST_INPUT_BYTES = 8 * 1024
 MAX_HOST_CALLS = 32
 MAX_HOST_OPERATION_REF_BYTES = 256
@@ -33,6 +38,8 @@ MAX_HOST_CONTENT_BYTES = 4 * 1024
 _ACTIONS = {"discover", "read", "mutate", "code", "publish"}
 _SOURCES = {"model", "code"}
 _RESULT_STATUSES = {"ok", "replayed", "denied", "conflict", "unavailable", "invalid"}
+HOST_HTTP_PATH = "/v1/host"
+MAX_HOST_HTTP_RESPONSE_BYTES = MAX_HOST_RESULT_BYTES + 1024
 
 
 class PlaneHostRPCError(ValueError):
@@ -528,6 +535,259 @@ class PlaneHostServer:
             carry.extend(chunk)
 
 
+class PlaneHostHTTPClient:
+    """Invoke the Plane host seam from the isolated runtime service."""
+
+    def __init__(self, *, url: str, auth_token: str, timeout_seconds: float = 5.0) -> None:
+        self._url = self._validate_url(url)
+        self._auth_token = _text(auth_token, "host.authToken", 512)
+        self._timeout_seconds = self._validate_timeout(timeout_seconds)
+
+    def invoke(self, call: PlaneHostCall) -> PlaneHostResult:
+        if not isinstance(call, PlaneHostCall):
+            raise PlaneHostRPCError("host callback request is invalid")
+        payload = _canonical(call.to_wire(), "host.request")
+        if len(payload) > MAX_HOST_REQUEST_BYTES:
+            raise PlaneHostRPCError("host request exceeds the size limit")
+        parsed = urllib.parse.urlsplit(self._url)
+        connection: http.client.HTTPConnection | http.client.HTTPSConnection
+        connection_type = http.client.HTTPSConnection if parsed.scheme == "https" else http.client.HTTPConnection
+        connection = connection_type(parsed.hostname, parsed.port, timeout=self._timeout_seconds)
+        path = urllib.parse.urlunsplit(("", "", parsed.path or HOST_HTTP_PATH, parsed.query, ""))
+        try:
+            connection.request(
+                "POST",
+                path,
+                body=payload,
+                headers={
+                    "Authorization": f"Bearer {self._auth_token}",
+                    "Content-Type": "application/json",
+                    "Content-Length": str(len(payload)),
+                },
+            )
+            response = connection.getresponse()
+            body = response.read(MAX_HOST_HTTP_RESPONSE_BYTES)
+            if len(body) > MAX_HOST_HTTP_RESPONSE_BYTES or response.status != 200:
+                raise PlaneHostRPCError("Plane host callback was rejected")
+            result = PlaneHostResult.from_wire(body)
+            if (
+                result.request_ref != call.request_ref
+                or result.correlation_id != call.correlation_id
+                or result.idempotency_key != call.idempotency_key
+            ):
+                raise PlaneHostRPCError("Plane host callback result is not bound to the request")
+            return result
+        except (OSError, ValueError, http.client.HTTPException, PlaneHostRPCError) as exc:
+            if isinstance(exc, PlaneHostRPCError):
+                raise
+            raise PlaneHostRPCError("Plane host callback is unavailable") from exc
+        finally:
+            connection.close()
+
+    @staticmethod
+    def _validate_url(value: str) -> str:
+        if not isinstance(value, str) or not value or len(value.encode("utf-8")) > 2048:
+            raise PlaneHostRPCError("host URL is invalid")
+        parsed = urllib.parse.urlsplit(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+            raise PlaneHostRPCError("host URL is invalid")
+        if parsed.query or parsed.fragment:
+            raise PlaneHostRPCError("host URL is invalid")
+        try:
+            if parsed.port is not None and not 0 < parsed.port <= 65535:
+                raise PlaneHostRPCError("host URL port is invalid")
+        except ValueError as exc:
+            raise PlaneHostRPCError("host URL port is invalid") from exc
+        return value.rstrip("/")
+
+    @staticmethod
+    def _validate_timeout(value: float) -> float:
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0 or value > 60:
+            raise PlaneHostRPCError("host callback timeout is invalid")
+        return float(value)
+
+
+class _PlaneHostHTTPHandler(BaseHTTPRequestHandler):
+    server: "_PlaneHostHTTPServer"
+
+    def do_POST(self) -> None:  # noqa: N802
+        if self.path != HOST_HTTP_PATH:
+            self._write(404, {"error": "not_found"})
+            return
+        authorization = self.headers.get("Authorization", "")
+        if not authorization.startswith("Bearer ") or not self.server.auth_matches(authorization[7:]):
+            self._write(401, {"error": "unauthorized"})
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "-1"))
+        except ValueError:
+            self._write(400, {"error": "invalid_request"})
+            return
+        if length < 0 or length > MAX_HOST_REQUEST_BYTES:
+            self._write(413, {"error": "request_too_large"})
+            return
+        try:
+            raw = self.rfile.read(length)
+            call = PlaneHostCall.from_wire(raw)
+            result = self.server.invoke_once(call)
+            payload = _canonical(result.to_wire(), "host.result")
+            if len(payload) > MAX_HOST_RESULT_BYTES:
+                raise PlaneHostRPCError("host result exceeds the size limit")
+        except Exception:
+            self._write(503, {"error": "host_unavailable"})
+            return
+        self._write(200, result.to_wire())
+
+    def _write(self, status: int, value: Mapping[str, Any]) -> None:
+        payload = _canonical(value, "host HTTP response")
+        if len(payload) > MAX_HOST_HTTP_RESPONSE_BYTES:
+            status = 500
+            payload = b'{"error":"response_too_large"}'
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        try:
+            self.wfile.write(payload)
+        except OSError:
+            pass
+
+    def log_message(self, format: str, *args: object) -> None:
+        # Request headers, including the per-invocation token, never enter logs.
+        message = format % args
+        if len(message) > 256:
+            message = message[:256]
+        sys.stderr.write(f"event=agent.runtime.host_http message={message!r}\n")
+
+
+class _PlaneHostHTTPServer(ThreadingHTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+    def __init__(self, address: tuple[str, int], owner: "PlaneHostHTTPServer") -> None:
+        super().__init__(address, _PlaneHostHTTPHandler)
+        self.owner = owner
+
+    def auth_matches(self, token: str) -> bool:
+        return hmac.compare_digest(token.encode("utf-8"), self.owner.auth_token.encode("utf-8"))
+
+    def invoke_once(self, call: PlaneHostCall) -> PlaneHostResult:
+        return self.owner._invoke_once(call)
+
+
+class PlaneHostHTTPServer:
+    """Bounded per-invocation HTTP host seam on the internal Compose network."""
+
+    def __init__(
+        self,
+        *,
+        bind_host: str,
+        advertised_host: str,
+        port: int,
+        auth_token: str,
+        invoke: Callable[[PlaneHostCall], PlaneHostResult],
+        timeout_seconds: float = 5.0,
+        max_calls: int = MAX_HOST_CALLS,
+    ) -> None:
+        if not bind_host or not isinstance(bind_host, str) or len(bind_host) > 255 or "\x00" in bind_host:
+            raise PlaneHostRPCError("host bind address is invalid")
+        if not advertised_host or not isinstance(advertised_host, str) or len(advertised_host) > 255:
+            raise PlaneHostRPCError("host advertised address is invalid")
+        if isinstance(port, bool) or not isinstance(port, int) or not 0 <= port <= 65535:
+            raise PlaneHostRPCError("host port is invalid")
+        if port == 0:
+            # Ephemeral ports are useful for local tests; production passes a
+            # fixed internal-only port from Compose.
+            pass
+        self.bind_host = bind_host
+        self.advertised_host = advertised_host
+        self.port = port
+        self.auth_token = _text(auth_token, "host.authToken", 512)
+        self._invoke = invoke
+        self._timeout_seconds = PlaneHostHTTPClient._validate_timeout(timeout_seconds)
+        self._max_calls = max_calls
+        self._records: dict[str, PlaneHostResult] = {}
+        self._call_count = 0
+        self._lock = threading.RLock()
+        self._server: _PlaneHostHTTPServer | None = None
+        self._thread: threading.Thread | None = None
+
+    @property
+    def url(self) -> str:
+        server = self._server
+        port = self.port if server is None else server.server_address[1]
+        return f"http://{self.advertised_host}:{port}{HOST_HTTP_PATH}"
+
+    def start(self) -> None:
+        if self._server is not None:
+            raise RuntimeError("host HTTP server has already started")
+        server = _PlaneHostHTTPServer((self.bind_host, self.port), self)
+        server.timeout = self._timeout_seconds
+        self._server = server
+        self.port = int(server.server_address[1])
+        self._thread = threading.Thread(target=server.serve_forever, name="plane-agent-host-http", daemon=True)
+        self._thread.start()
+
+    def close(self) -> None:
+        server = self._server
+        self._server = None
+        if server is not None:
+            server.shutdown()
+            server.server_close()
+        thread = self._thread
+        self._thread = None
+        if thread is not None:
+            thread.join(timeout=self._timeout_seconds)
+
+    def __enter__(self) -> "PlaneHostHTTPServer":
+        self.start()
+        return self
+
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
+        self.close()
+
+    def _invoke_once(self, call: PlaneHostCall) -> PlaneHostResult:
+        with self._lock:
+            replay = self._records.get(call.request_ref)
+            if replay is not None:
+                return PlaneHostResult(
+                    request_ref=replay.request_ref,
+                    correlation_id=replay.correlation_id,
+                    idempotency_key=replay.idempotency_key,
+                    status=replay.status if replay.status in _RESULT_STATUSES - {"ok"} else "replayed",
+                    replayed=True,
+                    output=replay.output,
+                    error_code=replay.error_code,
+                    error_message=replay.error_message,
+                    publication=replay.publication,
+                )
+            if self._call_count >= self._max_calls:
+                return PlaneHostResult(
+                    request_ref=call.request_ref,
+                    correlation_id=call.correlation_id,
+                    idempotency_key=call.idempotency_key,
+                    status="denied",
+                    replayed=False,
+                    output=None,
+                    error_code="HOST_BUDGET_EXCEEDED",
+                    error_message="Plane host callback budget exhausted",
+                )
+            self._call_count += 1
+        result = self._invoke(call)
+        if not isinstance(result, PlaneHostResult):
+            raise PlaneHostRPCError("host callback returned an invalid result")
+        if (
+            result.request_ref != call.request_ref
+            or result.correlation_id != call.correlation_id
+            or result.idempotency_key != call.idempotency_key
+        ):
+            raise PlaneHostRPCError("host callback result is not bound to the request")
+        with self._lock:
+            self._records[call.request_ref] = result
+        return result
+
+
 class PlaneGatewayHostPort:
     """Bind host callbacks to one trusted invocation and the live gateway."""
 
@@ -730,6 +990,9 @@ __all__ = [
     "MAX_HOST_OPERATION_REF_BYTES",
     "MAX_HOST_REQUEST_BYTES",
     "MAX_HOST_RESULT_BYTES",
+    "HOST_HTTP_PATH",
+    "PlaneHostHTTPClient",
+    "PlaneHostHTTPServer",
     "PlaneHostCall",
     "PlaneHostRPCError",
     "PlaneHostResult",

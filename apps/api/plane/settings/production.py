@@ -16,7 +16,11 @@ from urllib.parse import urlparse
 
 from django.core.exceptions import ImproperlyConfigured
 
-from plane.agent.runtime.config import AgentRuntimeConfiguration, RuntimeConfigurationError
+from plane.agent.runtime.config import (
+    AgentRuntimeConfiguration,
+    RuntimeConfigurationError,
+    validate_runtime_host_url,
+)
 
 from .common import *  # noqa
 
@@ -32,12 +36,26 @@ def _validate_agent_runtime_boundary():
         return
     try:
         runtime_configuration = AgentRuntimeConfiguration.from_environment(os.environ)
+        host_url = validate_runtime_host_url(os.environ.get("PLANE_AGENT_RUNTIME_HOST_URL"))
+        host_bind = os.environ.get("PLANE_AGENT_RUNTIME_HOST_BIND", "0.0.0.0")
+        if not host_bind or "\x00" in host_bind or len(host_bind) > 255:
+            raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_HOST_BIND is invalid")
+        host_port = int(os.environ.get("PLANE_AGENT_RUNTIME_HOST_PORT", "8091"))
+        if not 1 <= host_port <= 65535:
+            raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_HOST_PORT is outside its allowed range")
     except RuntimeConfigurationError as exc:
         raise ImproperlyConfigured(f"Production Agent runtime configuration is invalid: {exc}") from exc
+    except (TypeError, ValueError) as exc:
+        raise ImproperlyConfigured("Production Agent runtime host configuration is invalid") from exc
     globals().update(
         {
             "PLANE_AGENT_RUNTIME_URL": runtime_configuration.url,
             "PLANE_AGENT_RUNTIME_SHARED_SECRET": runtime_configuration.shared_secret,
+            "PLANE_AGENT_RUNTIME_HOST_URL": host_url,
+            "PLANE_AGENT_RUNTIME_HOST_BIND": host_bind,
+            "PLANE_AGENT_RUNTIME_HOST_PORT": host_port,
+            "PLANE_AGENT_RUNTIME_DISPATCH_PATH": runtime_configuration.dispatch_path,
+            "PLANE_AGENT_RUNTIME_LEDGER_PATH": runtime_configuration.ledger_path,
             "PLANE_AGENT_RUNTIME_SECRET_FILE": os.environ.get("PLANE_AGENT_RUNTIME_SECRET_FILE", ""),
             "PLANE_AGENT_RUNTIME_COMMAND": runtime_configuration.command,
             "PLANE_AGENT_RUNTIME_ENVIRONMENT": dict(runtime_configuration.child_environment),

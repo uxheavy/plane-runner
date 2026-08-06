@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
@@ -17,15 +19,18 @@ from urllib.parse import urlsplit
 
 
 RUNTIME_PROTOCOL = "plane.agent-runtime/v1"
+RUNTIME_BOOTSTRAP_MODULE = "plane_runtime.g1_runtime_image.bootstrap"
 DEFAULT_RUNTIME_COMMAND = (
     "python3",
     "-m",
-    "plane_runtime.g1_runtime_image.bootstrap",
+    RUNTIME_BOOTSTRAP_MODULE,
     "--once",
     "--g1-production",
 )
 DEFAULT_HEALTH_PATH = "/health/ready"
+DEFAULT_DISPATCH_PATH = "/v1/runtime/dispatch"
 DEFAULT_SAFETY_STOP_FILE = "/run/plane-agent-runtime/safety-stop"
+DEFAULT_LEDGER_PATH = "/run/plane-agent-runtime/dispatch-ledger.sqlite"
 
 _PLACEHOLDER_SECRETS = frozenset(
     {
@@ -53,6 +58,38 @@ _SENSITIVE_ENV_MARKERS = (
 
 class RuntimeConfigurationError(ValueError):
     """A runtime configuration value is absent, invalid, or unsafe."""
+
+
+_APPROVED_PYTHON_EXECUTABLES = frozenset(
+    {
+        "python3",
+        "/usr/bin/python3",
+        "/usr/local/bin/python3",
+        sys.executable,
+    }
+)
+_RUNTIME_BOOTSTRAP_FLAGS = ("--once", "--g1-production")
+
+
+def validate_runtime_command(command: Sequence[str]) -> tuple[str, ...]:
+    """Validate the exact production bootstrap argv shape.
+
+    Substring matching would allow ``python -c`` comments or lookalike
+    filenames to replace the pinned bootstrap. Only the approved Python
+    executable, ``-m``, the exact module, and the frozen bootstrap flags are
+    accepted here.
+    """
+
+    if isinstance(command, (str, bytes)) or not isinstance(command, Sequence):
+        raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_COMMAND must be an argv sequence")
+    values = tuple(command)
+    if len(values) != 5 or any(not isinstance(part, str) or not part or "\x00" in part for part in values):
+        raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_COMMAND has an invalid argv shape")
+    if values[0] not in _APPROVED_PYTHON_EXECUTABLES:
+        raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_COMMAND executable is not approved")
+    if values[1:] != ("-m", RUNTIME_BOOTSTRAP_MODULE, *_RUNTIME_BOOTSTRAP_FLAGS):
+        raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_COMMAND must use the exact pinned bootstrap argv")
+    return values
 
 
 def _bounded_text(value: object, name: str, maximum: int) -> str:
@@ -199,6 +236,23 @@ def _validate_runtime_url(value: object) -> str:
     return raw.rstrip("/")
 
 
+def validate_runtime_host_url(value: object) -> str:
+    """Validate the internal Plane host callback URL without importing Django."""
+
+    raw = _bounded_text(value, "PLANE_AGENT_RUNTIME_HOST_URL", 2048).rstrip("/")
+    parsed = urlsplit(raw)
+    if parsed.scheme != "http" or not parsed.hostname:
+        raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_HOST_URL must be an internal HTTP URL")
+    if parsed.username is not None or parsed.password is not None or parsed.query or parsed.fragment:
+        raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_HOST_URL must not contain credentials or query data")
+    try:
+        if parsed.port is not None and not 0 < parsed.port <= 65535:
+            raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_HOST_URL port is invalid")
+    except ValueError as exc:
+        raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_HOST_URL port is invalid") from exc
+    return raw
+
+
 def _validate_health_path(value: object) -> str:
     path = _bounded_text(value, "PLANE_AGENT_RUNTIME_HEALTH_PATH", 128)
     if not path.startswith("/") or "?" in path or "#" in path:
@@ -213,7 +267,9 @@ class AgentRuntimeConfiguration:
     url: str
     shared_secret: str
     health_path: str
+    dispatch_path: str
     safety_stop_file: str
+    ledger_path: str
     command: tuple[str, ...]
     child_environment: Mapping[str, str]
     provider_credentials: Mapping[str, str]
@@ -234,6 +290,7 @@ class AgentRuntimeConfiguration:
         url = _validate_runtime_url(source.get("PLANE_AGENT_RUNTIME_URL"))
         shared_secret = _read_secret(source)
         health_path = _validate_health_path(source.get("PLANE_AGENT_RUNTIME_HEALTH_PATH", DEFAULT_HEALTH_PATH))
+        dispatch_path = _validate_health_path(source.get("PLANE_AGENT_RUNTIME_DISPATCH_PATH", DEFAULT_DISPATCH_PATH))
         safety_stop_file = _bounded_text(
             source.get("PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE", DEFAULT_SAFETY_STOP_FILE),
             "PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE",
@@ -241,6 +298,13 @@ class AgentRuntimeConfiguration:
         )
         if not Path(safety_stop_file).is_absolute():
             raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE must be absolute")
+        ledger_path = _bounded_text(
+            source.get("PLANE_AGENT_RUNTIME_LEDGER_PATH", DEFAULT_LEDGER_PATH),
+            "PLANE_AGENT_RUNTIME_LEDGER_PATH",
+            512,
+        )
+        if not Path(ledger_path).is_absolute():
+            raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_LEDGER_PATH must be absolute")
         raw_command = source.get("PLANE_AGENT_RUNTIME_COMMAND")
         if raw_command:
             try:
@@ -249,12 +313,7 @@ class AgentRuntimeConfiguration:
                 raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_COMMAND is malformed") from exc
         else:
             command = DEFAULT_RUNTIME_COMMAND
-        if not command or not any("plane_runtime.g1_runtime_image.bootstrap" in part for part in command):
-            raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_COMMAND must use the pinned Plane runtime bootstrap")
-        if any(not isinstance(part, str) or not part or "\x00" in part for part in command):
-            raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_COMMAND contains an invalid argument")
-        if len(command) > 16:
-            raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_COMMAND contains too many arguments")
+        command = validate_runtime_command(command)
         child_environment = _validate_child_environment(
             _parse_object(
                 source.get("PLANE_AGENT_RUNTIME_ENVIRONMENT_JSON", "{}"),
@@ -274,7 +333,9 @@ class AgentRuntimeConfiguration:
             url=url,
             shared_secret=shared_secret,
             health_path=health_path,
+            dispatch_path=dispatch_path,
             safety_stop_file=safety_stop_file,
+            ledger_path=ledger_path,
             command=command,
             child_environment=child_environment,
             provider_credentials=provider_credentials,
@@ -306,7 +367,9 @@ class AgentRuntimeConfiguration:
             "protocol": RUNTIME_PROTOCOL,
             "url": self.url,
             "healthPath": self.health_path,
+            "dispatchPath": self.dispatch_path,
             "safetyStopFileConfigured": bool(self.safety_stop_file),
+            "ledgerPathConfigured": bool(self.ledger_path),
             "commandConfigured": bool(self.command),
             "childEnvironmentEntries": len(self.child_environment),
             "providerCredentialEntries": len(self.provider_credentials),
@@ -326,8 +389,12 @@ class AgentRuntimeConfiguration:
 __all__ = [
     "AgentRuntimeConfiguration",
     "DEFAULT_HEALTH_PATH",
+    "DEFAULT_DISPATCH_PATH",
+    "DEFAULT_LEDGER_PATH",
     "DEFAULT_RUNTIME_COMMAND",
     "DEFAULT_SAFETY_STOP_FILE",
+    "RUNTIME_BOOTSTRAP_MODULE",
     "RUNTIME_PROTOCOL",
     "RuntimeConfigurationError",
+    "validate_runtime_command",
 ]

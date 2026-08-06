@@ -77,6 +77,7 @@ def _settings_environment() -> dict[str, str]:
             "LIVE_SERVER_SECRET_KEY": "runtime-settings-test-key",
             "CORS_ALLOWED_ORIGINS": "http://localhost",
             "PLANE_AGENT_RUNTIME_URL": "http://agent-runtime:8080",
+            "PLANE_AGENT_RUNTIME_HOST_URL": "http://api:8091",
             "PLANE_AGENT_RUNTIME_SECRET": "runtime-settings-agent-secret-0123456789",
         }
     )
@@ -579,7 +580,11 @@ def test_agent_runtime_production_compose_has_an_isolated_readiness_and_secret_b
     services = _resolved_community_services()
     runtime = services["agent-runtime"]
     runtime_environment = runtime["environment"]
-    assert runtime["network_mode"] == "none"
+    assert "network_mode" not in runtime
+    assert "agent_runtime_internal" in runtime["networks"]
+    assert not runtime.get("ports")
+    assert "agent_runtime_internal" in services["api"]["networks"]
+    assert "agent_runtime_internal" in services["worker"]["networks"]
     assert runtime["read_only"] is True
     assert runtime["cap_drop"] == ["ALL"]
     assert "no-new-privileges:true" in runtime["security_opt"]

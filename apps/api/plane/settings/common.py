@@ -456,6 +456,10 @@ LIVE_URL = urljoin(LIVE_BASE_URL, LIVE_BASE_PATH) if LIVE_BASE_URL else None
 # materialize the complete contract; common settings expose only non-secret
 # deployment knobs so local/test settings never inherit a runtime credential.
 PLANE_AGENT_RUNTIME_URL = os.environ.get("PLANE_AGENT_RUNTIME_URL", "")
+PLANE_AGENT_RUNTIME_HOST_URL = os.environ.get("PLANE_AGENT_RUNTIME_HOST_URL", "")
+PLANE_AGENT_RUNTIME_HOST_BIND = os.environ.get("PLANE_AGENT_RUNTIME_HOST_BIND", "0.0.0.0")
+PLANE_AGENT_RUNTIME_HOST_PORT = int(os.environ.get("PLANE_AGENT_RUNTIME_HOST_PORT", "8091"))
+PLANE_AGENT_RUNTIME_DISPATCH_PATH = os.environ.get("PLANE_AGENT_RUNTIME_DISPATCH_PATH", "/v1/runtime/dispatch")
 PLANE_AGENT_RUNTIME_SECRET_FILE = os.environ.get("PLANE_AGENT_RUNTIME_SECRET_FILE", "")
 PLANE_AGENT_RUNTIME_COMMAND = os.environ.get("PLANE_AGENT_RUNTIME_COMMAND", "")
 PLANE_AGENT_RUNTIME_CHECKOUT = os.environ.get("PLANE_AGENT_RUNTIME_CHECKOUT", "")

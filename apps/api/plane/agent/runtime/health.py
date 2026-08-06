@@ -9,10 +9,13 @@ lifecycle state.
 from __future__ import annotations
 
 import os
+import http.client
+import json
 import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Literal
+from urllib.parse import urlsplit
 
 from .config import RUNTIME_PROTOCOL
 
@@ -203,16 +206,124 @@ class RuntimeSafetyController:
         )
 
 
-def operator_health_readback(*, controller: RuntimeSafetyController) -> dict[str, object]:
-    """Adapter for the operator aggregate's ``operator_health_readback`` hook."""
-
-    return controller.health().as_dict()
+_OPERATOR_MAX_RESPONSE_BYTES = 64 * 1024
+_OPERATOR_MAX_ID_BYTES = 256
 
 
-def request_operator_safety_stop(*, controller: RuntimeSafetyController, reason: str) -> dict[str, object]:
-    """Adapter for the operator aggregate's safety-stop hook."""
+def _operator_text(value: object, name: str, maximum: int = _OPERATOR_MAX_ID_BYTES) -> str:
+    if not isinstance(value, str) or not value or "\x00" in value or len(value.encode("utf-8")) > maximum:
+        raise ValueError(f"{name} is invalid")
+    if any(ord(char) < 0x20 and char not in "\t" for char in value):
+        raise ValueError(f"{name} contains control characters")
+    return value
 
-    return controller.request_safety_stop(reason).as_dict()
+
+def _operator_credentials() -> tuple[str, str] | None:
+    url = os.environ.get("PLANE_AGENT_RUNTIME_URL", "")
+    direct = os.environ.get("PLANE_AGENT_RUNTIME_SECRET", "")
+    secret_file = os.environ.get("PLANE_AGENT_RUNTIME_SECRET_FILE", "")
+    if not url or (direct and secret_file):
+        return None
+    secret = direct
+    if secret_file:
+        try:
+            secret = Path(secret_file).read_text(encoding="utf-8").strip()
+        except OSError:
+            return None
+    if not secret or len(secret.encode("utf-8")) < 32:
+        return None
+    parsed = urlsplit(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+        return None
+    if parsed.query or parsed.fragment:
+        return None
+    return url.rstrip("/"), secret
+
+
+def _operator_http(method: str, path: str, body: bytes | None = None) -> tuple[int, dict[str, object]]:
+    credentials = _operator_credentials()
+    if credentials is None:
+        return 0, {"status": "external_required", "ready": False, "code": "RUNTIME_NOT_CONFIGURED"}
+    base_url, secret = credentials
+    parsed = urlsplit(base_url)
+    connection_type = http.client.HTTPSConnection if parsed.scheme == "https" else http.client.HTTPConnection
+    connection = connection_type(parsed.hostname, parsed.port, timeout=5.0)
+    try:
+        connection.request(
+            method,
+            path,
+            body=body,
+            headers={
+                "Authorization": f"Bearer {secret}",
+                "Content-Type": "application/json",
+                "Content-Length": str(len(body or b"")),
+            },
+        )
+        response = connection.getresponse()
+        raw = response.read(_OPERATOR_MAX_RESPONSE_BYTES + 1)
+        if len(raw) > _OPERATOR_MAX_RESPONSE_BYTES:
+            raise RuntimeError("runtime operator response exceeds its size bound")
+        value = json.loads(raw.decode("utf-8"))
+        if not isinstance(value, dict):
+            raise RuntimeError("runtime operator response is not an object")
+        return response.status, value
+    except (OSError, ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("runtime operator boundary is unavailable") from exc
+    finally:
+        connection.close()
+
+
+def operator_health_readback(workspace_id: str, limit: int) -> dict[str, object]:
+    """Read bounded runtime health through the authenticated runtime HTTP seam."""
+
+    workspace_id = _operator_text(workspace_id, "workspace_id")
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 12:
+        raise ValueError("limit is outside its allowed range")
+    status, value = _operator_http("GET", os.environ.get("PLANE_AGENT_RUNTIME_HEALTH_PATH", "/health/ready"))
+    if status == 0:
+        return {**value, "workspace_id": workspace_id, "limit": limit}
+    if status not in {200, 503}:
+        raise RuntimeError("runtime health boundary rejected the request")
+    safety_stop = bool(value.get("safetyStop", False))
+    value["workspace_id"] = workspace_id
+    value["limit"] = limit
+    value["safety_stop"] = {
+        "status": "draining" if safety_stop else value.get("status", "dependency_failure"),
+        "requested": safety_stop,
+        "control": "runtime_operator_adapter",
+    }
+    return value
+
+
+def request_operator_safety_stop(
+    workspace_id: str,
+    invocation_id: str,
+    reason: str,
+    idempotency_key: str,
+) -> dict[str, object]:
+    """Request an authenticated, targeted, idempotent runtime safety stop."""
+
+    workspace_id = _operator_text(workspace_id, "workspace_id")
+    invocation_id = _operator_text(invocation_id, "invocation_id")
+    reason = _operator_text(reason, "reason", 512)
+    idempotency_key = _operator_text(idempotency_key, "idempotency_key")
+    body = json.dumps(
+        {
+            "workspaceId": workspace_id,
+            "invocationId": invocation_id,
+            "reason": reason,
+            "idempotencyKey": idempotency_key,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    status, value = _operator_http("POST", "/safety-stop", body)
+    if status == 0:
+        return {**value, "workspace_id": workspace_id, "invocation_id": invocation_id}
+    if status not in {200, 202}:
+        raise RuntimeError("runtime safety-stop boundary rejected the request")
+    return value
 
 
 __all__ = [

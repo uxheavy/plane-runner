@@ -44,7 +44,8 @@ health = controller.health().as_dict()
 bounded, non-secret diagnostic. The controller never returns credentials.
 
 For the T3 operator aggregate, register these exact adapters without moving
-state ownership into the aggregate:
+state ownership into the aggregate. They are Plane-side clients of the
+runtime HTTP owner, not controller instances:
 
 ```python
 from plane.agent.runtime import (
@@ -53,19 +54,42 @@ from plane.agent.runtime import (
     request_operator_safety_stop,
 )
 
-operator_health_readback(controller: RuntimeSafetyController) -> dict[str, object]
+operator_health_readback(workspace_id: str, limit: int) -> dict[str, object]
 request_operator_safety_stop(
-    controller: RuntimeSafetyController,
+    workspace_id: str,
+    invocation_id: str,
     reason: str,
+    idempotency_key: str,
 ) -> dict[str, object]
 ```
 
-The functions are keyword-only (`controller=...`, and `reason=...` for the
-stop adapter). The first calls `controller.health().as_dict()`; the second
-calls `controller.request_safety_stop(reason).as_dict()`. The stop is one-way
-for that process and persists a mode-0600 marker. T3 should expose its own
-operator hook names `operator_health_readback` and
-`request_operator_safety_stop` by forwarding to these runtime-owned adapters.
+The health call validates the workspace and bound, then reads the bounded
+runtime health endpoint. The stop call sends all four fields to the
+authenticated `/safety-stop` endpoint. The runtime binds the idempotency key
+to the workspace, invocation, and reason; a matching retry is a replay and a
+conflicting retry is rejected. T3 should expose its own operator hook names
+`operator_health_readback` and `request_operator_safety_stop` by forwarding to
+these runtime-owned adapters.
+
+The T3 safety-stop caller must preserve the Plane lifecycle boundary. Before
+calling `request_operator_safety_stop`, or in the same application-level
+operation, it must durably record the cancellation/control transition for the
+bound invocation using Plane's existing
+`plane.agent.runtime.supervisor.request_runtime_cancellation` path with
+`invocation`, `reason`, `operator`, and the operator `idempotency_key` (and its
+existing audit/idempotency evidence), keyed by the workspace and invocation.
+A failed durable write must not call the runtime.
+After the durable write succeeds, the caller may send the runtime request as
+best-effort enforcement. A runtime timeout or dependency failure must be
+reported as external enforcement failure while the durable Plane cancellation
+remains authoritative and is reconciled on the next worker/runtime start.
+
+The runtime response labels its local state
+`authority: runtime_ephemeral_enforcement` and
+`planeLifecycleAuthority: required`. Its in-memory targeted-stop map and
+container marker are not durable lifecycle state; a runtime restart may erase
+them. Plane must therefore re-read the durable control row and reissue
+best-effort enforcement for any still-running invocation after replacement.
 
 ## Readiness and bounded diagnostics
 
@@ -84,8 +108,9 @@ docker compose --env-file deployments/cli/community/variables.env \
   -f deployments/cli/community/docker-compose.yml ps agent-runtime
 ```
 
-The runtime has no Docker network, so its health endpoint is checked from
-inside the disposable container rather than through a published host port:
+The runtime has an internal-only Docker network shared with API/worker for the
+authenticated dispatch and host callback seams. It has no published host
+port. Its health endpoint is checked from inside the disposable container:
 
 ```sh
 docker compose --env-file deployments/cli/community/variables.env \
@@ -101,19 +126,17 @@ only for `ready`. `configured`, `dependency_failure`, `draining`, and
 `stopped` remain visible in the bounded JSON body and are not collapsed into a
 false ready result.
 
+The configured child command is fail-closed at both the Plane and launcher
+boundaries. Its argv must be the approved Python executable followed by
+`-m plane_runtime.g1_runtime_image.bootstrap --once --g1-production`; a
+comment, filename containing the module name, or arbitrary extra flag is not
+accepted. An invocation-scoped `--plane-host-socket <absolute-path>` extension
+is added only by the authenticated host callback bridge.
+
 ## Global safety stop and credential revocation
 
-The in-process owner can stop new work atomically while existing invocations
-drain:
-
-```python
-from plane.agent.runtime import request_operator_safety_stop
-
-snapshot = request_operator_safety_stop(
-    controller=controller,
-    reason="incident reference INC-LOCAL-001",
-)
-```
+Plane operators target a workspace and invocation through the runtime-owned
+HTTP boundary. This does not mutate Plane lifecycle state:
 
 The HTTP boundary uses the mounted secret only for local authorization. Never
 echo it while diagnosing. For a disposable container, read the file inside the
@@ -126,7 +149,12 @@ import json, urllib.request
 secret = open("/run/secrets/plane_agent_runtime", encoding="utf-8").read().strip()
 request = urllib.request.Request(
     "http://127.0.0.1:8080/safety-stop",
-    data=json.dumps({"reason": "incident reference INC-LOCAL-001"}).encode(),
+    data=json.dumps({
+        "workspaceId": "workspace:local",
+        "invocationId": "invocation:local",
+        "reason": "incident reference INC-LOCAL-001",
+        "idempotencyKey": "stop:INC-LOCAL-001",
+    }, sort_keys=True, separators=(",", ":")).encode(),
     headers={"Authorization": "Bearer " + secret, "Content-Type": "application/json"},
     method="POST",
 )

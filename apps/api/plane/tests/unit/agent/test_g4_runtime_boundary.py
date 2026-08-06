@@ -18,8 +18,6 @@ from plane.agent.runtime import (
     RuntimeProcessPolicy,
     RuntimeSafetyController,
     RuntimeSafetyStopError,
-    operator_health_readback,
-    request_operator_safety_stop,
 )
 from plane.agent.runtime.service import _RuntimeHTTPServer
 
@@ -114,8 +112,8 @@ def test_g4_runtime_safety_controller_has_stable_readback_and_one_way_stop(tmp_p
 def test_g4_runtime_operator_adapters_forward_only_the_owner_snapshot(tmp_path):
     controller = RuntimeSafetyController(configured=True, stop_file=tmp_path / "safety-stop")
     controller.mark_ready()
-    assert operator_health_readback(controller=controller)["status"] == "ready"
-    stopped = request_operator_safety_stop(controller=controller, reason="operator test")
+    assert controller.health().as_dict()["status"] == "ready"
+    stopped = controller.request_safety_stop("operator test").as_dict()
     assert stopped["status"] == "draining"
     assert stopped["safetyStop"] is True
 
@@ -189,7 +187,10 @@ def test_g4_runtime_http_health_and_safety_stop_boundary(tmp_path):
             assert json.loads(response.read())["status"] == "ready"
         request = urllib.request.Request(
             f"{url}/safety-stop",
-            data=b'{"reason":"test stop"}',
+            data=(
+                b'{"idempotencyKey":"stop:test","invocationId":"invocation:test",'
+                b'"reason":"test stop","workspaceId":"workspace:test"}'
+            ),
             headers={
                 "Authorization": f"Bearer {configuration.shared_secret}",
                 "Content-Type": "application/json",
@@ -198,7 +199,7 @@ def test_g4_runtime_http_health_and_safety_stop_boundary(tmp_path):
         )
         with urllib.request.urlopen(request, timeout=2) as response:
             assert response.status == 202
-            assert json.loads(response.read())["status"] == "draining"
+            assert json.loads(response.read())["status"] == "accepted"
         with pytest.raises(urllib.error.HTTPError) as error:
             urllib.request.urlopen(f"{url}/health/ready", timeout=2)
         assert error.value.code == 503

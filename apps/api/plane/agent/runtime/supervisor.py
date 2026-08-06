@@ -235,9 +235,18 @@ def runtime_invocation_cancellation_requested(invocation_id: Any) -> bool:
 
 @transaction.atomic
 def request_runtime_cancellation(
-    invocation: RuntimeInvocation, *, reason: str = "Cancelled by an administrator", operator=None
+    invocation: RuntimeInvocation,
+    *,
+    reason: str = "Cancelled by an administrator",
+    operator=None,
+    idempotency_key: str | None = None,
 ):
-    """Record cancellation durably and create the one visible event immediately."""
+    """Record cancellation durably and create the one visible event immediately.
+
+    ``idempotency_key`` is the caller's durable operator command key.  When
+    supplied, it is bound to the Plane terminal event before any runtime-side
+    enforcement is attempted; the runtime HTTP stop remains only best-effort.
+    """
 
     assignment, run, stored = lock_invocation_path(invocation.pk)
     stored.run = run
@@ -253,7 +262,12 @@ def request_runtime_cancellation(
             _allow_lifecycle=True, update_fields=["cancellation_requested_at", "cancellation_reason", "updated_at"]
         )
     if not RunTerminalEvent.objects.filter(invocation=stored).exists():
-        finalize_invocation(stored, kind="run_cancellation", reason=control.cancellation_reason)
+        finalize_invocation(
+            stored,
+            kind="run_cancellation",
+            reason=control.cancellation_reason,
+            idempotency_key=idempotency_key,
+        )
     control.state = RuntimeControlState.RELEASED
     control.lease_owner = None
     control.lease_expires_at = None

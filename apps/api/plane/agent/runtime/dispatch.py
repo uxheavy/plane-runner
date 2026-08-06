@@ -6,9 +6,8 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
 from copy import deepcopy
-from typing import Any, Protocol
+from typing import Any
 
 from django.db import IntegrityError, transaction
 
@@ -24,20 +23,11 @@ from plane.agent.lifecycle.runtime_contract import (
 from plane.agent.lifecycle import lock_invocation_path
 from plane.db.models import RuntimeEventIngress, RuntimeExitEvidence, RuntimeInvocation
 
-
-class RuntimeDispatchError(ValueError):
-    """Raised when the separate runtime transport cannot accept a dispatch."""
+from .contracts import RuntimeDispatchError, RuntimeTransport
 
 
 class RuntimeIngressError(ValueError):
     """Raised when an untrusted runtime frame cannot become Plane evidence."""
-
-
-class RuntimeTransport(Protocol):
-    """Logical transport to the separate runtime service."""
-
-    def dispatch(self, snapshot_json: str, envelope_json: str) -> Iterable[str]:
-        """Send canonical JSON and return serialized untrusted frames."""
 
 
 def _contract_error(exc: RuntimeContractError, context: str) -> RuntimeIngressError:
