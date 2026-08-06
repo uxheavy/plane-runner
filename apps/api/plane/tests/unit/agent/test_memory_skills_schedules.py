@@ -6,7 +6,15 @@ import pytest
 from django.core.exceptions import ValidationError
 from django.db import close_old_connections
 
-from plane.agent.lifecycle import create_actor, create_profile
+from plane.agent.lifecycle import (
+    InvalidTransitionError,
+    RecoveryIntentRequiredError,
+    create_actor,
+    create_profile,
+    create_run,
+    record_invocation,
+    transition_run,
+)
 from plane.agent.memory import (
     AgentMemoryError,
     apply_memory_retention,
@@ -23,7 +31,17 @@ from plane.agent.memory import (
     review_proposal,
     rollback_memory,
 )
-from plane.agent.schedules import create_schedule, fire_schedule, next_schedule_fire, parse_cron_expression
+from plane.agent.schedules import (
+    AgentScheduleError,
+    cancel_schedule,
+    create_schedule,
+    fire_due_schedules,
+    fire_schedule,
+    next_schedule_fire,
+    parse_cron_expression,
+    pause_schedule,
+    resume_schedule,
+)
 from plane.agent.skills import (
     capture_skill_candidate,
     create_skill,
@@ -40,11 +58,15 @@ from plane.db.models import (
     AgentProvenanceKind,
     AgentRevisionState,
     AgentRole,
+    AgentScheduleFire,
     AgentScheduleFireState,
     AgentScheduleState,
     AgentSkillDefinition,
     AgentSkillVisibility,
+    AssignmentContract,
     Project,
+    RecoveryIntent,
+    RunState,
     User,
     Workspace,
     WorkspaceMember,
@@ -566,15 +588,55 @@ def test_schedule_timezone_idempotency_normal_assignment_and_retry(actor, profil
     schedule.refresh_from_db()
     assert schedule.next_fire_at == datetime(2026, 8, 6, 16, 0, tzinfo=timezone.utc)
 
-    schedule.state = AgentScheduleState.PAUSED
-    schedule.save()
-    failed = fire_schedule(schedule, scheduled_for=schedule.next_fire_at, now=start)
-    assert failed.state == AgentScheduleFireState.FAILED
-    schedule.state = AgentScheduleState.ENABLED
-    schedule.save()
-    retried = fire_schedule(schedule, scheduled_for=schedule.next_fire_at, now=start + timedelta(seconds=1))
+    paused = pause_schedule(schedule)
+    with pytest.raises(AgentScheduleError, match="paused"):
+        fire_schedule(schedule, scheduled_for=schedule.next_fire_at, now=start)
+    assert paused.__class__.objects.get(pk=schedule.pk).fires.count() == 1
+    resumed = resume_schedule(paused)
+    retried = fire_schedule(schedule, scheduled_for=resumed.next_fire_at, now=start + timedelta(seconds=1))
     assert retried.state == AgentScheduleFireState.CREATED
     assert retried.assignment is not None
+
+
+@pytest.mark.django_db
+def test_schedule_control_state_is_idempotent_and_blocks_new_fires(actor, profile, create_user):
+    start = datetime(2026, 8, 5, 15, 0, tzinfo=timezone.utc)
+    schedule = create_schedule(
+        actor,
+        name="Controllable schedule",
+        cron_expression="*/5 * * * *",
+        timezone_name="UTC",
+        target_ref="issue:control",
+        objective="Honor Plane schedule control state.",
+        starts_at=start,
+    )
+    scheduled_for = schedule.next_fire_at
+
+    paused = pause_schedule(schedule)
+    assert pause_schedule(paused).id == paused.id
+    paused.refresh_from_db()
+    assert paused.state == AgentScheduleState.PAUSED
+    assert paused.next_fire_at == scheduled_for
+    assert fire_due_schedules(now=scheduled_for + timedelta(minutes=1)) == []
+    with pytest.raises(AgentScheduleError, match="paused"):
+        fire_schedule(paused, scheduled_for=scheduled_for, created_by=create_user)
+    assert paused.fires.count() == 0
+
+    resumed = resume_schedule(paused)
+    assert resume_schedule(resumed).id == resumed.id
+    fire = fire_schedule(resumed, scheduled_for=scheduled_for, created_by=create_user)
+    assert fire.state == AgentScheduleFireState.CREATED
+
+    cancelled = cancel_schedule(resumed)
+    assert cancel_schedule(cancelled).id == cancelled.id
+    cancelled.refresh_from_db()
+    assert cancelled.state == AgentScheduleState.DISABLED
+    assert cancelled.next_fire_at is None
+    with pytest.raises(AgentScheduleError, match="disabled"):
+        fire_schedule(cancelled, scheduled_for=scheduled_for + timedelta(minutes=5), created_by=create_user)
+    assert cancelled.fires.count() == 1
+    with pytest.raises(AgentScheduleError, match="terminal"):
+        resume_schedule(cancelled)
 
 
 def test_standard_cron_weekday_dom_dow_and_dst_semantics():
@@ -647,8 +709,8 @@ def test_schedule_fire_concurrency_and_retry_exhaustion(actor, profile, create_u
     assert schedule.__class__.objects.get(pk=schedule.pk).fires.count() == 1
 
     schedule.refresh_from_db()
-    schedule.state = AgentScheduleState.PAUSED
-    schedule.save()
+    actor.is_active = False
+    actor.save(update_fields=["is_active", "updated_at"])
     failed = fire_schedule(schedule, scheduled_for=schedule.next_fire_at, now=start)
     assert failed.state == AgentScheduleFireState.FAILED
     failed_again = fire_schedule(
@@ -658,3 +720,55 @@ def test_schedule_fire_concurrency_and_retry_exhaustion(actor, profile, create_u
     )
     assert failed_again.state == AgentScheduleFireState.EXHAUSTED
     assert failed_again.assignment_id is None
+
+
+@pytest.mark.django_db
+def test_schedule_fire_enters_normal_lifecycle_and_requires_explicit_unknown_recovery(actor, profile, create_user):
+    start = datetime(2026, 8, 5, 15, 0, tzinfo=timezone.utc)
+    schedule = create_schedule(
+        actor,
+        name="Recovery schedule",
+        cron_expression="*/5 * * * *",
+        timezone_name="UTC",
+        target_ref="issue:recovery",
+        objective="Recover through the Plane run lifecycle.",
+        starts_at=start,
+    )
+    fire = fire_schedule(schedule, scheduled_for=schedule.next_fire_at, created_by=create_user)
+    replay = fire_schedule(schedule, scheduled_for=schedule.next_fire_at, created_by=create_user)
+    assignment = fire.assignment
+    assert replay.id == fire.id
+    assert assignment is not None
+    assert AgentScheduleFire.objects.filter(schedule=schedule).count() == 1
+    assert AssignmentContract.objects.filter(assignee=actor).count() == 1
+
+    run = create_run(
+        assignment,
+        profile,
+        idempotency_key="idempotency:schedule-recovery-run",
+        created_by=create_user,
+    )
+    invocation = record_invocation(run, idempotency_key="idempotency:schedule-recovery-invocation")
+    unknown = transition_run(run, RunState.OUTCOME_UNKNOWN)
+
+    with pytest.raises(RecoveryIntentRequiredError):
+        create_run(assignment, profile)
+    with pytest.raises(RecoveryIntentRequiredError):
+        create_run(assignment, profile, recovery_of=unknown)
+
+    recovered = create_run(
+        assignment,
+        profile,
+        recovery_of=unknown,
+        recovery_intent=RecoveryIntent.RECONCILE,
+        idempotency_key="idempotency:schedule-reconciled-run",
+        created_by=create_user,
+    )
+    assert recovered.id != run.id
+    assert recovered.recovery_of_id == unknown.id
+    assert recovered.lineage_of_id == unknown.id
+    with pytest.raises(InvalidTransitionError):
+        record_invocation(unknown, idempotency_key="idempotency:schedule-blind-replay")
+    assert invocation.run_id == run.id
+    assert AssignmentContract.objects.filter(assignee=actor).count() == 1
+    assert AgentScheduleFire.objects.filter(schedule=schedule).count() == 1

@@ -24,6 +24,28 @@ class AgentScheduleError(ValidationError):
     """Base error for schedule definitions and trigger control."""
 
 
+_SCHEDULE_STATE_TRANSITIONS = {
+    AgentScheduleState.ENABLED: {
+        AgentScheduleState.ENABLED,
+        AgentScheduleState.PAUSED,
+        AgentScheduleState.DISABLED,
+    },
+    AgentScheduleState.PAUSED: {
+        AgentScheduleState.ENABLED,
+        AgentScheduleState.PAUSED,
+        AgentScheduleState.DISABLED,
+    },
+    AgentScheduleState.DISABLED: {AgentScheduleState.DISABLED},
+}
+
+
+def _schedule_state(value: str) -> AgentScheduleState:
+    try:
+        return AgentScheduleState(value)
+    except (TypeError, ValueError) as exc:
+        raise AgentScheduleError(f"Unknown schedule state: {value}") from exc
+
+
 def _non_empty(value: str, field: str, limit: int = 65_536) -> str:
     if not isinstance(value, str) or not value.strip() or len(value.encode("utf-8")) > limit:
         raise AgentScheduleError(f"{field} must be a non-empty string within {limit} UTF-8 bytes")
@@ -248,6 +270,47 @@ def create_schedule(
     )
 
 
+@transaction.atomic
+def transition_schedule(schedule: AgentSchedule, target: str) -> AgentSchedule:
+    """Apply one legal, idempotent Plane-owned schedule control transition.
+
+    Pausing preserves the next due slot for a later resume.  Cancellation is
+    represented by the terminal ``disabled`` state and clears future trigger
+    eligibility.  Existing fires and their assignments are never rewritten by
+    schedule control.
+    """
+
+    target = _schedule_state(target)
+    locked_schedule = AgentSchedule.objects.select_for_update().get(pk=schedule.pk)
+    if target not in _SCHEDULE_STATE_TRANSITIONS[locked_schedule.state]:
+        raise AgentScheduleError(
+            f"Schedule state {locked_schedule.state} cannot move to {target}; disabled is terminal"
+        )
+    if locked_schedule.state == target:
+        return locked_schedule
+    locked_schedule.state = target
+    update_fields = ["state", "updated_at"]
+    if target == AgentScheduleState.DISABLED:
+        locked_schedule.next_fire_at = None
+        update_fields.append("next_fire_at")
+    locked_schedule.save(update_fields=update_fields)
+    return locked_schedule
+
+
+def pause_schedule(schedule: AgentSchedule) -> AgentSchedule:
+    return transition_schedule(schedule, AgentScheduleState.PAUSED)
+
+
+def resume_schedule(schedule: AgentSchedule) -> AgentSchedule:
+    return transition_schedule(schedule, AgentScheduleState.ENABLED)
+
+
+def cancel_schedule(schedule: AgentSchedule) -> AgentSchedule:
+    """Permanently cancel a schedule without cancelling its normal assignments."""
+
+    return transition_schedule(schedule, AgentScheduleState.DISABLED)
+
+
 def _fire_key(schedule: AgentSchedule, scheduled_for: datetime, idempotency_key: str | None) -> str:
     if idempotency_key is not None:
         return _non_empty(idempotency_key, "schedule fire idempotency_key", 128)
@@ -298,6 +361,10 @@ def fire_schedule(
         .filter(schedule=locked_schedule, scheduled_for=scheduled_for)
         .first()
     )
+    if locked_schedule.state != AgentScheduleState.ENABLED:
+        if fire is not None:
+            return fire
+        raise AgentScheduleError(f"Schedule is {locked_schedule.state}; no new fire may be created")
     if fire is None:
         fire = AgentScheduleFire.objects.create(
             workspace=locked_schedule.workspace,
@@ -320,13 +387,6 @@ def fire_schedule(
         fire.state = AgentScheduleFireState.PENDING
         fire.error = ""
         fire.save(update_fields=["attempt", "state", "error", "updated_at"])
-    if locked_schedule.state != AgentScheduleState.ENABLED:
-        return _record_failure(
-            fire,
-            now=now,
-            error=AgentScheduleError(f"Schedule is {locked_schedule.state}"),
-            retry_policy=_retry_policy(locked_schedule.retry_policy),
-        )
     retry_policy = _retry_policy(locked_schedule.retry_policy)
     try:
         with transaction.atomic():
