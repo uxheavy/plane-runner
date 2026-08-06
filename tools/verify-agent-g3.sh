@@ -166,6 +166,7 @@ run_api() {
     docker run --rm \
         --network "${NETWORK_NAME}" \
         "${API_ENV[@]}" \
+        --entrypoint /bin/sh \
         --mount "type=bind,src=${ROOT_DIR}/apps/api,dst=/workspace/apps/api,readonly" \
         --mount "type=bind,src=${ROOT_DIR}/packages/agent-runtime-contract,dst=/workspace/packages/agent-runtime-contract,readonly" \
         --mount "type=bind,src=${MCP_ROOT},dst=/workspace/external/plane-mcp-server,readonly" \
@@ -174,7 +175,7 @@ run_api() {
         --mount "type=bind,src=${HERMES_ROOT},dst=/workspace/hermes-agent,readonly" \
         --mount "type=bind,src=${RUNTIME_LOG_DIR},dst=/workspace/apps/api/plane/logs" \
         --workdir /workspace/apps/api \
-        "${API_TEST_IMAGE}" "$@"
+        "${API_TEST_IMAGE}" -c 'exec "$@"' -- "$@"
 }
 
 G3_TEST_PATHS=(

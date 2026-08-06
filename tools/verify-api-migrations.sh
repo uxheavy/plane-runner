@@ -43,10 +43,10 @@ run_api() {
     docker run --rm \
         --network "${NETWORK_NAME}" \
         "${API_ENV[@]}" \
+        --entrypoint /bin/sh \
         --mount "type=bind,src=${ROOT_DIR}/apps/api,dst=/code,readonly" \
         --workdir /code \
-        "${API_TEST_IMAGE}" \
-        "$@"
+        "${API_TEST_IMAGE}" -c 'exec "$@"' -- "$@"
 }
 
 fail() {
