@@ -59,7 +59,10 @@ def _validate_agent_runtime_boundary():
             "PLANE_AGENT_RUNTIME_SECRET_FILE": os.environ.get("PLANE_AGENT_RUNTIME_SECRET_FILE", ""),
             "PLANE_AGENT_RUNTIME_COMMAND": runtime_configuration.command,
             "PLANE_AGENT_RUNTIME_ENVIRONMENT": dict(runtime_configuration.child_environment),
-            "PLANE_AGENT_RUNTIME_CREDENTIALS": dict(runtime_configuration.provider_credentials),
+            "PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER": runtime_configuration.credential_resolver,
+            "PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE": os.environ.get(
+                "PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE", "/tmp/plane-agent-credentials/revocations.json"
+            ),
             "PLANE_AGENT_RUNTIME_TIMEOUT_SECONDS": runtime_configuration.timeout_seconds,
             "PLANE_AGENT_RUNTIME_MAX_REQUEST_BYTES": runtime_configuration.max_request_bytes,
             "PLANE_AGENT_RUNTIME_MAX_RESPONSE_BYTES": runtime_configuration.max_response_bytes,

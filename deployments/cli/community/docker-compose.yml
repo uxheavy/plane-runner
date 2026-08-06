@@ -71,6 +71,8 @@ x-app-env: &app-env
   PLANE_AGENT_RUNTIME_HOST_PORT: ${PLANE_AGENT_RUNTIME_HOST_PORT:-8091}
   PLANE_AGENT_RUNTIME_DISPATCH_PATH: ${PLANE_AGENT_RUNTIME_DISPATCH_PATH:-/v1/runtime/dispatch}
   PLANE_AGENT_RUNTIME_SECRET_FILE: /run/secrets/plane_agent_runtime
+  PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER: ${PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER:-command:/usr/local/bin/plane-agent-runtime-credential-resolver}
+  PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE: ${PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE:-/run/plane-agent-credentials/revocations.json}
 
 x-agent-runtime-env: &agent-runtime-env
   DJANGO_SETTINGS_MODULE: plane.settings.common
@@ -164,6 +166,7 @@ services:
         condition: any
     volumes:
       - logs_api:/code/plane/logs
+      - agent_runtime_credential_state:/run/plane-agent-credentials
     expose:
       - "8091"
     networks:
@@ -192,6 +195,7 @@ services:
         condition: any
     volumes:
       - logs_worker:/code/plane/logs
+      - agent_runtime_credential_state:/run/plane-agent-credentials
     expose:
       - "8091"
     networks:
@@ -238,7 +242,7 @@ services:
         condition: service_started
 
   agent-runtime:
-    image: ${PLANE_AGENT_RUNTIME_IMAGE:-makeplane/plane-backend:${APP_RELEASE:-stable}}
+    image: ${PLANE_AGENT_RUNTIME_IMAGE:-uxheavy/plane-agent-runtime:hermes-e573a466}
     command: ["python3", "-m", "plane.agent.runtime.service"]
     user: "${PLANE_AGENT_RUNTIME_UID:-65532}:${PLANE_AGENT_RUNTIME_GID:-65532}"
     read_only: true
@@ -407,6 +411,7 @@ volumes:
   rabbitmq_data:
   proxy_config:
   proxy_data:
+  agent_runtime_credential_state:
 
 networks:
   default:

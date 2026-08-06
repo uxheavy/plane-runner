@@ -203,18 +203,18 @@ def _validate_child_environment(environment: Mapping[str, object]) -> dict[str, 
     return validated
 
 
-def _validate_provider_credentials(value: Mapping[str, object]) -> dict[str, str]:
-    validated: dict[str, str] = {}
-    if len(value) > 16:
-        raise RuntimeConfigurationError("runtime provider credentials contain too many entries")
-    for key, item in value.items():
-        _bounded_text(key, "runtime provider credential key", 128)
-        if not isinstance(item, str) or not item or "\x00" in item:
-            raise RuntimeConfigurationError("runtime provider credentials must be non-empty strings")
-        if len(item.encode("utf-8")) > 16 * 1024:
-            raise RuntimeConfigurationError("runtime provider credential exceeds its size bound")
-        validated[key] = _reject_placeholder(item, "runtime provider credential")
-    return validated
+def _validate_credential_resolver(value: object) -> str:
+    if value in (None, ""):
+        return ""
+    raw = _bounded_text(value, "PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER", 512)
+    if not raw.startswith("command:"):
+        raise RuntimeConfigurationError(
+            "PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER must use command:/absolute/path"
+        )
+    executable = raw.removeprefix("command:")
+    if not executable.startswith("/") or any(char.isspace() for char in executable):
+        raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER executable is invalid")
+    return raw
 
 
 def _validate_runtime_url(value: object) -> str:
@@ -272,7 +272,7 @@ class AgentRuntimeConfiguration:
     ledger_path: str
     command: tuple[str, ...]
     child_environment: Mapping[str, str]
-    provider_credentials: Mapping[str, str]
+    credential_resolver: str
     timeout_seconds: float
     max_request_bytes: int
     max_response_bytes: int
@@ -320,12 +320,10 @@ class AgentRuntimeConfiguration:
                 "PLANE_AGENT_RUNTIME_ENVIRONMENT_JSON",
             )
         )
-        provider_credentials = _validate_provider_credentials(
-            _parse_object(
-                source.get("PLANE_AGENT_RUNTIME_CREDENTIALS_JSON", "{}"),
-                "PLANE_AGENT_RUNTIME_CREDENTIALS_JSON",
+        if source.get("PLANE_AGENT_RUNTIME_CREDENTIALS_JSON"):
+            raise RuntimeConfigurationError(
+                "PLANE_AGENT_RUNTIME_CREDENTIALS_JSON is not accepted; use the host credential resolver"
             )
-        )
         network_policy = source.get("PLANE_AGENT_RUNTIME_NETWORK_POLICY", "none")
         if network_policy != "none":
             raise RuntimeConfigurationError("runtime network policy must be none")
@@ -338,7 +336,9 @@ class AgentRuntimeConfiguration:
             ledger_path=ledger_path,
             command=command,
             child_environment=child_environment,
-            provider_credentials=provider_credentials,
+            credential_resolver=_validate_credential_resolver(
+                source.get("PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER", "")
+            ),
             timeout_seconds=_positive_float(source, "PLANE_AGENT_RUNTIME_TIMEOUT_SECONDS", 300.0, 3600.0),
             max_request_bytes=_positive_int(
                 source, "PLANE_AGENT_RUNTIME_MAX_REQUEST_BYTES", 256 * 1024, 2 * 1024 * 1024
@@ -372,7 +372,7 @@ class AgentRuntimeConfiguration:
             "ledgerPathConfigured": bool(self.ledger_path),
             "commandConfigured": bool(self.command),
             "childEnvironmentEntries": len(self.child_environment),
-            "providerCredentialEntries": len(self.provider_credentials),
+            "credentialResolverConfigured": bool(self.credential_resolver),
             "timeoutSeconds": self.timeout_seconds,
             "maxRequestBytes": self.max_request_bytes,
             "maxResponseBytes": self.max_response_bytes,

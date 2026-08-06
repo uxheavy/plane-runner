@@ -200,7 +200,7 @@ def _runtime_conditions() -> list[dict[str, str]]:
     checkout = getattr(settings, "PLANE_AGENT_RUNTIME_CHECKOUT", None)
     revision = getattr(settings, "PLANE_AGENT_RUNTIME_SHA", None)
     command = getattr(settings, "PLANE_AGENT_RUNTIME_COMMAND", None)
-    credentials = getattr(settings, "PLANE_AGENT_RUNTIME_CREDENTIALS", {})
+    credential_resolver = getattr(settings, "PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER", "")
     environment = getattr(settings, "PLANE_AGENT_RUNTIME_ENVIRONMENT", {})
     conditions: list[dict[str, str]] = []
     if not checkout and not command:
@@ -211,7 +211,7 @@ def _runtime_conditions() -> list[dict[str, str]]:
         conditions.append({"name": "runtime_revision", "status": "revision_mismatch"})
     else:
         conditions.append({"name": "runtime_revision", "status": "pass"})
-    if not isinstance(credentials, dict):
+    if not isinstance(credential_resolver, (str, type(None))) or not credential_resolver:
         conditions.append({"name": "runtime_credentials", "status": "credential_mismatch"})
     else:
         conditions.append({"name": "runtime_credentials", "status": "pass"})

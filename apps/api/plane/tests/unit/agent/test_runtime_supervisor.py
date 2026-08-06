@@ -530,10 +530,12 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
     }
     try:
         with override_settings(
-            PLANE_AGENT_RUNTIME_CREDENTIALS={
-                "api_key": provider_key,
-                "base_url": f"http://127.0.0.1:{provider.server_port}/v1",
-                "api_mode": "chat_completions",
+            PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER={
+                "runtime": {
+                    "api_key": provider_key,
+                    "base_url": f"http://127.0.0.1:{provider.server_port}/v1",
+                    "api_mode": "chat_completions",
+                }
             },
             PLANE_AGENT_RUNTIME_ENVIRONMENT=runtime_environment,
             APP_BASE_URL="http://127.0.0.1",
@@ -670,10 +672,12 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
     }
     replay_output = ""
     with override_settings(
-        PLANE_AGENT_RUNTIME_CREDENTIALS={
-            "api_key": provider_key,
-            "base_url": "http://127.0.0.1:1/v1",
-            "api_mode": "chat_completions",
+        PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER={
+            "runtime": {
+                "api_key": provider_key,
+                "base_url": "http://127.0.0.1:1/v1",
+                "api_mode": "chat_completions",
+            }
         },
         PLANE_AGENT_RUNTIME_ENVIRONMENT=runtime_environment,
     ):

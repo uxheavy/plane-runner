@@ -580,6 +580,7 @@ def test_agent_runtime_production_compose_has_an_isolated_readiness_and_secret_b
     services = _resolved_community_services()
     runtime = services["agent-runtime"]
     runtime_environment = runtime["environment"]
+    assert runtime["image"].startswith("uxheavy/plane-agent-runtime:hermes-e573a466")
     assert "network_mode" not in runtime
     assert "agent_runtime_internal" in runtime["networks"]
     assert not runtime.get("ports")
@@ -594,8 +595,18 @@ def test_agent_runtime_production_compose_has_an_isolated_readiness_and_secret_b
     assert runtime_environment["PLANE_AGENT_RUNTIME_NETWORK_POLICY"] == "none"
     assert runtime_environment["PLANE_AGENT_RUNTIME_SECRET_FILE"] == "/run/secrets/plane_agent_runtime"
     assert "PLANE_AGENT_RUNTIME_SECRET" not in runtime_environment
+    assert "PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER" not in runtime_environment
+    assert "PLANE_AGENT_RUNTIME_CREDENTIALS_JSON" not in runtime_environment
     healthcheck = runtime["healthcheck"]
     assert healthcheck["test"][0] == "CMD-SHELL"
     assert "/health/ready" in healthcheck["test"][1]
     assert services["api"]["environment"]["PLANE_AGENT_RUNTIME_SECRET_FILE"] == "/run/secrets/plane_agent_runtime"
     assert "PLANE_AGENT_RUNTIME_SECRET" not in services["api"]["environment"]
+    assert services["api"]["environment"]["PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER"].startswith("command:")
+    assert services["api"]["environment"]["PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE"] == (
+        "/run/plane-agent-credentials/revocations.json"
+    )
+    assert any(
+        (volume.get("source") if isinstance(volume, dict) else volume).startswith("agent_runtime_credential_state")
+        for volume in services["api"].get("volumes", [])
+    )

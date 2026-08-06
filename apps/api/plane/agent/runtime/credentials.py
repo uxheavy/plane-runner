@@ -9,12 +9,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import secrets
+import subprocess
 import threading
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Any
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows has no supported production runtime
+    fcntl = None
 
 
 class RuntimeCredentialError(ValueError):
@@ -33,10 +41,70 @@ class CredentialLease:
     issued_at: float
     expires_at: float
     credential_digest: str
+    rotation_generation: int = 0
     revoked_at: float | None = None
 
 
 CredentialSource = Callable[[str], Mapping[str, str]] | Mapping[str, Mapping[str, str]]
+
+
+class CommandCredentialResolver:
+    """Resolve one credential reference through a deployment-owned executable.
+
+    The executable is the only production source of provider credentials.  Its
+    stdout is consumed in the supervisor process and never placed in settings,
+    product state, or the runtime container environment.
+    """
+
+    def __init__(self, executable: str, *, timeout_seconds: float = 5.0) -> None:
+        if not isinstance(executable, str) or not executable.startswith("/") or "\x00" in executable:
+            raise RuntimeCredentialError("credential resolver executable is invalid")
+        if len(executable.encode("utf-8")) > 512:
+            raise RuntimeCredentialError("credential resolver executable is too long")
+        if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float)) or timeout_seconds <= 0:
+            raise RuntimeCredentialError("credential resolver timeout is invalid")
+        self.executable = executable
+        self.timeout_seconds = float(timeout_seconds)
+
+    def __call__(self, credential_ref: str) -> Mapping[str, str]:
+        if not isinstance(credential_ref, str) or not credential_ref or "\x00" in credential_ref:
+            raise RuntimeCredentialError("credential reference is invalid")
+        try:
+            result = subprocess.run(
+                [self.executable, credential_ref],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                env={"PATH": "/usr/bin:/bin"},
+                check=True,
+                timeout=self.timeout_seconds,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise RuntimeCredentialError("deployment credential resolver failed") from exc
+        if len(result.stdout) > 128 * 1024:
+            raise RuntimeCredentialError("deployment credential resolver output is oversized")
+        try:
+            value = json.loads(result.stdout.decode("utf-8"))
+        except (UnicodeDecodeError, TypeError, ValueError) as exc:
+            raise RuntimeCredentialError("deployment credential resolver returned invalid JSON") from exc
+        if not isinstance(value, dict):
+            raise RuntimeCredentialError("deployment credential resolver must return an object")
+        return value
+
+
+def credential_source_from_configuration(configuration: object) -> CredentialSource:
+    """Build the host-only resolver from settings or a test-owned source."""
+
+    if isinstance(configuration, str):
+        if not configuration.startswith("command:"):
+            raise RuntimeCredentialError("credential resolver must use command:/absolute/path")
+        executable = configuration.removeprefix("command:")
+        if not executable or any(char.isspace() for char in executable):
+            raise RuntimeCredentialError("credential resolver executable is invalid")
+        return CommandCredentialResolver(executable)
+    if callable(configuration) or isinstance(configuration, Mapping):
+        return configuration
+    raise RuntimeCredentialError("deployment credential resolver is not configured")
 
 
 class RuntimeCredentialBroker:
@@ -48,6 +116,7 @@ class RuntimeCredentialBroker:
         *,
         ttl_seconds: float = 300.0,
         clock: Callable[[], float] | None = None,
+        state_file: str | os.PathLike[str] | None = None,
     ) -> None:
         if not callable(source) and not isinstance(source, Mapping):
             raise TypeError("credential source must be callable or a mapping")
@@ -61,6 +130,9 @@ class RuntimeCredentialBroker:
         self._lock = threading.RLock()
         self._leases: dict[str, CredentialLease] = {}
         self._generations: dict[str, int] = {}
+        self._state_file = Path(state_file) if state_file else None
+        if self._state_file is not None and not self._state_file.is_absolute():
+            raise RuntimeCredentialError("credential state file must be absolute")
 
     def issue(
         self,
@@ -74,9 +146,12 @@ class RuntimeCredentialBroker:
         if invocation_ref is not None:
             self._validate_ref(invocation_ref, "invocation_ref")
         with self._lock:
+            self._refresh_external_state()
             credentials = self._load_current(credential_ref)
             generation = self._generations.get(credential_ref, 0) + 1
             self._generations[credential_ref] = generation
+            state = self._read_state()
+            rotation_generation = int(state["rotationGeneration"].get(credential_ref, 0))
             now = self._now()
             lease = CredentialLease(
                 lease_id=secrets.token_urlsafe(24),
@@ -87,6 +162,7 @@ class RuntimeCredentialBroker:
                 issued_at=now,
                 expires_at=now + self._ttl_seconds,
                 credential_digest=self._digest(credentials),
+                rotation_generation=rotation_generation,
             )
             self._leases[lease.lease_id] = lease
             return lease, credentials
@@ -95,6 +171,7 @@ class RuntimeCredentialBroker:
         self._validate_lease_id(lease_id)
         self._validate_ref(invocation_ref, "invocation_ref")
         with self._lock:
+            self._refresh_external_state()
             lease = self._active_lease(lease_id)
             if lease.invocation_ref is not None and lease.invocation_ref != invocation_ref:
                 raise RuntimeCredentialError("credential lease is bound to another invocation")
@@ -107,6 +184,7 @@ class RuntimeCredentialBroker:
         self._validate_ref(agent_ref, "agent_ref")
         self._validate_ref(invocation_ref, "invocation_ref")
         with self._lock:
+            self._refresh_external_state()
             lease = self._active_lease(lease_id)
             if lease.agent_ref != agent_ref or lease.invocation_ref != invocation_ref:
                 raise RuntimeCredentialError("credential lease binding does not match the invocation")
@@ -121,28 +199,55 @@ class RuntimeCredentialBroker:
             lease = self._active_lease(lease_id)
             revoked = replace(lease, revoked_at=self._now())
             self._leases[lease_id] = revoked
+            self._persist_state_change(lambda state: state["revokedLeases"].append(lease_id))
             return revoked
+
+    def revoke_lease_id(self, lease_id: str) -> bool:
+        """Persist a lease revocation even when the lease lives in another worker."""
+
+        self._validate_lease_id(lease_id)
+        with self._lock:
+            self._refresh_external_state()
+            lease = self._leases.get(lease_id)
+            if lease is not None and lease.revoked_at is None:
+                self._leases[lease_id] = replace(lease, revoked_at=self._now())
+            state = self._read_state()
+            already_revoked = (
+                (lease is not None and lease.revoked_at is not None)
+                or lease_id in state["revokedLeases"]
+            )
+            if not already_revoked:
+                self._persist_state_change(lambda current: current["revokedLeases"].append(lease_id))
+            return not already_revoked
 
     def revoke_invocation(self, invocation_ref: str) -> int:
         self._validate_ref(invocation_ref, "invocation_ref")
         with self._lock:
+            self._refresh_external_state()
             now = self._now()
             count = 0
             for lease_id, lease in tuple(self._leases.items()):
                 if lease.invocation_ref == invocation_ref and lease.revoked_at is None:
                     self._leases[lease_id] = replace(lease, revoked_at=now)
                     count += 1
+            self._persist_state_change(lambda state: state["revokedInvocations"].update({invocation_ref: now}))
             return count
 
     def rotate(self, credential_ref: str) -> int:
         self._validate_ref(credential_ref, "credential_ref")
         with self._lock:
+            self._refresh_external_state()
             generation = self._generations.get(credential_ref, 0) + 1
             self._generations[credential_ref] = generation
             now = self._now()
+            state = self._read_state()
+            rotation_generation = int(state["rotationGeneration"].get(credential_ref, 0)) + 1
             for lease_id, lease in tuple(self._leases.items()):
                 if lease.credential_ref == credential_ref and lease.revoked_at is None:
                     self._leases[lease_id] = replace(lease, revoked_at=now)
+            self._persist_state_change(
+                lambda current: current["rotationGeneration"].update({credential_ref: rotation_generation})
+            )
             return generation
 
     def get_lease(self, lease_id: str) -> CredentialLease:
@@ -159,6 +264,17 @@ class RuntimeCredentialBroker:
             raise RuntimeCredentialError("credential lease is unknown")
         if lease.revoked_at is not None:
             raise RuntimeCredentialError("credential lease is revoked")
+        state = self._read_state()
+        if lease_id in state["revokedLeases"]:
+            self._leases[lease_id] = replace(lease, revoked_at=self._now())
+            raise RuntimeCredentialError("credential lease is revoked")
+        if lease.invocation_ref and lease.invocation_ref in state["revokedInvocations"]:
+            self._leases[lease_id] = replace(lease, revoked_at=self._now())
+            raise RuntimeCredentialError("credential lease is revoked")
+        current_rotation = state["rotationGeneration"].get(lease.credential_ref, 0)
+        if isinstance(current_rotation, int) and current_rotation > lease.rotation_generation:
+            self._leases[lease_id] = replace(lease, revoked_at=self._now())
+            raise RuntimeCredentialError("credential lease was rotated")
         if self._now() >= lease.expires_at:
             raise RuntimeCredentialError("credential lease is expired")
         return lease
@@ -201,6 +317,70 @@ class RuntimeCredentialBroker:
         return value
 
     @staticmethod
+    def _empty_state() -> dict[str, Any]:
+        return {"revokedLeases": [], "revokedInvocations": {}, "rotationGeneration": {}}
+
+    def _read_state(self) -> dict[str, Any]:
+        if self._state_file is None or not self._state_file.exists():
+            return self._empty_state()
+        try:
+            value = json.loads(self._state_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            raise RuntimeCredentialError("credential state is unavailable") from exc
+        if not isinstance(value, dict):
+            raise RuntimeCredentialError("credential state is invalid")
+        state = self._empty_state()
+        if isinstance(value.get("revokedLeases"), list):
+            state["revokedLeases"] = [item for item in value["revokedLeases"] if isinstance(item, str)]
+        if isinstance(value.get("revokedInvocations"), dict):
+            state["revokedInvocations"] = {
+                key: item
+                for key, item in value["revokedInvocations"].items()
+                if isinstance(key, str) and isinstance(item, (int, float))
+            }
+        if isinstance(value.get("rotationGeneration"), dict):
+            state["rotationGeneration"] = {
+                key: item
+                for key, item in value["rotationGeneration"].items()
+                if isinstance(key, str) and isinstance(item, int) and item >= 0
+            }
+        return state
+
+    def _refresh_external_state(self) -> None:
+        state = self._read_state()
+        now = self._now()
+        for lease_id, lease in tuple(self._leases.items()):
+            if lease.revoked_at is not None:
+                continue
+            if lease_id in state["revokedLeases"] or (
+                lease.invocation_ref and lease.invocation_ref in state["revokedInvocations"]
+            ):
+                self._leases[lease_id] = replace(lease, revoked_at=now)
+            elif state["rotationGeneration"].get(lease.credential_ref, 0) > lease.rotation_generation:
+                self._leases[lease_id] = replace(lease, revoked_at=now)
+
+    def _persist_state_change(self, update: Callable[[dict[str, Any]], None]) -> None:
+        if self._state_file is None:
+            return
+        self._state_file.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = self._state_file.with_name(self._state_file.name + ".lock")
+        with lock_path.open("a+", encoding="utf-8") as lock:
+            if fcntl is not None:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            try:
+                state = self._read_state()
+                update(state)
+                temporary = self._state_file.with_name(f".{self._state_file.name}.{secrets.token_hex(8)}.tmp")
+                temporary.write_text(json.dumps(state, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+                os.chmod(temporary, 0o600)
+                os.replace(temporary, self._state_file)
+            except OSError as exc:
+                raise RuntimeCredentialError("credential state could not be updated") from exc
+            finally:
+                if fcntl is not None:
+                    fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+    @staticmethod
     def _validate_ref(value: str, name: str) -> None:
         if (
             not isinstance(value, str)
@@ -215,4 +395,10 @@ class RuntimeCredentialBroker:
         RuntimeCredentialBroker._validate_ref(value, "lease_id")
 
 
-__all__ = ["CredentialLease", "RuntimeCredentialBroker", "RuntimeCredentialError"]
+__all__ = [
+    "CommandCredentialResolver",
+    "CredentialLease",
+    "RuntimeCredentialBroker",
+    "RuntimeCredentialError",
+    "credential_source_from_configuration",
+]

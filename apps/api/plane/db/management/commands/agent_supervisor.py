@@ -5,6 +5,7 @@ from __future__ import annotations
 import shlex
 import secrets
 import subprocess
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -17,6 +18,8 @@ from plane.agent.runtime import (
     PlaneHostHTTPServer,
     RemoteRuntimeTransport,
     RuntimeCredentialBroker,
+    RuntimeCredentialError,
+    credential_source_from_configuration,
     RuntimeDispatchError,
     RuntimeHostEndpoint,
     RuntimeSupervisorError,
@@ -63,6 +66,27 @@ class Command(BaseCommand):
                 raise CommandError("Hermes runtime checkout could not be verified") from exc
             if actual_sha != str(expected_sha):
                 raise CommandError("Hermes runtime checkout does not match the configured SHA")
+            try:
+                dirty = subprocess.run(
+                    ["git", "-C", str(checkout), "status", "--porcelain", "--untracked-files=all"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                ).stdout.strip()
+                remotes = subprocess.run(
+                    ["git", "-C", str(checkout), "remote", "-v"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                ).stdout
+            except (OSError, subprocess.SubprocessError) as exc:
+                raise CommandError("Hermes runtime checkout provenance could not be verified") from exc
+            if dirty:
+                raise CommandError("Hermes runtime checkout must be clean")
+            if "github.com/uxheavy/hermes-agent" not in remotes:
+                raise CommandError("Hermes runtime checkout must use the uxheavy fork")
         command = options.get("runtime_command") or getattr(settings, "PLANE_AGENT_RUNTIME_COMMAND", None)
         if isinstance(command, str):
             command = shlex.split(command)
@@ -74,9 +98,11 @@ class Command(BaseCommand):
             command = validate_runtime_command(tuple(command))
         except (TypeError, ValueError) as exc:
             raise CommandError("the production runtime command must use the exact pinned bootstrap argv") from exc
-        runtime_credentials = getattr(settings, "PLANE_AGENT_RUNTIME_CREDENTIALS", {})
-        if not isinstance(runtime_credentials, dict):
-            raise CommandError("PLANE_AGENT_RUNTIME_CREDENTIALS must be a host-only mapping")
+        resolver_configuration = getattr(settings, "PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER", "")
+        try:
+            credential_source = credential_source_from_configuration(resolver_configuration)
+        except RuntimeCredentialError as exc:
+            raise CommandError(str(exc)) from exc
         runtime_environment = getattr(settings, "PLANE_AGENT_RUNTIME_ENVIRONMENT", {})
         if not isinstance(runtime_environment, dict) or any(
             not isinstance(key, str) or not key or "\x00" in key or not isinstance(value, str) or "\x00" in value
@@ -88,6 +114,45 @@ class Command(BaseCommand):
             "PLANE_AGENT_RUNTIME_LEDGER_PATH",
             "/tmp/plane-agent-runtime-ledger.sqlite",
         )
+        credential_state_file = getattr(
+            settings,
+            "PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE",
+            "/run/plane-agent-credentials/revocations.json",
+        )
+        credential_broker = RuntimeCredentialBroker(
+            credential_source,
+            state_file=credential_state_file,
+        )
+
+        def credential_control(current_invocation):
+            actor_ref = current_invocation.run.snapshot["actorRef"]
+            _lease, values = credential_broker.issue(
+                agent_ref=actor_ref,
+                credential_ref="runtime",
+                invocation_ref=current_invocation.invocation_id,
+            )
+            return values
+
+        safety_stop_file = Path(
+            getattr(settings, "PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE", "/run/plane-agent-runtime/safety-stop")
+        )
+
+        def local_cancelled() -> bool:
+            from plane.agent.runtime.supervisor import runtime_invocation_cancelled
+
+            return runtime_invocation_cancelled(invocation.pk) or safety_stop_file.exists()
+
+        monitor_stop = threading.Event()
+
+        def revoke_on_stop() -> None:
+            from plane.agent.runtime.supervisor import runtime_invocation_cancellation_requested
+
+            while not monitor_stop.wait(0.05):
+                if runtime_invocation_cancellation_requested(invocation.pk) or safety_stop_file.exists():
+                    credential_broker.revoke_invocation(invocation.invocation_id)
+
+        monitor = threading.Thread(target=revoke_on_stop, name="plane-runtime-credential-revoker", daemon=True)
+        monitor.start()
         try:
             runtime_url = getattr(settings, "PLANE_AGENT_RUNTIME_URL", "")
             shared_secret = getattr(settings, "PLANE_AGENT_RUNTIME_SHARED_SECRET", "")
@@ -137,7 +202,7 @@ class Command(BaseCommand):
                     max_request_bytes=getattr(settings, "PLANE_AGENT_RUNTIME_MAX_REQUEST_BYTES", 256 * 1024),
                     max_response_bytes=getattr(settings, "PLANE_AGENT_RUNTIME_MAX_RESPONSE_BYTES", 512 * 1024),
                     host_endpoint_factory=host_endpoint,
-                    credential_broker=RuntimeCredentialBroker({"runtime": dict(runtime_credentials)}),
+                    credential_broker=credential_broker,
                     model_call_allowance=options.get("model_call_allowance"),
                 )
             else:
@@ -149,7 +214,8 @@ class Command(BaseCommand):
                     bootstrap_command=True,
                     model_call_allowance=options.get("model_call_allowance"),
                     environment=dict(runtime_environment),
-                    credential_control=lambda _invocation: dict(runtime_credentials),
+                    credential_control=credential_control,
+                    is_cancelled=local_cancelled,
                 )
             result = run_runtime_invocation(
                 invocation,
@@ -157,8 +223,12 @@ class Command(BaseCommand):
                 worker_id=options["worker_id"],
                 lease_seconds=options["lease_seconds"],
             )
-        except (ValueError, OSError, RuntimeSupervisorError) as exc:
+        except (ValueError, OSError, RuntimeCredentialError, RuntimeSupervisorError) as exc:
             raise CommandError(str(exc)) from exc
+        finally:
+            monitor_stop.set()
+            monitor.join(timeout=1)
+            credential_broker.revoke_invocation(invocation.invocation_id)
         self.stdout.write(
             self.style.SUCCESS(
                 f"invocation={result.invocation_id} state={result.state} "

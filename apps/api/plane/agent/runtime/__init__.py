@@ -49,6 +49,8 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "CredentialLease": ("credentials", "CredentialLease"),
     "RuntimeCredentialBroker": ("credentials", "RuntimeCredentialBroker"),
     "RuntimeCredentialError": ("credentials", "RuntimeCredentialError"),
+    "CommandCredentialResolver": ("credentials", "CommandCredentialResolver"),
+    "credential_source_from_configuration": ("credentials", "credential_source_from_configuration"),
     "RuntimeHealthState": ("health", "RuntimeHealthState"),
     "RuntimeHealthStatus": ("health", "RuntimeHealthStatus"),
     "RuntimeSafetyStopError": ("health", "RuntimeSafetyStopError"),

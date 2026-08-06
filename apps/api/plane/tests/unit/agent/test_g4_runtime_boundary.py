@@ -55,6 +55,15 @@ def test_g4_runtime_configuration_rejects_credential_shaped_child_environment_an
         AgentRuntimeConfiguration.from_environment(
             _runtime_environment(PLANE_AGENT_RUNTIME_ENVIRONMENT_JSON='{"PATH":"/bin","PATH":"/usr/bin"}')
         )
+    configuration = AgentRuntimeConfiguration.from_environment(
+        _runtime_environment(PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER="command:/run/secrets/resolve-runtime-credential")
+    )
+    assert configuration.credential_resolver.endswith("resolve-runtime-credential")
+    assert configuration.public_summary()["credentialResolverConfigured"] is True
+    with pytest.raises(RuntimeConfigurationError, match="not accepted"):
+        AgentRuntimeConfiguration.from_environment(
+            _runtime_environment(PLANE_AGENT_RUNTIME_CREDENTIALS_JSON='{"api_key":"never-in-settings"}')
+        )
 
 
 def test_g4_runtime_configuration_reads_a_single_line_secret_file_without_accepting_both_sources(tmp_path):
@@ -156,6 +165,29 @@ def test_g4_runtime_credential_lease_issuance_binding_revocation_and_rotation():
     assert generation == 3
     with pytest.raises(RuntimeCredentialError, match="revoked"):
         broker.resolve(next_lease.lease_id, agent_ref="agent-1", invocation_ref="invocation-2")
+
+
+def test_g4_runtime_credential_operator_state_invalidates_active_leases_across_processes(tmp_path):
+    now = [100.0]
+    state_file = tmp_path / "credential-revocations.json"
+    source = {"provider": {"TOKEN": "disposable-token-1"}}
+    broker = RuntimeCredentialBroker(source, ttl_seconds=60, clock=lambda: now[0], state_file=state_file)
+    lease, _ = broker.issue(agent_ref="agent-1", credential_ref="provider", invocation_ref="invocation-1")
+
+    operator = RuntimeCredentialBroker(lambda _ref: {}, clock=lambda: now[0], state_file=state_file)
+    assert operator.revoke_invocation("invocation-1") == 0
+    with pytest.raises(RuntimeCredentialError, match="revoked"):
+        broker.resolve(lease.lease_id, agent_ref="agent-1", invocation_ref="invocation-1")
+
+    next_lease, _ = broker.issue(agent_ref="agent-1", credential_ref="provider", invocation_ref="invocation-2")
+    assert operator.rotate("provider") == 1
+    with pytest.raises(RuntimeCredentialError, match="revoked|rotated"):
+        broker.resolve(next_lease.lease_id, agent_ref="agent-1", invocation_ref="invocation-2")
+
+    expiring, _ = broker.issue(agent_ref="agent-1", credential_ref="provider", invocation_ref="invocation-3")
+    now[0] = expiring.expires_at
+    with pytest.raises(RuntimeCredentialError, match="expired"):
+        broker.resolve(expiring.lease_id, agent_ref="agent-1", invocation_ref="invocation-3")
 
 
 def test_g4_runtime_process_and_code_mode_policies_are_finite_and_networkless():
