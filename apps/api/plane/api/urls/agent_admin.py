@@ -14,6 +14,10 @@ from plane.api.views.agent_admin import (
     AgentGatewayReadbackListAPIEndpoint,
     AgentGovernanceCommandAPIEndpoint,
     AgentGovernanceReadbackAPIEndpoint,
+    AgentOperatorCanaryAPIEndpoint,
+    AgentOperatorHealthAPIEndpoint,
+    AgentOperatorReadbackAPIEndpoint,
+    AgentOperatorSafetyStopAPIEndpoint,
     AgentOutcomeAcceptAPIEndpoint,
     AgentOutcomeAdminCreateAPIEndpoint,
     AgentOutcomeAdminDetailAPIEndpoint,
@@ -151,6 +155,26 @@ urlpatterns = [
         "workspaces/<str:slug>/agent-admin/governance/commands/",
         AgentGovernanceCommandAPIEndpoint.as_view(http_method_names=["post"]),
         name="agent-admin-governance-command",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/operator/readback/",
+        AgentOperatorReadbackAPIEndpoint.as_view(http_method_names=["get"]),
+        name="agent-admin-operator-readback",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/operator/health/",
+        AgentOperatorHealthAPIEndpoint.as_view(http_method_names=["get"]),
+        name="agent-admin-operator-health",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/operator/canary/",
+        AgentOperatorCanaryAPIEndpoint.as_view(http_method_names=["get"]),
+        name="agent-admin-operator-canary",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/operator/safety-stop/",
+        AgentOperatorSafetyStopAPIEndpoint.as_view(http_method_names=["post"]),
+        name="agent-admin-operator-safety-stop",
     ),
     path(
         "workspaces/<str:slug>/agent-admin/actors/<uuid:actor_id>/memory/",

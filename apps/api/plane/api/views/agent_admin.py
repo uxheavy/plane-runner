@@ -12,6 +12,12 @@ from rest_framework.response import Response
 
 from plane.agent.administration import AgentAdminExtensionCommand, AgentAdminExtensionError, update_actor
 from plane.agent.administration_extensions import build_governance_readback, plane_agent_admin_extension
+from plane.agent.operations_readback import (
+    build_canary_readback,
+    build_health_readback,
+    build_operator_readback,
+    build_safety_stop_command,
+)
 from plane.agent.readback import AgentReadbackTooLarge, build_run_readback, validate_readback_limit
 from plane.agent.validation import MAX_AGENT_READBACK_BYTES
 from plane.agent.lifecycle import (
@@ -49,6 +55,7 @@ from plane.api.serializers import (
     RuntimeInvocationAdminSerializer,
     AgentGovernanceCommandSerializer,
 )
+from plane.api.serializers.agent_admin import AgentOperatorReadbackSerializer, AgentSafetyStopSerializer
 from plane.api.views.base import BaseAPIView
 from plane.db.models import (
     AgentActor,
@@ -500,3 +507,73 @@ class AgentGovernanceCommandAPIEndpoint(AgentAdminAPIView):
         except ValueError as exc:
             raise AgentAdminExtensionError(str(exc)) from exc
         return Response(plane_agent_admin_extension().execute(command))
+
+
+class AgentOperatorReadbackAPIEndpoint(AgentAdminAPIView):
+    """API projection shared with ``agent_operator_readback``."""
+
+    def get(self, request, slug):
+        serializer = AgentOperatorReadbackSerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        values = serializer.validated_data
+        return Response(
+            build_operator_readback(
+                self.workspace(),
+                limit=values["limit"],
+                cursor=values.get("cursor"),
+                run_id=str(values["run_id"]) if values.get("run_id") else None,
+                correlation_id=values.get("correlation_id"),
+                canary_mode=values["canary_mode"],
+            )
+        )
+
+
+class AgentOperatorHealthAPIEndpoint(AgentAdminAPIView):
+    """Small production-readiness projection using the runtime-owned adapter."""
+
+    def get(self, request, slug):
+        serializer = AgentOperatorReadbackSerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        return Response(build_health_readback(self.workspace(), limit=serializer.validated_data["limit"]))
+
+
+class AgentOperatorCanaryAPIEndpoint(AgentAdminAPIView):
+    def get(self, request, slug):
+        mode = request.query_params.get("mode", "offline")
+        try:
+            return Response(build_canary_readback(mode=mode))
+        except ValueError as exc:
+            return Response({"error": {"code": "CANARY_INVALID", "message": str(exc)}}, status=400)
+
+
+class AgentOperatorSafetyStopAPIEndpoint(AgentAdminAPIView):
+    """Delegate one targeted stop; no global or local stop state is stored here."""
+
+    def post(self, request, slug):
+        serializer = AgentSafetyStopSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        values = serializer.validated_data
+        workspace = self.workspace()
+        invocation_id = values.get("invocation_id")
+        if invocation_id is None:
+            run = get_object_or_404(RunAttempt, workspace=workspace, pk=values["run_id"])
+            invocation_id = run.last_invocation_id
+            if not invocation_id:
+                return Response(
+                    {"error": {"code": "SAFETY_STOP_UNAVAILABLE", "message": "The run has no active invocation."}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        if not RuntimeInvocation.objects.filter(run__workspace=workspace, invocation_id=invocation_id).exists():
+            return Response(
+                {"error": {"code": "SAFETY_STOP_UNAVAILABLE", "message": "The invocation is unavailable."}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        result = build_safety_stop_command(
+            workspace,
+            invocation_id=invocation_id,
+            reason=values["reason"],
+            idempotency_key=values["idempotency_key"],
+        )
+        if result.get("status") == "external_required":
+            return Response({"control": result}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        return Response({"control": result, "readback": build_operator_readback(workspace, limit=1)})

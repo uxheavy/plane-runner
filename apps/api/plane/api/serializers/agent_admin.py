@@ -426,6 +426,30 @@ class AgentGovernanceCommandSerializer(serializers.Serializer):
             raise serializers.ValidationError(str(exc)) from exc
 
 
+class AgentOperatorReadbackSerializer(serializers.Serializer):
+    """Bounded query contract shared by operator API and CLI projections."""
+
+    limit = serializers.IntegerField(required=False, min_value=1, max_value=12, default=8)
+    cursor = serializers.CharField(required=False, allow_blank=False, max_length=64)
+    run_id = serializers.UUIDField(required=False)
+    correlation_id = serializers.CharField(required=False, allow_blank=False, max_length=128)
+    canary_mode = serializers.ChoiceField(required=False, choices=("offline", "live"), default="offline")
+
+
+class AgentSafetyStopSerializer(serializers.Serializer):
+    """Targeted runtime safety-stop request; no global stop state is accepted."""
+
+    run_id = serializers.UUIDField(required=False)
+    invocation_id = serializers.CharField(required=False, allow_blank=False, max_length=128)
+    reason = serializers.CharField(required=False, allow_blank=True, default="Operator safety stop", max_length=512)
+    idempotency_key = serializers.CharField(max_length=128, allow_blank=False, trim_whitespace=True)
+
+    def validate(self, attrs):
+        if bool(attrs.get("run_id")) == bool(attrs.get("invocation_id")):
+            raise serializers.ValidationError("Provide exactly one of run_id or invocation_id")
+        return attrs
+
+
 class GatewayReceiptAdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = OperationGatewayIdempotency
