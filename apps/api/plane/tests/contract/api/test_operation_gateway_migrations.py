@@ -11,7 +11,7 @@ from django.utils import timezone
 
 BASE_MIGRATION = ("db", "0126_operationgatewayaudit_operationgatewayidempotency")
 PRE_HEAD_MIGRATION = ("db", "0128_operationgateway_publications_and_audit_trigger")
-HEAD_MIGRATION = ("db", "0137_runtime_supervisor_state")
+HEAD_MIGRATION = ("db", "0138_agentactor_chief_of_staff_for_and_more")
 COMBINED_MIGRATION_CHAIN = (
     (
         ("db", "0123_agent_lifecycle_foundation"),
@@ -46,6 +46,10 @@ COMBINED_MIGRATION_CHAIN = (
     (("db", "0135_agent_input_durability"), ("db", "0134_agent_input_event_sequence")),
     (("db", "0136_agent_principal_and_code_mode_reservations"), ("db", "0135_agent_input_durability")),
     (("db", "0137_runtime_supervisor_state"), ("db", "0136_agent_principal_and_code_mode_reservations")),
+    (
+        ("db", "0138_agentactor_chief_of_staff_for_and_more"),
+        ("db", "0137_runtime_supervisor_state"),
+    ),
 )
 
 

@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 from .base import BaseModel
+from .workspace import WorkspaceMember
 from plane.agent.validation import (
     PROFILE_MODEL_KEYS,
     PROFILE_RUNTIME_KEYS,
@@ -37,6 +38,26 @@ class AgentRole(models.TextChoices):
     HR = "hr", "HR"
     EVALUATOR = "evaluator", "Evaluator"
     CUSTOM = "custom", "Custom"
+
+
+class HRProposalKind(models.TextChoices):
+    HIRE = "hire", "Hire"
+    ROLE_CHANGE = "role_change", "Role change"
+    SUSPEND = "suspend", "Suspend"
+    RETIRE = "retire", "Retire"
+    REASSIGN = "reassign", "Reassign"
+    CHIEF_OF_STAFF = "chief_of_staff", "Chief of staff provisioning"
+
+
+class HRProposalState(models.TextChoices):
+    PROPOSED = "proposed", "Proposed"
+    APPROVED = "approved", "Approved"
+    REJECTED = "rejected", "Rejected"
+
+
+class EvaluatorVerdict(models.TextChoices):
+    ACCEPT = "accept", "Accept recommendation"
+    REVISION_REQUESTED = "revision_requested", "Revision requested"
 
 
 class AssignmentState(models.TextChoices):
@@ -180,6 +201,13 @@ class AgentActor(AgentScopedModel):
     )
     credential_ref = models.CharField(max_length=255, null=True, blank=True)
     is_active = models.BooleanField(default=True)
+    chief_of_staff_for = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="chief_of_staff_agent",
+        null=True,
+        blank=True,
+    )
     active_profile = models.ForeignKey(
         "ProfileVersion",
         on_delete=models.PROTECT,
@@ -217,6 +245,12 @@ class AgentActor(AgentScopedModel):
                 or profile.project_id != self.project_id
             ):
                 raise ValidationError("Active profile must belong to the same Agent actor and Plane scope")
+        if self.chief_of_staff_for_id and not WorkspaceMember.objects.filter(
+            workspace_id=self.workspace_id,
+            member_id=self.chief_of_staff_for_id,
+            is_active=True,
+        ).exists():
+            raise ValidationError("Chief-of-staff Agent must belong to its human's active workspace")
 
 
 class ProfileVersion(AgentScopedModel):
@@ -305,6 +339,25 @@ class AssignmentContract(AgentScopedModel):
         null=True,
         blank=True,
     )
+    root_assignment = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        related_name="rooted_children",
+        null=True,
+        blank=True,
+    )
+    delegated_by = models.ForeignKey(
+        AgentActor,
+        on_delete=models.PROTECT,
+        related_name="delegated_assignments",
+        null=True,
+        blank=True,
+    )
+    delegation_key = models.CharField(max_length=128, unique=True, null=True, blank=True, editable=False)
+    delegation_command_fingerprint = models.CharField(max_length=72, null=True, blank=True, editable=False)
+    delegation_depth = models.PositiveIntegerField(default=0, editable=False)
+    scope = models.JSONField(default=default_dict)
+    budget = models.JSONField(default=default_dict)
     revision = models.PositiveIntegerField(default=1)
     target_ref = models.CharField(max_length=255)
     objective = models.TextField()
@@ -322,6 +375,7 @@ class AssignmentContract(AgentScopedModel):
 
     def save(self, *args, **kwargs):
         allowed = kwargs.pop("_allow_lifecycle", False)
+        allow_reassignment = kwargs.pop("_allow_reassignment", False)
         try:
             validate_bounded_string_list(
                 self.acceptance_criteria,
@@ -332,6 +386,26 @@ class AssignmentContract(AgentScopedModel):
             validate_bounded_list(self.context_refs, "context_refs", max_items=64)
         except AgentValueError as exc:
             raise ValidationError(str(exc)) from exc
+        _assert_immutable(
+            self,
+            (
+                "workspace_id",
+                "project_id",
+                "lineage_of_id",
+                "root_assignment_id",
+                "delegated_by_id",
+                "delegation_key",
+                "delegation_command_fingerprint",
+                "delegation_depth",
+                "scope",
+                "budget",
+                "target_ref",
+                "objective",
+                "acceptance_criteria",
+                "context_refs",
+            ),
+        )
+        _assert_lifecycle_mutation(self, ("assignee_id",), allowed=allow_reassignment)
         _assert_lifecycle_mutation(self, ("state", "revision"), allowed=allowed)
         super().save(*args, **kwargs)
 
@@ -341,13 +415,215 @@ class AssignmentContract(AgentScopedModel):
             raise ValidationError("Assignment must use its assignee's Plane scope")
         if self.lineage_of_id:
             lineage = AssignmentContract.objects.only("workspace_id", "project_id").get(pk=self.lineage_of_id)
-            if lineage.workspace_id != self.workspace_id or lineage.project_id != self.project_id:
+            if lineage.workspace_id != self.workspace_id or (
+                lineage.project_id is not None and lineage.project_id != self.project_id
+            ):
                 raise ValidationError("Assignment lineage must remain in the same Plane scope")
-            if lineage.assignee_id != self.assignee_id:
-                raise ValidationError("Assignment lineage must remain with the same Agent actor")
+        if self.root_assignment_id:
+            root = AssignmentContract.objects.only("workspace_id", "project_id").get(pk=self.root_assignment_id)
+            if root.workspace_id != self.workspace_id or (
+                root.project_id is not None and root.project_id != self.project_id
+            ):
+                raise ValidationError("Assignment root lineage must remain in the same Plane scope")
+        if self.delegated_by_id:
+            delegator = AgentActor.objects.only("workspace_id", "project_id").get(pk=self.delegated_by_id)
+            if delegator.workspace_id != self.workspace_id or (
+                delegator.project_id is not None and delegator.project_id != self.project_id
+            ):
+                raise ValidationError("Assignment delegator is outside the assignment's Plane scope")
 
     def __str__(self):
         return f"{self.target_ref}: {self.objective[:60]}"
+
+
+class AgentHRProposal(AgentScopedModel):
+    """A human-gated proposal for changing Plane control state."""
+
+    kind = models.CharField(max_length=32, choices=HRProposalKind.choices)
+    state = models.CharField(max_length=32, choices=HRProposalState.choices, default=HRProposalState.PROPOSED)
+    proposed_by = models.ForeignKey(AgentActor, on_delete=models.PROTECT, related_name="hr_proposals")
+    subject_actor = models.ForeignKey(
+        AgentActor,
+        on_delete=models.PROTECT,
+        related_name="hr_subject_proposals",
+        null=True,
+        blank=True,
+    )
+    subject_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="agent_hr_proposals",
+        null=True,
+        blank=True,
+    )
+    requested_principal = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="agent_hr_requested_principals",
+        null=True,
+        blank=True,
+    )
+    target_assignment = models.ForeignKey(
+        AssignmentContract,
+        on_delete=models.PROTECT,
+        related_name="hr_reassignment_proposals",
+        null=True,
+        blank=True,
+    )
+    requested_assignee = models.ForeignKey(
+        AgentActor,
+        on_delete=models.PROTECT,
+        related_name="hr_requested_assignments",
+        null=True,
+        blank=True,
+    )
+    requested_role = models.CharField(max_length=32, choices=AgentRole.choices, null=True, blank=True)
+    requested_display_name = models.CharField(max_length=255, blank=True)
+    requested_profile = models.JSONField(default=default_dict)
+    expected_state_fingerprint = models.CharField(max_length=72, blank=True)
+    rationale = models.TextField()
+    idempotency_key = models.CharField(max_length=128, unique=True)
+    command_fingerprint = models.CharField(max_length=72, editable=False)
+    decision_idempotency_key = models.CharField(max_length=128, unique=True, null=True, blank=True, editable=False)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="agent_hr_decisions",
+        null=True,
+        blank=True,
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_note = models.TextField(blank=True)
+    applied_actor = models.ForeignKey(
+        AgentActor,
+        on_delete=models.PROTECT,
+        related_name="applied_hr_proposals",
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        db_table = "agent_hr_proposals"
+        ordering = ("-created_at",)
+        indexes = [models.Index(fields=["workspace", "state"], name="agent_hr_scope_state_idx")]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(kind=HRProposalKind.REASSIGN, target_assignment__isnull=False)
+                | ~models.Q(kind=HRProposalKind.REASSIGN),
+                name="agent_hr_reassign_has_assignment",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        allowed = kwargs.pop("_allow_lifecycle", False)
+        _assert_immutable(
+            self,
+            (
+                "workspace_id",
+                "project_id",
+                "kind",
+                "proposed_by_id",
+                "subject_actor_id",
+                "subject_user_id",
+                "requested_principal_id",
+                "target_assignment_id",
+                "requested_assignee_id",
+                "requested_role",
+                "requested_display_name",
+                "requested_profile",
+                "expected_state_fingerprint",
+                "rationale",
+                "idempotency_key",
+                "command_fingerprint",
+            ),
+        )
+        _assert_lifecycle_mutation(
+            self,
+            ("state", "decision_idempotency_key", "reviewed_by_id", "reviewed_at", "review_note", "applied_actor_id"),
+            allowed=allowed,
+        )
+        super().save(*args, **kwargs)
+
+    def validate_agent_scope(self):
+        proposer = AgentActor.objects.only("workspace_id", "project_id").get(pk=self.proposed_by_id)
+        if proposer.workspace_id != self.workspace_id or (
+            proposer.project_id is not None and proposer.project_id != self.project_id
+        ):
+            raise ValidationError("HR proposal author is outside the proposal's Plane scope")
+        for actor_id, label in (
+            (self.subject_actor_id, "HR proposal subject"),
+            (self.requested_assignee_id, "HR requested assignee"),
+            (self.applied_actor_id, "HR applied actor"),
+        ):
+            if actor_id:
+                actor = AgentActor.objects.only("workspace_id", "project_id").get(pk=actor_id)
+                if actor.workspace_id != self.workspace_id or (
+                    actor.project_id is not None and actor.project_id != self.project_id
+                ):
+                    raise ValidationError(f"{label} is outside the proposal's Plane scope")
+        if self.target_assignment_id:
+            assignment = AssignmentContract.objects.only("workspace_id", "project_id").get(pk=self.target_assignment_id)
+            if (assignment.workspace_id, assignment.project_id) != (self.workspace_id, self.project_id):
+                raise ValidationError("HR assignment target is outside the proposal's Plane scope")
+
+
+class EvaluatorReview(AgentScopedModel):
+    """Durable evaluator evidence; it recommends but never accepts an outcome."""
+
+    outcome = models.OneToOneField("OutcomeSubmission", on_delete=models.PROTECT, related_name="evaluator_review")
+    run = models.ForeignKey("RunAttempt", on_delete=models.PROTECT, related_name="evaluator_reviews")
+    evaluator = models.ForeignKey("AgentActor", on_delete=models.PROTECT, related_name="evaluator_reviews")
+    evaluator_profile = models.ForeignKey("ProfileVersion", on_delete=models.PROTECT, related_name="evaluator_reviews")
+    criteria = models.JSONField(default=default_list)
+    verdict = models.CharField(max_length=32, choices=EvaluatorVerdict.choices)
+    recommendation = models.TextField()
+    provenance = models.JSONField(default=default_dict)
+    idempotency_key = models.CharField(max_length=128, unique=True)
+    command_fingerprint = models.CharField(max_length=72, editable=False)
+    reviewed_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "agent_evaluator_reviews"
+        ordering = ("-created_at",)
+
+    def save(self, *args, **kwargs):
+        _assert_immutable(
+            self,
+            (
+                "workspace_id",
+                "project_id",
+                "outcome_id",
+                "run_id",
+                "evaluator_id",
+                "evaluator_profile_id",
+                "criteria",
+                "verdict",
+                "recommendation",
+                "provenance",
+                "idempotency_key",
+                "command_fingerprint",
+                "reviewed_at",
+            ),
+        )
+        super().save(*args, **kwargs)
+
+    def validate_agent_scope(self):
+        outcome = OutcomeSubmission.objects.only("workspace_id", "project_id", "run_id").get(pk=self.outcome_id)
+        run = RunAttempt.objects.only("workspace_id", "project_id", "actor_id").get(pk=self.run_id)
+        evaluator = AgentActor.objects.only("workspace_id", "project_id").get(pk=self.evaluator_id)
+        profile = ProfileVersion.objects.only("workspace_id", "project_id", "actor_id").get(
+            pk=self.evaluator_profile_id
+        )
+        if (outcome.workspace_id, outcome.project_id) != (self.workspace_id, self.project_id):
+            raise ValidationError("Evaluator review is outside the outcome's Plane scope")
+        if outcome.run_id != self.run_id or (run.workspace_id, run.project_id) != (self.workspace_id, self.project_id):
+            raise ValidationError("Evaluator review must bind the outcome's run")
+        if run.actor_id == self.evaluator_id or profile.actor_id != self.evaluator_id:
+            raise ValidationError("Evaluator review must be independent of the producing Agent")
+        if evaluator.workspace_id != self.workspace_id or (
+            evaluator.project_id is not None and evaluator.project_id != self.project_id
+        ):
+            raise ValidationError("Evaluator review actor is outside the outcome's Plane scope")
 
 
 class RunAttempt(AgentScopedModel):

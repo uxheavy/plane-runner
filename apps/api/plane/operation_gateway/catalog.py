@@ -350,6 +350,92 @@ _AGENT_OUTCOME_PUBLISH_RESULT = {
     "required": ["published", "outcome"],
     "properties": {"published": {"type": "boolean"}, "outcome": {"type": "object"}},
 }
+_AGENT_DELEGATE_INPUT = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "parent_assignment_ref",
+        "delegator_ref",
+        "assignee_ref",
+        "target_ref",
+        "objective",
+        "acceptance_criteria",
+    ],
+    "properties": {
+        "parent_assignment_ref": {"type": "string", "pattern": "^assignment:"},
+        "delegator_ref": {"type": "string", "pattern": "^agent-actor:"},
+        "assignee_ref": {"type": "string", "pattern": "^agent-actor:"},
+        "target_ref": {"type": "string", "minLength": 1, "maxLength": 255},
+        "objective": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "acceptance_criteria": {"type": "array", "minItems": 1, "maxItems": 32},
+        "context_refs": {"type": "array", "maxItems": 64},
+        "scope": {"type": "object"},
+        "budget": {"type": "object"},
+    },
+}
+_AGENT_HR_PROPOSE_INPUT = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["proposer_ref", "kind", "rationale"],
+    "properties": {
+        "proposer_ref": {"type": "string", "pattern": "^agent-actor:"},
+        "kind": {"type": "string", "enum": ["hire", "role_change", "suspend", "retire", "reassign", "chief_of_staff"]},
+        "rationale": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "subject_actor_ref": {"type": "string", "pattern": "^agent-actor:"},
+        "subject_user_ref": {"type": "string", "pattern": "^user:"},
+        "requested_principal_ref": {"type": "string", "pattern": "^user:"},
+        "target_assignment_ref": {"type": "string", "pattern": "^assignment:"},
+        "requested_assignee_ref": {"type": "string", "pattern": "^agent-actor:"},
+        "requested_role": {"type": "string"},
+        "requested_display_name": {"type": "string", "maxLength": 255},
+        "requested_profile": {"type": "object"},
+        "project_id": {"type": ["string", "null"]},
+    },
+}
+_AGENT_HR_DECIDE_INPUT = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["proposal_ref", "approved"],
+    "properties": {
+        "proposal_ref": {"type": "string", "pattern": "^hr-proposal:"},
+        "approved": {"type": "boolean"},
+        "decision_note": {"type": "string", "maxLength": 4096},
+    },
+}
+_AGENT_OUTCOME_EVALUATE_INPUT = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["outcome_ref", "evaluator_ref", "verdict"],
+    "properties": {
+        "outcome_ref": {"type": "string", "pattern": "^outcome-submission:"},
+        "evaluator_ref": {"type": "string", "pattern": "^agent-actor:"},
+        "criteria": {"type": "array", "maxItems": 32},
+        "verdict": {"type": "string", "enum": ["accept", "revision_requested"]},
+        "feedback": {"type": "string", "maxLength": 4096},
+        "provenance": {"type": "object"},
+    },
+}
+_AGENT_OUTCOME_DECIDE_INPUT = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["outcome_ref"],
+    "properties": {
+        "outcome_ref": {"type": "string", "pattern": "^outcome-submission:"},
+        "decision_note": {"type": "string", "maxLength": 4096},
+    },
+}
+_AGENT_ASSIGNMENT_CANCEL_INPUT = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["assignment_ref"],
+    "properties": {"assignment_ref": {"type": "string", "pattern": "^assignment:"}},
+}
+_AGENT_GOVERNANCE_RESULT = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["record"],
+    "properties": {"record": {"type": "object"}},
+}
 
 
 OPERATION_CATALOG.update(
@@ -455,6 +541,126 @@ OPERATION_CATALOG.update(
             input_schema=_AGENT_OUTCOME_PUBLISH_INPUT,
             result_schema=_AGENT_OUTCOME_PUBLISH_RESULT,
             tags=("agent", "outcome", "publication", "mutation"),
+            authorization_scope="workspace",
+        ),
+        "agent.assignment.delegate": OperationDescriptor(
+            operation_id="agent.assignment.delegate",
+            schema_version=SCHEMA_VERSION,
+            kind="mutation",
+            summary="Create one bounded child AssignmentContract through dynamic delegation.",
+            required_input=(
+                "parent_assignment_ref",
+                "delegator_ref",
+                "assignee_ref",
+                "target_ref",
+                "objective",
+                "acceptance_criteria",
+            ),
+            input_fields=tuple(_AGENT_DELEGATE_INPUT["properties"]),
+            max_result_bytes=8 * 1024,
+            handler="agent_assignment_delegate",
+            result_key="assignment",
+            input_schema=_AGENT_DELEGATE_INPUT,
+            result_schema={
+                "type": "object",
+                "required": ["assignment"],
+                "properties": {"assignment": {"type": "object"}},
+            },
+            tags=("agent", "assignment", "delegation", "mutation"),
+            authorization_scope="workspace",
+        ),
+        "agent.assignment.cancel": OperationDescriptor(
+            operation_id="agent.assignment.cancel",
+            schema_version=SCHEMA_VERSION,
+            kind="mutation",
+            summary="Cancel an assignment and propagate cancellation to unfinished delegated children.",
+            required_input=("assignment_ref",),
+            input_fields=tuple(_AGENT_ASSIGNMENT_CANCEL_INPUT["properties"]),
+            max_result_bytes=8 * 1024,
+            handler="agent_assignment_cancel",
+            result_key="assignment",
+            input_schema=_AGENT_ASSIGNMENT_CANCEL_INPUT,
+            result_schema={
+                "type": "object",
+                "required": ["assignment"],
+                "properties": {"assignment": {"type": "object"}},
+            },
+            tags=("agent", "assignment", "cancellation", "mutation"),
+            authorization_scope="workspace",
+        ),
+        "agent.hr.propose": OperationDescriptor(
+            operation_id="agent.hr.propose",
+            schema_version=SCHEMA_VERSION,
+            kind="mutation",
+            summary="Record a human-gated HR proposal without changing Plane control state.",
+            required_input=("proposer_ref", "kind", "rationale"),
+            input_fields=tuple(_AGENT_HR_PROPOSE_INPUT["properties"]),
+            max_result_bytes=8 * 1024,
+            handler="agent_hr_propose",
+            result_key="proposal",
+            input_schema=_AGENT_HR_PROPOSE_INPUT,
+            result_schema={"type": "object", "required": ["proposal"], "properties": {"proposal": {"type": "object"}}},
+            tags=("agent", "hr", "governance", "mutation"),
+            authorization_scope="workspace",
+        ),
+        "agent.hr.decide": OperationDescriptor(
+            operation_id="agent.hr.decide",
+            schema_version=SCHEMA_VERSION,
+            kind="mutation",
+            summary="Approve or reject one HR proposal as a current human workspace administrator.",
+            required_input=("proposal_ref", "approved"),
+            input_fields=tuple(_AGENT_HR_DECIDE_INPUT["properties"]),
+            max_result_bytes=8 * 1024,
+            handler="agent_hr_decide",
+            result_key="proposal",
+            input_schema=_AGENT_HR_DECIDE_INPUT,
+            result_schema={"type": "object", "required": ["proposal"], "properties": {"proposal": {"type": "object"}}},
+            tags=("agent", "hr", "governance", "human", "mutation"),
+            authorization_scope="workspace",
+        ),
+        "agent.outcome.evaluate": OperationDescriptor(
+            operation_id="agent.outcome.evaluate",
+            schema_version=SCHEMA_VERSION,
+            kind="mutation",
+            summary="Persist evaluator evidence and recommendation before human outcome review.",
+            required_input=("outcome_ref", "evaluator_ref", "verdict"),
+            input_fields=tuple(_AGENT_OUTCOME_EVALUATE_INPUT["properties"]),
+            max_result_bytes=8 * 1024,
+            handler="agent_outcome_evaluate",
+            result_key="outcome",
+            input_schema=_AGENT_OUTCOME_EVALUATE_INPUT,
+            result_schema={"type": "object", "required": ["outcome"], "properties": {"outcome": {"type": "object"}}},
+            tags=("agent", "outcome", "evaluator", "mutation"),
+            authorization_scope="workspace",
+        ),
+        "agent.outcome.accept": OperationDescriptor(
+            operation_id="agent.outcome.accept",
+            schema_version=SCHEMA_VERSION,
+            kind="mutation",
+            summary="Accept an evaluator-reviewed outcome as a human reviewer.",
+            required_input=("outcome_ref",),
+            input_fields=tuple(_AGENT_OUTCOME_DECIDE_INPUT["properties"]),
+            max_result_bytes=8 * 1024,
+            handler="agent_outcome_accept",
+            result_key="outcome",
+            input_schema=_AGENT_OUTCOME_DECIDE_INPUT,
+            result_schema={"type": "object", "required": ["outcome"], "properties": {"outcome": {"type": "object"}}},
+            tags=("agent", "outcome", "human", "mutation"),
+            authorization_scope="workspace",
+        ),
+        "agent.outcome.request_revision": OperationDescriptor(
+            operation_id="agent.outcome.request_revision",
+            schema_version=SCHEMA_VERSION,
+            kind="mutation",
+            summary="Return an evaluator-reviewed outcome for human-requested revision.",
+            required_input=("outcome_ref",),
+            input_fields=tuple(_AGENT_OUTCOME_DECIDE_INPUT["properties"]),
+            max_result_bytes=8 * 1024,
+            handler="agent_outcome_request_revision",
+            result_key="outcome",
+            input_schema=_AGENT_OUTCOME_DECIDE_INPUT,
+            result_schema={"type": "object", "required": ["outcome"], "properties": {"outcome": {"type": "object"}}},
+            tags=("agent", "outcome", "human", "revision", "mutation"),
             authorization_scope="workspace",
         ),
     }
@@ -1011,9 +1217,7 @@ def _catalog_search_entry(entry: dict[str, Any]) -> dict[str, Any]:
 
 
 def catalog_search(query: str = "", *, limit: int | None = None, cursor: str | None = None) -> dict[str, Any]:
-    if not isinstance(query, str) or (
-        limit is not None and (not isinstance(limit, int) or isinstance(limit, bool))
-    ):
+    if not isinstance(query, str) or (limit is not None and (not isinstance(limit, int) or isinstance(limit, bool))):
         raise ValueError("catalog search input is invalid")
     if limit is not None and not 1 <= limit <= 50:
         raise ValueError("catalog search limit is invalid")

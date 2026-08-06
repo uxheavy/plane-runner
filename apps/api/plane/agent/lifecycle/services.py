@@ -27,6 +27,7 @@ from plane.agent.validation import (
 )
 from plane.db.models import (
     AgentActor,
+    AgentHRProposal,
     AgentRole,
     AssignmentContract,
     AssignmentState,
@@ -34,6 +35,8 @@ from plane.db.models import (
     InvocationState,
     OutcomeState,
     OutcomeSubmission,
+    EvaluatorReview,
+    EvaluatorVerdict,
     ProfileVersion,
     RecoveryIntent,
     RunAttempt,
@@ -44,6 +47,8 @@ from plane.db.models import (
     RuntimeInvocation,
     RuntimeInvocationControl,
     RuntimeUsageObservation,
+    HRProposalKind,
+    HRProposalState,
     TerminalEventKind,
     TerminalEventSource,
 )
@@ -93,6 +98,10 @@ class TerminalEventRequiredError(AgentDomainError):
 
 
 _RUNTIME_LEASE_TTL = timedelta(minutes=5)
+
+MAX_DELEGATION_DEPTH = 8
+MAX_DELEGATION_FAN_OUT = 64
+MAX_DELEGATION_BUDGET = 2**63 - 1
 
 
 def _command_id(value):
@@ -700,8 +709,140 @@ def _transition_assignment_locked(assignment, target):
     return assignment
 
 
+def _delegation_actor(actor, *, expected_role=AgentRole.DELEGATOR):
+    actor = AgentActor.objects.select_related("active_profile").get(pk=actor.pk)
+    _ensure_actor_active(actor)
+    if actor.active_profile_id is None or actor.active_profile.role != expected_role:
+        raise AgentDomainError(f"Only an Agent with the current {expected_role} role may perform this operation")
+    return actor
+
+
+def _bounded_delegation_json(value, field_name):
+    try:
+        return validate_bounded_json(value or {}, field_name, max_items=64)
+    except AgentValueError as exc:
+        raise AgentDomainError(str(exc)) from exc
+
+
+def _budget_number(value, *keys):
+    if not isinstance(value, dict):
+        return None
+    for key in keys:
+        candidate = value.get(key)
+        if candidate is not None:
+            if isinstance(candidate, bool) or not isinstance(candidate, int) or candidate < 0:
+                raise AgentDomainError(f"budget.{key} must be a non-negative integer")
+            if candidate > MAX_DELEGATION_BUDGET:
+                raise AgentDomainError(f"budget.{key} exceeds the accepted delegation bound")
+            return candidate
+    return None
+
+
+def _scope_is_subset(child, parent):
+    """Return whether a child scope is no broader than its parent's scope."""
+
+    if not parent:
+        return True
+    if not child:
+        return True
+    for key, value in child.items():
+        if key not in parent:
+            return False
+        parent_value = parent[key]
+        if isinstance(parent_value, list):
+            if not isinstance(value, list) or not all(item in parent_value for item in value):
+                return False
+        elif isinstance(parent_value, dict):
+            if not isinstance(value, dict) or not _scope_is_subset(value, parent_value):
+                return False
+        elif value != parent_value:
+            return False
+    return True
+
+
+def _delegation_budget_totals(root):
+    totals = {}
+    rows = AssignmentContract.all_objects.filter(root_assignment=root).values_list("budget", flat=True)
+    for budget in rows:
+        if not isinstance(budget, dict):
+            continue
+        for total_key, aliases in {
+            "inputTokens": ("inputTokens", "input_tokens"),
+            "outputTokens": ("outputTokens", "output_tokens"),
+            "durationMs": ("durationMs", "duration_ms"),
+            "units": ("units", "total_units"),
+        }.items():
+            amount = _budget_number(budget, *aliases)
+            if amount is not None:
+                totals[total_key] = totals.get(total_key, 0) + amount
+    return totals
+
+
+def _ensure_delegation_bounds(parent, *, child_scope, child_budget, depth):
+    if depth > MAX_DELEGATION_DEPTH:
+        raise AgentDomainError("Delegation maximum depth exceeded")
+    root = parent.root_assignment or parent
+    root_budget = root.budget or {}
+    max_depth = _budget_number(root_budget, "maxDepth", "max_depth")
+    if max_depth is not None and depth > max_depth:
+        raise AgentDomainError("Delegation maximum depth exceeded")
+    max_fan_out = _budget_number(parent.budget, "maxFanOut", "max_fan_out")
+    if max_fan_out is None:
+        max_fan_out = _budget_number(root_budget, "maxFanOut", "max_fan_out")
+    max_fan_out = max_fan_out if max_fan_out is not None else MAX_DELEGATION_FAN_OUT
+    if parent.lineage_children.count() >= max_fan_out:
+        raise AgentDomainError("Delegation maximum fan-out exceeded")
+    if not _scope_is_subset(child_scope, parent.scope):
+        raise AgentDomainError("Delegated assignment scope cannot escalate its parent scope")
+    totals = _delegation_budget_totals(root)
+    for total_key, aliases in {
+        "inputTokens": ("inputTokens", "input_tokens"),
+        "outputTokens": ("outputTokens", "output_tokens"),
+        "durationMs": ("durationMs", "duration_ms"),
+        "units": ("units", "total_units"),
+    }.items():
+        amount = _budget_number(child_budget, *aliases)
+        cap_aliases = {
+            "inputTokens": ("maxInputTokens", "max_input_tokens"),
+            "outputTokens": ("maxOutputTokens", "max_output_tokens"),
+            "durationMs": ("maxDurationMs", "max_duration_ms"),
+            "units": ("maxUnits", "max_units"),
+        }
+        cap = _budget_number(root_budget, *cap_aliases[total_key])
+        if amount is not None and cap is not None and totals.get(total_key, 0) + amount > cap:
+            raise AgentDomainError("Delegated assignment cumulative budget exceeded")
+
+
+def _delegation_fingerprint(
+    parent, assignee, *, target_ref, objective, acceptance_criteria, context_refs, scope, budget, delegated_by
+):
+    return _command_fingerprint(
+        "delegate_assignment",
+        {
+            "parentAssignmentId": _command_id(parent),
+            "assigneeId": _command_id(assignee),
+            "targetRef": target_ref,
+            "objective": objective,
+            "acceptanceCriteria": acceptance_criteria,
+            "contextRefs": context_refs,
+            "scope": scope,
+            "budget": budget,
+            "delegatedBy": _command_id(delegated_by),
+        },
+    )
+
+
 @transaction.atomic
-def create_actor(*, workspace, display_name, project=None, credential_ref=None, principal=None, created_by=None):
+def create_actor(
+    *,
+    workspace,
+    display_name,
+    project=None,
+    credential_ref=None,
+    principal=None,
+    chief_of_staff_for=None,
+    created_by=None,
+):
     _ensure_scope(workspace, project)
     display_name = _ensure_non_empty(display_name, "display_name", limit=255)
     if principal is None:
@@ -722,12 +863,23 @@ def create_actor(*, workspace, display_name, project=None, credential_ref=None, 
         principal = User.objects.get(pk=getattr(principal, "pk", principal))
         if not principal.is_active or not principal.is_bot:
             raise AgentDomainError("AgentActor principal must be an active dedicated Plane Agent identity")
+    if chief_of_staff_for is not None:
+        chief_of_staff_for = User.objects.get(pk=getattr(chief_of_staff_for, "pk", chief_of_staff_for))
+        if chief_of_staff_for.is_bot or not chief_of_staff_for.is_active:
+            raise AgentDomainError("Chief-of-staff provisioning requires an active human subject")
+        if not WorkspaceMember.objects.filter(
+            workspace=workspace,
+            member=chief_of_staff_for,
+            is_active=True,
+        ).exists():
+            raise AgentDomainError("Chief-of-staff provisioning requires the human's live workspace membership")
     return AgentActor.objects.create(
         workspace=workspace,
         project=project,
         display_name=display_name,
         principal=principal,
         credential_ref=_credential_ref(credential_ref),
+        chief_of_staff_for=chief_of_staff_for,
         created_by=created_by,
     )
 
@@ -822,6 +974,10 @@ def create_assignment(
     context_refs=None,
     project=None,
     lineage_of=None,
+    delegated_by=None,
+    scope=None,
+    budget=None,
+    idempotency_key=None,
     created_by=None,
 ):
     assignee = AgentActor.objects.get(pk=assignee.pk)
@@ -830,10 +986,21 @@ def create_assignment(
     _ensure_actor_scope(assignee, assignee.workspace, project)
     target_ref = _ensure_non_empty(target_ref, "target_ref", limit=255)
     objective = _ensure_non_empty(objective, "objective")
+    lineage_parent = None
     if lineage_of is not None:
-        lineage_of = AssignmentContract.objects.get(pk=lineage_of.pk)
-        if (lineage_of.workspace_id, lineage_of.project_id) != (assignee.workspace_id, project.id if project else None):
+        lineage_parent = AssignmentContract.objects.select_for_update().get(pk=lineage_of.pk)
+        lineage_of = lineage_parent
+        if lineage_of.workspace_id != assignee.workspace_id or (
+            lineage_of.project_id is not None and lineage_of.project_id != (project.id if project else None)
+        ):
             raise AgentDomainError("Assignment lineage is outside the Agent's Plane scope")
+        if delegated_by is None:
+            raise AgentDomainError("Delegated assignments require a dedicated delegator")
+        delegated_by = _delegation_actor(delegated_by)
+        if delegated_by.id != lineage_parent.assignee_id:
+            raise AgentDomainError("Only the parent assignment's delegator may create its child")
+    elif delegated_by is not None:
+        raise AgentDomainError("A delegator can only be recorded on a child assignment")
     try:
         acceptance_criteria = validate_bounded_string_list(
             acceptance_criteria,
@@ -845,16 +1012,393 @@ def create_assignment(
     except AgentValueError as exc:
         raise AgentDomainError(str(exc)) from exc
     context_refs = _as_list(context_refs, "context_refs", max_items=64, max_string_bytes=MAX_BOUNDED_TOKEN_BYTES)
+    scope_value = _bounded_delegation_json(scope, "scope")
+    budget_value = _bounded_delegation_json(budget, "budget")
+    delegation_key = _normalise_idempotency(idempotency_key, "delegation idempotency_key") if lineage_parent else None
+    delegation_fingerprint = None
+    root_assignment = None
+    delegation_depth = 0
+    if lineage_parent is not None:
+        if idempotency_key is None:
+            raise AgentDomainError("Delegated assignments require an idempotency key")
+        if scope is None:
+            scope_value = deepcopy(lineage_parent.scope or {})
+        if budget is None:
+            budget_value = deepcopy(lineage_parent.budget or {})
+        delegation_depth = lineage_parent.delegation_depth + 1
+        root_assignment = lineage_parent.root_assignment or lineage_parent
+        delegation_fingerprint = _delegation_fingerprint(
+            lineage_parent,
+            assignee,
+            target_ref=target_ref,
+            objective=objective,
+            acceptance_criteria=acceptance_criteria,
+            context_refs=context_refs,
+            scope=scope_value,
+            budget=budget_value,
+            delegated_by=delegated_by,
+        )
+        _lock_idempotency_key(delegation_key)
+        existing = AssignmentContract.all_objects.filter(delegation_key=delegation_key).first()
+        if existing is not None:
+            if existing.delegation_command_fingerprint != delegation_fingerprint:
+                raise IdempotencyConflictError("Delegation idempotency key is bound to another Plane command")
+            return existing
+        _ensure_delegation_bounds(
+            lineage_parent,
+            child_scope=scope_value,
+            child_budget=budget_value,
+            depth=delegation_depth,
+        )
     return AssignmentContract.objects.create(
         workspace=assignee.workspace,
         project=project,
         assignee=assignee,
         lineage_of=lineage_of,
+        root_assignment=root_assignment,
+        delegated_by=delegated_by,
+        delegation_key=delegation_key,
+        delegation_command_fingerprint=delegation_fingerprint,
+        delegation_depth=delegation_depth,
+        scope=scope_value,
+        budget=budget_value,
         target_ref=target_ref,
         objective=objective,
         acceptance_criteria=acceptance_criteria,
         context_refs=context_refs,
         state=AssignmentState.READY,
+        created_by=created_by,
+    )
+
+
+@transaction.atomic
+def delegate_assignment(
+    parent,
+    assignee,
+    *,
+    target_ref,
+    objective,
+    acceptance_criteria,
+    context_refs=None,
+    scope=None,
+    budget=None,
+    idempotency_key,
+    delegated_by=None,
+    created_by=None,
+):
+    """Create one ordinary child assignment with bounded immutable lineage."""
+
+    parent = AssignmentContract.objects.select_for_update().get(pk=parent.pk)
+    delegated_by = delegated_by or parent.assignee
+    return create_assignment(
+        assignee,
+        target_ref=target_ref,
+        objective=objective,
+        acceptance_criteria=acceptance_criteria,
+        context_refs=context_refs,
+        project=parent.project,
+        lineage_of=parent,
+        delegated_by=delegated_by,
+        scope=scope,
+        budget=budget,
+        idempotency_key=idempotency_key,
+        created_by=created_by,
+    )
+
+
+def _hr_state_fingerprint(*, actor=None, assignment=None, subject_user=None):
+    if actor is not None:
+        value = {
+            "actorId": _command_id(actor),
+            "displayName": actor.display_name,
+            "isActive": actor.is_active,
+            "activeProfileId": _command_id(actor.active_profile_id),
+            "principalId": _command_id(actor.principal_id),
+        }
+    elif assignment is not None:
+        value = {
+            "assignmentId": _command_id(assignment),
+            "assigneeId": _command_id(assignment.assignee_id),
+            "state": assignment.state,
+            "revision": assignment.revision,
+        }
+    else:
+        value = {"subjectUserId": _command_id(subject_user)}
+    return content_digest(value).replace("content:", "command:")
+
+
+def _ensure_human_workspace_admin(workspace, human):
+    if human is None or getattr(human, "is_anonymous", False):
+        raise AgentDomainError("Human HR decisions require an authenticated workspace administrator")
+    if not WorkspaceMember.objects.filter(
+        workspace=workspace,
+        member=human,
+        role__in=[20, 15],
+        is_active=True,
+    ).exists():
+        raise AgentDomainError("Human HR decisions require a current workspace administrator")
+
+
+def _validate_hr_profile(profile):
+    try:
+        return validate_bounded_json(profile or {}, "requested_profile", max_items=64, reject_credentials=True)
+    except AgentValueError as exc:
+        raise AgentDomainError(str(exc)) from exc
+
+
+@transaction.atomic
+def propose_hr_change(
+    *,
+    workspace,
+    proposed_by,
+    kind,
+    rationale,
+    idempotency_key,
+    subject_actor=None,
+    subject_user=None,
+    requested_principal=None,
+    target_assignment=None,
+    requested_assignee=None,
+    requested_role=None,
+    requested_display_name="",
+    requested_profile=None,
+    project=None,
+    created_by=None,
+):
+    """Record a replay-safe HR proposal; no Plane control state changes here."""
+
+    proposed_by = _delegation_actor(proposed_by, expected_role=AgentRole.HR)
+    kind = _state(kind, HRProposalKind, "HR proposal kind")
+    key = _normalise_idempotency(idempotency_key, "HR proposal idempotency_key")
+    rationale = _ensure_non_empty(rationale, "rationale")
+    requested_profile = _validate_hr_profile(requested_profile)
+    project = project if project is not None else getattr(subject_actor, "project", None)
+    if project is not None and project.workspace_id != workspace.id:
+        raise AgentDomainError("HR proposal project is outside the workspace")
+    if subject_actor is not None:
+        subject_actor = AgentActor.objects.select_for_update().get(pk=subject_actor.pk)
+        _ensure_actor_scope(subject_actor, workspace, project if subject_actor.project_id else None)
+    if target_assignment is not None:
+        target_assignment = AssignmentContract.objects.select_for_update().get(pk=target_assignment.pk)
+        if (target_assignment.workspace_id, target_assignment.project_id) != (
+            workspace.id,
+            getattr(project, "id", None),
+        ):
+            raise AgentDomainError("HR assignment target is outside the proposal scope")
+    if requested_assignee is not None:
+        requested_assignee = AgentActor.objects.get(pk=requested_assignee.pk)
+        _ensure_actor_scope(requested_assignee, workspace, project if requested_assignee.project_id else None)
+    if requested_role is not None:
+        requested_role = _state(requested_role, AgentRole, "requested Agent role")
+    if kind in {HRProposalKind.HIRE, HRProposalKind.CHIEF_OF_STAFF}:
+        if subject_actor is not None:
+            raise AgentDomainError("Hire proposals cannot already have an Agent subject")
+        if not requested_display_name.strip():
+            requested_display_name = (
+                f"{subject_user.display_name}'s Chief of Staff"
+                if kind == HRProposalKind.CHIEF_OF_STAFF and subject_user is not None
+                else "Proposed Plane Agent"
+            )
+        if requested_role is None:
+            requested_role = AgentRole.CHIEF_OF_STAFF if kind == HRProposalKind.CHIEF_OF_STAFF else AgentRole.WORKER
+        if kind == HRProposalKind.CHIEF_OF_STAFF:
+            if subject_user is None:
+                raise AgentDomainError("Chief-of-staff provisioning requires a human subject")
+            if subject_user.is_bot or not subject_user.is_active or not WorkspaceMember.objects.filter(
+                workspace=workspace,
+                member=subject_user,
+                is_active=True,
+            ).exists():
+                raise AgentDomainError("Chief-of-staff provisioning requires the human's live workspace membership")
+            if AgentActor.objects.filter(chief_of_staff_for=subject_user).exists():
+                raise AgentDomainError("The human already has a chief-of-staff Agent")
+    elif kind in {HRProposalKind.ROLE_CHANGE, HRProposalKind.SUSPEND, HRProposalKind.RETIRE}:
+        if subject_actor is None:
+            raise AgentDomainError("This HR proposal requires an Agent subject")
+        if kind == HRProposalKind.ROLE_CHANGE and requested_role is None:
+            raise AgentDomainError("Role changes require a requested role")
+    elif kind == HRProposalKind.REASSIGN:
+        if target_assignment is None or requested_assignee is None:
+            raise AgentDomainError("Reassignment proposals require an assignment and a new assignee")
+    if requested_principal is not None and not requested_principal.is_bot:
+        raise AgentDomainError("HR proposals cannot attach a human as an Agent principal")
+    expected = _hr_state_fingerprint(actor=subject_actor, assignment=target_assignment, subject_user=subject_user)
+    binding = {
+        "workspaceId": _command_id(workspace),
+        "kind": kind,
+        "proposedBy": _command_id(proposed_by),
+        "subjectActor": _command_id(subject_actor),
+        "subjectUser": _command_id(subject_user),
+        "requestedPrincipal": _command_id(requested_principal),
+        "targetAssignment": _command_id(target_assignment),
+        "requestedAssignee": _command_id(requested_assignee),
+        "requestedRole": requested_role,
+        "requestedDisplayName": requested_display_name,
+        "requestedProfile": requested_profile,
+        "expectedState": expected,
+        "rationale": rationale,
+    }
+    fingerprint = _command_fingerprint("propose_hr_change", binding)
+    _lock_idempotency_key(key)
+    existing = AgentHRProposal.all_objects.filter(idempotency_key=key).first()
+    if existing is not None:
+        if existing.command_fingerprint != fingerprint:
+            raise IdempotencyConflictError("HR proposal idempotency key is bound to another Plane command")
+        return existing
+    return AgentHRProposal.objects.create(
+        workspace=workspace,
+        project=project,
+        kind=kind,
+        state=HRProposalState.PROPOSED,
+        proposed_by=proposed_by,
+        subject_actor=subject_actor,
+        subject_user=subject_user,
+        requested_principal=requested_principal,
+        target_assignment=target_assignment,
+        requested_assignee=requested_assignee,
+        requested_role=requested_role,
+        requested_display_name=requested_display_name,
+        requested_profile=requested_profile,
+        expected_state_fingerprint=expected,
+        rationale=rationale,
+        idempotency_key=key,
+        command_fingerprint=fingerprint,
+        created_by=created_by,
+    )
+
+
+def _hr_profile_fields(proposal):
+    profile = dict(proposal.requested_profile or {})
+    allowed = {
+        "display_name",
+        "instructions",
+        "persona",
+        "expected_outcomes",
+        "model_defaults",
+        "runtime_defaults",
+        "context_refs",
+        "tool_presentation",
+        "memory_scopes",
+        "version",
+    }
+    if set(profile) - allowed:
+        raise AgentDomainError("HR profile proposals may only contain behavioral profile fields")
+    profile.setdefault("instructions", f"Operate as the Plane Agent {proposal.requested_role} role.")
+    profile.setdefault("display_name", proposal.requested_display_name)
+    return profile
+
+
+@transaction.atomic
+def decide_hr_proposal(proposal, *, human_reviewer, approved, decision_note="", idempotency_key=None):
+    """Apply or reject one proposal only after a live human admin decision."""
+
+    proposal = AgentHRProposal.objects.select_for_update().get(pk=proposal.pk)
+    if proposal.state != HRProposalState.PROPOSED:
+        if idempotency_key is not None and proposal.decision_idempotency_key not in {None, idempotency_key}:
+            raise IdempotencyConflictError("HR decision idempotency key is bound to another decision")
+        return proposal
+    _ensure_human_workspace_admin(proposal.workspace, human_reviewer)
+    decision_key = _normalise_idempotency(
+        idempotency_key or f"idempotency:hr-decision-{proposal.id}",
+        "HR decision idempotency_key",
+    )
+    decision_note = _ensure_bounded_text(decision_note, "review_note")
+    if not approved:
+        proposal.state = HRProposalState.REJECTED
+        proposal.reviewed_by = human_reviewer
+        proposal.reviewed_at = timezone.now()
+        proposal.review_note = decision_note
+        proposal.decision_idempotency_key = decision_key
+        proposal.save(_allow_lifecycle=True, created_by_id=proposal.created_by_id)
+        return proposal
+
+    if proposal.subject_actor_id:
+        current_actor = AgentActor.objects.select_for_update().get(pk=proposal.subject_actor_id)
+        current_assignment = None
+    elif proposal.target_assignment_id:
+        current_actor = None
+        current_assignment = AssignmentContract.objects.select_for_update().get(pk=proposal.target_assignment_id)
+    else:
+        current_actor = None
+        current_assignment = None
+    if (
+        proposal.kind == HRProposalKind.CHIEF_OF_STAFF
+        and AgentActor.objects.filter(chief_of_staff_for=proposal.subject_user).exists()
+    ):
+        raise AgentDomainError("Chief-of-staff proposal is stale because the human already has an Agent")
+    if proposal.expected_state_fingerprint != _hr_state_fingerprint(
+        actor=current_actor, assignment=current_assignment, subject_user=proposal.subject_user
+    ):
+        raise AgentDomainError("HR proposal is stale; current Plane control state changed")
+
+    applied_actor = current_actor
+    if proposal.kind in {HRProposalKind.HIRE, HRProposalKind.CHIEF_OF_STAFF}:
+        applied_actor = create_actor(
+            workspace=proposal.workspace,
+            project=proposal.project,
+            display_name=proposal.requested_display_name,
+            principal=proposal.requested_principal,
+            chief_of_staff_for=proposal.subject_user if proposal.kind == HRProposalKind.CHIEF_OF_STAFF else None,
+            created_by=human_reviewer,
+        )
+        if applied_actor.chief_of_staff_for_id:
+            owner_member = WorkspaceMember.objects.filter(
+                workspace=proposal.workspace, member_id=applied_actor.chief_of_staff_for_id, is_active=True
+            ).first()
+            agent_member = WorkspaceMember.objects.filter(
+                workspace=proposal.workspace, member_id=applied_actor.principal_id, is_active=True
+            ).first()
+            if owner_member is None or agent_member is None:
+                raise AgentDomainError("Chief-of-staff provisioning requires the human's live workspace membership")
+            agent_member.role = owner_member.role
+            agent_member.save(update_fields=["role", "updated_at"])
+    elif proposal.kind == HRProposalKind.ROLE_CHANGE:
+        if current_actor is None or not current_actor.is_active:
+            raise AgentDomainError("Role changes require a current active Agent")
+    elif proposal.kind in {HRProposalKind.SUSPEND, HRProposalKind.RETIRE}:
+        if current_actor is None:
+            raise AgentDomainError("Suspension requires a current Agent")
+        current_actor.is_active = False
+        current_actor.save(update_fields=["is_active", "updated_at"])
+    elif proposal.kind == HRProposalKind.REASSIGN:
+        if current_assignment is None or proposal.requested_assignee_id is None:
+            raise AgentDomainError("Reassignment proposal is incomplete")
+        current_assignment.assignee_id = proposal.requested_assignee_id
+        current_assignment.save(_allow_reassignment=True, created_by_id=proposal.created_by_id)
+
+    if proposal.kind in {HRProposalKind.HIRE, HRProposalKind.CHIEF_OF_STAFF, HRProposalKind.ROLE_CHANGE}:
+        profile_fields = _hr_profile_fields(proposal)
+        create_profile(
+            applied_actor,
+            role=proposal.requested_role,
+            instructions=profile_fields.pop("instructions"),
+            created_by=human_reviewer,
+            **profile_fields,
+        )
+        applied_actor.refresh_from_db()
+    proposal.state = HRProposalState.APPROVED
+    proposal.reviewed_by = human_reviewer
+    proposal.reviewed_at = timezone.now()
+    proposal.review_note = decision_note
+    proposal.decision_idempotency_key = decision_key
+    proposal.applied_actor = applied_actor
+    proposal.save(_allow_lifecycle=True, created_by_id=proposal.created_by_id)
+    return proposal
+
+
+@transaction.atomic
+def propose_chief_of_staff(*, workspace, human, proposed_by, idempotency_key, rationale, created_by=None):
+    """Use HR governance for the one least-privileged chief-of-staff relationship."""
+
+    return propose_hr_change(
+        workspace=workspace,
+        proposed_by=proposed_by,
+        kind=HRProposalKind.CHIEF_OF_STAFF,
+        subject_user=human,
+        requested_role=AgentRole.CHIEF_OF_STAFF,
+        requested_display_name=f"{human.display_name}'s Chief of Staff",
+        rationale=rationale,
+        idempotency_key=idempotency_key,
         created_by=created_by,
     )
 
@@ -877,7 +1421,36 @@ def transition_assignment(assignment, target, *, outcome=None):
 
 @transaction.atomic
 def cancel_assignment(assignment):
-    return transition_assignment(assignment, AssignmentState.CANCELLED)
+    def _cancel_tree(parent):
+        for child in list(
+            AssignmentContract.objects.select_for_update()
+            .filter(lineage_of=parent)
+            .exclude(state__in=[AssignmentState.COMPLETED, AssignmentState.CANCELLED])
+        ):
+            _transition_assignment_locked(child, AssignmentState.CANCELLED)
+            for run in (
+                RunAttempt.objects.select_for_update()
+                .filter(assignment=child)
+                .exclude(
+                    state__in=[
+                        RunState.SUCCEEDED,
+                        RunState.FAILED,
+                        RunState.BLOCKED,
+                        RunState.CANCELLED,
+                        RunState.OUTCOME_UNKNOWN,
+                    ]
+                )
+            ):
+                if run.last_invocation_id:
+                    transition_run(run, RunState.CANCELLED)
+            _cancel_tree(child)
+
+    locked = AssignmentContract.objects.select_for_update().get(pk=assignment.pk)
+    if locked.state == AssignmentState.CANCELLED:
+        return locked
+    result = _transition_assignment_locked(locked, AssignmentState.CANCELLED)
+    _cancel_tree(locked)
+    return result
 
 
 def _uuid_from_ref(value, field_name):
@@ -2055,21 +2628,94 @@ def propose_outcome(run, *, summary, artifacts=None, evidence=None, idempotency_
 
 
 @transaction.atomic
-def review_outcome(outcome, *, evaluator, feedback=""):
+def review_outcome(
+    outcome,
+    *,
+    evaluator,
+    feedback="",
+    criteria=None,
+    verdict=EvaluatorVerdict.ACCEPT,
+    provenance=None,
+    idempotency_key=None,
+):
     feedback = _ensure_bounded_text(feedback, "evaluator_feedback")
     locked = OutcomeSubmission.objects.select_for_update().select_related("run").get(pk=outcome.pk)
+    verdict = _state(verdict, EvaluatorVerdict, "evaluator verdict")
     if locked.state != OutcomeState.PROPOSED:
+        existing_review = EvaluatorReview.objects.filter(outcome=locked).first()
+        if existing_review is not None and existing_review.verdict == verdict:
+            return locked
         raise InvalidTransitionError(f"Outcome cannot be evaluated from {locked.state}")
     evaluator = AgentActor.objects.select_related("active_profile").get(pk=evaluator.pk)
     _ensure_actor_active(evaluator)
     if evaluator.active_profile_id is None or evaluator.active_profile.role != AgentRole.EVALUATOR:
         raise AgentDomainError("Only an Agent with the current evaluator role may review outcomes")
+    if evaluator.id == locked.run.actor_id:
+        raise AgentDomainError("Independent evaluator review is required; an Agent cannot evaluate its own outcome")
     if evaluator.workspace_id != locked.workspace_id or (
         evaluator.project_id is not None and evaluator.project_id != locked.project_id
     ):
         raise AgentDomainError("Evaluator is outside the outcome's Plane scope")
+    criteria_value = _as_list(
+        criteria if criteria is not None else [{"criterion": "outcome evidence", "result": "reviewed"}],
+        "evaluator_criteria",
+        max_items=32,
+    )
+    provenance_value = _as_dict(provenance, "evaluator_provenance") if provenance is not None else {}
+    provenance_value.update(
+        {
+            "outcomeRef": namespaced_ref("outcome-submission", str(locked.id)),
+            "runRef": namespaced_ref("run", str(locked.run_id)),
+            "evaluatorActorRef": namespaced_ref("agent-actor", str(evaluator.id)),
+            "evaluatorProfileRef": namespaced_ref("profile-version", str(evaluator.active_profile_id)),
+        }
+    )
+    recommendation = feedback or "Evaluator review recorded; human decision remains required."
+    review_key = _normalise_idempotency(
+        idempotency_key or f"idempotency:evaluator-{locked.id}",
+        "evaluator review idempotency_key",
+    )
+    review_fingerprint = _command_fingerprint(
+        "review_outcome",
+        {
+            "outcomeId": _command_id(locked),
+            "evaluatorId": _command_id(evaluator),
+            "profileVersionId": _command_id(evaluator.active_profile),
+            "criteria": criteria_value,
+            "verdict": verdict,
+            "recommendation": recommendation,
+            "provenance": provenance_value,
+        },
+    )
+    _lock_idempotency_key(review_key)
+    existing = EvaluatorReview.all_objects.filter(idempotency_key=review_key).first()
+    if existing is not None:
+        if existing.command_fingerprint != review_fingerprint or existing.outcome_id != locked.id:
+            raise IdempotencyConflictError("Evaluator review idempotency key is bound to another Plane command")
+        return locked
+    existing = EvaluatorReview.all_objects.filter(outcome=locked).first()
+    if existing is not None:
+        if existing.command_fingerprint != review_fingerprint:
+            raise IdempotencyConflictError("Outcome already has a different evaluator recommendation")
+        return locked
+    EvaluatorReview.objects.create(
+        workspace=locked.workspace,
+        project=locked.project,
+        outcome=locked,
+        run=locked.run,
+        evaluator=evaluator,
+        evaluator_profile=evaluator.active_profile,
+        criteria=criteria_value,
+        verdict=verdict,
+        recommendation=recommendation,
+        provenance=provenance_value,
+        idempotency_key=review_key,
+        command_fingerprint=review_fingerprint,
+        reviewed_at=timezone.now(),
+        created_by=locked.created_by,
+    )
     locked.evaluator = evaluator
-    locked.evaluator_feedback = feedback
+    locked.evaluator_feedback = recommendation
     locked.evaluator_reviewed_at = timezone.now()
     locked.state = OutcomeState.EVALUATOR_REVIEWED
     locked.save(_allow_lifecycle=True, created_by_id=locked.created_by_id)
@@ -2092,12 +2738,23 @@ def accept_outcome(outcome, *, human_reviewer, decision_note=""):
     _require_reviewed_outcome(locked)
     if human_reviewer is None:
         raise AgentDomainError("Human acceptance requires a reviewer")
+    assignment = AssignmentContract.objects.select_for_update().get(pk=locked.run.assignment_id)
+    pending = {assignment.id}
+    while pending:
+        child_ids = set(AssignmentContract.objects.filter(lineage_of_id__in=pending).values_list("id", flat=True))
+        if not child_ids:
+            break
+        if AssignmentContract.objects.filter(
+            id__in=child_ids,
+            state__in=[AssignmentState.READY, AssignmentState.ACTIVE, AssignmentState.REVISION],
+        ).exists():
+            raise AgentDomainError("Parent outcome cannot be accepted while delegated assignments remain unfinished")
+        pending = child_ids
     locked.state = OutcomeState.ACCEPTED
     locked.human_reviewer = human_reviewer
     locked.human_decision_note = decision_note
     locked.human_decided_at = timezone.now()
     locked.save(_allow_lifecycle=True, created_by_id=locked.created_by_id)
-    assignment = AssignmentContract.objects.select_for_update().get(pk=locked.run.assignment_id)
     _transition_assignment_locked(assignment, AssignmentState.COMPLETED)
     return locked
 
