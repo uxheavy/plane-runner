@@ -547,7 +547,7 @@ class AgentOperatorCanaryAPIEndpoint(AgentAdminAPIView):
 
 
 class AgentOperatorSafetyStopAPIEndpoint(AgentAdminAPIView):
-    """Delegate one targeted stop; no global or local stop state is stored here."""
+    """Record one targeted Plane stop, then request runtime enforcement."""
 
     def post(self, request, slug):
         serializer = AgentSafetyStopSerializer(data=request.data)
@@ -573,7 +573,6 @@ class AgentOperatorSafetyStopAPIEndpoint(AgentAdminAPIView):
             invocation_id=invocation_id,
             reason=values["reason"],
             idempotency_key=values["idempotency_key"],
+            operator=request.user,
         )
-        if result.get("status") == "external_required":
-            return Response({"control": result}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         return Response({"control": result, "readback": build_operator_readback(workspace, limit=1)})

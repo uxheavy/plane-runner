@@ -18,6 +18,7 @@ from django.utils import timezone
 from plane.agent.lifecycle import (
     AgentDomainError,
     ensure_human_workspace_admin,
+    IdempotencyConflictError,
     InvalidTransitionError,
     TerminalEventRequiredError,
     finalize_invocation,
@@ -253,6 +254,20 @@ def request_runtime_cancellation(
     if operator is not None:
         ensure_human_workspace_admin(assignment.workspace, operator)
     if stored.state in _INVOCATION_TERMINAL_STATES:
+        terminal = RunTerminalEvent.objects.filter(invocation=stored).first()
+        if terminal is None:
+            raise TerminalEventRequiredError("Terminal invocation state has no visible Plane terminal event")
+        if terminal.kind != "run_cancellation":
+            if idempotency_key is not None:
+                raise IdempotencyConflictError("Invocation already has a different terminal product event")
+            return stored
+        if idempotency_key is not None:
+            finalize_invocation(
+                stored,
+                kind="run_cancellation",
+                reason=str(reason)[:4096],
+                idempotency_key=idempotency_key,
+            )
         return stored
     control = _control(stored, lock=True)
     if control.cancellation_requested_at is None:

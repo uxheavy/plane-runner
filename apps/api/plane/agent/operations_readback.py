@@ -25,6 +25,7 @@ from plane.agent.administration_extensions import build_governance_readback
 from plane.agent.catalog_admin import gateway_status
 from plane.agent.lifecycle.runtime_contract import contract_digests
 from plane.agent.readback import AgentReadbackTooLarge
+from plane.agent.runtime.supervisor import request_runtime_cancellation
 from plane.agent.validation import MAX_AGENT_READBACK_BYTES, contains_credential_value
 from plane.api.serializers.agent_admin import (
     GatewayReadbackSerializer,
@@ -610,31 +611,69 @@ def build_safety_stop_command(
     invocation_id: str,
     reason: str,
     idempotency_key: str,
+    operator=None,
 ) -> dict[str, Any]:
-    """Delegate a targeted stop to T1's runtime owner; never mutate state here."""
+    """Record Plane's durable stop, then request ephemeral runtime enforcement."""
 
     if not isinstance(invocation_id, str) or not invocation_id or len(invocation_id.encode("utf-8")) > 128:
         raise ValueError("invocation_id must be a bounded identifier")
     if not isinstance(idempotency_key, str) or not idempotency_key or len(idempotency_key.encode("utf-8")) > 128:
         raise ValueError("idempotency_key must be a bounded identifier")
+    invocation = (
+        RuntimeInvocation.objects.select_related("run")
+        .filter(run__workspace=workspace, invocation_id=invocation_id)
+        .first()
+    )
+    if invocation is None:
+        raise ValueError("invocation_id is unavailable in the requested workspace")
+    durable = request_runtime_cancellation(
+        invocation,
+        reason=_safe_text(reason, max_bytes=MAX_REASON_BYTES),
+        operator=operator,
+        idempotency_key=idempotency_key,
+    )
+    plane_control = {
+        "authority": "plane_durable_lifecycle",
+        "invocation_id": durable.invocation_id,
+        "state": durable.state,
+        "idempotency_key": idempotency_key,
+        "recorded": True,
+    }
     try:
         adapter = _runtime_operator_adapter()
-        result = adapter.request_safety_stop(
+        runtime_result = adapter.request_safety_stop(
             workspace_id=str(workspace.id),
             invocation_id=invocation_id,
             reason=_safe_text(reason, max_bytes=MAX_REASON_BYTES),
             idempotency_key=idempotency_key,
         )
     except RuntimeOperatorAdapterUnavailable as exc:
-        return {
+        runtime_result = {
             "status": "external_required",
             "code": "RUNTIME_OPERATOR_ADAPTER_UNAVAILABLE",
             "message": _safe_text(exc),
             "external_required": ["runtime-owned safety-stop hook"],
         }
-    if not isinstance(result, Mapping):
-        raise ValueError("runtime safety-stop hook must return an object")
-    return _bounded_projection(result, label="safety-stop response")
+    except Exception as exc:
+        runtime_result = {
+            "status": "dependency_failure",
+            "code": "RUNTIME_OPERATOR_ADAPTER_FAILED",
+            "message": _safe_text(exc),
+        }
+    if not isinstance(runtime_result, Mapping):
+        runtime_result = {
+            "status": "dependency_failure",
+            "code": "RUNTIME_OPERATOR_ADAPTER_INVALID",
+            "message": "Runtime safety-stop hook returned an invalid response.",
+        }
+    return _bounded_projection(
+        {
+            "status": "accepted",
+            "plane_control": plane_control,
+            "runtime_enforcement": dict(runtime_result),
+        },
+        label="safety-stop response",
+    )
 
 
 def build_canary_readback(*, mode: str = "offline") -> dict[str, Any]:

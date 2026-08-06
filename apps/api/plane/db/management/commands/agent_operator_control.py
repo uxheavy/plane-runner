@@ -1,4 +1,4 @@
-"""Delegate a targeted Agent safety stop to the runtime-owned seam."""
+"""Record a targeted Plane safety stop and request runtime enforcement."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import json
 
 from django.core.management.base import BaseCommand, CommandError
 
+from plane.agent.lifecycle import AgentDomainError
 from plane.agent.operations_readback import build_operator_readback, build_safety_stop_command
 from plane.agent.validation import MAX_AGENT_READBACK_BYTES
 from plane.db.models import RunAttempt, RuntimeInvocation, Workspace
@@ -42,7 +43,7 @@ class Command(BaseCommand):
                 reason=options["reason"],
                 idempotency_key=options["idempotency_key"],
             )
-        except ValueError as exc:
+        except (AgentDomainError, ValueError) as exc:
             raise CommandError(str(exc)) from exc
         output = {"control": result}
         if result.get("status") != "external_required":

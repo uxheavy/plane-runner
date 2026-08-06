@@ -138,23 +138,55 @@ def test_operator_safety_stop_never_falls_back_without_runtime_hook(
 
     response = api_key_client.post(
         _url(workspace, "safety-stop/"),
-        {"invocation_id": invocation.invocation_id, "reason": "Stop canary", "idempotency_key": "stop:g4"},
+        {
+            "invocation_id": invocation.invocation_id,
+            "reason": "Stop canary",
+            "idempotency_key": "idempotency:stop-g4",
+        },
         format="json",
     )
-    assert response.status_code == 503
-    assert response.json()["control"]["status"] == "external_required"
+    assert response.status_code == 200, response.content
+    assert response.json()["control"]["status"] == "accepted"
+    assert response.json()["control"]["runtime_enforcement"]["status"] == "external_required"
     invocation.refresh_from_db()
-    assert invocation.state == "running"
+    assert invocation.state == "cancelled"
+    assert invocation.terminal_event.kind == "run_cancellation"
+    assert invocation.terminal_event.idempotency_key == "idempotency:stop-g4"
 
     call_command(
         "agent_operator_control",
         workspace_slug=workspace.slug,
         invocation_id=invocation.invocation_id,
         reason="Stop canary",
-        idempotency_key="stop:g4",
+        idempotency_key="idempotency:stop-g4",
     )
     cli_body = json.loads(capsys.readouterr().out)
-    assert cli_body["control"]["status"] == "external_required"
+    assert cli_body["control"]["status"] == "accepted"
+    assert cli_body["control"]["runtime_enforcement"]["status"] == "external_required"
+
+    conflict = api_key_client.post(
+        _url(workspace, "safety-stop/"),
+        {
+            "invocation_id": invocation.invocation_id,
+            "reason": "Stop canary",
+            "idempotency_key": "idempotency:stop-g4-conflict",
+        },
+        format="json",
+    )
+    assert conflict.status_code == 409
+    assert invocation.run.terminal_events.count() == 1
+
+    changed_reason = api_key_client.post(
+        _url(workspace, "safety-stop/"),
+        {
+            "invocation_id": invocation.invocation_id,
+            "reason": "A different stop command",
+            "idempotency_key": "idempotency:stop-g4",
+        },
+        format="json",
+    )
+    assert changed_reason.status_code == 409
+    assert invocation.run.terminal_events.count() == 1
 
 
 @pytest.mark.contract
@@ -177,7 +209,7 @@ def test_operator_runtime_adapter_drives_health_and_control_parity(
         actor,
         target_ref="issue:g4-adapter",
         objective="Exercise the runtime adapter.",
-        acceptance_criteria=["The runtime hook is authoritative."],
+        acceptance_criteria=["Plane records the stop before runtime enforcement."],
         created_by=create_user,
     )
     run = create_run(assignment, profile, created_by=create_user)
@@ -197,7 +229,7 @@ def test_operator_runtime_adapter_drives_health_and_control_parity(
         assert workspace_id == str(workspace.id)
         assert invocation_id == invocation.invocation_id
         assert reason == "Drain this invocation"
-        assert idempotency_key == "stop:g4-adapter"
+        assert idempotency_key == "idempotency:stop-g4-adapter"
         return {"status": "accepted", "idempotency_key": idempotency_key, "invocation_id": invocation_id}
 
     monkeypatch.setattr(runtime, "operator_health_readback", health, raising=False)
@@ -216,17 +248,19 @@ def test_operator_runtime_adapter_drives_health_and_control_parity(
         {
             "invocation_id": invocation.invocation_id,
             "reason": "Drain this invocation",
-            "idempotency_key": "stop:g4-adapter",
+            "idempotency_key": "idempotency:stop-g4-adapter",
         },
         format="json",
     )
-    assert control_response.status_code == 200
+    assert control_response.status_code == 200, control_response.content
     control_body = control_response.json()
+    assert control_body["control"]["plane_control"]["state"] == "cancelled"
+    assert control_body["control"]["runtime_enforcement"]["status"] == "accepted"
     call_command(
         "agent_operator_control",
         workspace_slug=workspace.slug,
         invocation_id=invocation.invocation_id,
         reason="Drain this invocation",
-        idempotency_key="stop:g4-adapter",
+        idempotency_key="idempotency:stop-g4-adapter",
     )
     assert json.loads(capsys.readouterr().out) == control_body

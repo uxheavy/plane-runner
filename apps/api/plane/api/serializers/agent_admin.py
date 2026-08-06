@@ -437,7 +437,7 @@ class AgentOperatorReadbackSerializer(serializers.Serializer):
 
 
 class AgentSafetyStopSerializer(serializers.Serializer):
-    """Targeted runtime safety-stop request; no global stop state is accepted."""
+    """Targeted Plane safety-stop request; no global stop state is accepted."""
 
     run_id = serializers.UUIDField(required=False)
     invocation_id = serializers.CharField(required=False, allow_blank=False, max_length=128)
