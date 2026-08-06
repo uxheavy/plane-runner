@@ -2,7 +2,7 @@
   "schema_version": "plane.mcp-compatibility/v1",
   "source": {
     "repository": "https://github.com/makeplane/plane-mcp-server",
-    "commit": "4b36e2664ba9a82fe2edebf89eaa76565b130398",
+    "commit": "96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1",
     "version": "0.2.11",
     "inventory_digest": "2778ef9d6f5426c6fc65894829ec04bf853c18c4ab09d796474896ba01826ad1"
   },

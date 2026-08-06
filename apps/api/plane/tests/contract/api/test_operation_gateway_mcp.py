@@ -19,7 +19,7 @@ from plane.operation_gateway.operations import SPECIAL_GATEWAY_OPERATION_IDS, ge
 def test_mcp_manifest_exhaustively_classifies_the_pinned_public_surface():
     assert MCP_COMPATIBILITY_MANIFEST["source"] == {
         "repository": "https://github.com/makeplane/plane-mcp-server",
-        "commit": "4b36e2664ba9a82fe2edebf89eaa76565b130398",
+        "commit": "96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1",
         "version": "0.2.11",
         "inventory_digest": "2778ef9d6f5426c6fc65894829ec04bf853c18c4ab09d796474896ba01826ad1",
     }
@@ -152,6 +152,8 @@ def test_gateway_adapters_do_not_dispatch_drf_views_or_loopback_requests():
 @pytest.mark.contract
 def test_generated_action_matrix_is_executable():
     rows = ADAPTER_REGISTRY["actions"]
+    assert ADAPTER_REGISTRY["source"]["commit"] == "96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1"
+    assert ADAPTER_REGISTRY["manifest_digest"] == "1c9964ff9165b528601fb5cb5e98cb68ae70a88865cfefbbf40a7c25a310be06"
     assert ADAPTER_REGISTRY["tool_count"] == len(rows) == 177
     assert len({row["tool_name"] for row in rows}) == 177
     required = {
