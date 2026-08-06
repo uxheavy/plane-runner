@@ -10,7 +10,9 @@ from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.response import Response
 
-from plane.agent.administration import update_actor
+from plane.agent.administration import AgentAdminExtensionCommand, AgentAdminExtensionError, update_actor
+from plane.agent.administration_extensions import build_governance_readback, plane_agent_admin_extension
+from plane.agent.readback import AgentReadbackTooLarge, build_run_readback, validate_readback_limit
 from plane.agent.validation import MAX_AGENT_READBACK_BYTES
 from plane.agent.lifecycle import (
     AgentDomainError,
@@ -44,10 +46,8 @@ from plane.api.serializers import (
     ProfileVersionCreateSerializer,
     RunAdminSerializer,
     RunInputEventAdminSerializer,
-    RuntimeEventEvidenceSerializer,
-    RuntimeExitEvidenceSerializer,
     RuntimeInvocationAdminSerializer,
-    TerminalEventAdminSerializer,
+    AgentGovernanceCommandSerializer,
 )
 from plane.api.views.base import BaseAPIView
 from plane.db.models import (
@@ -58,9 +58,6 @@ from plane.db.models import (
     Project,
     RunAttempt,
     RunInputEvent,
-    RunTerminalEvent,
-    RuntimeEventIngress,
-    RuntimeExitEvidence,
     RuntimeInvocation,
     Workspace,
 )
@@ -81,6 +78,16 @@ class AgentAdminAPIView(BaseAPIView):
             return Response(
                 {"error": {"code": "IDEMPOTENCY_CONFLICT", "message": str(exc)}},
                 status=status.HTTP_409_CONFLICT,
+            )
+        if isinstance(exc, AgentReadbackTooLarge):
+            return Response(
+                {"error": {"code": "READBACK_TOO_LARGE", "message": str(exc)}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if isinstance(exc, AgentAdminExtensionError):
+            return Response(
+                {"error": {"code": "GOVERNANCE_UNAVAILABLE", "message": str(exc)}},
+                status=status.HTTP_400_BAD_REQUEST,
             )
         return super().handle_exception(exc)
 
@@ -282,54 +289,7 @@ class AgentRunAdminDetailAPIEndpoint(AgentAdminAPIView):
     def get(self, request, slug, pk):
         run = self.run()
         limit = self.get_per_page(request, default_per_page=50, max_per_page=100)
-        outcome = OutcomeSubmission.objects.filter(run=run).first()
-        return Response(
-            {
-                "actor": AgentActorAdminSerializer(run.actor).data,
-                "profile": ProfileVersionAdminSerializer(run.profile_version).data,
-                "assignment": AssignmentAdminSerializer(run.assignment).data,
-                "run": RunAdminSerializer(run).data,
-                "input_events": RunInputEventAdminSerializer(
-                    RunInputEvent.objects.filter(run=run)[:limit], many=True
-                ).data,
-                "invocations": RuntimeInvocationAdminSerializer(
-                    RuntimeInvocation.objects.filter(run=run)[:limit], many=True
-                ).data,
-                "runtime_events": RuntimeEventEvidenceSerializer(
-                    RuntimeEventIngress.objects.filter(run=run)[:limit], many=True
-                ).data,
-                "runtime_exits": RuntimeExitEvidenceSerializer(
-                    RuntimeExitEvidence.objects.filter(run=run)[:limit], many=True
-                ).data,
-                "terminal_events": TerminalEventAdminSerializer(
-                    RunTerminalEvent.objects.filter(run=run)[:limit], many=True
-                ).data,
-                "outcome": OutcomeAdminSerializer(outcome).data if outcome else None,
-                "gateway_readback": [
-                    GatewayReadbackSerializer(
-                        {
-                            "receipt": receipt,
-                            "audit": OperationGatewayAudit.objects.filter(
-                                workspace_id=receipt.workspace_id,
-                                workspace_slug=receipt.workspace_slug,
-                                request_id=receipt.request_id,
-                                invocation_id=receipt.invocation_id,
-                                caller_id=receipt.caller_id,
-                                operation_id=receipt.operation_id,
-                                idempotency_key=receipt.idempotency_key,
-                                correlation_id=receipt.correlation_id,
-                                request_digest=receipt.request_digest,
-                            ).order_by("created_at", "id"),
-                        }
-                    ).data
-                    for receipt in OperationGatewayIdempotency.objects.filter(
-                        workspace_slug=slug,
-                        caller_id=run.actor.principal_id,
-                        correlation_id=f"correlation:{run.last_invocation_id}",
-                    ).order_by("-created_at")[:limit]
-                ],
-            }
-        )
+        return Response(build_run_readback(run, limit=limit))
 
 
 class AgentRunInputEventAdminListCreateAPIEndpoint(AgentAdminAPIView):
@@ -455,6 +415,7 @@ class AgentOutcomeRevisionAPIEndpoint(AgentAdminAPIView):
 
 class AgentGatewayReadbackListAPIEndpoint(AgentAdminAPIView):
     def get(self, request, slug):
+        limit = self.get_per_page(request, default_per_page=50, max_per_page=100)
         queryset = OperationGatewayIdempotency.objects.filter(workspace_slug=slug).order_by("-created_at")
         for field in ("operation_id", "idempotency_key", "caller_id", "state"):
             if request.query_params.get(field):
@@ -464,10 +425,10 @@ class AgentGatewayReadbackListAPIEndpoint(AgentAdminAPIView):
             queryset=queryset,
             default_per_page=50,
             max_per_page=100,
-            on_results=lambda receipts: [self._readback(receipt) for receipt in receipts],
+            on_results=lambda receipts: [self._readback(receipt, limit=limit) for receipt in receipts],
         )
 
-    def _readback(self, receipt):
+    def _readback(self, receipt, *, limit=100):
         audit = OperationGatewayAudit.objects.filter(
             workspace_id=receipt.workspace_id,
             workspace_slug=receipt.workspace_slug,
@@ -478,12 +439,13 @@ class AgentGatewayReadbackListAPIEndpoint(AgentAdminAPIView):
             idempotency_key=receipt.idempotency_key,
             correlation_id=receipt.correlation_id,
             request_digest=receipt.request_digest,
-        ).order_by("created_at", "id")
+        ).order_by("created_at", "id")[:limit]
         return GatewayReadbackSerializer({"receipt": receipt, "audit": audit}).data
 
 
 class AgentGatewayReadbackDetailAPIEndpoint(AgentAdminAPIView):
     def get(self, request, slug, pk):
+        limit = self.get_per_page(request, default_per_page=50, max_per_page=100)
         receipt = get_object_or_404(OperationGatewayIdempotency, workspace_slug=slug, pk=pk)
         audit = OperationGatewayAudit.objects.filter(
             workspace_id=receipt.workspace_id,
@@ -495,5 +457,42 @@ class AgentGatewayReadbackDetailAPIEndpoint(AgentAdminAPIView):
             idempotency_key=receipt.idempotency_key,
             correlation_id=receipt.correlation_id,
             request_digest=receipt.request_digest,
-        ).order_by("created_at", "id")
+        ).order_by("created_at", "id")[:limit]
         return Response(GatewayReadbackSerializer({"receipt": receipt, "audit": audit}).data)
+
+
+class AgentGovernanceReadbackAPIEndpoint(AgentAdminAPIView):
+    def get(self, request, slug):
+        workspace = self.workspace()
+        raw_limit = request.query_params.get("limit") or request.query_params.get("per_page")
+        if raw_limit is None:
+            limit = 50
+        else:
+            try:
+                limit = validate_readback_limit(int(raw_limit))
+            except (TypeError, ValueError) as exc:
+                raise AgentAdminExtensionError(str(exc)) from exc
+        return Response(
+            build_governance_readback(
+                workspace,
+                limit=limit,
+                resource_id=request.query_params.get("resource_id"),
+            )
+        )
+
+
+class AgentGovernanceCommandAPIEndpoint(AgentAdminAPIView):
+    def post(self, request, slug):
+        serializer = AgentGovernanceCommandSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        values = serializer.validated_data
+        command = AgentAdminExtensionCommand(
+            action=values["action"],
+            workspace_id=str(self.workspace().id),
+            actor_id=str(values["actor_id"]) if values.get("actor_id") else None,
+            run_id=str(values["run_id"]) if values.get("run_id") else None,
+            invocation_id=str(values["invocation_id"]) if values.get("invocation_id") else None,
+            idempotency_key=values["idempotency_key"],
+            payload=values.get("payload", {}),
+        )
+        return Response(plane_agent_admin_extension().execute(command))

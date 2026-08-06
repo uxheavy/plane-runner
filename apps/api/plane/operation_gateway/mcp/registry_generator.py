@@ -13,10 +13,36 @@ import argparse
 from pathlib import Path
 from typing import Any
 
+from ..limits import MAX_RESULT_BYTES
 from .manifest import effective_manifest
 
 REGISTRY_SCHEMA_VERSION = "plane.mcp-adapter-registry/v1"
 GATEWAY_SCHEMA_VERSION = "plane.operation/v1"
+REPRESENTATIVE_TEST = "plane.tests.contract.api.test_operation_gateway_mcp::test_generated_action_matrix_is_executable"
+
+
+def _catalog_metadata(operation_id: str | None) -> dict[str, Any]:
+    """Add executable catalog metadata from the authoritative Plane catalog."""
+
+    if not operation_id:
+        return {
+            "handler": None,
+            "catalog_schema_digest": None,
+            "authorization_service": "edition_api_absence",
+            "result_limit_bytes": MAX_RESULT_BYTES,
+        }
+    from ..catalog import OPERATION_CATALOG
+
+    try:
+        descriptor = OPERATION_CATALOG[operation_id]
+    except KeyError:
+        raise ValueError(f"Catalog metadata is missing for supported operation {operation_id!r}") from None
+    return {
+        "handler": descriptor.handler,
+        "catalog_schema_digest": descriptor.schema_digest,
+        "authorization_service": f"live_{descriptor.authorization_scope}_permission",
+        "result_limit_bytes": descriptor.max_result_bytes,
+    }
 
 
 def canonical_manifest_digest(manifest: dict[str, Any]) -> str:
@@ -51,6 +77,7 @@ def build_adapter_registry(manifest: dict[str, Any]) -> dict[str, Any]:
                 "tool_name": name,
                 "adapter": action["adapter"],
                 "registration": "gateway",
+                "disposition": action["disposition"],
                 "gateway_schema_version": GATEWAY_SCHEMA_VERSION,
                 "gateway_operation_id": operation_id,
                 "result_key": result_key,
@@ -60,11 +87,21 @@ def build_adapter_registry(manifest: dict[str, Any]) -> dict[str, Any]:
                 "return_annotation": action["return_annotation"],
                 "sdk_entrypoints": action.get("sdk_entrypoints", []),
             }
+            row.update(_catalog_metadata(operation_id))
+            row.update(
+                {
+                    "identity_mode": "external_user_binding",
+                    "idempotency_policy": "gateway_per_caller_operation_key",
+                    "audit_policy": "append_only_gateway_audit",
+                    "representative_test": REPRESENTATIVE_TEST,
+                }
+            )
         elif action["disposition"] == "MCP-D-002":
             row = {
                 "tool_name": name,
                 "adapter": action["adapter"],
                 "registration": "local",
+                "disposition": action["disposition"],
                 "gateway_schema_version": None,
                 "gateway_operation_id": None,
                 "result_key": None,
@@ -73,24 +110,41 @@ def build_adapter_registry(manifest: dict[str, Any]) -> dict[str, Any]:
                 "public_signature": action["signature"],
                 "return_annotation": action["return_annotation"],
                 "sdk_entrypoints": [],
+                "handler": "local_pql_reference",
+                "catalog_schema_digest": None,
+                "authorization_service": "local_only_no_plane_authority",
+                "result_limit_bytes": MAX_RESULT_BYTES,
+                "identity_mode": "local_no_caller_binding",
+                "idempotency_policy": "local_deterministic_reference",
+                "audit_policy": "not_applicable_no_plane_authority",
+                "representative_test": REPRESENTATIVE_TEST,
             }
-        else:
+        elif action["gateway_status"] == "unsupported" and action["disposition"] == "MCP-D-004":
             blocker = action.get("blocker")
             if not isinstance(blocker, dict) or blocker.get("action") != name:
-                raise ValueError(f"Deferred action {name!r} has no action-specific blocker")
+                raise ValueError(f"Unsupported action {name!r} has no action-specific disposition")
             row = {
                 "tool_name": name,
                 "adapter": action["adapter"],
-                "registration": "blocked",
+                "registration": "unsupported",
+                "disposition": action["disposition"],
                 "gateway_schema_version": None,
                 "gateway_operation_id": None,
                 "result_key": None,
-                "result_mode": "blocked",
+                "result_mode": "unsupported",
                 "input_aliases": {},
                 "public_signature": action["signature"],
                 "return_annotation": action["return_annotation"],
                 "sdk_entrypoints": action.get("sdk_entrypoints", []),
                 "blocker": blocker,
+                "handler": None,
+                "catalog_schema_digest": None,
+                "authorization_service": "edition_api_absence",
+                "result_limit_bytes": MAX_RESULT_BYTES,
+                "identity_mode": "external_user_preserved_fail_closed",
+                "idempotency_policy": "not_invoked_fail_closed",
+                "audit_policy": "unsupported_disposition_registry",
+                "representative_test": REPRESENTATIVE_TEST,
             }
         row.update(
             {

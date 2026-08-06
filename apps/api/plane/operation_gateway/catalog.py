@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Literal, Mapping
 
-from .contracts import SCHEMA_VERSION, canonical_json
+from .contracts import MAX_RESULT_BYTES, SCHEMA_VERSION, canonical_json
 
 CatalogKind = Literal["read", "mutation"]
 OperationKind = CatalogKind
@@ -56,7 +56,7 @@ class OperationDescriptor:
     summary: str = ""
     required_input: tuple[str, ...] = ()
     input_fields: tuple[str, ...] = ()
-    max_result_bytes: int = 8 * 1024
+    max_result_bytes: int = MAX_RESULT_BYTES
     handler: str = ""
     result_key: str = "result"
     permission: PermissionFamily = "project"
@@ -68,6 +68,10 @@ class OperationDescriptor:
     universal: bool = False
 
     def __post_init__(self) -> None:
+        if isinstance(self.max_result_bytes, bool) or not isinstance(self.max_result_bytes, int):
+            raise TypeError("max_result_bytes must be an integer")
+        if not 1 <= self.max_result_bytes <= MAX_RESULT_BYTES:
+            raise ValueError(f"max_result_bytes must be between 1 and {MAX_RESULT_BYTES} bytes")
         operation_name = self.name or {
             "work_item.read": "read_work_item",
             "work_item.rename": "rename_work_item",
@@ -133,7 +137,7 @@ def _descriptor(
     summary: str,
     required_input: tuple[str, ...] = (),
     input_fields: tuple[str, ...] = (),
-    max_result_bytes: int = 8 * 1024,
+    max_result_bytes: int = MAX_RESULT_BYTES,
     handler: str | None = None,
     result_key: str,
     permission: PermissionFamily = "project",
@@ -448,7 +452,7 @@ OPERATION_CATALOG.update(
             summary="Search accessible Plane objects and return typed references.",
             required_input=("query",),
             input_fields=("query", "limit", "cursor"),
-            max_result_bytes=8 * 1024,
+            max_result_bytes=MAX_RESULT_BYTES,
             handler="search_workspace",
             result_key="results",
             permission="workspace",
@@ -467,7 +471,7 @@ OPERATION_CATALOG.update(
             summary="Search the complete Plane operation catalog.",
             required_input=("query",),
             input_fields=("query", "limit", "cursor"),
-            max_result_bytes=8 * 1024,
+            max_result_bytes=MAX_RESULT_BYTES,
             handler="catalog_search",
             result_key="operations",
             permission="workspace",
@@ -485,7 +489,7 @@ OPERATION_CATALOG.update(
             summary="Describe one supported Plane operation and its schemas.",
             required_input=("operation_id",),
             input_fields=("operation_id",),
-            max_result_bytes=8 * 1024,
+            max_result_bytes=MAX_RESULT_BYTES,
             handler="catalog_describe",
             result_key="operation",
             permission="workspace",
@@ -519,7 +523,7 @@ OPERATION_CATALOG.update(
             kind="mutation",
             summary="Submit one explicit Plane Agent outcome with artifacts and evidence.",
             required_input=("run_ref", "summary"),
-            max_result_bytes=8 * 1024,
+            max_result_bytes=MAX_RESULT_BYTES,
             handler="agent_outcome_submit",
             name="submit_agent_outcome",
             result_key="outcome",
@@ -534,7 +538,7 @@ OPERATION_CATALOG.update(
             kind="mutation",
             summary="Explicitly publish an already submitted Plane Agent outcome.",
             required_input=("run_ref", "outcome_ref", "content"),
-            max_result_bytes=8 * 1024,
+            max_result_bytes=MAX_RESULT_BYTES,
             handler="agent_outcome_publish",
             name="publish_agent_outcome",
             result_key="outcome",
@@ -701,7 +705,7 @@ def _add_resource_operations(
     fields: tuple[str, ...],
     retrieve_id: str,
     permission: PermissionFamily = "project",
-    max_result_bytes: int = 8 * 1024,
+    max_result_bytes: int = MAX_RESULT_BYTES,
     list_required_input: tuple[str, ...] | None = None,
     create_required_input: tuple[str, ...] | None = None,
     list_result_key: str | None = None,
@@ -864,7 +868,7 @@ _add_resource_operations(
     ),
     retrieve_id="project_id",
     permission="workspace",
-    max_result_bytes=12 * 1024,
+    max_result_bytes=MAX_RESULT_BYTES,
     list_required_input=(),
     create_required_input=("name", "identifier"),
     list_result_key="projects",
@@ -952,7 +956,7 @@ for operation_id, descriptor in (
             input_fields=("project_id", "query", "expand", "fields", "external_id", "external_source", "order_by"),
             result_key="issues",
             permission="workspace",
-            max_result_bytes=12 * 1024,
+            max_result_bytes=MAX_RESULT_BYTES,
         ),
     ),
     (
@@ -965,7 +969,7 @@ for operation_id, descriptor in (
             required_input=("project_id", "issue_id"),
             input_fields=("project_id", "issue_id", "cursor", "per_page", "order_by", "fields", "expand", "params"),
             result_key="activities",
-            max_result_bytes=12 * 1024,
+            max_result_bytes=MAX_RESULT_BYTES,
         ),
     ),
     (
@@ -978,7 +982,7 @@ for operation_id, descriptor in (
             required_input=("project_id", "issue_id", "activity_id"),
             input_fields=("project_id", "issue_id", "activity_id", "fields", "expand", "params"),
             result_key="activity",
-            max_result_bytes=8 * 1024,
+            max_result_bytes=MAX_RESULT_BYTES,
         ),
     ),
     (
@@ -991,7 +995,7 @@ for operation_id, descriptor in (
             required_input=("project_id", "issue_id"),
             input_fields=("project_id", "issue_id"),
             result_key="relations",
-            max_result_bytes=12 * 1024,
+            max_result_bytes=MAX_RESULT_BYTES,
         ),
     ),
     (
@@ -1011,7 +1015,7 @@ for operation_id, descriptor in (
                 "relation_definition_label",
             ),
             result_key="relations",
-            max_result_bytes=12 * 1024,
+            max_result_bytes=MAX_RESULT_BYTES,
         ),
     ),
     (
@@ -1034,7 +1038,7 @@ for operation_id, descriptor in (
                 "params",
             ),
             result_key="work_items",
-            max_result_bytes=12 * 1024,
+            max_result_bytes=MAX_RESULT_BYTES,
         ),
     ),
     (
@@ -1070,11 +1074,244 @@ for operation_id, descriptor in (
                 "params",
             ),
             result_key="work_items",
-            max_result_bytes=12 * 1024,
+            max_result_bytes=MAX_RESULT_BYTES,
         ),
     ),
 ):
     OPERATION_CATALOG[operation_id] = descriptor
+
+
+def _add_breadth_operation(
+    operation_id: str,
+    *,
+    kind: OperationKind,
+    family: str,
+    summary: str,
+    required_input: tuple[str, ...] = (),
+    input_fields: tuple[str, ...] = (),
+    result_key: str,
+    permission: PermissionFamily = "project",
+    max_result_bytes: int = MAX_RESULT_BYTES,
+) -> None:
+    """Register one exact breadth action without introducing a generic endpoint."""
+
+    OPERATION_CATALOG[operation_id] = _descriptor(
+        operation_id,
+        kind=kind,
+        family=family,
+        summary=summary,
+        required_input=required_input,
+        input_fields=input_fields,
+        result_key=result_key,
+        permission=permission,
+        max_result_bytes=max_result_bytes,
+    )
+
+
+_add_breadth_operation(
+    "cycle.work_item.manage",
+    kind="mutation",
+    family="cycle_work_item",
+    summary="Add or remove project work items from one cycle.",
+    required_input=("project_id", "cycle_id"),
+    input_fields=("project_id", "cycle_id", "add_ids", "remove_ids"),
+    result_key="cycle_work_items",
+)
+_add_breadth_operation(
+    "cycle.archive",
+    kind="mutation",
+    family="cycle",
+    summary="Archive or unarchive one cycle through its native lifecycle fields.",
+    required_input=("project_id", "cycle_id", "archive"),
+    input_fields=("project_id", "cycle_id", "archive"),
+    result_key="archived",
+)
+_add_breadth_operation(
+    "cycle.complete",
+    kind="mutation",
+    family="cycle",
+    summary="Complete one cycle through its native end date.",
+    required_input=("project_id", "cycle_id"),
+    input_fields=("project_id", "cycle_id"),
+    result_key="cycle",
+)
+_add_breadth_operation(
+    "module.work_item.manage",
+    kind="mutation",
+    family="module_work_item",
+    summary="Add or remove project work items from one module.",
+    required_input=("project_id", "module_id"),
+    input_fields=("project_id", "module_id", "add_ids", "remove_ids"),
+    result_key="module_work_items",
+)
+_add_breadth_operation(
+    "module.archive",
+    kind="mutation",
+    family="module",
+    summary="Archive or unarchive one module through its native lifecycle fields.",
+    required_input=("project_id", "module_id", "archive"),
+    input_fields=("project_id", "module_id", "archive"),
+    result_key="module",
+)
+_add_breadth_operation(
+    "project.archive",
+    kind="mutation",
+    family="project",
+    summary="Archive or unarchive one project through its native lifecycle fields.",
+    required_input=("project_id", "archive"),
+    input_fields=("project_id", "archive"),
+    result_key="project",
+    permission="workspace",
+)
+_add_breadth_operation(
+    "project.features.update",
+    kind="mutation",
+    family="project",
+    summary="Update the native project feature flags with explicit field mapping.",
+    required_input=("project_id",),
+    input_fields=("project_id", "modules", "cycles", "views", "pages", "intakes", "work_item_types"),
+    result_key="project",
+    permission="workspace",
+)
+_add_breadth_operation(
+    "project.estimate.retrieve",
+    kind="read",
+    family="project_estimate",
+    summary="Read the native estimate linked to one project.",
+    required_input=("project_id",),
+    input_fields=("project_id",),
+    result_key="estimate",
+)
+_add_breadth_operation(
+    "project.estimate.points.list",
+    kind="read",
+    family="project_estimate",
+    summary="List native estimate points for one project estimate.",
+    required_input=("project_id", "estimate_id"),
+    input_fields=("project_id", "estimate_id"),
+    result_key="points",
+)
+_add_breadth_operation(
+    "project.estimate.create",
+    kind="mutation",
+    family="project_estimate",
+    summary="Create the native estimate for one project.",
+    required_input=("project_id", "name"),
+    input_fields=("project_id", "name", "type", "description", "last_used", "external_id", "external_source"),
+    result_key="estimate",
+)
+_add_breadth_operation(
+    "project.estimate.update",
+    kind="mutation",
+    family="project_estimate",
+    summary="Update the native estimate for one project.",
+    required_input=("project_id",),
+    input_fields=("project_id", "name", "description", "external_id", "external_source"),
+    result_key="estimate",
+)
+_add_breadth_operation(
+    "project.estimate.delete",
+    kind="mutation",
+    family="project_estimate",
+    summary="Delete the native estimate for one project.",
+    required_input=("project_id",),
+    input_fields=("project_id",),
+    result_key="deleted",
+    max_result_bytes=2048,
+)
+_add_breadth_operation(
+    "project.estimate.link",
+    kind="mutation",
+    family="project_estimate",
+    summary="Link an existing native estimate to one project.",
+    required_input=("project_id", "estimate_id"),
+    input_fields=("project_id", "estimate_id"),
+    result_key="project",
+)
+_add_breadth_operation(
+    "project.estimate.points.create",
+    kind="mutation",
+    family="project_estimate",
+    summary="Create native estimate points for one project estimate.",
+    required_input=("project_id", "estimate_id", "points"),
+    input_fields=("project_id", "estimate_id", "points"),
+    result_key="points",
+)
+_add_breadth_operation(
+    "project.estimate.point.update",
+    kind="mutation",
+    family="project_estimate",
+    summary="Update one native estimate point.",
+    required_input=("project_id", "estimate_id", "estimate_point_id"),
+    input_fields=("project_id", "estimate_id", "estimate_point_id", "value", "key", "description"),
+    result_key="point",
+)
+_add_breadth_operation(
+    "project.estimate.point.delete",
+    kind="mutation",
+    family="project_estimate",
+    summary="Delete one native estimate point.",
+    required_input=("project_id", "estimate_id", "estimate_point_id"),
+    input_fields=("project_id", "estimate_id", "estimate_point_id"),
+    result_key="deleted",
+    max_result_bytes=2048,
+)
+_add_breadth_operation(
+    "work_item.identifier.retrieve",
+    kind="read",
+    family="work_item",
+    summary="Retrieve one work item by its project identifier and sequence.",
+    required_input=("work_item_identifier",),
+    input_fields=("work_item_identifier", "expand", "fields", "external_id", "external_source", "order_by"),
+    result_key="work_item",
+    permission="workspace",
+)
+_add_breadth_operation(
+    "work_item.assignee.manage",
+    kind="mutation",
+    family="work_item",
+    summary="Add or remove one project member as a work-item assignee.",
+    required_input=("project_id", "work_item_id"),
+    input_fields=("project_id", "work_item_id", "add_user_id", "remove_user_id"),
+    result_key="work_item",
+)
+_add_breadth_operation(
+    "work_item.label.manage",
+    kind="mutation",
+    family="work_item",
+    summary="Add or remove one project label from a work item.",
+    required_input=("project_id", "work_item_id"),
+    input_fields=("project_id", "work_item_id", "add_label_id", "remove_label_id"),
+    result_key="work_item",
+)
+_add_breadth_operation(
+    "work_item.archive.list",
+    kind="read",
+    family="work_item",
+    summary="List archived work items in one project with bounded pagination.",
+    required_input=("project_id",),
+    input_fields=("project_id", "pql", "cursor", "per_page", "order_by", "fields", "expand"),
+    result_key="work_items",
+)
+_add_breadth_operation(
+    "work_item.archive",
+    kind="mutation",
+    family="work_item",
+    summary="Archive or unarchive one work item through its native lifecycle field.",
+    required_input=("project_id", "work_item_id", "archive"),
+    input_fields=("project_id", "work_item_id", "archive"),
+    result_key="work_item",
+)
+_add_breadth_operation(
+    "work_item_relation.remove",
+    kind="mutation",
+    family="work_item_relation",
+    summary="Remove one native work-item relation in the caller's project workspace.",
+    required_input=("project_id", "work_item_id", "related_work_item_id", "is_dependency"),
+    input_fields=("project_id", "work_item_id", "related_work_item_id", "is_dependency"),
+    result_key="removed",
+    max_result_bytes=2048,
+)
 
 for operation_id, descriptor in (
     (
@@ -1169,7 +1406,7 @@ for operation_id, descriptor in (
             ),
             result_key="members",
             permission="workspace",
-            max_result_bytes=12 * 1024,
+            max_result_bytes=MAX_RESULT_BYTES,
         ),
     ),
 ):

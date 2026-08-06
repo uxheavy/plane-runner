@@ -40,7 +40,8 @@ from plane.db.models import (
     WorkspaceMember,
 )
 from plane.operation_gateway.contracts import MAX_RESULT_BYTES
-from plane.operation_gateway.gateway import OperationGateway
+from plane.operation_gateway.catalog import OPERATION_CATALOG
+from plane.operation_gateway.gateway import GatewayFailure, OperationGateway
 from plane.operation_gateway.publications import (
     create_publication_intents,
     dispatch_publication_once,
@@ -106,6 +107,24 @@ def client_for_user(user):
 def drain_publications(record):
     for publication in record.publications.order_by("kind"):
         dispatch_publication_once(str(publication.id))
+
+
+@pytest.mark.contract
+def test_native_gateway_result_ceiling_accepts_8192_and_rejects_8193():
+    gateway = OperationGateway.__new__(OperationGateway)
+    descriptor = OPERATION_CATALOG["user.me"]
+    prefix = len(json.dumps({"user": ""}, separators=(",", ":")).encode())
+    raw_result = {"user": "x" * (MAX_RESULT_BYTES - prefix)}
+
+    bounded = gateway._bound_result(descriptor, raw_result, max_bytes=MAX_RESULT_BYTES)
+
+    assert len(json.dumps(bounded, separators=(",", ":")).encode()) == MAX_RESULT_BYTES
+    with pytest.raises(GatewayFailure, match="RESULT_TOO_LARGE"):
+        gateway._bound_result(
+            descriptor,
+            {"user": "x" * (MAX_RESULT_BYTES - prefix + 1)},
+            max_bytes=MAX_RESULT_BYTES,
+        )
 
 
 @pytest.mark.contract
@@ -353,6 +372,165 @@ def test_direct_family_adapters_preserve_serializer_validation_and_gateway_audit
     assert members["results"][0]["id"] == str(create_user.id)
 
     assert OperationGatewayAudit.objects.filter(idempotency_key__startswith="family-").count() >= 16
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_native_breadth_adapters_preserve_public_semantics_and_receipts(
+    api_key_client, workspace, gateway_project, gateway_issue, create_user
+):
+    gateway_project.cycle_view = True
+    gateway_project.module_view = True
+    gateway_project.save(update_fields=["cycle_view", "module_view"])
+
+    def execute(operation_id, key, input_data=None, *, project=True):
+        payload = dict(input_data or {})
+        if project:
+            payload = {"project_id": str(gateway_project.id), **payload}
+        response = api_key_client.post(
+            "/api/v1/operations/",
+            family_body(workspace, operation_id, key, payload),
+            format="json",
+        )
+        assert response.status_code in {status.HTTP_200_OK, status.HTTP_201_CREATED}, response.json()
+        body = response.json()
+        assert body["caller"]["id"] == str(create_user.id)
+        assert body["audit_receipt"]
+        return body
+
+    cycle = execute(
+        "cycle.create",
+        "breadth-cycle-create",
+        {"name": "Breadth Cycle", "owned_by": str(create_user.id)},
+    )["result"]["cycle"]
+    cycle_id = cycle["id"]
+    assert execute(
+        "cycle.work_item.manage",
+        "breadth-cycle-items",
+        {"cycle_id": cycle_id, "add_ids": [str(gateway_issue.id)]},
+    )["result"]["cycle_work_items"]
+    assert (
+        execute(
+            "cycle.archive",
+            "breadth-cycle-archive",
+            {"cycle_id": cycle_id, "archive": True},
+        )["result"]["archived"]
+        is True
+    )
+    assert (
+        execute(
+            "cycle.archive",
+            "breadth-cycle-unarchive",
+            {"cycle_id": cycle_id, "archive": False},
+        )["result"]["archived"]
+        is False
+    )
+    assert (
+        execute(
+            "cycle.complete",
+            "breadth-cycle-complete",
+            {"cycle_id": cycle_id},
+        )["result"]["cycle"]["id"]
+        == cycle_id
+    )
+
+    module = execute("module.create", "breadth-module-create", {"name": "Breadth Module"})["result"]["module"]
+    module_id = module["id"]
+    assert execute(
+        "module.work_item.manage",
+        "breadth-module-items",
+        {"module_id": module_id, "add_ids": [str(gateway_issue.id)]},
+    )["result"]["module_work_items"]
+    execute("module.archive", "breadth-module-archive", {"module_id": module_id, "archive": True})
+    execute("module.archive", "breadth-module-unarchive", {"module_id": module_id, "archive": False})
+
+    features = execute(
+        "project.features.update",
+        "breadth-project-features",
+        {"modules": True, "cycles": True, "views": False},
+    )["result"]["project"]
+    assert features["module_view"] is True
+
+    estimate = execute(
+        "project.estimate.create",
+        "breadth-estimate-create",
+        {"name": "Breadth Estimate", "type": "points"},
+    )["result"]["estimate"]
+    estimate_id = estimate["id"]
+    assert (
+        execute(
+            "project.estimate.link",
+            "breadth-estimate-link",
+            {"estimate_id": estimate_id},
+        )["result"]["project"]["estimate"]
+        == estimate_id
+    )
+    points = execute(
+        "project.estimate.points.create",
+        "breadth-estimate-points-create",
+        {"estimate_id": estimate_id, "points": [{"key": 0, "value": "1"}, {"key": 1, "value": "2"}]},
+    )["result"]["points"]
+    point_id = points[0]["id"]
+    assert execute(
+        "project.estimate.points.list",
+        "breadth-estimate-points-list",
+        {"estimate_id": estimate_id},
+    )["result"]["points"]
+    assert (
+        execute(
+            "project.estimate.point.update",
+            "breadth-estimate-point-update",
+            {"estimate_id": estimate_id, "estimate_point_id": point_id, "value": "XL"},
+        )["result"]["point"]["value"]
+        == "XL"
+    )
+    execute(
+        "project.estimate.point.delete",
+        "breadth-estimate-point-delete",
+        {"estimate_id": estimate_id, "estimate_point_id": point_id},
+    )
+    execute("project.estimate.update", "breadth-estimate-update", {"name": "Breadth Estimate Updated"})
+    execute("project.estimate.delete", "breadth-estimate-delete")
+
+    identifier = f"{gateway_project.identifier}-{gateway_issue.sequence_id}"
+    assert execute(
+        "work_item.identifier.retrieve",
+        "breadth-identifier-retrieve",
+        {"work_item_identifier": identifier},
+        project=False,
+    )["result"]["work_item"]["id"] == str(gateway_issue.id)
+    assert execute(
+        "work_item.assignee.manage",
+        "breadth-assignee-add",
+        {"work_item_id": str(gateway_issue.id), "add_user_id": str(create_user.id)},
+    )["result"]["work_item"]["id"] == str(gateway_issue.id)
+
+    label = execute("label.create", "breadth-label-create", {"name": "Breadth Label"})["result"]["label"]
+    assert execute(
+        "work_item.label.manage",
+        "breadth-label-add",
+        {"work_item_id": str(gateway_issue.id), "add_label_id": label["id"]},
+    )["result"]["work_item"]["id"] == str(gateway_issue.id)
+    archived_page = execute("work_item.archive.list", "breadth-archive-list")
+    assert archived_page["result"]["work_items"]["results"] == []
+
+    execute(
+        "work_item.archive",
+        "breadth-work-item-archive",
+        {"work_item_id": str(gateway_issue.id), "archive": True},
+    )
+    assert execute("work_item.archive.list", "breadth-archive-list-after")["result"]["work_items"]["count"] == 1
+    execute(
+        "work_item.archive",
+        "breadth-work-item-unarchive",
+        {"work_item_id": str(gateway_issue.id), "archive": False},
+    )
+
+    execute("project.archive", "breadth-project-archive", {"archive": True})
+    gateway_project.refresh_from_db()
+    assert gateway_project.archived_at is not None
+    execute("project.archive", "breadth-project-unarchive", {"archive": False})
+    assert OperationGatewayAudit.objects.filter(idempotency_key__startswith="breadth-").count() >= 28
 
 
 @pytest.mark.contract

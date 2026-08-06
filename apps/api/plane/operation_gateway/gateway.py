@@ -963,11 +963,7 @@ class OperationGateway:
             bounded = raw_result
         else:
             bounded = json.loads(canonical_json(raw_result))
-        result = (
-            bounded
-            if descriptor.result_key in bounded
-            else {descriptor.result_key: bounded}
-        )
+        result = bounded if descriptor.result_key in bounded else {descriptor.result_key: bounded}
         result = json.loads(canonical_json(result))
         if len(canonical_json(result).encode("utf-8")) > max_bytes:
             raise GatewayFailure("RESULT_TOO_LARGE", 409, False)

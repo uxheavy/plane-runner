@@ -72,6 +72,7 @@ from .agent_admin import (
     AgentActorAdminSerializer,
     AgentActorCreateSerializer,
     AgentActorPatchSerializer,
+    AgentGovernanceCommandSerializer,
     AssignmentAdminSerializer,
     AssignmentCreateSerializer,
     DispatchSerializer,

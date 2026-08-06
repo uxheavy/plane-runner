@@ -7,12 +7,15 @@ from dataclasses import dataclass
 from importlib.resources import files
 from typing import Any
 
+from ..limits import MAX_RESULT_BYTES
+
 
 @dataclass(frozen=True)
 class AdapterRegistration:
     tool_name: str
     adapter: str
     registration: str
+    disposition: str
     gateway_schema_version: str | None
     gateway_operation_id: str | None
     result_key: str | None
@@ -29,6 +32,14 @@ class AdapterRegistration:
     capabilities: tuple[str, ...]
     preserves: tuple[str, ...]
     rationale_code: str
+    handler: str | None
+    catalog_schema_digest: str | None
+    authorization_service: str
+    result_limit_bytes: int
+    identity_mode: str
+    idempotency_policy: str
+    audit_policy: str
+    representative_test: str
 
 
 def _read_registry() -> dict[str, Any]:
@@ -50,6 +61,14 @@ def _validate_registry(value: dict[str, Any]) -> tuple[AdapterRegistration, ...]
             tool_name=row["tool_name"],
             adapter=row["adapter"],
             registration=row["registration"],
+            disposition=row.get(
+                "disposition",
+                {
+                    "gateway": "MCP-D-001",
+                    "unsupported": "MCP-D-004",
+                    "local": "MCP-D-002",
+                }.get(row["registration"], ""),
+            ),
             gateway_schema_version=row["gateway_schema_version"],
             gateway_operation_id=row["gateway_operation_id"],
             result_key=row["result_key"],
@@ -66,6 +85,14 @@ def _validate_registry(value: dict[str, Any]) -> tuple[AdapterRegistration, ...]
             capabilities=tuple(row["capabilities"]),
             preserves=tuple(row["preserves"]),
             rationale_code=row["rationale_code"],
+            handler=row["handler"],
+            catalog_schema_digest=row["catalog_schema_digest"],
+            authorization_service=row["authorization_service"],
+            result_limit_bytes=row["result_limit_bytes"],
+            identity_mode=row["identity_mode"],
+            idempotency_policy=row["idempotency_policy"],
+            audit_policy=row["audit_policy"],
+            representative_test=row["representative_test"],
         )
         for row in rows
     )
@@ -81,14 +108,34 @@ def _validate_registry(value: dict[str, Any]) -> tuple[AdapterRegistration, ...]
             raise RuntimeError(f"Registration {row.tool_name!r} has incomplete public source metadata")
         if not row.preserves or not row.rationale_code:
             raise RuntimeError(f"Registration {row.tool_name!r} has incomplete contract evidence")
+        if (
+            isinstance(row.result_limit_bytes, bool)
+            or not isinstance(row.result_limit_bytes, int)
+            or not 1 <= row.result_limit_bytes <= MAX_RESULT_BYTES
+            or not row.identity_mode
+            or not row.idempotency_policy
+            or not row.audit_policy
+        ):
+            raise RuntimeError(f"Registration {row.tool_name!r} has incomplete matrix bounds or policy metadata")
+        expected_dispositions = {
+            "gateway": {"MCP-D-001", "MCP-D-003"},
+            "unsupported": "MCP-D-004",
+            "local": "MCP-D-002",
+        }.get(row.registration)
+        if isinstance(expected_dispositions, set):
+            valid_disposition = row.disposition in expected_dispositions
+        else:
+            valid_disposition = row.disposition == expected_dispositions
+        if not valid_disposition:
+            raise RuntimeError(f"Registration {row.tool_name!r} has an invalid disposition")
         if row.registration == "gateway":
             if not row.gateway_operation_id or row.gateway_schema_version != "plane.operation/v1":
                 raise RuntimeError(f"Gateway registration {row.tool_name!r} is incomplete")
             if row.blocker is not None:
                 raise RuntimeError(f"Gateway registration {row.tool_name!r} is blocked")
-        elif row.registration == "blocked":
+        elif row.registration == "unsupported":
             if row.gateway_operation_id is not None or not isinstance(row.blocker, dict):
-                raise RuntimeError(f"Blocked registration {row.tool_name!r} is not fail-closed")
+                raise RuntimeError(f"Unsupported registration {row.tool_name!r} is not fail-closed")
         elif row.registration != "local":
             raise RuntimeError(f"Unknown registration state for {row.tool_name!r}")
     return registrations

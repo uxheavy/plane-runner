@@ -17,6 +17,7 @@ from .attachment_policy import (
 )
 from .registry_generator import build_adapter_registry
 from .sdk_adapter import MCPAdapterError, MCPGatewayExecutionError, SharedSDKGatewayAdapter
+from ..contracts import MAX_RESULT_BYTES
 
 
 class FakeGateway:
@@ -63,7 +64,7 @@ class GeneratedAdapterTests(unittest.TestCase):
         self.assertEqual(len(ADAPTER_REGISTRATIONS), 177)
         self.assertEqual(
             {row.registration for row in ADAPTER_REGISTRATIONS},
-            {"gateway", "blocked", "local"},
+            {"gateway", "unsupported", "local"},
         )
         gateway_tools = {row.tool_name for row in ADAPTER_REGISTRATIONS if row.registration == "gateway"}
         manifest_tools = {action["name"] for action in manifest["actions"]}
@@ -76,7 +77,7 @@ class GeneratedAdapterTests(unittest.TestCase):
             self.assertEqual(
                 row.public_signature, next(a["signature"] for a in manifest["actions"] if a["name"] == row.tool_name)
             )
-            if row.registration == "blocked":
+            if row.registration == "unsupported":
                 self.assertEqual(row.blocker["action"], row.tool_name)
                 self.assertIsNone(row.gateway_operation_id)
 
@@ -119,7 +120,7 @@ class GeneratedAdapterTests(unittest.TestCase):
             {"id": "u1"},
         )
 
-    def test_deferred_and_unknown_actions_fail_closed_with_specific_codes(self):
+    def test_unsupported_and_unknown_actions_fail_closed_with_specific_codes(self):
         gateway = FakeGateway(result_by_operation={"work_item.retrieve": {"work_item": {"id": "i1", "name": "one"}}})
         self.assertEqual(
             SharedSDKGatewayAdapter(gateway).invoke(
@@ -130,12 +131,12 @@ class GeneratedAdapterTests(unittest.TestCase):
             ),
             {"id": "i1", "name": "one"},
         )
-        with self.assertRaises(MCPAdapterError) as deferred:
+        with self.assertRaises(MCPAdapterError) as unsupported:
             SharedSDKGatewayAdapter(FakeGateway()).invoke(
                 "list_work_item_properties", {}, idempotency_key="k", correlation_id="c"
             )
-        self.assertEqual(deferred.exception.code, "MCP_ACTION_GATEWAY_MAPPING_UNAVAILABLE")
-        self.assertIn("WORK_ITEM_PROPERTY", deferred.exception.message)
+        self.assertEqual(unsupported.exception.code, "MCP_ACTION_UNSUPPORTED")
+        self.assertIn("WORK_ITEM_PROPERTY", unsupported.exception.message)
         with self.assertRaises(MCPAdapterError) as unknown:
             SharedSDKGatewayAdapter(FakeGateway()).invoke(
                 "not_a_public_plane_tool", {}, idempotency_key="k", correlation_id="c"
@@ -171,8 +172,9 @@ class GeneratedAdapterTests(unittest.TestCase):
         with self.assertRaises(MCPAdapterError) as page_size:
             validator(registration, {"results": []}, {"per_page": 0})
         self.assertEqual(page_size.exception.code, "MCP_PAGE_BOUNDS_INVALID")
+        validator(registration, "x" * (MAX_RESULT_BYTES - 2), {})
         with self.assertRaises(MCPAdapterError) as result_size:
-            validator(registration, "x" * (16 * 1024 + 1), {})
+            validator(registration, "x" * (MAX_RESULT_BYTES - 1), {})
         self.assertEqual(result_size.exception.code, "MCP_GATEWAY_RESULT_TOO_LARGE")
 
     def test_attachment_source_and_content_bounds_are_enforced(self):

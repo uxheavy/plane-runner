@@ -19,11 +19,13 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable, Mapping
 
+from plane.operation_gateway.contracts import MAX_RESULT_BYTES
 
 HOST_PROTOCOL = "plane.agent-runtime/v1"
 PLANE_DISCOVERY_OPERATION = "plane.operations.discover@1"
 MAX_HOST_REQUEST_BYTES = 16 * 1024
-MAX_HOST_RESULT_BYTES = 16 * 1024
+# The host carries the public operation result and cannot widen its contract.
+MAX_HOST_RESULT_BYTES = MAX_RESULT_BYTES
 MAX_HOST_INPUT_BYTES = 8 * 1024
 MAX_HOST_CALLS = 32
 MAX_HOST_OPERATION_REF_BYTES = 256
