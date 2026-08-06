@@ -353,13 +353,17 @@ setup_g4_stack() {
 
 g4_pytest() {
     local path="$1"
-    run_api pytest \
-        -p plane.tests.g3_no_skips \
-        --migrations \
-        -q \
-        -o 'addopts=--strict-markers --reuse-db' \
-        -o cache_dir=/tmp/g4-pytest \
-        "${path}"
+    run_api sh -c '
+        set -Eeuo pipefail
+        export PYTHONPATH=/workspace/apps/api${PYTHONPATH:+:${PYTHONPATH}}
+        exec pytest \
+            -p plane.tests.g3_no_skips \
+            --migrations \
+            -q \
+            -o "addopts=--strict-markers --reuse-db" \
+            -o cache_dir=/tmp/g4-pytest \
+            "$1"
+    ' -- "${path}"
 }
 
 g4_runtime_contracts() {
