@@ -2,7 +2,7 @@
   "schema_version": "plane.mcp-compatibility/v1",
   "source": {
     "repository": "https://github.com/makeplane/plane-mcp-server",
-    "commit": "96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1",
+    "commit": "4b36e2664ba9a82fe2edebf89eaa76565b130398",
     "version": "0.2.11",
     "inventory_digest": "2778ef9d6f5426c6fc65894829ec04bf853c18c4ab09d796474896ba01826ad1"
   },
@@ -21,7 +21,7 @@
     "create_work_item_relation": {"operation_id": "work_item_relation.create", "result_key": "relations", "input_aliases": {"work_item_id": "issue_id"}},
     "delete_cycle": {"operation_id": "cycle.delete", "result_key": "deleted", "result_mode": "none"},
     "list_cycle_work_items": {"operation_id": "cycle.work_item.list", "result_key": "work_items"},
-    "transfer_cycle_work_items": {"operation_id": "cycle.transfer", "result_key": "message"},
+    "transfer_cycle_work_items": {"operation_id": "cycle.transfer", "result_key": "message", "result_mode": "none"},
     "delete_module": {"operation_id": "module.delete", "result_key": "deleted", "result_mode": "none"},
     "list_module_work_items": {"operation_id": "module.work_item.list", "result_key": "work_items"},
     "delete_intake_work_item": {"operation_id": "intake.delete", "result_key": "deleted", "result_mode": "none", "input_aliases": {"work_item_id": "issue_id"}},
@@ -71,7 +71,29 @@
     "retrieve_page": {"operation_id": "page.retrieve", "result_key": "page"},
     "create_page": {"operation_id": "page.create", "result_key": "page"},
     "get_project_members": {"operation_id": "project_member.list", "result_key": "members"},
-    "get_workspace_members": {"operation_id": "workspace_member.list", "result_key": "members"}
+    "get_workspace_members": {"operation_id": "workspace_member.list", "result_key": "members"},
+    "manage_cycle_work_items": {"operation_id": "cycle.work_item.manage", "result_key": "cycle_work_items", "result_mode": "none"},
+    "manage_cycle_archive": {"operation_id": "cycle.archive", "result_key": "archived"},
+    "complete_cycle": {"operation_id": "cycle.complete", "result_key": "cycle"},
+    "manage_module_work_items": {"operation_id": "module.work_item.manage", "result_key": "module_work_items", "result_mode": "none"},
+    "manage_module_archive": {"operation_id": "module.archive", "result_key": "module", "result_mode": "none"},
+    "manage_project_archive": {"operation_id": "project.archive", "result_key": "project", "result_mode": "none"},
+    "update_project_features": {"operation_id": "project.features.update", "result_key": "project"},
+    "get_project_estimate": {"operation_id": "project.estimate.retrieve", "result_key": "estimate"},
+    "list_project_estimate_points": {"operation_id": "project.estimate.points.list", "result_key": "points"},
+    "create_project_estimate": {"operation_id": "project.estimate.create", "result_key": "estimate"},
+    "update_project_estimate": {"operation_id": "project.estimate.update", "result_key": "estimate"},
+    "delete_project_estimate": {"operation_id": "project.estimate.delete", "result_key": "deleted", "result_mode": "none"},
+    "link_estimate_to_project": {"operation_id": "project.estimate.link", "result_key": "project"},
+    "create_project_estimate_points": {"operation_id": "project.estimate.points.create", "result_key": "points"},
+    "update_project_estimate_point": {"operation_id": "project.estimate.point.update", "result_key": "point"},
+    "delete_project_estimate_point": {"operation_id": "project.estimate.point.delete", "result_key": "deleted", "result_mode": "none"},
+    "retrieve_work_item_by_identifier": {"operation_id": "work_item.identifier.retrieve", "result_key": "work_item"},
+    "manage_work_item_assignee": {"operation_id": "work_item.assignee.manage", "result_key": "work_item"},
+    "manage_work_item_label": {"operation_id": "work_item.label.manage", "result_key": "work_item"},
+    "list_archived_work_items": {"operation_id": "work_item.archive.list", "result_key": "work_items"},
+    "manage_work_item_archive": {"operation_id": "work_item.archive", "result_key": "work_item", "result_mode": "none"},
+    "remove_work_item_relation": {"operation_id": "work_item_relation.remove", "result_key": "removed", "result_mode": "none"}
   },
   "actions": [
     {

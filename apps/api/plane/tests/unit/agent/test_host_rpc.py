@@ -6,11 +6,13 @@ import pytest
 
 from plane.agent.runtime.host_rpc import (
     HOST_PROTOCOL,
+    MAX_HOST_RESULT_BYTES,
     PlaneHostCall,
     PlaneHostRPCError,
     PlaneHostResult,
     PlaneHostServer,
 )
+from plane.operation_gateway.contracts import MAX_RESULT_BYTES
 
 
 def _call(**overrides):
@@ -62,6 +64,38 @@ def test_host_call_derives_and_validates_binding_complete_identity():
     changed["input"] = {"query": "different"}
     with pytest.raises(PlaneHostRPCError, match="requestRef"):
         PlaneHostCall.from_wire(changed)
+
+
+def test_host_result_uses_the_canonical_public_result_ceiling():
+    assert MAX_HOST_RESULT_BYTES == MAX_RESULT_BYTES == 8 * 1024
+    base = {
+        "protocol": HOST_PROTOCOL,
+        "requestRef": "request:test",
+        "correlationId": "correlation:test",
+        "idempotencyKey": "idempotency:test",
+        "status": "ok",
+        "replayed": False,
+    }
+    prefix_size = len(json.dumps({**base, "output": ""}, sort_keys=True, separators=(",", ":")).encode())
+    output = "x" * (MAX_HOST_RESULT_BYTES - prefix_size)
+    result = PlaneHostResult(
+        request_ref=base["requestRef"],
+        correlation_id=base["correlationId"],
+        idempotency_key=base["idempotencyKey"],
+        status=base["status"],
+        replayed=base["replayed"],
+        output=output,
+    )
+    assert len(json.dumps(result.to_wire(), sort_keys=True, separators=(",", ":")).encode()) == MAX_RESULT_BYTES
+    with pytest.raises(PlaneHostRPCError, match="exceeds"):
+        PlaneHostResult(
+            request_ref=base["requestRef"],
+            correlation_id=base["correlationId"],
+            idempotency_key=base["idempotencyKey"],
+            status=base["status"],
+            replayed=base["replayed"],
+            output=output + "x",
+        )
 
 
 def test_host_server_replays_exact_calls_without_reinvoking_the_gateway(tmp_path):

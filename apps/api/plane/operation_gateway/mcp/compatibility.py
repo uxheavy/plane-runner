@@ -17,9 +17,9 @@ from ..catalog import IMPLEMENTED_OPERATION_IDS, OPERATION_CATALOG
 from .manifest import effective_manifest
 
 MCPCompatibilityManifest = dict[str, Any]
-MCPDisposition = Literal["MCP-D-001", "MCP-D-002", "MCP-D-003"]
-MCPAdapter = Literal["shared_sdk_transport", "local_pql", "hardened_attachment"]
-MCPGatewayStatus = Literal["deferred", "local_only", "supported"]
+MCPDisposition = Literal["MCP-D-001", "MCP-D-002", "MCP-D-003", "MCP-D-004"]
+MCPAdapter = Literal["shared_sdk_transport", "local_pql", "hardened_attachment", "unsupported"]
+MCPGatewayStatus = Literal["unsupported", "local_only", "supported"]
 
 
 class MCPCompatibilityError(ValueError):
@@ -124,15 +124,18 @@ def _validate_manifest(manifest: MCPCompatibilityManifest) -> tuple[MCPAction, .
             if action.blocker is not None:
                 raise RuntimeError(f"Supported MCP action {action.name!r} cannot carry a blocker")
         elif action.gateway_operation_id is not None:
-            raise RuntimeError(f"Deferred MCP action {action.name!r} cannot claim a gateway operation")
+            raise RuntimeError(f"Unsupported MCP action {action.name!r} cannot claim a gateway operation")
         elif action.disposition != "MCP-D-002":
             if not isinstance(action.blocker, dict) or not action.blocker.get("code"):
-                raise RuntimeError(f"Deferred MCP action {action.name!r} has no machine-readable blocker")
+                raise RuntimeError(f"Unsupported MCP action {action.name!r} has no machine-readable disposition")
+            if action.gateway_status != "unsupported" or action.disposition != "MCP-D-004":
+                raise RuntimeError(f"Unsupported MCP action {action.name!r} has an inconsistent disposition")
 
         expected_adapter = {
             "MCP-D-001": "shared_sdk_transport",
             "MCP-D-002": "local_pql",
             "MCP-D-003": "hardened_attachment",
+            "MCP-D-004": "unsupported",
         }[action.disposition]
         if action.adapter != expected_adapter:
             raise RuntimeError(f"MCP action {action.name!r} has an inconsistent disposition adapter")
@@ -154,7 +157,7 @@ def get_mcp_action(tool_name: str) -> MCPAction | None:
 def gateway_operation_for(tool_name: str) -> str | None:
     """Return only an explicitly registered semantic gateway operation.
 
-    Deferred and local-only actions return ``None``. Callers must not fall
+    Unsupported and local-only actions return ``None``. Callers must not fall
     back to a guessed operation or a direct Plane SDK/REST call.
     """
 
@@ -181,7 +184,11 @@ def require_gateway_operation(tool_name: str) -> str:
     if action.gateway_operation_id is None:
         raise MCPCompatibilityError(
             tool_name=tool_name,
-            code="MCP_ACTION_GATEWAY_MAPPING_UNAVAILABLE",
+            code=(
+                "MCP_ACTION_UNSUPPORTED"
+                if action.gateway_status == "unsupported"
+                else "MCP_ACTION_GATEWAY_MAPPING_UNAVAILABLE"
+            ),
             rationale=action.rationale,
         )
     return action.gateway_operation_id

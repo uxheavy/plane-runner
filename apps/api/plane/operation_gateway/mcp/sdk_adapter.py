@@ -8,8 +8,10 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from .adapter_registry import AdapterRegistration, get_registration
+from ..contracts import MAX_RESULT_BYTES
 
-MAX_PUBLIC_RESULT_BYTES = 16 * 1024
+# MCP/SDK are public transports for the same gateway result contract.
+MAX_PUBLIC_RESULT_BYTES = MAX_RESULT_BYTES
 MAX_PAGE_SIZE = 1000
 
 
@@ -75,8 +77,14 @@ class SharedSDKGatewayAdapter:
             )
         if registration.registration != "gateway":
             blocker = registration.blocker or {}
-            code = "MCP_ACTION_GATEWAY_MAPPING_UNAVAILABLE"
-            message = blocker.get("code", "The public MCP action has no exact gateway registration.")
+            code = (
+                "MCP_ACTION_UNSUPPORTED"
+                if registration.registration == "unsupported"
+                else "MCP_ACTION_GATEWAY_MAPPING_UNAVAILABLE"
+            )
+            message = blocker.get(
+                "code", blocker.get("reason", "The public MCP action has no exact gateway registration.")
+            )
             raise MCPAdapterError(tool_name=tool_name, code=code, message=str(message))
         payload = self._translate_input(registration, arguments or {})
         envelope = self._invoker.execute(

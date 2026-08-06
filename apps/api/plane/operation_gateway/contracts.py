@@ -9,9 +9,10 @@ from typing import Any, Literal, NotRequired, TypedDict
 from django.core.serializers.json import DjangoJSONEncoder
 from rest_framework import serializers
 
+from .limits import MAX_RESULT_BYTES  # noqa: F401 -- public transport modules import the canonical limit here
+
 SCHEMA_VERSION = "plane.operation/v1"
 MAX_INPUT_BYTES = 16 * 1024
-MAX_RESULT_BYTES = 8 * 1024
 MAX_RESPONSE_BYTES = 16 * 1024
 MAX_METADATA_BYTES = 1024
 
@@ -205,6 +206,9 @@ class GatewayOperationInputSerializer(StrictSerializer):
     link_id = serializers.UUIDField(required=False)
     state_id = serializers.UUIDField(required=False)
     activity_id = serializers.UUIDField(required=False)
+    estimate_id = serializers.UUIDField(required=False)
+    estimate_point_id = serializers.UUIDField(required=False)
+    related_work_item_id = serializers.UUIDField(required=False)
     operation_id = serializers.CharField(max_length=128, allow_blank=False, required=False)
     relation_definition_id = serializers.UUIDField(required=False, allow_null=True)
     owned_by = serializers.UUIDField(required=False, allow_null=True)
@@ -226,6 +230,7 @@ class GatewayOperationInputSerializer(StrictSerializer):
     external_source = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
     external_id = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
     identifier = serializers.CharField(max_length=32, required=False, allow_blank=False)
+    work_item_identifier = serializers.CharField(max_length=128, required=False, allow_blank=False)
     color = serializers.CharField(max_length=32, required=False, allow_blank=False)
     emoji = serializers.CharField(max_length=32, required=False, allow_blank=True, allow_null=True)
     cover_image = serializers.CharField(max_length=2048, required=False, allow_blank=True, allow_null=True)
@@ -249,13 +254,18 @@ class GatewayOperationInputSerializer(StrictSerializer):
     logo_props = serializers.JSONField(required=False, allow_null=True)
     params = serializers.JSONField(required=False, allow_null=True)
     data = serializers.JSONField(required=False, allow_null=True)
+    points = serializers.ListField(child=serializers.JSONField(), required=False, allow_null=True)
+    value = serializers.JSONField(required=False, allow_null=True)
 
     assignees = serializers.ListField(child=serializers.UUIDField(), required=False, allow_null=True)
     labels = serializers.ListField(child=serializers.UUIDField(), required=False, allow_null=True)
     work_item_ids = serializers.ListField(child=serializers.UUIDField(), required=False, allow_null=True)
+    add_ids = serializers.ListField(child=serializers.UUIDField(), required=False, allow_null=True)
+    remove_ids = serializers.ListField(child=serializers.UUIDField(), required=False, allow_null=True)
     members = serializers.ListField(child=serializers.UUIDField(), required=False, allow_null=True)
     per_page = serializers.IntegerField(required=False, min_value=1, max_value=1000)
     point = serializers.IntegerField(required=False, min_value=0, allow_null=True)
+    key = serializers.IntegerField(required=False, min_value=0, allow_null=True)
     archive_in = serializers.IntegerField(required=False, allow_null=True)
     close_in = serializers.IntegerField(required=False, allow_null=True)
     network = serializers.IntegerField(required=False, allow_null=True)
@@ -288,6 +298,7 @@ class GatewayOperationInputSerializer(StrictSerializer):
     archived = serializers.BooleanField(required=False, allow_null=True)
     is_locked = serializers.BooleanField(required=False, allow_null=True)
     archive = serializers.BooleanField(required=False)
+    is_dependency = serializers.BooleanField(required=False)
     track_visit = serializers.BooleanField(required=False)
     module_view = serializers.BooleanField(required=False, allow_null=True)
     cycle_view = serializers.BooleanField(required=False, allow_null=True)
@@ -297,6 +308,12 @@ class GatewayOperationInputSerializer(StrictSerializer):
     guest_view_all_features = serializers.BooleanField(required=False, allow_null=True)
     is_issue_type_enabled = serializers.BooleanField(required=False, allow_null=True)
     is_time_tracking_enabled = serializers.BooleanField(required=False, allow_null=True)
+    modules = serializers.BooleanField(required=False, allow_null=True)
+    cycles = serializers.BooleanField(required=False, allow_null=True)
+    views = serializers.BooleanField(required=False, allow_null=True)
+    pages = serializers.BooleanField(required=False, allow_null=True)
+    intakes = serializers.BooleanField(required=False, allow_null=True)
+    work_item_types = serializers.BooleanField(required=False, allow_null=True)
     default = serializers.BooleanField(required=False, allow_null=True)
     is_triage = serializers.BooleanField(required=False, allow_null=True)
     is_active = serializers.BooleanField(required=False, allow_null=True)
