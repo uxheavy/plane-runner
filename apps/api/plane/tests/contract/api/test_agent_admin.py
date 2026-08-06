@@ -5,6 +5,8 @@ import uuid
 
 import pytest
 from django.core.management import call_command
+from django.core.cache import cache
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from plane.db.models import (
@@ -25,6 +27,17 @@ from plane.db.models import (
     User,
     WorkspaceMember,
 )
+from plane.agent.lifecycle import (
+    create_actor,
+    create_assignment,
+    create_profile,
+    create_run,
+    delegate_assignment,
+    propose_outcome,
+    record_invocation,
+)
+from plane.agent.runtime.host_rpc import trusted_host_request
+from plane.operation_gateway.gateway import OperationGateway
 
 
 def _admin_url(workspace, suffix):
@@ -163,10 +176,12 @@ def test_admin_api_proves_lifecycle_review_and_redaction(api_key_client, workspa
     assert run_body["run"]["id"] == run_id
     assert run_body["outcome"]["state"] == OutcomeState.ACCEPTED
     assert run_body["invocations"][0]["id"] == invocation_id
-    assert run_body["invocations"][0]["control"]["state"]
-    assert "raw_payload" not in json.dumps(run_body)
-    assert "envelope" not in json.dumps(run_body)
-    assert "original_sequence" not in json.dumps(run_body)
+    run_json = json.dumps(run_body, sort_keys=True)
+    assert "control" not in run_body["invocations"][0]
+    assert "socket" not in run_json.casefold()
+    assert "raw_payload" not in run_json
+    assert "envelope" not in run_json
+    assert "original_sequence" not in run_json
 
     assignment = AssignmentContract.objects.get(pk=assignment_id)
     assert assignment.state == AssignmentState.COMPLETED
@@ -374,3 +389,508 @@ def test_admin_api_exposes_revision_cancel_and_gateway_readback(
     assert '"request_input":' not in readback_json
     assert '"result":' not in readback_json
     assert '"error":' not in readback_json
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
+def test_run_readback_returns_only_run_correlated_gateway_receipts_and_matches_cli(
+    api_key_client,
+    workspace,
+    agent_admin_gateway_project,
+    agent_admin_gateway_issue,
+    capsys,
+):
+    actor_response = _actor(api_key_client, workspace, "Correlated worker")
+    actor_id = actor_response.json()["id"]
+    actor = AgentActor.objects.select_related("principal").get(pk=actor_id)
+    ProjectMember.objects.create(project=agent_admin_gateway_project, member=actor.principal, role=15, is_active=True)
+    assert (
+        api_key_client.post(
+            _admin_url(workspace, f"actors/{actor_id}/profiles/"),
+            {"role": AgentRole.WORKER, "instructions": "Read correlated work."},
+            format="json",
+        ).status_code
+        == 201
+    )
+    assignment_response = api_key_client.post(
+        _admin_url(workspace, f"actors/{actor_id}/assignments/"),
+        {
+            "target_ref": "issue:correlation",
+            "objective": "Read only the current run's receipts.",
+            "acceptance_criteria": ["No receipt from another run is returned."],
+        },
+        format="json",
+    )
+    assignment_id = assignment_response.json()["id"]
+    first_dispatch = api_key_client.post(
+        _admin_url(workspace, f"assignments/{assignment_id}/dispatch/"),
+        {"idempotency_key": "idempotency:correlation-first"},
+        format="json",
+    )
+    second_dispatch = api_key_client.post(
+        _admin_url(workspace, f"assignments/{assignment_id}/dispatch/"),
+        {"idempotency_key": "idempotency:correlation-second"},
+        format="json",
+    )
+    assert first_dispatch.status_code == second_dispatch.status_code == 201
+    first_run_id = first_dispatch.json()["run"]["id"]
+    second_run_id = second_dispatch.json()["run"]["id"]
+
+    for dispatch, run_id, label in (
+        (first_dispatch, first_run_id, "first"),
+        (second_dispatch, second_run_id, "second"),
+    ):
+        invocation = RuntimeInvocation.objects.get(pk=dispatch.json()["invocation"]["id"])
+        response, response_status = OperationGateway().execute(
+            trusted_host_request(invocation),
+            {
+                "schema_version": "plane.operation/v1",
+                "operation_id": "work_item.read",
+                "workspace_slug": workspace.slug,
+                "idempotency_key": f"idempotency:correlation-{label}",
+                "correlation_id": f"correlation:{run_id}",
+                "input": {
+                    "project_id": str(agent_admin_gateway_project.id),
+                    "issue_id": str(agent_admin_gateway_issue.id),
+                },
+            },
+        )
+        assert response_status == 200
+        assert response["correlation_id"] == f"correlation:{run_id}"
+
+    first_body = api_key_client.get(_admin_url(workspace, f"runs/{first_run_id}/?per_page=1"))
+    second_body = api_key_client.get(_admin_url(workspace, f"runs/{second_run_id}/?per_page=1"))
+    assert first_body.status_code == second_body.status_code == 200
+    first_readback = first_body.json()
+    second_readback = second_body.json()
+    assert [row["receipt"]["idempotency_key"] for row in first_readback["gateway_readback"]] == [
+        "idempotency:correlation-first"
+    ]
+    assert [row["receipt"]["idempotency_key"] for row in second_readback["gateway_readback"]] == [
+        "idempotency:correlation-second"
+    ]
+    for row, run_id in (
+        (first_readback["gateway_readback"][0], first_run_id),
+        (second_readback["gateway_readback"][0], second_run_id),
+    ):
+        assert row["receipt"]["correlation_id"] == f"correlation:{run_id}"
+        assert all(item["correlation_id"] == f"correlation:{run_id}" for item in row["audit"])
+
+    first_json = json.dumps(first_readback, sort_keys=True)
+    assert len(first_json.encode("utf-8")) <= 8 * 1024
+    assert "control" not in first_json
+    assert "socket" not in first_json.casefold()
+
+    call_command("agent_readback", workspace_slug=workspace.slug, run_id=first_run_id, limit=1)
+    cli_readback = json.loads(capsys.readouterr().out)
+    assert cli_readback == first_readback
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
+def test_context_admin_reuses_governance_services_and_api_cli_projection(api_key_client, workspace, capsys):
+    cache.clear()
+    actor_response = _actor(api_key_client, workspace, "Context worker", credential_ref=None)
+    actor_id = actor_response.json()["id"]
+
+    memory_response = api_key_client.post(
+        _admin_url(workspace, f"actors/{actor_id}/memory/"),
+        {"key": "operating-preference", "content": "Prefer bounded readback."},
+        format="json",
+    )
+    assert memory_response.status_code == 201
+    memory_id = memory_response.json()["id"]
+    assert memory_response.json()["active_revision"]["state"] == "active"
+    assert (
+        api_key_client.get(_admin_url(workspace, f"actors/{actor_id}/memory/{memory_id}/revisions/")).status_code == 200
+    )
+
+    skill_response = api_key_client.post(
+        _admin_url(workspace, f"actors/{actor_id}/skills/"),
+        {"key": "bounded-readback", "package_files": {"SKILL.md": "Keep evidence bounded."}},
+        format="json",
+    )
+    assert skill_response.status_code == 201
+    skill_id = skill_response.json()["id"]
+    assert (
+        api_key_client.get(_admin_url(workspace, f"actors/{actor_id}/skills/{skill_id}/revisions/")).status_code == 200
+    )
+
+    schedule_response = api_key_client.post(
+        _admin_url(workspace, f"actors/{actor_id}/schedules/"),
+        {
+            "name": "Readback schedule",
+            "cron_expression": "* * * * *",
+            "target_ref": "issue:scheduled-readback",
+            "objective": "Run bounded scheduled work.",
+            "starts_at": timezone.now().isoformat(),
+        },
+        format="json",
+    )
+    assert schedule_response.status_code == 201
+    schedule_id = schedule_response.json()["id"]
+    fire_response = api_key_client.post(
+        _admin_url(workspace, f"schedules/{schedule_id}/fires/"),
+        {
+            "scheduled_for": schedule_response.json()["next_fire_at"],
+            "idempotency_key": "idempotency:scheduled-readback",
+        },
+        format="json",
+    )
+    assert fire_response.status_code == 201
+    replay_response = api_key_client.post(
+        _admin_url(workspace, f"schedules/{schedule_id}/fires/"),
+        {
+            "scheduled_for": schedule_response.json()["next_fire_at"],
+            "idempotency_key": "idempotency:scheduled-readback",
+        },
+        format="json",
+    )
+    assert replay_response.status_code == 201
+    assert replay_response.json()["id"] == fire_response.json()["id"]
+
+    status_response = api_key_client.get(_admin_url(workspace, "gateway/status/"))
+    catalog_response = api_key_client.get(_admin_url(workspace, "gateway/catalog/?limit=1"))
+    assert status_response.status_code == catalog_response.status_code == 200
+    assert status_response.json()["external_adapter_registry"]["tool_count"] == 177
+    assert status_response.json()["external_adapter_registry"]["disposition"] == {
+        "gateway": 64,
+        "blocked": 112,
+        "local": 1,
+    }
+    assert len(json.dumps(catalog_response.json()).encode()) <= 8 * 1024
+
+    context_response = api_key_client.get(_admin_url(workspace, f"actors/{actor_id}/context/?per_page=1"))
+    assert context_response.status_code == 200
+    call_command("agent_context_readback", workspace_slug=workspace.slug, actor_id=actor_id, limit=1)
+    assert json.loads(capsys.readouterr().out) == context_response.json()
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
+def test_governance_extension_api_cli_parity_and_l7_state_adapters(api_key_client, workspace, capsys):
+    cache.clear()
+    worker_response = _actor(api_key_client, workspace, "Governance worker")
+    worker_id = worker_response.json()["id"]
+    assert (
+        api_key_client.post(
+            _admin_url(workspace, f"actors/{worker_id}/profiles/"),
+            {"role": AgentRole.WORKER, "instructions": "Produce bounded governance evidence."},
+            format="json",
+        ).status_code
+        == 201
+    )
+    assignment_response = api_key_client.post(
+        _admin_url(workspace, f"actors/{worker_id}/assignments/"),
+        {
+            "target_ref": "issue:governance-outcome",
+            "objective": "Produce one reviewable outcome.",
+            "acceptance_criteria": ["The outcome has an independent review."],
+        },
+        format="json",
+    )
+    assert assignment_response.status_code == 201
+    assignment_id = assignment_response.json()["id"]
+    assignment = AssignmentContract.objects.get(pk=assignment_id)
+    profile = ProfileVersion.objects.get(actor_id=worker_id, version=1)
+    run = create_run(
+        assignment,
+        profile,
+        idempotency_key="idempotency:governance-dispatch",
+        created_by=workspace.owner,
+    )
+    invocation = record_invocation(
+        run,
+        idempotency_key="idempotency:governance-invocation",
+        created_by=workspace.owner,
+    )
+    outcome = propose_outcome(
+        run,
+        summary="Governance outcome",
+        idempotency_key="idempotency:governance-outcome",
+        created_by=workspace.owner,
+    )
+    run_id = str(run.id)
+    outcome_id = str(outcome.id)
+
+    evaluator_response = _actor(api_key_client, workspace, "Governance evaluator", credential_ref=None)
+    evaluator_id = evaluator_response.json()["id"]
+    assert (
+        api_key_client.post(
+            _admin_url(workspace, f"actors/{evaluator_id}/profiles/"),
+            {"role": AgentRole.EVALUATOR, "instructions": "Review governance outcomes."},
+            format="json",
+        ).status_code
+        == 201
+    )
+    hr_response = _actor(api_key_client, workspace, "Governance HR", credential_ref=None)
+    hr_id = hr_response.json()["id"]
+    assert (
+        api_key_client.post(
+            _admin_url(workspace, f"actors/{hr_id}/profiles/"),
+            {"role": AgentRole.HR, "instructions": "Propose bounded HR changes."},
+            format="json",
+        ).status_code
+        == 201
+    )
+
+    command_url = _admin_url(workspace, "governance/commands/")
+    mismatched_review = api_key_client.post(
+        command_url,
+        {
+            "action": "evaluator.review",
+            "actor_id": worker_id,
+            "run_id": run_id,
+            "idempotency_key": "idempotency:governance-mismatched-review",
+            "payload": {"outcome_id": outcome_id, "evaluator_id": evaluator_id},
+        },
+        format="json",
+    )
+    assert mismatched_review.status_code == 400
+    outcome.refresh_from_db()
+    assert outcome.state == OutcomeState.PROPOSED
+    review_response = api_key_client.post(
+        command_url,
+        {
+            "action": "evaluator.review",
+            "actor_id": evaluator_id,
+            "run_id": run_id,
+            "invocation_id": invocation.invocation_id,
+            "idempotency_key": "idempotency:governance-review",
+            "payload": {
+                "outcome_id": outcome_id,
+                "evaluator_id": evaluator_id,
+                "feedback": "Independent evidence is present.",
+                "criteria": [{"criterion": "evidence", "result": "pass"}],
+                "provenance": {"source": "governance-contract-test"},
+            },
+        },
+        format="json",
+    )
+    assert review_response.status_code == 200, review_response.json()
+    assert review_response.json()["evaluator_reviews"][0]["outcome_state"] == OutcomeState.EVALUATOR_REVIEWED
+    revision_response = api_key_client.post(
+        command_url,
+        {
+            "action": "outcome.request_revision",
+            "idempotency_key": "idempotency:governance-revision",
+            "payload": {"outcome_id": outcome_id, "reviewer_id": str(workspace.owner_id)},
+        },
+        format="json",
+    )
+    assert revision_response.status_code == 200
+    assert revision_response.json()["evaluator_reviews"][0]["outcome_state"] == OutcomeState.REVISION_REQUESTED
+
+    accepted_assignment = create_assignment(
+        AgentActor.objects.get(pk=worker_id),
+        target_ref="issue:governance-accepted-outcome",
+        objective="Produce one accepted outcome.",
+        acceptance_criteria=["The accepted outcome is reviewed."],
+        created_by=workspace.owner,
+    )
+    accepted_run = create_run(
+        accepted_assignment,
+        profile,
+        idempotency_key="idempotency:governance-accepted-run",
+        created_by=workspace.owner,
+    )
+    accepted_invocation = record_invocation(
+        accepted_run,
+        idempotency_key="idempotency:governance-accepted-invocation",
+        created_by=workspace.owner,
+    )
+    accepted_outcome = propose_outcome(
+        accepted_run,
+        summary="Governance accepted outcome",
+        idempotency_key="idempotency:governance-accepted-outcome",
+        created_by=workspace.owner,
+    )
+    accept_response = api_key_client.post(
+        command_url,
+        {
+            "action": "outcome.accept",
+            "idempotency_key": "idempotency:governance-accept",
+            "payload": {"outcome_id": str(accepted_outcome.id), "reviewer_id": str(workspace.owner_id)},
+        },
+        format="json",
+    )
+    assert accept_response.status_code == 400
+    accepted_review_response = api_key_client.post(
+        command_url,
+        {
+            "action": "evaluator.review",
+            "actor_id": evaluator_id,
+            "run_id": str(accepted_run.id),
+            "invocation_id": accepted_invocation.invocation_id,
+            "idempotency_key": "idempotency:governance-accepted-review",
+            "payload": {"outcome_id": str(accepted_outcome.id), "evaluator_id": evaluator_id},
+        },
+        format="json",
+    )
+    assert accepted_review_response.status_code == 200
+    accept_response = api_key_client.post(
+        command_url,
+        {
+            "action": "outcome.accept",
+            "idempotency_key": "idempotency:governance-accept",
+            "payload": {"outcome_id": str(accepted_outcome.id), "reviewer_id": str(workspace.owner_id)},
+        },
+        format="json",
+    )
+    assert accept_response.status_code == 200
+    assert accept_response.json()["evaluator_reviews"][0]["outcome_state"] == OutcomeState.ACCEPTED
+
+    chief_response = api_key_client.post(
+        command_url,
+        {
+            "action": "chief_of_staff.provision",
+            "actor_id": hr_id,
+            "idempotency_key": "idempotency:governance-chief",
+            "payload": {
+                "human_id": str(workspace.owner_id),
+                "proposed_by_id": hr_id,
+                "rationale": "Provision a human-gated chief of staff.",
+            },
+        },
+        format="json",
+    )
+    assert chief_response.status_code == 200
+    proposal_id = chief_response.json()["hr_proposals"][0]["id"]
+    decision_response = api_key_client.post(
+        command_url,
+        {
+            "action": "hr.proposal.decide",
+            "idempotency_key": "idempotency:governance-chief-decision",
+            "payload": {
+                "proposal_id": proposal_id,
+                "reviewer_id": str(workspace.owner_id),
+                "approved": True,
+                "decision_note": "Approved by the workspace owner.",
+            },
+        },
+        format="json",
+    )
+    assert decision_response.status_code == 200
+    assert decision_response.json()["hr_proposals"][0]["state"] == "approved"
+
+    cancel_worker = create_actor(
+        workspace=workspace,
+        display_name="Governance cancellation worker",
+        created_by=workspace.owner,
+    )
+    create_profile(
+        cancel_worker,
+        role=AgentRole.WORKER,
+        instructions="Remain bounded during cancellation.",
+        created_by=workspace.owner,
+    )
+    delegator = create_actor(
+        workspace=workspace,
+        display_name="Governance delegator",
+        created_by=workspace.owner,
+    )
+    create_profile(
+        delegator,
+        role=AgentRole.DELEGATOR,
+        instructions="Delegate bounded cancellation tests.",
+        created_by=workspace.owner,
+    )
+    cancel_worker_id = str(cancel_worker.id)
+    delegator_id = str(delegator.id)
+    parent_response = api_key_client.post(
+        _admin_url(workspace, f"actors/{delegator_id}/assignments/"),
+        {
+            "target_ref": "issue:governance-cancel",
+            "objective": "Cancel a delegated tree.",
+            "acceptance_criteria": ["Cancellation propagates."],
+        },
+        format="json",
+    )
+    parent = AssignmentContract.objects.get(pk=parent_response.json()["id"])
+    child = delegate_assignment(
+        parent,
+        AgentActor.objects.get(pk=cancel_worker_id),
+        target_ref="issue:governance-cancel-child",
+        objective="Remain unfinished until cancellation.",
+        acceptance_criteria=["The child is cancelled."],
+        idempotency_key="idempotency:governance-child",
+    )
+    cancel_response = api_key_client.post(
+        command_url,
+        {
+            "action": "assignment.cancel",
+            "idempotency_key": "idempotency:governance-cancel",
+            "payload": {"assignment_id": str(parent.id), "reviewer_id": str(workspace.owner_id)},
+        },
+        format="json",
+    )
+    assert cancel_response.status_code == 200
+    assert cancel_response.json()["assignments"][0]["state"] == AssignmentState.CANCELLED
+    child.refresh_from_db()
+    assert child.state == AssignmentState.CANCELLED
+
+    api_response = api_key_client.get(_admin_url(workspace, "governance/?limit=1"))
+    assert api_response.status_code == 200
+    api_payload = api_response.json()
+    assert len(json.dumps(api_payload).encode("utf-8")) <= 8 * 1024
+    assert all(len(api_payload[key]) <= 1 for key in ("assignments", "hr_proposals", "evaluator_reviews"))
+    output = json.dumps(api_payload)
+    for forbidden in (
+        "credential:",
+        "credential_ref",
+        "runtime_control",
+        "socket",
+        "lease_owner",
+        "requested_profile",
+    ):
+        assert forbidden not in output
+
+    call_command("agent_governance_readback", workspace_slug=workspace.slug, limit=1)
+    assert json.loads(capsys.readouterr().out) == api_payload
+
+    resource_response = api_key_client.post(
+        command_url,
+        {
+            "action": "hr.proposal.read",
+            "idempotency_key": "idempotency:governance-resource-read",
+            "payload": {"resource_id": f"hr-proposal:{proposal_id}"},
+        },
+        format="json",
+    )
+    assert resource_response.status_code == 200
+    call_command(
+        "agent_governance",
+        workspace_slug=workspace.slug,
+        action="hr.proposal.read",
+        idempotency_key="idempotency:governance-resource-read-cli",
+        payload=json.dumps({"resource_id": f"hr-proposal:{proposal_id}"}),
+    )
+    assert json.loads(capsys.readouterr().out) == resource_response.json()
+
+    untyped_resource = api_key_client.get(_admin_url(workspace, f"governance/?resource_id={proposal_id}"))
+    assert untyped_resource.status_code == 400
+    assert proposal_id not in untyped_resource.content.decode()
+
+    bad_payload = api_key_client.post(
+        command_url,
+        {
+            "action": "hr.proposal.read",
+            "idempotency_key": "idempotency:governance-bad-payload",
+            "payload": {"api_key": "secret-value"},
+        },
+        format="json",
+    )
+    assert bad_payload.status_code == 400
+
+    denied_user = User.objects.create(email=f"governance-denied-{uuid.uuid4().hex}@plane.so")
+    WorkspaceMember.objects.create(workspace=workspace, member=denied_user, role=15, is_active=True)
+    denied_token = APIToken.objects.create(
+        user=denied_user,
+        label="governance denied",
+        token=f"governance-denied-{uuid.uuid4().hex}",
+    )
+    denied_client = APIClient()
+    denied_client.credentials(HTTP_X_API_KEY=denied_token.token)
+    denied = denied_client.get(_admin_url(workspace, "governance/"))
+    assert denied.status_code == 403
+    assert str(proposal_id) not in denied.content.decode()

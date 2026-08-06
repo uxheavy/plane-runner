@@ -12,6 +12,8 @@ from plane.api.views.agent_admin import (
     AgentAssignmentDispatchAPIEndpoint,
     AgentGatewayReadbackDetailAPIEndpoint,
     AgentGatewayReadbackListAPIEndpoint,
+    AgentGovernanceCommandAPIEndpoint,
+    AgentGovernanceReadbackAPIEndpoint,
     AgentOutcomeAcceptAPIEndpoint,
     AgentOutcomeAdminCreateAPIEndpoint,
     AgentOutcomeAdminDetailAPIEndpoint,
@@ -24,6 +26,24 @@ from plane.api.views.agent_admin import (
     AgentRunInputEventAdminListCreateAPIEndpoint,
     AgentRunInvocationAdminListCreateAPIEndpoint,
 )
+from plane.api.views.agent_context_admin import (
+    AgentMemoryAdminListCreateAPIEndpoint,
+    AgentMemoryProposalAdminCreateAPIEndpoint,
+    AgentMemoryRevisionAdminListAPIEndpoint,
+    AgentMemoryRollbackAPIEndpoint,
+    AgentProposalAdminListAPIEndpoint,
+    AgentProposalPromoteAPIEndpoint,
+    AgentProposalReviewAPIEndpoint,
+    AgentScheduleAdminListCreateAPIEndpoint,
+    AgentScheduleFireListAPIEndpoint,
+    AgentScheduleFireRetryAPIEndpoint,
+    AgentSkillAdminListCreateAPIEndpoint,
+    AgentSkillProposalAdminCreateAPIEndpoint,
+    AgentSkillRevisionAdminListAPIEndpoint,
+    AgentSkillRollbackAPIEndpoint,
+)
+from plane.api.views.agent_catalog_admin import AgentGatewayCatalogAPIEndpoint, AgentGatewayStatusAPIEndpoint
+from plane.api.views.agent_context_readback import AgentContextReadbackAPIEndpoint
 
 
 urlpatterns = [
@@ -121,5 +141,100 @@ urlpatterns = [
         "workspaces/<str:slug>/agent-admin/gateway/readback/<uuid:pk>/",
         AgentGatewayReadbackDetailAPIEndpoint.as_view(http_method_names=["get"]),
         name="agent-admin-gateway-receipt",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/governance/",
+        AgentGovernanceReadbackAPIEndpoint.as_view(http_method_names=["get"]),
+        name="agent-admin-governance-readback",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/governance/commands/",
+        AgentGovernanceCommandAPIEndpoint.as_view(http_method_names=["post"]),
+        name="agent-admin-governance-command",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/actors/<uuid:actor_id>/memory/",
+        AgentMemoryAdminListCreateAPIEndpoint.as_view(http_method_names=["get", "post"]),
+        name="agent-admin-memory",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/actors/<uuid:actor_id>/memory/<uuid:memory_id>/revisions/",
+        AgentMemoryRevisionAdminListAPIEndpoint.as_view(http_method_names=["get"]),
+        name="agent-admin-memory-revisions",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/actors/<uuid:actor_id>/memory/<uuid:memory_id>/proposals/",
+        AgentMemoryProposalAdminCreateAPIEndpoint.as_view(http_method_names=["post"]),
+        name="agent-admin-memory-proposal",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/actors/<uuid:actor_id>/memory/<uuid:memory_id>/rollback/",
+        AgentMemoryRollbackAPIEndpoint.as_view(http_method_names=["post"]),
+        name="agent-admin-memory-rollback",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/actors/<uuid:actor_id>/skills/",
+        AgentSkillAdminListCreateAPIEndpoint.as_view(http_method_names=["get", "post"]),
+        name="agent-admin-skills",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/actors/<uuid:actor_id>/skills/<uuid:skill_id>/revisions/",
+        AgentSkillRevisionAdminListAPIEndpoint.as_view(http_method_names=["get"]),
+        name="agent-admin-skill-revisions",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/actors/<uuid:actor_id>/skills/<uuid:skill_id>/proposals/",
+        AgentSkillProposalAdminCreateAPIEndpoint.as_view(http_method_names=["post"]),
+        name="agent-admin-skill-proposal",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/actors/<uuid:actor_id>/skills/<uuid:skill_id>/rollback/",
+        AgentSkillRollbackAPIEndpoint.as_view(http_method_names=["post"]),
+        name="agent-admin-skill-rollback",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/proposals/",
+        AgentProposalAdminListAPIEndpoint.as_view(http_method_names=["get"]),
+        name="agent-admin-proposals",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/proposals/<uuid:pk>/review/",
+        AgentProposalReviewAPIEndpoint.as_view(http_method_names=["post"]),
+        name="agent-admin-proposal-review",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/proposals/<uuid:pk>/promote/",
+        AgentProposalPromoteAPIEndpoint.as_view(http_method_names=["post"]),
+        name="agent-admin-proposal-promote",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/actors/<uuid:actor_id>/schedules/",
+        AgentScheduleAdminListCreateAPIEndpoint.as_view(http_method_names=["get", "post"]),
+        name="agent-admin-schedules",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/schedules/<uuid:schedule_id>/fires/",
+        AgentScheduleFireListAPIEndpoint.as_view(http_method_names=["get", "post"]),
+        name="agent-admin-schedule-fires",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/schedule-fires/<uuid:pk>/retry/",
+        AgentScheduleFireRetryAPIEndpoint.as_view(http_method_names=["post"]),
+        name="agent-admin-schedule-fire-retry",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/gateway/status/",
+        AgentGatewayStatusAPIEndpoint.as_view(http_method_names=["get"]),
+        name="agent-admin-gateway-status",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/gateway/catalog/",
+        AgentGatewayCatalogAPIEndpoint.as_view(http_method_names=["get"]),
+        name="agent-admin-gateway-catalog",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/actors/<uuid:actor_id>/context/",
+        AgentContextReadbackAPIEndpoint.as_view(http_method_names=["get"]),
+        name="agent-admin-context-readback",
     ),
 ]

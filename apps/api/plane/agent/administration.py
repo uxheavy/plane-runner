@@ -7,16 +7,78 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Mapping, Protocol
 
 from django.db import transaction
 
-from plane.agent.validation import contains_credential_value, is_credential_key
+from plane.agent.validation import (
+    MAX_AGENT_READBACK_BYTES,
+    contains_credential_value,
+    is_credential_key,
+    validate_bounded_json,
+)
 from plane.agent.lifecycle import create_profile
 from plane.db.models import AgentActor, ProfileVersion
 
 
 _CREDENTIAL_REF_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9-]{0,31}:[A-Za-z0-9][A-Za-z0-9._~/-]{0,219}$")
+
+
+AGENT_ADMIN_L7_ACTIONS = (
+    "delegation.lineage.read",
+    "hr.proposal.read",
+    "hr.proposal.decide",
+    "chief_of_staff.provision",
+    "evaluator.review",
+    "outcome.accept",
+    "outcome.request_revision",
+    "assignment.cancel",
+)
+
+
+class AgentAdminExtensionError(ValueError):
+    """Bounded failure for an unavailable or out-of-scope extension object."""
+
+
+@dataclass(frozen=True)
+class AgentAdminExtensionCommand:
+    """The only command envelope an L7 adapter may receive from administration."""
+
+    action: str
+    workspace_id: str
+    actor_id: str | None
+    run_id: str | None
+    invocation_id: str | None
+    idempotency_key: str
+    payload: Mapping[str, Any]
+
+    def __post_init__(self) -> None:
+        if self.action not in AGENT_ADMIN_L7_ACTIONS:
+            raise ValueError("unsupported Agent admin extension action")
+        if not self.workspace_id or not self.idempotency_key:
+            raise ValueError("workspace_id and idempotency_key are required")
+        if not isinstance(self.idempotency_key, str) or len(self.idempotency_key) > 128:
+            raise ValueError("idempotency_key must be at most 128 characters")
+        if self.invocation_id is not None and (
+            not isinstance(self.invocation_id, str) or not self.invocation_id or len(self.invocation_id) > 128
+        ):
+            raise ValueError("invocation_id must be a bounded identifier")
+        if not isinstance(self.payload, Mapping):
+            raise ValueError("payload must be a JSON object")
+        validate_bounded_json(
+            dict(self.payload),
+            "payload",
+            max_bytes=MAX_AGENT_READBACK_BYTES,
+            reject_credentials=True,
+        )
+
+
+class AgentAdminExtensionSerializerPort(Protocol):
+    """L7 serializer seam: return only typed, redacted operator projections."""
+
+    resource_name: str
+
+    def serialize(self, value: Any) -> Mapping[str, Any]: ...
 
 
 class AgentAdminExtensionPort(Protocol):
@@ -28,7 +90,13 @@ class AgentAdminExtensionPort(Protocol):
 
     resource_name: str
 
-    def read(self, *, workspace_id: str, resource_id: str) -> dict[str, Any] | None: ...
+    def read(self, *, workspace_id: str, resource_id: str) -> Mapping[str, Any] | None: ...
+
+
+class AgentAdminExtensionServicePort(AgentAdminExtensionPort, Protocol):
+    """Service seam for the bounded L7 actions listed above."""
+
+    def execute(self, command: AgentAdminExtensionCommand) -> Mapping[str, Any]: ...
 
 
 @dataclass(frozen=True)
