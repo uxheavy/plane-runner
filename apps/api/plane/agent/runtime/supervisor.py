@@ -239,10 +239,10 @@ def request_runtime_cancellation(
 ):
     """Record cancellation durably and create the one visible event immediately."""
 
-    _assignment, run, stored = lock_invocation_path(invocation.pk)
+    assignment, run, stored = lock_invocation_path(invocation.pk)
     stored.run = run
     if operator is not None:
-        ensure_human_workspace_admin(run.assignment, operator)
+        ensure_human_workspace_admin(assignment.workspace, operator)
     if stored.state in _INVOCATION_TERMINAL_STATES:
         return stored
     control = _control(stored, lock=True)
