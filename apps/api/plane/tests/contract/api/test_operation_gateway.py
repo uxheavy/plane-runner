@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import pytest
 from django.conf import settings
+from django.core.cache import cache
 from django.core.management import call_command
 from django.db import DatabaseError, close_old_connections, connection, transaction
 from django.test import override_settings
@@ -52,6 +53,14 @@ from plane.operation_gateway.role_boundary import AuditRoleBoundaryError, verify
 from plane.operation_gateway.tasks import dispatch_publication, reconcile_publications
 from plane.bgtasks.webhook_task import WebhookDeliveryResult, deliver_webhook_target
 from plane.operation_gateway.work_items import WorkItemRenameFailure, WorkItemRenameService
+
+
+@pytest.fixture(autouse=True)
+def reset_operation_gateway_api_key_throttle_cache():
+    """Keep the contract suite focused on the gateway's shared quotas."""
+
+    if hasattr(cache, "delete_pattern"):
+        cache.delete_pattern("api_key:*")
 
 
 @pytest.fixture

@@ -59,6 +59,13 @@ from .publications import (
     dispatch_publication_once,
     schedule_publications_on_commit,
 )
+from .quota import (
+    GatewayQuotaExceeded,
+    QuotaIdentity,
+    build_quota_identity,
+    release_gateway_quota,
+    reserve_gateway_quota,
+)
 from .role_boundary import audited_gateway_boundary
 from .mcp.attachments import AttachmentFailure, WorkItemAttachmentService, _assert_issue_permission
 from .operations import OperationAdapterFailure, OperationRequest, get_operation_handler
@@ -170,6 +177,24 @@ class OperationGateway:
             idempotency_key=envelope["idempotency_key"],
             parsed_input=parsed_input,
         )
+        try:
+            quota_identity = build_quota_identity(
+                workspace_id=workspace.id,
+                caller_id=caller_id,
+                agent_ref=getattr(request, "agent_actor_ref", None),
+                invocation_ref=getattr(request, "agent_invocation_ref", None) or envelope["correlation_id"],
+            )
+        except ValueError:
+            return self._record_unkeyed_failure(
+                operation_id=descriptor.operation_id,
+                workspace_slug=workspace_slug,
+                idempotency_key=envelope["idempotency_key"],
+                correlation_id=envelope["correlation_id"],
+                caller_id=caller_id,
+                workspace_id=workspace.id,
+                request_digest=request_digest,
+                failure=GatewayFailure("VALIDATION_ERROR", 400, False),
+            )
         decision = self._begin_attempt(
             workspace=workspace,
             descriptor=descriptor,
@@ -178,6 +203,7 @@ class OperationGateway:
             caller_id=caller_id,
             request_digest=request_digest,
             parsed_input=parsed_input,
+            quota_identity=quota_identity,
         )
         if decision.response is not None:
             return decision.response
@@ -285,6 +311,7 @@ class OperationGateway:
                 record.retryable = False
                 record.error = None
                 record.audit_receipt = audit.id
+                release_gateway_quota(record)
                 record.save(update_fields=["state", "retryable", "error", "audit_receipt", "updated_at"])
                 audit_id = audit.id
             return self._success_envelope(
@@ -307,6 +334,7 @@ class OperationGateway:
         caller_id: str,
         request_digest: str,
         parsed_input: dict[str, Any],
+        quota_identity: QuotaIdentity,
     ) -> AttemptDecision:
         deadline = time.monotonic() + 30
         while True:
@@ -319,6 +347,7 @@ class OperationGateway:
                     caller_id=caller_id,
                     request_digest=request_digest,
                     parsed_input=parsed_input,
+                    quota_identity=quota_identity,
                 )
             except RetryRunningAttempt:
                 if time.monotonic() >= deadline:
@@ -330,6 +359,7 @@ class OperationGateway:
                         caller_id=caller_id,
                         request_digest=request_digest,
                         parsed_input=parsed_input,
+                        quota_identity=quota_identity,
                         allow_running_unknown=True,
                     )
                 time.sleep(0.01)
@@ -385,6 +415,7 @@ class OperationGateway:
         caller_id: str,
         request_digest: str,
         parsed_input: dict[str, Any],
+        quota_identity: QuotaIdentity,
         allow_running_unknown: bool = False,
     ) -> AttemptDecision:
         with transaction.atomic():
@@ -424,6 +455,38 @@ class OperationGateway:
                     created = False
 
             if created:
+                try:
+                    with transaction.atomic():
+                        reservation = reserve_gateway_quota(quota_identity)
+                except GatewayQuotaExceeded:
+                    record.delete()
+                    return AttemptDecision(
+                        workspace=workspace,
+                        record=None,
+                        response=self._record_unkeyed_failure(
+                            operation_id=descriptor.operation_id,
+                            workspace_slug=workspace.slug,
+                            idempotency_key=idempotency_key,
+                            correlation_id=correlation_id,
+                            caller_id=caller_id,
+                            workspace_id=workspace.id,
+                            request_digest=request_digest,
+                            failure=GatewayFailure("THROTTLED", 429, False),
+                        ),
+                    )
+                record.quota_bucket_start = reservation.bucket_start
+                record.quota_agent_key = reservation.agent_key
+                record.quota_invocation_key = reservation.invocation_key
+                record.quota_reserved = True
+                record.save(
+                    update_fields=[
+                        "quota_bucket_start",
+                        "quota_agent_key",
+                        "quota_invocation_key",
+                        "quota_reserved",
+                        "updated_at",
+                    ]
+                )
                 self._write_audit(
                     phase=OperationGatewayAudit.Phase.INTENT,
                     outcome=OperationGatewayAudit.Outcome.INTENT,
@@ -481,6 +544,7 @@ class OperationGateway:
                     outcome=OperationGatewayAudit.Outcome.OUTCOME_UNKNOWN,
                     error=GatewayFailure("OUTCOME_UNKNOWN", 409, False),
                 )
+                release_gateway_quota(record)
                 error = self._error("OUTCOME_UNKNOWN", False)
                 return AttemptDecision(
                     workspace=workspace,
@@ -502,6 +566,37 @@ class OperationGateway:
                 )
 
             if record.state == OperationGatewayIdempotency.State.FAILED_PRECOMMIT and record.retryable:
+                try:
+                    with transaction.atomic():
+                        reservation = reserve_gateway_quota(quota_identity)
+                except GatewayQuotaExceeded:
+                    audit = self._write_invocation_pair(
+                        record=record,
+                        correlation_id=correlation_id,
+                        request_digest=request_digest,
+                        invocation_id=uuid.uuid4(),
+                        request_id=uuid.uuid4(),
+                        outcome=OperationGatewayAudit.Outcome.DENIED,
+                        error=GatewayFailure("THROTTLED", 429, False),
+                    )
+                    return AttemptDecision(
+                        workspace=workspace,
+                        record=None,
+                        response=(
+                            self._failure_envelope(
+                                record,
+                                descriptor,
+                                workspace.slug,
+                                caller_id,
+                                audit.id,
+                                self._error("THROTTLED", False),
+                                False,
+                                request_id=audit.request_id,
+                                correlation_id=audit.correlation_id,
+                            ),
+                            429,
+                        ),
+                    )
                 record.request_id = uuid.uuid4()
                 record.invocation_id = uuid.uuid4()
                 record.correlation_id = correlation_id
@@ -512,6 +607,10 @@ class OperationGateway:
                 record.error = None
                 record.audit_receipt = None
                 record.retryable = False
+                record.quota_bucket_start = reservation.bucket_start
+                record.quota_agent_key = reservation.agent_key
+                record.quota_invocation_key = reservation.invocation_key
+                record.quota_reserved = True
                 record.save(
                     update_fields=[
                         "request_id",
@@ -524,6 +623,10 @@ class OperationGateway:
                         "error",
                         "audit_receipt",
                         "retryable",
+                        "quota_bucket_start",
+                        "quota_agent_key",
+                        "quota_invocation_key",
+                        "quota_reserved",
                         "updated_at",
                     ]
                 )
@@ -625,7 +728,12 @@ class OperationGateway:
                 workspace.slug,
                 caller_id,
                 request_digest,
-                GatewayFailure(failure.code, failure.http_status, failure.retryable),
+                GatewayFailure(
+                    failure.code,
+                    failure.http_status,
+                    failure.retryable,
+                    ambiguous=descriptor.reconciliation == "outcome_unknown_escalation" and failure.retryable,
+                ),
             )
         except OperationAdapterFailure as failure:
             return self._persist_failure(
@@ -634,7 +742,12 @@ class OperationGateway:
                 workspace.slug,
                 caller_id,
                 request_digest,
-                GatewayFailure(failure.code, failure.http_status, failure.retryable),
+                GatewayFailure(
+                    failure.code,
+                    failure.http_status,
+                    failure.retryable,
+                    ambiguous=descriptor.reconciliation == "outcome_unknown_escalation" and failure.retryable,
+                ),
             )
         except Issue.DoesNotExist:
             return self._persist_failure(
@@ -661,7 +774,12 @@ class OperationGateway:
                 workspace.slug,
                 caller_id,
                 request_digest,
-                GatewayFailure("UPSTREAM_FAILURE", 503, True),
+                GatewayFailure(
+                    "UPSTREAM_FAILURE",
+                    503,
+                    True,
+                    ambiguous=descriptor.reconciliation == "outcome_unknown_escalation",
+                ),
             )
 
     def _parse_operation_input(
@@ -869,10 +987,7 @@ class OperationGateway:
             raise GatewayFailure("VALIDATION_ERROR", 400, False)
         try:
             run_id = run_ref.removeprefix("run:")
-            run = (
-                RunAttempt.objects.select_related("actor", "workspace")
-                .get(pk=run_id, workspace_id=workspace.id)
-            )
+            run = RunAttempt.objects.select_related("actor", "workspace").get(pk=run_id, workspace_id=workspace.id)
         except (RunAttempt.DoesNotExist, ValueError):
             raise GatewayFailure("CALLBACK_BINDING_INVALID", 403, False) from None
         expected_actor_ref = getattr(request, "agent_actor_ref", None)
@@ -991,6 +1106,7 @@ class OperationGateway:
         record.error = None
         record.retryable = False
         record.audit_receipt = audit.id
+        release_gateway_quota(record)
         record.save(update_fields=["state", "result", "error", "retryable", "audit_receipt", "updated_at"])
         if publication_payload:
             schedule_publications_on_commit(record)
@@ -1071,6 +1187,7 @@ class OperationGateway:
         record.error = error
         record.retryable = failure.retryable and not outcome_unknown
         record.audit_receipt = audit.id
+        release_gateway_quota(record)
         record.save(update_fields=["state", "result", "error", "retryable", "audit_receipt", "updated_at"])
         return self._failure_envelope(record, descriptor, workspace_slug, caller_id, audit.id, error, False), (
             409 if outcome_unknown else failure.http_status
@@ -1098,6 +1215,7 @@ class OperationGateway:
                     result=locked.result,
                     error=GatewayFailure("OUTCOME_UNKNOWN", 409, False),
                 )
+                release_gateway_quota(locked)
                 return self._failure_envelope(
                     locked,
                     descriptor,
@@ -1121,6 +1239,7 @@ class OperationGateway:
             locked.error = error
             locked.retryable = False
             locked.audit_receipt = audit.id
+            release_gateway_quota(locked)
             locked.save(update_fields=["state", "error", "retryable", "audit_receipt", "updated_at"])
             return self._failure_envelope(locked, descriptor, workspace_slug, caller_id, audit.id, error, False), 409
 
@@ -1149,6 +1268,7 @@ class OperationGateway:
             record.error = error
             record.retryable = False
             record.audit_receipt = audit.id
+            release_gateway_quota(record)
             record.save(update_fields=["state", "error", "retryable", "audit_receipt", "updated_at"])
         return self._failure_envelope(
             record,
@@ -1328,6 +1448,7 @@ class OperationGateway:
             result=record.result,
             error=GatewayFailure("OUTCOME_UNKNOWN", 409, False),
         )
+        release_gateway_quota(record)
         return self._direct_failure_envelope(
             operation_id=record.operation_id,
             workspace_slug=record.workspace_slug,
@@ -1490,6 +1611,7 @@ class OperationGateway:
             "IDEMPOTENCY_CONFLICT": 409,
             "OUTCOME_UNKNOWN": 409,
             "RESULT_TOO_LARGE": 409,
+            "THROTTLED": 429,
             "UNKNOWN_OPERATION": 404,
             "UPSTREAM_FAILURE": 503,
         }.get(code, 400)

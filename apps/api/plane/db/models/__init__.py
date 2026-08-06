@@ -52,7 +52,12 @@ from .agent_context import (
     AgentSkillVisibility,
 )
 from .api import APIActivityLog, APIToken
-from .operation_gateway import OperationGatewayAudit, OperationGatewayIdempotency, OperationGatewayPublication
+from .operation_gateway import (
+    OperationGatewayAudit,
+    OperationGatewayIdempotency,
+    OperationGatewayPublication,
+    OperationGatewayQuotaBucket,
+)
 from .asset import FileAsset
 from .base import BaseModel
 from .cycle import Cycle, CycleIssue, CycleUserProperties

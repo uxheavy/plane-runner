@@ -140,6 +140,10 @@ class OperationGatewayIdempotency(models.Model):
     result = models.JSONField(null=True, blank=True)
     error = models.JSONField(null=True, blank=True)
     audit_receipt = models.UUIDField(null=True, blank=True)
+    quota_bucket_start = models.DateTimeField(null=True, blank=True, editable=False)
+    quota_agent_key = models.CharField(max_length=128, blank=True, default="", editable=False)
+    quota_invocation_key = models.CharField(max_length=128, blank=True, default="", editable=False)
+    quota_reserved = models.BooleanField(default=False, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -164,6 +168,49 @@ class OperationGatewayIdempotency(models.Model):
         indexes = [
             models.Index(fields=("workspace_id", "created_at"), name="op_gateway_workspace_created"),
             models.Index(fields=("caller_id", "created_at"), name="op_gateway_caller_created"),
+            models.Index(fields=("quota_bucket_start", "quota_reserved"), name="op_gateway_quota_active"),
+        ]
+
+
+class OperationGatewayQuotaBucket(models.Model):
+    """One locked, durable quota bucket shared by every gateway transport."""
+
+    class Scope(models.TextChoices):
+        WORKSPACE = "workspace", "Workspace"
+        AGENT = "agent", "Agent"
+        INVOCATION = "invocation", "Invocation"
+
+    id = models.UUIDField(default=uuid.uuid4, primary_key=True, editable=False)
+    workspace_id = models.UUIDField(editable=False)
+    scope = models.CharField(max_length=16, choices=Scope.choices)
+    subject_key = models.CharField(max_length=128, editable=False)
+    bucket_start = models.DateTimeField(editable=False)
+    request_count = models.PositiveIntegerField(default=0)
+    active_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    objects = OperationGatewayWriteManager()
+
+    def save(self, *args, **kwargs):
+        _verify_gateway_write_boundary()
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        _verify_gateway_write_boundary()
+        return super().delete(*args, **kwargs)
+
+    class Meta:
+        db_table = "operation_gateway_quota_bucket"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("workspace_id", "scope", "subject_key", "bucket_start"),
+                name="operation_gateway_quota_bucket_key",
+            )
+        ]
+        indexes = [
+            models.Index(fields=("workspace_id", "bucket_start"), name="op_gateway_quota_window"),
+            models.Index(fields=("scope", "subject_key", "bucket_start"), name="op_gateway_quota_subject"),
         ]
 
 
@@ -283,7 +330,7 @@ class OperationGatewayPublication(models.Model):
                 fields=("idempotency", "kind", "target_id"),
                 condition=models.Q(target_id__isnull=False),
                 name="operation_gateway_publication_target",
-            )
+            ),
         ]
         indexes = [
             models.Index(fields=("state", "lease_until"), name="op_gateway_pub_dispatch"),

@@ -17,6 +17,83 @@ CatalogKind = Literal["read", "mutation"]
 OperationKind = CatalogKind
 AuthorizationScope = Literal["workspace", "project"]
 CodeModeCallbackKind = Literal["search", "describe", "operation", "spill"]
+ReconciliationStrategy = Literal[
+    "read_after_write",
+    "safe_idempotent_replay",
+    "outcome_unknown_escalation",
+]
+
+RECONCILIATION_POLICY_VERSION = "plane-operation-gateway-reconciliation/v1"
+
+# This is deliberately an exact, versioned registry rather than a default.
+# Adding a mutation to the catalog requires choosing its recovery semantics in
+# the same change; catalog construction below rejects both missing and extra
+# rows.  A descriptor may still carry an explicit policy for a narrowly
+# constructed operation outside the catalog.
+MUTATION_RECONCILIATION_POLICIES: Mapping[str, ReconciliationStrategy] = MappingProxyType(
+    {
+        "work_item.rename": "read_after_write",
+        "work_item_attachment.upload_from_url": "outcome_unknown_escalation",
+        "work_item_attachment.delete": "outcome_unknown_escalation",
+        "agent.outcome.submit": "safe_idempotent_replay",
+        "agent.outcome.publish": "safe_idempotent_replay",
+        "agent.assignment.delegate": "safe_idempotent_replay",
+        "agent.assignment.cancel": "safe_idempotent_replay",
+        "agent.hr.propose": "safe_idempotent_replay",
+        "agent.hr.decide": "safe_idempotent_replay",
+        "agent.outcome.evaluate": "safe_idempotent_replay",
+        "agent.outcome.accept": "safe_idempotent_replay",
+        "agent.outcome.request_revision": "safe_idempotent_replay",
+        "work_item.create": "safe_idempotent_replay",
+        "work_item.update": "safe_idempotent_replay",
+        "work_item.delete": "safe_idempotent_replay",
+        "cycle.create": "safe_idempotent_replay",
+        "cycle.update": "safe_idempotent_replay",
+        "cycle.delete": "safe_idempotent_replay",
+        "module.create": "safe_idempotent_replay",
+        "module.update": "safe_idempotent_replay",
+        "module.delete": "safe_idempotent_replay",
+        "project.create": "safe_idempotent_replay",
+        "project.update": "safe_idempotent_replay",
+        "project.delete": "safe_idempotent_replay",
+        "state.create": "safe_idempotent_replay",
+        "state.update": "safe_idempotent_replay",
+        "state.delete": "safe_idempotent_replay",
+        "label.create": "safe_idempotent_replay",
+        "label.update": "safe_idempotent_replay",
+        "label.delete": "safe_idempotent_replay",
+        "link.create": "safe_idempotent_replay",
+        "link.update": "safe_idempotent_replay",
+        "link.delete": "safe_idempotent_replay",
+        "comment.create": "safe_idempotent_replay",
+        "comment.update": "safe_idempotent_replay",
+        "comment.delete": "safe_idempotent_replay",
+        "intake.create": "safe_idempotent_replay",
+        "intake.update": "safe_idempotent_replay",
+        "intake.delete": "safe_idempotent_replay",
+        "work_item_relation.create": "safe_idempotent_replay",
+        "cycle.transfer": "safe_idempotent_replay",
+        "page.create": "safe_idempotent_replay",
+        "cycle.work_item.manage": "safe_idempotent_replay",
+        "cycle.archive": "safe_idempotent_replay",
+        "cycle.complete": "safe_idempotent_replay",
+        "module.work_item.manage": "safe_idempotent_replay",
+        "module.archive": "safe_idempotent_replay",
+        "project.archive": "safe_idempotent_replay",
+        "project.features.update": "safe_idempotent_replay",
+        "project.estimate.create": "safe_idempotent_replay",
+        "project.estimate.update": "safe_idempotent_replay",
+        "project.estimate.delete": "safe_idempotent_replay",
+        "project.estimate.link": "safe_idempotent_replay",
+        "project.estimate.points.create": "safe_idempotent_replay",
+        "project.estimate.point.update": "safe_idempotent_replay",
+        "project.estimate.point.delete": "safe_idempotent_replay",
+        "work_item.assignee.manage": "safe_idempotent_replay",
+        "work_item.label.manage": "safe_idempotent_replay",
+        "work_item.archive": "safe_idempotent_replay",
+        "work_item_relation.remove": "safe_idempotent_replay",
+    }
+)
 
 CODE_MODE_CALLBACK_NAMES: Mapping[CodeModeCallbackKind, str] = MappingProxyType(
     {
@@ -66,6 +143,7 @@ class OperationDescriptor:
     tags: tuple[str, ...] = ()
     authorization_scope: AuthorizationScope = "project"
     universal: bool = False
+    reconciliation: ReconciliationStrategy | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.max_result_bytes, bool) or not isinstance(self.max_result_bytes, int):
@@ -97,12 +175,29 @@ class OperationDescriptor:
         authorization_scope = self.authorization_scope
         if self.permission == "workspace":
             authorization_scope = "workspace"
+        reconciliation = self.reconciliation
+        if self.kind == "mutation":
+            reconciliation = reconciliation or MUTATION_RECONCILIATION_POLICIES.get(self.operation_id)
+            if reconciliation is None:
+                raise ValueError(
+                    f"Mutation {self.operation_id!r} must have an explicit reconciliation policy in "
+                    f"{RECONCILIATION_POLICY_VERSION}"
+                )
+            if reconciliation not in {
+                "read_after_write",
+                "safe_idempotent_replay",
+                "outcome_unknown_escalation",
+            }:
+                raise ValueError(f"Unsupported mutation reconciliation policy: {reconciliation}")
+        elif reconciliation is not None:
+            raise ValueError("Read operations cannot declare mutation reconciliation")
         object.__setattr__(self, "name", operation_name)
         object.__setattr__(self, "handler", handler_name)
         object.__setattr__(self, "family", family)
         object.__setattr__(self, "authorization_scope", authorization_scope)
         object.__setattr__(self, "input_schema", _freeze(input_schema))
         object.__setattr__(self, "result_schema", _freeze(result_schema))
+        object.__setattr__(self, "reconciliation", reconciliation)
 
     @property
     def operation_ref(self) -> str:
@@ -141,6 +236,7 @@ def _descriptor(
     handler: str | None = None,
     result_key: str,
     permission: PermissionFamily = "project",
+    reconciliation: ReconciliationStrategy | None = None,
 ) -> OperationDescriptor:
     return OperationDescriptor(
         operation_id=operation_id,
@@ -154,6 +250,7 @@ def _descriptor(
         handler=handler or operation_id.replace(".", "_"),
         result_key=result_key,
         permission=permission,
+        reconciliation=reconciliation,
     )
 
 
@@ -198,6 +295,7 @@ OPERATION_CATALOG: dict[str, OperationDescriptor] = {
         max_result_bytes=4096,
         result_key="work_item",
         handler="work_item_rename",
+        reconciliation="read_after_write",
     ),
     "work_item_attachment.list": _descriptor(
         "work_item_attachment.list",
@@ -228,6 +326,7 @@ OPERATION_CATALOG: dict[str, OperationDescriptor] = {
         input_fields=("project_id", "issue_id", "url", "name"),
         result_key="attachment",
         handler="work_item_attachment_upload_from_url",
+        reconciliation="outcome_unknown_escalation",
     ),
     "work_item_attachment.delete": _descriptor(
         "work_item_attachment.delete",
@@ -238,6 +337,7 @@ OPERATION_CATALOG: dict[str, OperationDescriptor] = {
         input_fields=("project_id", "issue_id", "attachment_id"),
         result_key="deleted",
         handler="work_item_attachment_delete",
+        reconciliation="outcome_unknown_escalation",
     ),
     "work_item_attachment.read": _descriptor(
         "work_item_attachment.read",
@@ -678,6 +778,7 @@ def _catalog_entry(descriptor: OperationDescriptor) -> dict[str, Any]:
         "name": descriptor.name,
         "schemaVersion": descriptor.schema_version,
         "kind": descriptor.kind,
+        "reconciliation": descriptor.reconciliation,
         "summary": descriptor.summary,
         "tags": list(descriptor.tags),
         "inputSchema": _thaw(descriptor.input_schema),
@@ -1413,9 +1514,44 @@ for operation_id, descriptor in (
     OPERATION_CATALOG[operation_id] = descriptor
 
 
+def _validate_reconciliation_policies() -> None:
+    catalog_ids = {
+        descriptor.operation_id for descriptor in OPERATION_CATALOG.values() if descriptor.kind == "mutation"
+    }
+    policy_ids = set(MUTATION_RECONCILIATION_POLICIES)
+    missing = sorted(catalog_ids - policy_ids)
+    extra = sorted(policy_ids - catalog_ids)
+    if missing or extra:
+        raise RuntimeError(
+            "Mutation reconciliation registry must exactly match the catalog "
+            f"(missing={missing}, extra={extra}, version={RECONCILIATION_POLICY_VERSION})"
+        )
+    invalid = sorted(
+        operation_id
+        for operation_id in catalog_ids
+        if OPERATION_CATALOG[operation_id].reconciliation != MUTATION_RECONCILIATION_POLICIES[operation_id]
+    )
+    if invalid:
+        raise RuntimeError(f"Mutation reconciliation descriptors disagree with the registry: {invalid}")
+
+
+_validate_reconciliation_policies()
+
+
 # The digest is computed after the full breadth and the universal Plane core
 # have been registered, so discovery and presentation share one source.
 CATALOG_DIGEST = f"content:{hashlib.sha256(canonical_json(_catalog_payload()).encode('utf-8')).hexdigest()}"
+
+
+# Publication intents are part of the mutation contract even though they are
+# not separately callable catalog rows.  Keep this list explicit so a new
+# durable publication kind cannot silently inherit replay behavior.
+PUBLICATION_RECONCILIATION_MATRIX = (
+    {"publicationKind": "activity", "strategy": "safe_idempotent_replay", "evidence": "deterministic_activity_id"},
+    {"publicationKind": "model_activity", "strategy": "safe_idempotent_replay", "evidence": "gateway_publication_key"},
+    {"publicationKind": "notification", "strategy": "safe_idempotent_replay", "evidence": "gateway_publication_key"},
+    {"publicationKind": "webhook", "strategy": "outcome_unknown_escalation", "evidence": "dispatch_started_lease"},
+)
 
 
 # The executable seam is deliberately derived from the complete descriptor
@@ -1434,7 +1570,11 @@ def code_mode_callback_names() -> dict[str, str]:
 
 
 def operation_catalog_snapshot() -> dict[str, Any]:
-    return {"catalogDigest": CATALOG_DIGEST, **_catalog_payload()}
+    return {
+        "catalogDigest": CATALOG_DIGEST,
+        "reconciliationMatrix": operation_reconciliation_matrix(),
+        **_catalog_payload(),
+    }
 
 
 _CATALOG_SEARCH_PRIORITY = (
@@ -1446,7 +1586,16 @@ _CATALOG_SEARCH_PRIORITY = (
     "catalog.describe",
     "code_mode.spill",
 )
-_CATALOG_SEARCH_FIELDS = ("operationId", "operationRef", "name", "kind", "family", "tags", "universal")
+_CATALOG_SEARCH_FIELDS = (
+    "operationId",
+    "operationRef",
+    "name",
+    "kind",
+    "family",
+    "tags",
+    "universal",
+    "reconciliation",
+)
 
 
 def _catalog_search_entry(entry: dict[str, Any]) -> dict[str, Any]:
@@ -1496,3 +1645,33 @@ def describe_operation(operation_id: str) -> dict[str, Any]:
 
 def all_operations() -> tuple[OperationDescriptor, ...]:
     return tuple(OPERATION_CATALOG.values())
+
+
+def operation_reconciliation_matrix() -> dict[str, Any]:
+    """Return the exact catalog-derived mutation and publication policy matrix."""
+
+    mutations = sorted(
+        (descriptor for descriptor in all_operations() if descriptor.kind == "mutation"),
+        key=lambda item: item.operation_id,
+    )
+    rows = [
+        {
+            "operationId": descriptor.operation_id,
+            "kind": descriptor.kind,
+            "strategy": descriptor.reconciliation,
+            "readAfterWrite": descriptor.reconciliation == "read_after_write",
+            "safeReplay": descriptor.reconciliation == "safe_idempotent_replay",
+            "outcomeUnknownEscalation": descriptor.reconciliation == "outcome_unknown_escalation",
+        }
+        for descriptor in mutations
+    ]
+    expected_ids = {descriptor.operation_id for descriptor in mutations}
+    actual_ids = {row["operationId"] for row in rows}
+    if actual_ids != expected_ids or any(not row["strategy"] for row in rows):
+        raise RuntimeError("Operation reconciliation matrix is not complete")
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "policyVersion": RECONCILIATION_POLICY_VERSION,
+        "operations": rows,
+        "publications": [dict(row) for row in PUBLICATION_RECONCILIATION_MATRIX],
+    }
