@@ -127,6 +127,17 @@ def fixture() -> tuple[dict, dict, dict, str]:
 
 
 class G4ContractTests(unittest.TestCase):
+    def test_red_team_stage_requires_exact_image_http_dispatch_and_pinned_hermes_wrapper(self):
+        source = (TOOLS / "agent-g4-runtime-red-team.py").read_text(encoding="utf-8")
+        self.assertIn('"/v1/runtime/dispatch"', source)
+        self.assertIn("dispatch_http=passed full_chain=passed", source)
+        self.assertIn("PINNED_HERMES_RUN_AGENT_PATH = \"/opt/hermes/run_agent.py\"", source)
+        self.assertIn("PINNED_HERMES_RUN_AGENT_SHA256", source)
+        self.assertIn("pinned_hermes_run_agent=ok", source)
+        self.assertIn("shim_boundary=deterministic_model_factory_only", source)
+        self.assertNotIn("sitecustomize.py", source)
+        self.assertNotIn("bootstrap_payload", source)
+
     def write_case(self, manifest, authority, config, evidence):
         temp = tempfile.TemporaryDirectory()
         directory = Path(temp.name)
