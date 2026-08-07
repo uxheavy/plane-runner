@@ -308,6 +308,8 @@ class G4ContractTests(unittest.TestCase):
             validate_rollback_runbook(runbook.replace("python3 tools/agent-g4-rollback-drill.py", "python3 tools/other-drill.py"), MANIFEST, fixture)
         with self.assertRaisesRegex(ContractError, "rollback_runbook_stale_pin_present"):
             validate_rollback_runbook(runbook + "\n5f7e27f969b54ab94f0c6a6da9ea6feca27b7e32\n", MANIFEST, fixture)
+        with self.assertRaisesRegex(ContractError, "rollback_runbook_missing_Plane_service_revision_above_is"):
+            validate_rollback_runbook(runbook.replace("The Plane service revision above is", "The Plane deployment revision is"), MANIFEST, fixture)
 
     def test_dirty_exception_is_narrow_and_structural(self):
         script = (ROOT / "tools/verify-agent-g4.sh").read_text(encoding="utf-8")

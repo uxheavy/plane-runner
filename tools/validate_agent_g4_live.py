@@ -200,7 +200,7 @@ def validate_rollback_runbook(runbook_text: str, manifest: dict[str, Any], fixtu
     g3_baseline = _required(candidate_binding, "acceptedG3Baseline", "candidateBinding")
     current_runtime = _object(_required(current, "runtime", "rollback_current"), "rollback_current_runtime")
     required = (
-        "current candidate is Plane commit",
+        "current Plane deployable service candidate is the exact",
         f"`{current_parent}`",
         "previously accepted G3",
         "candidate is Plane commit",
@@ -217,6 +217,8 @@ def validate_rollback_runbook(runbook_text: str, manifest: dict[str, Any], fixtu
         f"`{pins['runtimeImageDigest']}`",
         "runtime revision",
         f"`{pins['runtimeImageRevision']}`",
+        "Plane service revision above is",
+        "runtime image/runtimeRevision source",
         "runtime",
         "contract",
         f"`{pins['runtimeContract']}`",

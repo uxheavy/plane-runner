@@ -3,7 +3,7 @@
   "candidateBinding": {
     "mode": "exact-single-child",
     "acceptedG3Baseline": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
-    "parentCommit": "ffcc2dc9e8ec5410b8f29ef7bf3aa9b3930b187e",
+    "parentCommit": "739068b87231558df8c4685c42045f5c91306200",
     "candidateCommitSource": "git-head-with-exact-parent",
     "rejectDescendants": true
   },
@@ -152,7 +152,7 @@
     },
     "rollback": {
       "path": "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json",
-      "sha256": "7e5a24e9ea4c819a2629b27b982eb025f627f90ce0d1b86c7a6fc75d09f7b572",
+      "sha256": "03f9917c92fd650f218e7385bbd9090b8b46d9acd614ac55e573ec745f9a8511",
       "testPath": "plane/tests/contract/api/test_agent_g4_rollback_drill.py",
       "requiredOutputFields": [
         "externalWrites",
