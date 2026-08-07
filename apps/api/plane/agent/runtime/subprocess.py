@@ -143,6 +143,10 @@ _CLONE_THREAD = 0x00010000
 _SIGCHLD = 17
 _HERMES_BOOTSTRAP_CLONE_FLAGS = _CLONE_VM | _CLONE_VFORK | _SIGCHLD
 _HERMES_BOOTSTRAP_THREAD_REQUIRED_FLAGS = _CLONE_VM | _CLONE_SIGHAND | _CLONE_THREAD
+# CPython 3.12's non-vfork Popen path uses the classic musl fork wrapper,
+# which reaches clone(SIGCHLD) before exec. It is the only additional process
+# creation shape permitted for the bounded Hermes Code Mode child.
+_HERMES_CODE_MODE_CLONE_FLAGS = _SIGCHLD
 _AUDIT_ARCH = {"x86_64": 0xC000003E, "aarch64": 0xC00000B7}
 _SYSCALLS = {
     "x86_64": {
@@ -332,6 +336,18 @@ def _install_linux_kernel_policy() -> None:
     # vfork; the finite pids limit is a second process-tree bound.
     clone_number = syscalls.get("clone")
     if clone_number is not None:
+        # Permit only the classic fork-compatible clone(SIGCHLD) shape before
+        # evaluating the existing bootstrap/thread patterns below. The syscall
+        # arguments are available in seccomp's clone flags word; all other
+        # clone shapes fall through to the explicit clone denial.
+        instructions.extend(
+            (
+                _SockFilter(_BPF_JMP_JEQ_K, 0, 3, clone_number),
+                _SockFilter(_BPF_LD_W_ABS, 0, 0, _SECCOMP_CLONE_FLAGS_OFFSET),
+                _SockFilter(_BPF_JMP_JEQ_K, 0, 1, _HERMES_CODE_MODE_CLONE_FLAGS),
+                _SockFilter(_BPF_RET_K, 0, 0, _SECCOMP_RET_ALLOW),
+            )
+        )
         instructions.extend(
             (
                 _SockFilter(_BPF_JMP_JEQ_K, 0, 7, clone_number),

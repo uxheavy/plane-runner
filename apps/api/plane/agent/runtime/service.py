@@ -90,6 +90,8 @@ class RuntimeDispatchExecutor:
         child_environment.setdefault("DJANGO_SETTINGS_MODULE", "plane.settings.common")
         child_environment.setdefault("PYTHONDONTWRITEBYTECODE", "1")
         child_environment.setdefault("PYTHONNOUSERSITE", "1")
+        child_environment.setdefault("PYTHONPATH", "/opt:/opt/hermes")
+        child_environment.setdefault("PLANE_AGENT_RUNTIME_DISABLE_VFORK", "1")
         child_environment.setdefault("REDIS_URL", "redis://127.0.0.1:6379/0")
         self._transport = SubprocessRuntimeTransport(
             command=configuration.command,

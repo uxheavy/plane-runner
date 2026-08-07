@@ -157,7 +157,7 @@ def test_g4_runtime_dispatch_child_rejects_network_filesystem_and_process_escape
         thread.join(timeout=2)
 
 
-def test_g4_runtime_direct_syscalls_deny_fork_clone_and_clone3_but_allow_exact_clone_patterns(tmp_path):
+def test_g4_runtime_direct_syscalls_deny_fork_vfork_clone_and_clone3_but_allow_exact_clone_patterns(tmp_path):
     fixture = (
         "import ctypes, errno, json, mmap, os, platform, socket, sys\n"
         "from plane.agent.runtime.subprocess import (\n"
@@ -199,6 +199,18 @@ def test_g4_runtime_direct_syscalls_deny_fork_clone_and_clone3_but_allow_exact_c
         "        return False\n"
         "    os.waitpid(result, 0)\n"
         "    return True\n"
+        "def allowed_code_mode_clone():\n"
+        "    result, error = probe(\n"
+        "        'clone', ctypes.c_ulong(_SIGCHLD), ctypes.c_void_p(stack_top),\n"
+        "        ctypes.c_void_p(0), ctypes.c_void_p(0), ctypes.c_ulong(0),\n"
+        "    )\n"
+        "    if result == 0:\n"
+        "        libc.syscall(exit_syscall, 0)\n"
+        "        return False\n"
+        "    if result <= 0 or error != 0:\n"
+        "        return False\n"
+        "    os.waitpid(result, 0)\n"
+        "    return True\n"
         "def allowed_thread_clone():\n"
         "    clone_pidfd = 0x00001000\n"
         "    result, error = probe(\n"
@@ -220,10 +232,12 @@ def test_g4_runtime_direct_syscalls_deny_fork_clone_and_clone3_but_allow_exact_c
         "print(json.dumps({\n"
         "    'architecture': machine,\n"
         "    'forkDenied': denied('fork'),\n"
+        "    'vforkDenied': denied('vfork'),\n"
         "    'ordinaryCloneDenied': denied('clone', ctypes.c_ulong(_SIGCHLD), ctypes.c_void_p(1),\n"
         "        ctypes.c_void_p(0), ctypes.c_void_p(0), ctypes.c_ulong(0)),\n"
         "    'clone3Denied': denied('clone3', ctypes.byref(clone_args), ctypes.sizeof(clone_args)),\n"
         "    'bootstrapCloneAllowed': allowed_bootstrap_clone(),\n"
+        "    'codeModeCloneAllowed': allowed_code_mode_clone(),\n"
         "    'threadCloneAllowed': allowed_thread_clone(),\n"
         "    'unixSocketAllowed': socket_result(socket.AF_UNIX)[0],\n"
         "    'inetSocketDenied': socket_result(socket.AF_INET)[1] == errno.EPERM,\n"
@@ -248,6 +262,7 @@ def test_g4_runtime_direct_syscalls_deny_fork_clone_and_clone3_but_allow_exact_c
         assert observed["architecture"] in {"x86_64", "aarch64"}
         assert {key: value for key, value in observed.items() if key != "architecture"} == {
             "bootstrapCloneAllowed": True,
+            "codeModeCloneAllowed": True,
             "clone3Denied": True,
             "forkDenied": True,
             "inet6SocketDenied": True,
@@ -255,6 +270,7 @@ def test_g4_runtime_direct_syscalls_deny_fork_clone_and_clone3_but_allow_exact_c
             "ordinaryCloneDenied": True,
             "threadCloneAllowed": True,
             "unixSocketAllowed": True,
+            "vforkDenied": True,
         }
     finally:
         server.shutdown()
