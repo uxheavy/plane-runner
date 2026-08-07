@@ -16,8 +16,8 @@ from pathlib import Path
 
 HERMES_COMMIT = "e573a46611e2cb988f1ab43ad34cd8cc3b2cb659"
 RESOURCE_LABEL = "com.uxheavy.plane.agent-g4-runtime"
-EXPECTED_RUNTIME_IMAGE_DIGEST = "sha256:ea897bbe22a0044d58c16c4091bdf028e4661c2320d00e737f351cb3a1cdd734"
-EXPECTED_RUNTIME_IMAGE_REVISION = "24d38235b2afea809ebb0e537e2f3e8015da8ee2"
+EXPECTED_RUNTIME_IMAGE_DIGEST = "sha256:9e205eea56635226aba3d21466f0ed8359b3bff78cbbd554721753715b4749fc"
+EXPECTED_RUNTIME_IMAGE_REVISION = "ffcc2dc9e8ec5410b8f29ef7bf3aa9b3930b187e"
 RUNTIME_CONTRACT = "plane.agent-runtime/v1"
 
 
@@ -607,7 +607,7 @@ def main() -> int:
     if shutil.which("docker") is None:
         print("event=agent.g4.runtime-red-team status=failed reason=docker_unavailable")
         return 1
-    image = os.environ.get("PLANE_G4_RUNTIME_IMAGE", "plane-agent-runtime:hermes-e573a466")
+    image = os.environ.get("PLANE_G4_RUNTIME_IMAGE", "plane-agent-runtime:hermes-e573a466-g4-ffcc2dc9")
     expected_digest = os.environ.get("PLANE_G4_RUNTIME_IMAGE_DIGEST", EXPECTED_RUNTIME_IMAGE_DIGEST)
     containers: list[str] = []
     network: str | None = None

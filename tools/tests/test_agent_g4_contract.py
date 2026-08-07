@@ -46,7 +46,7 @@ def fixture() -> tuple[dict, dict, dict, str]:
         "hermesCommit": "c" * 40,
         "mcpGitlink": "d" * 40,
         "sdkGitlink": "e" * 40,
-        "runtimeImageTag": "plane-agent-runtime:hermes-e573a466",
+        "runtimeImageTag": "plane-agent-runtime:hermes-e573a466-g4-ffcc2dc9",
         "runtimeImageDigest": "sha256:" + "f" * 64,
         "runtimeImageRevision": "1" * 40,
         "runtimeContract": "plane.agent-runtime/v1",

@@ -252,15 +252,15 @@ docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose
 
 `apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` is the pin
 manifest. The current candidate is Plane commit
-`8a7371208079a7c25ab391e433785c3e67803d72`; the previously accepted G3
+`ffcc2dc9e8ec5410b8f29ef7bf3aa9b3930b187e`; the previously accepted G3
 candidate is Plane commit `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
 The current binding carries Hermes commit
 `e573a46611e2cb988f1ab43ad34cd8cc3b2cb659`, MCP gitlink
 `2dc152e136d7ad952b901e5fe9364a37487297ba`, SDK gitlink
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`, runtime image tag
-`plane-agent-runtime:hermes-e573a466`, runtime image digest
-`sha256:ea897bbe22a0044d58c16c4091bdf028e4661c2320d00e737f351cb3a1cdd734`,
-runtime revision `24d38235b2afea809ebb0e537e2f3e8015da8ee2`, and runtime
+`plane-agent-runtime:hermes-e573a466-g4-ffcc2dc9`, runtime image digest
+`sha256:9e205eea56635226aba3d21466f0ed8359b3bff78cbbd554721753715b4749fc`,
+runtime revision `ffcc2dc9e8ec5410b8f29ef7bf3aa9b3930b187e`, and runtime
 contract `plane.agent-runtime/v1`. API, worker, `beat-worker`, supervisor,
 and `agent-runtime` each switch their revision and image digest to the
 corresponding current value in that manifest; the operation services retain
