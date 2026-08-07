@@ -328,8 +328,8 @@ def _install_linux_kernel_policy() -> None:
     # one bounded stderr-reader thread, whose clone flags are distinct and
     # carry CLONE_THREAD. Permit the exact exec flags and only clone calls
     # with the required thread flags; ordinary clone flags, fork, and clone3
-    # remain denied below. The finite pids limit is a second process-tree
-    # bound.
+    # remain denied below. CPython's bounded execute_code Popen path uses
+    # vfork; the finite pids limit is a second process-tree bound.
     clone_number = syscalls.get("clone")
     if clone_number is not None:
         instructions.extend(
@@ -365,7 +365,6 @@ def _install_linux_kernel_policy() -> None:
         "socketpair",
         "clone",
         "fork",
-        "vfork",
         "clone3",
         "ptrace",
         "openat2",

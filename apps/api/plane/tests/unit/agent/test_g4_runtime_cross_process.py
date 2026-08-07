@@ -105,6 +105,8 @@ def test_g4_runtime_dispatch_child_rejects_network_filesystem_and_process_escape
         "sys.stdin.buffer.read()\n"
         "child = subprocess.run([sys.executable, '-c', 'print(\"child\")'], capture_output=True, check=False)\n"
         "bootstrap_child_allowed = child.returncode == 0 and child.stdout == b'child\\n'\n"
+        "code_child = subprocess.run([sys.executable, '-c', 'print(\"code\")'], capture_output=True, check=False, start_new_session=True)\n"
+        "code_mode_spawn_allowed = code_child.returncode == 0 and code_child.stdout == b'code\\n'\n"
         "def denied_network():\n"
         "    try:\n"
         "        socket.socket()\n"
@@ -123,7 +125,7 @@ def test_g4_runtime_dispatch_child_rejects_network_filesystem_and_process_escape
         "        return False\n"
         "    except OSError:\n"
         "        return True\n"
-        "print(json.dumps({'bootstrapChildAllowed': bootstrap_child_allowed, 'networkDenied': denied_network(), "
+        "print(json.dumps({'bootstrapChildAllowed': bootstrap_child_allowed, 'codeModeSpawnAllowed': code_mode_spawn_allowed, 'networkDenied': denied_network(), "
         "'filesystemDenied': denied_filesystem(), 'processDenied': denied_process()}, "
         "sort_keys=True, separators=(',', ':')))"
     )
@@ -144,6 +146,7 @@ def test_g4_runtime_dispatch_child_rejects_network_filesystem_and_process_escape
         observed = json.loads(frames[0])
         assert observed == {
             "bootstrapChildAllowed": True,
+            "codeModeSpawnAllowed": True,
             "filesystemDenied": True,
             "networkDenied": True,
             "processDenied": True,
@@ -154,7 +157,7 @@ def test_g4_runtime_dispatch_child_rejects_network_filesystem_and_process_escape
         thread.join(timeout=2)
 
 
-def test_g4_runtime_direct_syscalls_deny_fork_vfork_clone_and_clone3_but_allow_exact_clone_patterns(tmp_path):
+def test_g4_runtime_direct_syscalls_deny_fork_clone_and_clone3_but_allow_exact_clone_patterns(tmp_path):
     fixture = (
         "import ctypes, errno, json, mmap, os, platform, socket, sys\n"
         "from plane.agent.runtime.subprocess import (\n"
@@ -217,7 +220,6 @@ def test_g4_runtime_direct_syscalls_deny_fork_vfork_clone_and_clone3_but_allow_e
         "print(json.dumps({\n"
         "    'architecture': machine,\n"
         "    'forkDenied': denied('fork'),\n"
-        "    'vforkDenied': denied('vfork'),\n"
         "    'ordinaryCloneDenied': denied('clone', ctypes.c_ulong(_SIGCHLD), ctypes.c_void_p(1),\n"
         "        ctypes.c_void_p(0), ctypes.c_void_p(0), ctypes.c_ulong(0)),\n"
         "    'clone3Denied': denied('clone3', ctypes.byref(clone_args), ctypes.sizeof(clone_args)),\n"
@@ -253,7 +255,6 @@ def test_g4_runtime_direct_syscalls_deny_fork_vfork_clone_and_clone3_but_allow_e
             "ordinaryCloneDenied": True,
             "threadCloneAllowed": True,
             "unixSocketAllowed": True,
-            "vforkDenied": True,
         }
     finally:
         server.shutdown()
