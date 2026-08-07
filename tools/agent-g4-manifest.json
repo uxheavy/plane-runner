@@ -1,5 +1,12 @@
 {
   "manifestVersion": "plane-agent-g4/v1",
+  "candidateBinding": {
+    "mode": "exact-single-child",
+    "acceptedG3Baseline": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
+    "parentCommit": "8a7371208079a7c25ab391e433785c3e67803d72",
+    "candidateCommitSource": "git-head-with-exact-parent",
+    "rejectDescendants": true
+  },
   "authority": [
     "AGENTS.md",
     "docs/agent-tooling/GOAL.md",
@@ -23,7 +30,39 @@
     "hermesCommit": "e573a46611e2cb988f1ab43ad34cd8cc3b2cb659",
     "mcpGitlink": "2dc152e136d7ad952b901e5fe9364a37487297ba",
     "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889",
-    "runtimeImageDigest": "sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e"
+    "runtimeImageTag": "plane-agent-runtime:hermes-e573a466",
+    "runtimeImageDigest": "sha256:ea897bbe22a0044d58c16c4091bdf028e4661c2320d00e737f351cb3a1cdd734",
+    "runtimeImageRevision": "24d38235b2afea809ebb0e537e2f3e8015da8ee2",
+    "runtimeContract": "plane.agent-runtime/v1"
+  },
+  "liveContract": {
+    "authoritySchema": "tools/agent-g4-live-authority.schema.json",
+    "configSchema": "tools/agent-g4-live-config.schema.json",
+    "evidenceSchema": "tools/agent-g4-live-evidence.schema.json",
+    "evidenceVersion": "plane-agent-g4/live-evidence/v1",
+    "bindingFields": [
+      "candidateCommit",
+      "g3Baseline",
+      "hermesCommit",
+      "mcpGitlink",
+      "sdkGitlink",
+      "runtimeImageTag",
+      "runtimeImageDigest",
+      "runtimeImageRevision",
+      "runtimeContract"
+    ],
+    "providerModelSource": "authority.binding.provider",
+    "thresholdsSource": "authority.binding.thresholds",
+    "fallbackAllowed": false,
+    "requiredCanaries": ["permitted", "denied"],
+    "requiredReadbacks": ["audit", "version"],
+    "commandBinding": "sha256-of-exact-PLANE_G4_LIVE_COMMAND"
+  },
+  "cleanup": {
+    "redTeamResourceLabels": {
+      "com.uxheavy.plane.agent-g4-runtime": "true"
+    },
+    "assertZeroLabeledResources": true
   },
   "retiredDocuments": [
     "docs/agent-tooling/APPROVAL-MANIFEST.md",
@@ -34,25 +73,29 @@
   ],
   "contracts": [
     "apps/api/plane/agent/lifecycle/contract_artifacts/v1/manifest.json",
-    "packages/agent-runtime-contract/schemas/v1/manifest.json"
+    "packages/agent-runtime-contract/schemas/v1/manifest.json",
+    "tools/agent-g4-live-authority.schema.json",
+    "tools/agent-g4-live-config.schema.json",
+    "tools/agent-g4-live-evidence.schema.json"
   ],
   "scripts": [
     "tools/check-agent-settings-reuse.py",
     "tools/verify-api-migrations.sh",
     "tools/verify-agent-g3.sh",
-    "tools/verify-agent-g4.sh"
+    "tools/verify-agent-g4.sh",
+    "tools/summarize_agent_g4.py",
+    "tools/validate_agent_g4_live.py"
   ],
   "runbook": "docs/agent-tooling/operations/agent-runtime-operations.md",
   "runbookEvidence": [
     "## Readiness and bounded diagnostics",
     "## Global safety stop and credential revocation",
     "## Incident diagnosis",
-    "## Rollback",
-    "## Restore and reconciliation",
+    "## Offline production-candidate load thresholds",
+    "## Coordinated rollback",
     "## Evidence cleanup",
     "outcome_unknown",
-    "request_runtime_cancellation",
-    "docker compose logs --tail=100 agent-runtime"
+    "request_runtime_cancellation"
   ],
   "stages": [
     "preflight",
@@ -60,8 +103,10 @@
     "static-scope",
     "g4-runtime-contracts",
     "g4-cross-process",
+    "g4-runtime-service",
     "g4-runtime-red-team",
     "g4-gateway-workload",
+    "g4-rollback",
     "g4-operator-readback",
     "g4-production-configuration",
     "live-boundary",
@@ -70,11 +115,67 @@
   "pytestPaths": [
     "plane/tests/unit/agent/test_g4_runtime_boundary.py",
     "plane/tests/unit/agent/test_g4_runtime_cross_process.py",
+    "plane/tests/unit/agent/test_runtime_supervisor.py",
     "plane/tests/contract/api/test_operation_gateway_g4.py",
+    "plane/tests/contract/api/test_agent_g4_rollback_drill.py",
     "plane/tests/contract/api/test_agent_operator_readback_g4.py",
     "plane/tests/contract/api/test_agent_runtime_production.py"
   ],
   "offlineFixtures": [
-    "tools/agent-g4-runtime-red-team.py"
-  ]
+    "tools/agent-g4-runtime-red-team.py",
+    "tools/agent-g4-rollback-drill.py"
+  ],
+  "offlineEvidence": {
+    "load": {
+      "path": "apps/api/plane/tests/fixtures/agent_g4_load_thresholds.json",
+      "sha256": "355d1f8bdc70761b85d27f1cc9fe027c93baa506be90b68948d1d702414889ec",
+      "testPath": "plane/tests/contract/api/test_operation_gateway_g4.py",
+      "requiredOutputFields": [
+        "requests",
+        "workers",
+        "agents",
+        "throughputPerSecond",
+        "latencyMs",
+        "queueingMs",
+        "errorRate",
+        "saturation",
+        "resources",
+        "sustainedDurationSeconds"
+      ]
+    },
+    "rollback": {
+      "path": "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json",
+      "sha256": "bc9e64cf8369edfa4830a1b6498d824f5eee08180d4d0868cfdcae4df1e6dcf2",
+      "testPath": "plane/tests/contract/api/test_agent_g4_rollback_drill.py",
+      "requiredOutputFields": [
+        "externalWrites",
+        "migrationLeaf",
+        "reverseMigrationAllowed",
+        "auditRows",
+        "outcomeRows",
+        "idempotencyRows",
+        "activeQuotaReservations",
+        "temporaryDatabaseRemoved"
+      ]
+    },
+    "runtimeService": {
+      "path": "apps/api/plane/tests/unit/agent/test_runtime_supervisor.py",
+      "sha256": "9e1cd9a79cc57dffd60203f29bda7af6ddddc704ddd0a0f847715f83e3e13601",
+      "testPath": "plane/tests/unit/agent/test_runtime_supervisor.py",
+      "testName": "test_pinned_hermes_runs_through_http_service_launcher_and_bound_host_socket",
+      "requiredMarkers": [
+        "plane.agent.runtime.service",
+        "RemoteRuntimeTransport",
+        "plane_runtime.g1_runtime_image.bootstrap",
+        "PLANE_G2_HERMES_CHECKOUT"
+      ]
+    }
+  },
+  "verifierTests": [
+    "tools/tests/test_agent_g4_contract.py"
+  ],
+  "pendingInputs": {
+    "liveProviderModel": "Provider/model live canaries remain separately authorized; offline verification must not claim live closure.",
+    "redTeamResourceLabels": "The red-team source uses com.uxheavy.plane.agent-g4-runtime labels; the verifier checks that label family after the stage and does not edit the source."
+  }
 }

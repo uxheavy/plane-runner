@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plane-agent-g4/live-config/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "authorityId", "mode", "offline", "fallbackAllowed", "binding", "provider", "thresholdProfile", "thresholds", "canaries", "requiredReadbacks"],
+  "properties": {
+    "schemaVersion": { "const": "plane-agent-g4/live-config/v1" },
+    "authorityId": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "mode": { "const": "live" },
+    "offline": { "const": false },
+    "fallbackAllowed": { "const": false },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidateCommit", "g3Baseline", "hermesCommit", "mcpGitlink", "sdkGitlink", "runtimeImageTag", "runtimeImageDigest", "runtimeImageRevision", "runtimeContract", "commandSha256", "provider", "thresholdProfile", "thresholds", "canaries"],
+      "properties": {
+        "candidateCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "g3Baseline": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "hermesCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "mcpGitlink": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "sdkGitlink": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "runtimeImageTag": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "runtimeImageDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "runtimeImageRevision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "runtimeContract": { "const": "plane.agent-runtime/v1" },
+        "commandSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "provider": { "type": "object" },
+        "thresholdProfile": { "type": "string" },
+        "thresholds": { "type": "object" },
+        "canaries": { "type": "object" }
+      }
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "model", "fallbackUsed"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "model": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "fallbackUsed": { "const": false }
+      }
+    },
+    "thresholdProfile": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "thresholds": { "type": "object" },
+    "canaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["permitted", "denied"],
+      "properties": {
+        "permitted": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "denied": { "type": "string", "minLength": 1, "maxLength": 200 }
+      }
+    },
+    "requiredReadbacks": {
+      "type": "array",
+      "const": ["audit", "version"]
+    },
+    "fallbackProviders": {
+      "type": "array",
+      "maxItems": 0
+    }
+  }
+}

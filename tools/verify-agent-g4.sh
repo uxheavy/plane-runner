@@ -5,19 +5,27 @@ export PYTHONDONTWRITEBYTECODE=1
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 MANIFEST="${ROOT_DIR}/tools/agent-g4-manifest.json"
-G3_BASE_COMMIT="9b4bad0b0b54c90c8d25e9af5f086971e6b9c93a"
+G3_BASE_COMMIT="7c9d35f4c324865c27c84da5016be2c84e460bcc"
+CANDIDATE_PARENT_COMMIT="8a7371208079a7c25ab391e433785c3e67803d72"
 MCP_COMMIT="2dc152e136d7ad952b901e5fe9364a37487297ba"
 SDK_COMMIT="7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
 HERMES_COMMIT="e573a46611e2cb988f1ab43ad34cd8cc3b2cb659"
-RUNTIME_IMAGE_DIGEST="sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e"
+RUNTIME_IMAGE_TAG="plane-agent-runtime:hermes-e573a466"
+RUNTIME_IMAGE_DIGEST="sha256:ea897bbe22a0044d58c16c4091bdf028e4661c2320d00e737f351cb3a1cdd734"
+RUNTIME_IMAGE_REVISION="24d38235b2afea809ebb0e537e2f3e8015da8ee2"
+RUNTIME_CONTRACT="plane.agent-runtime/v1"
 API_TEST_IMAGE="${PLANE_API_TEST_IMAGE:-plane-g3-external-client-api-tests:prepared}"
-RUNTIME_IMAGE="${PLANE_G4_RUNTIME_IMAGE:-${API_TEST_IMAGE}}"
+RUNTIME_IMAGE="${PLANE_G4_RUNTIME_IMAGE:-${RUNTIME_IMAGE_TAG}}"
 MODE="${PLANE_G4_MODE:-offline}"
 CURRENT_STEP="preflight"
 STAGE_COUNT=0
 STACK_STARTED=0
 CREATED_API_LOG_DIR=0
 OFFLINE_STATUS="not_run"
+CURRENT_LOG=""
+RED_TEAM_STAGE_ENTERED=0
+RED_TEAM_LABEL_KEY="com.uxheavy.plane.agent-g4-runtime"
+RED_TEAM_LABEL_VALUE="true"
 G4_PROJECT_NAME="plane-agent-g4-verify-$$-${RANDOM}"
 G4_NETWORK_NAME="${G4_PROJECT_NAME}_test_env"
 G4_TEMP_PARENT="${ROOT_DIR}/tmp"
@@ -91,6 +99,10 @@ fail() {
     local expected="$1"
     local actual="$2"
     local suggestion="$3"
+    if [[ -n "${CURRENT_LOG}" && -f "${CURRENT_LOG}" ]]; then
+        emit "${CURRENT_STEP}.failure-log" captured "log_sha256=$(shasum -a 256 "${CURRENT_LOG}" | awk '{print $1}')" >&2
+        python3 "${ROOT_DIR}/tools/summarize_agent_g4.py" --print-sanitized-log "${CURRENT_LOG}" >&2 || true
+    fi
     emit "${CURRENT_STEP}" failed "expected=${expected}" "actual=${actual}" "suggestion=${suggestion}" >&2
     exit 1
 }
@@ -109,6 +121,19 @@ live_configuration_required() {
         "suggestion=provide_the_named_authority_config_and_command"
 }
 
+validate_live_configuration() {
+    if ! python3 "${ROOT_DIR}/tools/validate_agent_g4_live.py" \
+        --authority "${PLANE_G4_LIVE_AUTHORITY}" \
+        --config "${PLANE_G4_LIVE_CONFIG}" \
+        --manifest "${MANIFEST}" \
+        --candidate "${CANDIDATE_COMMIT}" \
+        --command "${PLANE_G4_LIVE_COMMAND}" \
+        --config-only >/dev/null; then
+        fail "live authority and config are exact and valid" "live_configuration_invalid" "inspect the structured authority/config contract"
+    fi
+    emit "live-boundary.preflight" passed "config=validated" "offline=not_run" "command_binding=validated"
+}
+
 check_candidate_clean() {
     local status dirty="" line path
     status="$(git -C "${ROOT_DIR}" status --porcelain=v1 --untracked-files=all)"
@@ -122,10 +147,13 @@ check_candidate_clean() {
 }
 
 check_candidate_identity() {
-    local actual expected
+    local actual parent_line parent_count parent
     actual="$(git -C "${ROOT_DIR}" rev-parse HEAD)" || fail "candidate commit is readable" "git rev-parse failed" "inspect the candidate checkout"
-    expected="${PLANE_G4_CANDIDATE_COMMIT:-${actual}}"
-    [[ "${actual}" == "${expected}" ]] || fail "candidate HEAD=${expected}" "actual=${actual}" "rerun against the exact candidate commit"
+    [[ -z "${PLANE_G4_CANDIDATE_COMMIT:-}" ]] || fail "candidate is bound by the committed manifest" "candidate_override_present" "remove PLANE_G4_CANDIDATE_COMMIT; use the committed evidence wrapper"
+    parent_line="$(git -C "${ROOT_DIR}" rev-list --parents -n 1 "${actual}")"
+    read -r _ parent parent_count <<< "${parent_line}"
+    [[ -n "${parent}" && -z "${parent_count}" ]] || fail "candidate is a single-parent evidence wrapper" "merge_or_root_commit" "run from the exact committed wrapper candidate"
+    [[ "${parent}" == "${CANDIDATE_PARENT_COMMIT}" ]] || fail "candidate immediate parent=${CANDIDATE_PARENT_COMMIT}" "actual_parent=${parent}" "rerun from the exact candidate wrapper commit"
     git -C "${ROOT_DIR}" merge-base --is-ancestor "${G3_BASE_COMMIT}" "${actual}" || fail "candidate descends from G3 base=${G3_BASE_COMMIT}" "candidate=${actual}" "use the integrated G3 candidate history"
     CANDIDATE_COMMIT="${actual}"
 }
@@ -148,35 +176,90 @@ check_gitlinks() {
     [[ "${sdk_link}" == *"${SDK_COMMIT}"$'\texternal/plane-python-sdk' ]] || fail "SDK gitlink=${SDK_COMMIT}" "${sdk_link}" "inspect the integrated Plane tree"
 }
 
-check_image() {
-    local image="$1" expected="$2" actual
-    actual="$(docker image inspect "${image}" --format '{{.Id}}' 2>/dev/null)" || fail "prepared image ${image} is available offline" "image unavailable" "prepare the pinned image locally; this verifier never pulls"
-    [[ "${actual}" == "${expected}" ]] || fail "image ${image} digest=${expected}" "actual=${actual}" "use the authoritative prepared image"
+check_api_test_image() {
+    local image="$1"
+    docker image inspect "${image}" --format '{{.Id}}' >/dev/null 2>&1 || fail "prepared API test image ${image} is available offline" "image unavailable" "prepare the pinned API test image locally; this verifier never pulls"
     docker run --rm --network none --entrypoint sh "${image}" -c '
         set -eu
         command -v python >/dev/null
         command -v pytest >/dev/null
         command -v ruff >/dev/null
         python -c "import django, psycopg, pytest"
-    ' >/dev/null 2>&1 || fail "offline API/runtime dependencies are prepared in ${image}" "dependency probe failed" "prepare the pinned local image without installing during verification"
+    ' >/dev/null 2>&1 || fail "offline API test dependencies are prepared in ${image}" "dependency probe failed" "prepare the API test image without installing during verification"
+}
+
+check_runtime_image() {
+    local image="$1" expected="$2" actual hermes_revision runtime_revision runtime_contract
+    actual="$(docker image inspect "${image}" --format '{{.Id}}' 2>/dev/null)" || fail "prepared image ${image} is available offline" "image unavailable" "prepare the pinned image locally; this verifier never pulls"
+    [[ "${actual}" == "${expected}" ]] || fail "image ${image} digest=${expected}" "actual=${actual}" "use the authoritative prepared image"
+    hermes_revision="$(docker image inspect "${image}" --format '{{index .Config.Labels "org.uxheavy.plane.hermes.commit"}}')"
+    runtime_revision="$(docker image inspect "${image}" --format '{{index .Config.Labels "org.uxheavy.plane.runtime.revision"}}')"
+    runtime_contract="$(docker image inspect "${image}" --format '{{index .Config.Labels "org.uxheavy.plane.runtime.contract"}}')"
+    [[ "${hermes_revision}" == "${HERMES_COMMIT}" ]] || fail "runtime image Hermes revision=${HERMES_COMMIT}" "actual=${hermes_revision}" "use the image built from the pinned Hermes commit"
+    [[ "${runtime_revision}" == "${RUNTIME_IMAGE_REVISION}" ]] || fail "runtime image Plane revision=${RUNTIME_IMAGE_REVISION}" "actual=${runtime_revision}" "use the image built from the integrated runtime source"
+    [[ "${runtime_contract}" == "${RUNTIME_CONTRACT}" ]] || fail "runtime image contract=${RUNTIME_CONTRACT}" "actual=${runtime_contract}" "use the authoritative runtime contract image"
+    docker run --rm --network none --entrypoint sh "${image}" -c '
+        set -eu
+        command -v python >/dev/null
+        command -v pytest >/dev/null
+        python -c "import django, psycopg, pytest"
+    ' >/dev/null 2>&1 || fail "offline runtime dependencies are prepared in ${image}" "dependency probe failed" "prepare the pinned local runtime image without installing during verification"
 }
 
 validate_manifest() {
-    python3 - "${MANIFEST}" "${ROOT_DIR}" "${CANDIDATE_COMMIT}" "${MCP_COMMIT}" "${SDK_COMMIT}" "${HERMES_COMMIT}" "${RUNTIME_IMAGE_DIGEST}" <<'PY'
+    python3 - "${MANIFEST}" "${ROOT_DIR}" "${CANDIDATE_COMMIT}" "${G3_BASE_COMMIT}" "${CANDIDATE_PARENT_COMMIT}" "${MCP_COMMIT}" "${SDK_COMMIT}" "${HERMES_COMMIT}" "${RUNTIME_IMAGE_TAG}" "${RUNTIME_IMAGE_DIGEST}" "${RUNTIME_IMAGE_REVISION}" "${RUNTIME_CONTRACT}" <<'PY'
+import hashlib
 import json
 import subprocess
 import sys
 from pathlib import Path
 
-manifest_path, root_value, candidate, mcp, sdk, hermes, image_digest = sys.argv[1:]
+manifest_path, root_value, candidate, g3, candidate_parent, mcp, sdk, hermes, image_tag, image_digest, image_revision, runtime_contract = sys.argv[1:]
 root = Path(root_value)
 manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
 assert manifest["manifestVersion"] == "plane-agent-g4/v1"
+assert manifest["candidateBinding"] == {
+    "mode": "exact-single-child",
+    "acceptedG3Baseline": g3,
+    "parentCommit": candidate_parent,
+    "candidateCommitSource": "git-head-with-exact-parent",
+    "rejectDescendants": True,
+}
 assert manifest["pins"] == {
     "hermesCommit": hermes,
     "mcpGitlink": mcp,
     "sdkGitlink": sdk,
+    "runtimeImageTag": image_tag,
     "runtimeImageDigest": image_digest,
+    "runtimeImageRevision": image_revision,
+    "runtimeContract": runtime_contract,
+}
+assert manifest["liveContract"] == {
+    "authoritySchema": "tools/agent-g4-live-authority.schema.json",
+    "configSchema": "tools/agent-g4-live-config.schema.json",
+    "evidenceSchema": "tools/agent-g4-live-evidence.schema.json",
+    "evidenceVersion": "plane-agent-g4/live-evidence/v1",
+    "bindingFields": [
+        "candidateCommit",
+        "g3Baseline",
+        "hermesCommit",
+        "mcpGitlink",
+        "sdkGitlink",
+        "runtimeImageTag",
+        "runtimeImageDigest",
+        "runtimeImageRevision",
+        "runtimeContract",
+    ],
+    "providerModelSource": "authority.binding.provider",
+    "thresholdsSource": "authority.binding.thresholds",
+    "fallbackAllowed": False,
+    "requiredCanaries": ["permitted", "denied"],
+    "requiredReadbacks": ["audit", "version"],
+    "commandBinding": "sha256-of-exact-PLANE_G4_LIVE_COMMAND",
+}
+assert manifest["cleanup"] == {
+    "redTeamResourceLabels": {"com.uxheavy.plane.agent-g4-runtime": "true"},
+    "assertZeroLabeledResources": True,
 }
 required_stages = {
     "preflight",
@@ -184,8 +267,10 @@ required_stages = {
     "static-scope",
     "g4-runtime-contracts",
     "g4-cross-process",
+    "g4-runtime-service",
     "g4-runtime-red-team",
     "g4-gateway-workload",
+    "g4-rollback",
     "g4-operator-readback",
     "g4-production-configuration",
     "live-boundary",
@@ -193,6 +278,8 @@ required_stages = {
 }
 assert set(manifest["stages"]) == required_stages
 for relative in (*manifest["authority"], *manifest["contracts"], *manifest["scripts"], manifest["runbook"], *manifest["offlineFixtures"]):
+    assert (root / relative).exists(), relative
+for relative in manifest["verifierTests"]:
     assert (root / relative).exists(), relative
 for relative in manifest["pytestPaths"]:
     assert (root / "apps/api" / relative).exists(), relative
@@ -212,7 +299,19 @@ for relative in manifest["pytestPaths"]:
     text = (root / "apps/api" / relative).read_text(encoding="utf-8")
     for marker in ("pytest.skip", "pytest.xfail", "@pytest.mark.xfail", "importorskip"):
         assert marker not in text, f"suppression marker in required G4 test {relative}: {marker}"
-print(f"manifest=validated stages={len(manifest['stages'])} pytest_paths={len(manifest['pytestPaths'])} retired_absent={len(manifest['retiredDocuments'])}")
+for name, evidence in manifest["offlineEvidence"].items():
+    path = root / evidence["path"]
+    assert path.exists(), evidence["path"]
+    contents = path.read_bytes()
+    assert hashlib.sha256(contents).hexdigest() == evidence["sha256"], f"offline evidence changed: {name}"
+    test_path = root / "apps/api" / evidence["testPath"]
+    assert test_path.exists(), evidence["testPath"]
+    text = test_path.read_text(encoding="utf-8")
+    if "testName" in evidence:
+        assert f"def {evidence['testName']}" in text, f"required offline test missing: {evidence['testName']}"
+    for marker in evidence.get("requiredMarkers", []):
+        assert marker in text, f"required offline marker missing: {marker}"
+print(f"manifest=validated stages={len(manifest['stages'])} pytest_paths={len(manifest['pytestPaths'])} retired_absent={len(manifest['retiredDocuments'])} offline_evidence={len(manifest['offlineEvidence'])} candidate_parent={candidate_parent}")
 PY
 }
 
@@ -220,21 +319,38 @@ run_logged() {
     local stage="$1"
     shift
     local log="${EVIDENCE_DIR}/${stage}.log"
-    local exit_code
+    local exit_code summary live_contract
+    CURRENT_LOG="${log}"
     set +e
     "$@" >"${log}" 2>&1
     exit_code=$?
     set -e
     if [[ "${exit_code}" -ne 0 ]]; then
-        tail -80 "${log}" >&2 || true
         fail "stage ${stage} exits 0" "exit_code=${exit_code}" "inspect the stage evidence and fix the first failure"
     fi
     if rg -n -i '(^|[[:space:]])[0-9]+ (skipped|deselected|xfailed|xpassed)|(^|[[:space:]])(xfail|xpass)([[:space:]]|$)' "${log}" >/dev/null; then
-        tail -80 "${log}" >&2 || true
         fail "stage ${stage} has no skipped, deselected, or xfail tests" "test suppression detected" "select and pass every required test"
     fi
+    if [[ "${stage}" == "live-boundary" ]]; then
+        if ! live_contract="$(python3 "${ROOT_DIR}/tools/validate_agent_g4_live.py" \
+            --authority "${PLANE_G4_LIVE_AUTHORITY}" \
+            --config "${PLANE_G4_LIVE_CONFIG}" \
+            --manifest "${MANIFEST}" \
+            --evidence "${log}" \
+            --candidate "${CANDIDATE_COMMIT}" \
+            --command "${PLANE_G4_LIVE_COMMAND}")"; then
+            fail "live command emits validated G4 evidence" "live_evidence_contract_failed" "inspect the sanitized live evidence"
+        fi
+    fi
+    summary="$(python3 "${ROOT_DIR}/tools/summarize_agent_g4.py" "${log}")" || fail "stage ${stage} summary is machine-readable" "summary_failed" "inspect the stage output"
+    read -r -a summary_fields <<< "${summary}"
     STAGE_COUNT=$((STAGE_COUNT + 1))
-    emit "${stage}" passed "exit_code=${exit_code}" "evidence=complete"
+    if [[ -n "${live_contract:-}" ]]; then
+        emit "${stage}" passed "exit_code=${exit_code}" "evidence=complete" "${summary_fields[@]}" "${live_contract}"
+    else
+        emit "${stage}" passed "exit_code=${exit_code}" "evidence=complete" "${summary_fields[@]}"
+    fi
+    CURRENT_LOG=""
 }
 
 static_scope() {
@@ -331,7 +447,6 @@ setup_g4_stack() {
         CORS_ALLOWED_ORIGINS=http://localhost \
         LIVE_SERVER_SECRET_KEY=compose-test-key \
         SECRET_KEY=compose-test-key \
-        PLANE_AGENT_RUNTIME_IMAGE="${RUNTIME_IMAGE}" \
         docker compose -f "${ROOT_DIR}/deployments/cli/community/docker-compose.yml" config --format json \
         >"${COMMUNITY_COMPOSE_CONFIG}" || return 1
     [[ -s "${COMMUNITY_COMPOSE_CONFIG}" ]] || return 1
@@ -366,9 +481,77 @@ g4_pytest() {
     ' -- "${path}"
 }
 
+g4_pytest_targeted() {
+    local path="$1"
+    local expression="$2"
+    run_api sh -c '
+        set -Eeuo pipefail
+        export PYTHONPATH=/workspace/apps/api${PYTHONPATH:+:${PYTHONPATH}}
+        exec pytest \
+            -p plane.tests.g3_no_skips \
+            --migrations \
+            -q \
+            -o "addopts=--strict-markers --reuse-db" \
+            -o cache_dir=/tmp/g4-pytest \
+            -k "$2" \
+            "$1"
+    ' -- "${path}" "${expression}"
+}
+
+g4_gateway_workload() {
+    run_api sh -c '
+        set -Eeuo pipefail
+        export PYTHONPATH=/workspace/apps/api${PYTHONPATH:+:${PYTHONPATH}}
+        export PLANE_G4_LOAD_JSON=1
+        exec pytest \
+            -p plane.tests.g3_no_skips \
+            --migrations \
+            -s \
+            -q \
+            -o "addopts=--strict-markers --reuse-db" \
+            -o cache_dir=/tmp/g4-pytest \
+            "$1"
+    ' -- plane/tests/contract/api/test_operation_gateway_g4.py
+}
+
+g4_rollback() {
+    run_api sh -c '
+        set -Eeuo pipefail
+        export PYTHONPATH=/workspace/apps/api${PYTHONPATH:+:${PYTHONPATH}}
+        pytest \
+            -p plane.tests.g3_no_skips \
+            --migrations \
+            -q \
+            -o "addopts=--strict-markers --reuse-db" \
+            -o cache_dir=/tmp/g4-pytest \
+            plane/tests/contract/api/test_agent_g4_rollback_drill.py
+        python -c '\''
+import json
+from plane.operation_gateway.rollback_drill import run_rollback_drill
+result = run_rollback_drill()
+print(json.dumps({"event": "agent.g4.rollback", **result}, sort_keys=True))
+raise SystemExit(0 if result["passes"] else 1)
+'\''
+    '
+}
+
 g4_runtime_contracts() {
     setup_g4_stack || return 1
     g4_pytest plane/tests/unit/agent/test_g4_runtime_boundary.py
+}
+
+check_labeled_redteam_resources() {
+    local label="${RED_TEAM_LABEL_KEY}=${RED_TEAM_LABEL_VALUE}"
+    local containers networks volumes leftovers
+    containers="$(docker ps -aq --filter "label=${label}")"
+    networks="$(docker network ls -q --filter "label=${label}")"
+    volumes="$(docker volume ls -q --filter "label=${label}")"
+    leftovers="${containers}${networks}${volumes}"
+    if [[ -n "${leftovers}" ]]; then
+        emit "cleanup.red-team" failed "expected=zero_labeled_red_team_resources" "actual=resources_remain" "label=${label}" "suggestion=inspect_and_remove_only_the_labeled_task_resources" >&2
+        return 1
+    fi
+    emit "cleanup.red-team" passed "label=${label}" "containers=0" "networks=0" "volumes=0"
 }
 
 cleanup() {
@@ -377,6 +560,9 @@ cleanup() {
     trap - EXIT INT TERM
     if [[ "${STACK_STARTED}" -eq 1 ]]; then
         compose down -v --remove-orphans >/dev/null 2>&1 || cleanup_status=1
+    fi
+    if [[ "${RED_TEAM_STAGE_ENTERED}" -eq 1 ]]; then
+        check_labeled_redteam_resources || cleanup_status=1
     fi
     if [[ "${CREATED_API_LOG_DIR}" -eq 1 ]]; then
         rm -rf -- "${ROOT_DIR}/apps/api/plane/logs"
@@ -395,7 +581,11 @@ cleanup() {
         [[ "${status}" -ne 0 ]] || status=1
     else
         STAGE_COUNT=$((STAGE_COUNT + 1))
-        emit "cleanup" passed "exit_code=0" "evidence=worktree_and_task_resources_checked"
+        emit "cleanup" passed "exit_code=0" "evidence=worktree_and_task_resources_checked" \
+            "collected=1" "passed=1" "failed=0" "skipped=0" "xfail=0" "deselected=0" "duration_ms=0" "migration_leaf=not_applicable" \
+            "workload_throughput=na" "workload_latency_p95_ms=na" "workload_latency_p99_ms=na" "workload_error_rate=na" "workload_saturation=na" \
+            "workload_queue_p95_ms=na" "workload_sustained_duration_s=na" "workload_requests=na" "workload_workers=na" "workload_agents=na" \
+            "resource_cpu_pct=na" "resource_cpu_seconds=na" "resource_memory_mb=na" "resource_db_connections=na" "resource_io_mb=na" "evidence_sha256=cleanup-checked"
     fi
     if [[ "${status}" -eq 2 ]]; then
         emit "complete" external_required "exit_code=2" "stage_count=${STAGE_COUNT}" "offline=${OFFLINE_STATUS}" "live=explicit_authority_required"
@@ -410,11 +600,6 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 
-if [[ "${MODE}" == "live" ]] && ! live_configuration_is_explicit; then
-    CURRENT_STEP="live-boundary"
-    live_configuration_required
-    exit 2
-fi
 if [[ -n "${G3_TEST_PATHS_OVERRIDE:-}" ]]; then
     CURRENT_STEP="preflight"
     emit "preflight" failed "expected=G3_TEST_PATHS_OVERRIDE unset" "actual=noncanonical_override_present" "suggestion=invoke_verify-agent-g3.sh_directly_for_subset_diagnostics" >&2
@@ -435,11 +620,30 @@ pin_external_tree mcp "${MCP_ROOT}" "${MCP_COMMIT}"
 pin_external_tree sdk "${SDK_ROOT}" "${SDK_COMMIT}"
 pin_external_tree hermes "${HERMES_ROOT}" "${HERMES_COMMIT}"
 [[ -d "${EXTERNAL_SUPERPROJECT_ROOT}/.git/modules" ]] || fail "external git module metadata is mounted" "missing=${EXTERNAL_SUPERPROJECT_ROOT}/.git/modules" "set PLANE_EXTERNAL_SUPERPROJECT_ROOT"
-check_image "${API_TEST_IMAGE}" "${RUNTIME_IMAGE_DIGEST}"
-check_image "${RUNTIME_IMAGE}" "${RUNTIME_IMAGE_DIGEST}"
+check_api_test_image "${API_TEST_IMAGE}"
+[[ "${RUNTIME_IMAGE}" == "${RUNTIME_IMAGE_TAG}" ]] || fail "runtime image tag=${RUNTIME_IMAGE_TAG}" "actual=${RUNTIME_IMAGE}" "use the committed runtime image tag or an explicitly reviewed equivalent"
+check_runtime_image "${RUNTIME_IMAGE}" "${RUNTIME_IMAGE_DIGEST}"
 validate_manifest
 STAGE_COUNT=$((STAGE_COUNT + 1))
-emit "preflight" passed "exit_code=0" "candidate=${CANDIDATE_COMMIT}" "hermes=${HERMES_COMMIT}" "mcp=${MCP_COMMIT}" "sdk=${SDK_COMMIT}" "runtime_image_digest=${RUNTIME_IMAGE_DIGEST}"
+emit "preflight" passed "exit_code=0" "candidate=${CANDIDATE_COMMIT}" "hermes=${HERMES_COMMIT}" "mcp=${MCP_COMMIT}" "sdk=${SDK_COMMIT}" "runtime_image_tag=${RUNTIME_IMAGE_TAG}" "runtime_image_digest=${RUNTIME_IMAGE_DIGEST}" "runtime_image_revision=${RUNTIME_IMAGE_REVISION}" "runtime_contract=${RUNTIME_CONTRACT}" \
+    "collected=1" "passed=1" "failed=0" "skipped=0" "xfail=0" "deselected=0" "duration_ms=0" "migration_leaf=not_applicable" \
+    "workload_throughput=na" "workload_latency_p95_ms=na" "workload_latency_p99_ms=na" "workload_error_rate=na" "workload_saturation=na" \
+    "workload_queue_p95_ms=na" "workload_sustained_duration_s=na" "workload_requests=na" "workload_workers=na" "workload_agents=na" \
+    "resource_cpu_pct=na" "resource_cpu_seconds=na" "resource_memory_mb=na" "resource_db_connections=na" "resource_io_mb=na" "evidence_sha256=preflight-bound"
+
+if [[ "${MODE}" == "live" ]]; then
+    CURRENT_STEP="live-boundary"
+    if ! live_configuration_is_explicit; then
+        live_configuration_required
+        exit 2
+    fi
+    validate_live_configuration
+fi
+
+if [[ ! -d "${ROOT_DIR}/apps/api/plane/logs" ]]; then
+    mkdir -p -- "${ROOT_DIR}/apps/api/plane/logs"
+    CREATED_API_LOG_DIR=1
+fi
 
 CURRENT_STEP="g3-prerequisite"
 run_logged g3-prerequisite env \
@@ -449,7 +653,6 @@ run_logged g3-prerequisite env \
     PLANE_MCP_EXTERNAL_ROOT="${MCP_ROOT}" \
     PLANE_SDK_EXTERNAL_ROOT="${SDK_ROOT}" \
     PLANE_HERMES_EXTERNAL_ROOT="${HERMES_ROOT}" \
-    PLANE_AGENT_RUNTIME_IMAGE="${RUNTIME_IMAGE}" \
     "${ROOT_DIR}/tools/verify-agent-g3.sh"
 
 CURRENT_STEP="static-scope"
@@ -461,7 +664,12 @@ run_logged g4-runtime-contracts g4_runtime_contracts
 CURRENT_STEP="g4-cross-process"
 run_logged g4-cross-process g4_pytest plane/tests/unit/agent/test_g4_runtime_cross_process.py
 
+CURRENT_STEP="g4-runtime-service"
+run_logged g4-runtime-service g4_pytest \
+    plane/tests/unit/agent/test_runtime_supervisor.py
+
 CURRENT_STEP="g4-runtime-red-team"
+RED_TEAM_STAGE_ENTERED=1
 run_logged g4-runtime-red-team env \
     PLANE_G4_RUNTIME_IMAGE="${RUNTIME_IMAGE}" \
     PLANE_G4_RUNTIME_IMAGE_DIGEST="${RUNTIME_IMAGE_DIGEST}" \
@@ -469,7 +677,10 @@ run_logged g4-runtime-red-team env \
     python3 "${ROOT_DIR}/tools/agent-g4-runtime-red-team.py"
 
 CURRENT_STEP="g4-gateway-workload"
-run_logged g4-gateway-workload g4_pytest plane/tests/contract/api/test_operation_gateway_g4.py
+run_logged g4-gateway-workload g4_gateway_workload
+
+CURRENT_STEP="g4-rollback"
+run_logged g4-rollback g4_rollback
 
 CURRENT_STEP="g4-operator-readback"
 run_logged g4-operator-readback g4_pytest plane/tests/contract/api/test_agent_operator_readback_g4.py
@@ -487,7 +698,11 @@ if [[ "${MODE}" == "live" ]]; then
     run_logged live-boundary env PLANE_G4_OFFLINE=0 PLANE_G4_NO_MODEL_FALLBACK=1 bash -lc "${PLANE_G4_LIVE_COMMAND}"
 else
     STAGE_COUNT=$((STAGE_COUNT + 1))
-    emit "live-boundary" passed "exit_code=0" "mode=offline" "live_evaluation=not_requested"
+    emit "live-boundary" passed "exit_code=0" "mode=offline" "live_evaluation=not_requested" \
+        "collected=1" "passed=1" "failed=0" "skipped=0" "xfail=0" "deselected=0" "duration_ms=0" "migration_leaf=not_applicable" \
+        "workload_throughput=na" "workload_latency_p95_ms=na" "workload_latency_p99_ms=na" "workload_error_rate=na" "workload_saturation=na" \
+        "workload_queue_p95_ms=na" "workload_sustained_duration_s=na" "workload_requests=na" "workload_workers=na" "workload_agents=na" \
+        "resource_cpu_pct=na" "resource_cpu_seconds=na" "resource_memory_mb=na" "resource_db_connections=na" "resource_io_mb=na" "evidence_sha256=offline-not-run"
 fi
 
 exit 0

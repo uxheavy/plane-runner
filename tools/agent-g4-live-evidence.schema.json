@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plane-agent-g4/live-evidence/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "status", "binding", "provider", "canaries", "thresholds", "readback", "summary"],
+  "properties": {
+    "schemaVersion": { "const": "plane-agent-g4/live-evidence/v1" },
+    "status": { "const": "passed" },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidateCommit", "g3Baseline", "hermesCommit", "mcpGitlink", "sdkGitlink", "runtimeImageTag", "runtimeImageDigest", "runtimeImageRevision", "runtimeContract"],
+      "properties": {
+        "candidateCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "g3Baseline": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "hermesCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "mcpGitlink": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "sdkGitlink": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "runtimeImageTag": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "runtimeImageDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "runtimeImageRevision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "runtimeContract": { "const": "plane.agent-runtime/v1" }
+      }
+    },
+    "provider": { "type": "object" },
+    "canaries": { "type": "object" },
+    "thresholds": { "type": "object" },
+    "readback": { "type": "object" },
+    "summary": { "$ref": "#/$defs/summary" }
+  },
+  "$defs": {
+    "count": { "type": "integer", "minimum": 0 },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["counts", "durationMs", "migrationLeaf", "workload"],
+      "properties": {
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["collected", "passed", "failed", "skipped", "xfail", "deselected"],
+          "properties": {
+            "collected": { "$ref": "#/$defs/count" },
+            "passed": { "$ref": "#/$defs/count" },
+            "failed": { "$ref": "#/$defs/count" },
+            "skipped": { "$ref": "#/$defs/count" },
+            "xfail": { "$ref": "#/$defs/count" },
+            "deselected": { "$ref": "#/$defs/count" }
+          }
+        },
+        "durationMs": { "type": "number", "minimum": 0 },
+        "migrationLeaf": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "workload": { "type": "object" }
+      }
+    }
+  }
+}
