@@ -159,7 +159,7 @@ def test_g4_runtime_dispatch_child_rejects_network_filesystem_and_process_escape
 
 def test_g4_runtime_direct_syscalls_deny_fork_vfork_clone_and_clone3_but_allow_exact_clone_patterns(tmp_path):
     fixture = (
-        "import ctypes, errno, json, mmap, os, platform, socket, sys\n"
+        "import ctypes, errno, json, mmap, os, pathlib, platform, socket, sys\n"
         "from plane.agent.runtime.subprocess import (\n"
         "    _HERMES_BOOTSTRAP_CLONE_FLAGS, _HERMES_BOOTSTRAP_THREAD_REQUIRED_FLAGS,\n"
         "    _SIGCHLD, _SYSCALLS,\n"
@@ -219,6 +219,15 @@ def test_g4_runtime_direct_syscalls_deny_fork_vfork_clone_and_clone3_but_allow_e
         "        ctypes.c_void_p(0), ctypes.c_ulong(0),\n"
         "    )\n"
         "    return result == -1 and error == errno.EINVAL\n"
+        "mode_path = pathlib.Path('/tmp/runtime-mode-probe')\n"
+        "mode_path.write_text('x')\n"
+        "os.chmod(mode_path, 0o600)\n"
+        "chmod_exact_allowed = (mode_path.stat().st_mode & 0o777) == 0o600\n"
+        "try:\n"
+        "    os.chmod(mode_path, 0o644)\n"
+        "    chmod_other_denied = False\n"
+        "except OSError as error:\n"
+        "    chmod_other_denied = error.errno == errno.EPERM\n"
         "class CloneArgs(ctypes.Structure):\n"
         "    _fields_ = [\n"
         "        ('flags', ctypes.c_ulonglong), ('pidfd', ctypes.c_ulonglong),\n"
@@ -239,6 +248,8 @@ def test_g4_runtime_direct_syscalls_deny_fork_vfork_clone_and_clone3_but_allow_e
         "    'bootstrapCloneAllowed': allowed_bootstrap_clone(),\n"
         "    'codeModeCloneAllowed': allowed_code_mode_clone(),\n"
         "    'threadCloneAllowed': allowed_thread_clone(),\n"
+        "    'rpcSocketModeAllowed': chmod_exact_allowed,\n"
+        "    'otherChmodDenied': chmod_other_denied,\n"
         "    'unixSocketAllowed': socket_result(socket.AF_UNIX)[0],\n"
         "    'inetSocketDenied': socket_result(socket.AF_INET)[1] == errno.EPERM,\n"
         "    'inet6SocketDenied': socket_result(socket.AF_INET6)[1] == errno.EPERM,\n"
@@ -268,6 +279,8 @@ def test_g4_runtime_direct_syscalls_deny_fork_vfork_clone_and_clone3_but_allow_e
             "inet6SocketDenied": True,
             "inetSocketDenied": True,
             "ordinaryCloneDenied": True,
+            "otherChmodDenied": True,
+            "rpcSocketModeAllowed": True,
             "threadCloneAllowed": True,
             "unixSocketAllowed": True,
             "vforkDenied": True,

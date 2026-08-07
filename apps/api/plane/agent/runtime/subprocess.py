@@ -135,6 +135,7 @@ _SECCOMP_RET_ERRNO = 0x00050000
 _SECCOMP_RET_ALLOW = 0x7FFF0000
 _SECCOMP_SOCKET_DOMAIN_OFFSET = 16
 _SECCOMP_CLONE_FLAGS_OFFSET = 16
+_SECCOMP_MODE_OFFSET = 24
 _AF_UNIX = 1
 _CLONE_VM = 0x00000100
 _CLONE_SIGHAND = 0x00000800
@@ -147,6 +148,7 @@ _HERMES_BOOTSTRAP_THREAD_REQUIRED_FLAGS = _CLONE_VM | _CLONE_SIGHAND | _CLONE_TH
 # which reaches clone(SIGCHLD) before exec. It is the only additional process
 # creation shape permitted for the bounded Hermes Code Mode child.
 _HERMES_CODE_MODE_CLONE_FLAGS = _SIGCHLD
+_HERMES_RPC_SOCKET_MODE = 0o600
 _AUDIT_ARCH = {"x86_64": 0xC000003E, "aarch64": 0xC00000B7}
 _SYSCALLS = {
     "x86_64": {
@@ -306,6 +308,21 @@ def _install_linux_kernel_policy() -> None:
                 )
             )
 
+    def allow_arg(name: str, offset: int, value: int) -> None:
+        """Allow one syscall only when its scalar argument has this value."""
+
+        number = syscalls.get(name)
+        if number is not None:
+            instructions.extend(
+                (
+                    _SockFilter(_BPF_JMP_JEQ_K, 0, 4, number),
+                    _SockFilter(_BPF_LD_W_ABS, 0, 0, offset),
+                    _SockFilter(_BPF_JMP_JEQ_K, 1, 0, value),
+                    _SockFilter(_BPF_RET_K, 0, 0, _SECCOMP_RET_ERRNO | errno.EPERM),
+                    _SockFilter(_BPF_RET_K, 0, 0, _SECCOMP_RET_ALLOW),
+                )
+            )
+
     # Classic seccomp cannot safely inspect the sockaddr path supplied to
     # connect(2). Restrict socket creation to AF_UNIX, then allow only the
     # stream operations required by the invocation-bound Hermes host port and
@@ -374,6 +391,11 @@ def _install_linux_kernel_policy() -> None:
                 _SockFilter(_BPF_RET_K, 0, 0, _SECCOMP_RET_ALLOW),
             )
         )
+    # Hermes' invocation-local AF_UNIX server tightens its socket file to
+    # owner-only mode immediately after bind. Permit only that exact mode;
+    # arbitrary chmod calls remain denied, and the read-only rootfs plus
+    # bounded tmpfs/state mounts continue to enforce the path boundary.
+    allow_arg("chmod", _SECCOMP_MODE_OFFSET, _HERMES_RPC_SOCKET_MODE)
     # The outer production runtime container has a read-only root filesystem
     # and exposes only bounded tmpfs/state locations as writable mounts. Hermes
     # legitimately creates invocation-scoped logging and session directories
@@ -407,7 +429,6 @@ def _install_linux_kernel_policy() -> None:
         "symlinkat",
         "mknod",
         "mknodat",
-        "chmod",
         "fchmod",
         "fchmodat",
         "fchmodat2",
