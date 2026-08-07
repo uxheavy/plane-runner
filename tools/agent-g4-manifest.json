@@ -7,6 +7,13 @@
     "candidateCommitSource": "git-head-with-exact-parent",
     "rejectDescendants": true
   },
+  "rollbackBinding": {
+    "fixture": "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json",
+    "currentParentField": "candidateBinding.parentCommit",
+    "acceptedBaselineField": "candidateBinding.acceptedG3Baseline",
+    "acceptedEvidence": "tools/verify-agent-g3.sh",
+    "services": ["api", "worker", "beat-worker", "supervisor", "agent-runtime"]
+  },
   "authority": [
     "AGENTS.md",
     "docs/agent-tooling/GOAL.md",
@@ -145,7 +152,7 @@
     },
     "rollback": {
       "path": "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json",
-      "sha256": "bc9e64cf8369edfa4830a1b6498d824f5eee08180d4d0868cfdcae4df1e6dcf2",
+      "sha256": "7e5a24e9ea4c819a2629b27b982eb025f627f90ce0d1b86c7a6fc75d09f7b572",
       "testPath": "plane/tests/contract/api/test_agent_g4_rollback_drill.py",
       "requiredOutputFields": [
         "externalWrites",

@@ -6,7 +6,6 @@ export PYTHONDONTWRITEBYTECODE=1
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 MANIFEST="${ROOT_DIR}/tools/agent-g4-manifest.json"
 G3_BASE_COMMIT="7c9d35f4c324865c27c84da5016be2c84e460bcc"
-CANDIDATE_PARENT_COMMIT="8a7371208079a7c25ab391e433785c3e67803d72"
 MCP_COMMIT="2dc152e136d7ad952b901e5fe9364a37487297ba"
 SDK_COMMIT="7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
 HERMES_COMMIT="e573a46611e2cb988f1ab43ad34cd8cc3b2cb659"
@@ -17,6 +16,14 @@ RUNTIME_CONTRACT="plane.agent-runtime/v1"
 API_TEST_IMAGE="${PLANE_API_TEST_IMAGE:-plane-g3-external-client-api-tests:prepared}"
 RUNTIME_IMAGE="${PLANE_G4_RUNTIME_IMAGE:-${RUNTIME_IMAGE_TAG}}"
 MODE="${PLANE_G4_MODE:-offline}"
+CANDIDATE_PARENT_COMMIT="$(python3 - "${MANIFEST}" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    print(json.load(handle)["candidateBinding"]["parentCommit"])
+PY
+)"
 CURRENT_STEP="preflight"
 STAGE_COUNT=0
 STACK_STARTED=0
@@ -217,6 +224,9 @@ from pathlib import Path
 manifest_path, root_value, candidate, g3, candidate_parent, mcp, sdk, hermes, image_tag, image_digest, image_revision, runtime_contract = sys.argv[1:]
 root = Path(root_value)
 manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+sys.path.insert(0, str(root / "tools"))
+from validate_agent_g4_live import validate_rollback_fixture
+
 assert manifest["manifestVersion"] == "plane-agent-g4/v1"
 assert manifest["candidateBinding"] == {
     "mode": "exact-single-child",
@@ -224,6 +234,13 @@ assert manifest["candidateBinding"] == {
     "parentCommit": candidate_parent,
     "candidateCommitSource": "git-head-with-exact-parent",
     "rejectDescendants": True,
+}
+assert manifest["rollbackBinding"] == {
+    "fixture": "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json",
+    "currentParentField": "candidateBinding.parentCommit",
+    "acceptedBaselineField": "candidateBinding.acceptedG3Baseline",
+    "acceptedEvidence": "tools/verify-agent-g3.sh",
+    "services": ["api", "worker", "beat-worker", "supervisor", "agent-runtime"],
 }
 assert manifest["pins"] == {
     "hermesCommit": hermes,
@@ -311,6 +328,7 @@ for name, evidence in manifest["offlineEvidence"].items():
         assert f"def {evidence['testName']}" in text, f"required offline test missing: {evidence['testName']}"
     for marker in evidence.get("requiredMarkers", []):
         assert marker in text, f"required offline marker missing: {marker}"
+validate_rollback_fixture(root / manifest["rollbackBinding"]["fixture"], root, manifest)
 print(f"manifest=validated stages={len(manifest['stages'])} pytest_paths={len(manifest['pytestPaths'])} retired_absent={len(manifest['retiredDocuments'])} offline_evidence={len(manifest['offlineEvidence'])} candidate_parent={candidate_parent}")
 PY
 }

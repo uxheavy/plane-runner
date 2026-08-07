@@ -252,15 +252,30 @@ docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose
 
 `apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` is the pin
 manifest. The current candidate is Plane commit
-`5f7e27f969b54ab94f0c6a6da9ea6feca27b7e32`; the previously accepted G3
-candidate is Plane commit `6c5ad927b2e31e3d1cd608fc89fbb8a308cc9809`.
-API, worker, `beat-worker`, supervisor, and `agent-runtime` each switch their
-revision to the corresponding value in that manifest. Both sides explicitly
-use prepared image digest
-`sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e`;
-the rollback reasserts this immutable runtime image rather than accepting a
-mutable tag. The operation contract remains `plane.operation/v1`; the runtime
-contract remains `plane.agent-runtime/v1`.
+`8a7371208079a7c25ab391e433785c3e67803d72`; the previously accepted G3
+candidate is Plane commit `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
+The current binding carries Hermes commit
+`e573a46611e2cb988f1ab43ad34cd8cc3b2cb659`, MCP gitlink
+`2dc152e136d7ad952b901e5fe9364a37487297ba`, SDK gitlink
+`7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`, runtime image tag
+`plane-agent-runtime:hermes-e573a466`, runtime image digest
+`sha256:ea897bbe22a0044d58c16c4091bdf028e4661c2320d00e737f351cb3a1cdd734`,
+runtime revision `24d38235b2afea809ebb0e537e2f3e8015da8ee2`, and runtime
+contract `plane.agent-runtime/v1`. API, worker, `beat-worker`, supervisor,
+and `agent-runtime` each switch their revision and image digest to the
+corresponding current value in that manifest; the operation services retain
+`plane.operation/v1` and the runtime services retain `plane.agent-runtime/v1`.
+The previous services use immutable image digest
+`sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e`,
+the image pin recorded by the accepted G3 verifier. The rollback reasserts
+these immutable pins rather than accepting a mutable tag.
+
+For final-wrapper integration, the one canonical current-parent field is
+`tools/agent-g4-manifest.json:candidateBinding.parentCommit`. Set it to the
+wrapper’s immediate parent after all implementation lanes are integrated;
+the verifier derives the expected current parent from that field and requires
+the materialized fixture `current.planeCommit` and its manifest SHA-256 to
+agree before the rollback stage can run.
 
 Migration `db.0141_operationgateway_quotas` is additive: it adds quota fields,
 indexes, and the quota bucket table. Rollback is explicitly forward-only:

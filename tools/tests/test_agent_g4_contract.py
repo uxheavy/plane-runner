@@ -15,6 +15,8 @@ from validate_agent_g4_live import (  # noqa: E402
     ContractError,
     candidate_has_exact_parent,
     exact_binding,
+    validate_rollback_fixture,
+    validate_rollback_runbook,
     validate_files,
 )
 from summarize_agent_g4 import summarize  # noqa: E402
@@ -252,11 +254,58 @@ class G4ContractTests(unittest.TestCase):
         self.assertEqual(stage["passed"], "1")
         self.assertRegex(stage["evidence_sha256"], r"^[0-9a-f]{64}$")
 
+    def test_rollback_fixture_is_bound_to_manifest_and_accepted_g3_evidence(self):
+        result = validate_rollback_fixture(
+            ROOT / "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json",
+            ROOT,
+            MANIFEST,
+        )
+        self.assertEqual(result["current"]["planeCommit"], MANIFEST["candidateBinding"]["parentCommit"])
+        self.assertEqual(result["previous"]["planeCommit"], MANIFEST["candidateBinding"]["acceptedG3Baseline"])
+        self.assertEqual(
+            result["acceptedG3"]["imageDigest"],
+            "sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e",
+        )
+
+    def test_rollback_stale_and_arbitrary_pin_mutations_are_rejected(self):
+        fixture_path = ROOT / "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json"
+        original = json.loads(fixture_path.read_text(encoding="utf-8"))
+        mutations = (
+            ("current.planeCommit", lambda value: value["current"].update({"planeCommit": "5f7e27f969b54ab94f0c6a6da9ea6feca27b7e32"})),
+            ("current.service.imageDigest", lambda value: value["current"]["services"]["api"].update({"imageDigest": "sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e"})),
+            ("previous.planeCommit", lambda value: value["previous"].update({"planeCommit": "6c5ad927b2e31e3d1cd608fc89fbb8a308cc9809"})),
+            ("current.runtime.imageDigest", lambda value: value["current"]["runtime"].update({"imageDigest": "sha256:" + "0" * 64})),
+            ("previous.service.imageDigest", lambda value: value["previous"]["services"]["worker"].update({"imageDigest": "sha256:" + "1" * 64})),
+        )
+        for name, mutate in mutations:
+            with self.subTest(name=name):
+                value = copy.deepcopy(original)
+                mutate(value)
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "rollback.json"
+                    path.write_text(json.dumps(value), encoding="utf-8")
+                    with self.assertRaisesRegex(ContractError, "rollback_"):
+                        validate_rollback_fixture(path, ROOT, MANIFEST)
+
+    def test_rollback_runbook_examples_are_pin_bound(self):
+        fixture_path = ROOT / "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json"
+        fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+        runbook_path = ROOT / MANIFEST["runbook"]
+        runbook = runbook_path.read_text(encoding="utf-8")
+        validate_rollback_runbook(runbook, MANIFEST, fixture)
+        with self.assertRaisesRegex(ContractError, "rollback_runbook_missing"):
+            validate_rollback_runbook(runbook.replace("python3 tools/agent-g4-rollback-drill.py", "python3 tools/other-drill.py"), MANIFEST, fixture)
+        with self.assertRaisesRegex(ContractError, "rollback_runbook_stale_pin_present"):
+            validate_rollback_runbook(runbook + "\n5f7e27f969b54ab94f0c6a6da9ea6feca27b7e32\n", MANIFEST, fixture)
+
     def test_dirty_exception_is_narrow_and_structural(self):
         script = (ROOT / "tools/verify-agent-g4.sh").read_text(encoding="utf-8")
         self.assertEqual(script.count('[[ "${path}" == ".codex/config.toml" ]]'), 1)
         self.assertNotIn("path == \".env\"", script)
         self.assertNotIn("path == \".git\"", script)
+        self.assertNotIn('CANDIDATE_PARENT_COMMIT="8a7371208079a7c25ab391e433785c3e67803d72"', script)
+        self.assertIn('["candidateBinding"]["parentCommit"]', script)
+        self.assertIn("validate_rollback_fixture", script)
 
 
 if __name__ == "__main__":

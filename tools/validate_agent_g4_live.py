@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,6 +37,10 @@ DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 SECRET_FIELD_RE = re.compile(
     r"(?i)(?:password|passwd|secret|token|api[_-]?key|authorization|credential)\s*[\"']?\s*[:=]"
 )
+ROLLBACK_SERVICE_NAMES = ("api", "worker", "beat-worker", "supervisor", "agent-runtime")
+ROLLBACK_MIGRATION = "db.0141_operationgateway_quotas"
+ROLLBACK_OPERATION_CONTRACT = "plane.operation/v1"
+ROLLBACK_RUNTIME_CONTRACT = "plane.agent-runtime/v1"
 
 
 class ContractError(ValueError):
@@ -141,6 +146,171 @@ def candidate_has_exact_parent(candidate_parents: list[str], expected_parent: st
     """Return true only for a one-parent wrapper, never for a descendant."""
 
     return len(candidate_parents) == 1 and candidate_parents[0] == expected_parent
+
+
+def _git_text_at(root: Path, commit: str, relative: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(root), "show", f"{commit}:{relative}"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise ContractError(f"rollback_accepted_evidence_missing_{relative.replace('/', '_')}")
+    return result.stdout
+
+
+def _shell_assignment(text: str, name: str) -> str:
+    match = re.search(rf"^{re.escape(name)}=\"([^\"]+)\"$", text, re.MULTILINE)
+    if match is None:
+        raise ContractError(f"rollback_accepted_evidence_missing_{name}")
+    return match.group(1)
+
+
+def _rollback_services(section: Any, name: str) -> dict[str, dict[str, str]]:
+    services = _object(_required(_object(section, name), "services", name), f"{name}_services")
+    if set(services) != set(ROLLBACK_SERVICE_NAMES):
+        raise ContractError(f"rollback_{name}_services_mismatch")
+    result: dict[str, dict[str, str]] = {}
+    for service in ROLLBACK_SERVICE_NAMES:
+        row = _object(services[service], f"{name}_{service}")
+        if set(row) != {"revision", "imageDigest", "contract"}:
+            raise ContractError(f"rollback_{name}_{service}_fields_mismatch")
+        result[service] = {
+            "revision": _required(row, "revision", f"{name}_{service}"),
+            "imageDigest": _required(row, "imageDigest", f"{name}_{service}"),
+            "contract": _required(row, "contract", f"{name}_{service}"),
+        }
+    return result
+
+
+def _rollback_exact(actual: Any, expected: Any, name: str) -> None:
+    if actual != expected:
+        raise ContractError(f"rollback_{name}_mismatch")
+
+
+def validate_rollback_runbook(runbook_text: str, manifest: dict[str, Any], fixture: dict[str, Any]) -> None:
+    """Require executable rollback instructions to use the bound pin set."""
+
+    candidate_binding = _object(_required(manifest, "candidateBinding", "manifest"), "candidateBinding")
+    pins = _object(_required(manifest, "pins", "manifest"), "manifest_pins")
+    current = _object(_required(fixture, "current", "rollback"), "rollback_current")
+    previous = _object(_required(fixture, "previous", "rollback"), "rollback_previous")
+    current_parent = _required(candidate_binding, "parentCommit", "candidateBinding")
+    g3_baseline = _required(candidate_binding, "acceptedG3Baseline", "candidateBinding")
+    current_runtime = _object(_required(current, "runtime", "rollback_current"), "rollback_current_runtime")
+    required = (
+        "current candidate is Plane commit",
+        f"`{current_parent}`",
+        "previously accepted G3",
+        "candidate is Plane commit",
+        f"`{g3_baseline}`",
+        "Hermes commit",
+        f"`{pins['hermesCommit']}`",
+        "MCP gitlink",
+        f"`{pins['mcpGitlink']}`",
+        "SDK gitlink",
+        f"`{pins['sdkGitlink']}`",
+        "runtime image tag",
+        f"`{pins['runtimeImageTag']}`",
+        "runtime image digest",
+        f"`{pins['runtimeImageDigest']}`",
+        "runtime revision",
+        f"`{pins['runtimeImageRevision']}`",
+        "runtime",
+        "contract",
+        f"`{pins['runtimeContract']}`",
+        "previous services use immutable image digest",
+        f"`{previous['services']['api']['imageDigest']}`",
+        "python3 tools/agent-g4-rollback-drill.py",
+        f"Migration `{ROLLBACK_MIGRATION}`",
+        "keep the database at leaf `0141`",
+        "never reverse to `0140`",
+    )
+    for marker in required:
+        if marker not in runbook_text:
+            raise ContractError(f"rollback_runbook_missing_{marker.replace(' ', '_')}")
+    for stale in (
+        "5f7e27f969b54ab94f0c6a6da9ea6feca27b7e32",
+        "6c5ad927b2e31e3d1cd608fc89fbb8a308cc9809",
+    ):
+        if stale in runbook_text:
+            raise ContractError("rollback_runbook_stale_pin_present")
+    _rollback_exact(current_runtime["imageDigest"], pins["runtimeImageDigest"], "current_runtime_imageDigest")
+
+
+def validate_rollback_fixture(fixture_path: Path, root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
+    """Bind the disposable rollback fixture to G4 pins and accepted G3 evidence."""
+
+    fixture = _read_json(fixture_path, "rollback")
+    binding = _object(_required(manifest, "rollbackBinding", "manifest"), "rollbackBinding")
+    _exact(
+        binding,
+        {
+            "fixture": "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json",
+            "currentParentField": "candidateBinding.parentCommit",
+            "acceptedBaselineField": "candidateBinding.acceptedG3Baseline",
+            "acceptedEvidence": "tools/verify-agent-g3.sh",
+            "services": list(ROLLBACK_SERVICE_NAMES),
+        },
+        "manifest_rollbackBinding",
+    )
+    candidate_binding = _object(_required(manifest, "candidateBinding", "manifest"), "candidateBinding")
+    pins = _object(_required(manifest, "pins", "manifest"), "manifest_pins")
+    current = _object(_required(fixture, "current", "rollback"), "rollback_current")
+    previous = _object(_required(fixture, "previous", "rollback"), "rollback_previous")
+    current_parent = _required(candidate_binding, "parentCommit", "candidateBinding")
+    g3_baseline = _required(candidate_binding, "acceptedG3Baseline", "candidateBinding")
+    _rollback_exact(_required(current, "planeCommit", "rollback_current"), current_parent, "current_planeCommit")
+    _rollback_exact(_required(previous, "planeCommit", "rollback_previous"), g3_baseline, "previous_planeCommit")
+    _rollback_exact(_required(current, "migrationLeaf", "rollback_current"), ROLLBACK_MIGRATION, "current_migrationLeaf")
+    _rollback_exact(_required(previous, "migrationLeaf", "rollback_previous"), ROLLBACK_MIGRATION, "previous_migrationLeaf")
+
+    _rollback_exact(
+        _required(current, "runtime", "rollback_current"),
+        {
+            "hermesCommit": pins["hermesCommit"],
+            "mcpGitlink": pins["mcpGitlink"],
+            "sdkGitlink": pins["sdkGitlink"],
+            "imageTag": pins["runtimeImageTag"],
+            "imageDigest": pins["runtimeImageDigest"],
+            "runtimeRevision": pins["runtimeImageRevision"],
+            "contract": pins["runtimeContract"],
+        },
+        "current_runtime",
+    )
+
+    current_services = _rollback_services(current, "rollback_current")
+    previous_services = _rollback_services(previous, "rollback_previous")
+    expected_contracts = {
+        service: ROLLBACK_RUNTIME_CONTRACT if service in {"supervisor", "agent-runtime"} else ROLLBACK_OPERATION_CONTRACT
+        for service in ROLLBACK_SERVICE_NAMES
+    }
+    for service in ROLLBACK_SERVICE_NAMES:
+        _rollback_exact(current_services[service]["revision"], current_parent, f"current_{service}_revision")
+        _rollback_exact(current_services[service]["imageDigest"], pins["runtimeImageDigest"], f"current_{service}_imageDigest")
+        _rollback_exact(current_services[service]["contract"], expected_contracts[service], f"current_{service}_contract")
+
+    evidence = _git_text_at(root, g3_baseline, binding["acceptedEvidence"])
+    accepted_g3 = {
+        "hermesCommit": _shell_assignment(evidence, "HERMES_COMMIT"),
+        "mcpGitlink": _shell_assignment(evidence, "MCP_COMMIT"),
+        "sdkGitlink": _shell_assignment(evidence, "SDK_COMMIT"),
+        "imageDigest": _shell_assignment(evidence, "API_TEST_IMAGE_DIGEST"),
+    }
+    for key in ("hermesCommit", "mcpGitlink", "sdkGitlink"):
+        _rollback_exact(accepted_g3[key], pins[key], f"accepted_g3_{key}")
+    for service in ROLLBACK_SERVICE_NAMES:
+        _rollback_exact(previous_services[service]["revision"], g3_baseline, f"previous_{service}_revision")
+        _rollback_exact(previous_services[service]["imageDigest"], accepted_g3["imageDigest"], f"previous_{service}_imageDigest")
+        _rollback_exact(previous_services[service]["contract"], expected_contracts[service], f"previous_{service}_contract")
+
+    strategy = _object(_required(fixture, "strategy", "rollback"), "rollback_strategy")
+    _rollback_exact(strategy.get("migration"), ROLLBACK_MIGRATION, "strategy_migration")
+    _rollback_exact(strategy.get("reverseMigrationAllowed"), False, "strategy_reverseMigrationAllowed")
+    runbook_text = (root / _required(manifest, "runbook", "manifest")).read_text(encoding="utf-8")
+    validate_rollback_runbook(runbook_text, manifest, fixture)
+    return {"current": current, "previous": previous, "acceptedG3": accepted_g3}
 
 
 def _thresholds(value: Any, name: str) -> dict[str, float]:
