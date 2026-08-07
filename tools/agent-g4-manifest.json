@@ -3,7 +3,7 @@
   "candidateBinding": {
     "mode": "exact-single-child",
     "acceptedG3Baseline": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
-    "parentCommit": "61a73f8719651871afa6f6a6bcbb856a8618f56f",
+    "parentCommit": "468f77eb4289904cab420eaa2ad108ac82eadbfb",
     "candidateCommitSource": "git-head-with-exact-parent",
     "rejectDescendants": true
   },
@@ -87,6 +87,7 @@
   ],
   "scripts": [
     "tools/check-agent-settings-reuse.py",
+    "tools/check-local-dev.sh",
     "tools/check-local-dev-topology.py",
     "tools/verify-api-migrations.sh",
     "tools/verify-agent-g3.sh",
@@ -154,7 +155,7 @@
     },
     "rollback": {
       "path": "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json",
-      "sha256": "a7d13d4ee988e2b666638857e3389c4577ee710ba8028ed1d73d5daae08012bc",
+      "sha256": "89c018c7e1143a8305440bbda46212d0ff7f91f2f6cefc65cec86139c148e9f8",
       "testPath": "plane/tests/contract/api/test_agent_g4_rollback_drill.py",
       "requiredOutputFields": [
         "externalWrites",
@@ -181,7 +182,8 @@
     }
   },
   "verifierTests": [
-    "tools/tests/test_agent_g4_contract.py"
+    "tools/tests/test_agent_g4_contract.py",
+    "tools/tests/test_local_dev_topology.py"
   ],
   "pendingInputs": {
     "liveProviderModel": "Provider/model live canaries remain separately authorized; offline verification must not claim live closure.",

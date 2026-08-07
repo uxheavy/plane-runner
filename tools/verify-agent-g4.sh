@@ -550,6 +550,7 @@ g4_gateway_workload() {
 }
 
 g4_production_configuration() {
+    pnpm check:local-dev:agent
     run_api sh -c '
         set -Eeuo pipefail
         export PYTHONPATH=/workspace/apps/api${PYTHONPATH:+:${PYTHONPATH}}
