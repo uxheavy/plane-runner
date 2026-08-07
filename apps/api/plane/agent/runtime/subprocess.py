@@ -308,7 +308,9 @@ def _install_linux_kernel_policy() -> None:
 
     # Classic seccomp cannot safely inspect the sockaddr path supplied to
     # connect(2). Restrict socket creation to AF_UNIX, then allow only the
-    # stream operations required by the invocation-bound Hermes host port.
+    # stream operations required by the invocation-bound Hermes host port and
+    # the child Code Mode RPC server. AF_INET/AF_INET6 socket creation remains
+    # denied, so these operations cannot become a network listener.
     # close_fds=True and the exact pinned bootstrap argv provide the remaining
     # per-invocation binding; AF_INET/AF_INET6 sockets never become available.
     socket_number = syscalls.get("socket")
@@ -322,7 +324,18 @@ def _install_linux_kernel_policy() -> None:
                 _SockFilter(_BPF_RET_K, 0, 0, _SECCOMP_RET_ALLOW),
             )
         )
-    for name in ("connect", "sendto", "recvfrom"):
+    for name in (
+        "connect",
+        "bind",
+        "listen",
+        "accept",
+        "accept4",
+        "shutdown",
+        "sendto",
+        "recvfrom",
+        "sendmsg",
+        "recvmsg",
+    ):
         allow(name)
 
     # The pinned Hermes bootstrap uses Python's close_fds=True Popen path. On
@@ -371,13 +384,6 @@ def _install_linux_kernel_policy() -> None:
     # Hermes Code Mode cleanup. The read-only rootfs still confines those
     # operations to the explicit writable mounts.
     for name in (
-        "bind",
-        "listen",
-        "accept",
-        "accept4",
-        "shutdown",
-        "sendmsg",
-        "recvmsg",
         "socketpair",
         "clone",
         "fork",
