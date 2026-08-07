@@ -102,9 +102,9 @@ path, never the secret as an environment value.
 Validate the resolved topology before starting anything:
 
 ```sh
-docker compose --env-file deployments/cli/community/variables.env \
+docker compose -p plane-g4-load-luna --env-file deployments/cli/community/variables.env \
   -f deployments/cli/community/docker-compose.yml config --quiet
-docker compose --env-file deployments/cli/community/variables.env \
+docker compose -p plane-g4-load-luna --env-file deployments/cli/community/variables.env \
   -f deployments/cli/community/docker-compose.yml ps agent-runtime
 ```
 
@@ -113,10 +113,10 @@ authenticated dispatch and host callback seams. It has no published host
 port. Its health endpoint is checked from inside the disposable container:
 
 ```sh
-docker compose --env-file deployments/cli/community/variables.env \
+docker compose -p plane-g4-load-luna --env-file deployments/cli/community/variables.env \
   -f deployments/cli/community/docker-compose.yml exec agent-runtime \
   python3 -c 'import urllib.request; print(urllib.request.urlopen("http://127.0.0.1:8080/health/live", timeout=2).read().decode())'
-docker compose --env-file deployments/cli/community/variables.env \
+docker compose -p plane-g4-load-luna --env-file deployments/cli/community/variables.env \
   -f deployments/cli/community/docker-compose.yml exec agent-runtime \
   python3 -c 'import urllib.request; print(urllib.request.urlopen("http://127.0.0.1:8080/health/ready", timeout=2).read().decode())'
 ```
@@ -144,7 +144,7 @@ container and issue the request there; a 202 response contains only the
 health schema:
 
 ```sh
-docker compose exec agent-runtime python3 -c '
+docker compose -p plane-g4-load-luna exec agent-runtime python3 -c '
 import json, urllib.request
 secret = open("/run/secrets/plane_agent_runtime", encoding="utf-8").read().strip()
 request = urllib.request.Request(
@@ -175,8 +175,8 @@ runbook and must never be used as local proof.
 Capture bounded, redacted evidence:
 
 ```sh
-docker compose logs --tail=100 agent-runtime
-docker inspect --format '{{json .State.Health}}' "$(docker compose ps -q agent-runtime)"
+docker compose -p plane-g4-load-luna logs --tail=100 agent-runtime
+docker inspect --format '{{json .State.Health}}' "$(docker compose -p plane-g4-load-luna ps -q agent-runtime)"
 ```
 
 Check whether the status is `dependency_failure`, `draining`, or
@@ -185,31 +185,155 @@ the safety-stop marker and the Compose resource/security settings before
 restarting. Runtime process diagnostics are capped; request and response
 frames are canonical JSON and no ambient parent environment is inherited.
 
-## Rollback
+## Offline production-candidate load thresholds
 
-The runtime image and command are configuration, not a database migration.
-Pin the previously validated image tag, resolve Compose again, then replace
-only the runtime service:
+The canonical threshold fixture is
+`apps/api/plane/tests/fixtures/agent_g4_load_thresholds.json`. It is an
+offline production-candidate gate for the pinned disposable PostgreSQL stack,
+not a live or GA SLO. The live/GA values must be recalibrated from an approved
+representative workload before rollout; passing this fixture does not grant
+deployment authority.
+
+| Dimension | Candidate threshold | Evidence emitted |
+| --- | ---: | --- |
+| Workload | 128 requests, 8 workers, 16 agent identities | `requests`, `workers`, `measuredAgentIdentities` |
+| Sustained duration | at least 0.75 seconds with 25 ms inter-batch pacing | `sustainedDurationSeconds` |
+| Throughput | at least 2 requests/second | `throughputPerSecond` |
+| Latency | p95 at most 7,500 ms; p99 at most 10,000 ms | `latencyMs.p95`, `latencyMs.p99` |
+| Error rate | 0% unexpected statuses | `errors`, `errorRate` |
+| Saturation | at least 1% quota throttling | `throttled`, `saturation` |
+| Queueing | p95 executor queue delay at most 750 ms | `queueingMs.p95` |
+| Database/resource | at most 24 PostgreSQL sessions, 768 MiB RSS, 90 CPU seconds | `resources` |
+| Safety invariants | full correlation/audit coverage, one replay row/effect, quota cleanup | `thresholdResults`, `breaches` |
+
+Run the real workload in a fresh test stack and retain the single JSON line
+for the verifier lane. Repeat the complete cycle at least three times, with
+`down -v` between runs:
 
 ```sh
-docker compose -f deployments/cli/community/docker-compose.yml \
-  up -d --no-deps --force-recreate agent-runtime
+docker compose -p plane-g4-load-luna -f docker-compose-test.yml down -v --remove-orphans
+docker compose -p plane-g4-load-luna -f docker-compose-test.yml up -d \
+  test-db test-redis test-mq test-minio
+docker compose -p plane-g4-load-luna -f docker-compose-test.yml run --rm --no-deps \
+  -e PLANE_G4_LOAD_JSON=1 --entrypoint /bin/sh api-tests -lc \
+  'pip install --no-cache-dir -r requirements/test.txt && pytest -q -s \
+  plane/tests/contract/api/test_operation_gateway_g4.py \
+  -k postgresql_gateway_workload_measures_real_quota_and_audit_evidence'
+docker compose -p plane-g4-load-luna -f docker-compose-test.yml down -v --remove-orphans
 ```
 
-Do not replay an invocation merely because the container was replaced. Plane's
-supervisor must establish lease ownership and reconcile any
-`outcome_unknown` state first. Exactly one Plane terminal event remains the
-authority.
+The command fails on any threshold breach and reports bounded machine-readable
+`latencyMs`, `queueingMs`, `resources`, `thresholdResults`, and `breaches`
+fields. It refuses a non-test database; do not substitute a simulation or a
+shared environment.
 
-## Restore and reconciliation
+## Coordinated rollback
 
-Restore the disposable runtime marker and container state only after the
-incident is understood. Re-check the runtime checkout/image identity, command,
-resource policy, and readiness. Reconcile every affected invocation from
-Plane's durable state; mark cancellation and lease death through the existing
-supervisor paths. A completed transport-ledger frame may be read only for the
-same invocation digest; a running or outcome-unknown ledger entry is never a
-blind replay authorization.
+### Trigger and safety stop
+
+Trigger rollback on any load-threshold breach, unexpected gateway error,
+audit/readback mismatch, quota leak, migration drift, runtime dependency
+failure, or an `outcome_unknown` state that cannot be reconciled from durable
+Plane state. Stop accepting new Agent work, stop the beat scheduler, and
+record the Plane cancellation/control transition first. Only after that durable
+write succeeds, issue the best-effort runtime safety stop. A failed durable
+write must not call the runtime. A process or image replacement is never a
+replay authorization.
+
+The safety stop remains the Plane lifecycle authority; runtime enforcement is
+ephemeral and must be re-read after replacement:
+
+```sh
+docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose.yml exec agent-runtime \
+  python3 -c 'import json,urllib.request; s=open("/run/secrets/plane_agent_runtime").read().strip(); r=urllib.request.Request("http://127.0.0.1:8080/safety-stop", data=json.dumps({"workspaceId":"<workspace>","invocationId":"<invocation>","reason":"<incident>","idempotencyKey":"<stop-key>"}, sort_keys=True, separators=(",", ":")).encode(), headers={"Authorization":"Bearer "+s,"Content-Type":"application/json"}, method="POST"); print(urllib.request.urlopen(r, timeout=2).read().decode())'
+```
+
+### Exact pins and migration strategy
+
+`apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` is the pin
+manifest. The current candidate is Plane commit
+`5f7e27f969b54ab94f0c6a6da9ea6feca27b7e32`; the previously accepted G3
+candidate is Plane commit `6c5ad927b2e31e3d1cd608fc89fbb8a308cc9809`.
+API, worker, `beat-worker`, supervisor, and `agent-runtime` each switch their
+revision to the corresponding value in that manifest. Both sides explicitly
+use prepared image digest
+`sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e`;
+the rollback reasserts this immutable runtime image rather than accepting a
+mutable tag. The operation contract remains `plane.operation/v1`; the runtime
+contract remains `plane.agent-runtime/v1`.
+
+Migration `db.0141_operationgateway_quotas` is additive: it adds quota fields,
+indexes, and the quota bucket table. Rollback is explicitly forward-only:
+keep the database at leaf `0141`, never reverse to `0140`, and run the prior
+services only after confirming they ignore the additive quota state. The
+`0141` migration blob is
+`1c6b0e3fb221cccd9ed2631d68cbf10ba5dc399b` and its SHA-256 is
+`797d95b90be5041e76cbf60ea27ee8ca0cea6045a6a67fab3a3181c173e1ce9e`.
+The compatibility floor is `0140` (blob
+`d51561b1d482917ebe533e95c566b9baf5ddef9c`), not a downgrade target.
+
+### Disposable executable drill
+
+The drill performs current-candidate upgrade, creates a representative
+`outcome_unknown` operation with an already-committed durable effect, switches
+all five service pins/contracts, keeps migration `0141`, reconciles from the
+effect/audit/outcome state, releases quota, checks idempotent re-run, and
+removes its temporary database. It never connects to Plane or deploys:
+
+```sh
+python3 tools/agent-g4-rollback-drill.py
+```
+
+The one-line JSON result must contain `passes:true`, empty `breaches`,
+`externalWrites:false`, `migrationLeaf:"db.0141_operationgateway_quotas"`,
+three audit rows, one outcome, one idempotency row, zero active quota
+reservations, and `cleanup.temporaryDatabaseRemoved:true`. This is the
+exercised rollback proof; a prose-only rollback is not sufficient.
+
+### Coordinated service switch and verification
+
+For an authorized disposable Compose rehearsal, render and inspect the
+resolved configuration with the exact previous pins before replacement, then
+switch API, worker, beat-worker, runtime, and the Plane supervisor control
+path as one change window:
+
+```sh
+docker compose -p plane-g4-load-luna --env-file deployments/cli/community/variables.env \
+  -f deployments/cli/community/docker-compose.yml config --quiet
+docker compose -p plane-g4-load-luna --env-file deployments/cli/community/variables.env \
+  -f deployments/cli/community/docker-compose.yml stop api worker beat-worker agent-runtime
+docker compose -p plane-g4-load-luna --env-file deployments/cli/community/variables.env \
+  -f deployments/cli/community/docker-compose.yml up -d --no-deps --force-recreate \
+  api worker beat-worker agent-runtime
+docker compose -p plane-g4-load-luna --env-file deployments/cli/community/variables.env \
+  -f deployments/cli/community/docker-compose.yml exec api python manage.py \
+  migrate --plan
+docker compose -p plane-g4-load-luna --env-file deployments/cli/community/variables.env \
+  -f deployments/cli/community/docker-compose.yml ps api worker beat-worker agent-runtime
+```
+
+`migrate --plan` must show no reverse operation and the database must still
+report leaf `0141`. Read back every affected idempotency record, gateway audit
+receipt, durable operation effect/outcome, and quota bucket before permitting
+any continuation. A completed effect may be reconciled exactly once; a missing
+or conflicting effect is a stop/escalation, never a blind replay.
+
+### Restore, reconciliation, and abort paths
+
+After the incident is understood, re-check all five previous revisions and
+digests, the approved command/resource policy, runtime readiness, migration
+leaf, and safety-stop state. Reconcile each affected invocation through Plane's
+supervisor and outcome readback. Confirm audit/outcome counts, exact
+idempotency digest, terminal-event uniqueness, and zero leaked quota
+reservations. Re-run the rollback drill and the relevant gateway/migration
+contract suites before restoring new work.
+
+Abort and escalate immediately if any pin is missing, a digest resolves to a
+mutable tag, services disagree on the contract, `0141` is absent or a reverse
+plan appears, audit/outcome readback is incomplete, a durable effect is not
+unique, quota remains active after reconciliation, or runtime enforcement does
+not acknowledge the safety stop. Preserve bounded logs and identifiers only;
+never include a runtime secret or provider credential.
 
 ## Evidence cleanup
 
@@ -217,7 +341,7 @@ Use a disposable Compose project and remove it after collecting the required
 bounded evidence:
 
 ```sh
-docker compose -f deployments/cli/community/docker-compose.yml down -v --remove-orphans
+docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose.yml down -v --remove-orphans
 ```
 
 Remove any local safety-stop marker and temporary ledger created for the test.

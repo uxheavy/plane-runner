@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "plane-operation-gateway-load-thresholds/v1",
+  "classification": "offline-production-candidate",
+  "candidateOnly": true,
+  "liveGaSloRequired": false,
+  "workload": {
+    "requests": 128,
+    "workers": 8,
+    "agentIdentities": 16,
+    "paceBetweenBatchesMs": 25,
+    "minimumSustainedDurationSeconds": 0.75
+  },
+  "thresholds": {
+    "minimumThroughputPerSecond": 2.0,
+    "maximumP95LatencyMs": 7500.0,
+    "maximumP99LatencyMs": 10000.0,
+    "maximumErrorRate": 0.0,
+    "minimumSaturationRate": 0.01,
+    "maximumQueueingP95Ms": 750.0,
+    "minimumSustainedDurationSeconds": 0.75,
+    "maximumDatabaseConnections": 24,
+    "maximumResidentSetMb": 768.0,
+    "maximumCpuSeconds": 90.0,
+    "minimumCorrelationCoverage": 1.0,
+    "minimumAuditCoverage": 1.0,
+    "maximumDuplicateEffects": 0,
+    "requireActualGateway": true,
+    "requireAgentDistribution": true
+  },
+  "notes": {
+    "throughputAndLatency": "Strong offline candidate gates for the pinned local PostgreSQL stack; recalibrate with live representative traffic before GA.",
+    "saturation": "The workload must exercise the configured quota ceiling and emit throttling evidence; this is not a live capacity target.",
+    "resources": "Connection, resident-set, CPU, and executor-queue bounds catch local regressions without claiming production host capacity.",
+    "duration": "The paced eight-worker run is long enough to expose sustained queueing on the disposable stack; it is a candidate minimum, not a live SLO."
+  }
+}

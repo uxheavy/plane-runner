@@ -1,3 +1,5 @@
+import json
+import os
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -356,15 +358,26 @@ def test_quota_cleanup_is_bounded_idempotent_and_concurrency_safe(workspace):
 @pytest.mark.django_db(transaction=True)
 def test_postgresql_gateway_workload_measures_real_quota_and_audit_evidence():
     result = run_gateway_workload(requests=128, workers=8, agent_count=16)
+    if os.environ.get("PLANE_G4_LOAD_JSON") == "1":
+        print(json.dumps({"event": "agent.g4.gateway.load", **result}, sort_keys=True))
 
-    assert result["manifestVersion"] == "plane-operation-gateway-load/v2"
+    assert result["manifestVersion"] == "plane-operation-gateway-load/v3"
     assert result["actualGateway"] is True
     assert result["simulation"] is False
     assert result["configuredAgentIdentities"] == 16
     assert result["measuredAgentIdentities"] == 16
-    assert result["throughputPerSecond"] > 0
+    evidence = json.dumps(result, sort_keys=True)
+    assert result["throughputPerSecond"] >= result["thresholds"]["minimumThroughputPerSecond"], evidence
+    assert result["latencyMs"]["p95"] <= result["thresholds"]["maximumP95LatencyMs"], evidence
+    assert result["latencyMs"]["p99"] <= result["thresholds"]["maximumP99LatencyMs"], evidence
     assert result["errors"] == 0
     assert result["errorRate"] == 0
+    assert result["saturation"] >= result["thresholds"]["minimumSaturationRate"], evidence
+    assert result["queueingMs"]["p95"] <= result["thresholds"]["maximumQueueingP95Ms"], evidence
+    assert result["resources"]["maxDatabaseConnections"] <= result["thresholds"]["maximumDatabaseConnections"], evidence
+    assert result["resources"]["maxResidentSetMb"] <= result["thresholds"]["maximumResidentSetMb"], evidence
+    assert result["resources"]["cpuSeconds"] <= result["thresholds"]["maximumCpuSeconds"], evidence
+    assert result["sustainedDurationSeconds"] >= result["thresholds"]["minimumSustainedDurationSeconds"], evidence
     assert result["correlationCoverage"] == 1
     assert result["auditCoverage"] == 1
     assert result["correlationAuditCoverage"] == 1
@@ -374,4 +387,4 @@ def test_postgresql_gateway_workload_measures_real_quota_and_audit_evidence():
     assert result["productionLimits"]["invocationRequests"] == 64
     assert result["productionLimits"]["invocationActive"] == QUOTA_MAX_INVOCATION_ACTIVE
     assert result["throttled"] > 0
-    assert result["passes"] is True
+    assert result["passes"] is True, evidence
