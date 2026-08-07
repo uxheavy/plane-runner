@@ -102,6 +102,7 @@ def test_g4_runtime_dispatch_is_cross_process_and_revokes_invocation_credentials
 def test_g4_runtime_dispatch_child_rejects_network_and_process_escapes(tmp_path):
     fixture = (
         "import ctypes, errno, json, os, platform, socket, subprocess, sys\n"
+        "from plane.agent.runtime.subprocess import _SYSCALLS\n"
         "sys.stdin.buffer.read()\n"
         "child = subprocess.run([sys.executable, '-c', 'print(\"child\")'], capture_output=True, check=False)\n"
         "bootstrap_child_allowed = child.returncode == 0 and child.stdout == b'child\\n'\n"
@@ -115,9 +116,12 @@ def test_g4_runtime_dispatch_child_rejects_network_and_process_escapes(tmp_path)
         "    except OSError:\n"
         "        return True\n"
         "machine = platform.machine()\n"
-        "fork_syscall = {'x86_64': 57, 'aarch64': 107}[machine]\n"
+        "syscalls = _SYSCALLS[machine]\n"
         "libc = ctypes.CDLL(None, use_errno=True)\n"
         "def denied_process():\n"
+        "    fork_syscall = syscalls.get('fork')\n"
+        "    if fork_syscall is None:\n"
+        "        return 'unsupported'\n"
         "    ctypes.set_errno(0)\n"
         "    result = libc.syscall(fork_syscall)\n"
         "    error = ctypes.get_errno()\n"
@@ -125,10 +129,10 @@ def test_g4_runtime_dispatch_child_rejects_network_and_process_escapes(tmp_path)
         "        os._exit(99)\n"
         "    if result > 0:\n"
         "        os.waitpid(result, 0)\n"
-        "    return result == -1 and error == errno.EPERM\n"
+        "    return 'denied' if result == -1 and error == errno.EPERM else 'unexpected'\n"
         "print(json.dumps({'bootstrapChildAllowed': bootstrap_child_allowed, "
         "'codeModeSpawnAllowed': code_mode_spawn_allowed, 'networkDenied': denied_network(), "
-        "'processDenied': denied_process()}, "
+        "'processProbe': denied_process(), 'architecture': machine}, "
         "sort_keys=True, separators=(',', ':')))"
     )
     environment = _runtime_environment(tmp_path, fixture)
@@ -146,11 +150,13 @@ def test_g4_runtime_dispatch_child_rejects_network_and_process_escapes(tmp_path)
             shared_secret=configuration.shared_secret,
         ).dispatch(snapshot_json, invocation_json)
         observed = json.loads(frames[0])
+        expected_process_probe = 'denied' if observed['architecture'] == 'x86_64' else 'unsupported'
         assert observed == {
+            "architecture": observed["architecture"],
             "bootstrapChildAllowed": True,
             "codeModeSpawnAllowed": True,
             "networkDenied": True,
-            "processDenied": True,
+            "processProbe": expected_process_probe,
         }
     finally:
         server.shutdown()
@@ -158,7 +164,18 @@ def test_g4_runtime_dispatch_child_rejects_network_and_process_escapes(tmp_path)
         thread.join(timeout=2)
 
 
-def test_g4_runtime_direct_syscalls_deny_fork_vfork_clone_and_clone3_but_allow_exact_clone_patterns(tmp_path):
+def test_g4_runtime_architecture_syscall_table_is_precise():
+    from plane.agent.runtime.subprocess import _SYSCALLS
+
+    assert _SYSCALLS["x86_64"]["fork"] == 57
+    assert _SYSCALLS["x86_64"]["vfork"] == 58
+    assert _SYSCALLS["x86_64"]["fchmodat2"] == 452
+    assert "fork" not in _SYSCALLS["aarch64"]
+    assert "vfork" not in _SYSCALLS["aarch64"]
+    assert _SYSCALLS["aarch64"]["fchmodat2"] == 452
+
+
+def test_g4_runtime_direct_syscalls_are_architecture_aware_and_bound(tmp_path):
     fixture = (
         "import ctypes, errno, json, mmap, os, pathlib, platform, socket, sys\n"
         "from plane.agent.runtime.subprocess import (\n"
@@ -175,8 +192,10 @@ def test_g4_runtime_direct_syscalls_deny_fork_vfork_clone_and_clone3_but_allow_e
         "    result = libc.syscall(syscalls[name], *args)\n"
         "    return result, ctypes.get_errno()\n"
         "def denied(name, *args):\n"
+        "    if name not in syscalls:\n"
+        "        return 'unsupported'\n"
         "    result, error = probe(name, *args)\n"
-        "    return result == -1 and error == errno.EPERM\n"
+        "    return 'denied' if result == -1 and error == errno.EPERM else 'unexpected'\n"
         "def socket_result(domain):\n"
         "    result, error = probe(\n"
         "        'socket', ctypes.c_ulong(domain), ctypes.c_ulong(socket.SOCK_STREAM), ctypes.c_ulong(0),\n"
@@ -217,6 +236,26 @@ def test_g4_runtime_direct_syscalls_deny_fork_vfork_clone_and_clone3_but_allow_e
         "    chmod_other_denied = False\n"
         "except OSError as error:\n"
         "    chmod_other_denied = error.errno == errno.EPERM\n"
+        "fchmodat2_path = pathlib.Path('/tmp/runtime-fchmodat2-probe')\n"
+        "fchmodat2_path.write_text('x')\n"
+        "def fchmodat2_mode(mode):\n"
+        "    number = syscalls.get('fchmodat2')\n"
+        "    if number is None:\n"
+        "        return 'unsupported'\n"
+        "    ctypes.set_errno(0)\n"
+        "    result = libc.syscall(number, ctypes.c_int(-100), ctypes.c_char_p(os.fsencode(fchmodat2_path)),\n"
+        "        ctypes.c_uint(mode), ctypes.c_uint(0))\n"
+        "    error = ctypes.get_errno()\n"
+        "    if result == 0:\n"
+        "        return 'allowed'\n"
+        "    if result == -1 and error == errno.EPERM:\n"
+        "        return 'denied'\n"
+        "    if result == -1 and error == errno.ENOSYS:\n"
+        "        return 'unavailable'\n"
+        "    return 'unexpected:' + str(error)\n"
+        "fchmodat2_0600 = fchmodat2_mode(0o600)\n"
+        "fchmodat2_0644 = fchmodat2_mode(0o644)\n"
+        "fchmodat2_path.unlink(missing_ok=True)\n"
         "class CloneArgs(ctypes.Structure):\n"
         "    _fields_ = [\n"
         "        ('flags', ctypes.c_ulonglong), ('pidfd', ctypes.c_ulonglong),\n"
@@ -229,8 +268,8 @@ def test_g4_runtime_direct_syscalls_deny_fork_vfork_clone_and_clone3_but_allow_e
         "clone_args = CloneArgs()\n"
         "print(json.dumps({\n"
         "    'architecture': machine,\n"
-        "    'forkDenied': denied('fork'),\n"
-        "    'vforkDenied': denied('vfork'),\n"
+        "    'forkProbe': denied('fork'),\n"
+        "    'vforkProbe': denied('vfork'),\n"
         "    'ordinaryCloneDenied': denied('clone', ctypes.c_ulong(_SIGCHLD | _CLONE_VM), ctypes.c_void_p(1),\n"
         "        ctypes.c_void_p(0), ctypes.c_void_p(0), ctypes.c_ulong(0)),\n"
         "    'vforkCloneDenied': denied('clone', ctypes.c_ulong(_SIGCHLD | _CLONE_VM | _CLONE_VFORK), "
@@ -241,6 +280,8 @@ def test_g4_runtime_direct_syscalls_deny_fork_vfork_clone_and_clone3_but_allow_e
         "    'threadCloneAllowed': allowed_thread_clone(),\n"
         "    'rpcSocketModeAllowed': chmod_exact_allowed,\n"
         "    'otherChmodDenied': chmod_other_denied,\n"
+        "    'fchmodat2_0600': fchmodat2_0600,\n"
+        "    'fchmodat2_0644': fchmodat2_0644,\n"
         "    'unixSocketAllowed': socket_result(socket.AF_UNIX)[0],\n"
         "    'inetSocketDenied': socket_result(socket.AF_INET)[1] == errno.EPERM,\n"
         "    'inet6SocketDenied': socket_result(socket.AF_INET6)[1] == errno.EPERM,\n"
@@ -262,10 +303,13 @@ def test_g4_runtime_direct_syscalls_deny_fork_vfork_clone_and_clone3_but_allow_e
         ).dispatch(snapshot_json, invocation_json)
         observed = json.loads(frames[0])
         assert observed["architecture"] in {"x86_64", "aarch64"}
+        expected_process_probe = "denied" if observed["architecture"] == "x86_64" else "unsupported"
         assert {key: value for key, value in observed.items() if key != "architecture"} == {
             "classicPopenCloneAllowed": True,
             "clone3Denied": True,
-            "forkDenied": True,
+            "forkProbe": expected_process_probe,
+            "fchmodat2_0600": "allowed",
+            "fchmodat2_0644": "denied",
             "inet6SocketDenied": True,
             "inetSocketDenied": True,
             "ordinaryCloneDenied": True,
@@ -273,7 +317,7 @@ def test_g4_runtime_direct_syscalls_deny_fork_vfork_clone_and_clone3_but_allow_e
             "rpcSocketModeAllowed": True,
             "threadCloneAllowed": True,
             "unixSocketAllowed": True,
-            "vforkDenied": True,
+            "vforkProbe": expected_process_probe,
             "vforkCloneDenied": True,
         }
     finally:
