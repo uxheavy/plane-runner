@@ -580,7 +580,7 @@ def test_agent_runtime_production_compose_has_an_isolated_readiness_and_secret_b
     services = _resolved_community_services()
     runtime = services["agent-runtime"]
     runtime_environment = runtime["environment"]
-    assert runtime["image"].startswith("uxheavy/plane-agent-runtime:hermes-e573a466-g4-5df34f9")
+    assert runtime["image"].startswith("uxheavy/plane-agent-runtime:hermes-e573a466-g4-0f974c7")
     assert "network_mode" not in runtime
     assert "agent_runtime_internal" in runtime["networks"]
     assert not runtime.get("ports")

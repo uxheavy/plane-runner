@@ -37,9 +37,9 @@
     "hermesCommit": "e573a46611e2cb988f1ab43ad34cd8cc3b2cb659",
     "mcpGitlink": "2dc152e136d7ad952b901e5fe9364a37487297ba",
     "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889",
-    "runtimeImageTag": "plane-agent-runtime:hermes-e573a466-g4-5df34f9",
-    "runtimeImageDigest": "sha256:e240948e2df0ee94262accab5dac126b8b5ec6084bc57da994b84c7ed2fa267b",
-    "runtimeImageRevision": "5df34f9480f8229dc3e14702a013859ba41a7212",
+    "runtimeImageTag": "plane-agent-runtime:hermes-e573a466-g4-0f974c7",
+    "runtimeImageDigest": "sha256:95dd1d9293517ab52aa68051489f330303b2bd86313d5516c88a107e0d3b3e9d",
+    "runtimeImageRevision": "0f974c7117983116e5bbbf8c746a0b59eb246919",
     "runtimeContract": "plane.agent-runtime/v1"
   },
   "liveContract": {

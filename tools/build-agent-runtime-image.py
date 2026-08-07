@@ -74,7 +74,7 @@ def stage_context(checkout: Path, destination: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--hermes-checkout", required=True, type=Path)
-    parser.add_argument("--tag", default="plane-agent-runtime:hermes-e573a466-g4-5df34f9")
+    parser.add_argument("--tag", default="plane-agent-runtime:hermes-e573a466-g4-0f974c7")
     args = parser.parse_args()
     if shutil.which("docker") is None:
         raise SystemExit("Docker CLI is required")
