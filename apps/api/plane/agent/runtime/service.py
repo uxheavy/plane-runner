@@ -13,7 +13,7 @@ import threading
 import tempfile
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any
+from typing import Any, Callable
 
 from .config import AgentRuntimeConfiguration, RuntimeConfigurationError
 from .health import RuntimeHealthStatus, RuntimeSafetyController, RuntimeSafetyStopError
@@ -76,9 +76,15 @@ def _strict_body(raw: bytes, maximum: int, allowed: set[str] | None = None) -> d
 class RuntimeDispatchExecutor:
     """Execute authenticated dispatches without importing Plane application code."""
 
-    def __init__(self, configuration: AgentRuntimeConfiguration, controller: RuntimeSafetyController) -> None:
+    def __init__(
+        self,
+        configuration: AgentRuntimeConfiguration,
+        controller: RuntimeSafetyController,
+        is_invocation_cancelled: Callable[[str], bool] | None = None,
+    ) -> None:
         self.configuration = configuration
         self.controller = controller
+        self._is_invocation_cancelled = is_invocation_cancelled or (lambda _invocation_id: False)
         self._slots = threading.BoundedSemaphore(configuration.max_concurrent_invocations)
         child_environment = dict(configuration.child_environment)
         child_environment.setdefault("DJANGO_SETTINGS_MODULE", "plane.settings.common")
@@ -193,12 +199,17 @@ class RuntimeDispatchExecutor:
                 server = PlaneHostServer(socket_path=socket_path, invoke=host_client.invoke)
                 server.start()
                 command = (*command, "--plane-host-socket", socket_path)
+
+            def is_cancelled() -> bool:
+                return self.controller.health().safety_stop or self._is_invocation_cancelled(invocation_id)
+
             return self._transport.dispatch_payload(
                 payload=payload,
                 run_id=run_id,
                 invocation_id=invocation_id,
                 request_digest=digest,
                 command=command,
+                is_cancelled=is_cancelled,
             )
         finally:
             if server is not None:
@@ -365,7 +376,11 @@ class _RuntimeHTTPServer(ThreadingHTTPServer):
     @property
     def dispatch_executor(self) -> RuntimeDispatchExecutor:
         if self._dispatch_executor is None:
-            self._dispatch_executor = RuntimeDispatchExecutor(self.configuration, self.controller)
+            self._dispatch_executor = RuntimeDispatchExecutor(
+                self.configuration,
+                self.controller,
+                is_invocation_cancelled=self.is_targeted_stop,
+            )
         return self._dispatch_executor
 
     def request_targeted_stop(self, body: dict[str, Any]) -> tuple[HTTPStatus, dict[str, object]]:
@@ -381,7 +396,7 @@ class _RuntimeHTTPServer(ThreadingHTTPServer):
                 result = dict(existing[3])
                 result["replayed"] = True
                 return HTTPStatus.OK, result
-            snapshot = self.controller.request_safety_stop(reason)
+            snapshot = self.controller.health()
             result = snapshot.as_dict()
             result.update(
                 {
@@ -418,8 +433,7 @@ def run_runtime_service(environment: dict[str, str] | None = None) -> int:
     controller = RuntimeSafetyController(configured=True, stop_file=configuration.safety_stop_file)
     try:
         controller.mark_ready()
-        executor = RuntimeDispatchExecutor(configuration, controller)
-        server = _RuntimeHTTPServer(address, controller, configuration, executor=executor)
+        server = _RuntimeHTTPServer(address, controller, configuration)
     except (OSError, RuntimeSafetyStopError, ValueError):
         sys.stderr.write("event=agent.runtime.startup status=failed reason=boundary_unavailable\n")
         return 78

@@ -133,6 +133,16 @@ _SECCOMP_SET_MODE_FILTER = 22
 _SECCOMP_RET_KILL_PROCESS = 0x80000000
 _SECCOMP_RET_ERRNO = 0x00050000
 _SECCOMP_RET_ALLOW = 0x7FFF0000
+_SECCOMP_SOCKET_DOMAIN_OFFSET = 16
+_SECCOMP_CLONE_FLAGS_OFFSET = 16
+_AF_UNIX = 1
+_CLONE_VM = 0x00000100
+_CLONE_SIGHAND = 0x00000800
+_CLONE_VFORK = 0x00004000
+_CLONE_THREAD = 0x00010000
+_SIGCHLD = 17
+_HERMES_BOOTSTRAP_CLONE_FLAGS = _CLONE_VM | _CLONE_VFORK | _SIGCHLD
+_HERMES_BOOTSTRAP_THREAD_REQUIRED_FLAGS = _CLONE_VM | _CLONE_SIGHAND | _CLONE_THREAD
 _AUDIT_ARCH = {"x86_64": 0xC000003E, "aarch64": 0xC00000B7}
 _SYSCALLS = {
     "x86_64": {
@@ -285,22 +295,68 @@ def _install_linux_kernel_policy() -> None:
                 )
             )
 
+    def allow(name: str) -> None:
+        number = syscalls.get(name)
+        if number is not None:
+            instructions.extend(
+                (
+                    _SockFilter(_BPF_JMP_JEQ_K, 0, 1, number),
+                    _SockFilter(_BPF_RET_K, 0, 0, _SECCOMP_RET_ALLOW),
+                )
+            )
+
+    # Classic seccomp cannot safely inspect the sockaddr path supplied to
+    # connect(2). Restrict socket creation to AF_UNIX, then allow only the
+    # stream operations required by the invocation-bound Hermes host port.
+    # close_fds=True and the exact pinned bootstrap argv provide the remaining
+    # per-invocation binding; AF_INET/AF_INET6 sockets never become available.
+    socket_number = syscalls.get("socket")
+    if socket_number is not None:
+        instructions.extend(
+            (
+                _SockFilter(_BPF_JMP_JEQ_K, 0, 3, socket_number),
+                _SockFilter(_BPF_LD_W_ABS, 0, 0, _SECCOMP_SOCKET_DOMAIN_OFFSET),
+                _SockFilter(_BPF_JMP_JEQ_K, 1, 0, _AF_UNIX),
+                _SockFilter(_BPF_RET_K, 0, 0, _SECCOMP_RET_ERRNO | errno.EPERM),
+            )
+        )
+    for name in ("connect", "sendto", "recvfrom"):
+        allow(name)
+
+    # The pinned Hermes bootstrap uses Python's close_fds=True Popen path. On
+    # the production image its musl vfork implementation reaches clone with
+    # CLONE_VM|CLONE_VFORK|SIGCHLD: the launcher is suspended until the child
+    # has exec'd the fixed Hermes service or failed. The bootstrap also starts
+    # one bounded stderr-reader thread, whose clone flags are distinct and
+    # carry CLONE_THREAD. Permit the exact exec flags and only clone calls
+    # with the required thread flags; ordinary clone flags, fork, and clone3
+    # remain denied below. The finite pids limit is a second process-tree
+    # bound.
+    clone_number = syscalls.get("clone")
+    if clone_number is not None:
+        instructions.extend(
+            (
+                _SockFilter(_BPF_JMP_JEQ_K, 0, 7, clone_number),
+                _SockFilter(_BPF_LD_W_ABS, 0, 0, _SECCOMP_CLONE_FLAGS_OFFSET),
+                _SockFilter(_BPF_JMP_JEQ_K, 4, 0, _HERMES_BOOTSTRAP_CLONE_FLAGS),
+                _SockFilter(_BPF_LD_W_ABS, 0, 0, _SECCOMP_CLONE_FLAGS_OFFSET),
+                _SockFilter(_BPF_ALU_AND_K, 0, 0, _HERMES_BOOTSTRAP_THREAD_REQUIRED_FLAGS),
+                _SockFilter(_BPF_JMP_JEQ_K, 1, 0, _HERMES_BOOTSTRAP_THREAD_REQUIRED_FLAGS),
+                _SockFilter(_BPF_RET_K, 0, 0, _SECCOMP_RET_ERRNO | errno.EPERM),
+                _SockFilter(_BPF_RET_K, 0, 0, _SECCOMP_RET_ALLOW),
+            )
+        )
     for name in (
-        "socket",
-        "connect",
         "bind",
         "listen",
         "accept",
         "accept4",
         "shutdown",
-        "sendto",
-        "recvfrom",
         "sendmsg",
         "recvmsg",
         "socketpair",
         "clone",
         "fork",
-        "vfork",
         "clone3",
         "ptrace",
         "openat2",
@@ -726,8 +782,15 @@ class SubprocessRuntimeTransport(RuntimeTransport):
         except (OSError, ValueError):
             overflow.set()
 
-    def _run_process(self, payload: bytes, *, command: Sequence[str] | None = None) -> tuple[str, ...]:
+    def _run_process(
+        self,
+        payload: bytes,
+        *,
+        command: Sequence[str] | None = None,
+        is_cancelled: Callable[[], bool] | None = None,
+    ) -> tuple[str, ...]:
         process_command = tuple(command or self._command)
+        cancellation_callback = self._is_cancelled if is_cancelled is None else is_cancelled
         child_preexec = None
         if self._process_policy.enforce_kernel_policy:
             process_command = (
@@ -805,7 +868,7 @@ class SubprocessRuntimeTransport(RuntimeTransport):
                 self._terminate(process)
                 break
             try:
-                cancelled = bool(self._is_cancelled())
+                cancelled = bool(cancellation_callback())
             except Exception as exc:
                 self._terminate(process)
                 raise RuntimeDispatchError("runtime cancellation state is unavailable") from exc
@@ -874,6 +937,7 @@ class SubprocessRuntimeTransport(RuntimeTransport):
         invocation_id: str,
         request_digest: str,
         command: Sequence[str] | None = None,
+        is_cancelled: Callable[[], bool] | None = None,
     ) -> tuple[str, ...]:
         """Execute one already-framed request behind the same durable ledger."""
 
@@ -881,13 +945,14 @@ class SubprocessRuntimeTransport(RuntimeTransport):
             raise RuntimeDispatchError("runtime process payload must be bytes")
         if len(payload) > self._max_input_bytes:
             raise RuntimeDispatchError("runtime request exceeds the process input bound")
-        if self._is_cancelled():
+        cancellation_callback = self._is_cancelled if is_cancelled is None else is_cancelled
+        if cancellation_callback():
             raise RuntimeDispatchError("runtime invocation was cancelled")
         replay = self._ledger.claim(run_id=run_id, invocation_id=invocation_id, request_digest=request_digest)
         if replay is not None:
             return replay
         try:
-            frames = self._run_process(payload, command=command)
+            frames = self._run_process(payload, command=command, is_cancelled=cancellation_callback)
         except Exception:
             try:
                 self._ledger.mark_unknown(invocation_id=invocation_id)

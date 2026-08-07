@@ -1,9 +1,11 @@
+import http.client
 import json
 import socket
 import threading
 
 import pytest
 
+import plane.agent.runtime.host_rpc as host_rpc
 from plane.agent.runtime.host_rpc import (
     HOST_PROTOCOL,
     MAX_HOST_RESULT_BYTES,
@@ -183,3 +185,43 @@ def test_host_server_replays_denials_as_denials(tmp_path):
         assert len(calls) == 1
     finally:
         server.close()
+
+
+def test_http_client_reads_one_byte_past_the_response_limit(monkeypatch):
+    call = _call()
+    result = PlaneHostResult(
+        request_ref=call.request_ref,
+        correlation_id=call.correlation_id,
+        idempotency_key=call.idempotency_key,
+        status="ok",
+        replayed=False,
+        output={"accepted": True},
+    )
+    prefix = json.dumps(result.to_wire(), sort_keys=True, separators=(",", ":")).encode()
+    limit = len(prefix)
+    trailing = prefix + b"x"
+    reads = []
+
+    class FakeResponse:
+        status = 200
+
+        def read(self, size):
+            reads.append(size)
+            return trailing[:size]
+
+    class FakeConnection:
+        def request(self, *_args, **_kwargs):
+            return None
+
+        def getresponse(self):
+            return FakeResponse()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(host_rpc, "MAX_HOST_HTTP_RESPONSE_BYTES", limit)
+    monkeypatch.setattr(http.client, "HTTPConnection", lambda *_args, **_kwargs: FakeConnection())
+
+    with pytest.raises(PlaneHostRPCError, match="rejected"):
+        host_rpc.PlaneHostHTTPClient(url="http://host.test", auth_token="token").invoke(call)
+    assert reads == [limit + 1]

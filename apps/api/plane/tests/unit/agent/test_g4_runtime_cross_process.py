@@ -4,6 +4,8 @@ import json
 import subprocess
 import sys
 import threading
+import time
+from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
@@ -15,6 +17,7 @@ from plane.agent.runtime import (
     PlaneHostHTTPServer,
     PlaneHostResult,
     RemoteRuntimeTransport,
+    RuntimeHostEndpoint,
     RuntimeCredentialBroker,
     RuntimeDispatchError,
     RuntimeConfigurationError,
@@ -52,17 +55,17 @@ def _configuration(tmp_path):
     return AgentRuntimeConfiguration.from_environment(environment)
 
 
-def _dispatch_body() -> tuple[str, str]:
+def _dispatch_body(suffix: str = "one") -> tuple[str, str]:
     snapshot = {
-        "actorRef": "agent:one",
+        "actorRef": f"agent:{suffix}",
         "contentDigest": "snapshot:digest",
-        "runId": "run:one",
-        "workspaceRef": "workspace:one",
+        "runId": f"run:{suffix}",
+        "workspaceRef": f"workspace:{suffix}",
     }
     invocation = {
-        "correlationId": "correlation:one",
-        "invocationId": "invocation:one",
-        "runId": "run:one",
+        "correlationId": f"correlation:{suffix}",
+        "invocationId": f"invocation:{suffix}",
+        "runId": f"run:{suffix}",
     }
     return (
         json.dumps(snapshot, sort_keys=True, separators=(",", ":")),
@@ -98,8 +101,10 @@ def test_g4_runtime_dispatch_is_cross_process_and_revokes_invocation_credentials
 
 def test_g4_runtime_dispatch_child_rejects_network_filesystem_and_process_escapes(tmp_path):
     fixture = (
-        "import json, os, socket, sys\n"
+        "import json, os, socket, subprocess, sys\n"
         "sys.stdin.buffer.read()\n"
+        "child = subprocess.run([sys.executable, '-c', 'print(\"child\")'], capture_output=True, check=False)\n"
+        "bootstrap_child_allowed = child.returncode == 0 and child.stdout == b'child\\n'\n"
         "def denied_network():\n"
         "    try:\n"
         "        socket.socket()\n"
@@ -118,8 +123,9 @@ def test_g4_runtime_dispatch_child_rejects_network_filesystem_and_process_escape
         "        return False\n"
         "    except OSError:\n"
         "        return True\n"
-        "print(json.dumps({'networkDenied': denied_network(), 'filesystemDenied': denied_filesystem(), "
-        "'processDenied': denied_process()}, sort_keys=True, separators=(',', ':')))"
+        "print(json.dumps({'bootstrapChildAllowed': bootstrap_child_allowed, 'networkDenied': denied_network(), "
+        "'filesystemDenied': denied_filesystem(), 'processDenied': denied_process()}, "
+        "sort_keys=True, separators=(',', ':')))"
     )
     environment = _runtime_environment(tmp_path, fixture)
     configuration = AgentRuntimeConfiguration.from_environment(environment)
@@ -136,11 +142,96 @@ def test_g4_runtime_dispatch_child_rejects_network_filesystem_and_process_escape
             shared_secret=configuration.shared_secret,
         ).dispatch(snapshot_json, invocation_json)
         observed = json.loads(frames[0])
-        assert observed == {"filesystemDenied": True, "networkDenied": True, "processDenied": True}
+        assert observed == {
+            "bootstrapChildAllowed": True,
+            "filesystemDenied": True,
+            "networkDenied": True,
+            "processDenied": True,
+        }
     finally:
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def test_g4_runtime_production_policy_allows_bound_unix_host_and_denies_network(tmp_path):
+    fixture = (
+        "import hashlib, json, socket, sys\n"
+        "frames = sys.stdin.buffer.read().splitlines()\n"
+        "request = json.loads(frames[-1])\n"
+        "run_id = request['run']['runId']\n"
+        "invocation_id = request['invocation']['invocationId']\n"
+        "call = {'protocol': 'plane.agent-runtime/v1', 'runId': run_id,\n"
+        "        'invocationId': invocation_id, 'correlationId': 'correlation:unix',\n"
+        "        'action': 'read', 'operationRef': 'operation:work_item.read',\n"
+        "        'input': {'project_id': 'project:one', 'issue_id': 'issue:one'}, 'source': 'model'}\n"
+        "identity = {key: call[key] for key in "
+        "('protocol', 'runId', 'invocationId', 'action', 'operationRef', 'input')}\n"
+        "digest = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(',', ':')).encode()).hexdigest()\n"
+        "call['requestRef'] = 'host-request:' + digest\n"
+        "call['idempotencyKey'] = 'host-idempotency:' + digest\n"
+        "payload = json.dumps(call, sort_keys=True, separators=(',', ':')).encode() + b'\\n'\n"
+        "socket_path = sys.argv[sys.argv.index('--plane-host-socket') + 1]\n"
+        "with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as channel:\n"
+        "    channel.connect(socket_path)\n"
+        "    channel.sendall(payload)\n"
+        "    response = bytearray()\n"
+        "    while not response.endswith(b'\\n'):\n"
+        "        response.extend(channel.recv(4096))\n"
+        "result = json.loads(bytes(response[:-1]))\n"
+        "try:\n"
+        "    socket.socket(socket.AF_INET, socket.SOCK_STREAM)\n"
+        "    network_denied = False\n"
+        "except OSError:\n"
+        "    network_denied = True\n"
+        "print(json.dumps({'hostStatus': result['status'], 'networkDenied': network_denied},\n"
+        "                  sort_keys=True, separators=(',', ':')))\n"
+    )
+    environment = _runtime_environment(tmp_path, fixture)
+    configuration = AgentRuntimeConfiguration.from_environment(environment)
+    controller = RuntimeSafetyController(configured=True, stop_file=tmp_path / "safety-stop")
+    controller.mark_ready()
+    callback_calls = []
+
+    def invoke(call: PlaneHostCall) -> PlaneHostResult:
+        callback_calls.append(call.request_ref)
+        return PlaneHostResult(
+            request_ref=call.request_ref,
+            correlation_id=call.correlation_id,
+            idempotency_key=call.idempotency_key,
+            status="ok",
+            replayed=False,
+            output={"read": True},
+        )
+
+    host_server = PlaneHostHTTPServer(
+        bind_host="127.0.0.1",
+        advertised_host="127.0.0.1",
+        port=0,
+        auth_token="host-token",
+        invoke=invoke,
+    )
+    host_server.start()
+    runtime_server = _RuntimeHTTPServer(("127.0.0.1", 0), controller, configuration)
+    thread = threading.Thread(target=runtime_server.serve_forever, daemon=True)
+    thread.start()
+    snapshot_json, invocation_json = _dispatch_body()
+    try:
+        transport = RemoteRuntimeTransport(
+            runtime_url=f"http://127.0.0.1:{runtime_server.server_port}",
+            shared_secret=configuration.shared_secret,
+            host_endpoint_factory=lambda _invocation_id: nullcontext(
+                RuntimeHostEndpoint(url=host_server.url, token="host-token")
+            ),
+        )
+        frames = transport.dispatch(snapshot_json, invocation_json)
+        assert json.loads(frames[0]) == {"hostStatus": "ok", "networkDenied": True}
+        assert len(callback_calls) == 1
+    finally:
+        runtime_server.shutdown()
+        runtime_server.server_close()
+        thread.join(timeout=2)
+        host_server.close()
 
 
 @pytest.mark.parametrize(
@@ -287,8 +378,95 @@ def test_g4_t3_operator_hooks_use_authenticated_runtime_http_and_targeted_idempo
         assert stopped["status"] == "accepted"
         assert stopped["authority"] == "runtime_ephemeral_enforcement"
         assert stopped["planeLifecycleAuthority"] == "required"
+        assert stopped["safetyStop"] is False
+        assert operator_health_readback("workspace:one", 1)["status"] == "ready"
+        assert operator_health_readback("workspace:one", 1)["safetyStop"] is False
         replay = request_operator_safety_stop("workspace:one", "invocation:one", "incident", "stop:one")
         assert replay["replayed"] is True
+        unrelated_snapshot, unrelated_invocation = _dispatch_body("two")
+        unrelated = RemoteRuntimeTransport(
+            runtime_url=f"http://127.0.0.1:{server.server_port}",
+            shared_secret=configuration.shared_secret,
+        ).dispatch(unrelated_snapshot, unrelated_invocation)
+        assert unrelated == ('{"protocol":"fixture","credential":"not-emitted"}',)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_g4_targeted_stop_cancels_only_the_named_active_invocation(tmp_path, monkeypatch):
+    fixture = (
+        "import json, signal, sys, time\n"
+        "request = json.loads(sys.stdin.buffer.read().splitlines()[-1])\n"
+        "if request['invocation']['invocationId'] == 'invocation:targeted':\n"
+        "    def stop(_signum, _frame):\n"
+        "        nonlocal_marker[0] = True\n"
+        "    nonlocal_marker = [False]\n"
+        "    signal.signal(signal.SIGUSR1, stop)\n"
+        "    while not nonlocal_marker[0]:\n"
+        "        time.sleep(0.01)\n"
+        "else:\n"
+        "    time.sleep(0.5)\n"
+        "print('{\"protocol\":\"fixture\",\"credential\":\"not-emitted\"}')\n"
+    )
+    configuration = AgentRuntimeConfiguration.from_environment(_runtime_environment(tmp_path, fixture))
+    controller = RuntimeSafetyController(configured=True, stop_file=tmp_path / "safety-stop")
+    controller.mark_ready()
+    server = _RuntimeHTTPServer(("127.0.0.1", 0), controller, configuration)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    runtime_url = f"http://127.0.0.1:{server.server_port}"
+    monkeypatch.setenv("PLANE_AGENT_RUNTIME_URL", runtime_url)
+    monkeypatch.setenv("PLANE_AGENT_RUNTIME_SECRET", configuration.shared_secret)
+    target_snapshot, target_invocation = _dispatch_body("targeted")
+    unrelated_snapshot, unrelated_invocation = _dispatch_body("active-unrelated")
+    target_error = []
+    unrelated_result = []
+
+    def dispatch_target():
+        try:
+            RemoteRuntimeTransport(runtime_url=runtime_url, shared_secret=configuration.shared_secret).dispatch(
+                target_snapshot, target_invocation
+            )
+        except Exception as exc:
+            target_error.append(exc)
+
+    def dispatch_unrelated():
+        try:
+            unrelated_result.append(
+                RemoteRuntimeTransport(runtime_url=runtime_url, shared_secret=configuration.shared_secret).dispatch(
+                    unrelated_snapshot, unrelated_invocation
+                )
+            )
+        except Exception as exc:
+            unrelated_result.append(exc)
+
+    dispatch_thread = threading.Thread(target=dispatch_target, daemon=True)
+    unrelated_thread = threading.Thread(target=dispatch_unrelated, daemon=True)
+    dispatch_thread.start()
+    unrelated_thread.start()
+    try:
+        deadline = time.monotonic() + 2
+        while controller.health().active_invocations != 2 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert controller.health().active_invocations == 2
+        stopped = request_operator_safety_stop(
+            "workspace:targeted", "invocation:targeted", "operator requested stop", "stop:targeted"
+        )
+        assert stopped["status"] == "accepted"
+        assert stopped["safetyStop"] is False
+        dispatch_thread.join(timeout=3)
+        unrelated_thread.join(timeout=3)
+        assert target_error and isinstance(target_error[0], RuntimeDispatchError)
+        assert unrelated_result == [('{"protocol":"fixture","credential":"not-emitted"}',)]
+        assert controller.health().status == "ready"
+        assert controller.health().active_invocations == 0
+        unrelated_snapshot, unrelated_invocation = _dispatch_body("unrelated")
+        unrelated = RemoteRuntimeTransport(runtime_url=runtime_url, shared_secret=configuration.shared_secret).dispatch(
+            unrelated_snapshot, unrelated_invocation
+        )
+        assert unrelated == ('{"protocol":"fixture","credential":"not-emitted"}',)
     finally:
         server.shutdown()
         server.server_close()

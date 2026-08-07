@@ -566,7 +566,7 @@ class PlaneHostHTTPClient:
                 },
             )
             response = connection.getresponse()
-            body = response.read(MAX_HOST_HTTP_RESPONSE_BYTES)
+            body = response.read(MAX_HOST_HTTP_RESPONSE_BYTES + 1)
             if len(body) > MAX_HOST_HTTP_RESPONSE_BYTES or response.status != 200:
                 raise PlaneHostRPCError("Plane host callback was rejected")
             result = PlaneHostResult.from_wire(body)

@@ -3,9 +3,14 @@
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import threading
+import time
+import urllib.error
+import urllib.request
+from contextlib import nullcontext
 from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -15,8 +20,17 @@ from django.test import override_settings
 from django.utils import timezone
 
 from plane.agent.lifecycle import create_actor, create_assignment, create_profile, create_run, record_invocation
-from plane.agent.runtime import RuntimeDispatchError
+from plane.agent.runtime import (
+    AgentRuntimeConfiguration,
+    build_gateway_host_port,
+    PlaneHostHTTPServer,
+    RemoteRuntimeTransport,
+    RuntimeCredentialBroker,
+    RuntimeDispatchError,
+    RuntimeHostEndpoint,
+)
 from plane.agent.runtime.supervisor import request_runtime_cancellation, run_runtime_invocation
+from plane.operation_gateway.gateway import OperationGateway
 from plane.db.models import (
     AgentActor,
     AgentRole,
@@ -167,6 +181,317 @@ def test_supervisor_entrypoint_ingests_usage_and_creates_one_visible_failure(
     }
     run.refresh_from_db()
     assert run.state == RunState.FAILED
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_pinned_hermes_runs_through_http_service_launcher_and_bound_host_socket(
+    tmp_path, workspace, gateway_project, gateway_issue, create_user
+):
+    checkout = os.environ.get("PLANE_G2_HERMES_CHECKOUT", "/hermes")
+    dependency_path = os.environ.get("PLANE_G2_HERMES_DEPENDENCY_PATH") or os.path.join(
+        checkout, "plane_runtime", "g1_runtime_image"
+    )
+    expected_sha = "e573a46611e2cb988f1ab43ad34cd8cc3b2cb659"
+    assert os.path.isdir(checkout)
+    assert (
+        subprocess.run(
+            ["git", "-C", checkout, "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+        ).stdout.strip()
+        == expected_sha
+    )
+    if dependency_path:
+        assert os.path.isdir(dependency_path)
+
+    run, invocation = _invocation(
+        workspace,
+        gateway_project,
+        gateway_issue,
+        create_user,
+        runtime_defaults={
+            "provider": "openai",
+            "model": "deterministic-local",
+            "adapter": "hermes",
+            "maxCodeModeCalls": 16,
+            "maxCodeModeOutputBytes": 131_072,
+        },
+        suffix="g2-http-real",
+    )
+    project_id = str(gateway_project.id)
+    issue_id = str(gateway_issue.id)
+    actor_ref = run.snapshot["actorRef"]
+    run_ref = run.snapshot["runId"]
+    fake_openai = tmp_path / "fake-openai"
+    fake_openai.mkdir()
+    (fake_openai / "sitecustomize.py").write_text(
+        """
+import json
+import re
+from types import SimpleNamespace as Namespace
+
+_PROJECT_ID = %r
+_ISSUE_ID = %r
+_ACTOR_REF = %r
+_RUN_REF = %r
+
+
+def _tool_call(number, request_json):
+    if number == 1:
+        return "tool_search", {"query": "Plane work item", "limit": 5}
+    if number == 2:
+        return "tool_describe", {"name": "plane_operation"}
+    if number == 3:
+        return "tool_call", {"name": "plane_operation", "arguments": {
+            "action": "discover", "operationRef": "plane.operations.discover@1",
+            "input": {"query": "work item", "limit": 32},
+        }}
+    if number == 4:
+        return "tool_call", {"name": "plane_operation", "arguments": {
+            "action": "read", "operationRef": "operation:work_item.read",
+            "input": {"project_id": _PROJECT_ID, "issue_id": _ISSUE_ID},
+        }}
+    if number == 5:
+        return "tool_call", {"name": "plane_operation", "arguments": {
+            "action": "mutate", "operationRef": "operation:agent.outcome.evaluate",
+            "input": {"outcome_ref": "outcome-submission:not-authorized",
+                       "evaluator_ref": _ACTOR_REF, "verdict": "revision_requested"},
+        }}
+    if number == 6:
+        return "execute_code", {"code": (
+            "from hermes_tools import plane_operation\\n"
+            "print(plane_operation(\\"code\\", \\"operation:catalog.search\\", "
+            "{\\"query\\": \\"rename\\", \\"limit\\": 5}))"
+        )}
+    if number == 7:
+        return "tool_call", {"name": "plane_operation", "arguments": {
+            "action": "mutate", "operationRef": "operation:agent.outcome.submit",
+            "input": {"run_ref": _RUN_REF,
+                       "summary": "The assigned issue was renamed through the Plane gateway.",
+                       "artifacts": ["artifact:g2-production"],
+                       "evidence": ["evidence:g2-production"]},
+        }}
+    if number == 8:
+        match = re.search(r"outcome-submission:[0-9a-f-]+", request_json)
+        return "tool_call", {"name": "plane_publish", "arguments": {
+            "kind": "outcome", "operationRef": "operation:agent.outcome.publish",
+            "resourceRef": match.group(0) if match else "outcome-submission:missing",
+            "content": "Explicit outcome publication.",
+        }}
+    return None, None
+
+
+class _Completions:
+    def __init__(self):
+        self.calls = 0
+
+    def create(self, **kwargs):
+        self.calls += 1
+        request_json = json.dumps(kwargs, sort_keys=True, default=str)
+        if self.calls <= 8:
+            name, arguments = _tool_call(self.calls, request_json)
+            delta = Namespace(
+                role="assistant",
+                content=None,
+                tool_calls=[Namespace(
+                    index=0,
+                    id="call-" + str(self.calls),
+                    type="function",
+                    function=Namespace(
+                        name=name,
+                        arguments=json.dumps(arguments, sort_keys=True, separators=(",", ":")),
+                    ),
+                )],
+            )
+            chunk = Namespace(
+                id="chatcmpl-tool",
+                object="chat.completion.chunk",
+                created=1,
+                model="deterministic-local",
+                choices=[Namespace(index=0, delta=delta, finish_reason="tool_calls")],
+            )
+        else:
+            delta = Namespace(role="assistant", content="ordinary final text only", tool_calls=None)
+            chunk = Namespace(
+                id="chatcmpl-final",
+                object="chat.completion.chunk",
+                created=1,
+                model="deterministic-local",
+                choices=[Namespace(index=0, delta=delta, finish_reason="stop")],
+            )
+        usage = Namespace(prompt_tokens=10, completion_tokens=2, total_tokens=12)
+        return iter((chunk, Namespace(id="chatcmpl-usage", choices=[], usage=usage)))
+
+
+class _Chat:
+    def __init__(self):
+        self.completions = _Completions()
+
+
+class OpenAI:
+    def __init__(self, *, api_key=None, base_url=None, **kwargs):
+        self.api_key = api_key
+        self.base_url = base_url
+        self.chat = _Chat()
+
+    def close(self):
+        return None
+
+
+class AsyncOpenAI(OpenAI):
+    pass
+
+
+class APIError(Exception):
+    pass
+
+
+class APITimeoutError(APIError):
+    pass
+
+
+class APIConnectionError(APIError):
+    pass
+
+
+import openai
+import hermes_logging
+from pathlib import Path
+
+openai.OpenAI = OpenAI
+openai.AsyncOpenAI = AsyncOpenAI
+hermes_logging.setup_logging = lambda **kwargs: Path(kwargs["hermes_home"]) / "logs"
+hermes_logging.setup_verbose_logging = lambda: None
+"""
+        % (project_id, issue_id, actor_ref, run_ref),
+        encoding="utf-8",
+    )
+    runtime_pythonpath = os.pathsep.join(path for path in (str(fake_openai), dependency_path, checkout) if path)
+    environment = {
+        "PLANE_AGENT_RUNTIME_URL": "http://127.0.0.1:1",
+        "PLANE_AGENT_RUNTIME_SECRET": "s" * 40,
+        "PLANE_AGENT_RUNTIME_COMMAND": "python3 -m plane_runtime.g1_runtime_image.bootstrap --once --g1-production",
+        "PLANE_AGENT_RUNTIME_ENVIRONMENT_JSON": json.dumps(
+            {
+                "HOME": str(tmp_path / "hermes-home"),
+                "HERMES_HOME": str(tmp_path / "hermes-home"),
+                "LANG": "C.UTF-8",
+                "LC_ALL": "C.UTF-8",
+                "PATH": f"{os.path.dirname(sys.executable)}:/usr/bin:/bin",
+                "PYTHONPATH": runtime_pythonpath,
+                "PYTHONUNBUFFERED": "1",
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+        "PLANE_AGENT_RUNTIME_LEDGER_PATH": str(tmp_path / "http-real-ledger.sqlite"),
+        "PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE": str(tmp_path / "http-real-safety-stop"),
+    }
+    (tmp_path / "hermes-home" / "sessions").mkdir(parents=True)
+    configuration = AgentRuntimeConfiguration.from_environment(environment)
+    host_calls = []
+    host_port = build_gateway_host_port(invocation=invocation, gateway=OperationGateway())
+
+    def invoke(call):
+        host_calls.append(call)
+        return host_port.invoke(call)
+
+    host_server = PlaneHostHTTPServer(
+        bind_host="127.0.0.1",
+        advertised_host="127.0.0.1",
+        port=0,
+        auth_token="host-token",
+        invoke=invoke,
+    )
+    host_server.start()
+    with socket.socket() as port_probe:
+        port_probe.bind(("127.0.0.1", 0))
+        runtime_port = port_probe.getsockname()[1]
+    service_environment = os.environ.copy()
+    service_environment.update(environment)
+    service_environment.update(
+        {
+            "PLANE_AGENT_RUNTIME_BIND": "127.0.0.1",
+            "PLANE_AGENT_RUNTIME_PORT": str(runtime_port),
+            "PYTHONPATH": os.pathsep.join(
+                path for path in (os.getcwd(), service_environment.get("PYTHONPATH")) if path
+            ),
+        }
+    )
+    service_process = subprocess.Popen(
+        [sys.executable, "-m", "plane.agent.runtime.service"],
+        cwd=os.getcwd(),
+        env=service_environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    runtime_url = f"http://127.0.0.1:{runtime_port}"
+    service_ready = False
+    for _ in range(100):
+        if service_process.poll() is not None:
+            break
+        try:
+            with urllib.request.urlopen(f"{runtime_url}/health/ready", timeout=0.2) as response:
+                if response.status == 200:
+                    service_ready = True
+                    break
+        except (OSError, urllib.error.HTTPError):
+            pass
+        time.sleep(0.05)
+    assert service_ready, service_process.stderr.read().decode("utf-8", errors="replace")
+    snapshot_json = json.dumps(run.snapshot, sort_keys=True, separators=(",", ":"))
+    envelope_json = json.dumps(invocation.envelope, sort_keys=True, separators=(",", ":"))
+    try:
+        frames = RemoteRuntimeTransport(
+                runtime_url=runtime_url,
+                shared_secret=configuration.shared_secret,
+                credential_broker=RuntimeCredentialBroker(
+                    {
+                        "runtime": {
+                            "api_key": "test-provider-key",
+                            "base_url": "http://127.0.0.1:9/v1",
+                            "api_mode": "chat_completions",
+                        }
+                    }
+                ),
+                model_call_allowance=16,
+            host_endpoint_factory=lambda _invocation_id: nullcontext(
+                RuntimeHostEndpoint(url=host_server.url, token="host-token")
+            ),
+        ).dispatch(snapshot_json, envelope_json)
+    finally:
+        host_server.close()
+        if service_process.poll() is None:
+            service_process.terminate()
+        try:
+            _, service_stderr = service_process.communicate(timeout=3)
+        except subprocess.TimeoutExpired:
+            service_process.kill()
+            _, service_stderr = service_process.communicate(timeout=3)
+        assert service_process.returncode == 0, service_stderr.decode("utf-8", errors="replace")
+
+    assert frames
+    assert json.loads(frames[-1])["kind"] == "completed"
+    assert [call.operation_ref for call in host_calls] == [
+        "plane.operations.discover@1",
+        "operation:work_item.read",
+        "operation:agent.outcome.evaluate",
+        "operation:agent.outcome.submit",
+        "operation:agent.outcome.publish",
+    ]
+    correlation_id = invocation.envelope["correlationId"]
+    assert OperationGatewayAudit.objects.filter(
+        operation_id="agent.outcome.evaluate",
+        phase="outcome",
+        outcome="denied",
+        error_code="NOT_AUTHORIZED",
+        correlation_id=correlation_id,
+    ).exists()
+    assert OperationGatewayAudit.objects.filter(
+        operation_id="agent.outcome.submit",
+        phase="outcome",
+        outcome="success",
+        correlation_id=correlation_id,
+    ).exists()
 
 
 @pytest.mark.django_db(transaction=True)
@@ -328,6 +653,7 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
     provider_stream_count = 0
     issue_id = str(gateway_issue.id)
     project_id = str(gateway_project.id)
+    actor_ref = run.snapshot["actorRef"]
     run_ref = run.snapshot["runId"]
 
     class LocalOpenAIHandler(BaseHTTPRequestHandler):
@@ -382,6 +708,20 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
                         },
                     }
                 elif provider_stream_count == 5:
+                    function_name = "tool_call"
+                    arguments = {
+                        "name": "plane_operation",
+                        "arguments": {
+                            "action": "mutate",
+                            "operationRef": "operation:agent.outcome.evaluate",
+                            "input": {
+                                "outcome_ref": "outcome-submission:not-authorized",
+                                "evaluator_ref": actor_ref,
+                                "verdict": "revision_requested",
+                            },
+                        },
+                    }
+                elif provider_stream_count == 6:
                     function_name = "execute_code"
                     arguments = {
                         "code": (
@@ -391,7 +731,7 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
                         )
                     }
                     code_callbacks.append(arguments["code"])
-                elif provider_stream_count == 6:
+                elif provider_stream_count == 7:
                     function_name = "tool_call"
                     arguments = {
                         "name": "plane_operation",
@@ -405,7 +745,7 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
                             },
                         },
                     }
-                elif provider_stream_count == 7:
+                elif provider_stream_count == 8:
                     function_name = "tool_call"
                     arguments = {
                         "name": "plane_operation",
@@ -420,7 +760,7 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
                             },
                         },
                     }
-                elif provider_stream_count == 8:
+                elif provider_stream_count == 9:
                     function_name = "tool_call"
                     match = re.search(r"outcome-submission:[0-9a-f-]+", json.dumps(request, sort_keys=True))
                     if match is None:
@@ -560,7 +900,7 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
 
     assert not provider_thread.is_alive()
     assert not provider_errors
-    assert provider_stream_count == 9, {
+    assert provider_stream_count == 10, {
         "provider_stream_count": provider_stream_count,
         "tool_calls": tool_calls,
         "invocation_state": invocation.state,
@@ -576,6 +916,7 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
     assert tool_calls == [
         "tool_search",
         "tool_describe",
+        "tool_call",
         "tool_call",
         "tool_call",
         "execute_code",
@@ -616,6 +957,7 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
         "work_item.rename",
         "agent.outcome.submit",
         "agent.outcome.publish",
+        "agent.outcome.evaluate",
     }
     receipts = OperationGatewayIdempotency.objects.filter(
         caller_id=actor.principal_id,
@@ -648,6 +990,15 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
     )
     assert 'Plane host model read operation:work_item.read -> ok' in runtime_event_text
     assert 'Plane host model mutate operation:work_item.rename -> ok' in runtime_event_text
+    assert 'Plane host model mutate operation:agent.outcome.evaluate -> denied' in runtime_event_text
+    assert OperationGatewayAudit.objects.filter(
+        caller_id=actor.principal_id,
+        operation_id="agent.outcome.evaluate",
+        phase="outcome",
+        outcome="denied",
+        error_code="NOT_AUTHORIZED",
+        correlation_id=correlation_id,
+    ).exists()
     assert OperationGatewayAudit.objects.filter(
         caller_id=actor.principal_id,
         operation_id="catalog.search",

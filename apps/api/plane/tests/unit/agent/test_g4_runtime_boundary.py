@@ -232,9 +232,11 @@ def test_g4_runtime_http_health_and_safety_stop_boundary(tmp_path):
         with urllib.request.urlopen(request, timeout=2) as response:
             assert response.status == 202
             assert json.loads(response.read())["status"] == "accepted"
-        with pytest.raises(urllib.error.HTTPError) as error:
-            urllib.request.urlopen(f"{url}/health/ready", timeout=2)
-        assert error.value.code == 503
+        with urllib.request.urlopen(f"{url}/health/ready", timeout=2) as response:
+            assert response.status == 200
+            health = json.loads(response.read())
+        assert health["status"] == "ready"
+        assert health["safetyStop"] is False
     finally:
         server.shutdown()
         server.server_close()
