@@ -306,19 +306,19 @@ def test_g4_runtime_direct_syscalls_are_architecture_aware_and_bound(tmp_path):
         expected_process_probe = "denied" if observed["architecture"] == "x86_64" else "unsupported"
         assert {key: value for key, value in observed.items() if key != "architecture"} == {
             "classicPopenCloneAllowed": True,
-            "clone3Denied": True,
+            "clone3Denied": "denied",
             "forkProbe": expected_process_probe,
             "fchmodat2_0600": "allowed",
             "fchmodat2_0644": "denied",
             "inet6SocketDenied": True,
             "inetSocketDenied": True,
-            "ordinaryCloneDenied": True,
+            "ordinaryCloneDenied": "denied",
             "otherChmodDenied": True,
             "rpcSocketModeAllowed": True,
             "threadCloneAllowed": True,
             "unixSocketAllowed": True,
             "vforkProbe": expected_process_probe,
-            "vforkCloneDenied": True,
+            "vforkCloneDenied": "denied",
         }
     finally:
         server.shutdown()
