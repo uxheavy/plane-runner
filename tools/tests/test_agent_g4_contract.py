@@ -154,6 +154,7 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn("provider_seam=deterministic_openai_transport_only", source)
         self.assertIn("agent_tool_registration=ok", source)
         self.assertIn("tamper_guard=fail_closed", source)
+        self.assertIn("filesystem_confinement=passed", source)
         self.assertIn("validate_pinned_hermes_identity", source)
         self.assertIn("COPY hermes/plane_runtime/g1_runtime_image/dotenv/ /opt/hermes/dotenv/", image_dockerfile)
         self.assertNotIn("/tmp/run_agent.py", source)

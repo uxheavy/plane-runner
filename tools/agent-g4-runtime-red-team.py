@@ -777,6 +777,12 @@ def main() -> int:
             raise ProbeFailure("runtime_resource_boundary_mismatch")
         if host_config.get("PidsLimit") != 128 or host_config.get("PortBindings"):
             raise ProbeFailure("runtime_pid_or_port_boundary_mismatch")
+        tmpfs_mounts = host_config.get("Tmpfs", {}) or {}
+        if (
+            tmpfs_mounts.get("/tmp") != "rw,noexec,nosuid,nodev,size=64m"
+            or tmpfs_mounts.get("/run/plane-agent-runtime") != "rw,noexec,nosuid,nodev,size=1m"
+        ):
+            raise ProbeFailure("runtime_writable_mount_boundary_mismatch")
         if any(mount.get("Destination") in {"/code", "/tmp/plane-runtime-module"} for mount in mounts):
             raise ProbeFailure("runtime_source_mount_detected")
 
@@ -785,6 +791,24 @@ def main() -> int:
             for mount in mounts
         ):
             raise ProbeFailure("runtime_unapproved_bind_mount_detected")
+        writable_probe = docker(
+            "exec",
+            name,
+            "python3",
+            "-c",
+            "from pathlib import Path; p=Path('/tmp/g4-filesystem-probe/child'); p.parent.mkdir(parents=True, exist_ok=True); p.write_text('ok', encoding='utf-8'); assert p.read_text(encoding='utf-8') == 'ok'",
+        )
+        if writable_probe.returncode != 0:
+            raise ProbeFailure("runtime_intended_tmpfs_write_failed")
+        rootfs_probe = docker(
+            "exec",
+            name,
+            "python3",
+            "-c",
+            "from pathlib import Path; Path('/opt/hermes/.g4-rootfs-write-probe').write_text('forbidden', encoding='utf-8')",
+        )
+        if rootfs_probe.returncode == 0:
+            raise ProbeFailure("runtime_readonly_rootfs_write_escape")
         require(
             docker_input(
                 PROVIDER_TRANSPORT_SHIM.encode("utf-8"),
@@ -988,6 +1012,7 @@ def main() -> int:
             "dispatch_http=passed full_chain=passed launcher=passed hermes_child=passed "
             "hermes_agent_loop=passed provider_transport_seam=passed agent_identity=passed "
             "tool_registration=passed tamper_guard=passed "
+            "filesystem_confinement=passed "
             "af_unix_callback=passed plane_http_gateway=passed authorization=passed "
             "idempotency=passed audit=passed publication=passed "
             "internal_network=passed source_mount_scan=passed credential_scan=passed"

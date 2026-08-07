@@ -264,9 +264,6 @@ _SYSCALLS = {
         "io_uring_setup": 425,
     },
 }
-_OPEN_WRITE_FLAGS = 1 | 2 | 64 | 512 | 1024 | 0x410000
-
-
 def _install_linux_kernel_policy() -> None:
     """Install the child-only policy; failure is intentionally fail-closed."""
 
@@ -347,6 +344,13 @@ def _install_linux_kernel_policy() -> None:
                 _SockFilter(_BPF_RET_K, 0, 0, _SECCOMP_RET_ALLOW),
             )
         )
+    # The outer production runtime container has a read-only root filesystem
+    # and exposes only bounded tmpfs/state locations as writable mounts. Hermes
+    # legitimately creates invocation-scoped logging and session directories
+    # below HERMES_HOME, so the child must retain mkdir/mkdirat and ordinary
+    # open/openat writes. The container filesystem boundary, rather than a
+    # path-blind seccomp denial, confines those writes to the intended mounts.
+    # Destructive namespace and mount operations remain denied below.
     for name in (
         "bind",
         "listen",
@@ -368,8 +372,6 @@ def _install_linux_kernel_policy() -> None:
         "rename",
         "renameat",
         "renameat2",
-        "mkdir",
-        "mkdirat",
         "rmdir",
         "truncate",
         "ftruncate",
@@ -409,24 +411,9 @@ def _install_linux_kernel_policy() -> None:
     ):
         deny(name)
 
-    def deny_open_writes(name: str, flags_offset: int) -> None:
-        number = syscalls.get(name)
-        if number is None:
-            return
-        # A non-matching syscall jumps over the flag load, mask, zero test,
-        # and errno return. Read-only opens continue to the next rule.
-        instructions.extend(
-            (
-                _SockFilter(_BPF_JMP_JEQ_K, 0, 4, number),
-                _SockFilter(_BPF_LD_W_ABS, 0, 0, flags_offset),
-                _SockFilter(_BPF_ALU_AND_K, 0, 0, _OPEN_WRITE_FLAGS),
-                _SockFilter(_BPF_JMP_JEQ_K, 1, 0, 0),
-                _SockFilter(_BPF_RET_K, 0, 0, _SECCOMP_RET_ERRNO | errno.EPERM),
-            )
-        )
-
-    deny_open_writes("open", 24)
-    deny_open_writes("openat", 32)
+    # Do not add a path-blind open/openat write denial here. The production
+    # container's read-only rootfs rejects writes outside its explicit tmpfs
+    # and state mounts while allowing Hermes' bounded log/session files.
     instructions.append(_SockFilter(_BPF_RET_K, 0, 0, _SECCOMP_RET_ALLOW))
     array_type = _SockFilter * len(instructions)
     array = array_type(*instructions)

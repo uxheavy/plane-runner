@@ -53,4 +53,5 @@ def test_g4_runtime_container_red_team_proves_the_pinned_real_image_and_cleans_l
     assert "provider_transport_seam=passed" in result.stdout
     assert "agent_identity=passed" in result.stdout
     assert "tamper_guard=passed" in result.stdout
+    assert "filesystem_confinement=passed" in result.stdout
     assert "cleanup_failed" not in result.stdout
