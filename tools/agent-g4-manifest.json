@@ -3,7 +3,7 @@
   "candidateBinding": {
     "mode": "exact-single-child",
     "acceptedG3Baseline": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
-    "parentCommit": "49db4fd72e944633beb9039b3908598a156254b2",
+    "parentCommit": "61a73f8719651871afa6f6a6bcbb856a8618f56f",
     "candidateCommitSource": "git-head-with-exact-parent",
     "rejectDescendants": true
   },
@@ -87,6 +87,7 @@
   ],
   "scripts": [
     "tools/check-agent-settings-reuse.py",
+    "tools/check-local-dev-topology.py",
     "tools/verify-api-migrations.sh",
     "tools/verify-agent-g3.sh",
     "tools/verify-agent-g4.sh",
@@ -126,7 +127,8 @@
     "plane/tests/contract/api/test_operation_gateway_g4.py",
     "plane/tests/contract/api/test_agent_g4_rollback_drill.py",
     "plane/tests/contract/api/test_agent_operator_readback_g4.py",
-    "plane/tests/contract/api/test_agent_runtime_production.py"
+    "plane/tests/contract/api/test_agent_runtime_production.py",
+    "plane/tests/contract/api/test_local_runtime_configuration.py"
   ],
   "offlineFixtures": [
     "tools/agent-g4-runtime-red-team.py",
@@ -152,7 +154,7 @@
     },
     "rollback": {
       "path": "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json",
-      "sha256": "dc142d722cef67068e815f25f5884b6026ba4dc24b3b6c2a53d5ee7780450631",
+      "sha256": "a7d13d4ee988e2b666638857e3389c4577ee710ba8028ed1d73d5daae08012bc",
       "testPath": "plane/tests/contract/api/test_agent_g4_rollback_drill.py",
       "requiredOutputFields": [
         "externalWrites",

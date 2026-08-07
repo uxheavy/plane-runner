@@ -286,7 +286,7 @@ docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose
 `apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` is the pin
 manifest. The current Plane deployable service candidate is the exact
 integrated implementation parent Plane commit
-`49db4fd72e944633beb9039b3908598a156254b2`; the previously accepted G3
+`61a73f8719651871afa6f6a6bcbb856a8618f56f`; the previously accepted G3
 candidate is Plane commit `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
 The current binding carries Hermes commit
 `e573a46611e2cb988f1ab43ad34cd8cc3b2cb659`, MCP gitlink

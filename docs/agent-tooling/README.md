@@ -4,7 +4,7 @@ This directory contains the compact execution control surface for the non-UI Pla
 
 ## Current status
 
-G0 through G3 are complete. The offline G4 baseline is independently accepted at wrapper commit `71a81a66ad8abf7650a8d5550e689df9fc1a86a4` (parent `49db4fd72e944633beb9039b3908598a156254b2`). [GOAL.md](./GOAL.md) records its exact image, runtime, contract, proof, and review evidence. Current integrated HEAD `c7e6338240` adds the verified local topology and original-design reuse correction but is not yet an accepted exact-wrapper candidate; it needs a new wrapper/manifest binding and complete offline G4 rerun. Separately authorized live provider/model evaluation and G5 staged rollout remain undone; G5 is not authorized. No chat UI is in scope.
+G0 through G3 are complete. The canonical offline G4 wrapper is bound as one exact child of implementation parent `61a73f8719651871afa6f6a6bcbb856a8618f56f`, with the exact image, runtime, contract, proof, and review evidence recorded in [GOAL.md](./GOAL.md). The integrated candidate includes the verified local topology and original-design reuse correction: one shared runtime settings parser, one community runtime service owner, and one local extension. Separately authorized live provider/model evaluation and G5 staged rollout remain undone; G5 is not authorized. No chat UI is in scope.
 
 The authorization is local-only. Pilot, production, deployment, destructive, credential, purchase, external-write, and other separately governed actions remain gated independently.
 

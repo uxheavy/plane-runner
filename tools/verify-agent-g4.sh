@@ -373,6 +373,23 @@ run_logged() {
 
 static_scope() {
     python3 "${ROOT_DIR}/tools/check-agent-settings-reuse.py" "${G3_BASE_COMMIT}" "${CANDIDATE_COMMIT}"
+    python3 - "${ROOT_DIR}/docker-compose-local.yml" "${ROOT_DIR}/deployments/cli/community/docker-compose.yml" <<'PY'
+from pathlib import Path
+import sys
+
+local = Path(sys.argv[1]).read_text(encoding="utf-8")
+community = Path(sys.argv[2]).read_text(encoding="utf-8")
+assert community.count("  agent-runtime:\n") == 1, "community compose must own one agent-runtime service"
+assert '    entrypoint: ["python3", "-m", "plane.agent.runtime.service"]' in community
+assert "    command: []" in community
+assert local.count("  agent-runtime:\n") == 1, "local compose must expose one agent-runtime extension"
+runtime = local.split("  agent-runtime:\n", 1)[1].split("\n  migrator:", 1)[0]
+assert "extends:\n      file: ./deployments/cli/community/docker-compose.yml\n      service: agent-runtime" in runtime
+assert "image:" not in runtime
+assert "entrypoint:" not in runtime
+assert "command:" not in runtime
+print("local topology reuse proof passed: community_owner=1 local_extension=1 entrypoint=canonical")
+PY
     git -C "${ROOT_DIR}" diff --check "${G3_BASE_COMMIT}" "${CANDIDATE_COMMIT}"
     gitleaks detect --no-banner --redact --source "${ROOT_DIR}" --log-opts "${G3_BASE_COMMIT}..${CANDIDATE_COMMIT}" --exit-code 1
 }
@@ -530,6 +547,22 @@ g4_gateway_workload() {
             -o cache_dir=/tmp/g4-pytest \
             "$1"
     ' -- plane/tests/contract/api/test_operation_gateway_g4.py
+}
+
+g4_production_configuration() {
+    run_api sh -c '
+        set -Eeuo pipefail
+        export PYTHONPATH=/workspace/apps/api${PYTHONPATH:+:${PYTHONPATH}}
+        exec pytest \
+            -p plane.tests.g3_no_skips \
+            --migrations \
+            -q \
+            -o "addopts=--strict-markers --reuse-db" \
+            -o cache_dir=/tmp/g4-pytest \
+            "$@"
+    ' -- \
+        plane/tests/contract/api/test_agent_runtime_production.py \
+        plane/tests/contract/api/test_local_runtime_configuration.py
 }
 
 g4_rollback() {
@@ -704,7 +737,7 @@ CURRENT_STEP="g4-operator-readback"
 run_logged g4-operator-readback g4_pytest plane/tests/contract/api/test_agent_operator_readback_g4.py
 
 CURRENT_STEP="g4-production-configuration"
-run_logged g4-production-configuration g4_pytest plane/tests/contract/api/test_agent_runtime_production.py
+run_logged g4-production-configuration g4_production_configuration
 
 CURRENT_STEP="live-boundary"
 OFFLINE_STATUS="passed"
