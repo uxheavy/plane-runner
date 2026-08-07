@@ -289,19 +289,25 @@ def run_gateway_workload(*, requests: int = 128, workers: int = 8, agent_count: 
         "maximumDuplicateEffects": duplicate_effects,
     }
     threshold_results = {
-        "minimumThroughputPerSecond": measured["minimumThroughputPerSecond"] >= thresholds["minimumThroughputPerSecond"],
+        "minimumThroughputPerSecond": (
+            measured["minimumThroughputPerSecond"] >= thresholds["minimumThroughputPerSecond"]
+        ),
         "maximumP95LatencyMs": measured["maximumP95LatencyMs"] <= thresholds["maximumP95LatencyMs"],
         "maximumP99LatencyMs": measured["maximumP99LatencyMs"] <= thresholds["maximumP99LatencyMs"],
         "maximumErrorRate": measured["maximumErrorRate"] <= thresholds["maximumErrorRate"],
         "minimumSaturationRate": measured["minimumSaturationRate"] >= thresholds["minimumSaturationRate"],
         "maximumQueueingP95Ms": measured["maximumQueueingP95Ms"] <= thresholds["maximumQueueingP95Ms"],
-        "maximumDatabaseConnections": measured["maximumDatabaseConnections"] <= thresholds["maximumDatabaseConnections"],
+        "maximumDatabaseConnections": (
+            measured["maximumDatabaseConnections"] <= thresholds["maximumDatabaseConnections"]
+        ),
         "maximumResidentSetMb": measured["maximumResidentSetMb"] <= thresholds["maximumResidentSetMb"],
         "maximumCpuSeconds": measured["maximumCpuSeconds"] <= thresholds["maximumCpuSeconds"],
         "minimumSustainedDurationSeconds": (
             measured["minimumSustainedDurationSeconds"] >= GATEWAY_WORKLOAD_MANIFEST["sustainedDurationSeconds"]
         ),
-        "minimumCorrelationCoverage": measured["minimumCorrelationCoverage"] >= thresholds["minimumCorrelationCoverage"],
+        "minimumCorrelationCoverage": (
+            measured["minimumCorrelationCoverage"] >= thresholds["minimumCorrelationCoverage"]
+        ),
         "minimumAuditCoverage": measured["minimumAuditCoverage"] >= thresholds["minimumAuditCoverage"],
         "maximumDuplicateEffects": measured["maximumDuplicateEffects"] <= thresholds["maximumDuplicateEffects"],
         "duplicateIdempotencyRows": duplicate_records == 1,
