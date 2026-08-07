@@ -350,7 +350,10 @@ def _install_linux_kernel_policy() -> None:
     # below HERMES_HOME, so the child must retain mkdir/mkdirat and ordinary
     # open/openat writes. The container filesystem boundary, rather than a
     # path-blind seccomp denial, confines those writes to the intended mounts.
-    # Destructive namespace and mount operations remain denied below.
+    # Destructive namespace and mount operations remain denied below, except
+    # the unlink/unlinkat/rmdir lifecycle needed by Python's tempfile probe and
+    # Hermes Code Mode cleanup. The read-only rootfs still confines those
+    # operations to the explicit writable mounts.
     for name in (
         "bind",
         "listen",
@@ -367,12 +370,12 @@ def _install_linux_kernel_policy() -> None:
         "ptrace",
         "openat2",
         "creat",
-        "unlink",
-        "unlinkat",
+        # tempfile._get_default_tempdir() probes a candidate by creating and
+        # unlinking a file; Code Mode then removes its generated directory.
+        # Keep the rest of the destructive namespace operations denied.
         "rename",
         "renameat",
         "renameat2",
-        "rmdir",
         "truncate",
         "ftruncate",
         "link",

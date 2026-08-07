@@ -16,8 +16,8 @@ from pathlib import Path
 
 HERMES_COMMIT = "e573a46611e2cb988f1ab43ad34cd8cc3b2cb659"
 RESOURCE_LABEL = "com.uxheavy.plane.agent-g4-runtime"
-EXPECTED_RUNTIME_IMAGE_DIGEST = "sha256:ab4cd8829c3265e7e54214845f037ffadefdd31da4fc3d73356783d1800b7f3d"
-EXPECTED_RUNTIME_IMAGE_REVISION = "24bd39389f84b89562385ff4d607db8fb6a322ad"
+EXPECTED_RUNTIME_IMAGE_DIGEST = "sha256:77cb4c5469220f83f26df1a7be8ddf96d3d88c374ccc00665f2a1742a3e80742"
+EXPECTED_RUNTIME_IMAGE_REVISION = "19b46d78c45feb6a07066b9933a356ce2afbd3c3"
 RUNTIME_CONTRACT = "plane.agent-runtime/v1"
 PINNED_HERMES_RUN_AGENT_PATH = "/opt/hermes/run_agent.py"
 PINNED_HERMES_RUN_AGENT_SHA256 = "1a336eac71d5cd4418ebf7a8e52236eb6984ac9b9cfbb2e9ba08c9a197486011"
@@ -133,14 +133,16 @@ class _DeterministicStream:
 
 class _Completions:
     _PLAN = (
-        ("plane_operation", {"action": "discover", "input": {"query": "work item", "limit": 8}}),
-        ("plane_operation", {"action": "read", "operationRef": "operation:work_item.read", "input": {"issue_ref": "issue:red-team"}}),
+        ("tool_search", {"query": "Plane operation", "limit": 8}),
+        ("tool_describe", {"name": "plane_operation"}),
+        ("tool_call", {"name": "plane_operation", "arguments": {"action": "discover", "input": {"query": "work item", "limit": 8}}}),
+        ("tool_call", {"name": "plane_operation", "arguments": {"action": "read", "operationRef": "operation:work_item.read", "input": {"issue_ref": "issue:red-team"}}}),
         ("execute_code", {"code": "from hermes_tools import plane_operation\nprint(plane_operation('code', 'operation:catalog.search', {'query': 'rename', 'limit': 5}))"}),
-        ("plane_operation", {"action": "mutate", "operationRef": "operation:work_item.rename", "input": {"issue_ref": "issue:red-team", "name": "must-not-apply", "actor_ref": "actor:not-authorized"}}),
-        ("plane_operation", {"action": "mutate", "operationRef": "operation:work_item.rename", "input": {"issue_ref": "issue:red-team", "name": "G4 exact image", "actor_ref": "actor:red-team"}}),
-        ("plane_operation", {"action": "mutate", "operationRef": "operation:work_item.rename", "input": {"issue_ref": "issue:red-team", "name": "G4 exact image", "actor_ref": "actor:red-team"}}),
-        ("plane_operation", {"action": "mutate", "operationRef": "operation:agent.outcome.submit", "input": {"run_ref": "run:red-team", "summary": "Exact-image runtime chain completed.", "artifacts": ["artifact:g4-exact-image"], "evidence": ["evidence:g4-exact-image"]}}),
-        ("plane_publish", {"kind": "outcome", "operationRef": "operation:agent.outcome.publish", "resourceRef": "outcome-submission:red-team", "content": "Explicit exact-image outcome publication."}),
+        ("tool_call", {"name": "plane_operation", "arguments": {"action": "mutate", "operationRef": "operation:work_item.rename", "input": {"issue_ref": "issue:red-team", "name": "must-not-apply", "actor_ref": "actor:not-authorized"}}}),
+        ("tool_call", {"name": "plane_operation", "arguments": {"action": "mutate", "operationRef": "operation:work_item.rename", "input": {"issue_ref": "issue:red-team", "name": "G4 exact image", "actor_ref": "actor:red-team"}}}),
+        ("tool_call", {"name": "plane_operation", "arguments": {"action": "mutate", "operationRef": "operation:work_item.rename", "input": {"issue_ref": "issue:red-team", "name": "G4 exact image", "actor_ref": "actor:red-team"}}}),
+        ("tool_call", {"name": "plane_operation", "arguments": {"action": "mutate", "operationRef": "operation:agent.outcome.submit", "input": {"run_ref": "run:red-team", "summary": "Exact-image runtime chain completed.", "artifacts": ["artifact:g4-exact-image"], "evidence": ["evidence:g4-exact-image"]}}}),
+        ("tool_call", {"name": "plane_publish", "arguments": {"kind": "outcome", "operationRef": "operation:agent.outcome.publish", "resourceRef": "outcome-submission:red-team", "content": "Explicit exact-image outcome publication."}}),
     )
 
     def __init__(self):
@@ -151,13 +153,31 @@ class _Completions:
         self.calls += 1
         identity = _assert_pinned_hermes_identity()
         names = _tool_names(kwargs)
-        required = {"plane_operation", "plane_publish", "execute_code"}
+        # Plane tools are deliberately deferred by Hermes' real tool-search
+        # assembly. Drive the native bridge tools first; Hermes then unwraps
+        # tool_call into the registered Plane handlers.
+        required = {"tool_search", "tool_describe", "tool_call", "execute_code"}
         messages = kwargs.get("messages", [])
         if not required.issubset(names):
             _diagnose({"event": "g4.hermes.tool-registration", "toolNames": sorted(names)})
             raise RuntimeError("real Hermes tool registration set is incomplete")
         if call_number > 0 and not any(message.get("role") == "tool" for message in messages if isinstance(message, dict)):
             raise RuntimeError("real Hermes tool result did not return through the provider loop")
+        if call_number == 5:
+            tool_messages = [
+                message for message in messages
+                if isinstance(message, dict) and message.get("role") == "tool"
+            ]
+            if not any(
+                '"operation":"catalog.search"' in str(message.get("content", ""))
+                and '"status":"ok"' in str(message.get("content", ""))
+                for message in tool_messages
+            ):
+                _diagnose({
+                    "event": "g4.hermes.code-mode-result",
+                    "toolMessages": tool_messages[-3:],
+                })
+                raise RuntimeError("genuine execute_code did not return the Plane Code Mode callback")
         if call_number < len(self._PLAN):
             name, arguments = self._PLAN[call_number]
             tool_delta = _tool_call("g4-call-" + str(call_number + 1), name, arguments)
@@ -451,7 +471,7 @@ body = sys.stdin.buffer.read()
 token = sys.argv[1]
 if token == "__runtime_secret_file__":
     token = pathlib.Path("/run/secrets/plane_agent_runtime").read_text(encoding="utf-8")
-connection = http.client.HTTPConnection("127.0.0.1", 8080, timeout=8)
+connection = http.client.HTTPConnection("127.0.0.1", 8080, timeout=30)
 try:
     connection.request("POST", sys.argv[2], body=body, headers={"Authorization": "Bearer " + token, "Content-Type": "application/json", "Content-Length": str(len(body))})
     response = connection.getresponse()
@@ -464,7 +484,7 @@ finally:
 
 GATEWAY_GET_SCRIPT = """
 import http.client, json, sys
-connection = http.client.HTTPConnection("plane-host", 8091, timeout=8)
+connection = http.client.HTTPConnection("plane-host", 8091, timeout=30)
 try:
     connection.request("GET", "/v1/evidence", headers={"X-Evidence-Token": sys.argv[1]})
     response = connection.getresponse()
@@ -614,7 +634,13 @@ def request_body(host_url: str, host_token: str) -> tuple[bytes, str]:
         # This is a non-secret provider marker consumed only by the injected
         # OpenAI transport seam. No production credential crosses the exact
         # image boundary.
-        "credentials": {"api_key": "offline-deterministic-model"},
+        # Hermes requires an explicit base URL alongside an API key before it
+        # constructs its normal OpenAI client. Both values are disposable
+        # transport configuration; the injected OpenAI seam never connects.
+        "credentials": {
+            "api_key": "offline-deterministic-model",
+            "base_url": "http://offline.invalid/v1",
+        },
         "host": {"url": host_url, "token": host_token},
         "invocation": invocation,
         "invocationId": invocation["invocationId"],
@@ -951,7 +977,17 @@ def main() -> int:
             and "tamper_guard=fail_closed" in frame
             for frame in raw_frames
         ):
-            raise ProbeFailure("real_hermes_agent_loop_execution_evidence_missing")
+            provider_diagnostic = docker(
+                "exec",
+                name,
+                "sh",
+                "-c",
+                "test ! -r /tmp/g4-provider-seam-error || cat /tmp/g4-provider-seam-error",
+            ).stdout
+            raise ProbeFailure(
+                "real_hermes_agent_loop_execution_evidence_missing:"
+                f"provider={provider_diagnostic[:4096]}"
+            )
 
         evidence_result = require(
             docker(
@@ -990,7 +1026,8 @@ def main() -> int:
             or "operation:agent.outcome.submit" not in operations
             or "operation:agent.outcome.publish" not in operations
         ):
-            raise ProbeFailure("plane_gateway_chain_evidence_incomplete")
+            bounded_evidence = json.dumps(evidence, sort_keys=True, separators=(",", ":"))[:8192]
+            raise ProbeFailure(f"plane_gateway_chain_evidence_incomplete:{bounded_evidence}")
         if not any(
             event.get("status") == "denied" and event.get("operationRef") == "operation:work_item.rename"
             for event in events

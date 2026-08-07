@@ -19,16 +19,16 @@
       "mcpGitlink": "2dc152e136d7ad952b901e5fe9364a37487297ba",
       "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889",
       "imageTag": "plane-agent-runtime:hermes-e573a466-g4-ffcc2dc9",
-      "imageDigest": "sha256:ab4cd8829c3265e7e54214845f037ffadefdd31da4fc3d73356783d1800b7f3d",
-      "runtimeRevision": "24bd39389f84b89562385ff4d607db8fb6a322ad",
+      "imageDigest": "sha256:77cb4c5469220f83f26df1a7be8ddf96d3d88c374ccc00665f2a1742a3e80742",
+      "runtimeRevision": "19b46d78c45feb6a07066b9933a356ce2afbd3c3",
       "contract": "plane.agent-runtime/v1"
     },
     "services": {
-      "api": {"revision": "739068b87231558df8c4685c42045f5c91306200", "imageDigest": "sha256:ab4cd8829c3265e7e54214845f037ffadefdd31da4fc3d73356783d1800b7f3d", "contract": "plane.operation/v1"},
-      "worker": {"revision": "739068b87231558df8c4685c42045f5c91306200", "imageDigest": "sha256:ab4cd8829c3265e7e54214845f037ffadefdd31da4fc3d73356783d1800b7f3d", "contract": "plane.operation/v1"},
-      "beat-worker": {"revision": "739068b87231558df8c4685c42045f5c91306200", "imageDigest": "sha256:ab4cd8829c3265e7e54214845f037ffadefdd31da4fc3d73356783d1800b7f3d", "contract": "plane.operation/v1"},
-      "supervisor": {"revision": "739068b87231558df8c4685c42045f5c91306200", "imageDigest": "sha256:ab4cd8829c3265e7e54214845f037ffadefdd31da4fc3d73356783d1800b7f3d", "contract": "plane.agent-runtime/v1"},
-      "agent-runtime": {"revision": "739068b87231558df8c4685c42045f5c91306200", "imageDigest": "sha256:ab4cd8829c3265e7e54214845f037ffadefdd31da4fc3d73356783d1800b7f3d", "contract": "plane.agent-runtime/v1"}
+      "api": {"revision": "739068b87231558df8c4685c42045f5c91306200", "imageDigest": "sha256:77cb4c5469220f83f26df1a7be8ddf96d3d88c374ccc00665f2a1742a3e80742", "contract": "plane.operation/v1"},
+      "worker": {"revision": "739068b87231558df8c4685c42045f5c91306200", "imageDigest": "sha256:77cb4c5469220f83f26df1a7be8ddf96d3d88c374ccc00665f2a1742a3e80742", "contract": "plane.operation/v1"},
+      "beat-worker": {"revision": "739068b87231558df8c4685c42045f5c91306200", "imageDigest": "sha256:77cb4c5469220f83f26df1a7be8ddf96d3d88c374ccc00665f2a1742a3e80742", "contract": "plane.operation/v1"},
+      "supervisor": {"revision": "739068b87231558df8c4685c42045f5c91306200", "imageDigest": "sha256:77cb4c5469220f83f26df1a7be8ddf96d3d88c374ccc00665f2a1742a3e80742", "contract": "plane.agent-runtime/v1"},
+      "agent-runtime": {"revision": "739068b87231558df8c4685c42045f5c91306200", "imageDigest": "sha256:77cb4c5469220f83f26df1a7be8ddf96d3d88c374ccc00665f2a1742a3e80742", "contract": "plane.agent-runtime/v1"}
     }
   },
   "previous": {
