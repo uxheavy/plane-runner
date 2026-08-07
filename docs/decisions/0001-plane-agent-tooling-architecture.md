@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted; runtime operation-approval portions superseded by ADR-0002; run-container lifetime wording superseded by ADR-0006
+Accepted; runtime operation-approval portions superseded by ADR-0002; invocation-isolation wording superseded by ADR-0006
 
 ## Date
 
@@ -10,7 +10,7 @@ Accepted; runtime operation-approval portions superseded by ADR-0002; run-contai
 
 ## Context
 
-Plane needs a safe and usable agent-facing operation surface. Plane already has a Python MCP server for external clients. Plane-native agents execute through Hermes and need common semantic tools plus a way to discover and compose the broader supported Plane API without loading a very large tool catalog into model context.
+Plane needs a safe and usable agent-facing operation surface. Plane already has a Python MCP server for external clients. Plane Agents backed by the hidden Hermes kernel need common semantic tools plus a way to discover and compose the broader supported Plane API without loading a very large tool catalog into model context.
 
 All agent activity must preserve Plane identity, live authorization, approval policy, mutation safety, bounded results, and append-only auditing. Generated code must not receive credentials or database access.
 
@@ -18,19 +18,19 @@ All agent activity must preserve Plane identity, live authorization, approval po
 
 Use one shared Plane Operation Gateway as the supported agent-facing application boundary.
 
-Plane-native Hermes agents use native semantic tools and self-hosted TypeScript Code Mode. Code Mode exposes documentation, searchable operation discovery, and execution through credential-free host callbacks. The generated TypeScript runs in a restricted child isolate inside the disposable Hermes run container.
+Plane Agents backed by the hidden Hermes kernel use native semantic tools and self-hosted TypeScript Code Mode. Code Mode exposes documentation, searchable operation discovery, and execution through credential-free host callbacks. The generated TypeScript runs in a restricted child isolate within invocation-scoped runtime isolation.
 
 External clients continue to use Plane's Python MCP server. Its handlers migrate incrementally to the same Plane Operation Gateway.
 
 The operation catalog is generated from the supported public OpenAPI surface and enriched by a curated agent-oriented overlay. Plane's live authorization remains authoritative for every operation.
 
-Each Plane-native agent uses one revocable Plane credential held only by trusted Hermes host code. The initial design does not add run-bound capability tokens or per-operation credentials.
+Each Plane Agent uses one revocable Plane credential held only by trusted Hermes host code. The initial design does not add run-bound capability tokens or per-operation credentials.
 
 Hermes's existing native tool registry, Tool Search, concurrency, approval lifecycle, session persistence, and oversized-result behavior are reused where their boundaries fit.
 
 ## Alternatives considered
 
-### Use MCP internally for Plane-native agents
+### Use MCP internally for Plane Agents
 
 - Benefit: one protocol for internal and external consumers.
 - Cost: adds protocol transport, server lifecycle, and schema translation inside a system that already controls both ends.
@@ -56,7 +56,7 @@ Hermes's existing native tool registry, Tool Search, concurrency, approval lifec
 
 ### Pause and replay Code Mode after approval
 
-- Benefit: approvals could outlive a disposable execution container.
+- Benefit: approval state outlives invocation-scoped runtime isolation.
 - Cost: duplicates Hermes's approval lifecycle and makes side-effect replay substantially harder.
 - Rejected: reuse Hermes's same-turn blocking approval and fail the run if the runtime dies.
 
@@ -68,5 +68,5 @@ Hermes's existing native tool registry, Tool Search, concurrency, approval lifec
 - The Python MCP server remains a supported compatibility layer during migration.
 - TypeScript Code Mode requires a new Hermes runtime adapter and restricted child isolate.
 - Credential theft from trusted Hermes host state remains possible until revocation; secure storage, rotation, network isolation, and incident controls are required.
-- Pending approvals do not survive Hermes or container restart in the initial release.
+- Pending approvals do not survive Hermes or runtime restart in the initial release.
 - Further expensive-to-reverse decisions should receive separate ADRs rather than editing this history.
