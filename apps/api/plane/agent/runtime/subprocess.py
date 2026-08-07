@@ -143,7 +143,6 @@ _CLONE_SIGHAND = 0x00000800
 _CLONE_VFORK = 0x00004000
 _CLONE_THREAD = 0x00010000
 _SIGCHLD = 17
-_HERMES_BOOTSTRAP_CLONE_FLAGS = _CLONE_VM | _CLONE_VFORK | _SIGCHLD
 _HERMES_BOOTSTRAP_THREAD_REQUIRED_FLAGS = _CLONE_VM | _CLONE_SIGHAND | _CLONE_THREAD
 # CPython 3.12's non-vfork Popen path uses the classic musl fork wrapper,
 # which reaches clone(SIGCHLD) before exec. It is the only additional process
@@ -356,16 +355,14 @@ def _install_linux_kernel_policy() -> None:
     ):
         allow(name)
 
-    # The pinned Hermes bootstrap uses Python's close_fds=True Popen path. On
-    # the production image its musl vfork implementation reaches clone with
-    # CLONE_VM|CLONE_VFORK|SIGCHLD: the launcher is suspended until the child
-    # has exec'd the fixed Hermes service or failed. The bootstrap also starts
-    # one bounded stderr-reader thread, whose clone flags are distinct and
-    # carry CLONE_THREAD. Permit the exact bootstrap and thread shapes below.
-    # Code Mode is deliberately forced through CPython's classic
-    # clone(SIGCHLD) path by the image-local runtime adapter; fork, vfork, and
-    # clone3 remain denied. The finite pids limit is a second process-tree
-    # bound.
+    # The pinned Hermes bootstrap and Code Mode both use Python's
+    # close_fds=True Popen path. The image-local runtime adapter disables
+    # CPython's vfork optimization before either path runs, so both use the
+    # exact classic clone(SIGCHLD) shape above. The bootstrap also starts one
+    # bounded stderr-reader thread, whose clone flags are distinct and carry
+    # CLONE_THREAD. Permit only the classic process shape and the existing
+    # required thread shape; fork, vfork, vfork-shaped clone calls, and clone3
+    # remain denied below. The finite pids limit is a second process-tree bound.
     clone_number = syscalls.get("clone")
     if clone_number is not None:
         # Permit only the classic fork-compatible clone(SIGCHLD) shape before
@@ -383,9 +380,7 @@ def _install_linux_kernel_policy() -> None:
         instructions.extend(
             (
                 _SockFilter(_BPF_LD_W_ABS, 0, 0, 0),
-                _SockFilter(_BPF_JMP_JEQ_K, 0, 7, clone_number),
-                _SockFilter(_BPF_LD_W_ABS, 0, 0, _SECCOMP_CLONE_FLAGS_OFFSET),
-                _SockFilter(_BPF_JMP_JEQ_K, 4, 0, _HERMES_BOOTSTRAP_CLONE_FLAGS),
+                _SockFilter(_BPF_JMP_JEQ_K, 0, 5, clone_number),
                 _SockFilter(_BPF_LD_W_ABS, 0, 0, _SECCOMP_CLONE_FLAGS_OFFSET),
                 _SockFilter(_BPF_ALU_AND_K, 0, 0, _HERMES_BOOTSTRAP_THREAD_REQUIRED_FLAGS),
                 _SockFilter(_BPF_JMP_JEQ_K, 1, 0, _HERMES_BOOTSTRAP_THREAD_REQUIRED_FLAGS),

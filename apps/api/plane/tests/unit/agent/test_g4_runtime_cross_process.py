@@ -161,7 +161,7 @@ def test_g4_runtime_direct_syscalls_deny_fork_vfork_clone_and_clone3_but_allow_e
     fixture = (
         "import ctypes, errno, json, mmap, os, pathlib, platform, socket, sys\n"
         "from plane.agent.runtime.subprocess import (\n"
-        "    _CLONE_VM, _HERMES_BOOTSTRAP_CLONE_FLAGS, _HERMES_BOOTSTRAP_THREAD_REQUIRED_FLAGS,\n"
+        "    _CLONE_VM, _CLONE_VFORK, _HERMES_BOOTSTRAP_THREAD_REQUIRED_FLAGS,\n"
         "    _SIGCHLD, _SYSCALLS,\n"
         ")\n"
         "sys.stdin.buffer.read()\n"
@@ -187,18 +187,6 @@ def test_g4_runtime_direct_syscalls_deny_fork_vfork_clone_and_clone3_but_allow_e
         "exit_syscall = {'x86_64': 60, 'aarch64': 93}[machine]\n"
         "stack = mmap.mmap(-1, 65536, prot=mmap.PROT_READ | mmap.PROT_WRITE)\n"
         "stack_top = (ctypes.addressof(ctypes.c_char.from_buffer(stack)) + len(stack)) & -16\n"
-        "def allowed_bootstrap_clone():\n"
-        "    result, error = probe(\n"
-        "        'clone', ctypes.c_ulong(_HERMES_BOOTSTRAP_CLONE_FLAGS), ctypes.c_void_p(stack_top),\n"
-        "        ctypes.c_void_p(0), ctypes.c_void_p(0), ctypes.c_ulong(0),\n"
-        "    )\n"
-        "    if result == 0:\n"
-        "        libc.syscall(exit_syscall, 0)\n"
-        "        return False\n"
-        "    if result <= 0 or error != 0:\n"
-        "        return False\n"
-        "    os.waitpid(result, 0)\n"
-        "    return True\n"
         "def allowed_code_mode_clone():\n"
         "    result, error = probe(\n"
         "        'clone', ctypes.c_ulong(_SIGCHLD), ctypes.c_void_p(stack_top),\n"
@@ -244,9 +232,10 @@ def test_g4_runtime_direct_syscalls_deny_fork_vfork_clone_and_clone3_but_allow_e
         "    'vforkDenied': denied('vfork'),\n"
         "    'ordinaryCloneDenied': denied('clone', ctypes.c_ulong(_SIGCHLD | _CLONE_VM), ctypes.c_void_p(1),\n"
         "        ctypes.c_void_p(0), ctypes.c_void_p(0), ctypes.c_ulong(0)),\n"
+        "    'vforkCloneDenied': denied('clone', ctypes.c_ulong(_SIGCHLD | _CLONE_VM | _CLONE_VFORK), ctypes.c_void_p(1),\n"
+        "        ctypes.c_void_p(0), ctypes.c_void_p(0), ctypes.c_ulong(0)),\n"
         "    'clone3Denied': denied('clone3', ctypes.byref(clone_args), ctypes.sizeof(clone_args)),\n"
-        "    'bootstrapCloneAllowed': allowed_bootstrap_clone(),\n"
-        "    'codeModeCloneAllowed': allowed_code_mode_clone(),\n"
+        "    'classicPopenCloneAllowed': allowed_code_mode_clone(),\n"
         "    'threadCloneAllowed': allowed_thread_clone(),\n"
         "    'rpcSocketModeAllowed': chmod_exact_allowed,\n"
         "    'otherChmodDenied': chmod_other_denied,\n"
@@ -272,8 +261,7 @@ def test_g4_runtime_direct_syscalls_deny_fork_vfork_clone_and_clone3_but_allow_e
         observed = json.loads(frames[0])
         assert observed["architecture"] in {"x86_64", "aarch64"}
         assert {key: value for key, value in observed.items() if key != "architecture"} == {
-            "bootstrapCloneAllowed": True,
-            "codeModeCloneAllowed": True,
+            "classicPopenCloneAllowed": True,
             "clone3Denied": True,
             "forkDenied": True,
             "inet6SocketDenied": True,
@@ -284,6 +272,7 @@ def test_g4_runtime_direct_syscalls_deny_fork_vfork_clone_and_clone3_but_allow_e
             "threadCloneAllowed": True,
             "unixSocketAllowed": True,
             "vforkDenied": True,
+            "vforkCloneDenied": True,
         }
     finally:
         server.shutdown()

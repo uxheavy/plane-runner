@@ -162,6 +162,7 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn("COPY hermes/plane_runtime/g1_runtime_image/dotenv/ /opt/hermes/dotenv/", image_dockerfile)
         self.assertIn("COPY plane_runtime_service/sitecustomize.py /opt/sitecustomize.py", image_dockerfile)
         self.assertIn("_HERMES_CODE_MODE_CLONE_FLAGS = _SIGCHLD", runtime_policy)
+        self.assertNotIn("_HERMES_BOOTSTRAP_CLONE_FLAGS", runtime_policy)
         self.assertIn("_HERMES_RPC_SOCKET_MODE = 0o600", runtime_policy)
         self.assertIn('allow_arg("chmod", _SECCOMP_MODE_OFFSET, _HERMES_RPC_SOCKET_MODE)', runtime_policy)
         self.assertIn('allow_arg("fchmodat", _SECCOMP_AT_MODE_OFFSET, _HERMES_RPC_SOCKET_MODE)', runtime_policy)
