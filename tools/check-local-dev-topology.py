@@ -7,6 +7,7 @@ import argparse
 import json
 import sys
 from collections.abc import Mapping
+from pathlib import Path
 
 
 BASE_SERVICES = {
@@ -22,6 +23,12 @@ BASE_SERVICES = {
 }
 RUNTIME_STATE_VOLUME = "agent_runtime_credential_state"
 RUNTIME_SECRET_FILE = "/run/secrets/plane_agent_runtime"
+MANIFEST_PATH = Path(__file__).with_name("agent-g4-manifest.json")
+RUNTIME_LABELS = {
+    "hermesCommit": "org.uxheavy.plane.hermes.commit",
+    "runtimeImageRevision": "org.uxheavy.plane.runtime.revision",
+    "runtimeContract": "org.uxheavy.plane.runtime.contract",
+}
 
 
 def require(condition: bool, message: str) -> None:
@@ -32,6 +39,34 @@ def require(condition: bool, message: str) -> None:
 def mapping(value: object, name: str) -> Mapping[str, object]:
     require(isinstance(value, Mapping), f"{name} must be an object")
     return value
+
+
+def runtime_manifest(path: Path = MANIFEST_PATH) -> Mapping[str, str]:
+    manifest = mapping(json.loads(path.read_text(encoding="utf-8")), "runtime manifest")
+    pins = mapping(manifest.get("pins"), "runtime manifest pins")
+    keys = (
+        "runtimeImageTag",
+        "runtimeImageDigest",
+        "hermesCommit",
+        "runtimeImageRevision",
+        "runtimeContract",
+    )
+    expected = {key: pins.get(key) for key in keys}
+    require(all(isinstance(value, str) and value for value in expected.values()), "runtime manifest binding is incomplete")
+    return expected  # type: ignore[return-value]
+
+
+def assert_runtime_image_tag(image: object, expected: Mapping[str, str]) -> None:
+    require(image == expected["runtimeImageTag"], f"agent runtime image must equal manifest tag {expected['runtimeImageTag']}")
+
+
+def assert_runtime_image_metadata(metadata: object, expected: Mapping[str, str]) -> None:
+    image = mapping(metadata, "agent runtime image metadata")
+    require(image.get("Id") == expected["runtimeImageDigest"], "agent runtime image ID must equal the manifest digest")
+    config = mapping(image.get("Config"), "agent runtime image config")
+    labels = mapping(config.get("Labels"), "agent runtime image labels")
+    for manifest_key, label_key in RUNTIME_LABELS.items():
+        require(labels.get(label_key) == expected[manifest_key], f"agent runtime image label {label_key} must match the manifest")
 
 
 def service(model: Mapping[str, object], name: str) -> Mapping[str, object]:
@@ -108,9 +143,8 @@ def assert_common(model: Mapping[str, object], *, agent_enabled: bool) -> None:
     require(internal.get("internal") is True, "runtime network must be internal")
 
     runtime = service(model, "agent-runtime")
-    runtime_image = str(runtime.get("image", ""))
-    require(runtime_image.startswith("uxheavy/plane-agent-runtime:hermes-"), "agent runtime must use the canonical pinned image")
-    require(not runtime_image.endswith(":latest"), "agent runtime must not use a floating image tag")
+    expected_runtime = runtime_manifest()
+    assert_runtime_image_tag(runtime.get("image"), expected_runtime)
     require(runtime.get("profiles") == ["agent"], "agent runtime must be opt-in through the agent profile")
     require(runtime.get("entrypoint") == ["python3", "-m", "plane.agent.runtime.service"], "agent runtime must select the runtime service module")
     require(runtime.get("command") == [], "agent runtime must not append arguments to the image bootstrap entrypoint")

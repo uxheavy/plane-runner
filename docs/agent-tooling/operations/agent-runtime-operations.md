@@ -138,14 +138,18 @@ docker compose -f docker-compose-local.yml up -d
 ```
 
 To opt into the separate runtime service, enable the `agent` profile and the
-local settings seam together. The profile uses the pinned community runtime
-image, an internal-only network, the mounted runtime secret, the API/worker
-host callback endpoints, and the existing credential-state volume. Its
-service definition extends the canonical community deployment service, so
-image, entrypoint, sandbox, healthcheck, and credential-mount changes remain
-owned in one Compose definition:
+local settings seam together. The local `.env.example` selects the exact
+manifest-bound prepared runtime tag and the opt-in checker verifies its image
+ID and labels. The community deployment keeps its registry-backed fallback
+for deployment environments. The profile uses an internal-only network, the
+mounted runtime secret, the API/worker host callback endpoints, and the
+existing credential-state volume. Its service definition extends the canonical
+community deployment service, so image, entrypoint, sandbox, healthcheck, and
+credential-mount changes remain owned in one Compose definition:
 
 ```sh
+pnpm check:local-dev
+pnpm check:local-dev:agent
 PLANE_AGENT_RUNTIME_ENABLED=1 docker compose --profile agent -f docker-compose-local.yml up -d
 docker compose --profile agent -f docker-compose-local.yml ps api worker agent-runtime
 docker compose --profile agent -f docker-compose-local.yml exec agent-runtime \

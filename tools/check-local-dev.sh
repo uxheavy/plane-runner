@@ -27,6 +27,54 @@ assert_contains() {
     fi
 }
 
+manifest_binding="$(python3 - <<'PY'
+import json
+
+with open("tools/agent-g4-manifest.json", encoding="utf-8") as manifest_file:
+    pins = json.load(manifest_file)["pins"]
+
+print("\t".join(pins[key] for key in (
+    "runtimeImageTag",
+    "runtimeImageDigest",
+    "hermesCommit",
+    "runtimeImageRevision",
+    "runtimeContract",
+)))
+PY
+)"
+IFS=$'\t' read -r manifest_runtime_image manifest_runtime_digest manifest_hermes_commit manifest_runtime_revision manifest_runtime_contract <<< "$manifest_binding"
+if [ -z "$manifest_runtime_image" ] || [ -z "$manifest_runtime_digest" ] || [ -z "$manifest_hermes_commit" ] || [ -z "$manifest_runtime_revision" ] || [ -z "$manifest_runtime_contract" ]; then
+    echo "Runtime manifest binding is incomplete." >&2
+    exit 1
+fi
+
+verify_agent_runtime_image() {
+    local image_id hermes_commit runtime_revision runtime_contract
+
+    if ! image_id="$(docker image inspect "$manifest_runtime_image" --format '{{.Id}}' 2>/dev/null)"; then
+        echo "Agent mode requires the exact local runtime image $manifest_runtime_image." >&2
+        echo "Expected image ID: $manifest_runtime_digest" >&2
+        exit 1
+    fi
+    if [ "$image_id" != "$manifest_runtime_digest" ]; then
+        echo "Agent runtime image ID does not match tools/agent-g4-manifest.json." >&2
+        echo "Expected image ID: $manifest_runtime_digest" >&2
+        echo "Actual image ID:   $image_id" >&2
+        exit 1
+    fi
+    hermes_commit="$(docker image inspect "$manifest_runtime_image" --format '{{index .Config.Labels "org.uxheavy.plane.hermes.commit"}}')"
+    runtime_revision="$(docker image inspect "$manifest_runtime_image" --format '{{index .Config.Labels "org.uxheavy.plane.runtime.revision"}}')"
+    runtime_contract="$(docker image inspect "$manifest_runtime_image" --format '{{index .Config.Labels "org.uxheavy.plane.runtime.contract"}}')"
+    if [ "$hermes_commit" != "$manifest_hermes_commit" ] || [ "$runtime_revision" != "$manifest_runtime_revision" ] || [ "$runtime_contract" != "$manifest_runtime_contract" ]; then
+        echo "Agent runtime image labels do not match tools/agent-g4-manifest.json." >&2
+        echo "Expected Hermes commit: $manifest_hermes_commit" >&2
+        echo "Expected runtime revision: $manifest_runtime_revision" >&2
+        echo "Expected runtime contract: $manifest_runtime_contract" >&2
+        exit 1
+    fi
+    echo "Agent runtime image is bound to the manifest tag, digest, and labels."
+}
+
 assert_line "apps/api/.env.example" 'AWS_S3_ENDPOINT_URL="http://plane-minio:9000"'
 assert_line "apps/api/.env.example" 'USE_MINIO=1'
 assert_line "apps/api/.env.example" 'WEB_URL="http://localhost:8080"'
@@ -36,19 +84,12 @@ assert_line "apps/api/.env.example" 'PLANE_AGENT_RUNTIME_ENABLED=0'
 assert_line ".env.example" 'PLANE_AGENT_RUNTIME_ENABLED=0'
 assert_line ".env.example" 'PLANE_AGENT_RUNTIME_URL="http://agent-runtime:8080"'
 runtime_image=$(sed -n 's/^PLANE_AGENT_RUNTIME_IMAGE="\([^"]*\)"$/\1/p' .env.example)
-case "$runtime_image" in
-    uxheavy/plane-agent-runtime:hermes-*) ;;
-    *)
-        echo "Canonical PLANE_AGENT_RUNTIME_IMAGE must be a pinned uxheavy Hermes image." >&2
-        exit 1
-        ;;
-esac
-case "$runtime_image" in
-    *:latest)
-        echo "Canonical PLANE_AGENT_RUNTIME_IMAGE must not use the latest tag." >&2
-        exit 1
-        ;;
-esac
+if [ "$runtime_image" != "$manifest_runtime_image" ]; then
+    echo "Canonical PLANE_AGENT_RUNTIME_IMAGE must equal tools/agent-g4-manifest.json." >&2
+    echo "Expected: $manifest_runtime_image" >&2
+    echo "Actual:   $runtime_image" >&2
+    exit 1
+fi
 assert_contains "docker-compose-local.yml" 'file: ./deployments/cli/community/docker-compose.yml'
 assert_contains "deployments/cli/community/docker-compose.yml" 'entrypoint: ["python3", "-m", "plane.agent.runtime.service"]'
 assert_contains "deployments/cli/community/docker-compose.yml" 'command: []'
@@ -91,12 +132,32 @@ fi
 assert_line "apps/proxy/Caddyfile.ce" $'\treverse_proxy /api/* api:8000'
 assert_line "apps/proxy/Caddyfile.ce" $'\treverse_proxy /{$BUCKET_NAME}/* plane-minio:9000'
 
+python3 tools/tests/test_local_dev_topology.py
+
 docker compose -f docker-compose-local.yml config --quiet
 docker compose -f docker-compose-local.yml config --format json | python3 tools/check-local-dev-topology.py --mode ordinary
 PLANE_AGENT_RUNTIME_ENABLED=1 docker compose --profile agent -f docker-compose-local.yml config --format json | \
     python3 tools/check-local-dev-topology.py --mode agent
 
-if [ "${1:-}" = "--runtime" ]; then
+runtime_check=false
+agent_check=false
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --runtime) runtime_check=true ;;
+        --agent) agent_check=true ;;
+        *)
+            echo "Usage: $0 [--runtime] [--agent]" >&2
+            exit 2
+            ;;
+    esac
+    shift
+done
+
+if [ "$agent_check" = true ]; then
+    verify_agent_runtime_image
+fi
+
+if [ "$runtime_check" = true ]; then
     curl --fail --silent --show-error --output /dev/null http://127.0.0.1:8080/api/instances/
 
     docker compose -f docker-compose-local.yml exec -T api python -c '
@@ -133,9 +194,6 @@ finally:
 '
 
     echo "Local proxy upload and worker storage access are valid."
-elif [ "$#" -ne 0 ]; then
-    echo "Usage: $0 [--runtime]" >&2
-    exit 2
 fi
 
 echo "Local development environment contract is valid."

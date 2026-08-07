@@ -18,6 +18,7 @@
     "check:format": "turbo run check:format",
     "check:types": "turbo run check:types",
     "check:local-dev": "./tools/check-local-dev.sh",
+    "check:local-dev:agent": "./tools/check-local-dev.sh --agent",
     "check:local-dev:runtime": "./tools/check-local-dev.sh --runtime",
     "verify:agent-g3": "./tools/verify-agent-g3.sh",
     "verify:agent-g4": "./tools/verify-agent-g4.sh",
