@@ -136,6 +136,7 @@ _SECCOMP_RET_ALLOW = 0x7FFF0000
 _SECCOMP_SOCKET_DOMAIN_OFFSET = 16
 _SECCOMP_CLONE_FLAGS_OFFSET = 16
 _SECCOMP_MODE_OFFSET = 24
+_SECCOMP_AT_MODE_OFFSET = 32
 _AF_UNIX = 1
 _CLONE_VM = 0x00000100
 _CLONE_SIGHAND = 0x00000800
@@ -396,6 +397,8 @@ def _install_linux_kernel_policy() -> None:
     # arbitrary chmod calls remain denied, and the read-only rootfs plus
     # bounded tmpfs/state mounts continue to enforce the path boundary.
     allow_arg("chmod", _SECCOMP_MODE_OFFSET, _HERMES_RPC_SOCKET_MODE)
+    allow_arg("fchmodat", _SECCOMP_AT_MODE_OFFSET, _HERMES_RPC_SOCKET_MODE)
+    allow_arg("fchmodat2", _SECCOMP_AT_MODE_OFFSET, _HERMES_RPC_SOCKET_MODE)
     # The outer production runtime container has a read-only root filesystem
     # and exposes only bounded tmpfs/state locations as writable mounts. Hermes
     # legitimately creates invocation-scoped logging and session directories
@@ -430,8 +433,6 @@ def _install_linux_kernel_policy() -> None:
         "mknod",
         "mknodat",
         "fchmod",
-        "fchmodat",
-        "fchmodat2",
         "chown",
         "fchown",
         "lchown",

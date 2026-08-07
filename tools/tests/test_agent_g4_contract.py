@@ -164,6 +164,7 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn("_HERMES_CODE_MODE_CLONE_FLAGS = _SIGCHLD", runtime_policy)
         self.assertIn("_HERMES_RPC_SOCKET_MODE = 0o600", runtime_policy)
         self.assertIn('allow_arg("chmod", _SECCOMP_MODE_OFFSET, _HERMES_RPC_SOCKET_MODE)', runtime_policy)
+        self.assertIn('allow_arg("fchmodat", _SECCOMP_AT_MODE_OFFSET, _HERMES_RPC_SOCKET_MODE)', runtime_policy)
         self.assertIn('"vfork"', runtime_policy)
         self.assertIn('child_environment.setdefault("PLANE_AGENT_RUNTIME_DISABLE_VFORK", "1")', runtime_service)
         self.assertIn("subprocess._USE_VFORK = False", vfork_adapter)
