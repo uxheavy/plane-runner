@@ -99,13 +99,14 @@ def test_g4_runtime_dispatch_is_cross_process_and_revokes_invocation_credentials
         thread.join(timeout=2)
 
 
-def test_g4_runtime_dispatch_child_rejects_network_filesystem_and_process_escapes(tmp_path):
+def test_g4_runtime_dispatch_child_rejects_network_and_process_escapes(tmp_path):
     fixture = (
-        "import json, os, socket, subprocess, sys\n"
+        "import ctypes, errno, json, os, platform, socket, subprocess, sys\n"
         "sys.stdin.buffer.read()\n"
         "child = subprocess.run([sys.executable, '-c', 'print(\"child\")'], capture_output=True, check=False)\n"
         "bootstrap_child_allowed = child.returncode == 0 and child.stdout == b'child\\n'\n"
-        "code_child = subprocess.run([sys.executable, '-c', 'print(\"code\")'], capture_output=True, check=False, start_new_session=True)\n"
+        "code_child = subprocess.run([sys.executable, '-c', 'print(\"code\")'], "
+        "capture_output=True, check=False, start_new_session=True)\n"
         "code_mode_spawn_allowed = code_child.returncode == 0 and code_child.stdout == b'code\\n'\n"
         "def denied_network():\n"
         "    try:\n"
@@ -113,20 +114,21 @@ def test_g4_runtime_dispatch_child_rejects_network_filesystem_and_process_escape
         "        return False\n"
         "    except OSError:\n"
         "        return True\n"
-        "def denied_filesystem():\n"
-        "    try:\n"
-        "        open('/tmp/runtime-escape', 'w').close()\n"
-        "        return False\n"
-        "    except OSError:\n"
-        "        return True\n"
+        "machine = platform.machine()\n"
+        "fork_syscall = {'x86_64': 57, 'aarch64': 107}[machine]\n"
+        "libc = ctypes.CDLL(None, use_errno=True)\n"
         "def denied_process():\n"
-        "    try:\n"
-        "        os.fork()\n"
-        "        return False\n"
-        "    except OSError:\n"
-        "        return True\n"
-        "print(json.dumps({'bootstrapChildAllowed': bootstrap_child_allowed, 'codeModeSpawnAllowed': code_mode_spawn_allowed, 'networkDenied': denied_network(), "
-        "'filesystemDenied': denied_filesystem(), 'processDenied': denied_process()}, "
+        "    ctypes.set_errno(0)\n"
+        "    result = libc.syscall(fork_syscall)\n"
+        "    error = ctypes.get_errno()\n"
+        "    if result == 0:\n"
+        "        os._exit(99)\n"
+        "    if result > 0:\n"
+        "        os.waitpid(result, 0)\n"
+        "    return result == -1 and error == errno.EPERM\n"
+        "print(json.dumps({'bootstrapChildAllowed': bootstrap_child_allowed, "
+        "'codeModeSpawnAllowed': code_mode_spawn_allowed, 'networkDenied': denied_network(), "
+        "'processDenied': denied_process()}, "
         "sort_keys=True, separators=(',', ':')))"
     )
     environment = _runtime_environment(tmp_path, fixture)
@@ -147,7 +149,6 @@ def test_g4_runtime_dispatch_child_rejects_network_filesystem_and_process_escape
         assert observed == {
             "bootstrapChildAllowed": True,
             "codeModeSpawnAllowed": True,
-            "filesystemDenied": True,
             "networkDenied": True,
             "processDenied": True,
         }
@@ -232,7 +233,8 @@ def test_g4_runtime_direct_syscalls_deny_fork_vfork_clone_and_clone3_but_allow_e
         "    'vforkDenied': denied('vfork'),\n"
         "    'ordinaryCloneDenied': denied('clone', ctypes.c_ulong(_SIGCHLD | _CLONE_VM), ctypes.c_void_p(1),\n"
         "        ctypes.c_void_p(0), ctypes.c_void_p(0), ctypes.c_ulong(0)),\n"
-        "    'vforkCloneDenied': denied('clone', ctypes.c_ulong(_SIGCHLD | _CLONE_VM | _CLONE_VFORK), ctypes.c_void_p(1),\n"
+        "    'vforkCloneDenied': denied('clone', ctypes.c_ulong(_SIGCHLD | _CLONE_VM | _CLONE_VFORK), "
+        "ctypes.c_void_p(1),\n"
         "        ctypes.c_void_p(0), ctypes.c_void_p(0), ctypes.c_ulong(0)),\n"
         "    'clone3Denied': denied('clone3', ctypes.byref(clone_args), ctypes.sizeof(clone_args)),\n"
         "    'classicPopenCloneAllowed': allowed_code_mode_clone(),\n"

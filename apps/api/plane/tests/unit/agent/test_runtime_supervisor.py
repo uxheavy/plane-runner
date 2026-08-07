@@ -475,6 +475,7 @@ hermes_logging.setup_verbose_logging = lambda: None
         "plane.operations.discover@1",
         "operation:work_item.read",
         "operation:agent.outcome.evaluate",
+        "operation:catalog.search",
         "operation:agent.outcome.submit",
         "operation:agent.outcome.publish",
     ]
