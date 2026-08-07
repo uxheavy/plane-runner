@@ -20,6 +20,15 @@ assert_line "apps/api/.env.example" 'AWS_S3_ENDPOINT_URL="http://plane-minio:900
 assert_line "apps/api/.env.example" 'USE_MINIO=1'
 assert_line "apps/api/.env.example" 'WEB_URL="http://localhost:8080"'
 assert_line "apps/api/.env.example" 'APP_BASE_URL="http://localhost:3000"'
+assert_line "apps/api/.env.example" 'DJANGO_SETTINGS_MODULE=plane.settings.local'
+assert_line "apps/api/.env.example" 'PLANE_AGENT_RUNTIME_ENABLED=0'
+assert_line ".env.example" 'PLANE_AGENT_RUNTIME_ENABLED=0'
+assert_line ".env.example" 'PLANE_AGENT_RUNTIME_URL="http://agent-runtime:8080"'
+assert_line ".env.example" 'PLANE_AGENT_RUNTIME_IMAGE="uxheavy/plane-agent-runtime:hermes-e573a466-g4-ff8cd9c5"'
+if [ ! -s ".plane-agent-runtime.secret" ]; then
+    echo "Missing generated .plane-agent-runtime.secret; run ./setup.sh first." >&2
+    exit 1
+fi
 assert_line "apps/web/.env.example" 'VITE_API_BASE_URL="http://localhost:8080"'
 assert_line "apps/admin/.env.example" 'VITE_API_BASE_URL="http://localhost:8080"'
 assert_line "apps/space/.env.example" 'VITE_API_BASE_URL="http://localhost:8080"'
@@ -34,6 +43,7 @@ if [ -f "apps/api/.env" ]; then
     assert_line "apps/api/.env" 'AWS_S3_ENDPOINT_URL="http://plane-minio:9000"'
     assert_line "apps/api/.env" 'USE_MINIO=1'
     assert_line "apps/api/.env" 'WEB_URL="http://localhost:8080"'
+    assert_line "apps/api/.env" 'DJANGO_SETTINGS_MODULE=plane.settings.local'
 fi
 
 for app in web admin space; do
@@ -55,6 +65,9 @@ assert_line "apps/proxy/Caddyfile.ce" $'\treverse_proxy /api/* api:8000'
 assert_line "apps/proxy/Caddyfile.ce" $'\treverse_proxy /{$BUCKET_NAME}/* plane-minio:9000'
 
 docker compose -f docker-compose-local.yml config --quiet
+docker compose -f docker-compose-local.yml config --format json | python3 tools/check-local-dev-topology.py --mode ordinary
+PLANE_AGENT_RUNTIME_ENABLED=1 docker compose --profile agent -f docker-compose-local.yml config --format json | \
+    python3 tools/check-local-dev-topology.py --mode agent
 
 if [ "${1:-}" = "--runtime" ]; then
     curl --fail --silent --show-error --output /dev/null http://127.0.0.1:8080/api/instances/

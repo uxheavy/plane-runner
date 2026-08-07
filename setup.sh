@@ -41,6 +41,48 @@ copy_env_file() {
     fi
 }
 
+# Generate the local-only runtime authentication secret when the untracked
+# Compose secret file is absent. The value is never written to a tracked
+# example or passed as a child-process environment variable.
+ensure_agent_runtime_secret() {
+    local runtime_secret temporary
+
+    if [ -s ".plane-agent-runtime.secret" ] \
+        && [ "$(wc -l < .plane-agent-runtime.secret | tr -d ' ')" -eq 0 ] \
+        && [ "$(wc -c < .plane-agent-runtime.secret | tr -d ' ')" -ge 32 ]; then
+        echo -e "${YELLOW}•${NC} Preserved existing .plane-agent-runtime.secret"
+    else
+        runtime_secret=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c48)
+        if [ -z "$runtime_secret" ]; then
+            echo -e "${RED}Error: Failed to generate the local Agent runtime secret.${NC}"
+            return 1
+        fi
+
+        umask 077
+        temporary=$(mktemp ".plane-agent-runtime.secret.tmp.XXXXXX")
+        if printf '%s' "$runtime_secret" > "$temporary" && mv "$temporary" .plane-agent-runtime.secret; then
+            echo -e "${GREEN}✓${NC} Generated .plane-agent-runtime.secret"
+        else
+            rm -f "$temporary"
+            echo -e "${RED}✗${NC} Failed to create .plane-agent-runtime.secret${NC}"
+            return 1
+        fi
+    fi
+
+    # Migrate an older ignored .env value out of the process environment so
+    # the Compose secret always comes from the mounted file seam.
+    if grep -q '^PLANE_AGENT_RUNTIME_SECRET=' .env; then
+        temporary=$(mktemp)
+        if awk '$1 != "PLANE_AGENT_RUNTIME_SECRET=" && $0 !~ /^PLANE_AGENT_RUNTIME_SECRET=/' .env > "$temporary" && mv "$temporary" .env; then
+            echo -e "${GREEN}✓${NC} Removed legacy .env Agent runtime secret"
+        else
+            rm -f "$temporary"
+            echo -e "${RED}✗${NC} Failed to remove the legacy .env Agent runtime secret${NC}"
+            return 1
+        fi
+    fi
+}
+
 # Export character encoding settings for macOS compatibility
 export LC_ALL=C
 export LC_CTYPE=C
@@ -61,6 +103,8 @@ for service in "${services[@]}"; do
 
     copy_env_file "${prefix}.env.example" "${prefix}.env" || success=false
 done
+
+ensure_agent_runtime_secret || success=false
 
 # Generate SECRET_KEY for Django when it is not already configured
 if [ -f "./apps/api/.env" ]; then

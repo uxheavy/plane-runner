@@ -386,6 +386,71 @@ class AgentRuntimeConfiguration:
         }
 
 
+@dataclass(frozen=True)
+class ValidatedAgentRuntimeBoundary:
+    """Validated runtime configuration plus the Plane host callback endpoint."""
+
+    configuration: AgentRuntimeConfiguration
+    host_url: str
+    host_bind: str
+    host_port: int
+
+
+def validate_agent_runtime_boundary(environment: Mapping[str, str]) -> ValidatedAgentRuntimeBoundary:
+    """Validate the complete shared runtime boundary without importing Django."""
+
+    configuration = AgentRuntimeConfiguration.from_environment(environment)
+    host_url = validate_runtime_host_url(environment.get("PLANE_AGENT_RUNTIME_HOST_URL"))
+    host_bind = environment.get("PLANE_AGENT_RUNTIME_HOST_BIND", "0.0.0.0")
+    if not host_bind or "\x00" in host_bind or len(host_bind) > 255:
+        raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_HOST_BIND is invalid")
+    try:
+        host_port = int(environment.get("PLANE_AGENT_RUNTIME_HOST_PORT", "8091"))
+    except (TypeError, ValueError) as exc:
+        raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_HOST_PORT is invalid") from exc
+    if not 1 <= host_port <= 65535:
+        raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_HOST_PORT is outside its allowed range")
+    return ValidatedAgentRuntimeBoundary(
+        configuration=configuration,
+        host_url=host_url,
+        host_bind=host_bind,
+        host_port=host_port,
+    )
+
+
+def runtime_settings_from_environment(environment: Mapping[str, str]) -> dict[str, object]:
+    """Return the non-Django-specific settings shared by local and production Plane."""
+
+    boundary = validate_agent_runtime_boundary(environment)
+    configuration = boundary.configuration
+    return {
+        "PLANE_AGENT_RUNTIME_URL": configuration.url,
+        "PLANE_AGENT_RUNTIME_SHARED_SECRET": configuration.shared_secret,
+        "PLANE_AGENT_RUNTIME_HOST_URL": boundary.host_url,
+        "PLANE_AGENT_RUNTIME_HOST_BIND": boundary.host_bind,
+        "PLANE_AGENT_RUNTIME_HOST_PORT": boundary.host_port,
+        "PLANE_AGENT_RUNTIME_DISPATCH_PATH": configuration.dispatch_path,
+        "PLANE_AGENT_RUNTIME_LEDGER_PATH": configuration.ledger_path,
+        "PLANE_AGENT_RUNTIME_SECRET_FILE": environment.get("PLANE_AGENT_RUNTIME_SECRET_FILE", ""),
+        "PLANE_AGENT_RUNTIME_COMMAND": configuration.command,
+        "PLANE_AGENT_RUNTIME_ENVIRONMENT": dict(configuration.child_environment),
+        "PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER": configuration.credential_resolver,
+        "PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE": environment.get(
+            "PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE", "/tmp/plane-agent-credentials/revocations.json"
+        ),
+        "PLANE_AGENT_RUNTIME_TIMEOUT_SECONDS": configuration.timeout_seconds,
+        "PLANE_AGENT_RUNTIME_MAX_REQUEST_BYTES": configuration.max_request_bytes,
+        "PLANE_AGENT_RUNTIME_MAX_RESPONSE_BYTES": configuration.max_response_bytes,
+        "PLANE_AGENT_RUNTIME_MAX_CONCURRENT_INVOCATIONS": configuration.max_concurrent_invocations,
+        "PLANE_AGENT_RUNTIME_CPU_SECONDS": configuration.cpu_seconds,
+        "PLANE_AGENT_RUNTIME_MEMORY_BYTES": configuration.memory_bytes,
+        "PLANE_AGENT_RUNTIME_PIDS_LIMIT": configuration.pids_limit,
+        "PLANE_AGENT_RUNTIME_NETWORK_POLICY": configuration.network_policy,
+        "PLANE_AGENT_RUNTIME_FILESYSTEM_POLICY": configuration.filesystem_policy,
+        "PLANE_AGENT_RUNTIME_PROCESS_POLICY": configuration.process_policy,
+    }
+
+
 __all__ = [
     "AgentRuntimeConfiguration",
     "DEFAULT_HEALTH_PATH",
@@ -396,5 +461,8 @@ __all__ = [
     "RUNTIME_BOOTSTRAP_MODULE",
     "RUNTIME_PROTOCOL",
     "RuntimeConfigurationError",
+    "ValidatedAgentRuntimeBoundary",
+    "runtime_settings_from_environment",
+    "validate_agent_runtime_boundary",
     "validate_runtime_command",
 ]

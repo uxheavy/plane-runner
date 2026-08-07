@@ -126,6 +126,36 @@ only for `ready`. `configured`, `dependency_failure`, `draining`, and
 `stopped` remain visible in the bounded JSON body and are not collapsed into a
 false ready result.
 
+## Local development topology
+
+`./setup.sh` copies the local examples and generates the untracked
+`.plane-agent-runtime.secret` Compose secret file. Ordinary local development
+does not start the runtime image and selects `plane.settings.local` for the
+API, worker, beat-worker, and migrator processes:
+
+```sh
+docker compose -f docker-compose-local.yml up -d
+```
+
+To opt into the separate runtime service, enable the `agent` profile and the
+local settings seam together. The profile uses the pinned community runtime
+image, an internal-only network, the mounted runtime secret, the API/worker
+host callback endpoints, and the existing credential-state volume:
+
+```sh
+PLANE_AGENT_RUNTIME_ENABLED=1 docker compose --profile agent -f docker-compose-local.yml up -d
+docker compose --profile agent -f docker-compose-local.yml ps api worker agent-runtime
+docker compose --profile agent -f docker-compose-local.yml exec agent-runtime \
+  python3 -c 'import urllib.request; print(urllib.request.urlopen("http://127.0.0.1:8080/health/ready", timeout=2).read().decode())'
+```
+
+If the image cannot be pulled or the secret is absent, only this explicit
+agent-mode startup is expected to fail; ordinary Plane services remain
+independent of the profile. Do not add provider credentials to the Compose
+file or pass them to generated child code. A local runtime invocation still
+uses Plane's host-side `RuntimeCredentialBroker`; provider/model calls are
+outside this offline topology check.
+
 The configured child command is fail-closed at both the Plane and launcher
 boundaries. Its argv must be the approved Python executable followed by
 `-m plane_runtime.g1_runtime_image.bootstrap --once --g1-production`; a
