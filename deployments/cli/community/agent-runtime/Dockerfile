@@ -19,6 +19,10 @@ ENV PYTHONPATH=/opt:/opt/hermes
 # checkout, host credentials, or source bind mount at execution time.
 COPY hermes/ /opt/hermes/
 COPY plane_runtime_service/ /opt/plane/agent/runtime/
+# The pinned Hermes G1 image intentionally uses this canonical no-op module
+# instead of python-dotenv so the real run_agent source remains importable
+# without ambient environment credential loading.
+COPY hermes/plane_runtime/g1_runtime_image/dotenv/ /opt/hermes/dotenv/
 
 LABEL org.opencontainers.image.title="Plane Agent runtime" \
       org.opencontainers.image.source="https://github.com/uxheavy/hermes-agent" \

@@ -49,4 +49,8 @@ def test_g4_runtime_container_red_team_proves_the_pinned_real_image_and_cleans_l
     assert result.returncode == 0, result.stdout + result.stderr
     assert "dispatch_http=passed" in result.stdout
     assert "full_chain=passed" in result.stdout
+    assert "hermes_agent_loop=passed" in result.stdout
+    assert "provider_transport_seam=passed" in result.stdout
+    assert "agent_identity=passed" in result.stdout
+    assert "tamper_guard=passed" in result.stdout
     assert "cleanup_failed" not in result.stdout

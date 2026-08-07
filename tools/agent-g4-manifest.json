@@ -38,8 +38,8 @@
     "mcpGitlink": "2dc152e136d7ad952b901e5fe9364a37487297ba",
     "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889",
     "runtimeImageTag": "plane-agent-runtime:hermes-e573a466-g4-ffcc2dc9",
-    "runtimeImageDigest": "sha256:9e205eea56635226aba3d21466f0ed8359b3bff78cbbd554721753715b4749fc",
-    "runtimeImageRevision": "ffcc2dc9e8ec5410b8f29ef7bf3aa9b3930b187e",
+    "runtimeImageDigest": "sha256:ab4cd8829c3265e7e54214845f037ffadefdd31da4fc3d73356783d1800b7f3d",
+    "runtimeImageRevision": "24bd39389f84b89562385ff4d607db8fb6a322ad",
     "runtimeContract": "plane.agent-runtime/v1"
   },
   "liveContract": {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import importlib.util
 import json
 import sys
 import tempfile
@@ -11,6 +12,15 @@ from pathlib import Path
 TOOLS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOLS))
 
+_RED_TEAM_SPEC = importlib.util.spec_from_file_location(
+    "agent_g4_runtime_red_team", TOOLS / "agent-g4-runtime-red-team.py"
+)
+if _RED_TEAM_SPEC is None or _RED_TEAM_SPEC.loader is None:
+    raise RuntimeError("G4 red-team module could not be loaded for focused tests")
+_RED_TEAM = importlib.util.module_from_spec(_RED_TEAM_SPEC)
+sys.modules[_RED_TEAM_SPEC.name] = _RED_TEAM
+_RED_TEAM_SPEC.loader.exec_module(_RED_TEAM)
+
 from validate_agent_g4_live import (  # noqa: E402
     ContractError,
     candidate_has_exact_parent,
@@ -20,6 +30,10 @@ from validate_agent_g4_live import (  # noqa: E402
     validate_files,
 )
 from summarize_agent_g4 import summarize  # noqa: E402
+PINNED_HERMES_RUN_AGENT_PATH = _RED_TEAM.PINNED_HERMES_RUN_AGENT_PATH
+PINNED_HERMES_RUN_AGENT_SHA256 = _RED_TEAM.PINNED_HERMES_RUN_AGENT_SHA256
+ProbeFailure = _RED_TEAM.ProbeFailure
+validate_pinned_hermes_identity = _RED_TEAM.validate_pinned_hermes_identity
 
 
 ROOT = TOOLS.parent
@@ -129,14 +143,50 @@ def fixture() -> tuple[dict, dict, dict, str]:
 class G4ContractTests(unittest.TestCase):
     def test_red_team_stage_requires_exact_image_http_dispatch_and_pinned_hermes_wrapper(self):
         source = (TOOLS / "agent-g4-runtime-red-team.py").read_text(encoding="utf-8")
+        image_dockerfile = (ROOT / "deployments/cli/community/agent-runtime/Dockerfile").read_text(encoding="utf-8")
         self.assertIn('"/v1/runtime/dispatch"', source)
         self.assertIn("dispatch_http=passed full_chain=passed", source)
         self.assertIn("PINNED_HERMES_RUN_AGENT_PATH = \"/opt/hermes/run_agent.py\"", source)
         self.assertIn("PINNED_HERMES_RUN_AGENT_SHA256", source)
-        self.assertIn("pinned_hermes_run_agent=ok", source)
-        self.assertIn("shim_boundary=deterministic_model_factory_only", source)
+        self.assertIn("PROVIDER_TRANSPORT_SHIM", source)
+        self.assertIn("from openai import OpenAI", source)
+        self.assertIn("g4-hermes-agent-loop=ok", source)
+        self.assertIn("provider_seam=deterministic_openai_transport_only", source)
+        self.assertIn("agent_tool_registration=ok", source)
+        self.assertIn("tamper_guard=fail_closed", source)
+        self.assertIn("validate_pinned_hermes_identity", source)
+        self.assertIn("COPY hermes/plane_runtime/g1_runtime_image/dotenv/ /opt/hermes/dotenv/", image_dockerfile)
+        self.assertNotIn("/tmp/run_agent.py", source)
+        self.assertNotIn("DOTENV_COMPAT_SHIM", source)
+        self.assertNotIn("MODEL_SHIM", source)
+        self.assertNotIn("DeterministicModel", source)
+        self.assertNotIn("AIAgent = ", source)
+        self.assertNotIn("spec_from_file_location", source)
         self.assertNotIn("sitecustomize.py", source)
         self.assertNotIn("bootstrap_payload", source)
+
+    def test_tamper_guard_rejects_shadowed_agent_identity(self):
+        valid = {
+            "module": "run_agent",
+            "path": PINNED_HERMES_RUN_AGENT_PATH,
+            "sha256": PINNED_HERMES_RUN_AGENT_SHA256,
+            "class": "AIAgent",
+            "classModule": "run_agent",
+            "shadowPresent": False,
+        }
+        for field, value in (
+            ("path", "/tmp/shadowed.py"),
+            ("sha256", "0" * 64),
+            ("class", "DeterministicModel"),
+            ("classModule", "shadowed"),
+            ("shadowPresent", True),
+        ):
+            tampered = dict(valid)
+            tampered[field] = value
+            with self.subTest(field=field), self.assertRaisesRegex(
+                ProbeFailure, "pinned_hermes_identity_tamper_guard_failed"
+            ):
+                validate_pinned_hermes_identity(tampered)
 
     def write_case(self, manifest, authority, config, evidence):
         temp = tempfile.TemporaryDirectory()

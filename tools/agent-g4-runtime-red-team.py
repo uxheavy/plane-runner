@@ -16,239 +16,220 @@ from pathlib import Path
 
 HERMES_COMMIT = "e573a46611e2cb988f1ab43ad34cd8cc3b2cb659"
 RESOURCE_LABEL = "com.uxheavy.plane.agent-g4-runtime"
-EXPECTED_RUNTIME_IMAGE_DIGEST = "sha256:9e205eea56635226aba3d21466f0ed8359b3bff78cbbd554721753715b4749fc"
-EXPECTED_RUNTIME_IMAGE_REVISION = "ffcc2dc9e8ec5410b8f29ef7bf3aa9b3930b187e"
+EXPECTED_RUNTIME_IMAGE_DIGEST = "sha256:ab4cd8829c3265e7e54214845f037ffadefdd31da4fc3d73356783d1800b7f3d"
+EXPECTED_RUNTIME_IMAGE_REVISION = "24bd39389f84b89562385ff4d607db8fb6a322ad"
 RUNTIME_CONTRACT = "plane.agent-runtime/v1"
+PINNED_HERMES_RUN_AGENT_PATH = "/opt/hermes/run_agent.py"
+PINNED_HERMES_RUN_AGENT_SHA256 = "1a336eac71d5cd4418ebf7a8e52236eb6984ac9b9cfbb2e9ba08c9a197486011"
 
 
-# Injected into the exact image's existing /tmp tmpfs with docker exec. It
-# replaces only Hermes' model factory; Plane tools and the host bridge remain
-# the pinned image implementation.
-MODEL_SHIM = r'''"""Task-generated offline model shim; no credentials or network.
+# Injected into the exact image's existing /tmp tmpfs with docker exec. It is
+# only an offline OpenAI-compatible transport seam beneath the image-owned
+# Hermes AIAgent. The service, launcher, pinned run_agent module, agent loop,
+# registry, callback bridge, and Plane gateway remain image-owned.
+PROVIDER_TRANSPORT_SHIM = r'''"""Deterministic OpenAI transport seam; no credentials or network.
 
-This module is injected as the model dependency only. The exact image's
-bootstrap, launcher, Hermes service, host socket, and Plane HTTP gateway stay
-on their production paths.
+The exact image imports this module only through Hermes' existing lazy
+``from openai import OpenAI`` provider seam. It deliberately does not import,
+load, replace, or re-export ``run_agent.AIAgent``. The real image-owned
+Hermes AIAgent constructs this client and executes every tool call below.
 """
 import hashlib
-import importlib.util
 import json
 import pathlib
 import sys
-import types
+from types import SimpleNamespace
 
 
 PINNED_HERMES_RUN_AGENT_PATH = "/opt/hermes/run_agent.py"
 PINNED_HERMES_RUN_AGENT_SHA256 = "1a336eac71d5cd4418ebf7a8e52236eb6984ac9b9cfbb2e9ba08c9a197486011"
 
-# Load the exact image-owned Hermes module before replacing only its AIAgent
-# factory. This keeps the pinned agent loop, registration imports, and adapter
-# contracts executable while making the provider call deterministic/offline.
-_pinned_path = pathlib.Path(PINNED_HERMES_RUN_AGENT_PATH)
-if hashlib.sha256(_pinned_path.read_bytes()).hexdigest() != PINNED_HERMES_RUN_AGENT_SHA256:
-    raise RuntimeError("pinned Hermes run_agent provenance mismatch")
-_pinned_spec = importlib.util.spec_from_file_location("_plane_pinned_hermes_run_agent", _pinned_path)
-if _pinned_spec is None or _pinned_spec.loader is None:
-    raise RuntimeError("pinned Hermes run_agent module could not be loaded")
-PINNED_HERMES_RUN_AGENT_MODULE = importlib.util.module_from_spec(_pinned_spec)
-sys.modules["_plane_pinned_hermes_run_agent"] = PINNED_HERMES_RUN_AGENT_MODULE
-# The exact image omits Hermes' optional dotenv package; this inert module is
-# the only dependency shim. The pinned run_agent source still executes fully.
-if "dotenv" not in sys.modules:
-    _dotenv = types.ModuleType("dotenv")
-    _dotenv.load_dotenv = lambda **_kwargs: False
-    sys.modules["dotenv"] = _dotenv
-_pinned_spec.loader.exec_module(PINNED_HERMES_RUN_AGENT_MODULE)
-if not callable(getattr(PINNED_HERMES_RUN_AGENT_MODULE, "AIAgent", None)):
-    raise RuntimeError("pinned Hermes run_agent did not expose AIAgent")
-PINNED_HERMES_RUN_AGENT_EXECUTED = True
+
+class OpenAIError(Exception):
+    pass
+
+
+class APIError(OpenAIError):
+    pass
+
+
+class APIConnectionError(APIError):
+    pass
+
+
+class APITimeoutError(APIError):
+    pass
+
+
+class RateLimitError(APIError):
+    pass
 
 
 def _diagnose(value):
     try:
-        pathlib.Path("/tmp/g4-model-shim-error").write_text(str(value)[:4096], encoding="utf-8")
+        pathlib.Path("/tmp/g4-provider-seam-error").write_text(str(value)[:4096], encoding="utf-8")
     except OSError:
         pass
 
 
-def _call(name, arguments, *, code=False):
-    from tools.registry import registry
+def _assert_pinned_hermes_identity():
+    """Fail closed if the provider seam is reached by a shadowed agent."""
+    module = sys.modules.get("run_agent")
+    agent_class = getattr(module, "AIAgent", None) if module is not None else None
+    module_path = pathlib.Path(getattr(module, "__file__", "")).resolve() if module is not None else None
+    source_digest = hashlib.sha256(pathlib.Path(PINNED_HERMES_RUN_AGENT_PATH).read_bytes()).hexdigest()
+    identity = {
+        "module": getattr(module, "__name__", None),
+        "path": str(module_path) if module_path is not None else None,
+        "sha256": source_digest,
+        "class": getattr(agent_class, "__name__", None),
+        "classModule": getattr(agent_class, "__module__", None),
+    }
+    if (
+        module is None
+        or str(module_path) != PINNED_HERMES_RUN_AGENT_PATH
+        or source_digest != PINNED_HERMES_RUN_AGENT_SHA256
+        or not isinstance(agent_class, type)
+        or agent_class.__name__ != "AIAgent"
+        or agent_class.__module__ != "run_agent"
+    ):
+        _diagnose({"event": "g4.hermes.identity", "identity": identity})
+        raise RuntimeError("pinned Hermes AIAgent identity or source is not exact")
+    return identity
 
-    if code:
-        from plane_runtime.host_port import plane_code_mode
 
-        with plane_code_mode():
-            raw = registry.dispatch(name, arguments)
-    else:
-        raw = registry.dispatch(name, arguments)
-    if not isinstance(raw, str):
-        raise RuntimeError("model shim received a non-text tool result")
-    result = json.loads(raw)
-    if not isinstance(result, dict):
-        raise RuntimeError("model shim received a non-object tool result")
-    return result
+def _tool_names(kwargs):
+    return {
+        item.get("function", {}).get("name")
+        for item in kwargs.get("tools", [])
+        if isinstance(item, dict) and isinstance(item.get("function"), dict)
+    }
 
 
-class DeterministicModel:
-    """Deterministic model seam used without changing the Hermes adapter."""
+def _tool_call(call_id, name, arguments):
+    return SimpleNamespace(
+        index=0,
+        id=call_id,
+        type="function",
+        function=SimpleNamespace(name=name, arguments=json.dumps(arguments, sort_keys=True, separators=(",", ":"))),
+        extra_content=None,
+    )
 
-    def __init__(self, **kwargs):
-        self.session_input_tokens = 1
-        self.session_output_tokens = 1
-        self.session_api_calls = 1
-        self._step_callback = kwargs.get("step_callback")
-        self._stream_delta_callback = kwargs.get("stream_delta_callback")
 
-    def interrupt(self, _reason):
+class _DeterministicStream:
+    def __init__(self, chunks):
+        self._chunks = iter(chunks)
+        self.response = None
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return next(self._chunks)
+
+    def close(self):
         return None
 
-    def run_conversation(self, _objective, system_message=None, **_kwargs):
-        del system_message
-        from plane_runtime.host_port import current_plane_host
-        from tools.registry import registry
 
-        if current_plane_host() is None:
-            _diagnose({"argv": sys.argv, "pythonpath": sys.path})
-            raise RuntimeError("model shim did not receive an invocation-bound host")
-        if "--g1-bootstrap-child" not in sys.argv or "--plane-host-socket" not in sys.argv:
-            raise RuntimeError("model shim did not run through the pinned launcher child")
-        if not PINNED_HERMES_RUN_AGENT_EXECUTED or PINNED_HERMES_RUN_AGENT_MODULE.__file__ != PINNED_HERMES_RUN_AGENT_PATH:
-            raise RuntimeError("pinned Hermes run_agent execution proof is missing")
-        if registry.get_entry("plane_operation") is None or registry.get_entry("plane_publish") is None:
-            raise RuntimeError("pinned Hermes Plane tool registrations are missing")
+class _Completions:
+    _PLAN = (
+        ("plane_operation", {"action": "discover", "input": {"query": "work item", "limit": 8}}),
+        ("plane_operation", {"action": "read", "operationRef": "operation:work_item.read", "input": {"issue_ref": "issue:red-team"}}),
+        ("execute_code", {"code": "from hermes_tools import plane_operation\nprint(plane_operation('code', 'operation:catalog.search', {'query': 'rename', 'limit': 5}))"}),
+        ("plane_operation", {"action": "mutate", "operationRef": "operation:work_item.rename", "input": {"issue_ref": "issue:red-team", "name": "must-not-apply", "actor_ref": "actor:not-authorized"}}),
+        ("plane_operation", {"action": "mutate", "operationRef": "operation:work_item.rename", "input": {"issue_ref": "issue:red-team", "name": "G4 exact image", "actor_ref": "actor:red-team"}}),
+        ("plane_operation", {"action": "mutate", "operationRef": "operation:work_item.rename", "input": {"issue_ref": "issue:red-team", "name": "G4 exact image", "actor_ref": "actor:red-team"}}),
+        ("plane_operation", {"action": "mutate", "operationRef": "operation:agent.outcome.submit", "input": {"run_ref": "run:red-team", "summary": "Exact-image runtime chain completed.", "artifacts": ["artifact:g4-exact-image"], "evidence": ["evidence:g4-exact-image"]}}),
+        ("plane_publish", {"kind": "outcome", "operationRef": "operation:agent.outcome.publish", "resourceRef": "outcome-submission:red-team", "content": "Explicit exact-image outcome publication."}),
+    )
 
-        discovered = _call(
-            "plane_operation",
-            {"action": "discover", "input": {"query": "work item", "limit": 8}},
-        )
-        read = _call(
-            "plane_operation",
-            {
-                "action": "read",
-                "operationRef": "operation:work_item.read",
-                "input": {"issue_ref": "issue:red-team"},
-            },
-        )
-        denied = _call(
-            "plane_operation",
-            {
-                "action": "mutate",
-                "operationRef": "operation:work_item.rename",
-                "input": {
-                    "issue_ref": "issue:red-team",
-                    "name": "must-not-apply",
-                    "actor_ref": "actor:not-authorized",
-                },
-            },
-        )
-        code = _call(
-            "plane_operation",
-            {
-                "action": "code",
-                "operationRef": "operation:catalog.search",
-                "input": {"query": "rename", "limit": 5},
-            },
-            code=True,
-        )
-        renamed = _call(
-            "plane_operation",
-            {
-                "action": "mutate",
-                "operationRef": "operation:work_item.rename",
-                "input": {
-                    "issue_ref": "issue:red-team",
-                    "name": "G4 exact image",
-                    "actor_ref": "actor:red-team",
-                },
-            },
-        )
-        replay = _call(
-            "plane_operation",
-            {
-                "action": "mutate",
-                "operationRef": "operation:work_item.rename",
-                "input": {
-                    "issue_ref": "issue:red-team",
-                    "name": "G4 exact image",
-                    "actor_ref": "actor:red-team",
-                },
-            },
-        )
-        submitted = _call(
-            "plane_operation",
-            {
-                "action": "mutate",
-                "operationRef": "operation:agent.outcome.submit",
-                "input": {
-                    "run_ref": "run:red-team",
-                    "summary": "Exact-image runtime chain completed.",
-                    "artifacts": ["artifact:g4-exact-image"],
-                    "evidence": ["evidence:g4-exact-image"],
-                },
-            },
-        )
-        try:
-            outcome_ref = submitted["output"]["result"]["outcome"]["outcomeRef"]
-        except (KeyError, TypeError) as exc:
-            _diagnose({"submitted": submitted})
-            raise RuntimeError("outcome submission receipt was incomplete") from exc
-        published = _call(
-            "plane_publish",
-            {
-                "kind": "outcome",
-                "operationRef": "operation:agent.outcome.publish",
-                "resourceRef": outcome_ref,
-                "content": "Explicit exact-image outcome publication.",
-            },
-        )
+    def __init__(self):
+        self.calls = 0
 
-        expected = (
-            discovered.get("status") == "ok"
-            and read.get("status") == "ok"
-            and denied.get("status") == "denied"
-            and denied.get("errorCode") == "NOT_AUTHORIZED"
-            and code.get("status") == "ok"
-            and renamed.get("status") == "ok"
-            and replay.get("status") == "replayed"
-            and submitted.get("status") == "ok"
-            and published.get("status") == "ok"
-            and isinstance(published.get("publication"), dict)
-            and published["publication"].get("productEventRef", "").startswith("product-event:")
-        )
-        if not expected:
-            _diagnose(
-                {
-                    "discovered": discovered,
-                    "read": read,
-                    "denied": denied,
-                    "code": code,
-                    "renamed": renamed,
-                    "replay": replay,
-                    "submitted": submitted,
-                    "published": published,
-                }
+    def create(self, **kwargs):
+        call_number = self.calls
+        self.calls += 1
+        identity = _assert_pinned_hermes_identity()
+        names = _tool_names(kwargs)
+        required = {"plane_operation", "plane_publish", "execute_code"}
+        messages = kwargs.get("messages", [])
+        if not required.issubset(names):
+            _diagnose({"event": "g4.hermes.tool-registration", "toolNames": sorted(names)})
+            raise RuntimeError("real Hermes tool registration set is incomplete")
+        if call_number > 0 and not any(message.get("role") == "tool" for message in messages if isinstance(message, dict)):
+            raise RuntimeError("real Hermes tool result did not return through the provider loop")
+        if call_number < len(self._PLAN):
+            name, arguments = self._PLAN[call_number]
+            tool_delta = _tool_call("g4-call-" + str(call_number + 1), name, arguments)
+            delta = SimpleNamespace(
+                role="assistant",
+                content=None,
+                tool_calls=[tool_delta],
+                reasoning=None,
+                reasoning_content=None,
             )
-            raise RuntimeError("model shim observed an incomplete gateway proof")
-        if self._step_callback is not None:
-            self._step_callback()
-        if self._stream_delta_callback is not None:
-            self._stream_delta_callback("deterministic exact-image chain complete")
-        return {
-            "final_response": (
-                "g4-model-shim chain=service-launcher-hermes-child-af_unix-host-http-gateway "
-                "native_read=ok durable_mutation=ok denied=ok code_mode=ok "
-                "idempotent_replay=ok explicit_publication=ok "
-                "pinned_hermes_run_agent=ok path=/opt/hermes/run_agent.py "
-                "sha256=1a336eac71d5cd4418ebf7a8e52236eb6984ac9b9cfbb2e9ba08c9a197486011 "
-                "shim_boundary=deterministic_model_factory_only"
+            finish_reason = "tool_calls"
+        else:
+            delta = SimpleNamespace(
+                role="assistant",
+                content=(
+                    "g4-hermes-agent-loop=ok provider_seam=deterministic_openai_transport_only "
+                    "hermes_agent_identity=run_agent.AIAgent "
+                    "pinned_hermes_run_agent=ok path=/opt/hermes/run_agent.py "
+                    "sha256=1a336eac71d5cd4418ebf7a8e52236eb6984ac9b9cfbb2e9ba08c9a197486011 "
+                    "agent_tool_registration=ok callback_trace=real_tool_loop "
+                    "tamper_guard=fail_closed shim_boundary=provider_transport_only"
+                ),
+                tool_calls=[],
+                reasoning=None,
+                reasoning_content=None,
             )
-        }
+            finish_reason = "stop"
+        chunk = SimpleNamespace(
+            model="offline-deterministic-openai",
+            choices=[SimpleNamespace(delta=delta, finish_reason=finish_reason)],
+            usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1, total_tokens=2),
+        )
+        return _DeterministicStream([chunk]) if kwargs.get("stream") else SimpleNamespace(
+            model="offline-deterministic-openai",
+            choices=[SimpleNamespace(
+                finish_reason=finish_reason,
+                message=SimpleNamespace(
+                    role="assistant",
+                    content=delta.content,
+                    tool_calls=[tool_delta] if call_number < len(self._PLAN) else None,
+                    reasoning=None,
+                    reasoning_content=None,
+                ),
+            )],
+            usage=chunk.usage,
+        )
 
 
-# The exact pinned module above executes first; only the provider-facing
-# factory imported by HermesKernelAdapter is replaced with the deterministic
-# offline implementation.
-AIAgent = DeterministicModel
+class OpenAI:
+    """OpenAI-compatible transport only; never an agent or tool executor."""
+
+    def __init__(self, **kwargs):
+        _assert_pinned_hermes_identity()
+        self.api_key = kwargs.get("api_key")
+        self.base_url = kwargs.get("base_url", "https://offline.invalid/v1")
+        self.chat = SimpleNamespace(completions=_Completions())
+
+    def close(self):
+        return None
+
+    def with_options(self, **_kwargs):
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        self.close()
+
+
+class AsyncOpenAI(OpenAI):
+    pass
 '''
 
 
@@ -494,8 +475,50 @@ finally:
 """
 
 
+HERMES_IDENTITY_PROBE = """
+import hashlib, json, pathlib, run_agent
+module_path = pathlib.Path(run_agent.__file__).resolve()
+agent_class = getattr(run_agent, "AIAgent", None)
+shadow_path = pathlib.Path("/tmp") / ("run_" + "agent.py")
+identity = {
+    "module": run_agent.__name__,
+    "path": str(module_path),
+    "sha256": hashlib.sha256(module_path.read_bytes()).hexdigest(),
+    "class": getattr(agent_class, "__name__", None),
+    "classModule": getattr(agent_class, "__module__", None),
+    "shadowPresent": shadow_path.exists(),
+}
+if (
+    identity["module"] != "run_agent"
+    or identity["path"] != "/opt/hermes/run_agent.py"
+    or identity["sha256"] != "1a336eac71d5cd4418ebf7a8e52236eb6984ac9b9cfbb2e9ba08c9a197486011"
+    or identity["class"] != "AIAgent"
+    or identity["classModule"] != "run_agent"
+    or identity["shadowPresent"]
+):
+    raise SystemExit(json.dumps({"event": "g4.hermes.identity", "identity": identity}, sort_keys=True))
+print(json.dumps(identity, sort_keys=True, separators=(",", ":")))
+"""
+
+
 class ProbeFailure(RuntimeError):
     pass
+
+
+def validate_pinned_hermes_identity(identity: object) -> None:
+    """Reject any runtime provenance record that could be a shadowed agent."""
+
+    if not isinstance(identity, dict):
+        raise ProbeFailure("pinned_hermes_identity_tamper_guard_failed")
+    if (
+        identity.get("module") != "run_agent"
+        or identity.get("path") != PINNED_HERMES_RUN_AGENT_PATH
+        or identity.get("sha256") != PINNED_HERMES_RUN_AGENT_SHA256
+        or identity.get("class") != "AIAgent"
+        or identity.get("classModule") != "run_agent"
+        or identity.get("shadowPresent") is not False
+    ):
+        raise ProbeFailure("pinned_hermes_identity_tamper_guard_failed")
 
 
 def docker(*args: str, timeout: int = 30) -> subprocess.CompletedProcess[str]:
@@ -528,9 +551,8 @@ def request_body(host_url: str, host_token: str) -> tuple[bytes, str]:
         "runtimeExit": "055792eb1bf4931dafe19de456b15037522f0b5e8f6a0d2fedfe0e0d1d1d1c05",
         "runtimeDurableState": "444c944ec8a5054f33c8662470529a1f4565d42ff06138438beceeef7967a0da",
     }
-    # Keep the fixture exactly within the public G1 contract. The deliberate
-    # empty credential source makes the real Hermes adapter fail closed after
-    # the bootstrap, proving this is not a synthetic child package.
+    # Keep the fixture exactly within the public G1 contract. The credential is
+    # a disposable marker consumed only by the injected provider transport.
     snapshot = {
         "protocol": "plane.agent-runtime/v1",
         "workspaceRef": "workspace:red-team",
@@ -589,9 +611,10 @@ def request_body(host_url: str, host_token: str) -> tuple[bytes, str]:
         b"plane.agent-runtime/dispatch/v1\n" + snapshot_json.encode() + b"\n" + invocation_json.encode()
     ).hexdigest()
     body = {
-        # This is a non-secret provider marker for the task-generated model
-        # shim. No production credential crosses the exact-image boundary.
-        "credentials": {"provider_marker": "offline-deterministic-model"},
+        # This is a non-secret provider marker consumed only by the injected
+        # OpenAI transport seam. No production credential crosses the exact
+        # image boundary.
+        "credentials": {"api_key": "offline-deterministic-model"},
         "host": {"url": host_url, "token": host_token},
         "invocation": invocation,
         "invocationId": invocation["invocationId"],
@@ -642,8 +665,8 @@ def main() -> int:
         secret = "disposable-runtime-secret-" + uuid.uuid4().hex
         host_token = "disposable-host-token-" + uuid.uuid4().hex
         secret_path.write_text(secret, encoding="utf-8")
-        model_shim_path = scratch / "run_agent.py"
-        model_shim_path.write_text(MODEL_SHIM, encoding="utf-8")
+        provider_shim_path = scratch / "openai.py"
+        provider_shim_path.write_text(PROVIDER_TRANSPORT_SHIM, encoding="utf-8")
         child_environment_json = json.dumps(
             {
                 "HOME": "/tmp",
@@ -764,17 +787,16 @@ def main() -> int:
             raise ProbeFailure("runtime_unapproved_bind_mount_detected")
         require(
             docker_input(
-                MODEL_SHIM.encode("utf-8"),
+                PROVIDER_TRANSPORT_SHIM.encode("utf-8"),
                 "exec",
                 "-i",
                 name,
                 "python3",
                 "-c",
-                "import pathlib,sys; pathlib.Path('/tmp/run_agent.py').write_bytes(sys.stdin.buffer.read())",
+                "import pathlib,sys; pathlib.Path('/tmp/openai.py').write_bytes(sys.stdin.buffer.read())",
             ),
-            "model_shim_injection_failed",
+            "provider_transport_injection_failed",
         )
-
         def runtime_post(payload: bytes, token: str, path: str = "/v1/runtime/dispatch") -> dict[str, object]:
             raw = require(
                 docker_input(
@@ -819,6 +841,23 @@ def main() -> int:
             raise ProbeFailure("runtime_service_not_ready")
         if not gateway_ready:
             raise ProbeFailure("internal_host_gateway_not_ready")
+        identity_raw = require(
+            docker(
+                "exec",
+                "-e",
+                "PYTHONPATH=/tmp:/opt:/opt/hermes",
+                "-e",
+                "PYTHONSAFEPATH=1",
+                name,
+                "python3",
+                "-c",
+                HERMES_IDENTITY_PROBE,
+                timeout=30,
+            ),
+            "pinned_hermes_identity_probe_failed",
+        )
+        identity = json.loads(identity_raw.splitlines()[-1])
+        validate_pinned_hermes_identity(identity)
         if docker(
             "exec", name, "python3", "-c", "import urllib.request; urllib.request.urlopen('http://1.1.1.1', timeout=1)"
         ).returncode == 0:
@@ -843,7 +882,7 @@ def main() -> int:
         dispatch = runtime_post(body, "__runtime_secret_file__")
         if dispatch.get("status") != 200:
             detail = json.dumps(dispatch, sort_keys=True, separators=(",", ":"))[:512]
-            diagnostic = docker("exec", name, "sh", "-c", "test ! -r /tmp/g4-model-shim-error || cat /tmp/g4-model-shim-error").stdout
+            diagnostic = docker("exec", name, "sh", "-c", "test ! -r /tmp/g4-provider-seam-error || cat /tmp/g4-provider-seam-error").stdout
             gateway_diagnostic = docker(
                 "exec", name, "python3", "-c", GATEWAY_GET_SCRIPT, host_token
             ).stdout
@@ -868,13 +907,27 @@ def main() -> int:
         if any(frame.get("invocationId") != "invocation:red-team" for frame in frames):
             raise ProbeFailure("runtime_dispatch_invocation_binding_missing")
         if frames[-1].get("kind") != "completed":
-            raise ProbeFailure("runtime_dispatch_child_not_completed")
+            provider_diagnostic = docker(
+                "exec",
+                name,
+                "sh",
+                "-c",
+                "test ! -r /tmp/g4-provider-seam-error || cat /tmp/g4-provider-seam-error",
+            ).stdout
+            bounded_frames = json.dumps(frames[-3:], sort_keys=True, separators=(",", ":"))[:4096]
+            raise ProbeFailure(
+                "runtime_dispatch_child_not_completed:"
+                f"frames={bounded_frames}:provider={provider_diagnostic[:1024]}"
+            )
         if not any(
-            "pinned_hermes_run_agent=ok" in frame
-            and "shim_boundary=deterministic_model_factory_only" in frame
+            "g4-hermes-agent-loop=ok" in frame
+            and "provider_seam=deterministic_openai_transport_only" in frame
+            and "hermes_agent_identity=run_agent.AIAgent" in frame
+            and "agent_tool_registration=ok" in frame
+            and "tamper_guard=fail_closed" in frame
             for frame in raw_frames
         ):
-            raise ProbeFailure("pinned_hermes_run_agent_execution_evidence_missing")
+            raise ProbeFailure("real_hermes_agent_loop_execution_evidence_missing")
 
         evidence_result = require(
             docker(
@@ -933,6 +986,8 @@ def main() -> int:
             f"image_digest={actual_digest} image_revision={EXPECTED_RUNTIME_IMAGE_REVISION} "
             f"runtime_contract={RUNTIME_CONTRACT} hermes_commit={HERMES_COMMIT} "
             "dispatch_http=passed full_chain=passed launcher=passed hermes_child=passed "
+            "hermes_agent_loop=passed provider_transport_seam=passed agent_identity=passed "
+            "tool_registration=passed tamper_guard=passed "
             "af_unix_callback=passed plane_http_gateway=passed authorization=passed "
             "idempotency=passed audit=passed publication=passed "
             "internal_network=passed source_mount_scan=passed credential_scan=passed"
