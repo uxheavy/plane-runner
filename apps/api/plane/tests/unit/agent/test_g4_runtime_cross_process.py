@@ -161,7 +161,7 @@ def test_g4_runtime_direct_syscalls_deny_fork_vfork_clone_and_clone3_but_allow_e
     fixture = (
         "import ctypes, errno, json, mmap, os, pathlib, platform, socket, sys\n"
         "from plane.agent.runtime.subprocess import (\n"
-        "    _HERMES_BOOTSTRAP_CLONE_FLAGS, _HERMES_BOOTSTRAP_THREAD_REQUIRED_FLAGS,\n"
+        "    _CLONE_VM, _HERMES_BOOTSTRAP_CLONE_FLAGS, _HERMES_BOOTSTRAP_THREAD_REQUIRED_FLAGS,\n"
         "    _SIGCHLD, _SYSCALLS,\n"
         ")\n"
         "sys.stdin.buffer.read()\n"
@@ -242,7 +242,7 @@ def test_g4_runtime_direct_syscalls_deny_fork_vfork_clone_and_clone3_but_allow_e
         "    'architecture': machine,\n"
         "    'forkDenied': denied('fork'),\n"
         "    'vforkDenied': denied('vfork'),\n"
-        "    'ordinaryCloneDenied': denied('clone', ctypes.c_ulong(_SIGCHLD), ctypes.c_void_p(1),\n"
+        "    'ordinaryCloneDenied': denied('clone', ctypes.c_ulong(_SIGCHLD | _CLONE_VM), ctypes.c_void_p(1),\n"
         "        ctypes.c_void_p(0), ctypes.c_void_p(0), ctypes.c_ulong(0)),\n"
         "    'clone3Denied': denied('clone3', ctypes.byref(clone_args), ctypes.sizeof(clone_args)),\n"
         "    'bootstrapCloneAllowed': allowed_bootstrap_clone(),\n"

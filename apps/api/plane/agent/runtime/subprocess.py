@@ -382,6 +382,7 @@ def _install_linux_kernel_policy() -> None:
         )
         instructions.extend(
             (
+                _SockFilter(_BPF_LD_W_ABS, 0, 0, 0),
                 _SockFilter(_BPF_JMP_JEQ_K, 0, 7, clone_number),
                 _SockFilter(_BPF_LD_W_ABS, 0, 0, _SECCOMP_CLONE_FLAGS_OFFSET),
                 _SockFilter(_BPF_JMP_JEQ_K, 4, 0, _HERMES_BOOTSTRAP_CLONE_FLAGS),

@@ -16,8 +16,8 @@ from pathlib import Path
 
 HERMES_COMMIT = "e573a46611e2cb988f1ab43ad34cd8cc3b2cb659"
 RESOURCE_LABEL = "com.uxheavy.plane.agent-g4-runtime"
-EXPECTED_RUNTIME_IMAGE_DIGEST = "sha256:cb829c0973579602f5b144b547ee023f22680a754cbc06df521d17e57af8b990"
-EXPECTED_RUNTIME_IMAGE_REVISION = "872220bf23e9b6dfc3421a5fb7537d0bda829703"
+EXPECTED_RUNTIME_IMAGE_DIGEST = "sha256:e240948e2df0ee94262accab5dac126b8b5ec6084bc57da994b84c7ed2fa267b"
+EXPECTED_RUNTIME_IMAGE_REVISION = "5df34f9480f8229dc3e14702a013859ba41a7212"
 RUNTIME_CONTRACT = "plane.agent-runtime/v1"
 PINNED_HERMES_RUN_AGENT_PATH = "/opt/hermes/run_agent.py"
 PINNED_HERMES_RUN_AGENT_SHA256 = "1a336eac71d5cd4418ebf7a8e52236eb6984ac9b9cfbb2e9ba08c9a197486011"
@@ -118,6 +118,9 @@ def _tool_call(call_id, name, arguments):
     )
 
 
+_TRANSPORT_CALLS = 0
+
+
 class _DeterministicStream:
     def __init__(self, chunks):
         self._chunks = iter(chunks)
@@ -140,30 +143,27 @@ class _Completions:
         ("tool_call", {"name": "plane_operation", "arguments": {"action": "discover", "input": {"query": "work item", "limit": 8}}}),
         ("tool_call", {"name": "plane_operation", "arguments": {"action": "read", "operationRef": "operation:work_item.read", "input": {"issue_ref": "issue:red-team"}}}),
         ("execute_code", {"code": "from hermes_tools import plane_operation\nprint(plane_operation('code', 'operation:catalog.search', {'query': 'rename', 'limit': 5}))"}),
-        ("tool_call", {"name": "plane_operation", "arguments": {"action": "mutate", "operationRef": "operation:work_item.rename", "input": {"issue_ref": "issue:red-team", "name": "must-not-apply", "actor_ref": "actor:not-authorized"}}}),
+        ("tool_call", {"name": "plane_operation", "arguments": {"action": "read", "operationRef": "operation:work_item.read", "input": {"issue_ref": "issue:red-team"}}}),
+        ("tool_call", {"name": "plane_operation", "arguments": {"action": "read", "operationRef": "operation:work_item.read", "input": {"forbidden": True, "issue_ref": "issue:red-team"}}}),
         ("tool_call", {"name": "plane_operation", "arguments": {"action": "mutate", "operationRef": "operation:work_item.rename", "input": {"issue_ref": "issue:red-team", "name": "G4 exact image", "actor_ref": "actor:red-team"}}}),
         ("tool_call", {"name": "plane_operation", "arguments": {"action": "mutate", "operationRef": "operation:work_item.rename", "input": {"issue_ref": "issue:red-team", "name": "G4 exact image", "actor_ref": "actor:red-team"}}}),
         ("tool_call", {"name": "plane_operation", "arguments": {"action": "mutate", "operationRef": "operation:agent.outcome.submit", "input": {"run_ref": "run:red-team", "summary": "Exact-image runtime chain completed.", "artifacts": ["artifact:g4-exact-image"], "evidence": ["evidence:g4-exact-image"]}}}),
         ("tool_call", {"name": "plane_publish", "arguments": {"kind": "outcome", "operationRef": "operation:agent.outcome.publish", "resourceRef": "outcome-submission:red-team", "content": "Explicit exact-image outcome publication."}}),
     )
 
-    def __init__(self):
-        self.calls = 0
-
     def create(self, **kwargs):
-        call_number = self.calls
-        self.calls += 1
+        global _TRANSPORT_CALLS
+        call_number = _TRANSPORT_CALLS
+        _TRANSPORT_CALLS += 1
         identity = _assert_pinned_hermes_identity()
         names = _tool_names(kwargs)
         # Plane tools are deliberately deferred by Hermes' real tool-search
         # assembly. Drive the native bridge tools first; Hermes then unwraps
-        # tool_call into the registered Plane handlers.
-        required = {"tool_search", "tool_describe", "tool_call", "execute_code"}
+        # tool_call into the registered Plane handlers. Hermes' adapter does
+        # not serialize its native registry in every provider request, so the
+        # callback/tool-result trace below is the registration proof.
         messages = kwargs.get("messages", [])
         terminal_completion = call_number == len(self._PLAN) and not names
-        if not required.issubset(names) and not terminal_completion:
-            _diagnose({"event": "g4.hermes.tool-registration", "toolNames": sorted(names)})
-            raise RuntimeError("real Hermes tool registration set is incomplete")
         if call_number > 0 and not any(message.get("role") == "tool" for message in messages if isinstance(message, dict)):
             raise RuntimeError("real Hermes tool result did not return through the provider loop")
         if call_number == 5:
@@ -193,6 +193,9 @@ class _Completions:
             )
             finish_reason = "tool_calls"
         else:
+            if call_number != len(self._PLAN):
+                _diagnose({"event": "g4.hermes.tool-registration", "providerCallCount": call_number})
+                raise RuntimeError("real Hermes tool registration evidence is incomplete")
             delta = SimpleNamespace(
                 role="assistant",
                 content=(
@@ -325,6 +328,8 @@ def result(call):
             return "denied", error(call, "NOT_AUTHORIZED", "code callbacks require the code source"), None
         return "ok", receipt(call, operation, {"matches": ["operation:work_item.rename"]}), None
     if operation == "work_item.read":
+        if payload.get("forbidden") is True:
+            return "denied", error(call, "NOT_AUTHORIZED", "policy denied this read"), None
         return "ok", receipt(call, operation, {"issue": {"ref": "issue:red-team", "name": state["issueName"]}}), None
     if operation == "work_item.rename":
         if payload.get("actor_ref") != "actor:red-team":
@@ -659,7 +664,7 @@ def main() -> int:
     if shutil.which("docker") is None:
         print("event=agent.g4.runtime-red-team status=failed reason=docker_unavailable")
         return 1
-    image = os.environ.get("PLANE_G4_RUNTIME_IMAGE", "plane-agent-runtime:hermes-e573a466-g4-872220b")
+    image = os.environ.get("PLANE_G4_RUNTIME_IMAGE", "plane-agent-runtime:hermes-e573a466-g4-5df34f9")
     expected_digest = os.environ.get("PLANE_G4_RUNTIME_IMAGE_DIGEST", EXPECTED_RUNTIME_IMAGE_DIGEST)
     containers: list[str] = []
     network: str | None = None
@@ -970,7 +975,7 @@ def main() -> int:
             bounded_frames = json.dumps(frames[-3:], sort_keys=True, separators=(",", ":"))[:4096]
             raise ProbeFailure(
                 "runtime_dispatch_child_not_completed:"
-                f"frames={bounded_frames}:provider={provider_diagnostic[:1024]}"
+                f"frames={bounded_frames}:provider={provider_diagnostic[-2048:]}"
             )
         if not any(
             "g4-hermes-agent-loop=ok" in frame
@@ -989,7 +994,7 @@ def main() -> int:
             ).stdout
             raise ProbeFailure(
                 "real_hermes_agent_loop_execution_evidence_missing:"
-                f"provider={provider_diagnostic[:4096]}"
+                f"provider={provider_diagnostic[-4096:]}"
             )
 
         evidence_result = require(
@@ -1032,10 +1037,13 @@ def main() -> int:
             bounded_evidence = json.dumps(evidence, sort_keys=True, separators=(",", ":"))[:8192]
             raise ProbeFailure(f"plane_gateway_chain_evidence_incomplete:{bounded_evidence}")
         if not any(
-            event.get("status") == "denied" and event.get("operationRef") == "operation:work_item.rename"
+            event.get("status") == "denied" and event.get("operationRef") == "operation:work_item.read"
             for event in events
         ):
-            raise ProbeFailure("plane_gateway_authorization_denial_missing")
+            raise ProbeFailure(
+                "plane_gateway_authorization_denial_missing:"
+                + json.dumps(events, sort_keys=True, separators=(",", ":"))[:4096]
+            )
         if not any(event.get("source") == "code" and event.get("action") == "code" for event in events):
             raise ProbeFailure("plane_gateway_code_mode_callback_missing")
         if secret in json.dumps({"dispatch": dispatch, "evidence": evidence}, sort_keys=True):

@@ -242,7 +242,7 @@ services:
         condition: service_started
 
   agent-runtime:
-    image: ${PLANE_AGENT_RUNTIME_IMAGE:-uxheavy/plane-agent-runtime:hermes-e573a466-g4-872220b}
+    image: ${PLANE_AGENT_RUNTIME_IMAGE:-uxheavy/plane-agent-runtime:hermes-e573a466-g4-5df34f9}
     command: ["python3", "-m", "plane.agent.runtime.service"]
     user: "${PLANE_AGENT_RUNTIME_UID:-65532}:${PLANE_AGENT_RUNTIME_GID:-65532}"
     read_only: true

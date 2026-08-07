@@ -259,12 +259,12 @@ The current binding carries Hermes commit
 `e573a46611e2cb988f1ab43ad34cd8cc3b2cb659`, MCP gitlink
 `2dc152e136d7ad952b901e5fe9364a37487297ba`, SDK gitlink
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`, runtime image tag
-`plane-agent-runtime:hermes-e573a466-g4-872220b`, runtime image digest
-`sha256:cb829c0973579602f5b144b547ee023f22680a754cbc06df521d17e57af8b990`,
-runtime revision `872220bf23e9b6dfc3421a5fb7537d0bda829703`, and runtime
+`plane-agent-runtime:hermes-e573a466-g4-5df34f9`, runtime image digest
+`sha256:e240948e2df0ee94262accab5dac126b8b5ec6084bc57da994b84c7ed2fa267b`,
+runtime revision `5df34f9480f8229dc3e14702a013859ba41a7212`, and runtime
 contract `plane.agent-runtime/v1`. The Plane service revision above is
 intentionally distinct from the runtime image/runtimeRevision source
-`872220bf23e9b6dfc3421a5fb7537d0bda829703`. API, worker, `beat-worker`,
+`5df34f9480f8229dc3e14702a013859ba41a7212`. API, worker, `beat-worker`,
 supervisor, and `agent-runtime` each switch their service revision and image
 digest to the corresponding current value in that manifest; the operation services retain
 `plane.operation/v1` and the runtime services retain `plane.agent-runtime/v1`.
