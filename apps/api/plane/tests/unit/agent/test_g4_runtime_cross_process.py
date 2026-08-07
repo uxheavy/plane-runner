@@ -154,6 +154,113 @@ def test_g4_runtime_dispatch_child_rejects_network_filesystem_and_process_escape
         thread.join(timeout=2)
 
 
+def test_g4_runtime_direct_syscalls_deny_fork_vfork_clone_and_clone3_but_allow_exact_clone_patterns(tmp_path):
+    fixture = (
+        "import ctypes, errno, json, mmap, os, platform, socket, sys\n"
+        "from plane.agent.runtime.subprocess import (\n"
+        "    _HERMES_BOOTSTRAP_CLONE_FLAGS, _HERMES_BOOTSTRAP_THREAD_REQUIRED_FLAGS,\n"
+        "    _SIGCHLD, _SYSCALLS,\n"
+        ")\n"
+        "sys.stdin.buffer.read()\n"
+        "machine = platform.machine()\n"
+        "syscalls = _SYSCALLS[machine]\n"
+        "libc = ctypes.CDLL(None, use_errno=True)\n"
+        "libc.syscall.restype = ctypes.c_long\n"
+        "def probe(name, *args):\n"
+        "    ctypes.set_errno(0)\n"
+        "    result = libc.syscall(syscalls[name], *args)\n"
+        "    return result, ctypes.get_errno()\n"
+        "def denied(name, *args):\n"
+        "    result, error = probe(name, *args)\n"
+        "    return result == -1 and error == errno.EPERM\n"
+        "def socket_result(domain):\n"
+        "    result, error = probe(\n"
+        "        'socket', ctypes.c_ulong(domain), ctypes.c_ulong(socket.SOCK_STREAM), ctypes.c_ulong(0),\n"
+        "    )\n"
+        "    if result >= 0:\n"
+        "        os.close(result)\n"
+        "        return True, None\n"
+        "    return False, error\n"
+        "exit_syscall = {'x86_64': 60, 'aarch64': 93}[machine]\n"
+        "stack = mmap.mmap(-1, 65536, prot=mmap.PROT_READ | mmap.PROT_WRITE)\n"
+        "stack_top = (ctypes.addressof(ctypes.c_char.from_buffer(stack)) + len(stack)) & -16\n"
+        "def allowed_bootstrap_clone():\n"
+        "    result, error = probe(\n"
+        "        'clone', ctypes.c_ulong(_HERMES_BOOTSTRAP_CLONE_FLAGS), ctypes.c_void_p(stack_top),\n"
+        "        ctypes.c_void_p(0), ctypes.c_void_p(0), ctypes.c_ulong(0),\n"
+        "    )\n"
+        "    if result == 0:\n"
+        "        libc.syscall(exit_syscall, 0)\n"
+        "        return False\n"
+        "    if result <= 0 or error != 0:\n"
+        "        return False\n"
+        "    os.waitpid(result, 0)\n"
+        "    return True\n"
+        "def allowed_thread_clone():\n"
+        "    clone_pidfd = 0x00001000\n"
+        "    result, error = probe(\n"
+        "        'clone', ctypes.c_ulong(_HERMES_BOOTSTRAP_THREAD_REQUIRED_FLAGS | clone_pidfd),\n"
+        "        ctypes.c_void_p(0xDEADBEEF), ctypes.c_void_p(0xDEADBEEF),\n"
+        "        ctypes.c_void_p(0), ctypes.c_ulong(0),\n"
+        "    )\n"
+        "    return result == -1 and error == errno.EINVAL\n"
+        "class CloneArgs(ctypes.Structure):\n"
+        "    _fields_ = [\n"
+        "        ('flags', ctypes.c_ulonglong), ('pidfd', ctypes.c_ulonglong),\n"
+        "        ('child_tid', ctypes.c_ulonglong), ('parent_tid', ctypes.c_ulonglong),\n"
+        "        ('exit_signal', ctypes.c_ulonglong), ('stack', ctypes.c_ulonglong),\n"
+        "        ('stack_size', ctypes.c_ulonglong), ('tls', ctypes.c_ulonglong),\n"
+        "        ('set_tid', ctypes.c_ulonglong), ('set_tid_size', ctypes.c_ulonglong),\n"
+        "        ('cgroup', ctypes.c_ulonglong),\n"
+        "    ]\n"
+        "clone_args = CloneArgs()\n"
+        "print(json.dumps({\n"
+        "    'architecture': machine,\n"
+        "    'forkDenied': denied('fork'),\n"
+        "    'vforkDenied': denied('vfork'),\n"
+        "    'ordinaryCloneDenied': denied('clone', ctypes.c_ulong(_SIGCHLD), ctypes.c_void_p(1),\n"
+        "        ctypes.c_void_p(0), ctypes.c_void_p(0), ctypes.c_ulong(0)),\n"
+        "    'clone3Denied': denied('clone3', ctypes.byref(clone_args), ctypes.sizeof(clone_args)),\n"
+        "    'bootstrapCloneAllowed': allowed_bootstrap_clone(),\n"
+        "    'threadCloneAllowed': allowed_thread_clone(),\n"
+        "    'unixSocketAllowed': socket_result(socket.AF_UNIX)[0],\n"
+        "    'inetSocketDenied': socket_result(socket.AF_INET)[1] == errno.EPERM,\n"
+        "    'inet6SocketDenied': socket_result(socket.AF_INET6)[1] == errno.EPERM,\n"
+        "}, sort_keys=True, separators=(',', ':')))\n"
+    )
+    environment = _runtime_environment(tmp_path, fixture)
+    configuration = AgentRuntimeConfiguration.from_environment(environment)
+    controller = RuntimeSafetyController(configured=True, stop_file=tmp_path / "safety-stop")
+    controller.mark_ready()
+    executor = RuntimeDispatchExecutor(configuration, controller)
+    server = _RuntimeHTTPServer(("127.0.0.1", 0), controller, configuration, executor=executor)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    snapshot_json, invocation_json = _dispatch_body("syscalls")
+    try:
+        frames = RemoteRuntimeTransport(
+            runtime_url=f"http://127.0.0.1:{server.server_port}",
+            shared_secret=configuration.shared_secret,
+        ).dispatch(snapshot_json, invocation_json)
+        observed = json.loads(frames[0])
+        assert observed["architecture"] in {"x86_64", "aarch64"}
+        assert {key: value for key, value in observed.items() if key != "architecture"} == {
+            "bootstrapCloneAllowed": True,
+            "clone3Denied": True,
+            "forkDenied": True,
+            "inet6SocketDenied": True,
+            "inetSocketDenied": True,
+            "ordinaryCloneDenied": True,
+            "threadCloneAllowed": True,
+            "unixSocketAllowed": True,
+            "vforkDenied": True,
+        }
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
 def test_g4_runtime_production_policy_allows_bound_unix_host_and_denies_network(tmp_path):
     fixture = (
         "import hashlib, json, socket, sys\n"

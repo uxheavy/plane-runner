@@ -314,10 +314,11 @@ def _install_linux_kernel_policy() -> None:
     if socket_number is not None:
         instructions.extend(
             (
-                _SockFilter(_BPF_JMP_JEQ_K, 0, 3, socket_number),
+                _SockFilter(_BPF_JMP_JEQ_K, 0, 4, socket_number),
                 _SockFilter(_BPF_LD_W_ABS, 0, 0, _SECCOMP_SOCKET_DOMAIN_OFFSET),
                 _SockFilter(_BPF_JMP_JEQ_K, 1, 0, _AF_UNIX),
                 _SockFilter(_BPF_RET_K, 0, 0, _SECCOMP_RET_ERRNO | errno.EPERM),
+                _SockFilter(_BPF_RET_K, 0, 0, _SECCOMP_RET_ALLOW),
             )
         )
     for name in ("connect", "sendto", "recvfrom"):
@@ -357,6 +358,7 @@ def _install_linux_kernel_policy() -> None:
         "socketpair",
         "clone",
         "fork",
+        "vfork",
         "clone3",
         "ptrace",
         "openat2",

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import shlex
 import secrets
-import subprocess
 import threading
 from contextlib import contextmanager
 from pathlib import Path
@@ -27,6 +26,7 @@ from plane.agent.runtime import (
     run_runtime_invocation,
     validate_runtime_command,
 )
+from plane.agent.runtime.provenance import RuntimeProvenanceError, preflight_runtime_provenance
 from plane.db.models import RuntimeInvocation
 from plane.operation_gateway.gateway import OperationGateway
 
@@ -49,44 +49,18 @@ class Command(BaseCommand):
         invocation = RuntimeInvocation.objects.filter(invocation_id=options["invocation_ref"]).first()
         if invocation is None:
             raise CommandError("invocation-ref does not identify a persisted Plane invocation")
+        runtime_url = getattr(settings, "PLANE_AGENT_RUNTIME_URL", "")
+        shared_secret = getattr(settings, "PLANE_AGENT_RUNTIME_SHARED_SECRET", "")
         checkout = options.get("runtime_checkout") or getattr(settings, "PLANE_AGENT_RUNTIME_CHECKOUT", None)
         expected_sha = options.get("runtime_sha") or getattr(settings, "PLANE_AGENT_RUNTIME_SHA", None)
-        if bool(checkout) != bool(expected_sha):
-            raise CommandError("Hermes runtime checkout and SHA must be configured together")
-        if checkout:
-            try:
-                actual_sha = subprocess.run(
-                    ["git", "-C", str(checkout), "rev-parse", "HEAD"],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                ).stdout.strip()
-            except (OSError, subprocess.SubprocessError) as exc:
-                raise CommandError("Hermes runtime checkout could not be verified") from exc
-            if actual_sha != str(expected_sha):
-                raise CommandError("Hermes runtime checkout does not match the configured SHA")
-            try:
-                dirty = subprocess.run(
-                    ["git", "-C", str(checkout), "status", "--porcelain", "--untracked-files=all"],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                ).stdout.strip()
-                remotes = subprocess.run(
-                    ["git", "-C", str(checkout), "remote", "-v"],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                ).stdout
-            except (OSError, subprocess.SubprocessError) as exc:
-                raise CommandError("Hermes runtime checkout provenance could not be verified") from exc
-            if dirty:
-                raise CommandError("Hermes runtime checkout must be clean")
-            if "github.com/uxheavy/hermes-agent" not in remotes:
-                raise CommandError("Hermes runtime checkout must use the uxheavy fork")
+        try:
+            preflight_runtime_provenance(
+                str(checkout) if checkout else None,
+                str(expected_sha) if expected_sha else None,
+                remote_runtime=bool(runtime_url and shared_secret),
+            )
+        except RuntimeProvenanceError as exc:
+            raise CommandError(str(exc)) from exc
         command = options.get("runtime_command") or getattr(settings, "PLANE_AGENT_RUNTIME_COMMAND", None)
         if isinstance(command, str):
             command = shlex.split(command)
@@ -154,8 +128,6 @@ class Command(BaseCommand):
         monitor = threading.Thread(target=revoke_on_stop, name="plane-runtime-credential-revoker", daemon=True)
         monitor.start()
         try:
-            runtime_url = getattr(settings, "PLANE_AGENT_RUNTIME_URL", "")
-            shared_secret = getattr(settings, "PLANE_AGENT_RUNTIME_SHARED_SECRET", "")
             if runtime_url and shared_secret:
                 host_url = getattr(settings, "PLANE_AGENT_RUNTIME_HOST_URL", "")
                 host_parsed = urlsplit(host_url)
