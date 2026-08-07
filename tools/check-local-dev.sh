@@ -16,6 +16,17 @@ assert_line() {
     fi
 }
 
+assert_contains() {
+    local file="$1"
+    local expected="$2"
+
+    if ! grep -Fq "$expected" "$file"; then
+        echo "Local development contract mismatch in $file" >&2
+        echo "Expected to contain: $expected" >&2
+        exit 1
+    fi
+}
+
 assert_line "apps/api/.env.example" 'AWS_S3_ENDPOINT_URL="http://plane-minio:9000"'
 assert_line "apps/api/.env.example" 'USE_MINIO=1'
 assert_line "apps/api/.env.example" 'WEB_URL="http://localhost:8080"'
@@ -24,7 +35,23 @@ assert_line "apps/api/.env.example" 'DJANGO_SETTINGS_MODULE=plane.settings.local
 assert_line "apps/api/.env.example" 'PLANE_AGENT_RUNTIME_ENABLED=0'
 assert_line ".env.example" 'PLANE_AGENT_RUNTIME_ENABLED=0'
 assert_line ".env.example" 'PLANE_AGENT_RUNTIME_URL="http://agent-runtime:8080"'
-assert_line ".env.example" 'PLANE_AGENT_RUNTIME_IMAGE="uxheavy/plane-agent-runtime:hermes-e573a466-g4-ff8cd9c5"'
+runtime_image=$(sed -n 's/^PLANE_AGENT_RUNTIME_IMAGE="\([^"]*\)"$/\1/p' .env.example)
+case "$runtime_image" in
+    uxheavy/plane-agent-runtime:hermes-*) ;;
+    *)
+        echo "Canonical PLANE_AGENT_RUNTIME_IMAGE must be a pinned uxheavy Hermes image." >&2
+        exit 1
+        ;;
+esac
+case "$runtime_image" in
+    *:latest)
+        echo "Canonical PLANE_AGENT_RUNTIME_IMAGE must not use the latest tag." >&2
+        exit 1
+        ;;
+esac
+assert_contains "docker-compose-local.yml" 'file: ./deployments/cli/community/docker-compose.yml'
+assert_contains "deployments/cli/community/docker-compose.yml" 'entrypoint: ["python3", "-m", "plane.agent.runtime.service"]'
+assert_contains "deployments/cli/community/docker-compose.yml" 'command: []'
 if [ ! -s ".plane-agent-runtime.secret" ]; then
     echo "Missing generated .plane-agent-runtime.secret; run ./setup.sh first." >&2
     exit 1

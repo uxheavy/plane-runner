@@ -20,7 +20,6 @@ BASE_SERVICES = {
     "proxy",
     "worker",
 }
-RUNTIME_IMAGE = "uxheavy/plane-agent-runtime:hermes-e573a466-g4-ff8cd9c5"
 RUNTIME_STATE_VOLUME = "agent_runtime_credential_state"
 RUNTIME_SECRET_FILE = "/run/secrets/plane_agent_runtime"
 
@@ -109,7 +108,9 @@ def assert_common(model: Mapping[str, object], *, agent_enabled: bool) -> None:
     require(internal.get("internal") is True, "runtime network must be internal")
 
     runtime = service(model, "agent-runtime")
-    require(runtime.get("image") == RUNTIME_IMAGE, "agent runtime must reuse the pinned community image")
+    runtime_image = str(runtime.get("image", ""))
+    require(runtime_image.startswith("uxheavy/plane-agent-runtime:hermes-"), "agent runtime must use the canonical pinned image")
+    require(not runtime_image.endswith(":latest"), "agent runtime must not use a floating image tag")
     require(runtime.get("profiles") == ["agent"], "agent runtime must be opt-in through the agent profile")
     require(runtime.get("entrypoint") == ["python3", "-m", "plane.agent.runtime.service"], "agent runtime must select the runtime service module")
     require(runtime.get("command") == [], "agent runtime must not append arguments to the image bootstrap entrypoint")

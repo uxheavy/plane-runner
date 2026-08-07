@@ -140,7 +140,10 @@ docker compose -f docker-compose-local.yml up -d
 To opt into the separate runtime service, enable the `agent` profile and the
 local settings seam together. The profile uses the pinned community runtime
 image, an internal-only network, the mounted runtime secret, the API/worker
-host callback endpoints, and the existing credential-state volume:
+host callback endpoints, and the existing credential-state volume. Its
+service definition extends the canonical community deployment service, so
+image, entrypoint, sandbox, healthcheck, and credential-mount changes remain
+owned in one Compose definition:
 
 ```sh
 PLANE_AGENT_RUNTIME_ENABLED=1 docker compose --profile agent -f docker-compose-local.yml up -d
