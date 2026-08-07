@@ -343,10 +343,11 @@ def _install_linux_kernel_policy() -> None:
     # CLONE_VM|CLONE_VFORK|SIGCHLD: the launcher is suspended until the child
     # has exec'd the fixed Hermes service or failed. The bootstrap also starts
     # one bounded stderr-reader thread, whose clone flags are distinct and
-    # carry CLONE_THREAD. Permit the exact exec flags and only clone calls
-    # with the required thread flags; ordinary clone flags, fork, and clone3
-    # remain denied below. CPython's bounded execute_code Popen path uses
-    # vfork; the finite pids limit is a second process-tree bound.
+    # carry CLONE_THREAD. Permit the exact bootstrap and thread shapes below.
+    # Code Mode is deliberately forced through CPython's classic
+    # clone(SIGCHLD) path by the image-local runtime adapter; fork, vfork, and
+    # clone3 remain denied. The finite pids limit is a second process-tree
+    # bound.
     clone_number = syscalls.get("clone")
     if clone_number is not None:
         # Permit only the classic fork-compatible clone(SIGCHLD) shape before
@@ -387,6 +388,7 @@ def _install_linux_kernel_policy() -> None:
         "socketpair",
         "clone",
         "fork",
+        "vfork",
         "clone3",
         "ptrace",
         "openat2",
