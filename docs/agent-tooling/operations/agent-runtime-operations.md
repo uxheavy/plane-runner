@@ -325,18 +325,18 @@ docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose
 `apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` is the pin
 manifest. The current Plane deployable service candidate is the exact
 authoritative image-source Plane commit
-`ddbb357ade7d461d152a555e271363dbc6312cc7`; the final offline evidence
+`1ae4d5617513d6e081a7064820dab909a86aae15`; the final offline evidence
 wrapper is its exact single child. The previously accepted G3 candidate is Plane commit `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
 The current binding carries Hermes commit
 `114eabf9d807b659e36d767e4de46ca056297ccb`, MCP gitlink
 `2dc152e136d7ad952b901e5fe9364a37487297ba`, SDK gitlink
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`, runtime image tag
-`plane-agent-runtime:hermes-114eabf9-g4-ddbb357`, runtime image digest
-`sha256:15a7f15b307aa73624c7c084517be6aff2dc6d4c11d9864b3eb40928d1420239`,
-runtime revision/source revision `ddbb357ade7d461d152a555e271363dbc6312cc7`, and runtime
+`plane-agent-runtime:hermes-114eabf9-g4-1ae4d561`, runtime image digest
+`sha256:2102070c36c1effc126de5fdbfa8735ec8f525aeaaf6ac2c12b82a7f71b44e10`,
+runtime revision/source revision `1ae4d5617513d6e081a7064820dab909a86aae15`, and runtime
 contract `plane.agent-runtime/v1`. The Plane service revision above is the
 authoritative image source; the runtime image/runtimeRevision source is
-`ddbb357ade7d461d152a555e271363dbc6312cc7`, which was used to build the
+`1ae4d5617513d6e081a7064820dab909a86aae15`, which was used to build the
 candidate image. The wrapper carries only the existing binding, fixture, and
 evidence documentation. API, worker, `beat-worker`,
 supervisor, and `agent-runtime` each switch their service revision and image
