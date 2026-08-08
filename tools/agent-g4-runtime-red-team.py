@@ -903,6 +903,12 @@ def main() -> int:
             docker(
                 "exec",
                 "-e",
+                "HOME=/tmp",
+                "-e",
+                "HERMES_HOME=/tmp/hermes-home",
+                "-e",
+                "TMPDIR=/tmp",
+                "-e",
                 "PYTHONPATH=/tmp:/opt:/opt/hermes",
                 "-e",
                 "PYTHONSAFEPATH=1",
