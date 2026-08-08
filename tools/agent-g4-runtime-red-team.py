@@ -20,7 +20,7 @@ EXPECTED_RUNTIME_IMAGE_DIGEST = "sha256:8f9acfc20857bd8085aa5022853f36da9176123c
 EXPECTED_RUNTIME_IMAGE_REVISION = "95ee2e6dfd30b7e8ae0927e2f3e343b51da8d146"
 RUNTIME_CONTRACT = "plane.agent-runtime/v1"
 PINNED_HERMES_RUN_AGENT_PATH = "/opt/hermes/run_agent.py"
-PINNED_HERMES_RUN_AGENT_SHA256 = "1a336eac71d5cd4418ebf7a8e52236eb6984ac9b9cfbb2e9ba08c9a197486011"
+PINNED_HERMES_RUN_AGENT_SHA256 = "67d09e1a31f2fc29ea4b32a03a9256e3d8f438d47d8e4784aafc780803ef4699"
 
 
 # Injected into the exact image's existing /tmp tmpfs with docker exec. It is
@@ -42,7 +42,7 @@ from types import SimpleNamespace
 
 
 PINNED_HERMES_RUN_AGENT_PATH = "/opt/hermes/run_agent.py"
-PINNED_HERMES_RUN_AGENT_SHA256 = "1a336eac71d5cd4418ebf7a8e52236eb6984ac9b9cfbb2e9ba08c9a197486011"
+PINNED_HERMES_RUN_AGENT_SHA256 = "67d09e1a31f2fc29ea4b32a03a9256e3d8f438d47d8e4784aafc780803ef4699"
 
 
 class OpenAIError(Exception):
@@ -202,7 +202,7 @@ class _Completions:
                     "g4-hermes-agent-loop=ok provider_seam=deterministic_openai_transport_only "
                     "hermes_agent_identity=run_agent.AIAgent "
                     "pinned_hermes_run_agent=ok path=/opt/hermes/run_agent.py "
-                    "sha256=1a336eac71d5cd4418ebf7a8e52236eb6984ac9b9cfbb2e9ba08c9a197486011 "
+                    "sha256=67d09e1a31f2fc29ea4b32a03a9256e3d8f438d47d8e4784aafc780803ef4699 "
                     "agent_tool_registration=ok callback_trace=real_tool_loop "
                     "tamper_guard=fail_closed shim_boundary=provider_transport_only"
                 ),
@@ -519,7 +519,7 @@ identity = {
 if (
     identity["module"] != "run_agent"
     or identity["path"] != "/opt/hermes/run_agent.py"
-    or identity["sha256"] != "1a336eac71d5cd4418ebf7a8e52236eb6984ac9b9cfbb2e9ba08c9a197486011"
+    or identity["sha256"] != "67d09e1a31f2fc29ea4b32a03a9256e3d8f438d47d8e4784aafc780803ef4699"
     or identity["class"] != "AIAgent"
     or identity["classModule"] != "run_agent"
     or identity["shadowPresent"]
