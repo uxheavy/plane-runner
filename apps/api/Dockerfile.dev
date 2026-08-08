@@ -33,9 +33,11 @@ RUN pip install -r requirements/local.txt --compile --no-cache-dir
 
 
 COPY . .
+COPY ./bin/plane-agent-runtime-credential-resolver /usr/local/bin/plane-agent-runtime-credential-resolver
 
 RUN mkdir -p /code/plane/logs
 RUN chmod -R +x /code/bin
+RUN chmod 755 /usr/local/bin/plane-agent-runtime-credential-resolver
 RUN chmod -R 777 /code
 
 
@@ -43,4 +45,3 @@ RUN chmod -R 777 /code
 EXPOSE 8000
 
 CMD [ "./bin/docker-entrypoint-api-local.sh" ]
-

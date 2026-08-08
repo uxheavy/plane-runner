@@ -182,6 +182,7 @@ services:
       <<: [*app-env, *runtime-db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
     secrets:
       - plane_agent_runtime
+      - plane_agent_provider_credentials
     depends_on:
       plane-db:
         condition: service_started
@@ -212,6 +213,7 @@ services:
       PLANE_AGENT_RUNTIME_HOST_URL: ${PLANE_AGENT_RUNTIME_WORKER_HOST_URL:-http://worker:8091}
     secrets:
       - plane_agent_runtime
+      - plane_agent_provider_credentials
     depends_on:
       provisioner-final:
         condition: service_completed_successfully
@@ -433,3 +435,8 @@ networks:
 secrets:
   plane_agent_runtime:
     environment: PLANE_AGENT_RUNTIME_SECRET
+  # The deployment provisions this external secret. The API/worker resolver
+  # accepts only the opaque runtime reference and reads this fixed mount.
+  plane_agent_provider_credentials:
+    external: true
+    name: ${PLANE_AGENT_RUNTIME_PROVIDER_SECRET_NAME:-community_plane_agent_provider_credentials}

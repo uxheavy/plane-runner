@@ -578,6 +578,14 @@ def test_resolved_community_compose_scopes_database_credentials_by_process():
 @pytest.mark.contract
 def test_agent_runtime_production_compose_has_an_isolated_readiness_and_secret_boundary():
     services = _resolved_community_services()
+    resolver = API_ROOT / "bin/plane-agent-runtime-credential-resolver"
+    assert resolver.is_file()
+    assert resolver.stat().st_mode & 0o111
+    installed_resolver = (
+        "COPY ./bin/plane-agent-runtime-credential-resolver "
+        "/usr/local/bin/plane-agent-runtime-credential-resolver"
+    )
+    assert installed_resolver in (API_ROOT / "Dockerfile.api").read_text(encoding="utf-8")
     runtime = services["agent-runtime"]
     runtime_environment = runtime["environment"]
     assert runtime["image"].startswith("uxheavy/plane-agent-runtime:hermes-114eabf9-g4-ddbb357")
@@ -603,6 +611,17 @@ def test_agent_runtime_production_compose_has_an_isolated_readiness_and_secret_b
     assert services["api"]["environment"]["PLANE_AGENT_RUNTIME_SECRET_FILE"] == "/run/secrets/plane_agent_runtime"
     assert "PLANE_AGENT_RUNTIME_SECRET" not in services["api"]["environment"]
     assert services["api"]["environment"]["PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER"].startswith("command:")
+    assert services["api"]["environment"]["PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER"] == (
+        "command:/usr/local/bin/plane-agent-runtime-credential-resolver"
+    )
+    provider_secret = next(
+        secret for secret in services["api"]["secrets"] if secret["source"] == "plane_agent_provider_credentials"
+    )
+    assert provider_secret["target"] == "/run/secrets/plane_agent_provider_credentials"
+    assert all(
+        secret["source"] != "plane_agent_provider_credentials"
+        for secret in services["agent-runtime"].get("secrets", [])
+    )
     assert services["api"]["environment"]["PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE"] == (
         "/run/plane-agent-credentials/revocations.json"
     )

@@ -20,6 +20,7 @@ from plane.agent.runtime import (
     RuntimeSafetyStopError,
     validate_credential_lease_metadata,
 )
+from plane.agent.runtime import credentials as runtime_credentials
 from plane.agent.runtime.service import _RuntimeHTTPServer
 
 
@@ -65,6 +66,36 @@ def test_g4_runtime_configuration_rejects_credential_shaped_child_environment_an
         AgentRuntimeConfiguration.from_environment(
             _runtime_environment(PLANE_AGENT_RUNTIME_CREDENTIALS_JSON='{"api_key":"never-in-settings"}')
         )
+
+
+def test_g4_deployment_credential_resolver_is_fixed_path_bounded_and_allowlisted(monkeypatch, tmp_path):
+    source = tmp_path / "provider.env"
+    source.write_text("# operator-owned\nOTHER=value\nXAI_API_KEY=provider-secret\n", encoding="utf-8")
+    monkeypatch.setattr(runtime_credentials, "DEPLOYMENT_CREDENTIAL_SOURCE_PATH", str(source))
+
+    assert runtime_credentials.resolve_deployment_credential("runtime") == {"api_key": "provider-secret"}
+    with pytest.raises(RuntimeCredentialError, match="not allowed"):
+        runtime_credentials.resolve_deployment_credential("provider")
+
+    source.write_text('{"XAI_API_KEY":"json-secret"}', encoding="utf-8")
+    assert runtime_credentials.resolve_deployment_credential("runtime") == {"api_key": "json-secret"}
+    source.write_text("XAI_API_KEY=first\nXAI_API_KEY=second\n", encoding="utf-8")
+    with pytest.raises(RuntimeCredentialError, match="duplicate"):
+        runtime_credentials.resolve_deployment_credential("runtime")
+
+
+def test_g4_deployment_credential_resolver_rejects_oversized_or_malformed_sources(monkeypatch, tmp_path):
+    source = tmp_path / "provider.env"
+    monkeypatch.setattr(runtime_credentials, "DEPLOYMENT_CREDENTIAL_SOURCE_PATH", str(source))
+    source.write_text("XAI_API_KEY=\n", encoding="utf-8")
+    with pytest.raises(RuntimeCredentialError):
+        runtime_credentials.resolve_deployment_credential("runtime")
+    source.write_text("not-an-assignment\n", encoding="utf-8")
+    with pytest.raises(RuntimeCredentialError):
+        runtime_credentials.resolve_deployment_credential("runtime")
+    source.write_bytes(b"XAI_API_KEY=" + b"x" * (runtime_credentials._DEPLOYMENT_CREDENTIAL_MAX_BYTES + 1))
+    with pytest.raises(RuntimeCredentialError, match="oversized"):
+        runtime_credentials.resolve_deployment_credential("runtime")
 
 
 def test_g4_runtime_configuration_reads_a_single_line_secret_file_without_accepting_both_sources(tmp_path):

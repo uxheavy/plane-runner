@@ -47,9 +47,11 @@ COPY package.json package.json
 
 RUN apk --no-cache add "bash~=5.2"
 COPY ./bin ./bin/
+COPY ./bin/plane-agent-runtime-credential-resolver /usr/local/bin/plane-agent-runtime-credential-resolver
 
 RUN mkdir -p /code/plane/logs
 RUN chmod +x ./bin/*
+RUN chmod 755 /usr/local/bin/plane-agent-runtime-credential-resolver
 RUN chmod -R 777 /code
 
 # Expose container port and run entry point script

@@ -11,6 +11,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import secrets
 import subprocess
 import threading
@@ -28,6 +29,114 @@ except ImportError:  # pragma: no cover - Windows has no supported production ru
 
 class RuntimeCredentialError(ValueError):
     """A credential lease is absent, expired, revoked, rotated, or unbound."""
+
+
+# Compose/Swarm mounts the operator-owned provider secret at this fixed path.
+# The packaged resolver never accepts a caller-selected source path.
+DEPLOYMENT_CREDENTIAL_SOURCE_PATH = "/run/secrets/plane_agent_provider_credentials"
+DEPLOYMENT_CREDENTIAL_ALLOWED_REFS = frozenset({"runtime"})
+_DEPLOYMENT_CREDENTIAL_KEY = "XAI_API_KEY"
+_DEPLOYMENT_CREDENTIAL_MAX_BYTES = 64 * 1024
+_DEPLOYMENT_CREDENTIAL_MAX_VALUE_BYTES = 16 * 1024
+_DEPLOYMENT_ENV_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _bounded_deployment_secret(value: object) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise RuntimeCredentialError("deployment credential source is unavailable")
+    if len(value.encode("utf-8")) > _DEPLOYMENT_CREDENTIAL_MAX_VALUE_BYTES:
+        raise RuntimeCredentialError("deployment credential source value is oversized")
+    if any(ord(char) < 0x20 or ord(char) == 0x7F for char in value):
+        raise RuntimeCredentialError("deployment credential source value is invalid")
+    return value
+
+
+def _parse_deployment_dotenv(text: str) -> str:
+    found: str | None = None
+    for raw_line in text.splitlines():
+        if len(raw_line.encode("utf-8")) > _DEPLOYMENT_CREDENTIAL_MAX_VALUE_BYTES:
+            raise RuntimeCredentialError("deployment credential source line is oversized")
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].lstrip()
+        if "=" not in line:
+            raise RuntimeCredentialError("deployment credential source is not valid dotenv")
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if _DEPLOYMENT_ENV_KEY.fullmatch(key) is None:
+            raise RuntimeCredentialError("deployment credential source contains an invalid key")
+        value = value.strip()
+        if value.startswith('"'):
+            try:
+                parsed = json.loads(value)
+            except (TypeError, ValueError, json.JSONDecodeError) as exc:
+                raise RuntimeCredentialError("deployment credential source contains an invalid value") from exc
+            if not isinstance(parsed, str):
+                raise RuntimeCredentialError("deployment credential source contains an invalid value")
+            value = parsed
+        elif value.startswith("'"):
+            if len(value) < 2 or not value.endswith("'"):
+                raise RuntimeCredentialError("deployment credential source contains an invalid value")
+            value = value[1:-1]
+        if key != _DEPLOYMENT_CREDENTIAL_KEY:
+            continue
+        if found is not None:
+            raise RuntimeCredentialError("deployment credential source contains a duplicate key")
+        found = _bounded_deployment_secret(value)
+    if found is None:
+        raise RuntimeCredentialError("deployment credential source does not contain the configured provider")
+    return found
+
+
+def _parse_deployment_credential_document(raw: bytes) -> str:
+    if len(raw) > _DEPLOYMENT_CREDENTIAL_MAX_BYTES:
+        raise RuntimeCredentialError("deployment credential source is oversized")
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise RuntimeCredentialError("deployment credential source is not UTF-8") from exc
+    stripped = text.lstrip()
+    if stripped.startswith("{"):
+        def reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+            result: dict[str, object] = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError("duplicate key")
+                result[key] = value
+            return result
+
+        try:
+            value = json.loads(stripped, object_pairs_hook=reject_duplicate_keys)
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise RuntimeCredentialError("deployment credential source is not valid JSON") from exc
+        if not isinstance(value, dict) or set(value) != {_DEPLOYMENT_CREDENTIAL_KEY}:
+            raise RuntimeCredentialError("deployment credential JSON fields are invalid")
+        return _bounded_deployment_secret(value[_DEPLOYMENT_CREDENTIAL_KEY])
+    return _parse_deployment_dotenv(text)
+
+
+def resolve_deployment_credential(credential_ref: str) -> dict[str, str]:
+    """Resolve the one approved provider credential for the broker subprocess."""
+
+    if not isinstance(credential_ref, str) or credential_ref not in DEPLOYMENT_CREDENTIAL_ALLOWED_REFS:
+        raise RuntimeCredentialError("credential reference is not allowed")
+    try:
+        flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(DEPLOYMENT_CREDENTIAL_SOURCE_PATH, flags)
+    except OSError as exc:
+        raise RuntimeCredentialError("deployment credential source is unavailable") from exc
+    try:
+        with os.fdopen(descriptor, "rb") as source:
+            descriptor = -1
+            raw = source.read(_DEPLOYMENT_CREDENTIAL_MAX_BYTES + 1)
+    except OSError as exc:
+        raise RuntimeCredentialError("deployment credential source is unavailable") from exc
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    return {"api_key": _parse_deployment_credential_document(raw)}
 
 
 @dataclass(frozen=True)
