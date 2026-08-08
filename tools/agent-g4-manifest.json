@@ -3,7 +3,7 @@
   "candidateBinding": {
     "mode": "exact-single-child",
     "acceptedG3Baseline": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
-    "parentCommit": "4d4618a6e4d5d40de74e3b0ee6c2fd460fa164f8",
+    "parentCommit": "b9fecdccf7a4909b09475c258cd0cc1f0886833e",
     "candidateCommitSource": "git-head-with-exact-parent",
     "rejectDescendants": true
   },
@@ -34,12 +34,12 @@
     "apps/api/plane/agent/tools/AGENTS.md"
   ],
   "pins": {
-    "hermesCommit": "e573a46611e2cb988f1ab43ad34cd8cc3b2cb659",
+    "hermesCommit": "114eabf9d807b659e36d767e4de46ca056297ccb",
     "mcpGitlink": "2dc152e136d7ad952b901e5fe9364a37487297ba",
     "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889",
-    "runtimeImageTag": "plane-agent-runtime:hermes-e573a466-g4-ff8cd9c5",
-    "runtimeImageDigest": "sha256:8bd10066b99077a60e8a1fda7630fd47a1a59da687aac3d87a80704cd34a7741",
-    "runtimeImageRevision": "ff8cd9c548ae73a587e9caacb960616bd9964e8b",
+    "runtimeImageTag": "plane-agent-runtime:hermes-114eabf9-g4-b9fecdcc",
+    "runtimeImageDigest": "sha256:19fbbc0886e5634e2c4b149767b12b0dad64b6d963716a2b61c90cd84fe15abb",
+    "runtimeImageRevision": "b9fecdccf7a4909b09475c258cd0cc1f0886833e",
     "runtimeContract": "plane.agent-runtime/v1"
   },
   "liveContract": {
@@ -131,10 +131,7 @@
     "plane/tests/contract/api/test_agent_runtime_production.py",
     "plane/tests/contract/api/test_local_runtime_configuration.py"
   ],
-  "offlineFixtures": [
-    "tools/agent-g4-runtime-red-team.py",
-    "tools/agent-g4-rollback-drill.py"
-  ],
+  "offlineFixtures": ["tools/agent-g4-runtime-red-team.py", "tools/agent-g4-rollback-drill.py"],
   "offlineEvidence": {
     "load": {
       "path": "apps/api/plane/tests/fixtures/agent_g4_load_thresholds.json",
@@ -181,10 +178,7 @@
       ]
     }
   },
-  "verifierTests": [
-    "tools/tests/test_agent_g4_contract.py",
-    "tools/tests/test_local_dev_topology.py"
-  ],
+  "verifierTests": ["tools/tests/test_agent_g4_contract.py", "tools/tests/test_local_dev_topology.py"],
   "pendingInputs": {
     "liveProviderModel": "Provider/model live canaries remain separately authorized; offline verification must not claim live closure.",
     "redTeamResourceLabels": "The red-team source uses com.uxheavy.plane.agent-g4-runtime labels; the verifier checks that label family after the stage and does not edit the source."

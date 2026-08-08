@@ -12,8 +12,9 @@ The Plane-owned provider-egress relay is parent-side and invocation-bound:
 the trusted runtime may use its configured external network, while the child
 stays AF_UNIX-only and receives no real provider credential. The exact Hermes
 constructor seam is now wired through the existing bootstrap/service chain;
-the candidate image pin and separately authorized live provider proof remain
-pending, and this work does not complete live G4 or G5.
+the candidate image is pinned in the runtime manifest. Separately authorized
+live provider proof remains pending, and this work does not complete live G4
+or G5.
 
 ## What is authoritative
 

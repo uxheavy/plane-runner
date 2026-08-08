@@ -14,10 +14,10 @@ import uuid
 from pathlib import Path
 
 
-HERMES_COMMIT = "e573a46611e2cb988f1ab43ad34cd8cc3b2cb659"
+HERMES_COMMIT = "114eabf9d807b659e36d767e4de46ca056297ccb"
 RESOURCE_LABEL = "com.uxheavy.plane.agent-g4-runtime"
-EXPECTED_RUNTIME_IMAGE_DIGEST = "sha256:8bd10066b99077a60e8a1fda7630fd47a1a59da687aac3d87a80704cd34a7741"
-EXPECTED_RUNTIME_IMAGE_REVISION = "ff8cd9c548ae73a587e9caacb960616bd9964e8b"
+EXPECTED_RUNTIME_IMAGE_DIGEST = "sha256:19fbbc0886e5634e2c4b149767b12b0dad64b6d963716a2b61c90cd84fe15abb"
+EXPECTED_RUNTIME_IMAGE_REVISION = "b9fecdccf7a4909b09475c258cd0cc1f0886833e"
 RUNTIME_CONTRACT = "plane.agent-runtime/v1"
 PINNED_HERMES_RUN_AGENT_PATH = "/opt/hermes/run_agent.py"
 PINNED_HERMES_RUN_AGENT_SHA256 = "1a336eac71d5cd4418ebf7a8e52236eb6984ac9b9cfbb2e9ba08c9a197486011"
@@ -664,7 +664,7 @@ def main() -> int:
     if shutil.which("docker") is None:
         print("event=agent.g4.runtime-red-team status=failed reason=docker_unavailable")
         return 1
-    image = os.environ.get("PLANE_G4_RUNTIME_IMAGE", "plane-agent-runtime:hermes-e573a466-g4-ff8cd9c5")
+    image = os.environ.get("PLANE_G4_RUNTIME_IMAGE", "plane-agent-runtime:hermes-114eabf9-g4-b9fecdcc")
     expected_digest = os.environ.get("PLANE_G4_RUNTIME_IMAGE_DIGEST", EXPECTED_RUNTIME_IMAGE_DIGEST)
     containers: list[str] = []
     network: str | None = None
