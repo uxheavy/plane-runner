@@ -12,7 +12,7 @@
     "compatibilityRule": "The previous API, worker, beat, supervisor, and runtime contract ignore 0141 quota columns/tables; the database remains at 0141 and reconciliation reads durable effect, audit, outcome, and quota state before any replay."
   },
   "current": {
-    "planeCommit": "97e0feb179a3ba879e062ccaddbdcdef639d24a8",
+    "planeCommit": "9279afb77d09b8037a39ef77b3f1ff9ee8dfb685",
     "migrationLeaf": "db.0141_operationgateway_quotas",
     "runtime": {
       "hermesCommit": "114eabf9d807b659e36d767e4de46ca056297ccb",
@@ -25,27 +25,27 @@
     },
     "services": {
       "api": {
-        "revision": "97e0feb179a3ba879e062ccaddbdcdef639d24a8",
+        "revision": "9279afb77d09b8037a39ef77b3f1ff9ee8dfb685",
         "imageDigest": "sha256:a6229affb433c569905e125326a8315ed2f03b732e059291c19cbd882b13092b",
         "contract": "plane.operation/v1"
       },
       "worker": {
-        "revision": "97e0feb179a3ba879e062ccaddbdcdef639d24a8",
+        "revision": "9279afb77d09b8037a39ef77b3f1ff9ee8dfb685",
         "imageDigest": "sha256:a6229affb433c569905e125326a8315ed2f03b732e059291c19cbd882b13092b",
         "contract": "plane.operation/v1"
       },
       "beat-worker": {
-        "revision": "97e0feb179a3ba879e062ccaddbdcdef639d24a8",
+        "revision": "9279afb77d09b8037a39ef77b3f1ff9ee8dfb685",
         "imageDigest": "sha256:a6229affb433c569905e125326a8315ed2f03b732e059291c19cbd882b13092b",
         "contract": "plane.operation/v1"
       },
       "supervisor": {
-        "revision": "97e0feb179a3ba879e062ccaddbdcdef639d24a8",
+        "revision": "9279afb77d09b8037a39ef77b3f1ff9ee8dfb685",
         "imageDigest": "sha256:a6229affb433c569905e125326a8315ed2f03b732e059291c19cbd882b13092b",
         "contract": "plane.agent-runtime/v1"
       },
       "agent-runtime": {
-        "revision": "97e0feb179a3ba879e062ccaddbdcdef639d24a8",
+        "revision": "9279afb77d09b8037a39ef77b3f1ff9ee8dfb685",
         "imageDigest": "sha256:a6229affb433c569905e125326a8315ed2f03b732e059291c19cbd882b13092b",
         "contract": "plane.agent-runtime/v1"
       }
