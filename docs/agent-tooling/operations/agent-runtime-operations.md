@@ -323,7 +323,7 @@ docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose
 ### Exact pins and migration strategy
 
 `apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` is the pin
-manifest. The current Plane deployable service candidate is the integrated
+manifest. The current Plane deployable service candidate is the exact integrated
 Plane commit
 `97e0feb179a3ba879e062ccaddbdcdef639d24a8`, descended from wrapper
 `82fe5bfd5c108f925b89326fc715adb40aa12134`; the previously accepted G3
@@ -335,8 +335,9 @@ The current binding carries Hermes commit
 `plane-agent-runtime:hermes-114eabf9-g4-b9fecdcc`, runtime image digest
 `sha256:a6229affb433c569905e125326a8315ed2f03b732e059291c19cbd882b13092b`,
 runtime revision `97e0feb179a3ba879e062ccaddbdcdef639d24a8`, and runtime
-contract `plane.agent-runtime/v1`. The Plane service revision above is
-the source revision used to build the candidate image. API, worker, `beat-worker`,
+contract `plane.agent-runtime/v1`. The Plane service revision above is the
+runtime image/runtimeRevision source and was used to build the candidate image.
+API, worker, `beat-worker`,
 supervisor, and `agent-runtime` each switch their service revision and image
 digest to the corresponding current value in that manifest; the operation services retain
 `plane.operation/v1` and the runtime services retain `plane.agent-runtime/v1`.

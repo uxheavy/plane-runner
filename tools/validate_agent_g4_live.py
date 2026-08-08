@@ -301,7 +301,11 @@ def validate_rollback_fixture(fixture_path: Path, root: Path, manifest: dict[str
         "sdkGitlink": _shell_assignment(evidence, "SDK_COMMIT"),
         "imageDigest": _shell_assignment(evidence, "API_TEST_IMAGE_DIGEST"),
     }
-    for key in ("hermesCommit", "mcpGitlink", "sdkGitlink"):
+    # Hermes is part of the runtime image and may advance for a candidate
+    # while rollback still targets the immutable accepted-G3 service image.
+    # The accepted G3 Hermes value remains evidence for that previous image;
+    # only shared client gitlinks must remain equal across the two bindings.
+    for key in ("mcpGitlink", "sdkGitlink"):
         _rollback_exact(accepted_g3[key], pins[key], f"accepted_g3_{key}")
     for service in ROLLBACK_SERVICE_NAMES:
         _rollback_exact(previous_services[service]["revision"], g3_baseline, f"previous_{service}_revision")
