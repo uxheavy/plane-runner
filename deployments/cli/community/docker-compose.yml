@@ -248,7 +248,7 @@ services:
         condition: service_started
 
   agent-runtime:
-    image: ${PLANE_AGENT_RUNTIME_IMAGE:-uxheavy/plane-agent-runtime:hermes-114eabf9-g4-b9fecdcc}
+    image: ${PLANE_AGENT_RUNTIME_IMAGE:-uxheavy/plane-agent-runtime:hermes-114eabf9-g4-75cb589f}
     entrypoint: ["python3", "-m", "plane.agent.runtime.service"]
     command: []
     user: "${PLANE_AGENT_RUNTIME_UID:-65532}:${PLANE_AGENT_RUNTIME_GID:-65532}"

@@ -3,7 +3,7 @@
   "candidateBinding": {
     "mode": "exact-single-child",
     "acceptedG3Baseline": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
-    "parentCommit": "1a760857e79f5941a2651b242bcbea100c5daf25",
+    "parentCommit": "75cb589f879f191b262b71825e7ca0d01ec6665d",
     "candidateCommitSource": "git-head-with-exact-parent",
     "rejectDescendants": true
   },
@@ -37,9 +37,9 @@
     "hermesCommit": "114eabf9d807b659e36d767e4de46ca056297ccb",
     "mcpGitlink": "2dc152e136d7ad952b901e5fe9364a37487297ba",
     "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889",
-    "runtimeImageTag": "plane-agent-runtime:hermes-114eabf9-g4-b9fecdcc",
-    "runtimeImageDigest": "sha256:a6229affb433c569905e125326a8315ed2f03b732e059291c19cbd882b13092b",
-    "runtimeImageRevision": "97e0feb179a3ba879e062ccaddbdcdef639d24a8",
+    "runtimeImageTag": "plane-agent-runtime:hermes-114eabf9-g4-75cb589f",
+    "runtimeImageDigest": "sha256:61477b729c270332dff515db438bdcf09b1b4f90b59d84e6d0b4c72bb0ac62b7",
+    "runtimeImageRevision": "75cb589f879f191b262b71825e7ca0d01ec6665d",
     "runtimeContract": "plane.agent-runtime/v1"
   },
   "liveContract": {
@@ -152,7 +152,7 @@
     },
     "rollback": {
       "path": "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json",
-      "sha256": "73c2eecfa70bfb623a24bf00ae151b6e985922793b658a1bd14d282b2befd9d0",
+      "sha256": "e7859e90d072bcef3198209165322cc74e83f1247771c53c856be0c87f1670fc",
       "testPath": "plane/tests/contract/api/test_agent_g4_rollback_drill.py",
       "requiredOutputFields": [
         "externalWrites",

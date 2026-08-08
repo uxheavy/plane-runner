@@ -323,22 +323,22 @@ docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose
 ### Exact pins and migration strategy
 
 `apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` is the pin
-manifest. The current Plane deployable service candidate is the exact integrated
-Plane commit
-`1a760857e79f5941a2651b242bcbea100c5daf25`, descended from wrapper
-`82fe5bfd5c108f925b89326fc715adb40aa12134`; the previously accepted G3
-candidate is Plane commit `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
+manifest. The current Plane deployable service candidate is the exact
+authoritative image-source Plane commit
+`75cb589f879f191b262b71825e7ca0d01ec6665d`; the final offline evidence
+wrapper is its exact single child. The previously accepted G3 candidate is Plane commit `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
 The current binding carries Hermes commit
 `114eabf9d807b659e36d767e4de46ca056297ccb`, MCP gitlink
 `2dc152e136d7ad952b901e5fe9364a37487297ba`, SDK gitlink
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`, runtime image tag
-`plane-agent-runtime:hermes-114eabf9-g4-b9fecdcc`, runtime image digest
-`sha256:a6229affb433c569905e125326a8315ed2f03b732e059291c19cbd882b13092b`,
-runtime revision `97e0feb179a3ba879e062ccaddbdcdef639d24a8`, and runtime
+`plane-agent-runtime:hermes-114eabf9-g4-75cb589f`, runtime image digest
+`sha256:61477b729c270332dff515db438bdcf09b1b4f90b59d84e6d0b4c72bb0ac62b7`,
+runtime revision/source revision `75cb589f879f191b262b71825e7ca0d01ec6665d`, and runtime
 contract `plane.agent-runtime/v1`. The Plane service revision above is the
-rollback/evidence wrapper. The runtime image/runtimeRevision source is
-`97e0feb179a3ba879e062ccaddbdcdef639d24a8`, which was used to build the
-candidate image. API, worker, `beat-worker`,
+authoritative image source; the runtime image/runtimeRevision source is
+`75cb589f879f191b262b71825e7ca0d01ec6665d`, which was used to build the
+candidate image. The wrapper carries only the existing binding, fixture, and
+evidence documentation. API, worker, `beat-worker`,
 supervisor, and `agent-runtime` each switch their service revision and image
 digest to the corresponding current value in that manifest; the operation services retain
 `plane.operation/v1` and the runtime services retain `plane.agent-runtime/v1`.

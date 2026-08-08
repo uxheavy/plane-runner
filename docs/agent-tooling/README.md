@@ -4,9 +4,12 @@ This directory contains the compact execution control surface for the non-UI Pla
 
 ## Current status
 
-G0 through G3 are complete. The canonical offline G4 wrapper is bound as one exact child of implementation parent `4d4618a6e4d5d40de74e3b0ee6c2fd460fa164f8`, with the exact image, runtime, contract, proof, and review evidence recorded in [GOAL.md](./GOAL.md). The integrated candidate includes the verified local topology and original-design reuse correction: one shared runtime settings parser, one community runtime service owner, and one local extension. Separately authorized live provider/model evaluation and G5 staged rollout remain undone; G5 is not authorized. No chat UI is in scope.
+G0 through G3 are complete. The canonical offline G4 wrapper is one exact child of authoritative image-source commit `75cb589f879f191b262b71825e7ca0d01ec6665d`, with the exact image, runtime, contract, proof, and review evidence recorded in [GOAL.md](./GOAL.md). The integrated candidate includes the verified local topology and original-design reuse correction: one shared runtime settings parser, one community runtime service owner, and one local extension. Live G4 provider/model evaluation and staged G5 rollout are authorized to proceed under their explicit gates but remain incomplete; no live provider call or rollout is performed here. No chat UI is in scope.
 
-The authorization is local-only. Pilot, production, deployment, destructive, credential, purchase, external-write, and other separately governed actions remain gated independently.
+The implementation authorization is local-only. Live G4 and staged G5 remain
+subject to their explicit authority, canary, safety-stop, rollback, and rollout
+gates; pilot, production, deployment, destructive, credential, purchase,
+external-write, and other separately governed actions remain gated independently.
 
 The Plane-owned provider-egress relay is parent-side and invocation-bound:
 the trusted runtime may use its configured external network, while the child
