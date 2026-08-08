@@ -40,7 +40,9 @@ PATH = "/v1/chat/completions"
 
 
 def _body(model: str = MODEL, *, extra: str = "") -> bytes:
-    return json.dumps({"model": model, "messages": [{"role": "user", "content": "hello" + extra}]}).encode()
+    return json.dumps(
+        {"model": model, "messages": [{"role": "user", "content": "hello" + extra}], "max_tokens": 32}
+    ).encode()
 
 
 def _round_trip(

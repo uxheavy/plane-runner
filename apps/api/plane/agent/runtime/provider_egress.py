@@ -207,8 +207,8 @@ def _safe_reason(value: str) -> str:
 
 def _credential_shaped_name(value: str) -> bool:
     normalized = value.casefold().replace("-", "_")
-    return normalized in _SENSITIVE_NAMES or any(
-        part in normalized for part in ("api_key", "token", "secret", "password")
+    return normalized in _SENSITIVE_NAMES or normalized.endswith("_token") or any(
+        part in normalized for part in ("api_key", "secret", "password")
     )
 
 
