@@ -161,7 +161,7 @@ class RemoteRuntimeTransport(RuntimeTransport):
                 return self._decode_response(response, digest, run_id, invocation_id)
         finally:
             if lease_id is not None and self._credential_broker is not None:
-                self._credential_broker.revoke(lease_id)
+                self._credential_broker.revoke_lease_id(lease_id)
 
     def _post(self, payload: bytes) -> bytes:
         parsed = urllib.parse.urlsplit(self._base_url)

@@ -19,6 +19,7 @@ from plane.agent.runtime import (
     RemoteRuntimeTransport,
     RuntimeHostEndpoint,
     RuntimeCredentialBroker,
+    RuntimeCredentialError,
     RuntimeDispatchError,
     RuntimeConfigurationError,
     RuntimeSafetyController,
@@ -97,6 +98,61 @@ def test_g4_runtime_dispatch_is_cross_process_and_revokes_invocation_credentials
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def test_g4_remote_dispatch_preserves_success_after_expired_lease_cleanup(tmp_path, monkeypatch):
+    now = [100.0]
+    state_file = tmp_path / "credential-revocations.json"
+    broker = RuntimeCredentialBroker(
+        {"runtime": {"TOKEN": "fixture-value"}},
+        ttl_seconds=1,
+        clock=lambda: now[0],
+        state_file=state_file,
+    )
+    issued_lease_ids = []
+    original_issue = broker.issue
+
+    def issue(**kwargs):
+        lease, values = original_issue(**kwargs)
+        issued_lease_ids.append(lease.lease_id)
+        return lease, values
+
+    monkeypatch.setattr(broker, "issue", issue)
+    transport = RemoteRuntimeTransport(
+        runtime_url="http://127.0.0.1:1",
+        shared_secret="s" * 40,
+        credential_broker=broker,
+    )
+    snapshot_json, invocation_json = _dispatch_body("expired-cleanup")
+
+    def successful_post(payload):
+        request = json.loads(payload)
+        now[0] = 101.0
+        return json.dumps(
+            {
+                "frames": ['{"status":"completed"}'],
+                "invocationId": request["invocationId"],
+                "protocol": RUNTIME_DISPATCH_PROTOCOL,
+                "requestDigest": request["requestDigest"],
+                "runId": request["runId"],
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+
+    monkeypatch.setattr(transport, "_post", successful_post)
+
+    assert transport.dispatch(snapshot_json, invocation_json) == ('{"status":"completed"}',)
+    assert len(issued_lease_ids) == 1
+    persisted = json.loads(state_file.read_text(encoding="utf-8"))
+    assert persisted["revokedLeases"] == issued_lease_ids
+    with pytest.raises(RuntimeCredentialError, match="revoked"):
+        broker.resolve(
+            issued_lease_ids[0],
+            agent_ref="agent:expired-cleanup",
+            invocation_ref="invocation:expired-cleanup",
+        )
+    assert broker.revoke_lease_id(issued_lease_ids[0]) is False
 
 
 def test_g4_runtime_dispatch_child_rejects_network_and_process_escapes(tmp_path):
