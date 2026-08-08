@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Mapping
 from urllib.parse import urlsplit
 
+from .provider_egress import ProviderRelayPolicy
+
 
 RUNTIME_PROTOCOL = "plane.agent-runtime/v1"
 RUNTIME_BOOTSTRAP_MODULE = "plane_runtime.g1_runtime_image.bootstrap"
@@ -217,6 +219,66 @@ def _validate_credential_resolver(value: object) -> str:
     return raw
 
 
+def _provider_policy_from_environment(
+    source: Mapping[str, str], *, max_request_bytes: int, max_response_bytes: int
+) -> ProviderRelayPolicy | None:
+    """Parse the trusted-parent provider route; never parse provider secrets."""
+
+    provider = source.get("PLANE_AGENT_RUNTIME_PROVIDER", "")
+    companion_keys = (
+        "PLANE_AGENT_RUNTIME_PROVIDER_HOST",
+        "PLANE_AGENT_RUNTIME_PROVIDER_PATH",
+        "PLANE_AGENT_RUNTIME_PROVIDER_MODELS",
+        "PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_NAME",
+    )
+    if not provider:
+        if any(source.get(key) for key in companion_keys):
+            raise RuntimeConfigurationError("provider egress route is incomplete")
+        return None
+    provider = _bounded_text(provider, "PLANE_AGENT_RUNTIME_PROVIDER", 64)
+    host = _bounded_text(source.get("PLANE_AGENT_RUNTIME_PROVIDER_HOST"), "provider egress host", 255)
+    if any(char in host for char in ("/", "?", "#", "@", ":")) or any(char.isspace() for char in host):
+        raise RuntimeConfigurationError("provider egress host must be one pinned hostname")
+    path = _bounded_text(
+        source.get("PLANE_AGENT_RUNTIME_PROVIDER_PATH", "/v1/chat/completions"),
+        "provider egress path",
+        1024,
+    )
+    raw_models = _bounded_text(
+        source.get("PLANE_AGENT_RUNTIME_PROVIDER_MODELS", ""),
+        "provider egress models",
+        4096,
+    )
+    models = tuple(item.strip() for item in raw_models.split(",") if item.strip())
+    if not models:
+        raise RuntimeConfigurationError("provider egress model allowlist is empty")
+    credential_name = _bounded_text(
+        source.get("PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_NAME", "api_key"),
+        "provider egress credential name",
+        128,
+    )
+    try:
+        return ProviderRelayPolicy(
+            provider=provider,
+            host=host,
+            path=path,
+            models=models,
+            credential_name=credential_name,
+            timeout_seconds=_positive_float(source, "PLANE_AGENT_RUNTIME_PROVIDER_TIMEOUT_SECONDS", 30.0, 300.0),
+            max_request_bytes=max_request_bytes,
+            max_response_bytes=max_response_bytes,
+            max_chunk_bytes=_positive_int(
+                source, "PLANE_AGENT_RUNTIME_PROVIDER_MAX_CHUNK_BYTES", 64 * 1024, 2 * 1024 * 1024
+            ),
+            max_calls=_positive_int(source, "PLANE_AGENT_RUNTIME_PROVIDER_MAX_CALLS", 16, 256),
+            max_concurrent_requests=_positive_int(
+                source, "PLANE_AGENT_RUNTIME_PROVIDER_MAX_CONCURRENT_REQUESTS", 2, 32
+            ),
+        )
+    except ValueError as exc:
+        raise RuntimeConfigurationError("provider egress route is invalid") from exc
+
+
 def _validate_runtime_url(value: object) -> str:
     raw = _bounded_text(value, "PLANE_AGENT_RUNTIME_URL", 2048)
     if raw != raw.strip() or any(char.isspace() for char in raw):
@@ -283,6 +345,8 @@ class AgentRuntimeConfiguration:
     network_policy: str
     filesystem_policy: str
     process_policy: str
+    credential_state_file: str
+    provider_policy: ProviderRelayPolicy | None
 
     @classmethod
     def from_environment(cls, environment: Mapping[str, str] | None = None) -> "AgentRuntimeConfiguration":
@@ -327,6 +391,20 @@ class AgentRuntimeConfiguration:
         network_policy = source.get("PLANE_AGENT_RUNTIME_NETWORK_POLICY", "none")
         if network_policy != "none":
             raise RuntimeConfigurationError("runtime network policy must be none")
+        credential_state_file = _bounded_text(
+            source.get("PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE", "/run/plane-agent-credentials/revocations.json"),
+            "PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE",
+            512,
+        )
+        if not Path(credential_state_file).is_absolute():
+            raise RuntimeConfigurationError("PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE must be absolute")
+        max_request_bytes = _positive_int(source, "PLANE_AGENT_RUNTIME_MAX_REQUEST_BYTES", 256 * 1024, 2 * 1024 * 1024)
+        max_response_bytes = _positive_int(
+            source, "PLANE_AGENT_RUNTIME_MAX_RESPONSE_BYTES", 512 * 1024, 2 * 1024 * 1024
+        )
+        provider_policy = _provider_policy_from_environment(
+            source, max_request_bytes=max_request_bytes, max_response_bytes=max_response_bytes
+        )
         return cls(
             url=url,
             shared_secret=shared_secret,
@@ -340,12 +418,8 @@ class AgentRuntimeConfiguration:
                 source.get("PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER", "")
             ),
             timeout_seconds=_positive_float(source, "PLANE_AGENT_RUNTIME_TIMEOUT_SECONDS", 300.0, 3600.0),
-            max_request_bytes=_positive_int(
-                source, "PLANE_AGENT_RUNTIME_MAX_REQUEST_BYTES", 256 * 1024, 2 * 1024 * 1024
-            ),
-            max_response_bytes=_positive_int(
-                source, "PLANE_AGENT_RUNTIME_MAX_RESPONSE_BYTES", 512 * 1024, 2 * 1024 * 1024
-            ),
+            max_request_bytes=max_request_bytes,
+            max_response_bytes=max_response_bytes,
             max_concurrent_invocations=_positive_int(source, "PLANE_AGENT_RUNTIME_MAX_CONCURRENT_INVOCATIONS", 1, 32),
             cpu_seconds=_positive_int(source, "PLANE_AGENT_RUNTIME_CPU_SECONDS", 300, 3600),
             memory_bytes=_positive_int(
@@ -358,6 +432,8 @@ class AgentRuntimeConfiguration:
             network_policy="none",
             filesystem_policy="runtime-workdir-readonly",
             process_policy="single-invocation-child",
+            credential_state_file=credential_state_file,
+            provider_policy=provider_policy,
         )
 
     def public_summary(self) -> dict[str, object]:
@@ -373,6 +449,9 @@ class AgentRuntimeConfiguration:
             "commandConfigured": bool(self.command),
             "childEnvironmentEntries": len(self.child_environment),
             "credentialResolverConfigured": bool(self.credential_resolver),
+            "credentialStateFileConfigured": bool(self.credential_state_file),
+            "providerEgressConfigured": self.provider_policy is not None,
+            "providerEgressTransport": "AF_UNIX" if self.provider_policy is not None else None,
             "timeoutSeconds": self.timeout_seconds,
             "maxRequestBytes": self.max_request_bytes,
             "maxResponseBytes": self.max_response_bytes,
@@ -436,7 +515,10 @@ def runtime_settings_from_environment(environment: Mapping[str, str]) -> dict[st
         "PLANE_AGENT_RUNTIME_ENVIRONMENT": dict(configuration.child_environment),
         "PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER": configuration.credential_resolver,
         "PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE": environment.get(
-            "PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE", "/tmp/plane-agent-credentials/revocations.json"
+            "PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE", "/run/plane-agent-credentials/revocations.json"
+        ),
+        "PLANE_AGENT_RUNTIME_PROVIDER": (
+            configuration.provider_policy.provider if configuration.provider_policy is not None else ""
         ),
         "PLANE_AGENT_RUNTIME_TIMEOUT_SECONDS": configuration.timeout_seconds,
         "PLANE_AGENT_RUNTIME_MAX_REQUEST_BYTES": configuration.max_request_bytes,

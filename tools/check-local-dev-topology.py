@@ -95,12 +95,13 @@ def has_secret(service_model: Mapping[str, object]) -> bool:
     )
 
 
-def has_credential_state_volume(service_model: Mapping[str, object]) -> bool:
+def has_credential_state_volume(service_model: Mapping[str, object], *, read_only: bool = False) -> bool:
     return any(
         isinstance(value, Mapping)
         and value.get("type") == "volume"
         and value.get("source") == RUNTIME_STATE_VOLUME
         and value.get("target") == "/run/plane-agent-credentials"
+        and (not read_only or value.get("read_only") is True or value.get("mode") == "ro")
         for value in list_values(service_model, "volumes")
     )
 
@@ -141,6 +142,8 @@ def assert_common(model: Mapping[str, object], *, agent_enabled: bool) -> None:
     networks = mapping(model.get("networks"), "networks")
     internal = mapping(networks.get("agent_runtime_internal"), "agent_runtime_internal")
     require(internal.get("internal") is True, "runtime network must be internal")
+    egress = mapping(networks.get("agent_runtime_egress"), "agent_runtime_egress")
+    require(egress.get("internal") is not True, "provider egress network must permit only the trusted runtime")
 
     runtime = service(model, "agent-runtime")
     expected_runtime = runtime_manifest()
@@ -152,12 +155,22 @@ def assert_common(model: Mapping[str, object], *, agent_enabled: bool) -> None:
     require("env_file" not in runtime, "agent runtime must not inherit the Plane application env file")
     require("ports" not in runtime, "agent runtime must not publish a host port")
     runtime_networks = mapping(runtime.get("networks"), "agent-runtime.networks")
-    require(set(runtime_networks) == {"agent_runtime_internal"}, "agent runtime must use the internal network only")
+    require(
+        set(runtime_networks) == {"agent_runtime_internal", "agent_runtime_egress"},
+        "agent runtime must use the internal and trusted egress networks",
+    )
+    require("agent_runtime_egress" not in set(mapping(service(model, "api").get("networks"), "api.networks")), "api must not use provider egress")
+    require("agent_runtime_egress" not in set(mapping(service(model, "worker").get("networks"), "worker.networks")), "worker must not use provider egress")
     runtime_values = environment(runtime, "agent-runtime")
     require(runtime_values.get("PLANE_AGENT_RUNTIME_SECRET_FILE") == RUNTIME_SECRET_FILE, "agent runtime must use the mounted secret file")
     require("PLANE_AGENT_RUNTIME_SECRET" not in runtime_values, "agent runtime must not receive a direct secret environment value")
+    require(
+        runtime_values.get("PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE") == "/run/plane-agent-credentials/revocations.json",
+        "agent runtime must read the shared credential revocation journal",
+    )
     require(not any(key.startswith(("DATABASE", "AWS_", "POSTGRES_")) for key in runtime_values), "agent runtime must not receive Plane storage credentials")
     require(has_secret(runtime), "agent runtime must receive the mounted runtime secret")
+    require(has_credential_state_volume(runtime, read_only=True), "agent runtime must mount credential state read-only")
     require("/run/plane-agent-runtime:rw,noexec,nosuid,nodev,size=1m" in list_values(runtime, "tmpfs"), "agent runtime state mount is missing")
     require("api" in mapping(runtime.get("depends_on"), "agent-runtime.depends_on"), "agent runtime must wait for api")
     require("worker" in mapping(runtime.get("depends_on"), "agent-runtime.depends_on"), "agent runtime must wait for worker")

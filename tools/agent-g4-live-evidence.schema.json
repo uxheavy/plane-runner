@@ -7,10 +7,21 @@
   "properties": {
     "schemaVersion": { "const": "plane-agent-g4/live-evidence/v1" },
     "status": { "const": "passed" },
+    "providerRelay": { "$ref": "#/$defs/providerRelay" },
     "binding": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["candidateCommit", "g3Baseline", "hermesCommit", "mcpGitlink", "sdkGitlink", "runtimeImageTag", "runtimeImageDigest", "runtimeImageRevision", "runtimeContract"],
+      "required": [
+        "candidateCommit",
+        "g3Baseline",
+        "hermesCommit",
+        "mcpGitlink",
+        "sdkGitlink",
+        "runtimeImageTag",
+        "runtimeImageDigest",
+        "runtimeImageRevision",
+        "runtimeContract"
+      ],
       "properties": {
         "candidateCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
         "g3Baseline": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
@@ -30,6 +41,26 @@
     "summary": { "$ref": "#/$defs/summary" }
   },
   "$defs": {
+    "providerRelay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "transport",
+        "childNetworkPolicy",
+        "externalEgressOwner",
+        "hostGatewaySeparate",
+        "hermesHookStatus"
+      ],
+      "properties": {
+        "protocol": { "const": "plane.agent-runtime/provider-relay/v1" },
+        "transport": { "const": "AF_UNIX" },
+        "childNetworkPolicy": { "const": "none" },
+        "externalEgressOwner": { "const": "agent-runtime" },
+        "hostGatewaySeparate": { "const": true },
+        "hermesHookStatus": { "enum": ["pending", "integrated"] }
+      }
+    },
     "count": { "type": "integer", "minimum": 0 },
     "summary": {
       "type": "object",

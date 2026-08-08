@@ -126,6 +126,41 @@ only for `ready`. `configured`, `dependency_failure`, `draining`, and
 `stopped` remain visible in the bounded JSON body and are not collapsed into a
 false ready result.
 
+## Provider egress relay
+
+The trusted `agent-runtime` service also has the canonical
+`agent_runtime_egress` network. API, worker, and the child do not join that
+network: the child remains under the pinned `network=none`/AF_UNIX-only
+process policy. The runtime opens one invocation-scoped AF_UNIX provider relay
+under its private temporary directory and owns the pinned provider hostname,
+path, model allowlist, TLS, redirect rejection, request/response bounds,
+timeouts, streaming cancellation, model-call budget, and audit outcome. This
+relay is an internal adapter, not a Plane host or public product endpoint.
+
+The runtime reads the shared revocation journal at
+`/run/plane-agent-credentials/revocations.json` and rechecks the invocation
+lease before and during a provider stream. The parent keeps the leased
+credential in memory for its HTTPS adapter; the relay request, child
+environment, bootstrap evidence, transcript, and generated code contain no
+real provider credential. The existing Plane host AF_UNIX gateway remains a
+separate product-operation boundary.
+
+The existing private credential frame carries only `invocationSocket`, `host`,
+`path`, `provider`, and `relayToken`. Hermes' documented constructor seam
+creates a fresh HTTP client with an AF_UNIX `uds` transport, logical base URL
+`http://plane-provider-relay.invalid/v1`; its HTTP `Host` is the fixed logical
+relay host `plane-provider-relay.invalid`. The parent translates that admitted
+request to the pinned provider hostname `api.x.ai`; the provider path remains
+enforced by the parent relay. The bootstrap argument is
+`--provider-relay-socket`.
+
+The exact Hermes source commit is now integrated through
+`bootstrap → service → serve_once_g1 → HermesKernelAdapter → run_agent.AIAgent`;
+no Plane-side client factory or AIAgent patch is used. The candidate image pin
+is updated only after a clean image build. Until that candidate and a
+separately authorized live run prove it, provider/model calls remain
+unperformed and live G4/G5 remain incomplete.
+
 ## Local development topology
 
 `./setup.sh` copies the local examples and generates the untracked
@@ -141,7 +176,8 @@ To opt into the separate runtime service, enable the `agent` profile and the
 local settings seam together. The local `.env.example` selects the exact
 manifest-bound prepared runtime tag and the opt-in checker verifies its image
 ID and labels. The community deployment keeps its registry-backed fallback
-for deployment environments. The profile uses an internal-only network, the
+for deployment environments. The profile uses the internal dispatch network
+plus the trusted runtime-only provider-egress network, the
 mounted runtime secret, the API/worker host callback endpoints, and the
 existing credential-state volume. Its service definition extends the canonical
 community deployment service, so image, entrypoint, sandbox, healthcheck, and
@@ -231,17 +267,17 @@ not a live or GA SLO. The live/GA values must be recalibrated from an approved
 representative workload before rollout; passing this fixture does not grant
 deployment authority.
 
-| Dimension | Candidate threshold | Evidence emitted |
-| --- | ---: | --- |
-| Workload | 128 requests, 8 workers, 16 agent identities | `requests`, `workers`, `measuredAgentIdentities` |
-| Sustained duration | at least 0.75 seconds with 25 ms inter-batch pacing | `sustainedDurationSeconds` |
-| Throughput | at least 2 requests/second | `throughputPerSecond` |
-| Latency | p95 at most 7,500 ms; p99 at most 10,000 ms | `latencyMs.p95`, `latencyMs.p99` |
-| Error rate | 0% unexpected statuses | `errors`, `errorRate` |
-| Saturation | at least 1% quota throttling | `throttled`, `saturation` |
-| Queueing | p95 executor queue delay at most 750 ms | `queueingMs.p95` |
-| Database/resource | at most 24 PostgreSQL sessions, 768 MiB RSS, 90 CPU seconds | `resources` |
-| Safety invariants | full correlation/audit coverage, one replay row/effect, quota cleanup | `thresholdResults`, `breaches` |
+| Dimension          |                                                   Candidate threshold | Evidence emitted                                 |
+| ------------------ | --------------------------------------------------------------------: | ------------------------------------------------ |
+| Workload           |                          128 requests, 8 workers, 16 agent identities | `requests`, `workers`, `measuredAgentIdentities` |
+| Sustained duration |                   at least 0.75 seconds with 25 ms inter-batch pacing | `sustainedDurationSeconds`                       |
+| Throughput         |                                            at least 2 requests/second | `throughputPerSecond`                            |
+| Latency            |                           p95 at most 7,500 ms; p99 at most 10,000 ms | `latencyMs.p95`, `latencyMs.p99`                 |
+| Error rate         |                                                0% unexpected statuses | `errors`, `errorRate`                            |
+| Saturation         |                                          at least 1% quota throttling | `throttled`, `saturation`                        |
+| Queueing           |                               p95 executor queue delay at most 750 ms | `queueingMs.p95`                                 |
+| Database/resource  |           at most 24 PostgreSQL sessions, 768 MiB RSS, 90 CPU seconds | `resources`                                      |
+| Safety invariants  | full correlation/audit coverage, one replay row/effect, quota cleanup | `thresholdResults`, `breaches`                   |
 
 Run the real workload in a fresh test stack and retain the single JSON line
 for the verifier lane. Repeat the complete cycle at least three times, with

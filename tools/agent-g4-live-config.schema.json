@@ -3,17 +3,45 @@
   "$id": "plane-agent-g4/live-config/v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "authorityId", "mode", "offline", "fallbackAllowed", "binding", "provider", "thresholdProfile", "thresholds", "canaries", "requiredReadbacks"],
+  "required": [
+    "schemaVersion",
+    "authorityId",
+    "mode",
+    "offline",
+    "fallbackAllowed",
+    "binding",
+    "provider",
+    "thresholdProfile",
+    "thresholds",
+    "canaries",
+    "requiredReadbacks"
+  ],
   "properties": {
     "schemaVersion": { "const": "plane-agent-g4/live-config/v1" },
     "authorityId": { "type": "string", "minLength": 1, "maxLength": 200 },
     "mode": { "const": "live" },
     "offline": { "const": false },
     "fallbackAllowed": { "const": false },
+    "providerRelay": { "$ref": "#/$defs/providerRelay" },
     "binding": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["candidateCommit", "g3Baseline", "hermesCommit", "mcpGitlink", "sdkGitlink", "runtimeImageTag", "runtimeImageDigest", "runtimeImageRevision", "runtimeContract", "commandSha256", "provider", "thresholdProfile", "thresholds", "canaries"],
+      "required": [
+        "candidateCommit",
+        "g3Baseline",
+        "hermesCommit",
+        "mcpGitlink",
+        "sdkGitlink",
+        "runtimeImageTag",
+        "runtimeImageDigest",
+        "runtimeImageRevision",
+        "runtimeContract",
+        "commandSha256",
+        "provider",
+        "thresholdProfile",
+        "thresholds",
+        "canaries"
+      ],
       "properties": {
         "candidateCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
         "g3Baseline": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
@@ -59,6 +87,28 @@
     "fallbackProviders": {
       "type": "array",
       "maxItems": 0
+    }
+  },
+  "$defs": {
+    "providerRelay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "transport",
+        "childNetworkPolicy",
+        "externalEgressOwner",
+        "hostGatewaySeparate",
+        "hermesHookStatus"
+      ],
+      "properties": {
+        "protocol": { "const": "plane.agent-runtime/provider-relay/v1" },
+        "transport": { "const": "AF_UNIX" },
+        "childNetworkPolicy": { "const": "none" },
+        "externalEgressOwner": { "const": "agent-runtime" },
+        "hostGatewaySeparate": { "const": true },
+        "hermesHookStatus": { "enum": ["pending", "integrated"] }
+      }
     }
   }
 }

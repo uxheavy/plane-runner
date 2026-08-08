@@ -33,6 +33,7 @@ from typing import Any
 
 from .config import RuntimeConfigurationError, validate_runtime_command
 from .contracts import RuntimeDispatchError, RuntimeTransport
+from .provider_egress import ProviderRelayDescriptor, ProviderRelayPolicy, _relay_bootstrap_payload
 
 
 _LEDGER_TABLE = "plane_runtime_dispatch_ledger"
@@ -56,7 +57,7 @@ _HERMES_RUNTIME_POLICY_FIELDS = frozenset(
     }
 )
 _HERMES_G1_CONTRACT_DIGESTS = {
-    # Frozen by the exact Hermes e573a46611e2cb988f1ab43ad34cd8cc3b2cb659
+    # Frozen by the exact Hermes 114eabf9d807b659e36d767e4de46ca056297ccb
     # plane_runtime.g1_contract manifest accepted at this process boundary.
     "runSnapshot": "e538fe79ede53e6bb2e307600dbefea507e30b996c002c3dab32d543ca0e36a2",
     "invocationEnvelope": "b7a15d74406f1624cdb7cd95b42edfd1ffee596abe57e4f00ed60e2e23ded995",
@@ -562,6 +563,7 @@ def _hermes_bootstrap_payload(
     *,
     model_call_allowance: int | None = None,
     credentials: Mapping[str, str] | None = None,
+    provider_relay: tuple[ProviderRelayDescriptor, ProviderRelayPolicy] | None = None,
 ) -> tuple[bytes, str, str, str]:
     """Frame the exact private bootstrap handoff for the marked Hermes child."""
 
@@ -577,7 +579,11 @@ def _hermes_bootstrap_payload(
         or not 0 <= model_call_allowance <= 4096
     ):
         raise RuntimeDispatchError("model-call allowance is outside the bootstrap bound")
-    credential_values = dict(credentials or {})
+    credential_values = (
+        _relay_bootstrap_payload(*provider_relay)
+        if provider_relay is not None
+        else dict(credentials or {})
+    )
     if len(credential_values) > 16 or any(
         not isinstance(key, str)
         or not isinstance(value, str)

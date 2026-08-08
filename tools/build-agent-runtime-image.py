@@ -11,7 +11,7 @@ import tempfile
 from pathlib import Path
 
 
-HERMES_COMMIT = "e573a46611e2cb988f1ab43ad34cd8cc3b2cb659"
+HERMES_COMMIT = "114eabf9d807b659e36d767e4de46ca056297ccb"
 HERMES_REMOTE = "github.com/uxheavy/hermes-agent"
 DOCKERFILE = Path(__file__).resolve().parents[1] / "deployments/cli/community/agent-runtime/Dockerfile"
 PLANE_RUNTIME = Path(__file__).resolve().parents[1] / "apps/api/plane/agent/runtime"
@@ -74,7 +74,7 @@ def stage_context(checkout: Path, destination: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--hermes-checkout", required=True, type=Path)
-    parser.add_argument("--tag", default="plane-agent-runtime:hermes-e573a466-g4-ff8cd9c5")
+    parser.add_argument("--tag", default="plane-agent-runtime:hermes-114eabf9-g4-candidate")
     args = parser.parse_args()
     if shutil.which("docker") is None:
         raise SystemExit("Docker CLI is required")

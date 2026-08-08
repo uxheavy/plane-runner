@@ -41,6 +41,7 @@ ROLLBACK_SERVICE_NAMES = ("api", "worker", "beat-worker", "supervisor", "agent-r
 ROLLBACK_MIGRATION = "db.0141_operationgateway_quotas"
 ROLLBACK_OPERATION_CONTRACT = "plane.operation/v1"
 ROLLBACK_RUNTIME_CONTRACT = "plane.agent-runtime/v1"
+PROVIDER_RELAY_PROTOCOL = "plane.agent-runtime/provider-relay/v1"
 
 
 class ContractError(ValueError):
@@ -339,6 +340,28 @@ def _provider(value: Any, name: str) -> dict[str, str]:
     return result
 
 
+def _provider_relay(value: Any, name: str) -> dict[str, Any]:
+    relay = _object(value, name)
+    required = {
+        "protocol",
+        "transport",
+        "childNetworkPolicy",
+        "externalEgressOwner",
+        "hostGatewaySeparate",
+        "hermesHookStatus",
+    }
+    if set(relay) != required:
+        raise ContractError(f"{name}_fields_mismatch")
+    _exact(relay["protocol"], PROVIDER_RELAY_PROTOCOL, f"{name}_protocol")
+    _exact(relay["transport"], "AF_UNIX", f"{name}_transport")
+    _exact(relay["childNetworkPolicy"], "none", f"{name}_child_network_policy")
+    _exact(relay["externalEgressOwner"], "agent-runtime", f"{name}_egress_owner")
+    _exact(relay["hostGatewaySeparate"], True, f"{name}_host_gateway_separate")
+    if relay["hermesHookStatus"] not in {"pending", "integrated"}:
+        raise ContractError(f"{name}_hook_status_invalid")
+    return relay
+
+
 def _canaries(value: Any, name: str) -> dict[str, dict[str, str]]:
     canaries = _object(value, name)
     if set(canaries) != {"permitted", "denied"}:
@@ -378,6 +401,7 @@ def validate_authority(authority: dict[str, Any], manifest: dict[str, Any], cand
         raise ContractError("authority_threshold_profile_invalid")
     thresholds = _thresholds(_required(binding, "thresholds", "authority_binding"), "authority_thresholds")
     canaries = _canaries(_required(binding, "canaries", "authority_binding"), "authority_canaries")
+    provider_relay = _provider_relay(authority["providerRelay"], "authority_provider_relay") if "providerRelay" in authority else None
     return {
         "authorityId": authority_id,
         "binding": binding,
@@ -385,6 +409,7 @@ def validate_authority(authority: dict[str, Any], manifest: dict[str, Any], cand
         "thresholdProfile": threshold_profile,
         "thresholds": thresholds,
         "canaries": canaries,
+        "providerRelay": provider_relay,
     }
 
 
@@ -400,6 +425,8 @@ def validate_config(config: dict[str, Any], authority_info: dict[str, Any], comm
         raise ContractError("config_fallback_providers_present")
     binding = _object(_required(config, "binding", "config"), "config_binding")
     _exact(binding, authority_info["binding"], "config_binding")
+    config_provider_relay = _provider_relay(config["providerRelay"], "config_provider_relay") if "providerRelay" in config else None
+    _exact(config_provider_relay, authority_info["providerRelay"], "config_provider_relay")
     _exact(_required(config, "provider", "config"), {**authority_info["provider"], "fallbackUsed": False}, "config_provider")
     _exact(_required(config, "thresholdProfile", "config"), authority_info["thresholdProfile"], "config_threshold_profile")
     _exact(_required(config, "thresholds", "config"), authority_info["thresholds"], "config_thresholds")
@@ -453,6 +480,10 @@ def validate_evidence(
     _exact(_required(evidence, "status", "evidence"), "passed", "evidence_status")
     expected = exact_binding(manifest, candidate)
     _exact(_required(evidence, "binding", "evidence"), expected, "evidence_binding")
+    evidence_provider_relay = _provider_relay(evidence["providerRelay"], "evidence_provider_relay") if "providerRelay" in evidence else None
+    _exact(evidence_provider_relay, authority_info["providerRelay"], "evidence_provider_relay")
+    if evidence_provider_relay is not None and evidence_provider_relay["hermesHookStatus"] != "integrated":
+        raise ContractError("evidence_provider_relay_hook_not_integrated")
     _exact(_required(evidence, "provider", "evidence"), {**authority_info["provider"], "fallbackUsed": False}, "evidence_provider")
     canaries = _object(_required(evidence, "canaries", "evidence"), "evidence_canaries")
     for key, expected_status in (("permitted", "allowed"), ("denied", "denied")):

@@ -8,6 +8,13 @@ G0 through G3 are complete. The canonical offline G4 wrapper is bound as one exa
 
 The authorization is local-only. Pilot, production, deployment, destructive, credential, purchase, external-write, and other separately governed actions remain gated independently.
 
+The Plane-owned provider-egress relay is parent-side and invocation-bound:
+the trusted runtime may use its configured external network, while the child
+stays AF_UNIX-only and receives no real provider credential. The exact Hermes
+constructor seam is now wired through the existing bootstrap/service chain;
+the candidate image pin and separately authorized live provider proof remain
+pending, and this work does not complete live G4 or G5.
+
 ## What is authoritative
 
 - [GOAL.md](./GOAL.md) is the active objective, success proof, phase/dependency map, and worker/reviewer protocol.

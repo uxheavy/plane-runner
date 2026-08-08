@@ -11,6 +11,8 @@ import signal
 import sys
 import threading
 import tempfile
+from collections.abc import Mapping
+from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable
@@ -18,6 +20,15 @@ from typing import Any, Callable
 from .config import AgentRuntimeConfiguration, RuntimeConfigurationError
 from .health import RuntimeHealthStatus, RuntimeSafetyController, RuntimeSafetyStopError
 from .host_rpc import PlaneHostHTTPClient, PlaneHostServer
+from .credentials import validate_credential_lease_metadata
+from .provider_egress import (
+    PinnedProviderHTTPSClient,
+    ProviderRelayAudit,
+    ProviderRelayBinding,
+    ProviderRelayDescriptor,
+    ProviderRelayServer,
+    ProviderUpstream,
+)
 from .subprocess import RuntimeProcessPolicy, SubprocessRuntimeTransport, _hermes_bootstrap_payload
 
 
@@ -31,6 +42,7 @@ _MAX_DISPATCH_FIELDS = {
     "invocation",
     "host",
     "credentials",
+    "credentialLease",
     "modelCallAllowance",
 }
 
@@ -73,6 +85,28 @@ def _strict_body(raw: bytes, maximum: int, allowed: set[str] | None = None) -> d
     return value
 
 
+@dataclass
+class RuntimeProviderRelay:
+    """Parent-owned lifecycle for one child provider socket."""
+
+    server: ProviderRelayServer
+    temp_dir: str
+
+    @property
+    def descriptor(self) -> ProviderRelayDescriptor:
+        return self.server.descriptor
+
+    def close(self) -> None:
+        self.server.close()
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def __enter__(self) -> "RuntimeProviderRelay":
+        return self
+
+    def __exit__(self, _type: object, _value: object, _traceback: object) -> None:
+        self.close()
+
+
 class RuntimeDispatchExecutor:
     """Execute authenticated dispatches without importing Plane application code."""
 
@@ -109,6 +143,59 @@ class RuntimeDispatchExecutor:
             ),
         )
 
+    def open_provider_relay(
+        self,
+        *,
+        run_id: str,
+        invocation_id: str,
+        provider: str,
+        model: str,
+        credentials: dict[str, str],
+        credential_lease: Mapping[str, object],
+        upstream: ProviderUpstream | None = None,
+        audit: Callable[[ProviderRelayAudit], None] | None = None,
+    ) -> RuntimeProviderRelay:
+        """Open the private relay for one exact Hermes provider invocation."""
+
+        policy = self.configuration.provider_policy
+        if policy is None:
+            raise RuntimeConfigurationError("provider egress is not configured")
+        if not isinstance(credential_lease, Mapping):
+            raise RuntimeConfigurationError("provider credential lease is required")
+        if provider != policy.provider:
+            raise RuntimeConfigurationError("provider is outside the configured route")
+        try:
+            temp_dir = tempfile.mkdtemp(prefix="plane-agent-provider-")
+            socket_path = os.path.join(temp_dir, "provider.sock")
+            relay = ProviderRelayServer(
+                socket_path=socket_path,
+                binding=ProviderRelayBinding(
+                    run_id=run_id,
+                    invocation_id=invocation_id,
+                    provider=provider,
+                    model=model,
+                ),
+                policy=policy,
+                credentials=credentials,
+                upstream=upstream or PinnedProviderHTTPSClient(policy),
+                lease_validator=lambda: validate_credential_lease_metadata(
+                    credential_lease,
+                    invocation_ref=invocation_id,
+                    state_file=self.configuration.credential_state_file,
+                ),
+                is_cancelled=lambda: self.controller.health().safety_stop
+                or self._is_invocation_cancelled(invocation_id),
+                audit=audit,
+            )
+            relay.start()
+            return RuntimeProviderRelay(server=relay, temp_dir=temp_dir)
+        except Exception:
+            if "relay" in locals():
+                relay.close()
+            if "temp_dir" in locals():
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            raise
+
     def dispatch(self, value: dict[str, Any]) -> tuple[str, ...]:
         if value.get("protocol") != RUNTIME_DISPATCH_PROTOCOL:
             raise ValueError("runtime dispatch protocol is unsupported")
@@ -139,6 +226,9 @@ class RuntimeDispatchExecutor:
         allowance = value.get("modelCallAllowance")
         if allowance is not None and (isinstance(allowance, bool) or not isinstance(allowance, int)):
             raise ValueError("runtime model-call allowance is invalid")
+        credential_lease = value.get("credentialLease")
+        if credential_lease is not None and not isinstance(credential_lease, dict):
+            raise ValueError("runtime credential lease is invalid")
         host = value.get("host")
         if host is not None:
             if not isinstance(host, dict) or set(host) != {"url", "token"}:
@@ -160,6 +250,7 @@ class RuntimeDispatchExecutor:
                 invocation,
                 digest,
                 credentials=credentials,
+                credential_lease=credential_lease,
                 allowance=allowance,
                 host_url=host_url,
                 host_token=host_token,
@@ -178,22 +269,44 @@ class RuntimeDispatchExecutor:
         digest: str,
         *,
         credentials: dict[str, str],
+        credential_lease: Mapping[str, object] | None,
         allowance: int | None,
         host_url: str | None,
         host_token: str | None,
     ) -> tuple[str, ...]:
         snapshot_json = _canonical(snapshot, "runtime snapshot").decode("utf-8")
         invocation_json = _canonical(invocation, "runtime invocation").decode("utf-8")
-        payload, run_id, invocation_id, _bootstrap_digest = _hermes_bootstrap_payload(
-            snapshot_json,
-            invocation_json,
-            model_call_allowance=allowance,
-            credentials=credentials,
-        )
         server: PlaneHostServer | None = None
         temp_dir: str | None = None
+        provider_relay: RuntimeProviderRelay | None = None
         command = self.configuration.command
         try:
+            provider_route = self._configured_provider_route(snapshot)
+            if provider_route is not None:
+                policy, provider, model = provider_route
+                if policy.host != "api.x.ai" or policy.path != "/v1/chat/completions":
+                    raise RuntimeConfigurationError(
+                        "provider relay route is not supported by the pinned Hermes adapter"
+                    )
+                if credential_lease is None:
+                    raise RuntimeConfigurationError("provider relay requires a credential lease")
+                provider_relay = self.open_provider_relay(
+                    run_id=snapshot["runId"],
+                    invocation_id=invocation["invocationId"],
+                    provider=provider,
+                    model=model,
+                    credentials=credentials,
+                    credential_lease=credential_lease,
+                )
+            payload, run_id, invocation_id, _bootstrap_digest = _hermes_bootstrap_payload(
+                snapshot_json,
+                invocation_json,
+                model_call_allowance=allowance,
+                credentials=credentials,
+                provider_relay=(provider_relay.descriptor, provider_route[0])
+                if provider_relay is not None and provider_route is not None
+                else None,
+            )
             if host_url is not None and host_token is not None:
                 temp_dir = tempfile.mkdtemp(prefix="plane-agent-host-")
                 socket_path = os.path.join(temp_dir, "host.sock")
@@ -201,6 +314,8 @@ class RuntimeDispatchExecutor:
                 server = PlaneHostServer(socket_path=socket_path, invoke=host_client.invoke)
                 server.start()
                 command = (*command, "--plane-host-socket", socket_path)
+            if provider_relay is not None:
+                command = (*command, "--provider-relay-socket", str(provider_relay.descriptor.socket_path))
 
             def is_cancelled() -> bool:
                 return self.controller.health().safety_stop or self._is_invocation_cancelled(invocation_id)
@@ -218,6 +333,23 @@ class RuntimeDispatchExecutor:
                 server.close()
             if temp_dir is not None:
                 shutil.rmtree(temp_dir, ignore_errors=True)
+            if provider_relay is not None:
+                provider_relay.close()
+
+    def _configured_provider_route(
+        self, snapshot: Mapping[str, Any]
+    ) -> tuple[Any, str, str] | None:
+        policy = self.configuration.provider_policy
+        runtime_policy = snapshot.get("runtimePolicy")
+        model = runtime_policy.get("model") if isinstance(runtime_policy, Mapping) else None
+        if (
+            policy is None
+            or not isinstance(model, Mapping)
+            or model.get("provider") != policy.provider
+            or model.get("model") not in policy.models
+        ):
+            return None
+        return policy, policy.provider, model["model"]
 
 
 def _bounded_reason(value: object) -> str:

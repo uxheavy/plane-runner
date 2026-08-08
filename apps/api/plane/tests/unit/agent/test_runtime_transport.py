@@ -20,6 +20,10 @@ from plane.agent.runtime.subprocess import (
     _hermes_bootstrap_payload,
     _hermes_request_payload,
 )
+from plane.agent.runtime.provider_egress import (
+    ProviderRelayDescriptor,
+    ProviderRelayPolicy,
+)
 
 
 SNAPSHOT = json.dumps(
@@ -115,6 +119,23 @@ def test_hermes_bootstrap_payload_is_bounded_three_frame_private_handoff():
     assert frames[1] == {"credentials": {"api_key": "credential-canary"}, "protocol": _HERMES_CREDENTIAL_PROTOCOL}
     assert frames[2]["invocation"]["invocationId"] == "invocation:test"
     assert "credential-canary" not in json.dumps(frames[2], sort_keys=True)
+
+
+def test_hermes_provider_relay_handoff_contains_only_dummy_marker_not_parent_secret(tmp_path):
+    descriptor = ProviderRelayDescriptor(tmp_path / "provider.sock", "t" * 40)
+    policy = ProviderRelayPolicy(provider="xai", host="api.x.ai", path="/v1/chat/completions", models=("grok-4",))
+    payload, _run_id, _invocation_id, _digest = _hermes_bootstrap_payload(
+        SNAPSHOT,
+        ENVELOPE,
+        credentials={"api_key": "parent-provider-secret"},
+        provider_relay=(descriptor, policy),
+    )
+    assert b"parent-provider-secret" not in payload
+    assert b'"credentials":{"host":"api.x.ai"' in payload
+    assert b'"invocationSocket":"' in payload
+    assert b'"path":"/v1/chat/completions"' in payload
+    assert b'"provider":"xai"' in payload
+    assert b'"relayToken":"' in payload
 
 
 def _command(source: str, *arguments: str) -> tuple[str, ...]:

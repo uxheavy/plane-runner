@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import secrets
 import subprocess
@@ -43,6 +44,25 @@ class CredentialLease:
     credential_digest: str
     rotation_generation: int = 0
     revoked_at: float | None = None
+
+    def public_metadata(self) -> dict[str, object]:
+        """Return only the lease facts the trusted runtime needs to recheck.
+
+        The credential values and their digest are intentionally absent.  The
+        digest remains host-side evidence; the runtime only needs identity,
+        expiry, revocation, and rotation binding for relay admission.
+        """
+
+        return {
+            "leaseId": self.lease_id,
+            "agentRef": self.agent_ref,
+            "credentialRef": self.credential_ref,
+            "invocationRef": self.invocation_ref,
+            "generation": self.generation,
+            "issuedAt": self.issued_at,
+            "expiresAt": self.expires_at,
+            "rotationGeneration": self.rotation_generation,
+        }
 
 
 CredentialSource = Callable[[str], Mapping[str, str]] | Mapping[str, Mapping[str, str]]
@@ -395,10 +415,95 @@ class RuntimeCredentialBroker:
         RuntimeCredentialBroker._validate_ref(value, "lease_id")
 
 
+def validate_credential_lease_metadata(
+    metadata: Mapping[str, object],
+    *,
+    invocation_ref: str,
+    state_file: str | os.PathLike[str] | None,
+    clock: Callable[[], float] | None = None,
+) -> None:
+    """Revalidate a host-issued lease at the trusted runtime boundary.
+
+    The runtime process does not resolve credentials and therefore does not
+    create a second broker.  It checks the immutable lease facts plus the
+    broker's shared revocation/rotation journal immediately before a provider
+    call and while streaming its response.
+    """
+
+    required = {
+        "leaseId",
+        "agentRef",
+        "credentialRef",
+        "invocationRef",
+        "generation",
+        "issuedAt",
+        "expiresAt",
+        "rotationGeneration",
+    }
+    if not isinstance(metadata, Mapping) or set(metadata) != required:
+        raise RuntimeCredentialError("credential lease metadata is invalid")
+    for key in ("leaseId", "agentRef", "credentialRef", "invocationRef"):
+        value = metadata.get(key)
+        if not isinstance(value, str) or not value:
+            raise RuntimeCredentialError("credential lease metadata is invalid")
+        RuntimeCredentialBroker._validate_ref(value, key)
+    if metadata.get("invocationRef") != invocation_ref:
+        raise RuntimeCredentialError("credential lease is bound to another invocation")
+    for key in ("generation", "rotationGeneration"):
+        value = metadata.get(key)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise RuntimeCredentialError("credential lease metadata is invalid")
+    issued_at = metadata.get("issuedAt")
+    expires_at = metadata.get("expiresAt")
+    if (
+        isinstance(issued_at, bool)
+        or not isinstance(issued_at, (int, float))
+        or isinstance(expires_at, bool)
+        or not isinstance(expires_at, (int, float))
+        or expires_at <= issued_at
+        or not math.isfinite(float(issued_at))
+        or not math.isfinite(float(expires_at))
+    ):
+        raise RuntimeCredentialError("credential lease metadata is invalid")
+    now = float((clock or time.time)())
+    if not math.isfinite(now) or now < 0 or now >= expires_at:
+        raise RuntimeCredentialError("credential lease is expired")
+    if state_file is None:
+        return
+    path = Path(state_file)
+    if not path.is_absolute():
+        raise RuntimeCredentialError("credential state file must be absolute")
+    if not path.exists():
+        return
+    try:
+        raw_state = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise RuntimeCredentialError("credential state is unavailable") from exc
+    if not isinstance(raw_state, dict):
+        raise RuntimeCredentialError("credential state is invalid")
+    revoked_leases = raw_state.get("revokedLeases", [])
+    revoked_invocations = raw_state.get("revokedInvocations", {})
+    rotation_generation = raw_state.get("rotationGeneration", {})
+    if not isinstance(revoked_leases, list) or not isinstance(revoked_invocations, dict) or not isinstance(
+        rotation_generation, dict
+    ):
+        raise RuntimeCredentialError("credential state is invalid")
+    lease_id = metadata["leaseId"]
+    credential_ref = metadata["credentialRef"]
+    if lease_id in revoked_leases or invocation_ref in revoked_invocations:
+        raise RuntimeCredentialError("credential lease is revoked")
+    current_rotation = rotation_generation.get(credential_ref, 0)
+    if isinstance(current_rotation, bool) or not isinstance(current_rotation, int) or current_rotation < 0:
+        raise RuntimeCredentialError("credential state is invalid")
+    if current_rotation > metadata["rotationGeneration"]:
+        raise RuntimeCredentialError("credential lease was rotated")
+
+
 __all__ = [
     "CommandCredentialResolver",
     "CredentialLease",
     "RuntimeCredentialBroker",
     "RuntimeCredentialError",
+    "validate_credential_lease_metadata",
     "credential_source_from_configuration",
 ]

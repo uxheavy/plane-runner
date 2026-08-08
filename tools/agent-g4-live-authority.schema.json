@@ -11,16 +11,52 @@
     "issuedAt": { "type": "string", "format": "date-time" },
     "expiresAt": { "type": "string", "format": "date-time" },
     "fallbackAllowed": { "const": false },
+    "providerRelay": { "$ref": "#/$defs/providerRelay" },
     "binding": { "$ref": "#/$defs/binding" }
   },
   "$defs": {
     "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
     "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "providerRelay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "transport",
+        "childNetworkPolicy",
+        "externalEgressOwner",
+        "hostGatewaySeparate",
+        "hermesHookStatus"
+      ],
+      "properties": {
+        "protocol": { "const": "plane.agent-runtime/provider-relay/v1" },
+        "transport": { "const": "AF_UNIX" },
+        "childNetworkPolicy": { "const": "none" },
+        "externalEgressOwner": { "const": "agent-runtime" },
+        "hostGatewaySeparate": { "const": true },
+        "hermesHookStatus": { "enum": ["pending", "integrated"] }
+      }
+    },
     "binding": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["candidateCommit", "g3Baseline", "hermesCommit", "mcpGitlink", "sdkGitlink", "runtimeImageTag", "runtimeImageDigest", "runtimeImageRevision", "runtimeContract", "commandSha256", "provider", "thresholdProfile", "thresholds", "canaries"],
+      "required": [
+        "candidateCommit",
+        "g3Baseline",
+        "hermesCommit",
+        "mcpGitlink",
+        "sdkGitlink",
+        "runtimeImageTag",
+        "runtimeImageDigest",
+        "runtimeImageRevision",
+        "runtimeContract",
+        "commandSha256",
+        "provider",
+        "thresholdProfile",
+        "thresholds",
+        "canaries"
+      ],
       "properties": {
         "candidateCommit": { "$ref": "#/$defs/sha" },
         "g3Baseline": { "$ref": "#/$defs/sha" },

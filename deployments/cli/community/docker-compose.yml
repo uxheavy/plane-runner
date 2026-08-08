@@ -83,6 +83,12 @@ x-agent-runtime-env: &agent-runtime-env
   PLANE_AGENT_RUNTIME_HEALTH_PATH: ${PLANE_AGENT_RUNTIME_HEALTH_PATH:-/health/ready}
   PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE: ${PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE:-/run/plane-agent-runtime/safety-stop}
   PLANE_AGENT_RUNTIME_NETWORK_POLICY: none
+  PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE: ${PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE:-/run/plane-agent-credentials/revocations.json}
+  PLANE_AGENT_RUNTIME_PROVIDER: ${PLANE_AGENT_RUNTIME_PROVIDER:-xai}
+  PLANE_AGENT_RUNTIME_PROVIDER_HOST: ${PLANE_AGENT_RUNTIME_PROVIDER_HOST:-api.x.ai}
+  PLANE_AGENT_RUNTIME_PROVIDER_PATH: ${PLANE_AGENT_RUNTIME_PROVIDER_PATH:-/v1/chat/completions}
+  PLANE_AGENT_RUNTIME_PROVIDER_MODELS: ${PLANE_AGENT_RUNTIME_PROVIDER_MODELS:-grok-4}
+  PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_NAME: ${PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_NAME:-api_key}
   PLANE_AGENT_RUNTIME_BIND: 0.0.0.0
   PLANE_AGENT_RUNTIME_PORT: 8080
 
@@ -249,6 +255,7 @@ services:
     read_only: true
     networks:
       - agent_runtime_internal
+      - agent_runtime_egress
     init: true
     expose:
       - "8080"
@@ -259,6 +266,8 @@ services:
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=64m
       - /run/plane-agent-runtime:rw,noexec,nosuid,nodev,size=1m
+    volumes:
+      - agent_runtime_credential_state:/run/plane-agent-credentials:ro
     cap_drop:
       - ALL
     security_opt:
@@ -418,6 +427,8 @@ networks:
   default:
   agent_runtime_internal:
     internal: true
+  agent_runtime_egress:
+    driver: bridge
 
 secrets:
   plane_agent_runtime:

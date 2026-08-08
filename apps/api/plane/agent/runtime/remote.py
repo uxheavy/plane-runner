@@ -121,6 +121,7 @@ class RemoteRuntimeTransport(RuntimeTransport):
         else:
             host_context = self._host_endpoint_factory(invocation_id)
         lease_id: str | None = None
+        lease_metadata: dict[str, object] | None = None
         credentials: Mapping[str, str] = {}
         try:
             if self._credential_broker is not None:
@@ -130,6 +131,7 @@ class RemoteRuntimeTransport(RuntimeTransport):
                     invocation_ref=invocation_id,
                 )
                 lease_id = lease.lease_id
+                lease_metadata = lease.public_metadata()
                 credentials = values
             with host_context as host:
                 if host is not None:
@@ -150,6 +152,8 @@ class RemoteRuntimeTransport(RuntimeTransport):
                     "invocation": envelope,
                     "credentials": dict(credentials),
                 }
+                if lease_metadata is not None:
+                    body["credentialLease"] = lease_metadata
                 if host_wire is not None:
                     body["host"] = host_wire
                 if self._model_call_allowance is not None:

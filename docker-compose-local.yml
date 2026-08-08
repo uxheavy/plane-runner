@@ -224,6 +224,8 @@ networks:
     driver: bridge
   agent_runtime_internal:
     internal: true
+  agent_runtime_egress:
+    driver: bridge
 
 secrets:
   plane_agent_runtime:

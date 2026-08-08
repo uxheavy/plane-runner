@@ -18,6 +18,7 @@ from plane.agent.runtime import (
     RuntimeProcessPolicy,
     RuntimeSafetyController,
     RuntimeSafetyStopError,
+    validate_credential_lease_metadata,
 )
 from plane.agent.runtime.service import _RuntimeHTTPServer
 
@@ -188,6 +189,51 @@ def test_g4_runtime_credential_operator_state_invalidates_active_leases_across_p
     now[0] = expiring.expires_at
     with pytest.raises(RuntimeCredentialError, match="expired"):
         broker.resolve(expiring.lease_id, agent_ref="agent-1", invocation_ref="invocation-3")
+
+
+def test_provider_relay_configuration_and_public_lease_metadata_are_parent_only(tmp_path):
+    configuration = AgentRuntimeConfiguration.from_environment(
+        _runtime_environment(
+            PLANE_AGENT_RUNTIME_PROVIDER="xai",
+            PLANE_AGENT_RUNTIME_PROVIDER_HOST="api.x.ai",
+            PLANE_AGENT_RUNTIME_PROVIDER_MODELS="grok-4,grok-4-mini",
+            PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE=str(tmp_path / "revocations.json"),
+        )
+    )
+    assert configuration.provider_policy is not None
+    assert configuration.provider_policy.provider == "xai"
+    assert configuration.provider_policy.host == "api.x.ai"
+    assert configuration.provider_policy.models == ("grok-4", "grok-4-mini")
+    assert configuration.provider_policy.path == "/v1/chat/completions"
+
+    now = [100.0]
+    broker = RuntimeCredentialBroker(
+        {"provider": {"api_key": "parent-only-provider-secret"}},
+        ttl_seconds=60,
+        clock=lambda: now[0],
+        state_file=tmp_path / "revocations.json",
+    )
+    lease, credentials = broker.issue(
+        agent_ref="agent-1", credential_ref="provider", invocation_ref="invocation-1"
+    )
+    metadata = lease.public_metadata()
+    assert "parent-only-provider-secret" not in json.dumps(metadata)
+    assert "credentialDigest" not in metadata
+    validate_credential_lease_metadata(
+        metadata,
+        invocation_ref="invocation-1",
+        state_file=tmp_path / "revocations.json",
+        clock=lambda: now[0],
+    )
+    assert credentials == {"api_key": "parent-only-provider-secret"}
+    broker.revoke_invocation("invocation-1")
+    with pytest.raises(RuntimeCredentialError, match="revoked"):
+        validate_credential_lease_metadata(
+            metadata,
+            invocation_ref="invocation-1",
+            state_file=tmp_path / "revocations.json",
+            clock=lambda: now[0],
+        )
 
 
 def test_g4_runtime_process_and_code_mode_policies_are_finite_and_networkless():
