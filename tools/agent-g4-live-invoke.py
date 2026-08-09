@@ -192,7 +192,7 @@ def main() -> int:
         "summary": {
             "counts": {"collected": 1, "passed": 1, "failed": 0, "skipped": 0, "xfail": 0, "deselected": 0},
             "durationMs": duration_ms,
-            "migrationLeaf": "db.0141_operationgateway_quotas",
+            "migrationLeaf": "db.0142_runtime_provider_attempts",
             "workload": {
                 "invocationRef": str(invocation.invocation_id),
                 "runRef": str(run.id),

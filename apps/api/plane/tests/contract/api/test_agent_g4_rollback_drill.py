@@ -14,7 +14,7 @@ def test_g4_rollback_drill_switches_all_services_and_reconciles_forward_only_sch
     assert result["passes"] is True, json.dumps(result, sort_keys=True)
     assert result["externalWrites"] is False
     assert result["strategy"]["reverseMigrationAllowed"] is False
-    assert result["readback"]["schema"]["migrationLeaf"] == "db.0141_operationgateway_quotas"
+    assert result["readback"]["schema"]["migrationLeaf"] == "db.0142_runtime_provider_attempts"
     assert result["readback"]["state"] == {
         "auditRows": 3,
         "outcomeRows": 1,

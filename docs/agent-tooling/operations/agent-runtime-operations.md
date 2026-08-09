@@ -325,18 +325,18 @@ docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose
 `apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` is the pin
 manifest. The current Plane deployable service candidate is the exact
 authoritative image-source Plane commit
-`1ae4d5617513d6e081a7064820dab909a86aae15`; the final offline evidence
+`98f476223d7401bbadaf85c1c57870a6c062cadc`; the final offline evidence
 wrapper is its exact single child. The previously accepted G3 candidate is Plane commit `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
 The current binding carries Hermes commit
 `114eabf9d807b659e36d767e4de46ca056297ccb`, MCP gitlink
 `2dc152e136d7ad952b901e5fe9364a37487297ba`, SDK gitlink
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`, runtime image tag
-`plane-agent-runtime:hermes-114eabf9-g4-1ae4d561`, runtime image digest
-`sha256:2102070c36c1effc126de5fdbfa8735ec8f525aeaaf6ac2c12b82a7f71b44e10`,
-runtime revision/source revision `1ae4d5617513d6e081a7064820dab909a86aae15`, and runtime
+`plane-agent-runtime:hermes-114eabf9-g4-98f4762`, runtime image digest
+`sha256:9130d1ea02a460c0d10a4a52663fa4219a8527592e583e3e90112f4b977bf2c2`,
+runtime revision/source revision `98f476223d7401bbadaf85c1c57870a6c062cadc`, and runtime
 contract `plane.agent-runtime/v1`. The Plane service revision above is the
 authoritative image source; the runtime image/runtimeRevision source is
-`1ae4d5617513d6e081a7064820dab909a86aae15`, which was used to build the
+`98f476223d7401bbadaf85c1c57870a6c062cadc`, which was used to build the
 candidate image. The wrapper carries only the existing binding, fixture, and
 evidence documentation. API, worker, `beat-worker`,
 supervisor, and `agent-runtime` each switch their service revision and image
@@ -354,21 +354,21 @@ the verifier derives the expected current parent from that field and requires
 the materialized fixture `current.planeCommit` and its manifest SHA-256 to
 agree before the rollback stage can run.
 
-Migration `db.0141_operationgateway_quotas` is additive: it adds quota fields,
-indexes, and the quota bucket table. Rollback is explicitly forward-only:
-keep the database at leaf `0141`, never reverse to `0140`, and run the prior
-services only after confirming they ignore the additive quota state. The
-`0141` migration blob is
-`1c6b0e3fb221cccd9ed2631d68cbf10ba5dc399b` and its SHA-256 is
-`797d95b90be5041e76cbf60ea27ee8ca0cea6045a6a67fab3a3181c173e1ce9e`.
-The compatibility floor is `0140` (blob
-`d51561b1d482917ebe533e95c566b9baf5ddef9c`), not a downgrade target.
+Migration `db.0142_runtime_provider_attempts` is additive: it adds the
+non-secret provider-attempt intent/terminal evidence table. Rollback is
+explicitly forward-only: keep the database at leaf `0142`, never reverse to `0141`,
+and run the prior services only after confirming they ignore the
+provider-attempt evidence. The `0142` migration blob is
+`d8d2452445ad96372f917b5819e3ede0c332f560` and its SHA-256 is
+`efed3980eb182d138bf13991fefa709c285451c89300cb81faa2a8a31572f9da`.
+The compatibility floor is `0141` (blob
+`1c6b0e3fb221cccd9ed2631d68cbf10ba5dc399b`), not a downgrade target.
 
 ### Disposable executable drill
 
 The drill performs current-candidate upgrade, creates a representative
 `outcome_unknown` operation with an already-committed durable effect, switches
-all five service pins/contracts, keeps migration `0141`, reconciles from the
+all five service pins/contracts, keeps migration `0142`, reconciles from the
 effect/audit/outcome state, releases quota, checks idempotent re-run, and
 removes its temporary database. It never connects to Plane or deploys:
 
@@ -377,7 +377,7 @@ python3 tools/agent-g4-rollback-drill.py
 ```
 
 The one-line JSON result must contain `passes:true`, empty `breaches`,
-`externalWrites:false`, `migrationLeaf:"db.0141_operationgateway_quotas"`,
+`externalWrites:false`, `migrationLeaf:"db.0142_runtime_provider_attempts"`,
 three audit rows, one outcome, one idempotency row, zero active quota
 reservations, and `cleanup.temporaryDatabaseRemoved:true`. This is the
 exercised rollback proof; a prose-only rollback is not sufficient.
@@ -405,7 +405,7 @@ docker compose -p plane-g4-load-luna --env-file deployments/cli/community/variab
 ```
 
 `migrate --plan` must show no reverse operation and the database must still
-report leaf `0141`. Read back every affected idempotency record, gateway audit
+report leaf `0142`. Read back every affected idempotency record, gateway audit
 receipt, durable operation effect/outcome, and quota bucket before permitting
 any continuation. A completed effect may be reconciled exactly once; a missing
 or conflicting effect is a stop/escalation, never a blind replay.
@@ -421,8 +421,8 @@ reservations. Re-run the rollback drill and the relevant gateway/migration
 contract suites before restoring new work.
 
 Abort and escalate immediately if any pin is missing, a digest resolves to a
-mutable tag, services disagree on the contract, `0141` is absent or a reverse
-plan appears, audit/outcome readback is incomplete, a durable effect is not
+mutable tag, services disagree on the contract, `0142` is absent or a reverse
+plan appears, audit/outcome/provider-attempt readback is incomplete, a durable effect is not
 unique, quota remains active after reconciliation, or runtime enforcement does
 not acknowledge the safety stop. Preserve bounded logs and identifiers only;
 never include a runtime secret or provider credential.

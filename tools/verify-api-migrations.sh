@@ -82,7 +82,7 @@ executor = MigrationExecutor(connection)
 leaves = set(executor.loader.graph.leaf_nodes("db"))
 applied = set(executor.recorder.applied_migrations())
 missing = leaves - applied
-expected = {("db", "0141_operationgateway_quotas")}
+expected = {("db", "0142_runtime_provider_attempts")}
 if leaves != expected or missing:
     raise SystemExit(f"db migration leaf state is invalid: leaves={sorted(leaves)} missing={sorted(missing)}")
 print(f"db_migration_leaf={sorted(leaves)[0]}")
@@ -103,6 +103,7 @@ if '${expected}' == '0138_agentactor_chief_of_staff_for_and_more':
     assert ('db', '0139_delegation_lineage_scope_guard') not in applied, applied
     assert ('db', '0140_invocation_free_cancellation_integrity') not in applied, applied
     assert ('db', '0141_operationgateway_quotas') not in applied, applied
+    assert ('db', '0142_runtime_provider_attempts') not in applied, applied
 else:
     assert ('db', '0139_delegation_lineage_scope_guard') in applied, applied
     assert ('db', '0140_invocation_free_cancellation_integrity') in applied, applied
@@ -180,9 +181,9 @@ CURRENT_STEP="reverse-to-0138"
 run_api python manage.py migrate db 0138_agentactor_chief_of_staff_for_and_more --noinput --verbosity 1
 assert_migration_leaf "0138_agentactor_chief_of_staff_for_and_more"
 
-CURRENT_STEP="reapply-0141"
-run_api python manage.py migrate db 0141_operationgateway_quotas --noinput --verbosity 1
-assert_migration_leaf "0141_operationgateway_quotas"
+CURRENT_STEP="reapply-0142"
+run_api python manage.py migrate db 0142_runtime_provider_attempts --noinput --verbosity 1
+assert_migration_leaf "0142_runtime_provider_attempts"
 
 CURRENT_STEP="bootstrap-before-reverse"
 run_api python manage.py bootstrap_operation_gateway_audit --phase=before-reverse

@@ -90,7 +90,7 @@ def _create_schema(connection: sqlite3.Connection) -> None:
         """
     )
     connection.execute(
-        "INSERT INTO schema_state (id, migration_leaf) VALUES (1, 'db.0141_operationgateway_quotas')"
+        "INSERT INTO schema_state (id, migration_leaf) VALUES (1, 'db.0142_runtime_provider_attempts')"
     )
     connection.commit()
 
