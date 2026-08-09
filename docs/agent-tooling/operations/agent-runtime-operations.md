@@ -324,8 +324,8 @@ docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose
 
 `apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` is the pin
 manifest. The current Plane deployable service candidate is the exact
-authoritative image-source Plane commit
-`c47ddfe6174ecd6d66257d8fedbd5d425c7f3172`; the final offline evidence
+repaired runner source correction
+`1304f0b48d9d572c9afc7fca6ef9cddffe8f8ccb`; the final offline evidence
 wrapper is its exact single child. The previously accepted G3 candidate is Plane commit `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
 The current binding carries Hermes commit
 `114eabf9d807b659e36d767e4de46ca056297ccb`, MCP gitlink
@@ -335,10 +335,12 @@ The current binding carries Hermes commit
 `sha256:b4a701905bae50bef643ef67c3883ef74d8f6ddcde2cf669d1dab50c44999b0c`,
 runtime revision/source revision `c47ddfe6174ecd6d66257d8fedbd5d425c7f3172`, and runtime
 contract `plane.agent-runtime/v1`. The Plane service revision above is the
-authoritative image source; the runtime image/runtimeRevision source is
+repaired source candidate; the runtime image/runtimeRevision source is
 `c47ddfe6174ecd6d66257d8fedbd5d425c7f3172`, which was used to build the
 candidate image. The wrapper carries only the existing binding, fixture, and
-evidence documentation. API, worker, `beat-worker`,
+evidence documentation. The live helper is mounted read-only into the
+unchanged API image, so no image rebuild or provider invocation is part of
+this repair. API, worker, `beat-worker`,
 supervisor, and `agent-runtime` each switch their service revision and image
 digest to the corresponding current value in that manifest; the operation services retain
 `plane.operation/v1` and the runtime services retain `plane.agent-runtime/v1`.
