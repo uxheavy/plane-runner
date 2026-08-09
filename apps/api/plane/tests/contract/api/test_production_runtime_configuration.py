@@ -588,7 +588,7 @@ def test_agent_runtime_production_compose_has_an_isolated_readiness_and_secret_b
     assert installed_resolver in (API_ROOT / "Dockerfile.api").read_text(encoding="utf-8")
     runtime = services["agent-runtime"]
     runtime_environment = runtime["environment"]
-    assert runtime["image"].startswith("uxheavy/plane-agent-runtime:hermes-114eabf9-g4-98f4762")
+    assert runtime["image"].startswith("uxheavy/plane-agent-runtime:hermes-114eabf9-g4-879c679")
     assert "network_mode" not in runtime
     assert "agent_runtime_internal" in runtime["networks"]
     assert not runtime.get("ports")
