@@ -4,7 +4,7 @@ This directory contains the compact execution control surface for the non-UI Pla
 
 ## Current status
 
-G0 through G3 are complete. The canonical offline G4 wrapper is one exact child of authoritative image-source commit `879c6795e498952d50443d45a621ffa6da9711a7`, with the exact image, runtime, contract, proof, and review evidence recorded in [GOAL.md](./GOAL.md). The integrated candidate includes the verified local topology, original-design reuse correction, and durable provider-attempt reconciliation: one shared runtime settings parser, one community runtime service owner, and one local extension. Live G4 provider/model evaluation and staged G5 rollout are authorized to proceed under their explicit gates but remain incomplete; no live provider call or rollout is performed here. No chat UI is in scope.
+G0 through G3 are complete. The canonical offline G4 wrapper is one exact child of authoritative image-source commit `e7b4e029f3a3ef3dab0012d3c1b8ff9019b978e0`, with the exact image, runtime, contract, proof, and review evidence recorded in [GOAL.md](./GOAL.md). The integrated candidate includes the verified local topology, original-design reuse correction, and durable provider-attempt reconciliation: one shared runtime settings parser, one community runtime service owner, and one local extension. Live G4 provider/model evaluation and staged G5 rollout are authorized to proceed under their explicit gates but remain incomplete; no live provider call or rollout is performed here. No chat UI is in scope.
 
 The implementation authorization is local-only. Live G4 and staged G5 remain
 subject to their explicit authority, canary, safety-stop, rollback, and rollout
