@@ -1287,7 +1287,7 @@ def test_identifiers_are_strict_and_target_references_are_lossless(assignment, p
     assert namespaced_ref("target", "literal-69737375653a313233") == run.snapshot["assignment"]["targetRef"]
 
 
-def _provider_attempt_notice(invocation, *, phase, upstream_initiated, sequence=1):
+def _provider_attempt_notice(invocation, *, phase, upstream_initiated, sequence=1, status_class=None, error_code=None):
     terminal = phase in {
         RuntimeProviderAttemptPhase.COMPLETED,
         RuntimeProviderAttemptPhase.FAILED,
@@ -1306,8 +1306,8 @@ def _provider_attempt_notice(invocation, *, phase, upstream_initiated, sequence=
         "idempotencyKey": f"provider-attempt:sequence-{sequence}",
         "sequence": sequence,
         "upstreamInitiated": upstream_initiated,
-        "statusClass": "unknown" if terminal else "",
-        "errorCode": "outcome_unknown" if terminal else "",
+        "statusClass": status_class if status_class is not None else ("unknown" if terminal else ""),
+        "errorCode": error_code if error_code is not None else ("outcome_unknown" if terminal else ""),
     }
 
 
@@ -1352,4 +1352,44 @@ def test_provider_attempt_reconciles_pre_send_failure_without_external_send(assi
     assert attempt.upstream_initiated is False
     assert attempt.status_class == "not_sent"
     assert attempt.error_code == "pre_send_failure"
+    assert provider_attempts_reconciled(invocation) is True
+
+
+@pytest.mark.django_db(transaction=True)
+def test_provider_attempt_reconciliation_leaves_completed_attempt_completed(assignment, profile):
+    run = create_run(assignment, profile)
+    invocation = record_invocation(run, idempotency_key="idempotency:provider-attempt-completed")
+    record_provider_attempt_notice(
+        invocation,
+        _provider_attempt_notice(invocation, phase=RuntimeProviderAttemptPhase.INTENT, upstream_initiated=False),
+    )
+    record_provider_attempt_notice(
+        invocation,
+        _provider_attempt_notice(
+            invocation,
+            phase=RuntimeProviderAttemptPhase.STARTED,
+            upstream_initiated=True,
+        ),
+    )
+    record_provider_attempt_notice(
+        invocation,
+        _provider_attempt_notice(
+            invocation,
+            phase=RuntimeProviderAttemptPhase.COMPLETED,
+            upstream_initiated=True,
+            status_class="2xx",
+            error_code="",
+        ),
+    )
+    completed_at = RuntimeProviderAttempt.objects.get(invocation=invocation).terminal_at
+
+    reconciled = reconcile_provider_attempts(invocation)
+    attempt = RuntimeProviderAttempt.objects.get(invocation=invocation)
+
+    assert reconciled == ()
+    assert attempt.phase == RuntimeProviderAttemptPhase.COMPLETED
+    assert attempt.upstream_initiated is True
+    assert attempt.status_class == "2xx"
+    assert attempt.error_code == ""
+    assert attempt.terminal_at == completed_at
     assert provider_attempts_reconciled(invocation) is True

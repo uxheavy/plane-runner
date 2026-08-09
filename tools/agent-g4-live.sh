@@ -17,7 +17,7 @@ PROVIDER_SECRET_SOURCE="${PLANE_G4_PROVIDER_SECRET_SOURCE:?configured provider s
 LIVE_INVOKE_SOURCE="${ROOT_DIR}/tools/agent-g4-live-invoke.py"
 MANIFEST="${ROOT_DIR}/tools/agent-g4-manifest.json"
 G4_CANDIDATE="$(git rev-parse HEAD)"
-G4_G3_BASELINE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["candidateBinding"]["parentCommit"])' "${MANIFEST}")"
+G4_G3_BASELINE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["candidateBinding"]["acceptedG3Baseline"])' "${MANIFEST}")"
 G4_HERMES="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["hermesCommit"])' "${MANIFEST}")"
 G4_MCP="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["mcpGitlink"])' "${MANIFEST}")"
 G4_SDK="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["sdkGitlink"])' "${MANIFEST}")"
@@ -64,6 +64,9 @@ cleanup() {
         printf 'event=agent.g4.live-runner.failure phase=%s error_class=%s exit_code=%s\n' \
             "${LIVE_PHASE}" "$(safe_error_class)" "${status}"
     fi
+    if [[ -s "${EVIDENCE_FILE}" ]]; then
+        cat "${EVIDENCE_FILE}"
+    fi
     docker rm -f "${RUNTIME}" >/dev/null 2>&1 || true
     docker network rm "${EGRESS}" >/dev/null 2>&1 || true
     PLANE_TEST_ENV_FILE="${ROOT_DIR}/apps/api/.env.example" \
@@ -87,6 +90,25 @@ docker run --rm --network "${NETWORK}" \
     --env DATABASE_URL=postgresql://plane:plane@test-db:5432/plane \
     --env DATABASE_RUNTIME_URL=postgresql://plane:plane@test-db:5432/plane \
     --env DATABASE_MIGRATION_URL=postgresql://plane:plane@test-db:5432/plane \
+    --env PLANE_AUDIT_RUNTIME_ROLE=plane_runtime \
+    --env PLANE_AUDIT_GOVERNANCE_ROLE=plane_audit_owner \
+    --env PLANE_AUDIT_MIGRATION_ROLE=plane_migrator \
+    --env REDIS_HOST=test-redis \
+    --env REDIS_URL=redis://test-redis:6379/ \
+    --env RABBITMQ_HOST=test-mq \
+    --env AMQP_URL=amqp://plane:plane@test-mq:5672/plane \
+    "${API_IMAGE}" python manage.py bootstrap_operation_gateway_audit --phase=before-migrate >/dev/null 2>&1
+
+LIVE_PHASE=migrate
+docker run --rm --network "${NETWORK}" \
+    --env DJANGO_SETTINGS_MODULE=plane.settings.test \
+    --env POSTGRES_HOST=test-db \
+    --env DATABASE_URL=postgresql://plane:plane@test-db:5432/plane \
+    --env DATABASE_RUNTIME_URL=postgresql://plane:plane@test-db:5432/plane \
+    --env DATABASE_MIGRATION_URL=postgresql://plane:plane@test-db:5432/plane \
+    --env PLANE_AUDIT_RUNTIME_ROLE=plane_runtime \
+    --env PLANE_AUDIT_GOVERNANCE_ROLE=plane_audit_owner \
+    --env PLANE_AUDIT_MIGRATION_ROLE=plane_migrator \
     --env REDIS_HOST=test-redis \
     --env REDIS_URL=redis://test-redis:6379/ \
     --env RABBITMQ_HOST=test-mq \
@@ -100,6 +122,9 @@ docker run --rm --network "${NETWORK}" \
     --env DATABASE_URL=postgresql://plane:plane@test-db:5432/plane \
     --env DATABASE_RUNTIME_URL=postgresql://plane:plane@test-db:5432/plane \
     --env DATABASE_MIGRATION_URL=postgresql://plane:plane@test-db:5432/plane \
+    --env PLANE_AUDIT_RUNTIME_ROLE=plane_runtime \
+    --env PLANE_AUDIT_GOVERNANCE_ROLE=plane_audit_owner \
+    --env PLANE_AUDIT_MIGRATION_ROLE=plane_migrator \
     --env REDIS_HOST=test-redis \
     --env REDIS_URL=redis://test-redis:6379/ \
     --env RABBITMQ_HOST=test-mq \
@@ -207,4 +232,3 @@ docker run --rm --network "${NETWORK}" --hostname api --network-alias api \
     "${API_IMAGE}" python /tmp/agent-g4-live-invoke.py >"${EVIDENCE_FILE}" 2>"${ERROR_FILE}"
 
 test -s "${EVIDENCE_FILE}"
-cat "${EVIDENCE_FILE}"

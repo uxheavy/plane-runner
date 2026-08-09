@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import ast
 import copy
 import importlib.util
 import json
+import re
 import sys
 import tempfile
 import unittest
@@ -141,6 +143,99 @@ def fixture() -> tuple[dict, dict, dict, str]:
 
 
 class G4ContractTests(unittest.TestCase):
+    def test_live_runner_exports_one_failure_object_before_disposable_teardown(self):
+        source = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+        cleanup = source[source.index("cleanup()") : source.index("trap cleanup EXIT INT TERM")]
+        evidence_index = cleanup.index('cat "${EVIDENCE_FILE}"')
+        compose_down_index = cleanup.index("docker compose", evidence_index)
+        run_dir_delete_index = cleanup.index('rm -rf -- "${RUN_DIR}"', compose_down_index)
+
+        self.assertLess(
+            evidence_index,
+            compose_down_index,
+            "event=agent.g4.runner.failure_evidence risk=teardown_destroys_readback "
+            "expected=evidence before down-v actual=cleanup order is unsafe "
+            "suggestion=preserve exactly one JSON object before teardown",
+        )
+        self.assertLess(evidence_index, run_dir_delete_index)
+        self.assertEqual(source.count('cat "${EVIDENCE_FILE}"'), 1)
+        self.assertIn('if [[ -s "${EVIDENCE_FILE}" ]]', cleanup)
+        self.assertIn('exit "${status}"', cleanup)
+
+    def test_live_runner_uses_accepted_g3_baseline_and_existing_audit_bootstrap_order(self):
+        source = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+        self.assertIn('["candidateBinding"]["acceptedG3Baseline"]', source)
+        self.assertNotIn('["candidateBinding"]["parentCommit"]', source)
+        self.assertIn("PLANE_AUDIT_RUNTIME_ROLE=plane_runtime", source)
+        self.assertIn("PLANE_AUDIT_GOVERNANCE_ROLE=plane_audit_owner", source)
+        self.assertIn("PLANE_AUDIT_MIGRATION_ROLE=plane_migrator", source)
+        before_migrate = source.index("phase=before-migrate")
+        migrate = source.index("python manage.py migrate", before_migrate)
+        after_migrate = source.index("phase=after-migrate", migrate)
+        self.assertLess(before_migrate, migrate)
+        self.assertLess(migrate, after_migrate)
+
+    def test_helper_failure_path_reconciles_and_emits_one_nonzero_structural_object(self):
+        source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+        self.assertIn("reconcile_provider_attempts", source)
+        self.assertIn("finalize_invocation", source)
+        self.assertIn("except BaseException", source)
+        self.assertIn('"plane-agent-g4/live-failure/v1"', source)
+        self.assertIn("return_code = 1", source)
+        self.assertEqual(source.count("print(json.dumps(evidence"), 1)
+
+    def test_failure_evidence_is_bounded_structural_and_excludes_sensitive_runtime_data(self):
+        source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        builder = next(
+            node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "build_failure_evidence"
+        )
+        namespace: dict[str, object] = {}
+        exec(
+            compile(ast.Module(body=[builder], type_ignores=[]), str(TOOLS / "agent-g4-live-invoke.py"), "exec"),
+            namespace,
+        )
+        evidence = namespace["build_failure_evidence"](
+            binding={"candidateCommit": "credential=provider-secret"},
+            failure_phase="api-invocation",
+            error_class="CommandError",
+            exit_code=1,
+            run_id="run:bounded",
+            run_state="failed",
+            invocation_id="invocation:bounded",
+            invocation_state="failed",
+            provider_attempts=[
+                {
+                    "sequence": 1,
+                    "phase": "failed",
+                    "upstreamInitiated": False,
+                    "statusClass": "not_sent",
+                    "errorCode": "pre_send_failure",
+                    "prompt": "do not include",
+                    "response": "do not include",
+                    "credential": "do not include",
+                    "payload": "do not include",
+                    "rawLogs": "do not include",
+                }
+            ],
+            terminal_kind="run_failure",
+        )
+        encoded = json.dumps(evidence, sort_keys=True, separators=(",", ":"))
+        self.assertEqual(evidence["schemaVersion"], "plane-agent-g4/live-failure/v1")
+        self.assertEqual(evidence["status"], "failed")
+        self.assertLessEqual(len(encoded.encode("utf-8")), 4096)
+        self.assertEqual(
+            set(evidence),
+            {"schemaVersion", "status", "binding", "failure", "run", "invocation", "providerAttempts", "terminal"},
+        )
+        for forbidden in ("do not include", "prompt", "response", "credential", "payload", "rawLogs"):
+            self.assertNotIn(forbidden, encoded)
+        self.assertNotRegex(encoded, re.compile(r"(?i)(password|secret|token|api[_-]?key|authorization|credential)"))
+
+    def test_provider_attempt_reconciliation_leaves_completed_attempt_completed(self):
+        source = (ROOT / "apps/api/plane/tests/unit/agent/test_lifecycle.py").read_text(encoding="utf-8")
+        self.assertIn("def test_provider_attempt_reconciliation_leaves_completed_attempt_completed", source)
+
     def test_red_team_stage_requires_exact_image_http_dispatch_and_pinned_hermes_wrapper(self):
         source = (TOOLS / "agent-g4-runtime-red-team.py").read_text(encoding="utf-8")
         image_dockerfile = (ROOT / "deployments/cli/community/agent-runtime/Dockerfile").read_text(encoding="utf-8")
