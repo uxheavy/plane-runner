@@ -320,6 +320,13 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
                     ),
                     error_code=code,
                 )
+            else:
+                relay._record_identity(
+                    {},
+                    "denied",
+                    relay._audit_reason(exc, code),
+                    upstream_called,
+                )
             try:
                 relay._write_http_error(self.wfile, request_id, code)
             except OSError:

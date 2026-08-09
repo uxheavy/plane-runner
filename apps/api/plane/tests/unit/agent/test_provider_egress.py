@@ -13,6 +13,7 @@ import pytest
 
 from plane.agent.runtime import (
     AgentRuntimeConfiguration,
+    PlaneHostResult,
     RuntimeConfigurationError,
     RuntimeCredentialBroker,
     RuntimeSafetyController,
@@ -390,7 +391,7 @@ def test_runtime_service_opens_relay_with_existing_lease_and_closes_it(tmp_path)
     assert "parent-provider-secret" not in repr(relay)
 
 
-def test_runtime_service_passes_invocation_relay_to_child_without_provider_secret(tmp_path):
+def test_runtime_service_passes_invocation_relay_to_child_without_provider_secret(tmp_path, monkeypatch):
     state_file = tmp_path / "revocations.json"
     broker = RuntimeCredentialBroker(
         {"provider": {"api_key": "parent-provider-secret"}},
@@ -413,6 +414,24 @@ def test_runtime_service_passes_invocation_relay_to_child_without_provider_secre
     controller = RuntimeSafetyController(configured=True, stop_file=tmp_path / "stop")
     controller.mark_ready()
     executor = RuntimeDispatchExecutor(configuration, controller)
+    callback_phases: list[str] = []
+
+    class FixtureHostClient:
+        def __init__(self, *, url: str, auth_token: str):
+            assert url == "http://plane-host.invalid"
+            assert auth_token == "host-token"
+
+        def invoke(self, call):
+            callback_phases.append(call.input["phase"])
+            return PlaneHostResult(
+                request_ref=call.request_ref,
+                correlation_id=call.correlation_id,
+                idempotency_key=call.idempotency_key,
+                status="ok",
+                replayed=False,
+            )
+
+    monkeypatch.setattr("plane.agent.runtime.service.PlaneHostHTTPClient", FixtureHostClient)
     child = textwrap.dedent(
         """
         import json
@@ -469,6 +488,7 @@ def test_runtime_service_passes_invocation_relay_to_child_without_provider_secre
         },
     }
     invocation = {
+        "correlationId": "correlation:relay",
         "invocationId": INVOCATION_ID,
         "runId": RUN_ID,
         "remainingBudget": {"outputTokens": 1},
@@ -486,12 +506,13 @@ def test_runtime_service_passes_invocation_relay_to_child_without_provider_secre
         credentials=credentials,
         credential_lease=lease.public_metadata(),
         allowance=1,
-        host_url=None,
-        host_token=None,
+        host_url="http://plane-host.invalid",
+        host_token="host-token",
     )
     assert frames == ('{"status":"completed"}',)
     assert len(upstream.calls) == 1
     assert upstream.calls[0][1] == credentials
+    assert callback_phases == ["intent", "started", "completed"]
 
 
 def test_runtime_service_fails_closed_before_child_dispatch_without_lease(tmp_path):

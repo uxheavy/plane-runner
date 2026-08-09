@@ -284,8 +284,11 @@ class RuntimeDispatchExecutor:
         command = self.configuration.command
         try:
             provider_route = self._configured_provider_route(snapshot)
-            if provider_route is not None and (host_url is None or host_token is None):
-                raise RuntimeConfigurationError("provider attempt evidence requires the Plane host callback")
+            if provider_route is not None:
+                if credential_lease is None:
+                    raise RuntimeConfigurationError("provider relay requires a credential lease")
+                if host_url is None or host_token is None:
+                    raise RuntimeConfigurationError("provider attempt evidence requires the Plane host callback")
             if host_url is not None and host_token is not None:
                 temp_dir = tempfile.mkdtemp(prefix="plane-agent-host-")
                 socket_path = os.path.join(temp_dir, "host.sock")
@@ -333,8 +336,6 @@ class RuntimeDispatchExecutor:
                     raise RuntimeConfigurationError(
                         "provider relay route is not supported by the pinned Hermes adapter"
                     )
-                if credential_lease is None:
-                    raise RuntimeConfigurationError("provider relay requires a credential lease")
                 provider_relay = self.open_provider_relay(
                     run_id=snapshot["runId"],
                     invocation_id=invocation["invocationId"],
