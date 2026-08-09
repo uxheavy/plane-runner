@@ -164,6 +164,56 @@ def test_permitted_provider_request_uses_invocation_af_unix_relay_and_streams_wi
     assert "provider-secret" not in repr(audits)
 
 
+def test_provider_attempt_intent_precedes_upstream_and_upstream_failure_is_unknown(tmp_path):
+    upstream = _FixtureUpstream(
+        ProviderResponse(status_code=200, headers={}, body_chunks=(b"never",)),
+        [],
+    )
+
+    def failed_upstream(request, credentials, is_cancelled):
+        upstream.calls.append((request, credentials))
+        raise RuntimeError("fixture upstream failed")
+
+    audits: list[ProviderRelayAudit] = []
+    server = _server(tmp_path, upstream=failed_upstream, audit=audits.append)
+    try:
+        server.start()
+        status, _headers, body = _round_trip(server, request_id="request:unknown")
+    finally:
+        server.close()
+
+    assert status == 403
+    assert json.loads(body) == {"error": "upstream_error"}
+    assert [audit.phase for audit in audits] == ["intent", "started", "outcome_unknown"]
+    assert audits[0].upstream_called is False
+    assert audits[1].upstream_called is True
+    assert audits[-1].error_code == "upstream_error"
+    assert audits[-1].status_class == "unknown"
+    assert len(upstream.calls) == 1
+
+
+def test_provider_attempt_evidence_failure_blocks_pre_send_upstream(tmp_path):
+    upstream = _FixtureUpstream(ProviderResponse(status_code=200, headers={}, body_chunks=(b"never",)), [])
+    attempted_phases: list[str] = []
+
+    def unavailable_evidence(audit: ProviderRelayAudit) -> None:
+        attempted_phases.append(audit.phase)
+        if audit.phase == "intent":
+            raise RuntimeError("evidence unavailable")
+
+    server = _server(tmp_path, upstream=upstream, audit=unavailable_evidence)
+    try:
+        server.start()
+        status, _headers, body = _round_trip(server, request_id="request:not-sent")
+    finally:
+        server.close()
+
+    assert status == 403
+    assert json.loads(body) == {"error": "denied"}
+    assert attempted_phases == ["intent", "failed"]
+    assert upstream.calls == []
+
+
 @pytest.mark.parametrize(
     ("field", "value", "reason"),
     (

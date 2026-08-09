@@ -24,6 +24,8 @@ from plane.agent.lifecycle import (
     finalize_invocation,
     lock_invocation_path,
     reconcile_runtime_usage,
+    reconcile_provider_attempts,
+    provider_attempts_reconciled,
     transition_run,
 )
 from plane.agent.lifecycle.runtime_contract import (
@@ -40,6 +42,7 @@ from plane.db.models import (
     RuntimeExitEvidence,
     RuntimeInvocation,
     RuntimeInvocationControl,
+    RuntimeProviderAttempt,
 )
 
 from .dispatch import RuntimeIngressError, dispatch_invocation, ingest_runtime_frame
@@ -311,6 +314,26 @@ def _reconcile_accepted_usage(invocation: RuntimeInvocation) -> None:
 
 
 def _finish_exit(invocation: RuntimeInvocation, accepted_frames: int) -> SupervisorResult:
+    open_attempts = list(
+        RuntimeProviderAttempt.objects.filter(invocation=invocation, terminal_at__isnull=True)
+    )
+    if open_attempts:
+        reconciled = reconcile_provider_attempts(invocation)
+        if any(attempt.upstream_initiated for attempt in reconciled):
+            return _terminalize(
+                invocation.pk,
+                kind="run_blocker",
+                reason="Provider request outcome is unknown; explicit reconciliation is required.",
+                code="outcome_unknown",
+                outcome_unknown=True,
+            )
+        if not provider_attempts_reconciled(invocation):
+            return _terminalize(
+                invocation.pk,
+                kind="run_failure",
+                reason="Provider attempt evidence could not be reconciled.",
+                code="provider_attempt_reconciliation_failed",
+            )
     exit_evidence = RuntimeExitEvidence.objects.get(invocation=invocation)
     if exit_evidence.kind == "completed":
         terminal = RunTerminalEvent.objects.filter(invocation=invocation).first()
@@ -388,6 +411,7 @@ def run_runtime_invocation(
         terminal = RunTerminalEvent.objects.filter(invocation=stored).first()
         return SupervisorResult(stored.invocation_id, stored.state, terminal.kind if terminal else None, 0)
     if claim.outcome_unknown:
+        reconcile_provider_attempts(claim.invocation)
         return _terminalize(
             claim.invocation.pk,
             kind="run_blocker",
@@ -444,6 +468,7 @@ def run_runtime_invocation(
                 reason="Runtime cancellation stopped the child process.",
                 code="cancelled",
             )
+        reconcile_provider_attempts(claim.invocation)
         return _terminalize(
             claim.invocation.pk,
             kind="run_blocker",

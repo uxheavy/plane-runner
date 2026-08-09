@@ -115,6 +115,14 @@ class RuntimeControlState(models.TextChoices):
     RELEASED = "released", "Released"
 
 
+class RuntimeProviderAttemptPhase(models.TextChoices):
+    INTENT = "intent", "Intent recorded"
+    STARTED = "started", "External request started"
+    COMPLETED = "completed", "Completed"
+    FAILED = "failed", "Failed"
+    OUTCOME_UNKNOWN = "outcome_unknown", "Outcome unknown"
+
+
 class InputEventKind(models.TextChoices):
     HUMAN_INPUT = "human_input", "Human input"
     CONTINUATION = "continuation", "Continuation"
@@ -906,6 +914,87 @@ class RuntimeInvocationControl(AgentScopedModel):
             or invocation.run_id is None
         ):
             raise ValidationError("Runtime control must use its invocation's Plane scope")
+
+
+class RuntimeProviderAttempt(AgentScopedModel):
+    """Durable, non-secret reconciliation for one provider relay request."""
+
+    invocation = models.ForeignKey(
+        RuntimeInvocation,
+        on_delete=models.PROTECT,
+        related_name="provider_attempts",
+    )
+    run = models.ForeignKey(RunAttempt, on_delete=models.PROTECT, related_name="runtime_provider_attempts")
+    actor = models.ForeignKey(AgentActor, on_delete=models.PROTECT, related_name="runtime_provider_attempts")
+    lease_id = models.CharField(max_length=128, editable=False)
+    provider = models.CharField(max_length=64, editable=False)
+    model = models.CharField(max_length=256, editable=False)
+    destination_host = models.CharField(max_length=255, editable=False)
+    destination_path = models.CharField(max_length=1024, editable=False)
+    request_id = models.CharField(max_length=256, editable=False)
+    idempotency_key = models.CharField(max_length=128, unique=True, editable=False)
+    sequence = models.PositiveIntegerField(editable=False)
+    phase = models.CharField(
+        max_length=24,
+        choices=RuntimeProviderAttemptPhase.choices,
+        default=RuntimeProviderAttemptPhase.INTENT,
+        editable=False,
+    )
+    upstream_initiated = models.BooleanField(default=False, editable=False)
+    status_class = models.CharField(max_length=16, blank=True, default="", editable=False)
+    error_code = models.CharField(max_length=64, blank=True, default="", editable=False)
+    terminal_at = models.DateTimeField(null=True, blank=True, editable=False)
+    fingerprint = models.CharField(max_length=72, editable=False)
+
+    IMMUTABLE_FIELDS = (
+        "workspace_id",
+        "project_id",
+        "invocation_id",
+        "run_id",
+        "actor_id",
+        "lease_id",
+        "provider",
+        "model",
+        "destination_host",
+        "destination_path",
+        "request_id",
+        "idempotency_key",
+        "sequence",
+        "fingerprint",
+        "deleted_at",
+    )
+    LIFECYCLE_FIELDS = ("phase", "upstream_initiated", "status_class", "error_code", "terminal_at")
+
+    class Meta:
+        db_table = "agent_runtime_provider_attempts"
+        ordering = ("invocation_id", "sequence")
+        indexes = [
+            models.Index(fields=["invocation", "terminal_at"], name="agent_rt_provider_active"),
+            models.Index(fields=["run", "created_at"], name="agent_rt_provider_run"),
+        ]
+        constraints = [
+            models.UniqueConstraint(fields=["invocation", "sequence"], name="agent_rt_provider_inv_seq"),
+            models.CheckConstraint(condition=models.Q(sequence__gte=1), name="agent_rt_provider_seq_positive"),
+        ]
+
+    def save(self, *args, **kwargs):
+        allowed = kwargs.pop("_allow_lifecycle", False)
+        _assert_immutable(self, self.IMMUTABLE_FIELDS)
+        _assert_lifecycle_mutation(self, self.LIFECYCLE_FIELDS, allowed=allowed)
+        super().save(*args, **kwargs)
+
+    def validate_agent_scope(self):
+        invocation = RuntimeInvocation.objects.only("run_id", "workspace_id", "project_id").get(pk=self.invocation_id)
+        run = RunAttempt.objects.only("workspace_id", "project_id", "actor_id").get(pk=self.run_id)
+        actor = AgentActor.objects.only("workspace_id", "project_id").get(pk=self.actor_id)
+        if (
+            invocation.run_id != self.run_id
+            or run.actor_id != self.actor_id
+            or (invocation.workspace_id, invocation.project_id) != (self.workspace_id, self.project_id)
+            or (run.workspace_id, run.project_id) != (self.workspace_id, self.project_id)
+            or (actor.workspace_id, actor.project_id) != (self.workspace_id, self.project_id)
+        ):
+            raise ValidationError("Provider attempt must bind one invocation, actor, run, and Plane scope")
 
 
 class RuntimeUsageObservation(AgentScopedModel):

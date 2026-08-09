@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from collections.abc import Mapping
 import re
 from datetime import datetime, timedelta
 from uuid import UUID, uuid4
@@ -47,6 +48,8 @@ from plane.db.models import (
     RuntimeInvocationControl,
     RuntimeEventIngress,
     RuntimeExitEvidence,
+    RuntimeProviderAttempt,
+    RuntimeProviderAttemptPhase,
     RuntimeUsageObservation,
     HRProposalKind,
     HRProposalState,
@@ -2179,6 +2182,205 @@ def reconcile_runtime_usage(run, invocation, usage=None, *, created_by=None):
     locked_run.cumulative_usage = cumulative
     locked_run.save(_allow_lifecycle=True, update_fields=["cumulative_usage"])
     return observation
+
+
+_PROVIDER_ATTEMPT_PHASES = frozenset(RuntimeProviderAttemptPhase.values)
+
+
+def _provider_attempt_text(value, field_name, maximum):
+    if not isinstance(value, str) or not value or len(value.encode("utf-8")) > maximum:
+        raise AgentDomainError(f"Provider attempt {field_name} is invalid")
+    if any(ord(char) < 0x20 or ord(char) == 0x7F for char in value):
+        raise AgentDomainError(f"Provider attempt {field_name} is invalid")
+    return value
+
+
+@transaction.atomic
+def record_provider_attempt_notice(invocation, notice: Mapping[str, object]):
+    """Persist one bounded provider-attempt lifecycle notice through Plane."""
+
+    required = {
+        "phase",
+        "runId",
+        "invocationId",
+        "leaseId",
+        "provider",
+        "model",
+        "destinationHost",
+        "destinationPath",
+        "requestId",
+        "idempotencyKey",
+        "sequence",
+        "upstreamInitiated",
+        "statusClass",
+        "errorCode",
+    }
+    if not isinstance(notice, Mapping) or set(notice) != required:
+        raise AgentDomainError("Provider attempt notice fields are invalid")
+    phase = notice["phase"]
+    if phase not in _PROVIDER_ATTEMPT_PHASES:
+        raise AgentDomainError("Provider attempt phase is invalid")
+    if notice["runId"] != str(invocation.run_id) or notice["invocationId"] != invocation.invocation_id:
+        raise AgentDomainError("Provider attempt notice is not bound to the invocation")
+    lease_id = _provider_attempt_text(notice["leaseId"], "leaseId", 128)
+    provider = _provider_attempt_text(notice["provider"], "provider", 64)
+    model = _provider_attempt_text(notice["model"], "model", 256)
+    destination_host = _provider_attempt_text(notice["destinationHost"], "destinationHost", 255)
+    destination_path = _provider_attempt_text(notice["destinationPath"], "destinationPath", 1024)
+    request_id = _provider_attempt_text(notice["requestId"], "requestId", 256)
+    idempotency_key = _provider_attempt_text(notice["idempotencyKey"], "idempotencyKey", 128)
+    status_class = notice["statusClass"]
+    error_code = notice["errorCode"]
+    if not isinstance(status_class, str) or len(status_class.encode("utf-8")) > 16:
+        raise AgentDomainError("Provider attempt statusClass is invalid")
+    if not isinstance(error_code, str) or len(error_code.encode("utf-8")) > 64:
+        raise AgentDomainError("Provider attempt errorCode is invalid")
+    if any(ord(char) < 0x20 or ord(char) == 0x7F for char in status_class + error_code):
+        raise AgentDomainError("Provider attempt status or error is invalid")
+    sequence = notice["sequence"]
+    if isinstance(sequence, bool) or not isinstance(sequence, int) or not 1 <= sequence <= 256:
+        raise AgentDomainError("Provider attempt sequence is invalid")
+    upstream_initiated = notice["upstreamInitiated"]
+    if not isinstance(upstream_initiated, bool):
+        raise AgentDomainError("Provider attempt upstreamInitiated is invalid")
+    if phase == RuntimeProviderAttemptPhase.INTENT and upstream_initiated:
+        raise AgentDomainError("Provider attempt intent cannot claim an initiated request")
+    if phase == RuntimeProviderAttemptPhase.STARTED and not upstream_initiated:
+        raise AgentDomainError("Provider attempt start must claim an initiated request")
+    terminal = phase in {
+        RuntimeProviderAttemptPhase.COMPLETED,
+        RuntimeProviderAttemptPhase.FAILED,
+        RuntimeProviderAttemptPhase.OUTCOME_UNKNOWN,
+    }
+    if phase == RuntimeProviderAttemptPhase.COMPLETED and not upstream_initiated:
+        raise AgentDomainError("Provider attempt completion must claim an initiated request")
+    if phase == RuntimeProviderAttemptPhase.OUTCOME_UNKNOWN and not upstream_initiated:
+        raise AgentDomainError("Provider attempt outcome_unknown must claim an initiated request")
+
+    _assignment, run, stored_invocation = lock_invocation_path(invocation.pk)
+    existing = RuntimeProviderAttempt.all_objects.select_for_update().filter(idempotency_key=idempotency_key).first()
+    identity = {
+        "invocationRef": stored_invocation.invocation_id,
+        "runRef": str(run.id),
+        "leaseId": lease_id,
+        "provider": provider,
+        "model": model,
+        "destinationHost": destination_host,
+        "destinationPath": destination_path,
+        "requestId": request_id,
+        "idempotencyKey": idempotency_key,
+        "sequence": sequence,
+    }
+    if existing is None:
+        if phase != RuntimeProviderAttemptPhase.INTENT:
+            raise AgentDomainError("Provider attempt must be durably intended before it starts")
+        observation = RuntimeProviderAttempt.objects.create(
+            workspace=stored_invocation.workspace,
+            project=stored_invocation.project,
+            invocation=stored_invocation,
+            run=run,
+            actor=run.actor,
+            lease_id=lease_id,
+            provider=provider,
+            model=model,
+            destination_host=destination_host,
+            destination_path=destination_path,
+            request_id=request_id,
+            idempotency_key=idempotency_key,
+            sequence=sequence,
+            phase=phase,
+            upstream_initiated=False,
+            status_class=status_class,
+            error_code=error_code,
+            fingerprint=content_digest(identity),
+            created_by=stored_invocation.created_by,
+        )
+        return observation
+
+    existing_identity = {
+        "invocationRef": existing.invocation.invocation_id,
+        "runRef": str(existing.run_id),
+        "leaseId": existing.lease_id,
+        "provider": existing.provider,
+        "model": existing.model,
+        "destinationHost": existing.destination_host,
+        "destinationPath": existing.destination_path,
+        "requestId": existing.request_id,
+        "idempotencyKey": existing.idempotency_key,
+        "sequence": existing.sequence,
+    }
+    if existing_identity != identity or existing.fingerprint != content_digest(identity):
+        raise IdempotencyConflictError("Provider attempt idempotency is bound to different evidence")
+    if existing.phase in {
+        RuntimeProviderAttemptPhase.COMPLETED,
+        RuntimeProviderAttemptPhase.FAILED,
+        RuntimeProviderAttemptPhase.OUTCOME_UNKNOWN,
+    }:
+        if (
+            existing.phase != phase
+            or existing.upstream_initiated != upstream_initiated
+            or existing.status_class != status_class
+            or existing.error_code != error_code
+        ):
+            raise IdempotencyConflictError("Provider attempt terminal evidence cannot be changed")
+        return existing
+    allowed_transitions = {
+        RuntimeProviderAttemptPhase.INTENT: {
+            RuntimeProviderAttemptPhase.STARTED,
+            RuntimeProviderAttemptPhase.FAILED,
+            RuntimeProviderAttemptPhase.OUTCOME_UNKNOWN,
+        },
+        RuntimeProviderAttemptPhase.STARTED: {
+            RuntimeProviderAttemptPhase.COMPLETED,
+            RuntimeProviderAttemptPhase.FAILED,
+            RuntimeProviderAttemptPhase.OUTCOME_UNKNOWN,
+        },
+    }
+    if phase == existing.phase:
+        return existing
+    if phase not in allowed_transitions.get(existing.phase, set()):
+        raise IdempotencyConflictError("Provider attempt lifecycle transition is invalid")
+    existing.phase = phase
+    existing.upstream_initiated = upstream_initiated
+    existing.status_class = status_class
+    existing.error_code = error_code
+    existing.terminal_at = timezone.now() if terminal else None
+    existing.save(
+        _allow_lifecycle=True,
+        update_fields=["phase", "upstream_initiated", "status_class", "error_code", "terminal_at", "updated_at"],
+    )
+    return existing
+
+
+@transaction.atomic
+def reconcile_provider_attempts(invocation):
+    """Close open provider attempts conservatively after runtime loss."""
+
+    _assignment, _run, stored_invocation = lock_invocation_path(invocation.pk)
+    attempts = list(
+        RuntimeProviderAttempt.objects.select_for_update().filter(
+            invocation=stored_invocation,
+            terminal_at__isnull=True,
+        )
+    )
+    for attempt in attempts:
+        attempt.phase = (
+            RuntimeProviderAttemptPhase.OUTCOME_UNKNOWN
+            if attempt.upstream_initiated
+            else RuntimeProviderAttemptPhase.FAILED
+        )
+        attempt.status_class = "unknown" if attempt.upstream_initiated else "not_sent"
+        attempt.error_code = "outcome_unknown" if attempt.upstream_initiated else "pre_send_failure"
+        attempt.terminal_at = timezone.now()
+        attempt.save(
+            _allow_lifecycle=True,
+            update_fields=["phase", "status_class", "error_code", "terminal_at", "updated_at"],
+        )
+    return tuple(attempts)
+
+
+def provider_attempts_reconciled(invocation) -> bool:
+    return not RuntimeProviderAttempt.objects.filter(invocation=invocation, terminal_at__isnull=True).exists()
 
 
 def _code_mode_usage_fields(

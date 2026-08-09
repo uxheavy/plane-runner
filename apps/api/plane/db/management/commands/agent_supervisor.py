@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
+from plane.agent.lifecycle import record_provider_attempt_notice
 from plane.agent.runtime import (
     HostBoundSubprocessRuntimeTransport,
     PlaneHostHTTPServer,
@@ -149,9 +150,22 @@ class Command(BaseCommand):
                     if invocation_ref != invocation.invocation_id:
                         raise RuntimeDispatchError("runtime host endpoint invocation binding is invalid")
                     token = secrets.token_urlsafe(32)
+
+                    def provider_attempt_recorder(call):
+                        notice = dict(call.input)
+                        notice.update({"runId": call.run_id, "invocationId": call.invocation_id})
+                        attempt = record_provider_attempt_notice(invocation, notice)
+                        return {
+                            "accepted": True,
+                            "attemptRef": f"provider-attempt:{attempt.id}",
+                            "phase": attempt.phase,
+                            "upstreamInitiated": attempt.upstream_initiated,
+                        }
+
                     host_port_adapter = build_gateway_host_port(
                         invocation=invocation,
                         gateway=OperationGateway(),
+                        provider_attempt_recorder=provider_attempt_recorder,
                     )
                     server = PlaneHostHTTPServer(
                         bind_host=getattr(settings, "PLANE_AGENT_RUNTIME_HOST_BIND", "0.0.0.0"),

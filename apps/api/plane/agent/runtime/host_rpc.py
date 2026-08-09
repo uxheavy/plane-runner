@@ -35,8 +35,8 @@ MAX_HOST_INPUT_BYTES = 8 * 1024
 MAX_HOST_CALLS = 32
 MAX_HOST_OPERATION_REF_BYTES = 256
 MAX_HOST_CONTENT_BYTES = 4 * 1024
-_ACTIONS = {"discover", "read", "mutate", "code", "publish"}
-_SOURCES = {"model", "code"}
+_ACTIONS = {"discover", "read", "mutate", "code", "publish", "observe"}
+_SOURCES = {"model", "code", "runtime"}
 _RESULT_STATUSES = {"ok", "replayed", "denied", "conflict", "unavailable", "invalid"}
 HOST_HTTP_PATH = "/v1/host"
 MAX_HOST_HTTP_RESPONSE_BYTES = MAX_HOST_RESULT_BYTES + 1024
@@ -147,7 +147,9 @@ class PlaneHostCall:
             raise PlaneHostRPCError(f"unsupported host source: {source!r}")
         if action == "code" and source != "code":
             raise PlaneHostRPCError("code action must use the code source")
-        if action != "code" and source != "model":
+        if action == "observe" and source != "runtime":
+            raise PlaneHostRPCError("observe action must use the runtime source")
+        if action not in {"code", "observe"} and source != "model":
             raise PlaneHostRPCError("only code action may use the code source")
         identity = {
             "protocol": HOST_PROTOCOL,
@@ -791,16 +793,38 @@ class PlaneHostHTTPServer:
 class PlaneGatewayHostPort:
     """Bind host callbacks to one trusted invocation and the live gateway."""
 
-    def __init__(self, host: Any) -> None:
+    def __init__(
+        self,
+        host: Any,
+        provider_attempt_recorder: Callable[[PlaneHostCall], Mapping[str, Any]] | None = None,
+    ) -> None:
         if not callable(getattr(host, "call_operation", None)):
             raise TypeError("host must be a CodeModeHostRPC")
         self._host = host
+        self._provider_attempt_recorder = provider_attempt_recorder
         self._run_ref = host.binding.run_ref
         self._invocation_ref = host.binding.invocation_ref
 
     def invoke(self, call: PlaneHostCall) -> PlaneHostResult:
         if call.run_id != self._run_ref or call.invocation_id != self._invocation_ref:
             return self._error(call, "CALLBACK_BINDING_INVALID", "Host callback is not bound to this invocation")
+        if call.action == "observe":
+            if call.operation_ref != "runtime.provider_attempt" or self._provider_attempt_recorder is None:
+                return self._error(call, "OPERATION_UNAVAILABLE", "Provider attempt observation is unavailable")
+            try:
+                output = self._provider_attempt_recorder(call)
+            except Exception:
+                return self._error(call, "PROVIDER_ATTEMPT_REJECTED", "Provider attempt evidence was rejected")
+            if not isinstance(output, Mapping):
+                return self._error(call, "PROVIDER_ATTEMPT_REJECTED", "Provider attempt evidence was invalid")
+            return PlaneHostResult(
+                request_ref=call.request_ref,
+                correlation_id=call.correlation_id,
+                idempotency_key=call.idempotency_key,
+                status="ok",
+                replayed=False,
+                output=dict(output),
+            )
         if call.action == "discover":
             if call.operation_ref != PLANE_DISCOVERY_OPERATION:
                 return self._error(call, "VALIDATION_ERROR", "Unsupported Plane discovery operation")
@@ -961,7 +985,11 @@ def trusted_host_request(invocation: Any) -> Any:
 
 
 def build_gateway_host_port(
-    *, invocation: Any, gateway: Any, is_cancelled: Callable[[], bool] | None = None
+    *,
+    invocation: Any,
+    gateway: Any,
+    is_cancelled: Callable[[], bool] | None = None,
+    provider_attempt_recorder: Callable[[PlaneHostCall], Mapping[str, Any]] | None = None,
 ) -> PlaneGatewayHostPort:
     """Build the trusted gateway-backed port for one persisted invocation."""
 
@@ -979,7 +1007,7 @@ def build_gateway_host_port(
         invocation=invocation,
         is_cancelled=is_cancelled,
     )
-    return PlaneGatewayHostPort(host)
+    return PlaneGatewayHostPort(host, provider_attempt_recorder=provider_attempt_recorder)
 
 
 __all__ = [

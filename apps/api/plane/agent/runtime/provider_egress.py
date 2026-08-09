@@ -159,6 +159,8 @@ class ProviderRequest:
     path: str
     headers: Mapping[str, str]
     body: bytes
+    request_id: str = ""
+    sequence: int = 0
 
 
 @dataclass(frozen=True)
@@ -177,6 +179,14 @@ class ProviderRelayAudit:
     outcome: str
     reason: str
     upstream_called: bool
+    phase: str = "terminal"
+    request_id: str = ""
+    lease_id: str = ""
+    destination_host: str = ""
+    destination_path: str = ""
+    sequence: int = 0
+    status_class: str = ""
+    error_code: str = ""
 
 
 class ProviderUpstream(Protocol):
@@ -207,8 +217,10 @@ def _safe_reason(value: str) -> str:
 
 def _credential_shaped_name(value: str) -> bool:
     normalized = value.casefold().replace("-", "_")
-    return normalized in _SENSITIVE_NAMES or normalized.endswith("_token") or any(
-        part in normalized for part in ("api_key", "secret", "password")
+    return (
+        normalized in _SENSITIVE_NAMES
+        or normalized.endswith("_token")
+        or any(part in normalized for part in ("api_key", "secret", "password"))
     )
 
 
@@ -224,9 +236,7 @@ def _contains_sensitive_key(value: object) -> bool:
     return False
 
 
-def _relay_bootstrap_payload(
-    descriptor: ProviderRelayDescriptor, policy: ProviderRelayPolicy
-) -> dict[str, str]:
+def _relay_bootstrap_payload(descriptor: ProviderRelayDescriptor, policy: ProviderRelayPolicy) -> dict[str, str]:
     """Create the exact non-secret relay fields consumed by Hermes G1."""
 
     value: dict[str, str] = {
@@ -270,6 +280,7 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
     def handle(self) -> None:
         relay = self.server.relay
         request_id = ""
+        request: ProviderRequest | None = None
         upstream_called = False
         acquired = relay._request_slots.acquire(blocking=False)
         if not acquired:
@@ -281,23 +292,47 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
             request_id = headers.get("x-request-id", "")
             relay._validate_request_id(request_id)
             request = relay._admit_http(method, target, headers, body, request_id)
+            relay._record_attempt(request, phase="intent", upstream_initiated=False, required=True)
+            relay._record_attempt(request, phase="started", upstream_initiated=True, required=True)
             upstream_called = True
             response = relay._call_upstream(request)
             relay._write_http_response(self.wfile, request_id, response)
-            relay._record(request, "allowed", "completed", True)
+            relay._record_attempt(
+                request,
+                phase="completed",
+                upstream_initiated=True,
+                status_class=relay._status_class(response.status_code),
+            )
         except ProviderRelayError as exc:
             code = relay._error_code(exc)
-            if request_id:
-                relay._record_identity(
-                    {}, "denied", relay._audit_reason(exc, code), upstream_called, request_id=request_id
+            if request is not None:
+                terminal_phase = "outcome_unknown" if upstream_called and code == "upstream_error" else "failed"
+                relay._record_attempt(
+                    request,
+                    phase=terminal_phase,
+                    upstream_initiated=upstream_called,
+                    status_class=(
+                        "unknown"
+                        if terminal_phase == "outcome_unknown"
+                        else "not_sent"
+                        if not upstream_called
+                        else "error"
+                    ),
+                    error_code=code,
                 )
             try:
                 relay._write_http_error(self.wfile, request_id, code)
             except OSError:
                 pass
         except (OSError, TimeoutError):
-            if request_id:
-                relay._record_identity({}, "failed", "channel_closed", upstream_called, request_id=request_id)
+            if request is not None:
+                relay._record_attempt(
+                    request,
+                    phase="outcome_unknown" if upstream_called else "failed",
+                    upstream_initiated=upstream_called,
+                    status_class="unknown" if upstream_called else "not_sent",
+                    error_code="channel_closed",
+                )
         finally:
             relay._request_slots.release()
 
@@ -362,6 +397,7 @@ class ProviderRelayServer:
         is_cancelled: Callable[[], bool] | None = None,
         audit: Callable[[ProviderRelayAudit], None] | None = None,
         max_request_bytes: int | None = None,
+        lease_id: str = "",
     ) -> None:
         self.binding = binding
         self.policy = policy
@@ -384,6 +420,7 @@ class ProviderRelayServer:
         self._lease_validator = lease_validator
         self._is_cancelled = is_cancelled or (lambda: False)
         self._audit = audit
+        self._lease_id = _bounded_text(lease_id, "provider lease id", 128) if lease_id else ""
         self._max_request_bytes = max_request_bytes if max_request_bytes is not None else policy.max_request_bytes
         if (
             isinstance(self._max_request_bytes, bool)
@@ -531,7 +568,13 @@ class ProviderRelayServer:
             path=self.policy.path,
             headers={key: value for key, value in headers.items() if key in {"accept", "user-agent"}},
             body=raw_body,
+            request_id=request_id,
+            sequence=self._calls,
         )
+
+    @staticmethod
+    def _status_class(status_code: int) -> str:
+        return f"{status_code // 100}xx"
 
     def _validate_lease_and_cancellation(self) -> None:
         if self._closed.is_set() or self._is_cancelled():
@@ -612,6 +655,8 @@ class ProviderRelayServer:
     @staticmethod
     def _error_code(error: ProviderRelayError) -> str:
         message = str(error).casefold()
+        if "call failed" in message:
+            return "upstream_error"
         if "oversized" in message or "size bound" in message:
             return "oversize"
         if "replayed" in message:
@@ -649,6 +694,42 @@ class ProviderRelayServer:
             if marker in message:
                 return marker.replace("-", "_")
         return code
+
+    def _record_attempt(
+        self,
+        request: ProviderRequest,
+        *,
+        phase: str,
+        upstream_initiated: bool,
+        status_class: str = "",
+        error_code: str = "",
+        required: bool = False,
+    ) -> None:
+        if self._audit is None:
+            return
+        try:
+            self._audit(
+                ProviderRelayAudit(
+                    run_id=self.binding.run_id,
+                    invocation_id=self.binding.invocation_id,
+                    provider=request.provider,
+                    model=request.model,
+                    outcome="allowed" if phase in {"intent", "started", "completed"} else "failed",
+                    reason=error_code or phase,
+                    upstream_called=upstream_initiated,
+                    phase=phase,
+                    request_id=request.request_id,
+                    lease_id=self._lease_id,
+                    destination_host=self.policy.host,
+                    destination_path=self.policy.path,
+                    sequence=request.sequence,
+                    status_class=status_class,
+                    error_code=error_code,
+                )
+            )
+        except Exception as exc:
+            if required:
+                raise ProviderRelayError("provider attempt evidence is unavailable") from exc
 
     def _record_identity(
         self,

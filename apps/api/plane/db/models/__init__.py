@@ -29,6 +29,8 @@ from .agent import (
     RuntimeInvocationControl,
     RuntimeExitEvidence,
     RuntimeInvocation,
+    RuntimeProviderAttempt,
+    RuntimeProviderAttemptPhase,
     RuntimeUsageObservation,
     TerminalEventKind,
     TerminalEventSource,

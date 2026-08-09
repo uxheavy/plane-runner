@@ -32,6 +32,7 @@ from plane.db.models import (
     RuntimeEventIngress,
     RuntimeExitEvidence,
     RuntimeInvocation,
+    RuntimeProviderAttempt,
     RuntimeUsageObservation,
 )
 from plane.db.models.operation_gateway import OperationGatewayAudit, OperationGatewayIdempotency
@@ -112,6 +113,30 @@ def _gateway_readback(run: RunAttempt, *, limit: int) -> list[dict[str, Any]]:
     return readback
 
 
+def _provider_attempt_readback(run: RunAttempt, *, limit: int) -> list[dict[str, Any]]:
+    """Expose only structural provider-attempt reconciliation facts."""
+
+    attempts = RuntimeProviderAttempt.objects.filter(run=run).order_by("created_at", "sequence", "id")[:limit]
+    return [
+        {
+            "attempt_id": str(attempt.id),
+            "invocation_id": attempt.invocation.invocation_id,
+            "phase": attempt.phase,
+            "provider": attempt.provider,
+            "model": attempt.model,
+            "destination_host": attempt.destination_host,
+            "destination_path": attempt.destination_path,
+            "request_id": attempt.request_id,
+            "sequence": attempt.sequence,
+            "upstream_initiated": attempt.upstream_initiated,
+            "status_class": attempt.status_class,
+            "error_code": attempt.error_code,
+            "terminal_at": attempt.terminal_at.isoformat() if attempt.terminal_at else None,
+        }
+        for attempt in attempts
+    ]
+
+
 def build_run_readback(run: RunAttempt, *, limit: int) -> dict[str, Any]:
     """Build the one projection used by the API and ``agent_readback`` command."""
 
@@ -144,6 +169,7 @@ def build_run_readback(run: RunAttempt, *, limit: int) -> dict[str, Any]:
         "usage": RuntimeUsageObservationAdminSerializer(
             RuntimeUsageObservation.objects.filter(run=run).order_by("created_at", "id")[:limit], many=True
         ).data,
+        "provider_attempts": _provider_attempt_readback(run, limit=limit),
         "gateway_readback": _gateway_readback(run, limit=limit),
     }
     redacted = redact_admin_value(payload)

@@ -31,6 +31,9 @@ from plane.agent.lifecycle import (
     propose_outcome,
     record_input_event,
     record_invocation,
+    record_provider_attempt_notice,
+    reconcile_provider_attempts,
+    provider_attempts_reconciled,
     request_revision,
     review_outcome,
     transition_run,
@@ -65,6 +68,8 @@ from plane.db.models import (
     RuntimeControlState,
     RuntimeInvocationControl,
     RuntimeInvocation,
+    RuntimeProviderAttempt,
+    RuntimeProviderAttemptPhase,
     ProfileVersion,
 )
 
@@ -1280,3 +1285,71 @@ def test_identifiers_are_strict_and_target_references_are_lossless(assignment, p
     other_run = create_run(other_assignment, profile)
     assert run.snapshot["assignment"]["targetRef"] != other_run.snapshot["assignment"]["targetRef"]
     assert namespaced_ref("target", "literal-69737375653a313233") == run.snapshot["assignment"]["targetRef"]
+
+
+def _provider_attempt_notice(invocation, *, phase, upstream_initiated, sequence=1):
+    terminal = phase in {
+        RuntimeProviderAttemptPhase.COMPLETED,
+        RuntimeProviderAttemptPhase.FAILED,
+        RuntimeProviderAttemptPhase.OUTCOME_UNKNOWN,
+    }
+    return {
+        "phase": phase,
+        "runId": str(invocation.run_id),
+        "invocationId": invocation.invocation_id,
+        "leaseId": "lease:provider-attempt",
+        "provider": "xai",
+        "model": "grok-4",
+        "destinationHost": "api.x.ai",
+        "destinationPath": "/v1/chat/completions",
+        "requestId": "request:provider-attempt",
+        "idempotencyKey": f"provider-attempt:sequence-{sequence}",
+        "sequence": sequence,
+        "upstreamInitiated": upstream_initiated,
+        "statusClass": "unknown" if terminal else "",
+        "errorCode": "outcome_unknown" if terminal else "",
+    }
+
+
+@pytest.mark.django_db(transaction=True)
+def test_provider_attempt_reconciles_process_loss_after_external_send(assignment, profile):
+    run = create_run(assignment, profile)
+    invocation = record_invocation(run, idempotency_key="idempotency:provider-attempt-unknown")
+    record_provider_attempt_notice(
+        invocation,
+        _provider_attempt_notice(invocation, phase=RuntimeProviderAttemptPhase.INTENT, upstream_initiated=False),
+    )
+    record_provider_attempt_notice(
+        invocation,
+        _provider_attempt_notice(invocation, phase=RuntimeProviderAttemptPhase.STARTED, upstream_initiated=True),
+    )
+
+    reconciled = reconcile_provider_attempts(invocation)
+    attempt = RuntimeProviderAttempt.objects.get(invocation=invocation)
+
+    assert len(reconciled) == 1
+    assert attempt.phase == RuntimeProviderAttemptPhase.OUTCOME_UNKNOWN
+    assert attempt.upstream_initiated is True
+    assert attempt.status_class == "unknown"
+    assert attempt.error_code == "outcome_unknown"
+    assert attempt.terminal_at is not None
+    assert provider_attempts_reconciled(invocation) is True
+
+
+@pytest.mark.django_db(transaction=True)
+def test_provider_attempt_reconciles_pre_send_failure_without_external_send(assignment, profile):
+    run = create_run(assignment, profile)
+    invocation = record_invocation(run, idempotency_key="idempotency:provider-attempt-not-sent")
+    record_provider_attempt_notice(
+        invocation,
+        _provider_attempt_notice(invocation, phase=RuntimeProviderAttemptPhase.INTENT, upstream_initiated=False),
+    )
+
+    reconcile_provider_attempts(invocation)
+    attempt = RuntimeProviderAttempt.objects.get(invocation=invocation)
+
+    assert attempt.phase == RuntimeProviderAttemptPhase.FAILED
+    assert attempt.upstream_initiated is False
+    assert attempt.status_class == "not_sent"
+    assert attempt.error_code == "pre_send_failure"
+    assert provider_attempts_reconciled(invocation) is True

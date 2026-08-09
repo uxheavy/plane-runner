@@ -19,7 +19,7 @@ from typing import Any, Callable
 
 from .config import AgentRuntimeConfiguration, RuntimeConfigurationError
 from .health import RuntimeHealthStatus, RuntimeSafetyController, RuntimeSafetyStopError
-from .host_rpc import PlaneHostHTTPClient, PlaneHostServer
+from .host_rpc import PlaneHostCall, PlaneHostHTTPClient, PlaneHostServer
 from .credentials import validate_credential_lease_metadata
 from .provider_egress import (
     PinnedProviderHTTPSClient,
@@ -183,6 +183,7 @@ class RuntimeDispatchExecutor:
                     invocation_ref=invocation_id,
                     state_file=self.configuration.credential_state_file,
                 ),
+                lease_id=str(credential_lease.get("leaseId", "")),
                 is_cancelled=lambda: self.controller.health().safety_stop
                 or self._is_invocation_cancelled(invocation_id),
                 audit=audit,
@@ -279,9 +280,53 @@ class RuntimeDispatchExecutor:
         server: PlaneHostServer | None = None
         temp_dir: str | None = None
         provider_relay: RuntimeProviderRelay | None = None
+        host_client: PlaneHostHTTPClient | None = None
         command = self.configuration.command
         try:
             provider_route = self._configured_provider_route(snapshot)
+            if provider_route is not None and (host_url is None or host_token is None):
+                raise RuntimeConfigurationError("provider attempt evidence requires the Plane host callback")
+            if host_url is not None and host_token is not None:
+                temp_dir = tempfile.mkdtemp(prefix="plane-agent-host-")
+                socket_path = os.path.join(temp_dir, "host.sock")
+                host_client = PlaneHostHTTPClient(url=host_url, auth_token=host_token)
+                server = PlaneHostServer(socket_path=socket_path, invoke=host_client.invoke)
+                server.start()
+                command = (*command, "--plane-host-socket", socket_path)
+
+            def provider_audit(audit: ProviderRelayAudit) -> None:
+                if host_client is None:
+                    raise RuntimeConfigurationError("provider attempt evidence requires the Plane host callback")
+                result = host_client.invoke(
+                    PlaneHostCall(
+                        run_id=audit.run_id,
+                        invocation_id=audit.invocation_id,
+                        correlation_id=invocation["correlationId"],
+                        action="observe",
+                        operation_ref="runtime.provider_attempt",
+                        input={
+                            "phase": audit.phase,
+                            "leaseId": audit.lease_id,
+                            "provider": audit.provider,
+                            "model": audit.model,
+                            "destinationHost": audit.destination_host,
+                            "destinationPath": audit.destination_path,
+                            "requestId": audit.request_id,
+                            "idempotencyKey": (
+                                "provider-attempt:"
+                                + hashlib.sha256(audit.request_id.encode("utf-8")).hexdigest()
+                            ),
+                            "sequence": audit.sequence,
+                            "upstreamInitiated": audit.upstream_called,
+                            "statusClass": audit.status_class,
+                            "errorCode": audit.error_code,
+                        },
+                        source="runtime",
+                    )
+                )
+                if result.status not in {"ok", "replayed"}:
+                    raise RuntimeConfigurationError("provider attempt evidence was rejected by Plane")
+
             if provider_route is not None:
                 policy, provider, model = provider_route
                 if policy.host != "api.x.ai" or policy.path != "/v1/chat/completions":
@@ -297,6 +342,7 @@ class RuntimeDispatchExecutor:
                     model=model,
                     credentials=credentials,
                     credential_lease=credential_lease,
+                    audit=provider_audit,
                 )
             payload, run_id, invocation_id, _bootstrap_digest = _hermes_bootstrap_payload(
                 snapshot_json,
@@ -307,13 +353,6 @@ class RuntimeDispatchExecutor:
                 if provider_relay is not None and provider_route is not None
                 else None,
             )
-            if host_url is not None and host_token is not None:
-                temp_dir = tempfile.mkdtemp(prefix="plane-agent-host-")
-                socket_path = os.path.join(temp_dir, "host.sock")
-                host_client = PlaneHostHTTPClient(url=host_url, auth_token=host_token)
-                server = PlaneHostServer(socket_path=socket_path, invoke=host_client.invoke)
-                server.start()
-                command = (*command, "--plane-host-socket", socket_path)
             if provider_relay is not None:
                 command = (*command, "--provider-relay-socket", str(provider_relay.descriptor.socket_path))
 
