@@ -457,7 +457,13 @@ def test_runtime_service_passes_invocation_relay_to_child_without_provider_secre
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as channel:
             channel.connect(socket_path)
             channel.sendall(wire)
-            assert b'200 OK' in channel.recv(4096)
+            response = bytearray()
+            while True:
+                chunk = channel.recv(4096)
+                if not chunk:
+                    break
+                response.extend(chunk)
+            assert b'200 OK' in response
         print(json.dumps({'status': 'completed'}, separators=(',', ':')))
         """
     )
