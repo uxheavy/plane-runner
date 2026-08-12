@@ -38,6 +38,7 @@ from plane.agent.lifecycle import (
     review_outcome,
     transition_run,
 )
+from plane.agent.lifecycle.services import _normalise_idempotency
 from plane.agent.runtime.supervisor import request_runtime_cancellation
 from plane.agent.lifecycle.runtime_contract import (
     ARTIFACT_DIRECTORY,
@@ -156,6 +157,19 @@ def test_five_plane_records_bind_to_one_actor_and_an_exact_l1_snapshot(assignmen
     assert run.snapshot["assignment"]["targetRef"].startswith("target:")
     assert run.snapshot["profile"]["profileRef"].startswith("profile-version:")
     validate_run_snapshot(run.snapshot)
+
+
+def test_g4_live_idempotency_namespace_is_accepted_by_lifecycle_normalizer():
+    valid = (
+        "idempotency:g4-live-run-focused",
+        "idempotency:g4-live-invocation-focused",
+    )
+    for value in valid:
+        assert _normalise_idempotency(value, "g4 live idempotency_key") == value
+
+    for value in ("g4-live-run:focused", "g4-live-invocation:focused"):
+        with pytest.raises(AgentDomainError):
+            _normalise_idempotency(value, "g4 live idempotency_key")
 
 
 @pytest.mark.django_db

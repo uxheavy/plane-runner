@@ -352,8 +352,8 @@ def main() -> int:
             ],
             created_by=user,
         )
-        run = create_run(assignment, profile, idempotency_key=f"g4-live-run:{suffix}", created_by=user)
-        invocation = record_invocation(run, idempotency_key=f"g4-live-invocation:{suffix}", trigger="initial")
+        run = create_run(assignment, profile, idempotency_key=f"idempotency:g4-live-run-{suffix}", created_by=user)
+        invocation = record_invocation(run, idempotency_key=f"idempotency:g4-live-invocation-{suffix}", trigger="initial")
         stdout = io.StringIO()
         stderr = io.StringIO()
         call_command(

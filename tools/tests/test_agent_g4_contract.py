@@ -246,6 +246,36 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn("return_code = 1", source)
         self.assertEqual(source.count("print(json.dumps(evidence"), 1)
 
+    def test_live_helper_generates_namespaced_lifecycle_idempotency_keys(self):
+        source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        generated = {}
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+                continue
+            kind = {"create_run": "run", "record_invocation": "invocation"}.get(node.func.id)
+            if kind is None:
+                continue
+            key_argument = next((keyword.value for keyword in node.keywords if keyword.arg == "idempotency_key"), None)
+            if key_argument is not None:
+                generated[kind] = eval(compile(ast.Expression(key_argument), str(TOOLS / "agent-g4-live-invoke.py"), "eval"), {}, {"suffix": "focused"})
+
+        self.assertEqual(
+            generated,
+            {
+                "run": "idempotency:g4-live-run-focused",
+                "invocation": "idempotency:g4-live-invocation-focused",
+            },
+        )
+        for value in generated.values():
+            self.assertTrue(value.startswith("idempotency:"))
+        self.assertNotRegex(source, r"(?:f[\"']|[\"'])g4-live-run:")
+        self.assertNotRegex(source, r"(?:f[\"']|[\"'])g4-live-invocation:")
+
+        services = (ROOT / "apps/api/plane/agent/lifecycle/services.py").read_text(encoding="utf-8")
+        self.assertIn('return _normalise_ref(value, "idempotency", field_name)', services)
+        self.assertIn('value.startswith(f"{namespace}:")', services)
+
     def test_failure_evidence_is_bounded_structural_and_excludes_sensitive_runtime_data(self):
         source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
         tree = ast.parse(source)
