@@ -39,6 +39,17 @@
         "hermesHookStatus": { "enum": ["pending", "integrated"] }
       }
     },
+    "apiArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["imageTag", "imageDigest", "sourceRevision", "contract"],
+      "properties": {
+        "imageTag": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "imageDigest": { "$ref": "#/$defs/digest" },
+        "sourceRevision": { "$ref": "#/$defs/sha" },
+        "contract": { "const": "plane.operation/v1" }
+      }
+    },
     "binding": {
       "type": "object",
       "additionalProperties": false,
@@ -52,10 +63,7 @@
         "runtimeImageDigest",
         "runtimeImageRevision",
         "runtimeContract",
-        "apiImageTag",
-        "apiImageDigest",
-        "apiSourceRevision",
-        "apiContract",
+        "apiArtifact",
         "commandSha256",
         "provider",
         "thresholdProfile",
@@ -72,10 +80,7 @@
         "runtimeImageDigest": { "$ref": "#/$defs/digest" },
         "runtimeImageRevision": { "$ref": "#/$defs/sha" },
         "runtimeContract": { "type": "string", "const": "plane.agent-runtime/v1" },
-        "apiImageTag": { "type": "string", "minLength": 1, "maxLength": 200 },
-        "apiImageDigest": { "$ref": "#/$defs/digest" },
-        "apiSourceRevision": { "$ref": "#/$defs/sha" },
-        "apiContract": { "type": "string", "const": "plane.operation/v1" },
+        "apiArtifact": { "$ref": "#/$defs/apiArtifact" },
         "commandSha256": { "$ref": "#/$defs/hash" },
         "provider": {
           "type": "object",

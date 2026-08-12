@@ -24,10 +24,7 @@ BINDING_FIELDS = (
     "runtimeImageDigest",
     "runtimeImageRevision",
     "runtimeContract",
-    "apiImageTag",
-    "apiImageDigest",
-    "apiSourceRevision",
-    "apiContract",
+    "apiArtifact",
 )
 THRESHOLD_FIELDS = (
     "permittedSuccessRateMin",
@@ -135,19 +132,24 @@ def exact_binding(manifest: dict[str, Any], candidate: str) -> dict[str, Any]:
         "runtimeImageDigest": _required(pins, "runtimeImageDigest", "manifest_pins"),
         "runtimeImageRevision": _required(pins, "runtimeImageRevision", "manifest_pins"),
         "runtimeContract": _required(pins, "runtimeContract", "manifest_pins"),
-        "apiImageTag": _required(pins, "apiImageTag", "manifest_pins"),
-        "apiImageDigest": _required(pins, "apiImageDigest", "manifest_pins"),
-        "apiSourceRevision": _required(pins, "apiSourceRevision", "manifest_pins"),
-        "apiContract": _required(pins, "apiContract", "manifest_pins"),
+        "apiArtifact": _object(_required(pins, "apiArtifact", "manifest_pins"), "manifest_apiArtifact"),
     }
+    if set(binding["apiArtifact"]) != {"imageTag", "imageDigest", "sourceRevision", "contract"}:
+        raise ContractError("manifest_apiArtifact_fields_mismatch")
     for key in BINDING_FIELDS:
-        if key in {"runtimeImageDigest", "apiImageDigest"}:
+        if key == "runtimeImageDigest":
             _digest(binding[key], f"manifest_{key}")
-        elif key in {"runtimeImageTag", "runtimeContract", "apiImageTag", "apiContract"}:
+        elif key in {"runtimeImageTag", "runtimeContract"}:
             if not isinstance(binding[key], str) or not binding[key]:
                 raise ContractError(f"manifest_{key}_invalid")
-        else:
+        elif key != "apiArtifact":
             _git_sha(binding[key], f"manifest_{key}")
+    api_artifact = binding["apiArtifact"]
+    _digest(api_artifact["imageDigest"], "manifest_apiArtifact_imageDigest")
+    _git_sha(api_artifact["sourceRevision"], "manifest_apiArtifact_sourceRevision")
+    for field in ("imageTag", "contract"):
+        if not isinstance(api_artifact[field], str) or not api_artifact[field]:
+            raise ContractError(f"manifest_apiArtifact_{field}_invalid")
     return binding
 
 
@@ -157,10 +159,11 @@ def validate_api_artifact_descriptor(actual: dict[str, Any], expected: dict[str,
     required = {"imageTag", "imageDigest", "sourceRevision", "contract", "artifact"}
     if set(actual) != required:
         raise ContractError("api_artifact_descriptor_fields_mismatch")
-    _exact(actual["imageTag"], expected["apiImageTag"], "api_artifact_imageTag")
-    _exact(actual["imageDigest"], expected["apiImageDigest"], "api_artifact_imageDigest")
-    _exact(actual["sourceRevision"], expected["apiSourceRevision"], "api_artifact_sourceRevision")
-    _exact(actual["contract"], expected["apiContract"], "api_artifact_contract")
+    expected_artifact = expected["apiArtifact"]
+    _exact(actual["imageTag"], expected_artifact["imageTag"], "api_artifact_imageTag")
+    _exact(actual["imageDigest"], expected_artifact["imageDigest"], "api_artifact_imageDigest")
+    _exact(actual["sourceRevision"], expected_artifact["sourceRevision"], "api_artifact_sourceRevision")
+    _exact(actual["contract"], expected_artifact["contract"], "api_artifact_contract")
     _exact(actual["artifact"], "plane-agent-api-g4", "api_artifact_kind")
     _digest(actual["imageDigest"], "api_artifact_imageDigest")
     _git_sha(actual["sourceRevision"], "api_artifact_sourceRevision")
@@ -223,7 +226,7 @@ def validate_rollback_runbook(runbook_text: str, manifest: dict[str, Any], fixtu
     current_parent = _required(candidate_binding, "parentCommit", "candidateBinding")
     g3_baseline = _required(candidate_binding, "acceptedG3Baseline", "candidateBinding")
     current_runtime = _object(_required(current, "runtime", "rollback_current"), "rollback_current_runtime")
-    current_api = _object(_required(current, "api", "rollback_current"), "rollback_current_api")
+    current_api = _object(_required(current, "apiArtifact", "rollback_current"), "rollback_current_apiArtifact")
     required = (
         "current Plane deployable service candidate is the exact",
         f"`{current_parent}`",
@@ -248,13 +251,13 @@ def validate_rollback_runbook(runbook_text: str, manifest: dict[str, Any], fixtu
         "contract",
         f"`{pins['runtimeContract']}`",
         "API image tag",
-        f"`{pins['apiImageTag']}`",
+        f"`{pins['apiArtifact']['imageTag']}`",
         "API image digest",
-        f"`{pins['apiImageDigest']}`",
+        f"`{pins['apiArtifact']['imageDigest']}`",
         "API source revision",
-        f"`{pins['apiSourceRevision']}`",
+        f"`{pins['apiArtifact']['sourceRevision']}`",
         "API contract",
-        f"`{pins['apiContract']}`",
+        f"`{pins['apiArtifact']['contract']}`",
         "previous services use immutable image digest",
         f"`{previous['services']['api']['imageDigest']}`",
         "python3 tools/agent-g4-rollback-drill.py",
@@ -272,10 +275,7 @@ def validate_rollback_runbook(runbook_text: str, manifest: dict[str, Any], fixtu
         if stale in runbook_text:
             raise ContractError("rollback_runbook_stale_pin_present")
     _rollback_exact(current_runtime["imageDigest"], pins["runtimeImageDigest"], "current_runtime_imageDigest")
-    _rollback_exact(current_api["imageTag"], pins["apiImageTag"], "current_api_imageTag")
-    _rollback_exact(current_api["imageDigest"], pins["apiImageDigest"], "current_api_imageDigest")
-    _rollback_exact(current_api["sourceRevision"], pins["apiSourceRevision"], "current_api_sourceRevision")
-    _rollback_exact(current_api["contract"], pins["apiContract"], "current_api_contract")
+    _rollback_exact(current_api, pins["apiArtifact"], "current_apiArtifact")
 
 
 def validate_rollback_fixture(fixture_path: Path, root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
@@ -319,14 +319,9 @@ def validate_rollback_fixture(fixture_path: Path, root: Path, manifest: dict[str
         "current_runtime",
     )
     _rollback_exact(
-        _required(current, "api", "rollback_current"),
-        {
-            "imageTag": pins["apiImageTag"],
-            "imageDigest": pins["apiImageDigest"],
-            "sourceRevision": pins["apiSourceRevision"],
-            "contract": pins["apiContract"],
-        },
-        "current_api",
+        _required(current, "apiArtifact", "rollback_current"),
+        pins["apiArtifact"],
+        "current_apiArtifact",
     )
 
     current_services = _rollback_services(current, "rollback_current")
@@ -347,7 +342,7 @@ def validate_rollback_fixture(fixture_path: Path, root: Path, manifest: dict[str
         "sdkGitlink": _shell_assignment(evidence, "SDK_COMMIT"),
         "imageDigest": _shell_assignment(evidence, "API_TEST_IMAGE_DIGEST"),
     }
-    previous_api = _object(_required(previous, "api", "rollback_previous"), "rollback_previous_api")
+    previous_api = _object(_required(previous, "apiArtifact", "rollback_previous"), "rollback_previous_apiArtifact")
     _rollback_exact(
         previous_api,
         {

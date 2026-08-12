@@ -54,10 +54,7 @@ BINDING_KEYS = (
     "runtimeImageDigest",
     "runtimeImageRevision",
     "runtimeContract",
-    "apiImageTag",
-    "apiImageDigest",
-    "apiSourceRevision",
-    "apiContract",
+    "apiArtifact",
 )
 
 
@@ -72,10 +69,12 @@ def fixture() -> tuple[dict, dict, dict, str]:
         "runtimeImageDigest": "sha256:" + "f" * 64,
         "runtimeImageRevision": "1" * 40,
         "runtimeContract": "plane.agent-runtime/v1",
-        "apiImageTag": "plane-agent-api:g4-test",
-        "apiImageDigest": "sha256:" + "0" * 64,
-        "apiSourceRevision": "2" * 40,
-        "apiContract": "plane.operation/v1",
+        "apiArtifact": {
+            "imageTag": "plane-agent-api:g4-test",
+            "imageDigest": "sha256:" + "0" * 64,
+            "sourceRevision": "2" * 40,
+            "contract": "plane.operation/v1",
+        },
     }
     binding = exact_binding(manifest, CANDIDATE)
     import hashlib
@@ -423,10 +422,10 @@ class G4ContractTests(unittest.TestCase):
         manifest, _, _, _ = fixture()
         expected = exact_binding(manifest, CANDIDATE)
         valid = {
-            "imageTag": expected["apiImageTag"],
-            "imageDigest": expected["apiImageDigest"],
-            "sourceRevision": expected["apiSourceRevision"],
-            "contract": expected["apiContract"],
+            "imageTag": expected["apiArtifact"]["imageTag"],
+            "imageDigest": expected["apiArtifact"]["imageDigest"],
+            "sourceRevision": expected["apiArtifact"]["sourceRevision"],
+            "contract": expected["apiArtifact"]["contract"],
             "artifact": "plane-agent-api-g4",
         }
         validate_api_artifact_descriptor(valid, expected)
@@ -444,6 +443,46 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn("check_api_test_image", source)
         self.assertIn("API image digest=${API_TEST_IMAGE_DIGEST}", source)
         self.assertIn("API image source label=${API_SOURCE_REVISION}", source)
+        self.assertIn('"apiArtifact"', source)
+
+    def test_manifest_api_artifact_passes_actual_gitleaks_and_exact_sha_validation(self):
+        manifest_path = TOOLS / "agent-g4-manifest.json"
+        manifest_text = manifest_path.read_text(encoding="utf-8")
+        self.assertNotIn('"apiSourceRevision"', manifest_text)
+        manifest, _, _, _ = fixture()
+        artifact = manifest["pins"]["apiArtifact"]
+        self.assertRegex(artifact["sourceRevision"], r"^[0-9a-f]{40}$")
+        self.assertEqual(exact_binding(manifest, CANDIDATE)["apiArtifact"], artifact)
+        head = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        parent = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", f"{head}^"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        result = subprocess.run(
+            [
+                "gitleaks",
+                "detect",
+                "--no-banner",
+                "--redact",
+                "--source",
+                str(ROOT),
+                "--log-opts",
+                f"{parent}..{head}",
+                "--exit-code",
+                "1",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_hermes_bind_visibility_rejects_unavailable_mount_before_g3(self):
         source = (TOOLS / "verify-agent-g4.sh").read_text(encoding="utf-8")
@@ -591,7 +630,7 @@ class G4ContractTests(unittest.TestCase):
             ("current.planeCommit", lambda value: value["current"].update({"planeCommit": "5f7e27f969b54ab94f0c6a6da9ea6feca27b7e32"})),
             ("current.service.imageDigest", lambda value: value["current"]["services"]["api"].update({"imageDigest": "sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e"})),
             ("previous.planeCommit", lambda value: value["previous"].update({"planeCommit": "6c5ad927b2e31e3d1cd608fc89fbb8a308cc9809"})),
-            ("current.runtime.imageDigest", lambda value: value["current"]["runtime"].update({"imageDigest": "sha256:" + "0" * 64})),
+            ("current.apiArtifact.imageDigest", lambda value: value["current"]["apiArtifact"].update({"imageDigest": "sha256:" + "0" * 64})),
             ("previous.service.imageDigest", lambda value: value["previous"]["services"]["worker"].update({"imageDigest": "sha256:" + "1" * 64})),
         )
         for name, mutate in mutations:

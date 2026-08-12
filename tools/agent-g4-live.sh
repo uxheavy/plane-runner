@@ -33,10 +33,10 @@ RUNTIME_IMAGE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))
 G4_RUNTIME_IMAGE_DIGEST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["runtimeImageDigest"])' "${MANIFEST}")"
 G4_RUNTIME_IMAGE_REVISION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["runtimeImageRevision"])' "${MANIFEST}")"
 G4_RUNTIME_CONTRACT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["runtimeContract"])' "${MANIFEST}")"
-G4_API_IMAGE_TAG="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["apiImageTag"])' "${MANIFEST}")"
-G4_API_IMAGE_DIGEST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["apiImageDigest"])' "${MANIFEST}")"
-G4_API_SOURCE_REVISION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["apiSourceRevision"])' "${MANIFEST}")"
-G4_API_CONTRACT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["apiContract"])' "${MANIFEST}")"
+G4_API_IMAGE_TAG="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["apiArtifact"]["imageTag"])' "${MANIFEST}")"
+G4_API_IMAGE_DIGEST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["apiArtifact"]["imageDigest"])' "${MANIFEST}")"
+G4_API_SOURCE_REVISION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["apiArtifact"]["sourceRevision"])' "${MANIFEST}")"
+G4_API_CONTRACT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["apiArtifact"]["contract"])' "${MANIFEST}")"
 API_IMAGE="${G4_API_IMAGE_TAG}"
 LIVE_PHASE=initialization
 

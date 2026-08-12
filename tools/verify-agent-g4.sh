@@ -25,28 +25,28 @@ API_TEST_IMAGE_TAG="$(python3 - "${MANIFEST}" <<'PY'
 import json
 import sys
 
-print(json.load(open(sys.argv[1], encoding="utf-8"))["pins"]["apiImageTag"])
+print(json.load(open(sys.argv[1], encoding="utf-8"))["pins"]["apiArtifact"]["imageTag"])
 PY
 )"
 API_TEST_IMAGE_DIGEST="$(python3 - "${MANIFEST}" <<'PY'
 import json
 import sys
 
-print(json.load(open(sys.argv[1], encoding="utf-8"))["pins"]["apiImageDigest"])
+print(json.load(open(sys.argv[1], encoding="utf-8"))["pins"]["apiArtifact"]["imageDigest"])
 PY
 )"
 API_SOURCE_REVISION="$(python3 - "${MANIFEST}" <<'PY'
 import json
 import sys
 
-print(json.load(open(sys.argv[1], encoding="utf-8"))["pins"]["apiSourceRevision"])
+print(json.load(open(sys.argv[1], encoding="utf-8"))["pins"]["apiArtifact"]["sourceRevision"])
 PY
 )"
 API_CONTRACT="$(python3 - "${MANIFEST}" <<'PY'
 import json
 import sys
 
-print(json.load(open(sys.argv[1], encoding="utf-8"))["pins"]["apiContract"])
+print(json.load(open(sys.argv[1], encoding="utf-8"))["pins"]["apiArtifact"]["contract"])
 PY
 )"
 API_TEST_IMAGE="${PLANE_API_TEST_IMAGE:-${API_TEST_IMAGE_TAG}}"
@@ -346,10 +346,12 @@ assert manifest["pins"] == {
     "runtimeImageDigest": image_digest,
     "runtimeImageRevision": image_revision,
     "runtimeContract": runtime_contract,
-    "apiImageTag": api_image_tag,
-    "apiImageDigest": api_image_digest,
-    "apiSourceRevision": api_source_revision,
-    "apiContract": api_contract,
+    "apiArtifact": {
+        "imageTag": api_image_tag,
+        "imageDigest": api_image_digest,
+        "sourceRevision": api_source_revision,
+        "contract": api_contract,
+    },
 }
 assert manifest["liveContract"] == {
     "authoritySchema": "tools/agent-g4-live-authority.schema.json",
@@ -366,10 +368,7 @@ assert manifest["liveContract"] == {
         "runtimeImageDigest",
         "runtimeImageRevision",
         "runtimeContract",
-        "apiImageTag",
-        "apiImageDigest",
-        "apiSourceRevision",
-        "apiContract",
+        "apiArtifact",
     ],
     "providerModelSource": "authority.binding.provider",
     "thresholdsSource": "authority.binding.thresholds",
@@ -781,10 +780,12 @@ receipt = {
         "runtimeImageDigest": image_digest,
         "runtimeImageRevision": image_revision,
         "runtimeContract": runtime_contract,
-        "apiImageTag": api_image_tag,
-        "apiImageDigest": api_image_digest,
-        "apiSourceRevision": api_source_revision,
-        "apiContract": api_contract,
+        "apiArtifact": {
+            "imageTag": api_image_tag,
+            "imageDigest": api_image_digest,
+            "sourceRevision": api_source_revision,
+            "contract": api_contract,
+        },
     },
     "actionCounters": {
         "provider_requests": 0,

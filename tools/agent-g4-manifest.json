@@ -42,10 +42,12 @@
     "runtimeImageDigest": "sha256:b4a701905bae50bef643ef67c3883ef74d8f6ddcde2cf669d1dab50c44999b0c",
     "runtimeImageRevision": "c47ddfe6174ecd6d66257d8fedbd5d425c7f3172",
     "runtimeContract": "plane.agent-runtime/v1",
-    "apiImageTag": "plane-agent-api:g4-e34f1763",
-    "apiImageDigest": "sha256:6f6a09b64d938c7a76a91ccb57365d67ef76604740634228b9e6a15a8f3a212a",
-    "apiSourceRevision": "e34f17639e80b665696ac821bfed5ce6350ee32c",
-    "apiContract": "plane.operation/v1"
+    "apiArtifact": {
+      "imageTag": "plane-agent-api:g4-e34f1763",
+      "imageDigest": "sha256:6f6a09b64d938c7a76a91ccb57365d67ef76604740634228b9e6a15a8f3a212a",
+      "sourceRevision": "e34f17639e80b665696ac821bfed5ce6350ee32c",
+      "contract": "plane.operation/v1"
+    }
   },
   "liveContract": {
     "authoritySchema": "tools/agent-g4-live-authority.schema.json",
@@ -62,10 +64,7 @@
       "runtimeImageDigest",
       "runtimeImageRevision",
       "runtimeContract",
-      "apiImageTag",
-      "apiImageDigest",
-      "apiSourceRevision",
-      "apiContract"
+      "apiArtifact"
     ],
     "providerModelSource": "authority.binding.provider",
     "thresholdsSource": "authority.binding.thresholds",

@@ -70,10 +70,12 @@ def _binding() -> dict[str, str]:
         "runtimeImageDigest": os.environ["G4_RUNTIME_IMAGE_DIGEST"],
         "runtimeImageRevision": os.environ["G4_RUNTIME_IMAGE_REVISION"],
         "runtimeContract": os.environ["G4_RUNTIME_CONTRACT"],
-        "apiImageTag": os.environ["G4_API_IMAGE_TAG"],
-        "apiImageDigest": os.environ["G4_API_IMAGE_DIGEST"],
-        "apiSourceRevision": os.environ["G4_API_SOURCE_REVISION"],
-        "apiContract": os.environ["G4_API_CONTRACT"],
+        "apiArtifact": {
+            "imageTag": os.environ["G4_API_IMAGE_TAG"],
+            "imageDigest": os.environ["G4_API_IMAGE_DIGEST"],
+            "sourceRevision": os.environ["G4_API_SOURCE_REVISION"],
+            "contract": os.environ["G4_API_CONTRACT"],
+        },
     }
 
 
@@ -102,10 +104,7 @@ def build_failure_evidence(
         "runtimeImageDigest",
         "runtimeImageRevision",
         "runtimeContract",
-        "apiImageTag",
-        "apiImageDigest",
-        "apiSourceRevision",
-        "apiContract",
+        "apiArtifact",
     )
     failure_phases = {
         "initialization",
@@ -160,9 +159,9 @@ def build_failure_evidence(
         if not isinstance(value, str) or len(value.encode("utf-8")) > 128:
             return "unavailable"
         hexadecimal = "0123456789abcdef"
-        if key in {"candidateCommit", "g3Baseline", "hermesCommit", "mcpGitlink", "sdkGitlink", "runtimeImageRevision", "apiSourceRevision"}:
+        if key in {"candidateCommit", "g3Baseline", "hermesCommit", "mcpGitlink", "sdkGitlink", "runtimeImageRevision"}:
             return value if len(value) == 40 and all(char in hexadecimal for char in value) else "unavailable"
-        if key in {"runtimeImageDigest", "apiImageDigest"}:
+        if key == "runtimeImageDigest":
             digest_prefix, separator, digest = value.partition(":")
             return (
                 value
@@ -183,8 +182,24 @@ def build_failure_evidence(
     bounded_binding = {
         key: bounded_binding_value(key, binding[key])
         for key in binding_fields
-        if isinstance(binding, dict) and key in binding
+        if isinstance(binding, dict) and key in binding and key != "apiArtifact"
     }
+    if isinstance(binding, dict) and "apiArtifact" in binding:
+        artifact = binding["apiArtifact"]
+        if not isinstance(artifact, dict) or set(artifact) != {"imageTag", "imageDigest", "sourceRevision", "contract"}:
+            bounded_binding["apiArtifact"] = {
+                "imageTag": "unavailable",
+                "imageDigest": "unavailable",
+                "sourceRevision": "unavailable",
+                "contract": "unavailable",
+            }
+        else:
+            bounded_binding["apiArtifact"] = {
+                "imageTag": bounded_binding_value("apiImageTag", artifact["imageTag"]),
+                "imageDigest": bounded_binding_value("runtimeImageDigest", artifact["imageDigest"]),
+                "sourceRevision": bounded_binding_value("runtimeImageRevision", artifact["sourceRevision"]),
+                "contract": bounded_binding_value("apiContract", artifact["contract"]),
+            }
     attempts = []
     for row in list(provider_attempts or [])[:32]:
         if not isinstance(row, dict):
