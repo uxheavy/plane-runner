@@ -12,7 +12,7 @@
     "compatibilityRule": "The previous API, worker, beat, supervisor, and runtime contract ignore 0142 provider-attempt evidence; the database remains at 0142 and reconciliation reads durable effect, audit, outcome, quota, and provider-attempt state before any replay."
   },
   "current": {
-    "planeCommit": "6ec5a6e4a666f886b80132c98d15cb431de277bd",
+    "planeCommit": "f35e8db6327529c2f93be1e998cae4e4493bd94f",
     "migrationLeaf": "db.0142_runtime_provider_attempts",
     "runtime": {
       "hermesCommit": "114eabf9d807b659e36d767e4de46ca056297ccb",

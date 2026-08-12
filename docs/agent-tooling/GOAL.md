@@ -7,7 +7,7 @@ Build and independently verify one complete, production-ready Plane Agent system
 This goal covers the full Plane Agent control plane and the hidden execution service. It does not require chat, composer, thread, inbox, sidecar, transcript, or conversation-navigation UI.
 
 Current remediation binding: the Plane control-plane source correction is
-`6ec5a6e4a666f886b80132c98d15cb431de277bd`; the executable API source and
+`f35e8db6327529c2f93be1e998cae4e4493bd94f`; the executable API source and
 immutable API image remain bound to `796415aca55987aee55197e3d3d56b1507be3e53`.
 The rollback service revision fields remain bound to that executable API source
 for API services and to `c47ddfe6174ecd6d66257d8fedbd5d425c7f3172` for
