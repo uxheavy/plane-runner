@@ -3,7 +3,7 @@
   "candidateBinding": {
     "mode": "exact-single-child",
     "acceptedG3Baseline": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
-    "parentCommit": "0d3100f477bf64ca4f6287efb97c42afa59918f1",
+    "parentCommit": "8b684d3e293684c03f61c7be65bb27ccdab6fca1",
     "candidateCommitSource": "git-head-with-exact-parent",
     "expectedCandidateSource": "external-operator-input:PLANE_G4_EXPECTED_CANDIDATE",
     "rejectDescendants": true
@@ -45,9 +45,9 @@
     "runtimeImageRevision": "c47ddfe6174ecd6d66257d8fedbd5d425c7f3172",
     "runtimeContract": "plane.agent-runtime/v1",
     "apiArtifact": {
-      "imageTag": "plane-agent-api:g4-0d3100f4",
-      "imageDigest": "sha256:84038637524ae8233050d7c26a0be2c4b9326800f5b3c59e2851378047d88077",
-      "sourceRevision": "0d3100f477bf64ca4f6287efb97c42afa59918f1",
+      "imageTag": "plane-agent-api:g4-8b684d3e",
+      "imageDigest": "sha256:73b2a3149818ae78271b86823defc4745013e415530064ed6bdebc4cee53edbd",
+      "sourceRevision": "8b684d3e293684c03f61c7be65bb27ccdab6fca1",
       "contract": "plane.operation/v1"
     }
   },
