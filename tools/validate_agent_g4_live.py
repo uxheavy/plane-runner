@@ -427,6 +427,60 @@ def validate_rollback_fixture(fixture_path: Path, root: Path, manifest: dict[str
     return {"current": current, "previous": previous, "acceptedG3": accepted_g3}
 
 
+def offline_evidence_sha256(path: Path) -> str:
+    """Compute the canonical digest for a committed offline evidence file."""
+
+    try:
+        contents = path.read_bytes()
+    except OSError as exc:
+        raise ContractError("offline_evidence_file_unreadable") from exc
+    return hashlib.sha256(contents).hexdigest()
+
+
+def offline_evidence_hashes(manifest: dict[str, Any], root: Path) -> dict[str, str]:
+    """Materialize committed offline evidence digests through the validator owner."""
+
+    entries = _object(_required(manifest, "offlineEvidence", "manifest"), "manifest_offlineEvidence")
+    hashes: dict[str, str] = {}
+    for name, value in entries.items():
+        evidence = _object(value, f"offline_evidence_{name}")
+        relative = _required(evidence, "path", f"offline_evidence_{name}")
+        if not isinstance(relative, str) or not relative:
+            raise ContractError(f"offline_evidence_{name}_path_invalid")
+        path = root / relative
+        if not path.is_file():
+            raise ContractError(f"offline_evidence_{name}_missing")
+        hashes[name] = offline_evidence_sha256(path)
+    return hashes
+
+
+def validate_offline_evidence(manifest: dict[str, Any], root: Path) -> dict[str, str]:
+    """Require every manifest digest to equal its exact committed evidence bytes."""
+
+    entries = _object(_required(manifest, "offlineEvidence", "manifest"), "manifest_offlineEvidence")
+    actual_hashes = offline_evidence_hashes(manifest, root)
+    for name, value in entries.items():
+        evidence = _object(value, f"offline_evidence_{name}")
+        expected = _required(evidence, "sha256", f"offline_evidence_{name}")
+        _hash(expected, f"offline_evidence_{name}_sha256")
+        _exact(actual_hashes[name], expected, f"offline_evidence_{name}_sha256")
+        test_path_value = _required(evidence, "testPath", f"offline_evidence_{name}")
+        if not isinstance(test_path_value, str) or not test_path_value:
+            raise ContractError(f"offline_evidence_{name}_testPath_invalid")
+        test_path = root / "apps/api" / test_path_value
+        if not test_path.is_file():
+            raise ContractError(f"offline_evidence_{name}_test_missing")
+        text = test_path.read_text(encoding="utf-8")
+        if "testName" in evidence:
+            test_name = evidence["testName"]
+            if not isinstance(test_name, str) or f"def {test_name}" not in text:
+                raise ContractError(f"offline_evidence_{name}_test_missing_{test_name}")
+        for marker in evidence.get("requiredMarkers", []):
+            if marker not in text:
+                raise ContractError(f"offline_evidence_{name}_marker_missing_{marker}")
+    return actual_hashes
+
+
 def _thresholds(value: Any, name: str) -> dict[str, float]:
     thresholds = _object(value, name)
     if set(thresholds) != set(THRESHOLD_FIELDS):

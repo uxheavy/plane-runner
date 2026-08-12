@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import copy
+import hashlib
 import importlib.util
 import json
 import re
@@ -29,6 +30,8 @@ from validate_agent_g4_live import (  # noqa: E402
     candidate_has_exact_parent,
     exact_binding,
     validate_api_artifact_descriptor,
+    offline_evidence_hashes,
+    validate_offline_evidence,
     validate_runtime_provider_environment,
     validate_rollback_fixture,
     validate_rollback_runbook,
@@ -753,6 +756,19 @@ class G4ContractTests(unittest.TestCase):
             result["acceptedG3"]["imageDigest"],
             "sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e",
         )
+
+    def test_offline_evidence_hash_materialization_is_exact_and_fail_closed(self):
+        fixture_path = ROOT / MANIFEST["offlineEvidence"]["rollback"]["path"]
+        actual = hashlib.sha256(fixture_path.read_bytes()).hexdigest()
+        self.assertEqual(actual, "312bf94f854e6cebf6d66576e51cf294e105228abf55ebf9192071633029797a")
+        self.assertEqual(offline_evidence_hashes(MANIFEST, ROOT)["rollback"], actual)
+        self.assertEqual(MANIFEST["offlineEvidence"]["rollback"]["sha256"], actual)
+        validate_offline_evidence(MANIFEST, ROOT)
+
+        stale = copy.deepcopy(MANIFEST)
+        stale["offlineEvidence"]["rollback"]["sha256"] = "0" * 64
+        with self.assertRaisesRegex(ContractError, "offline_evidence_rollback_sha256_mismatch"):
+            validate_offline_evidence(stale, ROOT)
 
     def test_rollback_stale_and_arbitrary_pin_mutations_are_rejected(self):
         fixture_path = ROOT / "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json"

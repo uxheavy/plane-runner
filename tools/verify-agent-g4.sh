@@ -310,7 +310,6 @@ check_runtime_image() {
 
 validate_manifest() {
     python3 - "${MANIFEST}" "${ROOT_DIR}" "${CANDIDATE_COMMIT}" "${G3_BASE_COMMIT}" "${CANDIDATE_PARENT_COMMIT}" "${MCP_COMMIT}" "${SDK_COMMIT}" "${HERMES_COMMIT}" "${RUNTIME_IMAGE_TAG}" "${RUNTIME_IMAGE_DIGEST}" "${RUNTIME_IMAGE_REVISION}" "${RUNTIME_CONTRACT}" "${API_TEST_IMAGE_TAG}" "${API_TEST_IMAGE_DIGEST}" "${API_SOURCE_REVISION}" "${API_CONTRACT}" <<'PY'
-import hashlib
 import json
 import subprocess
 import sys
@@ -320,7 +319,7 @@ manifest_path, root_value, candidate, g3, candidate_parent, mcp, sdk, hermes, im
 root = Path(root_value)
 manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
 sys.path.insert(0, str(root / "tools"))
-from validate_agent_g4_live import validate_rollback_fixture
+from validate_agent_g4_live import validate_offline_evidence, validate_rollback_fixture
 
 assert manifest["manifestVersion"] == "plane-agent-g4/v1"
 assert manifest["candidateBinding"] == {
@@ -421,18 +420,7 @@ for relative in manifest["pytestPaths"]:
     text = (root / "apps/api" / relative).read_text(encoding="utf-8")
     for marker in ("pytest.skip", "pytest.xfail", "@pytest.mark.xfail", "importorskip"):
         assert marker not in text, f"suppression marker in required G4 test {relative}: {marker}"
-for name, evidence in manifest["offlineEvidence"].items():
-    path = root / evidence["path"]
-    assert path.exists(), evidence["path"]
-    contents = path.read_bytes()
-    assert hashlib.sha256(contents).hexdigest() == evidence["sha256"], f"offline evidence changed: {name}"
-    test_path = root / "apps/api" / evidence["testPath"]
-    assert test_path.exists(), evidence["testPath"]
-    text = test_path.read_text(encoding="utf-8")
-    if "testName" in evidence:
-        assert f"def {evidence['testName']}" in text, f"required offline test missing: {evidence['testName']}"
-    for marker in evidence.get("requiredMarkers", []):
-        assert marker in text, f"required offline marker missing: {marker}"
+validate_offline_evidence(manifest, root)
 validate_rollback_fixture(root / manifest["rollbackBinding"]["fixture"], root, manifest)
 print(f"manifest=validated stages={len(manifest['stages'])} pytest_paths={len(manifest['pytestPaths'])} retired_absent={len(manifest['retiredDocuments'])} offline_evidence={len(manifest['offlineEvidence'])} candidate_parent={candidate_parent}")
 PY
