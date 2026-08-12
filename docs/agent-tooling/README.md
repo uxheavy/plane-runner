@@ -4,12 +4,17 @@ This directory contains the compact execution control surface for the non-UI Pla
 
 ## Current status
 
-G0 through G3 are complete. The previously accepted canonical offline G4 wrapper remains the baseline; the current control-plane source correction is `cb33c80f3c533daa20647b5e078e5e642da47f64` and its exact single-child wrapper still requires fresh offline proof before it can replace that baseline. The executable API source remains `796415aca55987aee55197e3d3d56b1507be3e53`, with API image tag `plane-agent-api:g4-796415ac` and image ID `sha256:9f01136f7878ef14b44cccb54aaf5b962b5a6a0a2c9da4f311f9b9c4cdbf8d29`; the runtime image remains bound to image-source commit `c47ddfe6174ecd6d66257d8fedbd5d425c7f3172`. The remediation uses the external `PLANE_G4_EXPECTED_CANDIDATE` authority, one shared G3/G4 verifier lock with an inherited descriptor, Docker-visible Hermes preflight, and a retained sanitized receipt. The latest authorized live attempt remains `outcome_unknown` and will not be blindly replayed; this offline repair made no provider request or retry. Live G4 and staged G5 remain incomplete. No chat UI is in scope.
+G0 through G3 are complete. The previously accepted canonical offline G4 wrapper remains the baseline; the current unaccepted remediation is based on source correction `c1e6fbf999cb0d1bc7bf29ccd09472c43e2d3ce0` and its one exact metadata-wrapper child still requires fresh offline proof before it can replace that baseline. The rebuilt API artifact is `plane-agent-api:g4-c1e6fbf9` at `sha256:84df816b0f15acf87858e677271ea64b9b3cc3d6212f2dc7fe3c09177aa2417b`, and the rebuilt runtime artifact is `plane-agent-runtime:hermes-114eabf9-g4-c1e6fbf9` at `sha256:225964fb13c92605675f2a676bb09048ce7effaeae11c4bfba7bb6cfe8d761b9`; both are source-bound to `c1e6fbf999cb0d1bc7bf29ccd09472c43e2d3ce0`. The remediation uses the external `PLANE_G4_EXPECTED_CANDIDATE` authority, one shared G3/G4 verifier lock with an inherited descriptor, Docker-visible Hermes preflight, and a retained sanitized receipt. The latest authorized live canary attempt remains permanently `outcome_unknown`; its blocked-canary receipt SHA-256 is `20be555eb93cac98a53ea3c0be1f56d3b6642179b77d9b6acf76ffd23dc76c7a`. A fresh explicitly authorized run is required; that attempt must not be replayed. This offline repair made no provider request or retry. Live G4 and staged G5 remain incomplete. No chat UI is in scope.
 
-The rollback fixture deliberately separates `current.planeCommit` (the
-control-plane source correction) from each service's executable artifact
-revision: API services remain `796415aca55987aee55197e3d3d56b1507be3e53`, and
-agent-runtime remains `c47ddfe6174ecd6d66257d8fedbd5d425c7f3172`.
+The rollback fixture deliberately separates the current candidate from the
+previous last-known-good artifacts. `current.planeCommit` is the source
+correction `c1e6fbf999cb0d1bc7bf29ccd09472c43e2d3ce0`; current API services use
+the rebuilt API artifact revision/digest above, and `agent-runtime` uses the
+rebuilt runtime artifact revision/digest above. The independent `previous`
+section retains the accepted G3 service artifact digest
+`sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e`.
+The validator rejects cross-mixing between these current and previous
+provenance bindings.
 
 The implementation authorization is local-only. Live G4 and staged G5 remain
 subject to their explicit authority, canary, safety-stop, rollback, and rollout

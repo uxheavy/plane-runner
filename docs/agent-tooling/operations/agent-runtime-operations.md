@@ -327,37 +327,34 @@ docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose
 
 `apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` is the pin
 manifest. The current Plane deployable service candidate is the exact
-repaired runner source correction
-`cb33c80f3c533daa20647b5e078e5e642da47f64`; the final offline evidence
-wrapper is its exact single child. The executable API artifact remains source-bound to
-`796415aca55987aee55197e3d3d56b1507be3e53`. The previously accepted G3 candidate is Plane commit `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
+runtime-contract source correction
+`c1e6fbf999cb0d1bc7bf29ccd09472c43e2d3ce0`; the final offline evidence
+wrapper is its exact single child. The current API artifact is immutable and
+source-bound to `c1e6fbf999cb0d1bc7bf29ccd09472c43e2d3ce0`; the previously accepted G3 candidate is Plane commit `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
 The current binding carries Hermes commit
 `114eabf9d807b659e36d767e4de46ca056297ccb`, MCP gitlink
 `2dc152e136d7ad952b901e5fe9364a37487297ba`, SDK gitlink
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`, runtime image tag
-`plane-agent-runtime:hermes-114eabf9-g4-c47ddfe`, runtime image digest
-`sha256:b4a701905bae50bef643ef67c3883ef74d8f6ddcde2cf669d1dab50c44999b0c`,
-runtime revision/source revision `c47ddfe6174ecd6d66257d8fedbd5d425c7f3172`, and runtime
-contract `plane.agent-runtime/v1`. The Plane service revision above is the
-repaired control-plane source candidate; its executable API artifact source is
-`796415aca55987aee55197e3d3d56b1507be3e53`. The runtime image/runtimeRevision source is
-`c47ddfe6174ecd6d66257d8fedbd5d425c7f3172`, which was used to build the
-candidate image. The wrapper carries only the existing binding, fixture, and
-evidence documentation. The API artifact is separately immutable and source
-bound. API image tag: `plane-agent-api:g4-796415ac`. API image digest:
-`sha256:9f01136f7878ef14b44cccb54aaf5b962b5a6a0a2c9da4f311f9b9c4cdbf8d29`.
-API source revision/image label: `796415aca55987aee55197e3d3d56b1507be3e53`.
-API contract: `plane.operation/v1`. The wrapper carries these exact values from
-the immutable API-image build. G3, G4, and
-the live helper execute the image-contained `/workspace/apps/api` tree; they
-do not bind-mount a newer host API source tree. API, worker, `beat-worker`,
-supervisor, and `agent-runtime` each switch their service revision and image
-digest to the corresponding current value in that manifest; the operation services retain
-`plane.operation/v1` and the runtime services retain `plane.agent-runtime/v1`.
-Here, `current.planeCommit` is the control-plane source correction; the
-service revision fields intentionally remain executable artifact revisions:
-`796415aca55987aee55197e3d3d56b1507be3e53` for API services and
-`c47ddfe6174ecd6d66257d8fedbd5d425c7f3172` for agent-runtime.
+`plane-agent-runtime:hermes-114eabf9-g4-c1e6fbf9`, runtime image digest
+`sha256:225964fb13c92605675f2a676bb09048ce7effaeae11c4bfba7bb6cfe8d761b9`,
+runtime revision/source revision `c1e6fbf999cb0d1bc7bf29ccd09472c43e2d3ce0`, and runtime
+contract `plane.agent-runtime/v1`. The current API artifact is tag
+`plane-agent-api:g4-c1e6fbf9` with image digest
+`sha256:84df816b0f15acf87858e677271ea64b9b3cc3d6212f2dc7fe3c09177aa2417b` and
+source revision/image label `c1e6fbf999cb0d1bc7bf29ccd09472c43e2d3ce0`.
+API image tag: `plane-agent-api:g4-c1e6fbf9`. API image digest:
+`sha256:84df816b0f15acf87858e677271ea64b9b3cc3d6212f2dc7fe3c09177aa2417b`.
+API source revision remains the exact source revision/image label above.
+API contract: `plane.operation/v1`.
+The wrapper carries these exact values from the immutable image builds. G3,
+G4, and the live helper execute the image-contained `/workspace/apps/api` tree;
+they do not bind-mount a newer host API source tree. API, worker,
+`beat-worker`, supervisor, and `agent-runtime` each use the corresponding
+current artifact revision and image digest in the manifest. The Plane service revision above is the current executable artifact revision; the runtime image/runtimeRevision source is `c1e6fbf999cb0d1bc7bf29ccd09472c43e2d3ce0`. Here,
+`current.planeCommit` is the control-plane source correction and the current
+service artifact revisions identify the rebuilt executable images; the
+`previous` rollback section independently retains the last known-good G3
+service revisions and digests.
 The previous services use immutable image digest
 `sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e`,
 the image pin recorded by the accepted G3 verifier. The rollback reasserts
@@ -496,7 +493,10 @@ runtime test containers and verifies representative source and Git metadata
 are readable. A disposable checkout may be marked with
 `PLANE_G4_DISPOSABLE_HERMES_ROOT=1` only when its path matches
 `ROOT_DIR/tmp/plane-g4-hermes-*`; the existing G4 cleanup then removes that
-exact non-symlink directory and verifies it is gone.
+exact non-symlink directory and verifies it is gone. The checkout must retain
+the `https://github.com/uxheavy/hermes-agent.git` remote; a local filesystem
+clone is not an accepted provenance source even when its commit and worktree
+are otherwise exact.
 
 G4 requires the operator to provide the exact final wrapper SHA through
 `PLANE_G4_EXPECTED_CANDIDATE`. The verifier, live authority validator, and
@@ -509,6 +509,10 @@ Set `PLANE_G4_RECEIPT_PATH` to retain the sanitized verifier receipt and its
 `.sha256` sidecar outside disposable cleanup. The receipt contains stage
 result lines and exact source, wrapper, image, Hermes, MCP, SDK, and runtime
 contract pins, but no raw logs, secrets, credentials, or provider payloads.
+The previously blocked live canary receipt remains retained by SHA-256
+`20be555eb93cac98a53ea3c0be1f56d3b6642179b77d9b6acf76ffd23dc76c7a`.
+That attempt is permanently `outcome_unknown`; it requires a fresh explicitly
+authorized run and must not be replayed.
 
 The active line has no dispatch-diagnostic JSON field from donor ADR-0011;
 its equivalent diagnostic ownership is the Plane-owned

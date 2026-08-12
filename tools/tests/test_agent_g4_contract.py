@@ -847,12 +847,16 @@ class G4ContractTests(unittest.TestCase):
             ),
             (
                 "api-service-artifact",
-                lambda value: value["current"]["services"]["api"].update({"revision": value["current"]["planeCommit"]}),
+                lambda value: value["current"]["services"]["api"].update(
+                    {"revision": value["previous"]["services"]["api"]["revision"]}
+                ),
                 "rollback_current_api_revision_mismatch",
             ),
             (
                 "runtime-service-artifact",
-                lambda value: value["current"]["services"]["agent-runtime"].update({"revision": value["current"]["planeCommit"]}),
+                lambda value: value["current"]["services"]["agent-runtime"].update(
+                    {"revision": value["previous"]["services"]["agent-runtime"]["revision"]}
+                ),
                 "rollback_current_agent-runtime_revision_mismatch",
             ),
         )
@@ -894,7 +898,9 @@ class G4ContractTests(unittest.TestCase):
             ("supervisor-as-runtime", lambda value: value["current"]["services"]["supervisor"].update({"artifactKind": "runtime"})),
             (
                 "api-source-runtime",
-                lambda value: value["current"]["services"]["api"].update({"artifactSourceRevision": value["current"]["runtime"]["runtimeRevision"]}),
+                lambda value: value["current"]["services"]["api"].update(
+                    {"artifactSourceRevision": value["previous"]["services"]["api"]["artifactSourceRevision"]}
+                ),
             ),
         )
         for name, mutate in mutations:
@@ -905,6 +911,45 @@ class G4ContractTests(unittest.TestCase):
                     path = Path(directory) / "rollback.json"
                     path.write_text(json.dumps(value), encoding="utf-8")
                     with self.assertRaisesRegex(ContractError, "rollback_current_"):
+                        validate_rollback_fixture(path, ROOT, MANIFEST)
+
+    def test_rollback_current_and_previous_provenance_cannot_be_cross_mixed(self):
+        fixture_path = ROOT / "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json"
+        original = json.loads(fixture_path.read_text(encoding="utf-8"))
+        mutations = (
+            (
+                "current-uses-previous-api-digest",
+                lambda value: value["current"]["services"]["api"].update(
+                    {"imageDigest": value["previous"]["services"]["api"]["imageDigest"]}
+                ),
+                "rollback_current_api_imageDigest_mismatch",
+            ),
+            (
+                "previous-uses-current-api-digest",
+                lambda value: value["previous"]["services"]["api"].update(
+                    {"imageDigest": value["current"]["services"]["api"]["imageDigest"]}
+                ),
+                "rollback_previous_api_imageDigest_mismatch",
+            ),
+            (
+                "current-uses-previous-plane-commit",
+                lambda value: value["current"].update({"planeCommit": value["previous"]["planeCommit"]}),
+                "rollback_current_planeCommit_mismatch",
+            ),
+            (
+                "previous-uses-current-plane-commit",
+                lambda value: value["previous"].update({"planeCommit": value["current"]["planeCommit"]}),
+                "rollback_previous_planeCommit_mismatch",
+            ),
+        )
+        for name, mutate, reason in mutations:
+            with self.subTest(name=name):
+                value = copy.deepcopy(original)
+                mutate(value)
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "rollback.json"
+                    path.write_text(json.dumps(value), encoding="utf-8")
+                    with self.assertRaisesRegex(ContractError, reason):
                         validate_rollback_fixture(path, ROOT, MANIFEST)
 
     def test_rollback_runbook_examples_are_pin_bound(self):
