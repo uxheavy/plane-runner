@@ -357,6 +357,24 @@ The previous services use immutable image digest
 the image pin recorded by the accepted G3 verifier. The rollback reasserts
 these immutable pins rather than accepting a mutable tag.
 
+The canonical API artifact build uses `apps/api` as its Docker context because
+`apps/api/Dockerfile.g4` copies that context to `/workspace/apps/api`:
+
+```sh
+docker build -f apps/api/Dockerfile.g4 \
+  --build-arg BASE_API_IMAGE=plane-g3-external-client-api-tests:prepared \
+  --build-arg PLANE_API_SOURCE_REVISION="$PLANE_API_SOURCE_REVISION" \
+  --build-arg PLANE_API_IMAGE_TAG="$PLANE_API_IMAGE_TAG" \
+  apps/api
+```
+
+The Dockerfile rejects a repository-root context before labeling an artifact,
+requires the executable `manage.py`/`plane` tree without `apps/api` nesting,
+checks exact SHA-256 values for the readback, admin, corruption-regression,
+and provider-configuration sources, and proves image dependencies with
+network-disabled imports. The verifier repeats the executable-path, digest,
+full source-label, contract-label, and artifact-label checks.
+
 For final-wrapper integration, the one canonical current-parent field is
 `tools/agent-g4-manifest.json:candidateBinding.parentCommit`. Set it to the
 wrapper’s immediate parent after all implementation lanes are integrated; the

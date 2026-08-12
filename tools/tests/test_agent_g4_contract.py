@@ -493,6 +493,21 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn("API image source label=${API_SOURCE_REVISION}", source)
         self.assertIn('"apiArtifact"', source)
 
+    def test_api_image_builder_rejects_repo_root_and_requires_apps_api_context(self):
+        dockerfile = (ROOT / "apps/api/Dockerfile.g4").read_text(encoding="utf-8")
+        self.assertTrue((ROOT / "apps/api/manage.py").is_file())
+        self.assertFalse((ROOT / "manage.py").exists())
+        self.assertIn("COPY . /workspace/apps/api", dockerfile)
+        self.assertIn('root / "manage.py"', dockerfile)
+        self.assertIn('root / "plane"', dockerfile)
+        self.assertIn('root / "apps/api"', dockerfile)
+        self.assertIn("repository-root build context is not accepted", dockerfile)
+        self.assertIn("PLANE_API_READBACK_SHA256", dockerfile)
+        self.assertIn("PLANE_API_CORRUPTION_TEST_SHA256", dockerfile)
+        self.assertIn('python -c "import django, psycopg, pytest"', dockerfile)
+        self.assertIn("org.uxheavy.plane.api.source.readback.sha256", dockerfile)
+        self.assertLess(dockerfile.index("repository-root build context is not accepted"), dockerfile.index("LABEL "))
+
     def test_manifest_api_artifact_passes_actual_gitleaks_and_exact_sha_validation(self):
         manifest_path = TOOLS / "agent-g4-manifest.json"
         manifest_text = manifest_path.read_text(encoding="utf-8")
