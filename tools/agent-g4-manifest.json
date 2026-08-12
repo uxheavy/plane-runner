@@ -3,7 +3,7 @@
   "candidateBinding": {
     "mode": "exact-single-child",
     "acceptedG3Baseline": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
-    "parentCommit": "8c7c01fcf999567861591905e49a507818bcd641",
+    "parentCommit": "0d3100f477bf64ca4f6287efb97c42afa59918f1",
     "candidateCommitSource": "git-head-with-exact-parent",
     "expectedCandidateSource": "external-operator-input:PLANE_G4_EXPECTED_CANDIDATE",
     "rejectDescendants": true
@@ -43,9 +43,9 @@
     "runtimeImageRevision": "c47ddfe6174ecd6d66257d8fedbd5d425c7f3172",
     "runtimeContract": "plane.agent-runtime/v1",
     "apiArtifact": {
-      "imageTag": "plane-agent-api:g4-8c7c01fc",
-      "imageDigest": "sha256:5f08a00fa24be7d1b1a37093da008cda59e68241f6bf29a4997fb448a6d1acc7",
-      "sourceRevision": "8c7c01fcf999567861591905e49a507818bcd641",
+      "imageTag": "plane-agent-api:g4-0d3100f4",
+      "imageDigest": "sha256:84038637524ae8233050d7c26a0be2c4b9326800f5b3c59e2851378047d88077",
+      "sourceRevision": "0d3100f477bf64ca4f6287efb97c42afa59918f1",
       "contract": "plane.operation/v1"
     }
   },
@@ -163,7 +163,7 @@
     },
     "rollback": {
       "path": "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json",
-      "sha256": "e3c39bddc01fe7db7c7eeefe4367ce6e26003981eb712589706fd1ab62e675f6",
+      "sha256": "af876bb11283e86e4018d87a6cfd412a954eea5a3fc416f02f74cad1d0cdc1d7",
       "testPath": "plane/tests/contract/api/test_agent_g4_rollback_drill.py",
       "requiredOutputFields": [
         "externalWrites",
