@@ -12,7 +12,7 @@
     "compatibilityRule": "The previous API, worker, beat, supervisor, and runtime contract ignore 0142 provider-attempt evidence; the database remains at 0142 and reconciliation reads durable effect, audit, outcome, quota, and provider-attempt state before any replay."
   },
   "current": {
-    "planeCommit": "796415aca55987aee55197e3d3d56b1507be3e53",
+    "planeCommit": "6ec5a6e4a666f886b80132c98d15cb431de277bd",
     "migrationLeaf": "db.0142_runtime_provider_attempts",
     "runtime": {
       "hermesCommit": "114eabf9d807b659e36d767e4de46ca056297ccb",
@@ -59,7 +59,7 @@
         "contract": "plane.agent-runtime/v1"
       },
       "agent-runtime": {
-        "revision": "796415aca55987aee55197e3d3d56b1507be3e53",
+        "revision": "c47ddfe6174ecd6d66257d8fedbd5d425c7f3172",
         "imageDigest": "sha256:b4a701905bae50bef643ef67c3883ef74d8f6ddcde2cf669d1dab50c44999b0c",
         "artifactKind": "runtime",
         "artifactSourceRevision": "c47ddfe6174ecd6d66257d8fedbd5d425c7f3172",
