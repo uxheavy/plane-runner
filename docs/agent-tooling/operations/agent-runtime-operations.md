@@ -325,7 +325,7 @@ docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose
 `apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` is the pin
 manifest. The current Plane deployable service candidate is the exact
 repaired runner source correction
-`e9010dec4adde127b4a7249b06efdd1356e3628e`; the final offline evidence
+`e34f17639e80b665696ac821bfed5ce6350ee32c`; the final offline evidence
 wrapper is its exact single child. The previously accepted G3 candidate is Plane commit `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
 The current binding carries Hermes commit
 `114eabf9d807b659e36d767e4de46ca056297ccb`, MCP gitlink
@@ -339,9 +339,9 @@ repaired source candidate; the runtime image/runtimeRevision source is
 `c47ddfe6174ecd6d66257d8fedbd5d425c7f3172`, which was used to build the
 candidate image. The wrapper carries only the existing binding, fixture, and
 evidence documentation. The API artifact is separately immutable and source
-bound. API image tag: `plane-agent-api:g4-pending-source`. API image digest:
-`sha256:0000000000000000000000000000000000000000000000000000000000000000`.
-API source revision/image label: `0000000000000000000000000000000000000000`.
+bound. API image tag: `plane-agent-api:g4-e34f1763`. API image digest:
+`sha256:6f6a09b64d938c7a76a91ccb57365d67ef76604740634228b9e6a15a8f3a212a`.
+API source revision/image label: `e34f17639e80b665696ac821bfed5ce6350ee32c`.
 API contract: `plane.operation/v1`. The final wrapper replaces these pending values with the
 digest and source revision produced by the exact API-image build. G3, G4, and
 the live helper execute the image-contained `/workspace/apps/api` tree; they
