@@ -28,6 +28,7 @@ from validate_agent_g4_live import (  # noqa: E402
     ContractError,
     candidate_has_exact_parent,
     exact_binding,
+    validate_api_artifact_descriptor,
     validate_rollback_fixture,
     validate_rollback_runbook,
     validate_files,
@@ -53,6 +54,10 @@ BINDING_KEYS = (
     "runtimeImageDigest",
     "runtimeImageRevision",
     "runtimeContract",
+    "apiImageTag",
+    "apiImageDigest",
+    "apiSourceRevision",
+    "apiContract",
 )
 
 
@@ -67,6 +72,10 @@ def fixture() -> tuple[dict, dict, dict, str]:
         "runtimeImageDigest": "sha256:" + "f" * 64,
         "runtimeImageRevision": "1" * 40,
         "runtimeContract": "plane.agent-runtime/v1",
+        "apiImageTag": "plane-agent-api:g4-test",
+        "apiImageDigest": "sha256:" + "0" * 64,
+        "apiSourceRevision": "2" * 40,
+        "apiContract": "plane.operation/v1",
     }
     binding = exact_binding(manifest, CANDIDATE)
     import hashlib
@@ -376,6 +385,65 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn("actual=lock_held_by_another_process", contender.stderr)
         self.assertEqual(holder_stdout, "")
         self.assertEqual(contender.stdout, "")
+
+    def test_preseeded_lock_marker_cannot_bypass_public_verifier(self):
+        with tempfile.TemporaryDirectory() as directory:
+            lock_path = ROOT / "tmp" / "plane-agent-g-verifier.lock"
+            holder = subprocess.Popen(
+                [
+                    sys.executable,
+                    str(TOOLS / "agent-verifier-lock.py"),
+                    str(lock_path),
+                    "--",
+                    sys.executable,
+                    "-c",
+                    "import time; print('preflight', flush=True); time.sleep(0.5)",
+                ],
+                cwd=ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            self.assertEqual(holder.stdout.readline().strip(), "preflight")
+            contender = subprocess.run(
+                ["env", "PLANE_AGENT_VERIFIER_LOCK_HELD=1", str(TOOLS / "verify-agent-g4.sh"), "--offline"],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            holder_stdout, holder_stderr = holder.communicate(timeout=2)
+        self.assertEqual(holder.returncode, 0, holder_stderr)
+        self.assertEqual(contender.returncode, 2)
+        self.assertIn("actual=lock_held_by_another_process", contender.stderr)
+        self.assertNotIn("event=agent.g4.preflight status=passed", contender.stdout)
+        self.assertEqual(holder_stdout, "")
+
+    def test_stale_or_wrong_api_artifact_binding_is_rejected(self):
+        manifest, _, _, _ = fixture()
+        expected = exact_binding(manifest, CANDIDATE)
+        valid = {
+            "imageTag": expected["apiImageTag"],
+            "imageDigest": expected["apiImageDigest"],
+            "sourceRevision": expected["apiSourceRevision"],
+            "contract": expected["apiContract"],
+            "artifact": "plane-agent-api-g4",
+        }
+        validate_api_artifact_descriptor(valid, expected)
+        for field, value in (
+            ("imageTag", "plane-agent-api:stale"),
+            ("imageDigest", "sha256:" + "1" * 64),
+            ("sourceRevision", "3" * 40),
+        ):
+            invalid = dict(valid)
+            invalid[field] = value
+            with self.subTest(field=field), self.assertRaisesRegex(ContractError, "api_artifact_"):
+                validate_api_artifact_descriptor(invalid, expected)
+
+        source = (TOOLS / "verify-agent-g4.sh").read_text(encoding="utf-8")
+        self.assertIn("check_api_test_image", source)
+        self.assertIn("API image digest=${API_TEST_IMAGE_DIGEST}", source)
+        self.assertIn("API image source label=${API_SOURCE_REVISION}", source)
 
     def test_hermes_bind_visibility_rejects_unavailable_mount_before_g3(self):
         source = (TOOLS / "verify-agent-g4.sh").read_text(encoding="utf-8")

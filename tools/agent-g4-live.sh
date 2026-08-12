@@ -12,7 +12,6 @@ EVIDENCE_FILE="${RUN_DIR}/evidence.json"
 ERROR_FILE="${RUN_DIR}/sanitized-error.log"
 RUNTIME_SECRET_FILE="${RUN_DIR}/runtime-secret"
 PLANE_TEST_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48), end="")')"
-API_IMAGE="plane-agent-api:g4-c47ddfe"
 PROVIDER_SECRET_SOURCE="${PLANE_G4_PROVIDER_SECRET_SOURCE:?configured provider source is required}"
 LIVE_INVOKE_SOURCE="${ROOT_DIR}/tools/agent-g4-live-invoke.py"
 MANIFEST="${ROOT_DIR}/tools/agent-g4-manifest.json"
@@ -34,7 +33,28 @@ RUNTIME_IMAGE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))
 G4_RUNTIME_IMAGE_DIGEST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["runtimeImageDigest"])' "${MANIFEST}")"
 G4_RUNTIME_IMAGE_REVISION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["runtimeImageRevision"])' "${MANIFEST}")"
 G4_RUNTIME_CONTRACT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["runtimeContract"])' "${MANIFEST}")"
+G4_API_IMAGE_TAG="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["apiImageTag"])' "${MANIFEST}")"
+G4_API_IMAGE_DIGEST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["apiImageDigest"])' "${MANIFEST}")"
+G4_API_SOURCE_REVISION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["apiSourceRevision"])' "${MANIFEST}")"
+G4_API_CONTRACT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["apiContract"])' "${MANIFEST}")"
+API_IMAGE="${G4_API_IMAGE_TAG}"
 LIVE_PHASE=initialization
+
+api_image_id="$(docker image inspect "${API_IMAGE}" --format '{{.Id}}' 2>/dev/null)" || {
+    printf '%s\n' 'event=agent.g4.live-runner status=failed expected=manifest-bound-api-image-available actual=image-unavailable suggestion=prepare-the-exact-immutable-api-artifact' >&2
+    exit 2
+}
+[[ "${api_image_id}" == "${G4_API_IMAGE_DIGEST}" ]] || {
+    printf '%s\n' "event=agent.g4.live-runner status=failed expected=api-image-digest=${G4_API_IMAGE_DIGEST} actual=${api_image_id} suggestion=use-the-manifest-bound-api-artifact" >&2
+    exit 2
+}
+api_source_label="$(docker image inspect "${API_IMAGE}" --format '{{index .Config.Labels "org.uxheavy.plane.api.source.revision"}}')"
+api_contract_label="$(docker image inspect "${API_IMAGE}" --format '{{index .Config.Labels "org.uxheavy.plane.api.contract"}}')"
+api_artifact_label="$(docker image inspect "${API_IMAGE}" --format '{{index .Config.Labels "org.uxheavy.plane.api.artifact"}}')"
+[[ "${api_source_label}" == "${G4_API_SOURCE_REVISION}" && "${api_contract_label}" == "${G4_API_CONTRACT}" && "${api_artifact_label}" == "plane-agent-api-g4" ]] || {
+    printf '%s\n' 'event=agent.g4.live-runner status=failed expected=api-image-source-contract-artifact-labels-bound actual=label-mismatch suggestion=use-the-exact-immutable-api-artifact' >&2
+    exit 2
+}
 
 safe_error_class() {
     python3 - "${ERROR_FILE}" <<'PY'
@@ -237,6 +257,10 @@ docker run --rm --network "${NETWORK}" --hostname api --network-alias api \
     --env G4_RUNTIME_IMAGE_DIGEST="${G4_RUNTIME_IMAGE_DIGEST}" \
     --env G4_RUNTIME_IMAGE_REVISION="${G4_RUNTIME_IMAGE_REVISION}" \
     --env G4_RUNTIME_CONTRACT="${G4_RUNTIME_CONTRACT}" \
+    --env G4_API_IMAGE_TAG="${G4_API_IMAGE_TAG}" \
+    --env G4_API_IMAGE_DIGEST="${G4_API_IMAGE_DIGEST}" \
+    --env G4_API_SOURCE_REVISION="${G4_API_SOURCE_REVISION}" \
+    --env G4_API_CONTRACT="${G4_API_CONTRACT}" \
     --env G4_PERMITTED_CANARY=live-permitted-read \
     --env G4_DENIED_CANARY=live-denied-evaluate \
     "${API_IMAGE}" python /tmp/agent-g4-live-invoke.py >"${EVIDENCE_FILE}" 2>"${ERROR_FILE}"

@@ -23,8 +23,12 @@ This goal covers the full Plane Agent control plane and the hidden execution ser
 The current G4 remediation binds the final wrapper through the external
 operator input `PLANE_G4_EXPECTED_CANDIDATE`; the committed manifest binds only
 the wrapper's approved source parent. G3 and G4 share a process-lifetime
-advisory lock, and the offline verifier retains a sanitized, hashed receipt
-outside disposable evidence cleanup. These changes are not a G4 acceptance;
+advisory lock whose inherited descriptor is path-checked rather than caller
+controlled by a boolean, and the offline verifier retains a sanitized, hashed
+receipt outside disposable evidence cleanup. G3/G4/API-migration behavior now
+executes the exact immutable API image containing the remediated source; the
+final image digest and source revision remain pending wrapper binding. These
+changes are not a G4 acceptance;
 the prior baseline and the permanently `outcome_unknown` live history remain
 the authoritative evidence until a fresh exact-candidate offline proof exists.
 

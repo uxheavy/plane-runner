@@ -4,9 +4,12 @@ set -Eeuo pipefail
 export PYTHONDONTWRITEBYTECODE=1
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-if [[ "${PLANE_AGENT_VERIFIER_LOCK_HELD:-}" != "1" ]]; then
+LOCK_PATH="${ROOT_DIR}/tmp/plane-agent-g-verifier.lock"
+if ! [[ "${PLANE_AGENT_VERIFIER_LOCK_FD:-}" =~ ^[0-9]+$ ]] || \
+    ! python3 "${ROOT_DIR}/tools/agent-verifier-lock.py" --check-fd "${PLANE_AGENT_VERIFIER_LOCK_FD}" "${LOCK_PATH}"; then
+    unset PLANE_AGENT_VERIFIER_LOCK_HELD PLANE_AGENT_VERIFIER_LOCK_FD
     exec python3 "${ROOT_DIR}/tools/agent-verifier-lock.py" \
-        "${ROOT_DIR}/tmp/plane-agent-g-verifier.lock" -- "${ROOT_DIR}/tools/verify-agent-g4.sh" "$@"
+        "${LOCK_PATH}" -- "${ROOT_DIR}/tools/verify-agent-g4.sh" "$@"
 fi
 MANIFEST="${ROOT_DIR}/tools/agent-g4-manifest.json"
 G3_BASE_COMMIT="7c9d35f4c324865c27c84da5016be2c84e460bcc"
@@ -18,7 +21,35 @@ RUNTIME_IMAGE_DIGEST="sha256:b4a701905bae50bef643ef67c3883ef74d8f6ddcde2cf669d1d
 RUNTIME_IMAGE_REVISION="c47ddfe6174ecd6d66257d8fedbd5d425c7f3172"
 RUNTIME_CONTRACT="plane.agent-runtime/v1"
 EXPECTED_CANDIDATE="${PLANE_G4_EXPECTED_CANDIDATE:-}"
-API_TEST_IMAGE="${PLANE_API_TEST_IMAGE:-plane-g3-external-client-api-tests:prepared}"
+API_TEST_IMAGE_TAG="$(python3 - "${MANIFEST}" <<'PY'
+import json
+import sys
+
+print(json.load(open(sys.argv[1], encoding="utf-8"))["pins"]["apiImageTag"])
+PY
+)"
+API_TEST_IMAGE_DIGEST="$(python3 - "${MANIFEST}" <<'PY'
+import json
+import sys
+
+print(json.load(open(sys.argv[1], encoding="utf-8"))["pins"]["apiImageDigest"])
+PY
+)"
+API_SOURCE_REVISION="$(python3 - "${MANIFEST}" <<'PY'
+import json
+import sys
+
+print(json.load(open(sys.argv[1], encoding="utf-8"))["pins"]["apiSourceRevision"])
+PY
+)"
+API_CONTRACT="$(python3 - "${MANIFEST}" <<'PY'
+import json
+import sys
+
+print(json.load(open(sys.argv[1], encoding="utf-8"))["pins"]["apiContract"])
+PY
+)"
+API_TEST_IMAGE="${PLANE_API_TEST_IMAGE:-${API_TEST_IMAGE_TAG}}"
 RUNTIME_IMAGE="${PLANE_G4_RUNTIME_IMAGE:-${RUNTIME_IMAGE_TAG}}"
 MODE="${PLANE_G4_MODE:-offline}"
 CANDIDATE_PARENT_COMMIT="$(python3 - "${MANIFEST}" <<'PY'
@@ -204,15 +235,26 @@ check_gitlinks() {
 }
 
 check_api_test_image() {
-    local image="$1"
-    docker image inspect "${image}" --format '{{.Id}}' >/dev/null 2>&1 || fail "prepared API test image ${image} is available offline" "image unavailable" "prepare the pinned API test image locally; this verifier never pulls"
+    local image="$1" image_id source_label contract_label artifact_label
+    [[ "${image}" == "${API_TEST_IMAGE_TAG}" ]] || fail "API image tag=${API_TEST_IMAGE_TAG}" "actual=${image}" "use the committed immutable API artifact"
+    image_id="$(docker image inspect "${image}" --format '{{.Id}}' 2>/dev/null)" || fail "prepared API test image ${image} is available offline" "image unavailable" "prepare the pinned API test image locally; this verifier never pulls"
+    [[ "${image_id}" == "${API_TEST_IMAGE_DIGEST}" ]] || fail "API image digest=${API_TEST_IMAGE_DIGEST}" "actual=${image_id}" "use the immutable API artifact built from the bound source"
+    source_label="$(docker image inspect "${image}" --format '{{index .Config.Labels "org.uxheavy.plane.api.source.revision"}}')"
+    contract_label="$(docker image inspect "${image}" --format '{{index .Config.Labels "org.uxheavy.plane.api.contract"}}')"
+    artifact_label="$(docker image inspect "${image}" --format '{{index .Config.Labels "org.uxheavy.plane.api.artifact"}}')"
+    [[ "${source_label}" == "${API_SOURCE_REVISION}" ]] || fail "API image source label=${API_SOURCE_REVISION}" "actual=${source_label}" "use the artifact built from the exact source revision"
+    [[ "${contract_label}" == "${API_CONTRACT}" ]] || fail "API contract label=${API_CONTRACT}" "actual=${contract_label}" "use the Plane API artifact"
+    [[ "${artifact_label}" == "plane-agent-api-g4" ]] || fail "API artifact label=plane-agent-api-g4" "actual=${artifact_label}" "use the reviewed immutable API image"
     docker run --rm --network none --entrypoint sh "${image}" -c '
         set -eu
         command -v python >/dev/null
         command -v pytest >/dev/null
         command -v ruff >/dev/null
         python -c "import django, psycopg, pytest"
+        test -r /workspace/apps/api/plane/agent/readback.py
+        grep -q "AgentReadbackIntegrityError" /workspace/apps/api/plane/agent/readback.py
     ' >/dev/null 2>&1 || fail "offline API test dependencies are prepared in ${image}" "dependency probe failed" "prepare the API test image without installing during verification"
+    emit "api-image" passed "image=${image}" "digest=${image_id}" "source_revision=${API_SOURCE_REVISION}" "artifact=immutable-image-contained-source"
 }
 
 check_disposable_hermes_root() {
@@ -267,14 +309,14 @@ check_runtime_image() {
 }
 
 validate_manifest() {
-    python3 - "${MANIFEST}" "${ROOT_DIR}" "${CANDIDATE_COMMIT}" "${G3_BASE_COMMIT}" "${CANDIDATE_PARENT_COMMIT}" "${MCP_COMMIT}" "${SDK_COMMIT}" "${HERMES_COMMIT}" "${RUNTIME_IMAGE_TAG}" "${RUNTIME_IMAGE_DIGEST}" "${RUNTIME_IMAGE_REVISION}" "${RUNTIME_CONTRACT}" <<'PY'
+    python3 - "${MANIFEST}" "${ROOT_DIR}" "${CANDIDATE_COMMIT}" "${G3_BASE_COMMIT}" "${CANDIDATE_PARENT_COMMIT}" "${MCP_COMMIT}" "${SDK_COMMIT}" "${HERMES_COMMIT}" "${RUNTIME_IMAGE_TAG}" "${RUNTIME_IMAGE_DIGEST}" "${RUNTIME_IMAGE_REVISION}" "${RUNTIME_CONTRACT}" "${API_TEST_IMAGE_TAG}" "${API_TEST_IMAGE_DIGEST}" "${API_SOURCE_REVISION}" "${API_CONTRACT}" <<'PY'
 import hashlib
 import json
 import subprocess
 import sys
 from pathlib import Path
 
-manifest_path, root_value, candidate, g3, candidate_parent, mcp, sdk, hermes, image_tag, image_digest, image_revision, runtime_contract = sys.argv[1:]
+manifest_path, root_value, candidate, g3, candidate_parent, mcp, sdk, hermes, image_tag, image_digest, image_revision, runtime_contract, api_image_tag, api_image_digest, api_source_revision, api_contract = sys.argv[1:]
 root = Path(root_value)
 manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
 sys.path.insert(0, str(root / "tools"))
@@ -304,6 +346,10 @@ assert manifest["pins"] == {
     "runtimeImageDigest": image_digest,
     "runtimeImageRevision": image_revision,
     "runtimeContract": runtime_contract,
+    "apiImageTag": api_image_tag,
+    "apiImageDigest": api_image_digest,
+    "apiSourceRevision": api_source_revision,
+    "apiContract": api_contract,
 }
 assert manifest["liveContract"] == {
     "authoritySchema": "tools/agent-g4-live-authority.schema.json",
@@ -320,6 +366,10 @@ assert manifest["liveContract"] == {
         "runtimeImageDigest",
         "runtimeImageRevision",
         "runtimeContract",
+        "apiImageTag",
+        "apiImageDigest",
+        "apiSourceRevision",
+        "apiContract",
     ],
     "providerModelSource": "authority.binding.provider",
     "thresholdsSource": "authority.binding.thresholds",
@@ -519,7 +569,6 @@ run_api() {
         --network "${G4_NETWORK_NAME}" \
         "${API_ENV[@]}" \
         --entrypoint /bin/sh \
-        --mount "type=bind,src=${ROOT_DIR}/apps/api,dst=/workspace/apps/api,readonly" \
         --mount "type=bind,src=${ROOT_DIR}/packages/agent-runtime-contract,dst=/workspace/packages/agent-runtime-contract,readonly" \
         --mount "type=bind,src=${MCP_ROOT},dst=/workspace/external/plane-mcp-server,readonly" \
         --mount "type=bind,src=${SDK_ROOT},dst=/workspace/external/plane-python-sdk,readonly" \
@@ -681,7 +730,8 @@ write_receipt() {
         "${RUN_STARTED_AT}" "${MODE}" "${CANDIDATE_COMMIT}" "${EXPECTED_CANDIDATE}" \
         "${CANDIDATE_PARENT_COMMIT}" "${G3_BASE_COMMIT}" "${HERMES_COMMIT}" "${MCP_COMMIT}" \
         "${SDK_COMMIT}" "${RUNTIME_IMAGE_TAG}" "${RUNTIME_IMAGE_DIGEST}" "${RUNTIME_IMAGE_REVISION}" \
-        "${RUNTIME_CONTRACT}" "${status}" "${cleanup_status}" <<'PY'
+        "${RUNTIME_CONTRACT}" "${API_TEST_IMAGE_TAG}" "${API_TEST_IMAGE_DIGEST}" "${API_SOURCE_REVISION}" \
+        "${API_CONTRACT}" "${status}" "${cleanup_status}" <<'PY'
 import hashlib
 import json
 import sys
@@ -705,6 +755,10 @@ from pathlib import Path
     image_digest,
     image_revision,
     runtime_contract,
+    api_image_tag,
+    api_image_digest,
+    api_source_revision,
+    api_contract,
     exit_code,
     cleanup_code,
 ) = sys.argv[1:]
@@ -727,6 +781,16 @@ receipt = {
         "runtimeImageDigest": image_digest,
         "runtimeImageRevision": image_revision,
         "runtimeContract": runtime_contract,
+        "apiImageTag": api_image_tag,
+        "apiImageDigest": api_image_digest,
+        "apiSourceRevision": api_source_revision,
+        "apiContract": api_contract,
+    },
+    "actionCounters": {
+        "provider_requests": 0,
+        "live_requests": 0,
+        "G5_actions": 0,
+        "credential_mutations": 0,
     },
     "stageResults": events,
     "cleanup": {
@@ -823,7 +887,7 @@ check_hermes_docker_visibility
 check_runtime_image "${RUNTIME_IMAGE}" "${RUNTIME_IMAGE_DIGEST}"
 validate_manifest
 STAGE_COUNT=$((STAGE_COUNT + 1))
-emit "preflight" passed "exit_code=0" "candidate=${CANDIDATE_COMMIT}" "hermes=${HERMES_COMMIT}" "mcp=${MCP_COMMIT}" "sdk=${SDK_COMMIT}" "runtime_image_tag=${RUNTIME_IMAGE_TAG}" "runtime_image_digest=${RUNTIME_IMAGE_DIGEST}" "runtime_image_revision=${RUNTIME_IMAGE_REVISION}" "runtime_contract=${RUNTIME_CONTRACT}" \
+emit "preflight" passed "exit_code=0" "candidate=${CANDIDATE_COMMIT}" "hermes=${HERMES_COMMIT}" "mcp=${MCP_COMMIT}" "sdk=${SDK_COMMIT}" "runtime_image_tag=${RUNTIME_IMAGE_TAG}" "runtime_image_digest=${RUNTIME_IMAGE_DIGEST}" "runtime_image_revision=${RUNTIME_IMAGE_REVISION}" "runtime_contract=${RUNTIME_CONTRACT}" "api_image_tag=${API_TEST_IMAGE_TAG}" "api_image_digest=${API_TEST_IMAGE_DIGEST}" "api_source_revision=${API_SOURCE_REVISION}" "api_contract=${API_CONTRACT}" \
     "collected=1" "passed=1" "failed=0" "skipped=0" "xfail=0" "deselected=0" "duration_ms=0" "migration_leaf=not_applicable" \
     "workload_throughput=na" "workload_latency_p95_ms=na" "workload_latency_p99_ms=na" "workload_error_rate=na" "workload_saturation=na" \
     "workload_queue_p95_ms=na" "workload_sustained_duration_s=na" "workload_requests=na" "workload_workers=na" "workload_agents=na" \
@@ -847,6 +911,10 @@ CURRENT_STEP="g3-prerequisite"
 run_logged g3-prerequisite env \
     -u G3_TEST_PATHS_OVERRIDE \
     PLANE_API_TEST_IMAGE="${API_TEST_IMAGE}" \
+    PLANE_API_TEST_IMAGE_TAG="${API_TEST_IMAGE_TAG}" \
+    PLANE_API_TEST_IMAGE_DIGEST="${API_TEST_IMAGE_DIGEST}" \
+    PLANE_API_SOURCE_REVISION="${API_SOURCE_REVISION}" \
+    PLANE_API_CONTRACT="${API_CONTRACT}" \
     PLANE_EXTERNAL_SUPERPROJECT_ROOT="${EXTERNAL_SUPERPROJECT_ROOT}" \
     PLANE_MCP_EXTERNAL_ROOT="${MCP_ROOT}" \
     PLANE_SDK_EXTERNAL_ROOT="${SDK_ROOT}" \

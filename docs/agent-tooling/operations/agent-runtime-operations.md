@@ -338,9 +338,14 @@ contract `plane.agent-runtime/v1`. The Plane service revision above is the
 repaired source candidate; the runtime image/runtimeRevision source is
 `c47ddfe6174ecd6d66257d8fedbd5d425c7f3172`, which was used to build the
 candidate image. The wrapper carries only the existing binding, fixture, and
-evidence documentation. The live helper is mounted read-only into the
-unchanged API image, so no image rebuild or provider invocation is part of
-this repair. API, worker, `beat-worker`,
+evidence documentation. The API artifact is separately immutable and source
+bound. API image tag: `plane-agent-api:g4-pending-source`. API image digest:
+`sha256:0000000000000000000000000000000000000000000000000000000000000000`.
+API source revision/image label: `0000000000000000000000000000000000000000`.
+API contract: `plane.operation/v1`. The final wrapper replaces these pending values with the
+digest and source revision produced by the exact API-image build. G3, G4, and
+the live helper execute the image-contained `/workspace/apps/api` tree; they
+do not bind-mount a newer host API source tree. API, worker, `beat-worker`,
 supervisor, and `agent-runtime` each switch their service revision and image
 digest to the corresponding current value in that manifest; the operation services retain
 `plane.operation/v1` and the runtime services retain `plane.agent-runtime/v1`.

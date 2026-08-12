@@ -5,6 +5,9 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="${ROOT_DIR}/docker-compose-test.yml"
 API_TEST_IMAGE="${PLANE_API_TEST_IMAGE:-plane-g3-external-client-api-tests:prepared}"
+API_TEST_IMAGE_DIGEST="${PLANE_API_TEST_IMAGE_DIGEST:-}"
+API_TEST_IMAGE_TAG="${PLANE_API_TEST_IMAGE_TAG:-${API_TEST_IMAGE}}"
+API_SOURCE_REVISION="${PLANE_API_SOURCE_REVISION:-}"
 PROJECT_NAME="plane-migration-verify-$$-${RANDOM}"
 NETWORK_NAME="${PROJECT_NAME}_test_env"
 CURRENT_STEP="preflight"
@@ -43,8 +46,7 @@ run_api() {
         --network "${NETWORK_NAME}" \
         "${API_ENV[@]}" \
         --entrypoint /bin/sh \
-        --mount "type=bind,src=${ROOT_DIR}/apps/api,dst=/code,readonly" \
-        --workdir /code \
+        --workdir /workspace/apps/api \
         "${API_TEST_IMAGE}" -c 'exec "$@"' -- "$@"
 }
 
@@ -140,7 +142,15 @@ trap cleanup EXIT
 trap 'exit 130' INT TERM
 
 command -v docker >/dev/null 2>&1 || fail "docker command" "docker is unavailable" "install or enable Docker before running the verifier"
-docker image inspect "${API_TEST_IMAGE}" >/dev/null 2>&1 || fail "existing API test image" "${API_TEST_IMAGE} is unavailable" "build the repository API test image outside this verifier; this check never installs dependencies"
+image_id="$(docker image inspect "${API_TEST_IMAGE}" --format '{{.Id}}' 2>/dev/null)" || fail "existing API test image" "${API_TEST_IMAGE} is unavailable" "build the repository API test image outside this verifier; this check never installs dependencies"
+if [[ -n "${API_TEST_IMAGE_DIGEST}" ]]; then
+    [[ "${image_id}" == "${API_TEST_IMAGE_DIGEST}" ]] || fail "bound API image digest=${API_TEST_IMAGE_DIGEST}" "actual=${image_id}" "use the immutable API artifact"
+fi
+[[ "${API_TEST_IMAGE}" == "${API_TEST_IMAGE_TAG}" ]] || fail "bound API image tag=${API_TEST_IMAGE_TAG}" "actual=${API_TEST_IMAGE}" "use the manifest-bound API image tag"
+if [[ -n "${API_SOURCE_REVISION}" ]]; then
+    source_label="$(docker image inspect "${API_TEST_IMAGE}" --format '{{index .Config.Labels "org.uxheavy.plane.api.source.revision"}}')"
+    [[ "${source_label}" == "${API_SOURCE_REVISION}" ]] || fail "bound API source revision=${API_SOURCE_REVISION}" "actual=${source_label}" "use the exact API artifact"
+fi
 
 CURRENT_STEP="start-empty-postgres"
 compose up --pull never -d test-db >/dev/null

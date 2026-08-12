@@ -3,9 +3,12 @@
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-if [[ "${PLANE_AGENT_VERIFIER_LOCK_HELD:-}" != "1" ]]; then
+LOCK_PATH="${ROOT_DIR}/tmp/plane-agent-g-verifier.lock"
+if ! [[ "${PLANE_AGENT_VERIFIER_LOCK_FD:-}" =~ ^[0-9]+$ ]] || \
+    ! python3 "${ROOT_DIR}/tools/agent-verifier-lock.py" --check-fd "${PLANE_AGENT_VERIFIER_LOCK_FD}" "${LOCK_PATH}"; then
+    unset PLANE_AGENT_VERIFIER_LOCK_HELD PLANE_AGENT_VERIFIER_LOCK_FD
     exec python3 "${ROOT_DIR}/tools/agent-verifier-lock.py" \
-        "${ROOT_DIR}/tmp/plane-agent-g-verifier.lock" -- "${ROOT_DIR}/tools/verify-agent-g3.sh" "$@"
+        "${LOCK_PATH}" -- "${ROOT_DIR}/tools/verify-agent-g3.sh" "$@"
 fi
 COMPOSE_FILE="${ROOT_DIR}/docker-compose-test.yml"
 G3_BASE_COMMIT="9b4bad0b0b54c90c8d25e9af5f086971e6b9c93a"
@@ -15,7 +18,10 @@ MCP_INVENTORY_COMMIT="96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1"
 SDK_COMMIT="7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
 HERMES_COMMIT="114eabf9d807b659e36d767e4de46ca056297ccb"
 API_TEST_IMAGE="${PLANE_API_TEST_IMAGE:-plane-g3-external-client-api-tests:prepared}"
-API_TEST_IMAGE_DIGEST="sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e"
+API_TEST_IMAGE_DIGEST="${PLANE_API_TEST_IMAGE_DIGEST:-sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e}"
+API_TEST_IMAGE_TAG="${PLANE_API_TEST_IMAGE_TAG:-${API_TEST_IMAGE}}"
+API_SOURCE_REVISION="${PLANE_API_SOURCE_REVISION:-}"
+API_CONTRACT="${PLANE_API_CONTRACT:-plane.operation/v1}"
 GIT_COMMON_DIR="$(git -C "${ROOT_DIR}" rev-parse --git-common-dir)"
 if [[ "${GIT_COMMON_DIR}" != /* ]]; then
     GIT_COMMON_DIR="${ROOT_DIR}/${GIT_COMMON_DIR}"
@@ -180,7 +186,6 @@ run_api() {
         --network "${NETWORK_NAME}" \
         "${API_ENV[@]}" \
         --entrypoint /bin/sh \
-        --mount "type=bind,src=${ROOT_DIR}/apps/api,dst=/workspace/apps/api,readonly" \
         --mount "type=bind,src=${ROOT_DIR}/packages/agent-runtime-contract,dst=/workspace/packages/agent-runtime-contract,readonly" \
         --mount "type=bind,src=${MCP_ROOT},dst=/workspace/external/plane-mcp-server,readonly" \
         --mount "type=bind,src=${SDK_ROOT},dst=/workspace/external/plane-python-sdk,readonly" \
@@ -245,9 +250,18 @@ cleanup() {
 }
 
 check_api_test_image() {
-    local image_id
+    local image_id source_label contract_label artifact_label
     image_id="$(docker image inspect "${API_TEST_IMAGE}" --format '{{.Id}}' 2>/dev/null)" || fail "prepared API test image=${API_TEST_IMAGE}" "image unavailable" "build or select a local prepared image with PLANE_API_TEST_IMAGE"
     [[ "${image_id}" == "${API_TEST_IMAGE_DIGEST}" ]] || fail "prepared API test image digest=${API_TEST_IMAGE_DIGEST}" "actual=${image_id}" "use the authoritative offline image; this verifier never rebuilds or pulls images"
+    [[ "${API_TEST_IMAGE}" == "${API_TEST_IMAGE_TAG}" ]] || fail "API image tag=${API_TEST_IMAGE_TAG}" "actual=${API_TEST_IMAGE}" "use the manifest-bound API image tag"
+    if [[ -n "${API_SOURCE_REVISION}" ]]; then
+        source_label="$(docker image inspect "${API_TEST_IMAGE}" --format '{{index .Config.Labels "org.uxheavy.plane.api.source.revision"}}')"
+        contract_label="$(docker image inspect "${API_TEST_IMAGE}" --format '{{index .Config.Labels "org.uxheavy.plane.api.contract"}}')"
+        artifact_label="$(docker image inspect "${API_TEST_IMAGE}" --format '{{index .Config.Labels "org.uxheavy.plane.api.artifact"}}')"
+        [[ "${source_label}" == "${API_SOURCE_REVISION}" ]] || fail "API image source revision=${API_SOURCE_REVISION}" "actual=${source_label}" "use the immutable API artifact built from the bound source"
+        [[ "${contract_label}" == "${API_CONTRACT}" ]] || fail "API image contract=${API_CONTRACT}" "actual=${contract_label}" "use the Plane operation API artifact"
+        [[ "${artifact_label}" == "plane-agent-api-g4" ]] || fail "API artifact label=plane-agent-api-g4" "actual=${artifact_label}" "use the reviewed immutable API image"
+    fi
     docker run --rm --network none --entrypoint sh "${API_TEST_IMAGE}" -c '
         set -eu
         command -v python >/dev/null
@@ -283,7 +297,9 @@ gitleaks detect --no-banner --redact --source "${ROOT_DIR}" --log-opts "${G3_BAS
 emit "static-scope" passed "base=${G3_BASE_COMMIT}" "candidate=${CANDIDATE_COMMIT}" "settings_reuse=passed" "secret_scan=base_to_candidate_passed" "diff_check=base_to_candidate_passed"
 
 CURRENT_STEP="migration-chain"
-PLANE_API_TEST_IMAGE="${API_TEST_IMAGE}" "${ROOT_DIR}/tools/verify-api-migrations.sh"
+PLANE_API_TEST_IMAGE="${API_TEST_IMAGE}" PLANE_API_TEST_IMAGE_DIGEST="${API_TEST_IMAGE_DIGEST}" \
+    PLANE_API_TEST_IMAGE_TAG="${API_TEST_IMAGE_TAG}" PLANE_API_SOURCE_REVISION="${API_SOURCE_REVISION}" \
+    "${ROOT_DIR}/tools/verify-api-migrations.sh"
 emit "migration-chain" passed "apply=passed" "reverse_to=0138" "reapply=passed" "drift=passed" "leaf=0142"
 
 CURRENT_STEP="start-stack"
@@ -314,7 +330,7 @@ python manage.py bootstrap_operation_gateway_audit --phase=before-migrate
 python manage.py migrate --noinput --verbosity 0
 python manage.py bootstrap_operation_gateway_audit --phase=after-migrate
 python -m plane.operation_gateway.mcp.registry_generator plane/operation_gateway/mcp/manifest.json --check plane/operation_gateway/mcp/adapter_registry.json
-ruff check plane/agent plane/operation_gateway plane/tests/unit/agent plane/tests/contract/api
+        ruff check plane/agent plane/operation_gateway plane/tests/unit/agent plane/tests/contract/api
 ruff format --check plane/tests/contract/api/test_operation_gateway_mcp.py plane/tests/contract/api/test_operation_gateway_external_clients.py
 python -m compileall -q plane/agent plane/operation_gateway plane/tests/unit/agent plane/tests/contract/api
 python manage.py shell -c 'from django.db import connection; from django.db.migrations.executor import MigrationExecutor; e=MigrationExecutor(connection); leaves=set(e.loader.graph.leaf_nodes(\"db\")); applied=set(e.recorder.applied_migrations()); assert leaves == {(\"db\", \"0142_runtime_provider_attempts\")}; assert not leaves-applied; print(\"event=agent.g3.api.migration_leaf status=passed leaf=0142\")'

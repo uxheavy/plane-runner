@@ -9,7 +9,28 @@ import sys
 from pathlib import Path
 
 
+def check_inherited_fd(argv: list[str]) -> int:
+    if len(argv) != 4 or argv[1] != "--check-fd":
+        return 2
+    try:
+        fd = int(argv[2])
+    except ValueError:
+        return 1
+    lock_path = Path(argv[3])
+    try:
+        fd_stat = os.fstat(fd)
+        path_stat = lock_path.stat()
+        if (fd_stat.st_dev, fd_stat.st_ino) != (path_stat.st_dev, path_stat.st_ino):
+            return 1
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except (OSError, ValueError, BlockingIOError):
+        return 1
+    return 0
+
+
 def main(argv: list[str]) -> int:
+    if len(argv) > 1 and argv[1] == "--check-fd":
+        return check_inherited_fd(argv)
     if len(argv) < 3 or argv[1] == "--" or argv[2] != "--":
         print(
             "event=agent.verifier.lock status=failed "
@@ -53,7 +74,8 @@ def main(argv: list[str]) -> int:
     # exec so the verifier process lifetime, not a helper PID, owns exclusion.
     os.set_inheritable(lock_file.fileno(), True)
     environment = dict(os.environ)
-    environment["PLANE_AGENT_VERIFIER_LOCK_HELD"] = "1"
+    environment.pop("PLANE_AGENT_VERIFIER_LOCK_HELD", None)
+    environment["PLANE_AGENT_VERIFIER_LOCK_FD"] = str(lock_file.fileno())
     os.execvpe(command[0], command, environment)
     return 127
 

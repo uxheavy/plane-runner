@@ -41,7 +41,11 @@
     "runtimeImageTag": "plane-agent-runtime:hermes-114eabf9-g4-c47ddfe",
     "runtimeImageDigest": "sha256:b4a701905bae50bef643ef67c3883ef74d8f6ddcde2cf669d1dab50c44999b0c",
     "runtimeImageRevision": "c47ddfe6174ecd6d66257d8fedbd5d425c7f3172",
-    "runtimeContract": "plane.agent-runtime/v1"
+    "runtimeContract": "plane.agent-runtime/v1",
+    "apiImageTag": "plane-agent-api:g4-pending-source",
+    "apiImageDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "apiSourceRevision": "0000000000000000000000000000000000000000",
+    "apiContract": "plane.operation/v1"
   },
   "liveContract": {
     "authoritySchema": "tools/agent-g4-live-authority.schema.json",
@@ -57,7 +61,11 @@
       "runtimeImageTag",
       "runtimeImageDigest",
       "runtimeImageRevision",
-      "runtimeContract"
+      "runtimeContract",
+      "apiImageTag",
+      "apiImageDigest",
+      "apiSourceRevision",
+      "apiContract"
     ],
     "providerModelSource": "authority.binding.provider",
     "thresholdsSource": "authority.binding.thresholds",
@@ -94,6 +102,8 @@
     "tools/verify-agent-g3.sh",
     "tools/verify-agent-g4.sh",
     "tools/agent-verifier-lock.py",
+    "apps/api/Dockerfile.g4",
+    "apps/api/.dockerignore",
     "tools/summarize_agent_g4.py",
     "tools/validate_agent_g4_live.py"
   ],

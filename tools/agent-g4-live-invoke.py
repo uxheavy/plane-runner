@@ -14,7 +14,7 @@ import time
 import uuid
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "plane.settings.test")
-sys.path.insert(0, "/code")
+sys.path.insert(0, "/workspace/apps/api")
 
 import django
 
@@ -70,6 +70,10 @@ def _binding() -> dict[str, str]:
         "runtimeImageDigest": os.environ["G4_RUNTIME_IMAGE_DIGEST"],
         "runtimeImageRevision": os.environ["G4_RUNTIME_IMAGE_REVISION"],
         "runtimeContract": os.environ["G4_RUNTIME_CONTRACT"],
+        "apiImageTag": os.environ["G4_API_IMAGE_TAG"],
+        "apiImageDigest": os.environ["G4_API_IMAGE_DIGEST"],
+        "apiSourceRevision": os.environ["G4_API_SOURCE_REVISION"],
+        "apiContract": os.environ["G4_API_CONTRACT"],
     }
 
 
@@ -98,6 +102,10 @@ def build_failure_evidence(
         "runtimeImageDigest",
         "runtimeImageRevision",
         "runtimeContract",
+        "apiImageTag",
+        "apiImageDigest",
+        "apiSourceRevision",
+        "apiContract",
     )
     failure_phases = {
         "initialization",
@@ -152,9 +160,9 @@ def build_failure_evidence(
         if not isinstance(value, str) or len(value.encode("utf-8")) > 128:
             return "unavailable"
         hexadecimal = "0123456789abcdef"
-        if key in {"candidateCommit", "g3Baseline", "hermesCommit", "mcpGitlink", "sdkGitlink", "runtimeImageRevision"}:
+        if key in {"candidateCommit", "g3Baseline", "hermesCommit", "mcpGitlink", "sdkGitlink", "runtimeImageRevision", "apiSourceRevision"}:
             return value if len(value) == 40 and all(char in hexadecimal for char in value) else "unavailable"
-        if key == "runtimeImageDigest":
+        if key in {"runtimeImageDigest", "apiImageDigest"}:
             digest_prefix, separator, digest = value.partition(":")
             return (
                 value

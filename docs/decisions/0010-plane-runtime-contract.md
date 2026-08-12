@@ -184,3 +184,11 @@ G0 accepts the logical type names, semantics, event variants, trust/publication/
 - Hermes owns the hidden inner execution mechanisms behind its adapter.
 - A deterministic adapter can test Plane lifecycle without a model or Hermes process.
 - G0 accepts the snapshot/envelope logical semantics, event taxonomy, publication mapping, cumulative budgets, payload limits, restart rules, and trust/publication/dispatch constraints. G1 generates and freezes the exact JSON Schema bytes before the implementation lanes that consume those generated schemas begin.
+
+### Execution-model policy
+
+Plane Agent implementation and gate execution in this program use the GPT-5.6
+model family only. Luna xhigh is the implementation protocol and Sol Medium is
+the consolidated gate-review protocol. This is an execution and evidence policy,
+not a new runtime permission or model-selection subsystem; existing Plane
+authorization and the runtime contract remain authoritative for product calls.

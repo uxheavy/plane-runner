@@ -23,6 +23,12 @@
       "runtimeRevision": "c47ddfe6174ecd6d66257d8fedbd5d425c7f3172",
       "contract": "plane.agent-runtime/v1"
     },
+    "api": {
+      "imageTag": "plane-agent-api:g4-pending-source",
+      "imageDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "sourceRevision": "0000000000000000000000000000000000000000",
+      "contract": "plane.operation/v1"
+    },
     "services": {
       "api": {
         "revision": "e9010dec4adde127b4a7249b06efdd1356e3628e",
@@ -54,6 +60,12 @@
   "previous": {
     "planeCommit": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
     "migrationLeaf": "db.0142_runtime_provider_attempts",
+    "api": {
+      "imageTag": "plane-g3-external-client-api-tests:prepared",
+      "imageDigest": "sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e",
+      "sourceRevision": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
+      "contract": "plane.operation/v1"
+    },
     "services": {
       "api": {
         "revision": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
