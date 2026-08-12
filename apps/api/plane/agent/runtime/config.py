@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Mapping
 from urllib.parse import urlsplit
 
-from .provider_egress import ProviderRelayPolicy
+from .provider_egress import GPT56_MODEL_RE, ProviderRelayPolicy, provider_wire
 
 
 RUNTIME_PROTOCOL = "plane.agent-runtime/v1"
@@ -236,11 +236,19 @@ def _provider_policy_from_environment(
             raise RuntimeConfigurationError("provider egress route is incomplete")
         return None
     provider = _bounded_text(provider, "PLANE_AGENT_RUNTIME_PROVIDER", 64)
-    host = _bounded_text(source.get("PLANE_AGENT_RUNTIME_PROVIDER_HOST"), "provider egress host", 255)
+    wire = provider_wire(provider)
+    host = _bounded_text(
+        source.get("PLANE_AGENT_RUNTIME_PROVIDER_HOST", wire.host if wire is not None else None),
+        "provider egress host",
+        255,
+    )
     if any(char in host for char in ("/", "?", "#", "@", ":")) or any(char.isspace() for char in host):
         raise RuntimeConfigurationError("provider egress host must be one pinned hostname")
     path = _bounded_text(
-        source.get("PLANE_AGENT_RUNTIME_PROVIDER_PATH", "/v1/chat/completions"),
+        source.get(
+            "PLANE_AGENT_RUNTIME_PROVIDER_PATH",
+            wire.path if wire is not None else "/v1/chat/completions",
+        ),
         "provider egress path",
         1024,
     )
@@ -252,8 +260,13 @@ def _provider_policy_from_environment(
     models = tuple(item.strip() for item in raw_models.split(",") if item.strip())
     if not models:
         raise RuntimeConfigurationError("provider egress model allowlist is empty")
+    if provider == "openai-codex" and any(not GPT56_MODEL_RE.fullmatch(model) for model in models):
+        raise RuntimeConfigurationError("Plane Agent provider models must remain within the GPT-5.6 family")
     credential_name = _bounded_text(
-        source.get("PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_NAME", "api_key"),
+        source.get(
+            "PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_NAME",
+            wire.credential_name if wire is not None else "api_key",
+        ),
         "provider egress credential name",
         128,
     )

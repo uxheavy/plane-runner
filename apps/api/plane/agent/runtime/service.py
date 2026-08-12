@@ -22,6 +22,7 @@ from .health import RuntimeHealthStatus, RuntimeSafetyController, RuntimeSafetyS
 from .host_rpc import PlaneHostCall, PlaneHostHTTPClient, PlaneHostServer
 from .credentials import validate_credential_lease_metadata
 from .provider_egress import (
+    GPT56_MODEL_RE,
     PinnedProviderHTTPSClient,
     ProviderRelayAudit,
     ProviderRelayBinding,
@@ -332,10 +333,6 @@ class RuntimeDispatchExecutor:
 
             if provider_route is not None:
                 policy, provider, model = provider_route
-                if policy.host != "api.x.ai" or policy.path != "/v1/chat/completions":
-                    raise RuntimeConfigurationError(
-                        "provider relay route is not supported by the pinned Hermes adapter"
-                    )
                 provider_relay = self.open_provider_relay(
                     run_id=snapshot["runId"],
                     invocation_id=invocation["invocationId"],
@@ -380,15 +377,21 @@ class RuntimeDispatchExecutor:
         self, snapshot: Mapping[str, Any]
     ) -> tuple[Any, str, str] | None:
         policy = self.configuration.provider_policy
+        if policy is None:
+            return None
         runtime_policy = snapshot.get("runtimePolicy")
         model = runtime_policy.get("model") if isinstance(runtime_policy, Mapping) else None
         if (
-            policy is None
-            or not isinstance(model, Mapping)
-            or model.get("provider") != policy.provider
-            or model.get("model") not in policy.models
+            not isinstance(model, Mapping)
+            or set(model) != {"provider", "model"}
+            or not isinstance(model.get("provider"), str)
+            or not isinstance(model.get("model"), str)
         ):
-            return None
+            raise RuntimeConfigurationError("runtime snapshot model route is invalid")
+        if policy.provider == "openai-codex" and not GPT56_MODEL_RE.fullmatch(model["model"]):
+            raise RuntimeConfigurationError("runtime snapshot model route is outside the GPT-5.6 family")
+        if model["provider"] != policy.provider or model["model"] not in policy.models:
+            raise RuntimeConfigurationError("runtime snapshot model route is outside the configured provider route")
         return policy, policy.provider, model["model"]
 
 

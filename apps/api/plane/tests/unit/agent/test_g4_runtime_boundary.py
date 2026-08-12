@@ -4,6 +4,7 @@ import json
 import threading
 import urllib.error
 import urllib.request
+from types import SimpleNamespace
 
 import pytest
 
@@ -21,7 +22,8 @@ from plane.agent.runtime import (
     validate_credential_lease_metadata,
 )
 from plane.agent.runtime import credentials as runtime_credentials
-from plane.agent.runtime.service import _RuntimeHTTPServer
+from plane.agent.runtime.provider_egress import ProviderRelayError
+from plane.agent.runtime.service import RuntimeDispatchExecutor, _RuntimeHTTPServer
 
 
 def _runtime_environment(**overrides: str) -> dict[str, str]:
@@ -264,6 +266,75 @@ def test_provider_relay_configuration_and_public_lease_metadata_are_parent_only(
             invocation_ref="invocation-1",
             state_file=tmp_path / "revocations.json",
             clock=lambda: now[0],
+        )
+
+
+def test_g4_runtime_service_accepts_the_bound_chatgpt_codex_route_before_child_dispatch(monkeypatch, tmp_path):
+    configuration = AgentRuntimeConfiguration.from_environment(
+        _runtime_environment(
+            PLANE_AGENT_RUNTIME_PROVIDER="openai-codex",
+            PLANE_AGENT_RUNTIME_PROVIDER_HOST="chatgpt.com",
+            PLANE_AGENT_RUNTIME_PROVIDER_PATH="/backend-api/codex/responses",
+            PLANE_AGENT_RUNTIME_PROVIDER_MODELS="gpt-5.6-luna",
+            PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE=str(tmp_path / "revocations.json"),
+        )
+    )
+    controller = RuntimeSafetyController(configured=True, stop_file=tmp_path / "stop")
+    controller.mark_ready()
+    executor = RuntimeDispatchExecutor(configuration, controller)
+    relay = SimpleNamespace(descriptor=SimpleNamespace(socket_path=tmp_path / "provider.sock"), close=lambda: None)
+    monkeypatch.setattr(executor, "open_provider_relay", lambda **_kwargs: relay)
+    monkeypatch.setattr(
+        "plane.agent.runtime.service.PlaneHostServer",
+        lambda **_kwargs: SimpleNamespace(start=lambda: None, close=lambda: None),
+    )
+    monkeypatch.setattr(
+        "plane.agent.runtime.service._hermes_bootstrap_payload",
+        lambda *_args, **_kwargs: (b"payload", "run:codex", "invocation:codex", "digest"),
+    )
+    monkeypatch.setattr(executor._transport, "dispatch_payload", lambda **_kwargs: ("completed",))
+
+    assert executor._execute(
+        {
+            "runId": "run:codex",
+            "runtimePolicy": {"model": {"provider": "openai-codex", "model": "gpt-5.6-luna"}},
+        },
+        {"invocationId": "invocation:codex", "correlationId": "correlation:codex"},
+        "digest",
+        credentials={"provider": "openai-codex"},
+        credential_lease={"leaseId": "lease:codex"},
+        allowance=1,
+        host_url="http://plane-api:8091",
+        host_token="host-token",
+    ) == ("completed",)
+
+
+@pytest.mark.parametrize(
+    ("provider", "host", "path", "model", "message"),
+    (
+        ("xai", "api.x.ai", "/v1/chat/completions", "gpt-5.6-luna", "configured provider route"),
+        ("openai-codex", "api.x.ai", "/v1/chat/completions", "gpt-5.6-luna", "provider egress route is invalid"),
+        ("openai-codex", "chatgpt.com", "/v1/chat/completions", "gpt-5.6-luna", "provider egress route is invalid"),
+        ("openai-codex", "chatgpt.com", "/backend-api/codex/responses", "gpt-5.5", "GPT-5.6 family"),
+    ),
+)
+def test_g4_runtime_policy_rejects_wrong_provider_wire_or_model_before_dispatch(
+    provider, host, path, model, message, tmp_path
+):
+    with pytest.raises((RuntimeConfigurationError, ProviderRelayError), match=message):
+        configuration = AgentRuntimeConfiguration.from_environment(
+            _runtime_environment(
+                PLANE_AGENT_RUNTIME_PROVIDER=provider,
+                PLANE_AGENT_RUNTIME_PROVIDER_HOST=host,
+                PLANE_AGENT_RUNTIME_PROVIDER_PATH=path,
+                PLANE_AGENT_RUNTIME_PROVIDER_MODELS=model,
+                PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE=str(tmp_path / f"{provider}-revocations.json"),
+            )
+        )
+        executor = object.__new__(RuntimeDispatchExecutor)
+        executor.configuration = configuration
+        executor._configured_provider_route(
+            {"runtimePolicy": {"model": {"provider": "openai-codex", "model": model}}}
         )
 
 

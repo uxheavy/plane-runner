@@ -12,6 +12,7 @@ import hmac
 import http.client
 import json
 import os
+import re
 import secrets
 import socket
 import socketserver
@@ -25,6 +26,7 @@ from typing import Any, Protocol
 
 PROVIDER_RELAY_PROTOCOL = "plane.agent-runtime/provider-relay/v1"
 PROVIDER_RELAY_HOST = "plane-provider-relay.invalid"
+GPT56_MODEL_RE = re.compile(r"^gpt-5\.6-(?:sol|terra|luna)(?:-pro)?$")
 _MAX_SOCKET_PATH_BYTES = 103
 _MAX_REQUEST_ID_BYTES = 256
 _MAX_MODEL_BYTES = 256
@@ -77,6 +79,42 @@ class ProviderRelayError(ValueError):
 
 
 @dataclass(frozen=True)
+class ProviderWire:
+    """The typed provider wire contract shared by runtime config and relay."""
+
+    provider: str
+    host: str
+    path: str
+    base_path: str
+    api_mode: str
+    credential_name: str = "api_key"
+
+
+_PROVIDER_WIRES = {
+    "openai-codex": ProviderWire(
+        provider="openai-codex",
+        host="chatgpt.com",
+        path="/backend-api/codex/responses",
+        base_path="/backend-api/codex",
+        api_mode="codex_responses",
+    ),
+    "xai": ProviderWire(
+        provider="xai",
+        host="api.x.ai",
+        path="/v1/chat/completions",
+        base_path="/v1",
+        api_mode="chat_completions",
+    ),
+}
+
+
+def provider_wire(provider: str) -> ProviderWire | None:
+    """Return the canonical wire contract for a known provider."""
+
+    return _PROVIDER_WIRES.get(provider)
+
+
+@dataclass(frozen=True)
 class ProviderRelayBinding:
     run_id: str
     invocation_id: str
@@ -99,6 +137,18 @@ class ProviderRelayPolicy:
     max_calls: int = 16
     max_concurrent_requests: int = 2
 
+    @property
+    def wire(self) -> ProviderWire | None:
+        return provider_wire(self.provider)
+
+    @property
+    def api_mode(self) -> str | None:
+        return self.wire.api_mode if self.wire is not None else None
+
+    @property
+    def base_path(self) -> str | None:
+        return self.wire.base_path if self.wire is not None else None
+
     def __post_init__(self) -> None:
         _bounded_text(self.provider, "provider", _MAX_PROVIDER_BYTES)
         _bounded_text(self.host, "provider host", _MAX_HOST_BYTES)
@@ -107,11 +157,20 @@ class ProviderRelayPolicy:
             raise ProviderRelayError("provider path is invalid")
         if self.method != "POST":
             raise ProviderRelayError("provider method is not permitted")
+        wire = provider_wire(self.provider)
+        if wire is not None and (
+            self.host != wire.host
+            or self.path != wire.path
+            or self.credential_name != wire.credential_name
+        ):
+            raise ProviderRelayError("provider wire contract is not pinned")
         _bounded_text(self.credential_name, "credential name", 128)
         if not self.models or any(not isinstance(model, str) or not model for model in self.models):
             raise ProviderRelayError("provider model allowlist is empty or invalid")
         for model in self.models:
             _bounded_text(model, "provider model", _MAX_MODEL_BYTES)
+        if self.provider == "openai-codex" and any(not GPT56_MODEL_RE.fullmatch(model) for model in self.models):
+            raise ProviderRelayError("Plane Agent provider models must remain within the GPT-5.6 family")
         if (
             isinstance(self.timeout_seconds, bool)
             or not isinstance(self.timeout_seconds, (int, float))
@@ -860,12 +919,15 @@ class PinnedProviderHTTPSClient:
 __all__ = [
     "PROVIDER_RELAY_PROTOCOL",
     "PROVIDER_RELAY_HOST",
+    "GPT56_MODEL_RE",
     "PinnedProviderHTTPSClient",
     "ProviderRelayAudit",
     "ProviderRelayBinding",
     "ProviderRelayDescriptor",
     "ProviderRelayError",
     "ProviderRelayPolicy",
+    "ProviderWire",
+    "provider_wire",
     "ProviderRelayServer",
     "ProviderRequest",
     "ProviderResponse",

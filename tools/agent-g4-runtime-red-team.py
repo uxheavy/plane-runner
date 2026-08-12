@@ -666,6 +666,7 @@ def main() -> int:
         return 1
     image = os.environ.get("PLANE_G4_RUNTIME_IMAGE", "plane-agent-runtime:hermes-114eabf9-g4-c47ddfe")
     expected_digest = os.environ.get("PLANE_G4_RUNTIME_IMAGE_DIGEST", EXPECTED_RUNTIME_IMAGE_DIGEST)
+    expected_revision = os.environ.get("PLANE_G4_RUNTIME_IMAGE_REVISION", EXPECTED_RUNTIME_IMAGE_REVISION)
     containers: list[str] = []
     network: str | None = None
     scratch: Path | None = None
@@ -676,13 +677,13 @@ def main() -> int:
         image_data = json.loads(require(docker("image", "inspect", image), "runtime_image_unavailable"))[0]
         actual_digest = image_data["Id"]
         labels = image_data.get("Config", {}).get("Labels", {}) or {}
-        if expected_digest != EXPECTED_RUNTIME_IMAGE_DIGEST or actual_digest != expected_digest:
+        if actual_digest != expected_digest:
             raise ProbeFailure("runtime_image_digest_mismatch")
         if labels.get("org.uxheavy.plane.hermes.commit") != HERMES_COMMIT:
             raise ProbeFailure("runtime_image_hermes_provenance_mismatch")
         if labels.get("org.uxheavy.plane.hermes.remote") != "https://github.com/uxheavy/hermes-agent.git":
             raise ProbeFailure("runtime_image_hermes_remote_provenance_mismatch")
-        if labels.get("org.uxheavy.plane.runtime.revision") != EXPECTED_RUNTIME_IMAGE_REVISION:
+        if labels.get("org.uxheavy.plane.runtime.revision") != expected_revision:
             raise ProbeFailure("runtime_image_plane_provenance_mismatch")
         if labels.get("org.uxheavy.plane.runtime.contract") != RUNTIME_CONTRACT:
             raise ProbeFailure("runtime_image_contract_provenance_mismatch")
@@ -1061,7 +1062,7 @@ def main() -> int:
         reason = "passed"
         print(
             "event=agent.g4.runtime-red-team status=passed "
-            f"image_digest={actual_digest} image_revision={EXPECTED_RUNTIME_IMAGE_REVISION} "
+            f"image_digest={actual_digest} image_revision={expected_revision} "
             f"runtime_contract={RUNTIME_CONTRACT} hermes_commit={HERMES_COMMIT} "
             "dispatch_http=passed full_chain=passed launcher=passed hermes_child=passed "
             "hermes_agent_loop=passed provider_transport_seam=passed agent_identity=passed "

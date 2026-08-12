@@ -930,6 +930,7 @@ RED_TEAM_STAGE_ENTERED=1
 run_logged g4-runtime-red-team env \
     PLANE_G4_RUNTIME_IMAGE="${RUNTIME_IMAGE}" \
     PLANE_G4_RUNTIME_IMAGE_DIGEST="${RUNTIME_IMAGE_DIGEST}" \
+    PLANE_G4_RUNTIME_IMAGE_REVISION="${RUNTIME_IMAGE_REVISION}" \
     PLANE_G4_RUNTIME_CODE_ROOT="${ROOT_DIR}/apps/api" \
     python3 "${ROOT_DIR}/tools/agent-g4-runtime-red-team.py"
 
