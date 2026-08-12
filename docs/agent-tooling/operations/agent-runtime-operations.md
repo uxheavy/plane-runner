@@ -437,6 +437,14 @@ The offline G3/G4 verifiers share one process-lifetime advisory lock at
 process via `flock`; a second verifier fails closed before preflight, and no
 owner file or PID-reuse cleanup is performed inside the verifier.
 
+Before G3 begins, G4 bind-mounts the supplied Hermes checkout into the
+prepared API test image with the same read-only Docker contract used by the
+runtime test containers and verifies representative source and Git metadata
+are readable. A disposable checkout may be marked with
+`PLANE_G4_DISPOSABLE_HERMES_ROOT=1` only when its path matches
+`ROOT_DIR/tmp/plane-g4-hermes-*`; the existing G4 cleanup then removes that
+exact non-symlink directory and verifies it is gone.
+
 G4 requires the operator to provide the exact final wrapper SHA through
 `PLANE_G4_EXPECTED_CANDIDATE`. The verifier, live authority validator, and
 live invocation each require `HEAD` to equal that external value. The

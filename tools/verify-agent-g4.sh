@@ -73,6 +73,8 @@ EXTERNAL_SUPERPROJECT_ROOT="${PLANE_EXTERNAL_SUPERPROJECT_ROOT:-${DEFAULT_EXTERN
 MCP_ROOT="${PLANE_MCP_EXTERNAL_ROOT:-${EXTERNAL_SUPERPROJECT_ROOT}/external/plane-mcp-server}"
 SDK_ROOT="${PLANE_SDK_EXTERNAL_ROOT:-${EXTERNAL_SUPERPROJECT_ROOT}/external/plane-python-sdk}"
 HERMES_ROOT="${PLANE_HERMES_EXTERNAL_ROOT:-${EXTERNAL_SUPERPROJECT_ROOT}/../hermes-agent}"
+HERMES_ROOT_OWNED=0
+DISPOSABLE_HERMES_REQUESTED="${PLANE_G4_DISPOSABLE_HERMES_ROOT:-0}"
 
 case "${1:-}" in
     "") ;;
@@ -211,6 +213,39 @@ check_api_test_image() {
         command -v ruff >/dev/null
         python -c "import django, psycopg, pytest"
     ' >/dev/null 2>&1 || fail "offline API test dependencies are prepared in ${image}" "dependency probe failed" "prepare the API test image without installing during verification"
+}
+
+check_disposable_hermes_root() {
+    [[ "${DISPOSABLE_HERMES_REQUESTED}" == "0" || "${DISPOSABLE_HERMES_REQUESTED}" == "1" ]] || \
+        fail "PLANE_G4_DISPOSABLE_HERMES_ROOT is 0 or 1" "invalid_disposable_hermes_flag" "use 1 only for a checkout owned by this verifier"
+    [[ "${DISPOSABLE_HERMES_REQUESTED}" == "1" ]] || return 0
+    [[ -n "${PLANE_HERMES_EXTERNAL_ROOT:-}" ]] || \
+        fail "disposable Hermes root is explicitly supplied" "missing_PLANE_HERMES_EXTERNAL_ROOT" "set the repository-owned Hermes checkout path"
+    case "${HERMES_ROOT}" in
+        "${G4_TEMP_PARENT}"/plane-g4-hermes-*) ;;
+        *) fail "disposable Hermes root is under ROOT_DIR/tmp/plane-g4-hermes-*" "invalid_disposable_hermes_root=${HERMES_ROOT}" "use the repository-owned Docker-visible temp owner" ;;
+    esac
+    [[ -d "${HERMES_ROOT}" && ! -L "${HERMES_ROOT}" ]] || \
+        fail "disposable Hermes root is a real directory" "missing_or_symlinked_disposable_hermes_root" "prepare a clean checkout before verification"
+    HERMES_ROOT_OWNED=1
+    emit "external.hermes.checkout" passed "root=${HERMES_ROOT}" "ownership=verifier_guarded_cleanup"
+}
+
+check_hermes_docker_visibility() {
+    if ! docker run --rm --network none \
+        --mount "type=bind,src=${HERMES_ROOT},dst=/workspace/hermes-agent,readonly" \
+        --entrypoint sh "${API_TEST_IMAGE}" -c '
+            set -eu
+            test -r /workspace/hermes-agent/pyproject.toml
+            if test -d /workspace/hermes-agent/.git; then
+                test -r /workspace/hermes-agent/.git/HEAD
+            else
+                test -r /workspace/hermes-agent/.git
+            fi
+        ' >/dev/null 2>&1; then
+        fail "Hermes checkout is Docker-bind-visible and readable" "docker_bind_visibility_failed=${HERMES_ROOT}" "use a Docker-visible checkout under ROOT_DIR/tmp"
+    fi
+    emit "external.hermes.visibility" passed "root=${HERMES_ROOT}" "docker=bind_readable"
 }
 
 check_runtime_image() {
@@ -626,6 +661,17 @@ check_labeled_redteam_resources() {
     emit "cleanup.red-team" passed "label=${label}" "containers=0" "networks=0" "volumes=0"
 }
 
+cleanup_disposable_hermes() {
+    [[ "${HERMES_ROOT_OWNED}" -eq 1 ]] || return 0
+    case "${HERMES_ROOT}" in
+        "${G4_TEMP_PARENT}"/plane-g4-hermes-*) ;;
+        *) return 1 ;;
+    esac
+    [[ -d "${HERMES_ROOT}" && ! -L "${HERMES_ROOT}" ]] || return 1
+    rm -rf -- "${HERMES_ROOT}"
+    [[ ! -e "${HERMES_ROOT}" ]]
+}
+
 write_receipt() {
     [[ -n "${RECEIPT_PATH}" ]] || return 0
     local receipt_parent
@@ -708,6 +754,7 @@ cleanup() {
     if [[ "${RED_TEAM_STAGE_ENTERED}" -eq 1 ]]; then
         check_labeled_redteam_resources || cleanup_status=1
     fi
+    cleanup_disposable_hermes || cleanup_status=1
     if [[ "${CREATED_API_LOG_DIR}" -eq 1 ]]; then
         rm -rf -- "${ROOT_DIR}/apps/api/plane/logs"
     fi
@@ -770,6 +817,8 @@ pin_external_tree sdk "${SDK_ROOT}" "${SDK_COMMIT}"
 pin_external_tree hermes "${HERMES_ROOT}" "${HERMES_COMMIT}"
 [[ -d "${EXTERNAL_SUPERPROJECT_ROOT}/.git/modules" ]] || fail "external git module metadata is mounted" "missing=${EXTERNAL_SUPERPROJECT_ROOT}/.git/modules" "set PLANE_EXTERNAL_SUPERPROJECT_ROOT"
 check_api_test_image "${API_TEST_IMAGE}"
+check_disposable_hermes_root
+check_hermes_docker_visibility
 [[ "${RUNTIME_IMAGE}" == "${RUNTIME_IMAGE_TAG}" ]] || fail "runtime image tag=${RUNTIME_IMAGE_TAG}" "actual=${RUNTIME_IMAGE}" "use the committed runtime image tag or an explicitly reviewed equivalent"
 check_runtime_image "${RUNTIME_IMAGE}" "${RUNTIME_IMAGE_DIGEST}"
 validate_manifest

@@ -377,6 +377,30 @@ class G4ContractTests(unittest.TestCase):
         self.assertEqual(holder_stdout, "")
         self.assertEqual(contender.stdout, "")
 
+    def test_hermes_bind_visibility_rejects_unavailable_mount_before_g3(self):
+        source = (TOOLS / "verify-agent-g4.sh").read_text(encoding="utf-8")
+        visibility = source.index("check_hermes_docker_visibility()")
+        g3 = source.index("run_logged g3-prerequisite")
+        self.assertLess(visibility, g3)
+        self.assertIn('--mount "type=bind,src=${HERMES_ROOT},dst=/workspace/hermes-agent,readonly"', source)
+        self.assertIn("test -r /workspace/hermes-agent/pyproject.toml", source)
+        self.assertIn('docker_bind_visibility_failed=${HERMES_ROOT}', source)
+        self.assertIn('>/dev/null 2>&1; then', source[source.index("check_hermes_docker_visibility()") : g3])
+
+    def test_repo_owned_hermes_checkout_uses_guarded_cleanup(self):
+        source = (TOOLS / "verify-agent-g4.sh").read_text(encoding="utf-8")
+        cleanup = source[source.index("cleanup()") : source.index("trap cleanup EXIT")]
+        self.assertIn('G4_TEMP_PARENT="${ROOT_DIR}/tmp"', source)
+        self.assertIn('PLANE_G4_DISPOSABLE_HERMES_ROOT', source)
+        self.assertIn('"${G4_TEMP_PARENT}"/plane-g4-hermes-*)', source)
+        self.assertIn('HERMES_ROOT_OWNED=1', source)
+        self.assertIn('if ! docker run --rm --network none', source)
+        cleanup_helper = source[source.index("cleanup_disposable_hermes()") : source.index("write_receipt()")]
+        self.assertIn('[[ "${HERMES_ROOT_OWNED}" -eq 1 ]] || return 0', cleanup_helper)
+        self.assertIn('rm -rf -- "${HERMES_ROOT}"', cleanup_helper)
+        self.assertIn('[[ ! -e "${HERMES_ROOT}" ]]', cleanup_helper)
+        self.assertNotIn('rm -rf -- "${G4_TEMP_PARENT}"', cleanup)
+
 
     def test_arbitrary_exit_zero_output_is_rejected(self):
         manifest, authority, config, _ = fixture()
