@@ -4,14 +4,15 @@ This directory contains the compact execution control surface for the non-UI Pla
 
 ## Current status
 
-G0 through G3 are complete. The previously accepted canonical offline G4 wrapper remains the baseline; the current unaccepted remediation is based on source correction `c1e6fbf999cb0d1bc7bf29ccd09472c43e2d3ce0` and its one exact metadata-wrapper child still requires fresh offline proof before it can replace that baseline. The rebuilt API artifact is `plane-agent-api:g4-c1e6fbf9` at `sha256:84df816b0f15acf87858e677271ea64b9b3cc3d6212f2dc7fe3c09177aa2417b`, and the rebuilt runtime artifact is `plane-agent-runtime:hermes-114eabf9-g4-c1e6fbf9` at `sha256:225964fb13c92605675f2a676bb09048ce7effaeae11c4bfba7bb6cfe8d761b9`; both are source-bound to `c1e6fbf999cb0d1bc7bf29ccd09472c43e2d3ce0`. The remediation uses the external `PLANE_G4_EXPECTED_CANDIDATE` authority, one shared G3/G4 verifier lock with an inherited descriptor, Docker-visible Hermes preflight, and a retained sanitized receipt. The latest authorized live canary attempt remains permanently `outcome_unknown`; its blocked-canary receipt SHA-256 is `20be555eb93cac98a53ea3c0be1f56d3b6642179b77d9b6acf76ffd23dc76c7a`. A fresh explicitly authorized run is required; that attempt must not be replayed. This offline repair made no provider request or retry. Live G4 and staged G5 remain incomplete. No chat UI is in scope.
+G0 through G3 are complete. Sol Medium review rejected the exact wrapper `d42161bb29bf28f04246b96051cee3a88dcccd36` on P1 because the pinned Hermes adapter did not translate Plane's typed `openai-codex` wire. The blocker is closed in the canonical Hermes owner at `d2e655101f263329359e7d0de9d0b856202a3e4b`, descended directly from Hermes `114eabf9d807b659e36d767e4de46ca056297ccb`; the Plane source commit is `99b8ba8e62a1e2311a7a0c145045c20d314f40c3`, descended from the wrapper, with API test-contract bytes rebuilt from that exact source. The current runtime artifact is `plane-agent-runtime:hermes-d2e65510-g4-codex-fix` at `sha256:826cc9813bd4d7ab562e2bd701bea7c9c9623cd9d19e5f37bee91ca65e5ba35a`, labeled with Plane revision `99b8ba8e62a1e2311a7a0c145045c20d314f40c3`; the API artifact is `plane-agent-api:g4-99b8ba8` at `sha256:0c87ef0b8394a40cabbc8197e58a6fd8079ac056b451104c248d3cafae3a6656`. The exact-image UDS probe and focused adapter tests exercise the GPT-5.6 Codex route, XAI preservation, and fail-closed mismatches. This is an implementation/provenance closure, not live acceptance. The latest authorized live canary remains permanently `outcome_unknown`; its blocked-canary receipt SHA-256 is `20be555eb93cac98a53ea3c0be1f56d3b6642179b77d9b6acf76ffd23dc76c7a`. A fresh explicitly authorized run is required; that attempt must not be replayed. This repair made no provider request or retry. Remaining risk is a fresh live G4 after the same Sol review; staged G5 remains incomplete. No chat UI is in scope.
 
 The rollback fixture deliberately separates the current candidate from the
 previous last-known-good artifacts. `current.planeCommit` is the source
-correction `c1e6fbf999cb0d1bc7bf29ccd09472c43e2d3ce0`; current API services use
-the rebuilt API artifact revision/digest above, and `agent-runtime` uses the
-rebuilt runtime artifact revision/digest above. The independent `previous`
-section retains the accepted G3 service artifact digest
+commit `99b8ba8e62a1e2311a7a0c145045c20d314f40c3`; current API services use
+the rebuilt API artifact source/revision `99b8ba8e62a1e2311a7a0c145045c20d314f40c3`,
+while `agent-runtime` uses the Hermes `d2e655101f263329359e7d0de9d0b856202a3e4b`
+artifact above. The independent `previous` section retains the accepted G3
+service artifact digest
 `sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e`.
 The validator rejects cross-mixing between these current and previous
 provenance bindings.

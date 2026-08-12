@@ -327,30 +327,39 @@ docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose
 
 `apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` is the pin
 manifest. The current Plane deployable service candidate is the exact
-runtime-contract source correction
-`c1e6fbf999cb0d1bc7bf29ccd09472c43e2d3ce0`; the final offline evidence
-wrapper is its exact single child. The current API artifact is immutable and
-source-bound to `c1e6fbf999cb0d1bc7bf29ccd09472c43e2d3ce0`; the previously accepted G3 candidate is Plane commit `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
+runtime-contract source correction `99b8ba8e62a1e2311a7a0c145045c20d314f40c3`.
+Sol Medium's P1 rejection of wrapper
+`d42161bb29bf28f04246b96051cee3a88dcccd36` is closed by the existing Hermes
+adapter owner at commit `d2e655101f263329359e7d0de9d0b856202a3e4b`, a direct
+child of pinned Hermes `114eabf9d807b659e36d767e4de46ca056297ccb`. The
+current Plane source commit is `99b8ba8e62a1e2311a7a0c145045c20d314f40c3`,
+and the final metadata wrapper is its exact single child. The current API
+artifact remains immutable and source-bound to
+`99b8ba8e62a1e2311a7a0c145045c20d314f40c3`; the previously accepted G3
+candidate is Plane commit `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
 The current binding carries Hermes commit
-`114eabf9d807b659e36d767e4de46ca056297ccb`, MCP gitlink
+`d2e655101f263329359e7d0de9d0b856202a3e4b`, MCP gitlink
 `2dc152e136d7ad952b901e5fe9364a37487297ba`, SDK gitlink
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`, runtime image tag
-`plane-agent-runtime:hermes-114eabf9-g4-c1e6fbf9`, runtime image digest
-`sha256:225964fb13c92605675f2a676bb09048ce7effaeae11c4bfba7bb6cfe8d761b9`,
-runtime revision/source revision `c1e6fbf999cb0d1bc7bf29ccd09472c43e2d3ce0`, and runtime
+`plane-agent-runtime:hermes-d2e65510-g4-codex-fix`, runtime image digest
+`sha256:826cc9813bd4d7ab562e2bd701bea7c9c9623cd9d19e5f37bee91ca65e5ba35a`,
+runtime revision/source revision `99b8ba8e62a1e2311a7a0c145045c20d314f40c3`, and runtime
 contract `plane.agent-runtime/v1`. The current API artifact is tag
-`plane-agent-api:g4-c1e6fbf9` with image digest
-`sha256:84df816b0f15acf87858e677271ea64b9b3cc3d6212f2dc7fe3c09177aa2417b` and
-source revision/image label `c1e6fbf999cb0d1bc7bf29ccd09472c43e2d3ce0`.
-API image tag: `plane-agent-api:g4-c1e6fbf9`. API image digest:
-`sha256:84df816b0f15acf87858e677271ea64b9b3cc3d6212f2dc7fe3c09177aa2417b`.
+`plane-agent-api:g4-99b8ba8` with image digest
+`sha256:0c87ef0b8394a40cabbc8197e58a6fd8079ac056b451104c248d3cafae3a6656` and
+source revision/image label `99b8ba8e62a1e2311a7a0c145045c20d314f40c3`.
+API image tag: `plane-agent-api:g4-99b8ba8`. API image digest:
+`sha256:0c87ef0b8394a40cabbc8197e58a6fd8079ac056b451104c248d3cafae3a6656`.
 API source revision remains the exact source revision/image label above.
 API contract: `plane.operation/v1`.
-The wrapper carries these exact values from the immutable image builds. G3,
-G4, and the live helper execute the image-contained `/workspace/apps/api` tree;
+The wrapper carries these exact values from the immutable image builds. The
+exact-image red-team probe proves the image-owned GPT-5.6 Codex child emits
+`/backend-api/codex/responses` over the bounded AF_UNIX relay; focused adapter
+tests retain XAI and fail-closed mismatch coverage. G3, G4, and the live helper
+execute the image-contained `/workspace/apps/api` tree;
 they do not bind-mount a newer host API source tree. API, worker,
 `beat-worker`, supervisor, and `agent-runtime` each use the corresponding
-current artifact revision and image digest in the manifest. The Plane service revision above is the current executable artifact revision; the runtime image/runtimeRevision source is `c1e6fbf999cb0d1bc7bf29ccd09472c43e2d3ce0`. Here,
+current artifact revision and image digest in the manifest. The Plane service revision above is the current executable artifact revision; the runtime image/runtimeRevision source is `99b8ba8e62a1e2311a7a0c145045c20d314f40c3`. Here,
 `current.planeCommit` is the control-plane source correction and the current
 service artifact revisions identify the rebuilt executable images; the
 `previous` rollback section independently retains the last known-good G3
@@ -487,16 +496,20 @@ The offline G3/G4 verifiers share one process-lifetime advisory lock at
 process via `flock`; a second verifier fails closed before preflight, and no
 owner file or PID-reuse cleanup is performed inside the verifier.
 
-Before G3 begins, G4 bind-mounts the supplied Hermes checkout into the
-prepared API test image with the same read-only Docker contract used by the
-runtime test containers and verifies representative source and Git metadata
-are readable. A disposable checkout may be marked with
-`PLANE_G4_DISPOSABLE_HERMES_ROOT=1` only when its path matches
-`ROOT_DIR/tmp/plane-g4-hermes-*`; the existing G4 cleanup then removes that
-exact non-symlink directory and verifies it is gone. The checkout must retain
-the `https://github.com/uxheavy/hermes-agent.git` remote; a local filesystem
-clone is not an accepted provenance source even when its commit and worktree
-are otherwise exact.
+Before G3 begins, G4 validates two independent read-only Hermes checkouts:
+the current runtime checkout at `d2e655101f263329359e7d0de9d0b856202a3e4b`
+and the accepted G3 checkout at
+`114eabf9d807b659e36d767e4de46ca056297ccb`. The G3 prerequisite receives
+only the accepted-baseline checkout, while current G4 runtime tests receive
+only the current checkout; path equality is rejected as cross-mixing. A
+disposable checkout may be marked with
+`PLANE_G4_DISPOSABLE_HERMES_ROOT=1` only when the current path matches
+`ROOT_DIR/tmp/plane-g4-hermes-*` and the G3 path matches
+`ROOT_DIR/tmp/plane-g4-hermes-g3-*`; guarded cleanup removes those exact
+non-symlink directories and verifies they are gone. Both checkouts must
+retain the `https://github.com/uxheavy/hermes-agent.git` remote; a local
+filesystem clone is not an accepted provenance source even when its commit
+and worktree are otherwise exact.
 
 G4 requires the operator to provide the exact final wrapper SHA through
 `PLANE_G4_EXPECTED_CANDIDATE`. The verifier, live authority validator, and
