@@ -192,7 +192,7 @@ def test_pinned_hermes_runs_through_http_service_launcher_and_bound_host_socket(
     dependency_path = os.environ.get("PLANE_G2_HERMES_DEPENDENCY_PATH") or os.path.join(
         checkout, "plane_runtime", "g1_runtime_image"
     )
-    expected_sha = "114eabf9d807b659e36d767e4de46ca056297ccb"
+    expected_sha = "d2e655101f263329359e7d0de9d0b856202a3e4b"
     assert os.path.isdir(checkout)
     assert (
         subprocess.run(
@@ -604,7 +604,7 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
     tmp_path, api_key_client, workspace, gateway_project, gateway_issue, create_user, capsys
 ):
     checkout = os.environ.get("PLANE_G2_HERMES_CHECKOUT", "/hermes")
-    expected_sha = "114eabf9d807b659e36d767e4de46ca056297ccb"
+    expected_sha = "d2e655101f263329359e7d0de9d0b856202a3e4b"
     assert os.path.isdir(checkout)
     actual_sha = subprocess.run(
         ["git", "-C", checkout, "rev-parse", "HEAD"], check=True, capture_output=True, text=True

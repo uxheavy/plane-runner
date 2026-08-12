@@ -708,6 +708,24 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn('[[ ! -e "${HERMES_ROOT}" ]]', cleanup_helper)
         self.assertNotIn('rm -rf -- "${G4_TEMP_PARENT}"', cleanup)
 
+    def test_g3_prerequisite_uses_independent_accepted_hermes_pin(self):
+        source = (TOOLS / "verify-agent-g4.sh").read_text(encoding="utf-8")
+        self.assertIn('manifest_pin() {', source)
+        self.assertIn('HERMES_COMMIT="$(manifest_pin pins.hermesCommit)"', source)
+        self.assertIn('RUNTIME_IMAGE_DIGEST="$(manifest_pin pins.runtimeImageDigest)"', source)
+        self.assertIn('value = json.load(open(sys.argv[1], encoding="utf-8"))', source)
+        self.assertNotIn('json.loads(open(sys.argv[1]', source)
+        self.assertIn('G3_HERMES_COMMIT="114eabf9d807b659e36d767e4de46ca056297ccb"', source)
+        self.assertIn('G3_HERMES_ROOT="${PLANE_G3_HERMES_EXTERNAL_ROOT:-${EXTERNAL_SUPERPROJECT_ROOT}/../hermes-agent}"', source)
+        self.assertIn('pin_external_tree hermes-g3 "${G3_HERMES_ROOT}" "${G3_HERMES_COMMIT}"', source)
+        g3 = source[source.index("run_logged g3-prerequisite") :]
+        self.assertIn('PLANE_HERMES_EXTERNAL_ROOT="${HERMES_ROOT}"', g3)
+        self.assertIn('PLANE_G3_HERMES_PIN_ROOT="${G3_HERMES_ROOT}"', g3)
+        self.assertIn('cross_mixed_hermes_roots', source)
+        g3_source = (TOOLS / "verify-agent-g3.sh").read_text(encoding="utf-8")
+        self.assertIn('HERMES_PIN_ROOT="${PLANE_G3_HERMES_PIN_ROOT:-${HERMES_ROOT}}"', g3_source)
+        self.assertIn('pin_external_tree hermes-pin "${HERMES_PIN_ROOT}" "${HERMES_COMMIT}"', g3_source)
+
 
     def test_arbitrary_exit_zero_output_is_rejected(self):
         manifest, authority, config, _ = fixture()

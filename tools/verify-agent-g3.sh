@@ -32,6 +32,7 @@ EXTERNAL_SUPERPROJECT_ROOT="${PLANE_EXTERNAL_SUPERPROJECT_ROOT:-${DEFAULT_SUPERP
 MCP_ROOT="${PLANE_MCP_EXTERNAL_ROOT:-${EXTERNAL_SUPERPROJECT_ROOT}/external/plane-mcp-server}"
 SDK_ROOT="${PLANE_SDK_EXTERNAL_ROOT:-${EXTERNAL_SUPERPROJECT_ROOT}/external/plane-python-sdk}"
 HERMES_ROOT="${PLANE_HERMES_EXTERNAL_ROOT:-${EXTERNAL_SUPERPROJECT_ROOT}/../hermes-agent}"
+HERMES_PIN_ROOT="${PLANE_G3_HERMES_PIN_ROOT:-${HERMES_ROOT}}"
 PROJECT_NAME="plane-agent-g3-verify-$$-${RANDOM}"
 NETWORK_NAME="${PROJECT_NAME}_test_env"
 CURRENT_STEP="preflight"
@@ -285,7 +286,7 @@ check_candidate
 CURRENT_STEP="source-pins"
 pin_external_tree mcp "${MCP_ROOT}" "${MCP_COMMIT}"
 pin_external_tree sdk "${SDK_ROOT}" "${SDK_COMMIT}"
-pin_external_tree hermes "${HERMES_ROOT}" "${HERMES_COMMIT}"
+pin_external_tree hermes-pin "${HERMES_PIN_ROOT}" "${HERMES_COMMIT}"
 check_gitlinks
 check_mcp_inventory
 [[ -d "${EXTERNAL_SUPERPROJECT_ROOT}/.git/modules" ]] || fail "external git module metadata is mounted" "missing metadata" "set PLANE_EXTERNAL_SUPERPROJECT_ROOT to the gitlink superproject"

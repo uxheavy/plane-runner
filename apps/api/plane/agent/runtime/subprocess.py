@@ -57,7 +57,7 @@ _HERMES_RUNTIME_POLICY_FIELDS = frozenset(
     }
 )
 _HERMES_G1_CONTRACT_DIGESTS = {
-    # Frozen by the exact Hermes 114eabf9d807b659e36d767e4de46ca056297ccb
+    # Frozen by the exact Hermes d2e655101f263329359e7d0de9d0b856202a3e4b
     # plane_runtime.g1_contract manifest accepted at this process boundary.
     "runSnapshot": "e538fe79ede53e6bb2e307600dbefea507e30b996c002c3dab32d543ca0e36a2",
     "invocationEnvelope": "b7a15d74406f1624cdb7cd95b42edfd1ffee596abe57e4f00ed60e2e23ded995",

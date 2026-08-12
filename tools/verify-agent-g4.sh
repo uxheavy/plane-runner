@@ -13,14 +13,29 @@ if ! [[ "${PLANE_AGENT_VERIFIER_LOCK_FD:-}" =~ ^[0-9]+$ ]] || \
 fi
 MANIFEST="${ROOT_DIR}/tools/agent-g4-manifest.json"
 G3_BASE_COMMIT="7c9d35f4c324865c27c84da5016be2c84e460bcc"
+G3_HERMES_COMMIT="114eabf9d807b659e36d767e4de46ca056297ccb"
 MCP_COMMIT="2dc152e136d7ad952b901e5fe9364a37487297ba"
 SDK_COMMIT="7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
-HERMES_COMMIT="114eabf9d807b659e36d767e4de46ca056297ccb"
-RUNTIME_IMAGE_TAG="plane-agent-runtime:hermes-114eabf9-g4-c1e6fbf9"
-RUNTIME_IMAGE_DIGEST="sha256:225964fb13c92605675f2a676bb09048ce7effaeae11c4bfba7bb6cfe8d761b9"
-RUNTIME_IMAGE_REVISION="c1e6fbf999cb0d1bc7bf29ccd09472c43e2d3ce0"
-RUNTIME_CONTRACT="plane.agent-runtime/v1"
 EXPECTED_CANDIDATE="${PLANE_G4_EXPECTED_CANDIDATE:-}"
+
+manifest_pin() {
+    local expression="$1"
+    python3 - "${MANIFEST}" "${expression}" <<'PY'
+import json
+import sys
+
+value = json.load(open(sys.argv[1], encoding="utf-8"))
+for part in sys.argv[2].split("."):
+    value = value[part]
+print(value)
+PY
+}
+
+HERMES_COMMIT="$(manifest_pin pins.hermesCommit)"
+RUNTIME_IMAGE_TAG="$(manifest_pin pins.runtimeImageTag)"
+RUNTIME_IMAGE_DIGEST="$(manifest_pin pins.runtimeImageDigest)"
+RUNTIME_IMAGE_REVISION="$(manifest_pin pins.runtimeImageRevision)"
+RUNTIME_CONTRACT="$(manifest_pin pins.runtimeContract)"
 API_TEST_IMAGE_TAG="$(python3 - "${MANIFEST}" <<'PY'
 import json
 import sys
@@ -104,7 +119,9 @@ EXTERNAL_SUPERPROJECT_ROOT="${PLANE_EXTERNAL_SUPERPROJECT_ROOT:-${DEFAULT_EXTERN
 MCP_ROOT="${PLANE_MCP_EXTERNAL_ROOT:-${EXTERNAL_SUPERPROJECT_ROOT}/external/plane-mcp-server}"
 SDK_ROOT="${PLANE_SDK_EXTERNAL_ROOT:-${EXTERNAL_SUPERPROJECT_ROOT}/external/plane-python-sdk}"
 HERMES_ROOT="${PLANE_HERMES_EXTERNAL_ROOT:-${EXTERNAL_SUPERPROJECT_ROOT}/../hermes-agent}"
+G3_HERMES_ROOT="${PLANE_G3_HERMES_EXTERNAL_ROOT:-${EXTERNAL_SUPERPROJECT_ROOT}/../hermes-agent}"
 HERMES_ROOT_OWNED=0
+G3_HERMES_ROOT_OWNED=0
 DISPOSABLE_HERMES_REQUESTED="${PLANE_G4_DISPOSABLE_HERMES_ROOT:-0}"
 
 case "${1:-}" in
@@ -271,6 +288,22 @@ check_disposable_hermes_root() {
         fail "disposable Hermes root is a real directory" "missing_or_symlinked_disposable_hermes_root" "prepare a clean checkout before verification"
     HERMES_ROOT_OWNED=1
     emit "external.hermes.checkout" passed "root=${HERMES_ROOT}" "ownership=verifier_guarded_cleanup"
+}
+
+check_disposable_g3_hermes_root() {
+    [[ "${DISPOSABLE_HERMES_REQUESTED}" == "1" ]] || return 0
+    [[ -n "${PLANE_G3_HERMES_EXTERNAL_ROOT:-}" ]] || \
+        fail "G3 disposable Hermes root is explicitly supplied" "missing_PLANE_G3_HERMES_EXTERNAL_ROOT" "set the repository-owned accepted-baseline Hermes checkout path"
+    case "${G3_HERMES_ROOT}" in
+        "${G4_TEMP_PARENT}"/plane-g4-hermes-g3-*) ;;
+        *) fail "G3 disposable Hermes root is under ROOT_DIR/tmp/plane-g4-hermes-g3-*" "invalid_g3_disposable_hermes_root=${G3_HERMES_ROOT}" "use the repository-owned Docker-visible temp owner" ;;
+    esac
+    [[ -d "${G3_HERMES_ROOT}" && ! -L "${G3_HERMES_ROOT}" ]] || \
+        fail "G3 disposable Hermes root is a real directory" "missing_or_symlinked_g3_disposable_hermes_root" "prepare a clean accepted-baseline checkout before verification"
+    [[ "${G3_HERMES_ROOT}" != "${HERMES_ROOT}" ]] || \
+        fail "G3 and current Hermes roots are distinct" "cross_mixed_hermes_roots" "provide separate current and accepted-baseline checkouts"
+    G3_HERMES_ROOT_OWNED=1
+    emit "external.hermes.g3-checkout" passed "root=${G3_HERMES_ROOT}" "ownership=verifier_guarded_cleanup" "pin=${G3_HERMES_COMMIT}"
 }
 
 check_hermes_docker_visibility() {
@@ -710,6 +743,17 @@ cleanup_disposable_hermes() {
     [[ ! -e "${HERMES_ROOT}" ]]
 }
 
+cleanup_disposable_g3_hermes() {
+    [[ "${G3_HERMES_ROOT_OWNED}" -eq 1 ]] || return 0
+    case "${G3_HERMES_ROOT}" in
+        "${G4_TEMP_PARENT}"/plane-g4-hermes-g3-*) ;;
+        *) return 1 ;;
+    esac
+    [[ -d "${G3_HERMES_ROOT}" && ! -L "${G3_HERMES_ROOT}" ]] || return 1
+    rm -rf -- "${G3_HERMES_ROOT}"
+    [[ ! -e "${G3_HERMES_ROOT}" ]]
+}
+
 write_receipt() {
     [[ -n "${RECEIPT_PATH}" ]] || return 0
     local receipt_parent
@@ -810,6 +854,7 @@ cleanup() {
         check_labeled_redteam_resources || cleanup_status=1
     fi
     cleanup_disposable_hermes || cleanup_status=1
+    cleanup_disposable_g3_hermes || cleanup_status=1
     if [[ "${CREATED_API_LOG_DIR}" -eq 1 ]]; then
         rm -rf -- "${ROOT_DIR}/apps/api/plane/logs"
     fi
@@ -870,9 +915,11 @@ check_gitlinks
 pin_external_tree mcp "${MCP_ROOT}" "${MCP_COMMIT}"
 pin_external_tree sdk "${SDK_ROOT}" "${SDK_COMMIT}"
 pin_external_tree hermes "${HERMES_ROOT}" "${HERMES_COMMIT}"
+pin_external_tree hermes-g3 "${G3_HERMES_ROOT}" "${G3_HERMES_COMMIT}"
 [[ -d "${EXTERNAL_SUPERPROJECT_ROOT}/.git/modules" ]] || fail "external git module metadata is mounted" "missing=${EXTERNAL_SUPERPROJECT_ROOT}/.git/modules" "set PLANE_EXTERNAL_SUPERPROJECT_ROOT"
 check_api_test_image "${API_TEST_IMAGE}"
 check_disposable_hermes_root
+check_disposable_g3_hermes_root
 check_hermes_docker_visibility
 [[ "${RUNTIME_IMAGE}" == "${RUNTIME_IMAGE_TAG}" ]] || fail "runtime image tag=${RUNTIME_IMAGE_TAG}" "actual=${RUNTIME_IMAGE}" "use the committed runtime image tag or an explicitly reviewed equivalent"
 check_runtime_image "${RUNTIME_IMAGE}" "${RUNTIME_IMAGE_DIGEST}"
@@ -910,6 +957,7 @@ run_logged g3-prerequisite env \
     PLANE_MCP_EXTERNAL_ROOT="${MCP_ROOT}" \
     PLANE_SDK_EXTERNAL_ROOT="${SDK_ROOT}" \
     PLANE_HERMES_EXTERNAL_ROOT="${HERMES_ROOT}" \
+    PLANE_G3_HERMES_PIN_ROOT="${G3_HERMES_ROOT}" \
     "${ROOT_DIR}/tools/verify-agent-g3.sh"
 
 CURRENT_STEP="static-scope"

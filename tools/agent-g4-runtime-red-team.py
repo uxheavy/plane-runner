@@ -14,7 +14,7 @@ import uuid
 from pathlib import Path
 
 
-HERMES_COMMIT = "114eabf9d807b659e36d767e4de46ca056297ccb"
+HERMES_COMMIT = "d2e655101f263329359e7d0de9d0b856202a3e4b"
 RESOURCE_LABEL = "com.uxheavy.plane.agent-g4-runtime"
 EXPECTED_RUNTIME_IMAGE_DIGEST = "sha256:225964fb13c92605675f2a676bb09048ce7effaeae11c4bfba7bb6cfe8d761b9"
 EXPECTED_RUNTIME_IMAGE_REVISION = "c1e6fbf999cb0d1bc7bf29ccd09472c43e2d3ce0"
@@ -256,6 +256,110 @@ class OpenAI:
 
 class AsyncOpenAI(OpenAI):
     pass
+'''
+
+
+CODEX_UDS_PROBE = r'''"""Exercise the image-owned Hermes Codex adapter in a child process.
+
+The parent is a bounded local HTTP relay on one AF_UNIX socket. The child uses
+the exact image's provider adapter and real httpx transport; no provider DNS or
+TCP is available because the container runs with ``--network none``.
+"""
+import os
+import socket
+import subprocess
+import sys
+import tempfile
+
+
+def read_request(connection):
+    payload = bytearray()
+    while b"\r\n\r\n" not in payload:
+        chunk = connection.recv(4096)
+        if not chunk:
+            raise RuntimeError("relay request ended before headers")
+        payload.extend(chunk)
+        if len(payload) > 64 * 1024:
+            raise RuntimeError("relay request headers exceeded bound")
+    header_end = payload.index(b"\r\n\r\n") + 4
+    lines = payload[:header_end].decode("iso-8859-1").split("\r\n")
+    content_length = next(
+        int(line.split(":", 1)[1].strip())
+        for line in lines[1:]
+        if line.lower().startswith("content-length:")
+    )
+    if content_length < 0 or content_length > 256 * 1024:
+        raise RuntimeError("relay request body exceeded bound")
+    while len(payload) - header_end < content_length:
+        chunk = connection.recv(4096)
+        if not chunk:
+            raise RuntimeError("relay request ended before body")
+        payload.extend(chunk)
+    return lines[0], {line.split(":", 1)[0].lower(): line.split(":", 1)[1].strip() for line in lines[1:] if line}
+
+
+child = r"""
+from plane_runtime.hermes_adapter import prepare_provider_relay_credentials
+import httpx
+import os
+
+socket_path = os.environ["G4_CODEX_RELAY_SOCKET"]
+credentials = {
+    "host": "chatgpt.com",
+    "path": "/backend-api/codex/responses",
+    "provider": "openai-codex",
+    "relayToken": "local-relay-token",
+    "invocationSocket": socket_path,
+}
+agent_credentials, factory = prepare_provider_relay_credentials(
+    credentials,
+    expected_provider="openai-codex",
+    provider_relay_socket=socket_path,
+)
+assert agent_credentials == {
+    "api_key": "plane-provider-relay",
+    "base_url": "http://plane-provider-relay.invalid/backend-api/codex",
+    "api_mode": "codex_responses",
+}
+with factory() as client:
+    response = client.post("/responses", json={"model": "gpt-5.6-luna", "input": []})
+assert response.status_code == 200
+"""
+
+with tempfile.TemporaryDirectory(prefix="g4-codex-uds-") as directory:
+    socket_path = os.path.join(directory, "provider.sock")
+    listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    listener.bind(socket_path)
+    listener.listen(1)
+    listener.settimeout(15)
+    child_process = subprocess.Popen(
+        [sys.executable, "-c", child],
+        env={**os.environ, "G4_CODEX_RELAY_SOCKET": socket_path},
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        connection, _ = listener.accept()
+        with connection:
+            request_line, headers = read_request(connection)
+            connection.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}")
+        stdout, stderr = child_process.communicate(timeout=15)
+    finally:
+        listener.close()
+        if child_process.poll() is None:
+            child_process.kill()
+            child_process.wait()
+
+if child_process.returncode != 0:
+    raise SystemExit((stderr or stdout or "codex child failed")[-2048:])
+if request_line != "POST /backend-api/codex/responses HTTP/1.1":
+    raise SystemExit("codex child emitted the wrong relay path")
+if headers.get("x-plane-relay-provider") != "openai-codex":
+    raise SystemExit("codex child emitted the wrong relay provider")
+if headers.get("authorization") != "Bearer local-relay-token":
+    raise SystemExit("codex child emitted the wrong relay authorization")
+print("codex_uds_cross_process=passed")
 '''
 
 
@@ -664,7 +768,7 @@ def main() -> int:
     if shutil.which("docker") is None:
         print("event=agent.g4.runtime-red-team status=failed reason=docker_unavailable")
         return 1
-    image = os.environ.get("PLANE_G4_RUNTIME_IMAGE", "plane-agent-runtime:hermes-114eabf9-g4-c1e6fbf9")
+    image = os.environ.get("PLANE_G4_RUNTIME_IMAGE", "plane-agent-runtime:hermes-d2e65510-g4-codex-fix")
     expected_digest = os.environ.get("PLANE_G4_RUNTIME_IMAGE_DIGEST", EXPECTED_RUNTIME_IMAGE_DIGEST)
     expected_revision = os.environ.get("PLANE_G4_RUNTIME_IMAGE_REVISION", EXPECTED_RUNTIME_IMAGE_REVISION)
     containers: list[str] = []
@@ -687,6 +791,26 @@ def main() -> int:
             raise ProbeFailure("runtime_image_plane_provenance_mismatch")
         if labels.get("org.uxheavy.plane.runtime.contract") != RUNTIME_CONTRACT:
             raise ProbeFailure("runtime_image_contract_provenance_mismatch")
+        codex_probe = require(
+            docker(
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--read-only",
+                "--tmpfs",
+                "/tmp:rw,noexec,nosuid,nodev,size=8m",
+                "--entrypoint",
+                "python3",
+                image,
+                "-c",
+                CODEX_UDS_PROBE,
+                timeout=30,
+            ),
+            "codex_uds_cross_process_probe_failed",
+        )
+        if "codex_uds_cross_process=passed" not in codex_probe:
+            raise ProbeFailure("codex_uds_cross_process_evidence_missing")
 
         name = f"plane-agent-g4-runtime-{uuid.uuid4().hex[:12]}"
         peer = f"{name}-host"
@@ -1066,6 +1190,7 @@ def main() -> int:
             f"runtime_contract={RUNTIME_CONTRACT} hermes_commit={HERMES_COMMIT} "
             "dispatch_http=passed full_chain=passed launcher=passed hermes_child=passed "
             "hermes_agent_loop=passed provider_transport_seam=passed agent_identity=passed "
+            "codex_uds_cross_process=passed "
             "tool_registration=passed tamper_guard=passed "
             "filesystem_confinement=passed "
             "af_unix_callback=passed plane_http_gateway=passed authorization=passed "
