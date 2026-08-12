@@ -437,6 +437,17 @@ never include a runtime secret or provider credential.
 
 ### Verifier authority, exclusion, and retained receipt
 
+The historical accepted-baseline-to-candidate Gitleaks scan traverses the
+immutable superseded wrapper `9ff8b952872e9201e2f0f2e8c6621c273d33f49b`, whose
+manifest had one non-secret Git revision value under the former flat
+`apiSourceRevision` field. Gitleaks fingerprinted that finding as
+`9ff8b952872e9201e2f0f2e8c6621c273d33f49b:tools/agent-g4-manifest.json:generic-api-key:47`.
+That exact fingerprint alone is recorded in the repository `.gitleaksignore`;
+it is not a file, rule, pattern, or value-family suppression. Current
+provenance uses the typed `pins.apiArtifact.sourceRevision` field, and the
+contract tests run the historical and current scans plus an unrelated real
+`apiKey`-shaped secret to prove the detector remains active.
+
 The offline G3/G4 verifiers share one process-lifetime advisory lock at
 `tmp/plane-agent-g-verifier.lock`. The lock is held across the verifier
 process via `flock`; a second verifier fails closed before preflight, and no

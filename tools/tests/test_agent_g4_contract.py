@@ -44,6 +44,8 @@ ROOT = TOOLS.parent
 MANIFEST = json.loads((TOOLS / "agent-g4-manifest.json").read_text(encoding="utf-8"))
 CANDIDATE = "a" * 40
 COMMAND = "python3 approved_live_probe.py --result-json"
+G3_BASELINE = "9b4bad0b0b54c90c8d25e9af5f086971e6b9c93a"
+HISTORICAL_FALSE_POSITIVE = "9ff8b952872e9201e2f0f2e8c6621c273d33f49b:tools/agent-g4-manifest.json:generic-api-key:47"
 BINDING_KEYS = (
     "candidateCommit",
     "g3Baseline",
@@ -483,6 +485,74 @@ class G4ContractTests(unittest.TestCase):
             text=True,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_gitleaks_historical_disposition_is_exact_and_detector_remains_active(self):
+        ignore_path = ROOT / ".gitleaksignore"
+        ignored = {
+            line.strip()
+            for line in ignore_path.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        }
+        self.assertEqual(ignored, {HISTORICAL_FALSE_POSITIVE})
+
+        def scan(log_range):
+            return subprocess.run(
+                [
+                    "gitleaks",
+                    "detect",
+                    "--no-banner",
+                    "--redact",
+                    "--source",
+                    str(ROOT),
+                    "--log-opts",
+                    log_range,
+                    "--exit-code",
+                    "1",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+        candidate = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+        ).stdout.strip()
+        source = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", f"{candidate}^"], check=True, capture_output=True, text=True
+        ).stdout.strip()
+        source_parent = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", f"{source}^"], check=True, capture_output=True, text=True
+        ).stdout.strip()
+        historical = scan(f"{G3_BASELINE}..{candidate}")
+        current_source = scan(f"{source_parent}..{source}")
+        current_wrapper = scan(f"{source}..{candidate}")
+        self.assertEqual(historical.returncode, 0, historical.stdout + historical.stderr)
+        self.assertEqual(current_source.returncode, 0, current_source.stdout + current_source.stderr)
+        self.assertEqual(current_wrapper.returncode, 0, current_wrapper.stdout + current_wrapper.stderr)
+
+        with tempfile.TemporaryDirectory() as directory:
+            secret_path = Path(directory) / "unrelated.json"
+            synthetic_secret = ("01234" * 3) + "567" + ("89abc" * 2) + "defa"
+            secret_path.write_text(f'{{"apiKey": "{synthetic_secret}"}}\n', encoding="utf-8")
+            unrelated = subprocess.run(
+                [
+                    "gitleaks",
+                    "detect",
+                    "--no-banner",
+                    "--redact",
+                    "--no-git",
+                    "--source",
+                    directory,
+                    "--gitleaks-ignore-path",
+                    str(ROOT),
+                    "--exit-code",
+                    "1",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        self.assertEqual(unrelated.returncode, 1, unrelated.stdout + unrelated.stderr)
 
     def test_hermes_bind_visibility_rejects_unavailable_mount_before_g3(self):
         source = (TOOLS / "verify-agent-g4.sh").read_text(encoding="utf-8")
