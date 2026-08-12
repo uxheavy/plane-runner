@@ -276,6 +276,42 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn('return _normalise_ref(value, "idempotency", field_name)', services)
         self.assertIn('value.startswith(f"{namespace}:")', services)
 
+    def test_live_helper_uses_namespaced_actor_credential_reference(self):
+        source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        actor_call = next(
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "create_actor"
+        )
+        credential_keyword = next(
+            keyword for keyword in actor_call.keywords if keyword.arg == "credential_ref"
+        )
+        credential_ref = ast.literal_eval(credential_keyword.value)
+
+        services_source = (ROOT / "apps/api/plane/agent/lifecycle/services.py").read_text(encoding="utf-8")
+        services_tree = ast.parse(services_source)
+        pattern_assignment = next(
+            node
+            for node in ast.walk(services_tree)
+            if isinstance(node, ast.Assign)
+            and any(isinstance(target, ast.Name) and target.id == "_CREDENTIAL_REF_PATTERN" for target in node.targets)
+        )
+        pattern = ast.literal_eval(pattern_assignment.value.args[0])
+        credential_pattern = re.compile(pattern)
+
+        self.assertEqual(
+            credential_ref,
+            "plane-credential:g4-live",
+            "event=g4.live.actor-credential-reference risk=unbound_actor_credential "
+            "expected=plane-credential:g4-live actual=%r suggestion=use_an_internal_namespaced_reference"
+            % credential_ref,
+        )
+        self.assertRegex(credential_ref, credential_pattern)
+        self.assertNotRegex("runtime", credential_pattern)
+
     def test_failure_evidence_is_bounded_structural_and_excludes_sensitive_runtime_data(self):
         source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
         tree = ast.parse(source)

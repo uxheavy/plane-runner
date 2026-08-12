@@ -321,7 +321,7 @@ def main() -> int:
             workspace=workspace,
             project=project,
             display_name="G4 configured provider worker",
-            credential_ref="runtime",
+            credential_ref="plane-credential:g4-live",
             created_by=user,
         )
         profile = create_profile(
