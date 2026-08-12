@@ -373,8 +373,8 @@ def validate_rollback_fixture(fixture_path: Path, root: Path, manifest: dict[str
     }
     current_artifacts["agent-runtime"] = ("runtime", pins["runtimeImageDigest"], pins["runtimeImageRevision"])
     for service in ROLLBACK_SERVICE_NAMES:
-        _rollback_exact(current_services[service]["revision"], current_parent, f"current_{service}_revision")
         artifact_kind, artifact_digest, artifact_source_revision = current_artifacts[service]
+        _rollback_exact(current_services[service]["revision"], artifact_source_revision, f"current_{service}_revision")
         _rollback_exact(current_services[service]["artifactKind"], artifact_kind, f"current_{service}_artifactKind")
         _rollback_exact(
             current_services[service]["artifactSourceRevision"],

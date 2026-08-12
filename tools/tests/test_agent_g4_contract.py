@@ -770,6 +770,36 @@ class G4ContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "offline_evidence_rollback_sha256_mismatch"):
             validate_offline_evidence(stale, ROOT)
 
+    def test_rollback_control_and_artifact_revisions_are_independently_bound(self):
+        fixture_path = ROOT / "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json"
+        original = json.loads(fixture_path.read_text(encoding="utf-8"))
+        mutations = (
+            (
+                "control-plane",
+                lambda value: value["current"].update({"planeCommit": "5f7e27f969b54ab94f0c6a6da9ea6feca27b7e32"}),
+                "rollback_current_planeCommit_mismatch",
+            ),
+            (
+                "api-service-artifact",
+                lambda value: value["current"]["services"]["api"].update({"revision": value["current"]["planeCommit"]}),
+                "rollback_current_api_revision_mismatch",
+            ),
+            (
+                "runtime-service-artifact",
+                lambda value: value["current"]["services"]["agent-runtime"].update({"revision": value["current"]["planeCommit"]}),
+                "rollback_current_agent-runtime_revision_mismatch",
+            ),
+        )
+        for name, mutate, reason in mutations:
+            with self.subTest(name=name):
+                value = copy.deepcopy(original)
+                mutate(value)
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "rollback.json"
+                    path.write_text(json.dumps(value), encoding="utf-8")
+                    with self.assertRaisesRegex(ContractError, reason):
+                        validate_rollback_fixture(path, ROOT, MANIFEST)
+
     def test_rollback_stale_and_arbitrary_pin_mutations_are_rejected(self):
         fixture_path = ROOT / "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json"
         original = json.loads(fixture_path.read_text(encoding="utf-8"))
