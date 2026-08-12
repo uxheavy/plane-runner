@@ -328,7 +328,7 @@ docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose
 `apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` is the pin
 manifest. The current Plane deployable service candidate is the exact
 repaired runner source correction
-`8b684d3e293684c03f61c7be65bb27ccdab6fca1`; the final offline evidence
+`796415aca55987aee55197e3d3d56b1507be3e53`; the final offline evidence
 wrapper is its exact single child. The previously accepted G3 candidate is Plane commit `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
 The current binding carries Hermes commit
 `114eabf9d807b659e36d767e4de46ca056297ccb`, MCP gitlink
@@ -342,9 +342,9 @@ repaired source candidate; the runtime image/runtimeRevision source is
 `c47ddfe6174ecd6d66257d8fedbd5d425c7f3172`, which was used to build the
 candidate image. The wrapper carries only the existing binding, fixture, and
 evidence documentation. The API artifact is separately immutable and source
-bound. API image tag: `plane-agent-api:g4-8b684d3e`. API image digest:
-`sha256:73b2a3149818ae78271b86823defc4745013e415530064ed6bdebc4cee53edbd`.
-API source revision/image label: `8b684d3e293684c03f61c7be65bb27ccdab6fca1`.
+bound. API image tag: `plane-agent-api:g4-796415ac`. API image digest:
+`sha256:9f01136f7878ef14b44cccb54aaf5b962b5a6a0a2c9da4f311f9b9c4cdbf8d29`.
+API source revision/image label: `796415aca55987aee55197e3d3d56b1507be3e53`.
 API contract: `plane.operation/v1`. The wrapper carries these exact values from
 the immutable API-image build. G3, G4, and
 the live helper execute the image-contained `/workspace/apps/api` tree; they
@@ -365,6 +365,11 @@ docker build -f apps/api/Dockerfile.g4 \
   --build-arg BASE_API_IMAGE=plane-g3-external-client-api-tests:prepared \
   --build-arg PLANE_API_SOURCE_REVISION="$PLANE_API_SOURCE_REVISION" \
   --build-arg PLANE_API_IMAGE_TAG="$PLANE_API_IMAGE_TAG" \
+  --build-arg PLANE_API_MANAGE_SHA256="$PLANE_API_MANAGE_SHA256" \
+  --build-arg PLANE_API_READBACK_SHA256="$PLANE_API_READBACK_SHA256" \
+  --build-arg PLANE_API_ADMIN_SHA256="$PLANE_API_ADMIN_SHA256" \
+  --build-arg PLANE_API_CORRUPTION_TEST_SHA256="$PLANE_API_CORRUPTION_TEST_SHA256" \
+  --build-arg PLANE_API_PROVIDER_CONFIG_SHA256="$PLANE_API_PROVIDER_CONFIG_SHA256" \
   apps/api
 ```
 
