@@ -18,7 +18,12 @@ from plane.agent.operations_readback import (
     build_operator_readback,
     build_safety_stop_command,
 )
-from plane.agent.readback import AgentReadbackTooLarge, build_run_readback, validate_readback_limit
+from plane.agent.readback import (
+    AgentReadbackIntegrityError,
+    AgentReadbackTooLarge,
+    build_run_readback,
+    validate_readback_limit,
+)
 from plane.agent.validation import MAX_AGENT_READBACK_BYTES
 from plane.agent.lifecycle import (
     AgentDomainError,
@@ -296,7 +301,13 @@ class AgentRunAdminDetailAPIEndpoint(AgentAdminAPIView):
     def get(self, request, slug, pk):
         run = self.run()
         limit = self.get_per_page(request, default_per_page=50, max_per_page=100)
-        return Response(build_run_readback(run, limit=limit))
+        try:
+            return Response(build_run_readback(run, limit=limit))
+        except AgentReadbackIntegrityError:
+            return Response(
+                {"error": {"code": "READBACK_INTEGRITY_FAILURE", "message": "Run evidence failed integrity checks."}},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
 
 class AgentRunInputEventAdminListCreateAPIEndpoint(AgentAdminAPIView):

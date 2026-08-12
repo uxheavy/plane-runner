@@ -5,6 +5,7 @@ import copy
 import importlib.util
 import json
 import re
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -93,6 +94,7 @@ def fixture() -> tuple[dict, dict, dict, str]:
         "purpose": "g4-live-evaluation",
         "issuedAt": "2099-01-01T00:00:00Z",
         "expiresAt": "2099-01-02T00:00:00Z",
+        "expectedCandidate": CANDIDATE,
         "fallbackAllowed": False,
         "binding": binding,
     }
@@ -102,6 +104,7 @@ def fixture() -> tuple[dict, dict, dict, str]:
         "mode": "live",
         "offline": False,
         "fallbackAllowed": False,
+        "expectedCandidate": CANDIDATE,
         "binding": binding,
         "provider": {**binding["provider"], "fallbackUsed": False},
         "thresholdProfile": binding["thresholdProfile"],
@@ -313,7 +316,7 @@ class G4ContractTests(unittest.TestCase):
         manifest, authority, config, evidence = fixture()
         temp, paths = self.write_case(manifest, authority, config, evidence)
         self.addCleanup(temp.cleanup)
-        result = validate_files(*paths, CANDIDATE, COMMAND)
+        result = validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
         self.assertEqual(result["passed"], 2)
 
     def test_exact_parent_rejects_original_and_descendant_shapes(self):
@@ -322,12 +325,65 @@ class G4ContractTests(unittest.TestCase):
         self.assertFalse(candidate_has_exact_parent(["b" * 40, "c" * 40], "b" * 40))
         self.assertFalse(candidate_has_exact_parent(["a" * 40], "b" * 40))
 
+    def test_external_expected_candidate_rejects_sibling_and_descendant_bindings(self):
+        manifest, authority, config, evidence = fixture()
+        temp, paths = self.write_case(manifest, authority, config, evidence)
+        self.addCleanup(temp.cleanup)
+        for expected_candidate in ("b" * 40, "c" * 40):
+            with self.subTest(expected_candidate=expected_candidate), self.assertRaisesRegex(
+                ContractError, "candidate_expected"
+            ):
+                validate_files(*paths, CANDIDATE, expected_candidate, COMMAND)
+
+    def test_g3_and_g4_share_process_lifetime_verifier_exclusion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            lock_path = Path(directory) / "verifier.lock"
+            holder = subprocess.Popen(
+                [
+                    sys.executable,
+                    str(TOOLS / "agent-verifier-lock.py"),
+                    str(lock_path),
+                    "--",
+                    sys.executable,
+                    "-c",
+                    "import time; print('preflight', flush=True); time.sleep(0.4)",
+                ],
+                cwd=ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            self.assertEqual(holder.stdout.readline().strip(), "preflight")
+            contender = subprocess.run(
+                [
+                    sys.executable,
+                    str(TOOLS / "agent-verifier-lock.py"),
+                    str(lock_path),
+                    "--",
+                    sys.executable,
+                    "-c",
+                    "print('preflight')",
+                ],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            holder_stdout, holder_stderr = holder.communicate(timeout=2)
+
+        self.assertEqual(holder.returncode, 0, holder_stderr)
+        self.assertEqual(contender.returncode, 2)
+        self.assertIn("actual=lock_held_by_another_process", contender.stderr)
+        self.assertEqual(holder_stdout, "")
+        self.assertEqual(contender.stdout, "")
+
+
     def test_arbitrary_exit_zero_output_is_rejected(self):
         manifest, authority, config, _ = fixture()
         temp, paths = self.write_case(manifest, authority, config, "true")
         self.addCleanup(temp.cleanup)
         with self.assertRaisesRegex(ContractError, "evidence_must_be_one_json_object"):
-            validate_files(*paths, CANDIDATE, COMMAND)
+            validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
 
     def test_malformed_and_mismatched_evidence_are_rejected(self):
         manifest, authority, config, evidence_text = fixture()
@@ -335,25 +391,25 @@ class G4ContractTests(unittest.TestCase):
             temp, paths = self.write_case(manifest, authority, config, evidence)
             self.addCleanup(temp.cleanup)
             with self.subTest(reason=reason), self.assertRaisesRegex(ContractError, reason):
-                validate_files(*paths, CANDIDATE, COMMAND)
+                validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
         evidence = json.loads(evidence_text)
         evidence["binding"]["mcpGitlink"] = "1" * 40
         temp, paths = self.write_case(manifest, authority, config, json.dumps(evidence))
         self.addCleanup(temp.cleanup)
         with self.assertRaisesRegex(ContractError, "evidence_binding_mismatch"):
-            validate_files(*paths, CANDIDATE, COMMAND)
+            validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
 
     def test_command_hash_and_config_pin_mismatches_are_rejected(self):
         manifest, authority, config, evidence = fixture()
         temp, paths = self.write_case(manifest, authority, config, evidence)
         self.addCleanup(temp.cleanup)
         with self.assertRaisesRegex(ContractError, "authority_command_mismatch"):
-            validate_files(*paths, CANDIDATE, COMMAND + " --tampered")
+            validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND + " --tampered")
         config["thresholds"]["maxLatencyP95Ms"] = 501
         temp, paths = self.write_case(manifest, authority, config, evidence)
         self.addCleanup(temp.cleanup)
         with self.assertRaisesRegex(ContractError, "config_thresholds_mismatch"):
-            validate_files(*paths, CANDIDATE, COMMAND)
+            validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
 
     def test_wrong_baseline_pin_is_rejected(self):
         manifest, authority, config, evidence = fixture()
@@ -361,7 +417,7 @@ class G4ContractTests(unittest.TestCase):
         temp, paths = self.write_case(manifest, authority, config, evidence)
         self.addCleanup(temp.cleanup)
         with self.assertRaisesRegex(ContractError, "authority_g3Baseline_mismatch"):
-            validate_files(*paths, CANDIDATE, COMMAND)
+            validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
 
     def test_provider_model_fallback_and_threshold_failures_are_rejected(self):
         for mutation, reason in (
@@ -376,7 +432,7 @@ class G4ContractTests(unittest.TestCase):
             temp, paths = self.write_case(manifest, authority, config, json.dumps(evidence))
             self.addCleanup(temp.cleanup)
             with self.subTest(reason=reason), self.assertRaisesRegex(ContractError, reason):
-                validate_files(*paths, CANDIDATE, COMMAND)
+                validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
 
     def test_runtime_image_binding_and_sanitized_metric_summary_are_structural(self):
         manifest, authority, config, evidence_text = fixture()
@@ -385,7 +441,7 @@ class G4ContractTests(unittest.TestCase):
         temp, paths = self.write_case(manifest, authority, config, json.dumps(evidence))
         self.addCleanup(temp.cleanup)
         with self.assertRaisesRegex(ContractError, "evidence_binding_mismatch"):
-            validate_files(*paths, CANDIDATE, COMMAND)
+            validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
 
         stage = summarize(
             "...."

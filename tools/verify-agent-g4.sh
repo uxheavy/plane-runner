@@ -4,6 +4,10 @@ set -Eeuo pipefail
 export PYTHONDONTWRITEBYTECODE=1
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ "${PLANE_AGENT_VERIFIER_LOCK_HELD:-}" != "1" ]]; then
+    exec python3 "${ROOT_DIR}/tools/agent-verifier-lock.py" \
+        "${ROOT_DIR}/tmp/plane-agent-g-verifier.lock" -- "${ROOT_DIR}/tools/verify-agent-g4.sh" "$@"
+fi
 MANIFEST="${ROOT_DIR}/tools/agent-g4-manifest.json"
 G3_BASE_COMMIT="7c9d35f4c324865c27c84da5016be2c84e460bcc"
 MCP_COMMIT="2dc152e136d7ad952b901e5fe9364a37487297ba"
@@ -13,6 +17,7 @@ RUNTIME_IMAGE_TAG="plane-agent-runtime:hermes-114eabf9-g4-c47ddfe"
 RUNTIME_IMAGE_DIGEST="sha256:b4a701905bae50bef643ef67c3883ef74d8f6ddcde2cf669d1dab50c44999b0c"
 RUNTIME_IMAGE_REVISION="c47ddfe6174ecd6d66257d8fedbd5d425c7f3172"
 RUNTIME_CONTRACT="plane.agent-runtime/v1"
+EXPECTED_CANDIDATE="${PLANE_G4_EXPECTED_CANDIDATE:-}"
 API_TEST_IMAGE="${PLANE_API_TEST_IMAGE:-plane-g3-external-client-api-tests:prepared}"
 RUNTIME_IMAGE="${PLANE_G4_RUNTIME_IMAGE:-${RUNTIME_IMAGE_TAG}}"
 MODE="${PLANE_G4_MODE:-offline}"
@@ -25,6 +30,7 @@ with open(sys.argv[1], encoding="utf-8") as handle:
 PY
 )"
 CURRENT_STEP="preflight"
+CANDIDATE_COMMIT=""
 STAGE_COUNT=0
 STACK_STARTED=0
 CREATED_API_LOG_DIR=0
@@ -44,6 +50,11 @@ fi
 EVIDENCE_DIR="$(mktemp -d "${G4_TEMP_PARENT}/plane-agent-g4.XXXXXX")"
 G4_RUNTIME_LOG_DIR="${EVIDENCE_DIR}/runtime-logs"
 COMMUNITY_COMPOSE_CONFIG="${EVIDENCE_DIR}/community-compose.json"
+RECEIPT_EVENTS_FILE="$(mktemp "${TMPDIR:-/tmp}/plane-agent-g4-events.XXXXXX")"
+RECEIPT_PATH=""
+RECEIPT_SHA_PATH=""
+RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+: >"${RECEIPT_EVENTS_FILE}"
 
 GIT_COMMON_DIR="$(git -C "${ROOT_DIR}" rev-parse --git-common-dir)"
 if [[ "${GIT_COMMON_DIR}" != /* ]]; then
@@ -94,12 +105,14 @@ esac
 emit() {
     local event="$1"
     local status="$2"
+    local line
     shift 2
-    printf 'event=agent.g4.%s status=%s' "${event}" "${status}"
+    line="event=agent.g4.${event} status=${status}"
     for field in "$@"; do
-        printf ' %s' "${field}"
+        line+=" ${field}"
     done
-    printf '\n'
+    printf '%s\n' "${line}"
+    printf '%s\n' "${line}" >>"${RECEIPT_EVENTS_FILE}"
 }
 
 fail() {
@@ -124,7 +137,7 @@ live_configuration_required() {
     emit "live-boundary" external_required "exit_code=2" \
         "expected=explicit_authority_config_and_live_command" \
         "actual=not_configured" \
-        "required=PLANE_G4_LIVE_AUTHORITY,PLANE_G4_LIVE_CONFIG,PLANE_G4_LIVE_COMMAND" \
+        "required=PLANE_G4_EXPECTED_CANDIDATE,PLANE_G4_LIVE_AUTHORITY,PLANE_G4_LIVE_CONFIG,PLANE_G4_LIVE_COMMAND" \
         "suggestion=provide_the_named_authority_config_and_command"
 }
 
@@ -134,6 +147,7 @@ validate_live_configuration() {
         --config "${PLANE_G4_LIVE_CONFIG}" \
         --manifest "${MANIFEST}" \
         --candidate "${CANDIDATE_COMMIT}" \
+        --expected-candidate "${EXPECTED_CANDIDATE}" \
         --command "${PLANE_G4_LIVE_COMMAND}" \
         --config-only >/dev/null; then
         fail "live authority and config are exact and valid" "live_configuration_invalid" "inspect the structured authority/config contract"
@@ -156,6 +170,8 @@ check_candidate_clean() {
 check_candidate_identity() {
     local actual parent_line parent_count parent
     actual="$(git -C "${ROOT_DIR}" rev-parse HEAD)" || fail "candidate commit is readable" "git rev-parse failed" "inspect the candidate checkout"
+    [[ "${EXPECTED_CANDIDATE}" =~ ^[0-9a-f]{40}$ ]] || fail "external expectedCandidate is a full git SHA" "expected_candidate_missing_or_invalid" "set PLANE_G4_EXPECTED_CANDIDATE from the operator authority"
+    [[ "${actual}" == "${EXPECTED_CANDIDATE}" ]] || fail "HEAD=${EXPECTED_CANDIDATE} from external authority" "actual_head=${actual}" "run from the exact externally approved wrapper"
     [[ -z "${PLANE_G4_CANDIDATE_COMMIT:-}" ]] || fail "candidate is bound by the committed manifest" "candidate_override_present" "remove PLANE_G4_CANDIDATE_COMMIT; use the committed evidence wrapper"
     parent_line="$(git -C "${ROOT_DIR}" rev-list --parents -n 1 "${actual}")"
     read -r _ parent parent_count <<< "${parent_line}"
@@ -163,6 +179,8 @@ check_candidate_identity() {
     [[ "${parent}" == "${CANDIDATE_PARENT_COMMIT}" ]] || fail "candidate immediate parent=${CANDIDATE_PARENT_COMMIT}" "actual_parent=${parent}" "rerun from the exact candidate wrapper commit"
     git -C "${ROOT_DIR}" merge-base --is-ancestor "${G3_BASE_COMMIT}" "${actual}" || fail "candidate descends from G3 base=${G3_BASE_COMMIT}" "candidate=${actual}" "use the integrated G3 candidate history"
     CANDIDATE_COMMIT="${actual}"
+    RECEIPT_PATH="${PLANE_G4_RECEIPT_PATH:-${TMPDIR:-/tmp}/plane-agent-g4-receipt-${CANDIDATE_COMMIT}.json}"
+    RECEIPT_SHA_PATH="${RECEIPT_PATH}.sha256"
 }
 
 pin_external_tree() {
@@ -233,6 +251,7 @@ assert manifest["candidateBinding"] == {
     "acceptedG3Baseline": g3,
     "parentCommit": candidate_parent,
     "candidateCommitSource": "git-head-with-exact-parent",
+    "expectedCandidateSource": "external-operator-input:PLANE_G4_EXPECTED_CANDIDATE",
     "rejectDescendants": True,
 }
 assert manifest["rollbackBinding"] == {
@@ -356,6 +375,7 @@ run_logged() {
             --manifest "${MANIFEST}" \
             --evidence "${log}" \
             --candidate "${CANDIDATE_COMMIT}" \
+            --expected-candidate "${EXPECTED_CANDIDATE}" \
             --command "${PLANE_G4_LIVE_COMMAND}")"; then
             fail "live command emits validated G4 evidence" "live_evidence_contract_failed" "inspect the sanitized live evidence"
         fi
@@ -606,6 +626,78 @@ check_labeled_redteam_resources() {
     emit "cleanup.red-team" passed "label=${label}" "containers=0" "networks=0" "volumes=0"
 }
 
+write_receipt() {
+    [[ -n "${RECEIPT_PATH}" ]] || return 0
+    local receipt_parent
+    receipt_parent="$(dirname -- "${RECEIPT_PATH}")"
+    mkdir -p -- "${receipt_parent}"
+    python3 - "${RECEIPT_EVENTS_FILE}" "${RECEIPT_PATH}" "${RECEIPT_SHA_PATH}" \
+        "${RUN_STARTED_AT}" "${MODE}" "${CANDIDATE_COMMIT}" "${EXPECTED_CANDIDATE}" \
+        "${CANDIDATE_PARENT_COMMIT}" "${G3_BASE_COMMIT}" "${HERMES_COMMIT}" "${MCP_COMMIT}" \
+        "${SDK_COMMIT}" "${RUNTIME_IMAGE_TAG}" "${RUNTIME_IMAGE_DIGEST}" "${RUNTIME_IMAGE_REVISION}" \
+        "${RUNTIME_CONTRACT}" "${status}" "${cleanup_status}" <<'PY'
+import hashlib
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+(
+    events_path,
+    receipt_path,
+    hash_path,
+    started_at,
+    mode,
+    candidate,
+    expected_candidate,
+    source_commit,
+    g3_baseline,
+    hermes,
+    mcp,
+    sdk,
+    image_tag,
+    image_digest,
+    image_revision,
+    runtime_contract,
+    exit_code,
+    cleanup_code,
+) = sys.argv[1:]
+events = Path(events_path).read_text(encoding="utf-8").splitlines()
+receipt = {
+    "schemaVersion": "plane-agent-g4/verifier-receipt/v1",
+    "status": "passed" if exit_code == "0" else ("external_required" if exit_code == "2" else "failed"),
+    "mode": mode,
+    "startedAt": started_at,
+    "finishedAt": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+    "binding": {
+        "candidateCommit": candidate,
+        "expectedCandidate": expected_candidate,
+        "sourceCommit": source_commit,
+        "acceptedG3Baseline": g3_baseline,
+        "hermesCommit": hermes,
+        "mcpGitlink": mcp,
+        "sdkGitlink": sdk,
+        "runtimeImageTag": image_tag,
+        "runtimeImageDigest": image_digest,
+        "runtimeImageRevision": image_revision,
+        "runtimeContract": runtime_contract,
+    },
+    "stageResults": events,
+    "cleanup": {
+        "verifierExitCode": int(exit_code),
+        "cleanupExitCode": int(cleanup_code),
+        "taskResourcesRemovedOrChecked": cleanup_code == "0",
+        "rawLogsRetained": False,
+    },
+}
+encoded = json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n"
+Path(receipt_path).write_text(encoded, encoding="utf-8")
+digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+Path(hash_path).write_text(f"{digest}  {Path(receipt_path).name}\n", encoding="utf-8")
+print(f"event=agent.g4.receipt status=retained path={receipt_path} sha256={digest}")
+PY
+}
+
 cleanup() {
     local status=$?
     local cleanup_status=0
@@ -639,6 +731,10 @@ cleanup() {
             "workload_queue_p95_ms=na" "workload_sustained_duration_s=na" "workload_requests=na" "workload_workers=na" "workload_agents=na" \
             "resource_cpu_pct=na" "resource_cpu_seconds=na" "resource_memory_mb=na" "resource_db_connections=na" "resource_io_mb=na" "evidence_sha256=cleanup-checked"
     fi
+    if ! write_receipt; then
+        emit "receipt" failed "expected=retained_sanitized_verifier_receipt" "actual=receipt_write_failed" "suggestion=inspect_PLANE_G4_RECEIPT_PATH" >&2
+        [[ "${status}" -ne 0 ]] || status=1
+    fi
     if [[ "${status}" -eq 2 ]]; then
         emit "complete" external_required "exit_code=2" "stage_count=${STAGE_COUNT}" "offline=${OFFLINE_STATUS}" "live=explicit_authority_required"
     elif [[ "${status}" -eq 0 ]]; then
@@ -646,6 +742,7 @@ cleanup() {
     else
         emit "complete" failed "exit_code=${status}" "stage_count=${STAGE_COUNT}" "failed_stage=${CURRENT_STEP}" >&2
     fi
+    rm -f -- "${RECEIPT_EVENTS_FILE}"
     exit "${status}"
 }
 
@@ -747,7 +844,11 @@ if [[ "${MODE}" == "live" ]]; then
         live_configuration_required
         exit 2
     fi
-    run_logged live-boundary env PLANE_G4_OFFLINE=0 PLANE_G4_NO_MODEL_FALLBACK=1 bash -lc "${PLANE_G4_LIVE_COMMAND}"
+    run_logged live-boundary env \
+        PLANE_G4_EXPECTED_CANDIDATE="${EXPECTED_CANDIDATE}" \
+        PLANE_G4_OFFLINE=0 \
+        PLANE_G4_NO_MODEL_FALLBACK=1 \
+        bash -lc "${PLANE_G4_LIVE_COMMAND}"
 else
     STAGE_COUNT=$((STAGE_COUNT + 1))
     emit "live-boundary" passed "exit_code=0" "mode=offline" "live_evaluation=not_requested" \

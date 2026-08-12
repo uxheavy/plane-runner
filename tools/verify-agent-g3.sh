@@ -3,6 +3,10 @@
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ "${PLANE_AGENT_VERIFIER_LOCK_HELD:-}" != "1" ]]; then
+    exec python3 "${ROOT_DIR}/tools/agent-verifier-lock.py" \
+        "${ROOT_DIR}/tmp/plane-agent-g-verifier.lock" -- "${ROOT_DIR}/tools/verify-agent-g3.sh" "$@"
+fi
 COMPOSE_FILE="${ROOT_DIR}/docker-compose-test.yml"
 G3_BASE_COMMIT="9b4bad0b0b54c90c8d25e9af5f086971e6b9c93a"
 CANDIDATE_COMMIT="$(git -C "${ROOT_DIR}" rev-parse HEAD)"

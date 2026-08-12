@@ -6,7 +6,12 @@ import json
 
 from django.core.management.base import BaseCommand, CommandError
 
-from plane.agent.readback import AgentReadbackTooLarge, build_run_readback, validate_readback_limit
+from plane.agent.readback import (
+    AgentReadbackIntegrityError,
+    AgentReadbackTooLarge,
+    build_run_readback,
+    validate_readback_limit,
+)
 from plane.db.models import RunAttempt
 
 
@@ -33,5 +38,5 @@ class Command(BaseCommand):
             raise CommandError("run-id does not identify a run in the requested workspace")
         try:
             self.stdout.write(json.dumps(build_run_readback(run, limit=limit), sort_keys=True, default=str))
-        except AgentReadbackTooLarge as exc:
+        except (AgentReadbackIntegrityError, AgentReadbackTooLarge) as exc:
             raise CommandError(str(exc)) from exc

@@ -51,8 +51,17 @@ from plane.db.models.operation_gateway import OperationGatewayAudit
 
 
 def _binding() -> dict[str, str]:
+    candidate = os.environ["G4_CANDIDATE"]
+    expected_candidate = os.environ["G4_EXPECTED_CANDIDATE"]
+    if (
+        len(candidate) != 40
+        or len(expected_candidate) != 40
+        or any(character not in "0123456789abcdef" for character in candidate + expected_candidate)
+        or candidate != expected_candidate
+    ):
+        raise RuntimeError("live invocation candidate does not match the external expectedCandidate")
     return {
-        "candidateCommit": os.environ["G4_CANDIDATE"],
+        "candidateCommit": candidate,
         "g3Baseline": os.environ["G4_G3_BASELINE"],
         "hermesCommit": os.environ["G4_HERMES"],
         "mcpGitlink": os.environ["G4_MCP"],

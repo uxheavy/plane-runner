@@ -381,8 +381,17 @@ def _canaries(value: Any, name: str) -> dict[str, dict[str, str]]:
     return result
 
 
-def validate_authority(authority: dict[str, Any], manifest: dict[str, Any], candidate: str, command: str) -> dict[str, Any]:
+def validate_authority(
+    authority: dict[str, Any],
+    manifest: dict[str, Any],
+    candidate: str,
+    expected_candidate: str,
+    command: str,
+) -> dict[str, Any]:
+    _git_sha(expected_candidate, "expectedCandidate")
+    _exact(candidate, expected_candidate, "candidate_expected")
     _exact(_required(authority, "schemaVersion", "authority"), "plane-agent-g4/live-authority/v1", "authority_schema")
+    _exact(_required(authority, "expectedCandidate", "authority"), expected_candidate, "authority_expected_candidate")
     _exact(_required(authority, "purpose", "authority"), "g4-live-evaluation", "authority_purpose")
     authority_id = _required(authority, "authorityId", "authority")
     if not isinstance(authority_id, str) or not authority_id:
@@ -423,6 +432,7 @@ def validate_config(config: dict[str, Any], authority_info: dict[str, Any], comm
     _exact(_required(config, "mode", "config"), "live", "config_mode")
     _bool(config, "offline", "config", False)
     _bool(config, "fallbackAllowed", "config", False)
+    _exact(_required(config, "expectedCandidate", "config"), authority_info["binding"]["candidateCommit"], "config_expected_candidate")
     if _required(config, "requiredReadbacks", "config") != ["audit", "version"]:
         raise ContractError("config_readbacks_mismatch")
     if config.get("fallbackProviders", []) != []:
@@ -529,12 +539,13 @@ def validate_files(
     manifest_path: Path,
     evidence_path: Path,
     candidate: str,
+    expected_candidate: str,
     command: str,
 ) -> dict[str, Any]:
     manifest = _read_json(manifest_path, "manifest")
     authority = _read_json(authority_path, "authority")
     config = _read_json(config_path, "config")
-    authority_info = validate_authority(authority, manifest, candidate, command)
+    authority_info = validate_authority(authority, manifest, candidate, expected_candidate, command)
     validate_config(config, authority_info, command)
     evidence = validate_evidence(evidence_path.read_text(encoding="utf-8"), manifest, authority_info, config, candidate)
     return evidence
@@ -547,6 +558,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--evidence", type=Path)
     parser.add_argument("--candidate", required=True)
+    parser.add_argument("--expected-candidate", required=True)
     parser.add_argument("--command", required=True)
     parser.add_argument("--config-only", action="store_true")
     args = parser.parse_args(argv)
@@ -554,14 +566,26 @@ def main(argv: list[str] | None = None) -> int:
         manifest = _read_json(args.manifest, "manifest")
         authority = _read_json(args.authority, "authority")
         config = _read_json(args.config, "config")
-        authority_info = validate_authority(authority, manifest, args.candidate, args.command)
+        authority_info = validate_authority(
+            authority,
+            manifest,
+            args.candidate,
+            args.expected_candidate,
+            args.command,
+        )
         validate_config(config, authority_info, args.command)
         if args.config_only:
             result = {"evidenceSha256": "not_run", "collected": 0, "passed": 0}
         else:
             if args.evidence is None:
                 raise ContractError("evidence_path_required")
-            result = validate_evidence(args.evidence.read_text(encoding="utf-8"), manifest, authority_info, config, args.candidate)
+            result = validate_evidence(
+                args.evidence.read_text(encoding="utf-8"),
+                manifest,
+                authority_info,
+                config,
+                args.candidate,
+            )
     except (ContractError, OSError, UnicodeError) as exc:
         print(f"event=agent.g4.live-contract status=failed reason={exc}", file=sys.stderr)
         return 1

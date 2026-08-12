@@ -351,10 +351,11 @@ these immutable pins rather than accepting a mutable tag.
 
 For final-wrapper integration, the one canonical current-parent field is
 `tools/agent-g4-manifest.json:candidateBinding.parentCommit`. Set it to the
-wrapper’s immediate parent after all implementation lanes are integrated;
-the verifier derives the expected current parent from that field and requires
-the materialized fixture `current.planeCommit` and its manifest SHA-256 to
-agree before the rollback stage can run.
+wrapper’s immediate parent after all implementation lanes are integrated; the
+verifier derives the expected current parent from that field and requires the
+materialized fixture `current.planeCommit` and its manifest SHA-256 to agree
+before the rollback stage can run. The exact wrapper itself remains an
+external operator input, not candidate-controlled metadata.
 
 Migration `db.0142_runtime_provider_attempts` is additive: it adds the
 non-secret provider-attempt intent/terminal evidence table. Rollback is
@@ -428,6 +429,32 @@ plan appears, audit/outcome/provider-attempt readback is incomplete, a durable e
 unique, quota remains active after reconciliation, or runtime enforcement does
 not acknowledge the safety stop. Preserve bounded logs and identifiers only;
 never include a runtime secret or provider credential.
+
+### Verifier authority, exclusion, and retained receipt
+
+The offline G3/G4 verifiers share one process-lifetime advisory lock at
+`tmp/plane-agent-g-verifier.lock`. The lock is held across the verifier
+process via `flock`; a second verifier fails closed before preflight, and no
+owner file or PID-reuse cleanup is performed inside the verifier.
+
+G4 requires the operator to provide the exact final wrapper SHA through
+`PLANE_G4_EXPECTED_CANDIDATE`. The verifier, live authority validator, and
+live invocation each require `HEAD` to equal that external value. The
+committed manifest binds only the approved source parent; it does not embed a
+self-referential wrapper SHA. Sibling wrappers and descendants therefore do
+not satisfy the candidate gate.
+
+Set `PLANE_G4_RECEIPT_PATH` to retain the sanitized verifier receipt and its
+`.sha256` sidecar outside disposable cleanup. The receipt contains stage
+result lines and exact source, wrapper, image, Hermes, MCP, SDK, and runtime
+contract pins, but no raw logs, secrets, credentials, or provider payloads.
+
+The active line has no dispatch-diagnostic JSON field from donor ADR-0011;
+its equivalent diagnostic ownership is the Plane-owned
+`RuntimeProviderAttempt` identity/fingerprint. Run-detail API and CLI
+readbacks validate invocation/run/scope ownership and the stored fingerprint,
+and fail closed on corruption. ADR-0011 is therefore not ported as a second
+diagnostic representation.
 
 ## Evidence cleanup
 

@@ -16,6 +16,7 @@ from plane.db.models import (
     AgentRole,
     AssignmentContract,
     AssignmentState,
+    InputEventKind,
     Issue,
     OutcomeState,
     ProfileVersion,
@@ -24,6 +25,8 @@ from plane.db.models import (
     RunAttempt,
     RunState,
     RuntimeInvocation,
+    RuntimeProviderAttempt,
+    RuntimeProviderAttemptPhase,
     State,
     User,
     WorkspaceMember,
@@ -35,7 +38,10 @@ from plane.agent.lifecycle import (
     create_run,
     delegate_assignment,
     propose_outcome,
+    record_input_event,
     record_invocation,
+    record_provider_attempt_notice,
+    transition_run,
 )
 from plane.agent.runtime.host_rpc import trusted_host_request
 from plane.operation_gateway.gateway import OperationGateway
@@ -201,6 +207,88 @@ def test_admin_api_proves_lifecycle_review_and_redaction(api_key_client, workspa
         "gateway_readback",
     }
     assert "credential:agent-admin" not in json.dumps(readback)
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_run_api_and_cli_readbacks_fail_closed_on_cross_invocation_provider_evidence(
+    api_key_client,
+    workspace,
+    create_user,
+    agent_admin_gateway_project,
+    capsys,
+):
+    actor = create_actor(
+        workspace=workspace,
+        project=agent_admin_gateway_project,
+        display_name="Readback integrity worker",
+        created_by=create_user,
+    )
+    profile = create_profile(actor, role=AgentRole.WORKER, instructions="Produce bounded evidence.")
+    first_assignment = create_assignment(
+        actor,
+        project=agent_admin_gateway_project,
+        target_ref="issue:readback-a",
+        objective="Record invocation A.",
+        acceptance_criteria=["Invocation A is structurally bound."],
+        created_by=create_user,
+    )
+    first_run = create_run(
+        first_assignment,
+        profile,
+        idempotency_key="idempotency:readback-run-a",
+        created_by=create_user,
+    )
+    first_invocation = record_invocation(first_run, idempotency_key="idempotency:readback-invocation-a")
+    attempt = record_provider_attempt_notice(
+        first_invocation,
+        {
+            "phase": RuntimeProviderAttemptPhase.INTENT,
+            "runId": str(first_run.id),
+            "invocationId": first_invocation.invocation_id,
+            "leaseId": "lease:readback-a",
+            "provider": "fixture-provider",
+            "model": "fixture-model",
+            "destinationHost": "provider.invalid",
+            "destinationPath": "/v1/chat/completions",
+            "requestId": "request:readback-a",
+            "idempotencyKey": "idempotency:provider-readback-a",
+            "sequence": 1,
+            "upstreamInitiated": False,
+            "statusClass": "",
+            "errorCode": "",
+        },
+    )
+    transition_run(first_run, RunState.WAITING_FOR_INPUT, pending_input_ref="event:readback-question")
+    input_event = record_input_event(
+        first_run,
+        payload={"answer": "Continue"},
+        kind=InputEventKind.HUMAN_INPUT,
+        pending_input_ref="event:readback-question",
+        idempotency_key="idempotency:readback-answer",
+    )
+    second_invocation = record_invocation(
+        first_run,
+        trigger="human_input",
+        input_event=input_event,
+        idempotency_key="idempotency:readback-invocation-b",
+    )
+
+    # QuerySet.update is the intended storage-bypass corruption simulation.
+    RuntimeProviderAttempt.objects.filter(pk=attempt.pk).update(invocation_id=second_invocation.id)
+
+    response = api_key_client.get(f"/api/v1/workspaces/{workspace.slug}/agent-admin/runs/{first_run.id}/")
+    assert response.status_code == 503
+    assert response.json() == {
+        "error": {
+            "code": "READBACK_INTEGRITY_FAILURE",
+            "message": "Run evidence failed integrity checks.",
+        }
+    }
+
+    with pytest.raises(CommandError, match="provider attempt ownership or fingerprint is invalid"):
+        call_command("agent_readback", workspace_slug=workspace.slug, run_id=str(first_run.id), limit=1)
+    assert capsys.readouterr().out == ""
 
 
 @pytest.mark.contract

@@ -5,6 +5,7 @@
     "acceptedG3Baseline": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
     "parentCommit": "1304f0b48d9d572c9afc7fca6ef9cddffe8f8ccb",
     "candidateCommitSource": "git-head-with-exact-parent",
+    "expectedCandidateSource": "external-operator-input:PLANE_G4_EXPECTED_CANDIDATE",
     "rejectDescendants": true
   },
   "rollbackBinding": {
@@ -92,6 +93,7 @@
     "tools/verify-api-migrations.sh",
     "tools/verify-agent-g3.sh",
     "tools/verify-agent-g4.sh",
+    "tools/agent-verifier-lock.py",
     "tools/summarize_agent_g4.py",
     "tools/validate_agent_g4_live.py"
   ],

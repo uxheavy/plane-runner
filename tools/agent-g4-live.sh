@@ -17,6 +17,15 @@ PROVIDER_SECRET_SOURCE="${PLANE_G4_PROVIDER_SECRET_SOURCE:?configured provider s
 LIVE_INVOKE_SOURCE="${ROOT_DIR}/tools/agent-g4-live-invoke.py"
 MANIFEST="${ROOT_DIR}/tools/agent-g4-manifest.json"
 G4_CANDIDATE="$(git rev-parse HEAD)"
+G4_EXPECTED_CANDIDATE="${PLANE_G4_EXPECTED_CANDIDATE:?operator-supplied exact wrapper SHA is required}"
+[[ "${G4_EXPECTED_CANDIDATE}" =~ ^[0-9a-f]{40}$ ]] || {
+    printf 'event=agent.g4.live-runner status=failed expected=full_external_expected_candidate_sha actual=invalid suggestion=set_Plane_G4_EXPECTED_CANDIDATE\n' >&2
+    exit 2
+}
+[[ "${G4_CANDIDATE}" == "${G4_EXPECTED_CANDIDATE}" ]] || {
+    printf 'event=agent.g4.live-runner status=failed expected=HEAD=external_expected_candidate actual=head_mismatch suggestion=use_the_exact_authorized_wrapper\n' >&2
+    exit 2
+}
 G4_G3_BASELINE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["candidateBinding"]["acceptedG3Baseline"])' "${MANIFEST}")"
 G4_HERMES="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["hermesCommit"])' "${MANIFEST}")"
 G4_MCP="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["mcpGitlink"])' "${MANIFEST}")"
@@ -219,6 +228,7 @@ docker run --rm --network "${NETWORK}" --hostname api --network-alias api \
     --env PLANE_AGENT_RUNTIME_PROVIDER_MODELS=grok-4 \
     --env PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_NAME=api_key \
     --env G4_CANDIDATE="${G4_CANDIDATE}" \
+    --env G4_EXPECTED_CANDIDATE="${G4_EXPECTED_CANDIDATE}" \
     --env G4_G3_BASELINE="${G4_G3_BASELINE}" \
     --env G4_HERMES="${G4_HERMES}" \
     --env G4_MCP="${G4_MCP}" \

@@ -9,6 +9,7 @@
     "mode",
     "offline",
     "fallbackAllowed",
+    "expectedCandidate",
     "binding",
     "provider",
     "thresholdProfile",
@@ -22,6 +23,7 @@
     "mode": { "const": "live" },
     "offline": { "const": false },
     "fallbackAllowed": { "const": false },
+    "expectedCandidate": { "$ref": "#/$defs/sha" },
     "providerRelay": { "$ref": "#/$defs/providerRelay" },
     "binding": {
       "type": "object",

@@ -3,13 +3,14 @@
   "$id": "plane-agent-g4/live-authority/v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "authorityId", "purpose", "issuedAt", "expiresAt", "binding", "fallbackAllowed"],
+  "required": ["schemaVersion", "authorityId", "purpose", "issuedAt", "expiresAt", "expectedCandidate", "binding", "fallbackAllowed"],
   "properties": {
     "schemaVersion": { "const": "plane-agent-g4/live-authority/v1" },
     "authorityId": { "type": "string", "minLength": 1, "maxLength": 200 },
     "purpose": { "const": "g4-live-evaluation" },
     "issuedAt": { "type": "string", "format": "date-time" },
     "expiresAt": { "type": "string", "format": "date-time" },
+    "expectedCandidate": { "$ref": "#/$defs/sha" },
     "fallbackAllowed": { "const": false },
     "providerRelay": { "$ref": "#/$defs/providerRelay" },
     "binding": { "$ref": "#/$defs/binding" }

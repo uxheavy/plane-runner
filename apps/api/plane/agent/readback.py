@@ -9,6 +9,7 @@ import json
 from typing import Any
 
 from plane.agent.administration import redact_admin_value
+from plane.agent.lifecycle.runtime_contract import content_digest
 from plane.agent.validation import MAX_AGENT_READBACK_BYTES
 from plane.api.serializers.agent_admin import (
     AgentActorAdminSerializer,
@@ -43,6 +44,10 @@ MAX_AGENT_READBACK_ITEMS = 100
 
 class AgentReadbackTooLarge(ValueError):
     """Raised when a serialized administration projection exceeds its byte bound."""
+
+
+class AgentReadbackIntegrityError(ValueError):
+    """Raised when persisted runtime evidence is not owned by its requested run."""
 
 
 def validate_readback_limit(limit: int) -> int:
@@ -116,25 +121,55 @@ def _gateway_readback(run: RunAttempt, *, limit: int) -> list[dict[str, Any]]:
 def _provider_attempt_readback(run: RunAttempt, *, limit: int) -> list[dict[str, Any]]:
     """Expose only structural provider-attempt reconciliation facts."""
 
-    attempts = RuntimeProviderAttempt.objects.filter(run=run).order_by("created_at", "sequence", "id")[:limit]
-    return [
-        {
-            "attempt_id": str(attempt.id),
-            "invocation_id": attempt.invocation.invocation_id,
-            "phase": attempt.phase,
+    attempts = (
+        RuntimeProviderAttempt.objects.filter(run=run)
+        .select_related("invocation")
+        .order_by("created_at", "sequence", "id")[:limit]
+    )
+    readback = []
+    for attempt in attempts:
+        invocation = attempt.invocation
+        if (
+            attempt.run_id != run.id
+            or invocation.run_id != run.id
+            or attempt.workspace_id != run.workspace_id
+            or attempt.project_id != run.project_id
+            or attempt.actor_id != run.actor_id
+            or not invocation.idempotency_key
+        ):
+            raise AgentReadbackIntegrityError("provider attempt ownership or fingerprint is invalid")
+        identity = {
+            "invocationRef": invocation.invocation_id,
+            "runRef": str(attempt.run_id),
+            "leaseId": attempt.lease_id,
             "provider": attempt.provider,
             "model": attempt.model,
-            "destination_host": attempt.destination_host,
-            "destination_path": attempt.destination_path,
-            "request_id": attempt.request_id,
+            "destinationHost": attempt.destination_host,
+            "destinationPath": attempt.destination_path,
+            "requestId": attempt.request_id,
+            "idempotencyKey": attempt.idempotency_key,
             "sequence": attempt.sequence,
-            "upstream_initiated": attempt.upstream_initiated,
-            "status_class": attempt.status_class,
-            "error_code": attempt.error_code,
-            "terminal_at": attempt.terminal_at.isoformat() if attempt.terminal_at else None,
         }
-        for attempt in attempts
-    ]
+        if attempt.fingerprint != content_digest(identity):
+            raise AgentReadbackIntegrityError("provider attempt ownership or fingerprint is invalid")
+        readback.append(
+            {
+                "attempt_id": str(attempt.id),
+                "invocation_id": invocation.invocation_id,
+                "phase": attempt.phase,
+                "provider": attempt.provider,
+                "model": attempt.model,
+                "destination_host": attempt.destination_host,
+                "destination_path": attempt.destination_path,
+                "request_id": attempt.request_id,
+                "sequence": attempt.sequence,
+                "upstream_initiated": attempt.upstream_initiated,
+                "status_class": attempt.status_class,
+                "error_code": attempt.error_code,
+                "terminal_at": attempt.terminal_at.isoformat() if attempt.terminal_at else None,
+            }
+        )
+    return readback
 
 
 def build_run_readback(run: RunAttempt, *, limit: int) -> dict[str, Any]:
