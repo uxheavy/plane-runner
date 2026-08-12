@@ -32,27 +32,37 @@
     "services": {
       "api": {
         "revision": "0d3100f477bf64ca4f6287efb97c42afa59918f1",
-        "imageDigest": "sha256:b4a701905bae50bef643ef67c3883ef74d8f6ddcde2cf669d1dab50c44999b0c",
+        "imageDigest": "sha256:84038637524ae8233050d7c26a0be2c4b9326800f5b3c59e2851378047d88077",
+        "artifactKind": "api",
+        "artifactSourceRevision": "0d3100f477bf64ca4f6287efb97c42afa59918f1",
         "contract": "plane.operation/v1"
       },
       "worker": {
         "revision": "0d3100f477bf64ca4f6287efb97c42afa59918f1",
-        "imageDigest": "sha256:b4a701905bae50bef643ef67c3883ef74d8f6ddcde2cf669d1dab50c44999b0c",
+        "imageDigest": "sha256:84038637524ae8233050d7c26a0be2c4b9326800f5b3c59e2851378047d88077",
+        "artifactKind": "api",
+        "artifactSourceRevision": "0d3100f477bf64ca4f6287efb97c42afa59918f1",
         "contract": "plane.operation/v1"
       },
       "beat-worker": {
         "revision": "0d3100f477bf64ca4f6287efb97c42afa59918f1",
-        "imageDigest": "sha256:b4a701905bae50bef643ef67c3883ef74d8f6ddcde2cf669d1dab50c44999b0c",
+        "imageDigest": "sha256:84038637524ae8233050d7c26a0be2c4b9326800f5b3c59e2851378047d88077",
+        "artifactKind": "api",
+        "artifactSourceRevision": "0d3100f477bf64ca4f6287efb97c42afa59918f1",
         "contract": "plane.operation/v1"
       },
       "supervisor": {
         "revision": "0d3100f477bf64ca4f6287efb97c42afa59918f1",
-        "imageDigest": "sha256:b4a701905bae50bef643ef67c3883ef74d8f6ddcde2cf669d1dab50c44999b0c",
+        "imageDigest": "sha256:84038637524ae8233050d7c26a0be2c4b9326800f5b3c59e2851378047d88077",
+        "artifactKind": "api",
+        "artifactSourceRevision": "0d3100f477bf64ca4f6287efb97c42afa59918f1",
         "contract": "plane.agent-runtime/v1"
       },
       "agent-runtime": {
         "revision": "0d3100f477bf64ca4f6287efb97c42afa59918f1",
         "imageDigest": "sha256:b4a701905bae50bef643ef67c3883ef74d8f6ddcde2cf669d1dab50c44999b0c",
+        "artifactKind": "runtime",
+        "artifactSourceRevision": "c47ddfe6174ecd6d66257d8fedbd5d425c7f3172",
         "contract": "plane.agent-runtime/v1"
       }
     }
@@ -70,26 +80,36 @@
       "api": {
         "revision": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
         "imageDigest": "sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e",
+        "artifactKind": "api",
+        "artifactSourceRevision": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
         "contract": "plane.operation/v1"
       },
       "worker": {
         "revision": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
         "imageDigest": "sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e",
+        "artifactKind": "api",
+        "artifactSourceRevision": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
         "contract": "plane.operation/v1"
       },
       "beat-worker": {
         "revision": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
         "imageDigest": "sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e",
+        "artifactKind": "api",
+        "artifactSourceRevision": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
         "contract": "plane.operation/v1"
       },
       "supervisor": {
         "revision": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
         "imageDigest": "sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e",
+        "artifactKind": "api",
+        "artifactSourceRevision": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
         "contract": "plane.agent-runtime/v1"
       },
       "agent-runtime": {
         "revision": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
         "imageDigest": "sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e",
+        "artifactKind": "api",
+        "artifactSourceRevision": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
         "contract": "plane.agent-runtime/v1"
       }
     }

@@ -16,8 +16,13 @@ the trusted runtime may use its configured external network, while the child
 stays AF_UNIX-only and receives no real provider credential. The exact Hermes
 constructor seam is now wired through the existing bootstrap/service chain;
 the candidate image is pinned in the runtime manifest. A replacement live
-provider proof requires fresh explicit external-action authority, and this work
-does not complete live G4 or G5.
+provider proof requires fresh explicit external-action authority. That authority
+and its matching live config carry one typed descriptor for the only permitted
+program route: `openai-codex/gpt-5.6-luna` at
+`https://chatgpt.com/backend-api/codex/responses`, with fallback disabled. The
+live runner validates that descriptor before reading the credential source,
+starting Docker networking, or invoking the API; this work does not complete
+live G4 or G5.
 
 ## What is authoritative
 

@@ -29,6 +29,7 @@ from validate_agent_g4_live import (  # noqa: E402
     candidate_has_exact_parent,
     exact_binding,
     validate_api_artifact_descriptor,
+    validate_runtime_provider_environment,
     validate_rollback_fixture,
     validate_rollback_runbook,
     validate_files,
@@ -84,7 +85,16 @@ def fixture() -> tuple[dict, dict, dict, str]:
     binding.update(
         {
             "commandSha256": hashlib.sha256(COMMAND.encode()).hexdigest(),
-            "provider": {"name": "approved-provider", "model": "approved-model"},
+            "provider": {
+                "name": "openai-codex",
+                "model": "gpt-5.6-luna",
+                "baseUrl": "https://chatgpt.com/backend-api/codex/responses",
+                "host": "chatgpt.com",
+                "path": "/backend-api/codex/responses",
+                "credentialSource": "chatgpt-subscription",
+                "credentialRef": "PLANE_G4_PROVIDER_SECRET_SOURCE",
+                "credentialName": "api_key",
+            },
             "thresholdProfile": "g4-live-approved-v1",
             "thresholds": {
                 "permittedSuccessRateMin": 1.0,
@@ -187,6 +197,42 @@ class G4ContractTests(unittest.TestCase):
         after_migrate = source.index("phase=after-migrate", migrate)
         self.assertLess(before_migrate, migrate)
         self.assertLess(migrate, after_migrate)
+
+    def test_live_runner_validates_authority_provider_before_any_egress_or_credential_use(self):
+        runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+        invoke = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+        validation = runner.index("validate_agent_g4_live.py")
+        self.assertLess(validation, runner.index("PROVIDER_SECRET_SOURCE=", validation))
+        self.assertLess(validation, runner.index("docker image inspect", validation))
+        self.assertLess(validation, runner.index("docker network create", validation))
+        self.assertIn("PROVIDER_DESCRIPTOR_JSON", runner)
+        self.assertIn("G4_PROVIDER_DESCRIPTOR_JSON", runner)
+        self.assertNotIn("api.x.ai", runner)
+        self.assertNotIn("grok-4", runner)
+        self.assertNotIn("api.x.ai", invoke)
+        self.assertNotIn("grok-4", invoke)
+
+    def test_provider_descriptor_mismatch_fails_before_provider_counter_or_relay_start(self):
+        _, authority, _, _ = fixture()
+        provider = authority["binding"]["provider"]
+        environment = {
+            "PLANE_AGENT_RUNTIME_PROVIDER": provider["name"],
+            "PLANE_AGENT_RUNTIME_PROVIDER_MODELS": provider["model"],
+            "PLANE_AGENT_RUNTIME_PROVIDER_BASE_URL": provider["baseUrl"],
+            "PLANE_AGENT_RUNTIME_PROVIDER_HOST": provider["host"],
+            "PLANE_AGENT_RUNTIME_PROVIDER_PATH": provider["path"],
+            "PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_SOURCE": provider["credentialSource"],
+            "PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_REF": provider["credentialRef"],
+            "PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_NAME": provider["credentialName"],
+        }
+        for field in environment:
+            with self.subTest(field=field):
+                mismatched = dict(environment)
+                mismatched[field] += "-mismatch"
+                counters = {"provider_requests": 0, "relay_started": False}
+                with self.assertRaisesRegex(ContractError, "runtime_provider_"):
+                    validate_runtime_provider_environment(provider, mismatched)
+                self.assertEqual(counters, {"provider_requests": 0, "relay_started": False})
 
     def test_helper_failure_path_reconciles_and_emits_one_nonzero_structural_object(self):
         source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
@@ -711,6 +757,27 @@ class G4ContractTests(unittest.TestCase):
                     path = Path(directory) / "rollback.json"
                     path.write_text(json.dumps(value), encoding="utf-8")
                     with self.assertRaisesRegex(ContractError, "rollback_"):
+                        validate_rollback_fixture(path, ROOT, MANIFEST)
+
+    def test_rollback_cross_artifact_and_supervisor_swaps_are_rejected(self):
+        fixture_path = ROOT / "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json"
+        original = json.loads(fixture_path.read_text(encoding="utf-8"))
+        mutations = (
+            ("agent-runtime-as-api", lambda value: value["current"]["services"]["agent-runtime"].update({"artifactKind": "api"})),
+            ("supervisor-as-runtime", lambda value: value["current"]["services"]["supervisor"].update({"artifactKind": "runtime"})),
+            (
+                "api-source-runtime",
+                lambda value: value["current"]["services"]["api"].update({"artifactSourceRevision": value["current"]["runtime"]["runtimeRevision"]}),
+            ),
+        )
+        for name, mutate in mutations:
+            with self.subTest(name=name):
+                value = copy.deepcopy(original)
+                mutate(value)
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "rollback.json"
+                    path.write_text(json.dumps(value), encoding="utf-8")
+                    with self.assertRaisesRegex(ContractError, "rollback_current_"):
                         validate_rollback_fixture(path, ROOT, MANIFEST)
 
     def test_rollback_runbook_examples_are_pin_bound(self):

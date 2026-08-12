@@ -79,6 +79,32 @@ def _binding() -> dict[str, str]:
     }
 
 
+def _provider_descriptor() -> dict[str, str]:
+    """Require the API invocation environment to equal validated authority data."""
+
+    try:
+        descriptor = json.loads(os.environ["G4_PROVIDER_DESCRIPTOR_JSON"])
+    except (KeyError, json.JSONDecodeError) as exc:
+        raise RuntimeError("live invocation provider descriptor is unavailable") from exc
+    fields = {
+        "name": "PLANE_AGENT_RUNTIME_PROVIDER",
+        "model": "PLANE_AGENT_RUNTIME_PROVIDER_MODELS",
+        "baseUrl": "PLANE_AGENT_RUNTIME_PROVIDER_BASE_URL",
+        "host": "PLANE_AGENT_RUNTIME_PROVIDER_HOST",
+        "path": "PLANE_AGENT_RUNTIME_PROVIDER_PATH",
+        "credentialSource": "PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_SOURCE",
+        "credentialRef": "PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_REF",
+        "credentialName": "PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_NAME",
+    }
+    if set(descriptor) != set(fields) or any(
+        not isinstance(descriptor[key], str) or not descriptor[key] for key in fields
+    ):
+        raise RuntimeError("live invocation provider descriptor is malformed")
+    if any(os.environ.get(environment_key) != descriptor[key] for key, environment_key in fields.items()):
+        raise RuntimeError("live invocation provider descriptor environment mismatch")
+    return descriptor
+
+
 def build_failure_evidence(
     *,
     binding,
@@ -251,6 +277,7 @@ def build_failure_evidence(
 
 def main() -> int:
     started = time.monotonic()
+    provider = _provider_descriptor()
     suffix = uuid.uuid4().hex[:12]
     run = None
     invocation = None
@@ -308,8 +335,8 @@ def main() -> int:
                 "product operations are required terminal evidence. Do not use Code Mode or external tools."
             ),
             runtime_defaults={
-                "provider": "xai",
-                "model": "grok-4",
+                "provider": provider["name"],
+                "model": provider["model"],
                 "adapter": "hermes",
                 "maxCodeModeCalls": 0,
             },
@@ -381,7 +408,7 @@ def main() -> int:
                 "hermesHookStatus": "integrated",
             },
             "binding": binding,
-            "provider": {"name": "xai", "model": "grok-4", "fallbackUsed": False},
+            "provider": {**provider, "fallbackUsed": False},
             "canaries": {
                 "permitted": {"id": os.environ["G4_PERMITTED_CANARY"], "status": "allowed", "passed": True},
                 "denied": {"id": os.environ["G4_DENIED_CANARY"], "status": "denied", "passed": True},

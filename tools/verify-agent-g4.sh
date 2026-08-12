@@ -337,6 +337,8 @@ assert manifest["rollbackBinding"] == {
     "acceptedBaselineField": "candidateBinding.acceptedG3Baseline",
     "acceptedEvidence": "tools/verify-agent-g3.sh",
     "services": ["api", "worker", "beat-worker", "supervisor", "agent-runtime"],
+    "artifactKindField": "services.<service>.artifactKind",
+    "artifactSourceRevisionField": "services.<service>.artifactSourceRevision",
 }
 assert manifest["pins"] == {
     "hermesCommit": hermes,
@@ -370,7 +372,7 @@ assert manifest["liveContract"] == {
         "runtimeContract",
         "apiArtifact",
     ],
-    "providerModelSource": "authority.binding.provider",
+    "providerDescriptorSource": "authority.binding.provider",
     "thresholdsSource": "authority.binding.thresholds",
     "fallbackAllowed": False,
     "requiredCanaries": ["permitted", "denied"],

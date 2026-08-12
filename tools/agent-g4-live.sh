@@ -11,10 +11,11 @@ RUN_DIR="${ROOT_DIR}/tmp/${PROJECT}"
 EVIDENCE_FILE="${RUN_DIR}/evidence.json"
 ERROR_FILE="${RUN_DIR}/sanitized-error.log"
 RUNTIME_SECRET_FILE="${RUN_DIR}/runtime-secret"
-PLANE_TEST_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48), end="")')"
-PROVIDER_SECRET_SOURCE="${PLANE_G4_PROVIDER_SECRET_SOURCE:?configured provider source is required}"
 LIVE_INVOKE_SOURCE="${ROOT_DIR}/tools/agent-g4-live-invoke.py"
 MANIFEST="${ROOT_DIR}/tools/agent-g4-manifest.json"
+LIVE_AUTHORITY="${PLANE_G4_LIVE_AUTHORITY:?validated live authority path is required}"
+LIVE_CONFIG="${PLANE_G4_LIVE_CONFIG:?validated live config path is required}"
+LIVE_COMMAND="${PLANE_G4_LIVE_COMMAND:?validated live command is required}"
 G4_CANDIDATE="$(git rev-parse HEAD)"
 G4_EXPECTED_CANDIDATE="${PLANE_G4_EXPECTED_CANDIDATE:?operator-supplied exact wrapper SHA is required}"
 [[ "${G4_EXPECTED_CANDIDATE}" =~ ^[0-9a-f]{40}$ ]] || {
@@ -39,6 +40,46 @@ G4_API_SOURCE_REVISION="$(python3 -c 'import json,sys; print(json.load(open(sys.
 G4_API_CONTRACT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["apiArtifact"]["contract"])' "${MANIFEST}")"
 API_IMAGE="${G4_API_IMAGE_TAG}"
 LIVE_PHASE=initialization
+
+# Authority/config validation is the egress boundary. It must complete before
+# reading the provider source, creating a network, starting a relay/runtime, or
+# invoking any API command. The runtime environment below is derived from the
+# same validated provider descriptor; it is never a second policy input.
+python3 "${ROOT_DIR}/tools/validate_agent_g4_live.py" \
+    --authority "${LIVE_AUTHORITY}" \
+    --config "${LIVE_CONFIG}" \
+    --manifest "${MANIFEST}" \
+    --candidate "${G4_CANDIDATE}" \
+    --expected-candidate "${G4_EXPECTED_CANDIDATE}" \
+    --command "${LIVE_COMMAND}" \
+    --config-only >/dev/null
+PROVIDER_DESCRIPTOR_JSON="$(python3 - "${LIVE_CONFIG}" <<'PY'
+import json
+import sys
+
+provider = dict(json.load(open(sys.argv[1], encoding="utf-8"))["provider"])
+provider.pop("fallbackUsed", None)
+print(json.dumps(provider, sort_keys=True, separators=(",", ":")))
+PY
+)"
+IFS=$'\t' read -r G4_PROVIDER_NAME G4_PROVIDER_MODEL G4_PROVIDER_BASE_URL G4_PROVIDER_HOST G4_PROVIDER_PATH \
+    G4_PROVIDER_CREDENTIAL_SOURCE G4_PROVIDER_CREDENTIAL_REF G4_PROVIDER_CREDENTIAL_NAME \
+    <<<"$(python3 - "${PROVIDER_DESCRIPTOR_JSON}" <<'PY'
+import json
+import sys
+
+provider = json.loads(sys.argv[1])
+print("\t".join(provider[key] for key in (
+    "name", "model", "baseUrl", "host", "path", "credentialSource", "credentialRef", "credentialName"
+)))
+PY
+)"
+PROVIDER_SECRET_SOURCE="${PLANE_G4_PROVIDER_SECRET_SOURCE:?configured provider source is required}"
+[[ -r "${PROVIDER_SECRET_SOURCE}" ]] || {
+    printf '%s\n' 'event=agent.g4.live-runner status=failed expected=provider-source-readable actual=unreadable suggestion=provide-the-authorized-chatgpt-subscription-source' >&2
+    exit 2
+}
+PLANE_TEST_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48), end="")')"
 
 api_image_id="$(docker image inspect "${API_IMAGE}" --format '{{.Id}}' 2>/dev/null)" || {
     printf '%s\n' 'event=agent.g4.live-runner status=failed expected=manifest-bound-api-image-available actual=image-unavailable suggestion=prepare-the-exact-immutable-api-artifact' >&2
@@ -186,11 +227,15 @@ docker run -d --name "${RUNTIME}" \
     --env PLANE_AGENT_RUNTIME_NETWORK_POLICY=none \
     --env PLANE_AGENT_RUNTIME_ENVIRONMENT_JSON={} \
     --env PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE=/run/plane-agent-credentials/revocations.json \
-    --env 'PLANE_AGENT_RUNTIME_PROVIDER=xai' \
-    --env 'PLANE_AGENT_RUNTIME_PROVIDER_HOST=api.x.ai' \
-    --env 'PLANE_AGENT_RUNTIME_PROVIDER_PATH=/v1/chat/completions' \
-    --env 'PLANE_AGENT_RUNTIME_PROVIDER_MODELS=grok-4' \
-    --env 'PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_NAME=api_key' \
+    --env PLANE_AGENT_RUNTIME_PROVIDER="${G4_PROVIDER_NAME}" \
+    --env PLANE_AGENT_RUNTIME_PROVIDER_BASE_URL="${G4_PROVIDER_BASE_URL}" \
+    --env PLANE_AGENT_RUNTIME_PROVIDER_HOST="${G4_PROVIDER_HOST}" \
+    --env PLANE_AGENT_RUNTIME_PROVIDER_PATH="${G4_PROVIDER_PATH}" \
+    --env PLANE_AGENT_RUNTIME_PROVIDER_MODELS="${G4_PROVIDER_MODEL}" \
+    --env PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_SOURCE="${G4_PROVIDER_CREDENTIAL_SOURCE}" \
+    --env PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_REF="${G4_PROVIDER_CREDENTIAL_REF}" \
+    --env PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_NAME="${G4_PROVIDER_CREDENTIAL_NAME}" \
+    --env PLANE_AGENT_RUNTIME_PROVIDER_DESCRIPTOR_JSON="${PROVIDER_DESCRIPTOR_JSON}" \
     --env PLANE_AGENT_RUNTIME_COMMAND='python3 -m plane_runtime.g1_runtime_image.bootstrap --once --g1-production' \
     --env PLANE_AGENT_RUNTIME_BIND=0.0.0.0 \
     --env PLANE_AGENT_RUNTIME_PORT=8080 \
@@ -242,11 +287,14 @@ docker run --rm --network "${NETWORK}" --hostname api --network-alias api \
     --env PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER=command:/usr/local/bin/plane-agent-runtime-credential-resolver \
     --env PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE=/tmp/g4-live-credential-state.json \
     --env PLANE_AGENT_RUNTIME_COMMAND='python3 -m plane_runtime.g1_runtime_image.bootstrap --once --g1-production' \
-    --env PLANE_AGENT_RUNTIME_PROVIDER=xai \
-    --env PLANE_AGENT_RUNTIME_PROVIDER_HOST=api.x.ai \
-    --env PLANE_AGENT_RUNTIME_PROVIDER_PATH=/v1/chat/completions \
-    --env PLANE_AGENT_RUNTIME_PROVIDER_MODELS=grok-4 \
-    --env PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_NAME=api_key \
+    --env PLANE_AGENT_RUNTIME_PROVIDER="${G4_PROVIDER_NAME}" \
+    --env PLANE_AGENT_RUNTIME_PROVIDER_BASE_URL="${G4_PROVIDER_BASE_URL}" \
+    --env PLANE_AGENT_RUNTIME_PROVIDER_HOST="${G4_PROVIDER_HOST}" \
+    --env PLANE_AGENT_RUNTIME_PROVIDER_PATH="${G4_PROVIDER_PATH}" \
+    --env PLANE_AGENT_RUNTIME_PROVIDER_MODELS="${G4_PROVIDER_MODEL}" \
+    --env PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_SOURCE="${G4_PROVIDER_CREDENTIAL_SOURCE}" \
+    --env PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_REF="${G4_PROVIDER_CREDENTIAL_REF}" \
+    --env PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_NAME="${G4_PROVIDER_CREDENTIAL_NAME}" \
     --env G4_CANDIDATE="${G4_CANDIDATE}" \
     --env G4_EXPECTED_CANDIDATE="${G4_EXPECTED_CANDIDATE}" \
     --env G4_G3_BASELINE="${G4_G3_BASELINE}" \
@@ -261,6 +309,7 @@ docker run --rm --network "${NETWORK}" --hostname api --network-alias api \
     --env G4_API_IMAGE_DIGEST="${G4_API_IMAGE_DIGEST}" \
     --env G4_API_SOURCE_REVISION="${G4_API_SOURCE_REVISION}" \
     --env G4_API_CONTRACT="${G4_API_CONTRACT}" \
+    --env G4_PROVIDER_DESCRIPTOR_JSON="${PROVIDER_DESCRIPTOR_JSON}" \
     --env G4_PERMITTED_CANARY=live-permitted-read \
     --env G4_DENIED_CANARY=live-denied-evaluate \
     "${API_IMAGE}" python /tmp/agent-g4-live-invoke.py >"${EVIDENCE_FILE}" 2>"${ERROR_FILE}"

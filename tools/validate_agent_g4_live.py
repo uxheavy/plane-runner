@@ -43,6 +43,36 @@ ROLLBACK_MIGRATION = "db.0142_runtime_provider_attempts"
 ROLLBACK_OPERATION_CONTRACT = "plane.operation/v1"
 ROLLBACK_RUNTIME_CONTRACT = "plane.agent-runtime/v1"
 PROVIDER_RELAY_PROTOCOL = "plane.agent-runtime/provider-relay/v1"
+PROVIDER_DESCRIPTOR_FIELDS = (
+    "name",
+    "model",
+    "baseUrl",
+    "host",
+    "path",
+    "credentialSource",
+    "credentialRef",
+    "credentialName",
+)
+EXPECTED_PROVIDER_DESCRIPTOR = {
+    "name": "openai-codex",
+    "model": "gpt-5.6-luna",
+    "baseUrl": "https://chatgpt.com/backend-api/codex/responses",
+    "host": "chatgpt.com",
+    "path": "/backend-api/codex/responses",
+    "credentialSource": "chatgpt-subscription",
+    "credentialRef": "PLANE_G4_PROVIDER_SECRET_SOURCE",
+    "credentialName": "api_key",
+}
+RUNTIME_PROVIDER_ENV_FIELDS = {
+    "PLANE_AGENT_RUNTIME_PROVIDER": "name",
+    "PLANE_AGENT_RUNTIME_PROVIDER_MODELS": "model",
+    "PLANE_AGENT_RUNTIME_PROVIDER_BASE_URL": "baseUrl",
+    "PLANE_AGENT_RUNTIME_PROVIDER_HOST": "host",
+    "PLANE_AGENT_RUNTIME_PROVIDER_PATH": "path",
+    "PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_SOURCE": "credentialSource",
+    "PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_REF": "credentialRef",
+    "PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_NAME": "credentialName",
+}
 
 
 class ContractError(ValueError):
@@ -201,11 +231,13 @@ def _rollback_services(section: Any, name: str) -> dict[str, dict[str, str]]:
     result: dict[str, dict[str, str]] = {}
     for service in ROLLBACK_SERVICE_NAMES:
         row = _object(services[service], f"{name}_{service}")
-        if set(row) != {"revision", "imageDigest", "contract"}:
+        if set(row) != {"revision", "imageDigest", "artifactKind", "artifactSourceRevision", "contract"}:
             raise ContractError(f"rollback_{name}_{service}_fields_mismatch")
         result[service] = {
             "revision": _required(row, "revision", f"{name}_{service}"),
             "imageDigest": _required(row, "imageDigest", f"{name}_{service}"),
+            "artifactKind": _required(row, "artifactKind", f"{name}_{service}"),
+            "artifactSourceRevision": _required(row, "artifactSourceRevision", f"{name}_{service}"),
             "contract": _required(row, "contract", f"{name}_{service}"),
         }
     return result
@@ -258,6 +290,9 @@ def validate_rollback_runbook(runbook_text: str, manifest: dict[str, Any], fixtu
         f"`{pins['apiArtifact']['sourceRevision']}`",
         "API contract",
         f"`{pins['apiArtifact']['contract']}`",
+        "artifactKind",
+        "artifactSourceRevision",
+        "only the standalone `agent-runtime` service uses the typed runtime",
         "previous services use immutable image digest",
         f"`{previous['services']['api']['imageDigest']}`",
         "python3 tools/agent-g4-rollback-drill.py",
@@ -291,6 +326,8 @@ def validate_rollback_fixture(fixture_path: Path, root: Path, manifest: dict[str
             "acceptedBaselineField": "candidateBinding.acceptedG3Baseline",
             "acceptedEvidence": "tools/verify-agent-g3.sh",
             "services": list(ROLLBACK_SERVICE_NAMES),
+            "artifactKindField": "services.<service>.artifactKind",
+            "artifactSourceRevisionField": "services.<service>.artifactSourceRevision",
         },
         "manifest_rollbackBinding",
     )
@@ -330,9 +367,21 @@ def validate_rollback_fixture(fixture_path: Path, root: Path, manifest: dict[str
         service: ROLLBACK_RUNTIME_CONTRACT if service in {"supervisor", "agent-runtime"} else ROLLBACK_OPERATION_CONTRACT
         for service in ROLLBACK_SERVICE_NAMES
     }
+    current_artifacts = {
+        service: ("api", pins["apiArtifact"]["imageDigest"], pins["apiArtifact"]["sourceRevision"])
+        for service in ("api", "worker", "beat-worker", "supervisor")
+    }
+    current_artifacts["agent-runtime"] = ("runtime", pins["runtimeImageDigest"], pins["runtimeImageRevision"])
     for service in ROLLBACK_SERVICE_NAMES:
         _rollback_exact(current_services[service]["revision"], current_parent, f"current_{service}_revision")
-        _rollback_exact(current_services[service]["imageDigest"], pins["runtimeImageDigest"], f"current_{service}_imageDigest")
+        artifact_kind, artifact_digest, artifact_source_revision = current_artifacts[service]
+        _rollback_exact(current_services[service]["artifactKind"], artifact_kind, f"current_{service}_artifactKind")
+        _rollback_exact(
+            current_services[service]["artifactSourceRevision"],
+            artifact_source_revision,
+            f"current_{service}_artifactSourceRevision",
+        )
+        _rollback_exact(current_services[service]["imageDigest"], artifact_digest, f"current_{service}_imageDigest")
         _rollback_exact(current_services[service]["contract"], expected_contracts[service], f"current_{service}_contract")
 
     evidence = _git_text_at(root, g3_baseline, binding["acceptedEvidence"])
@@ -361,6 +410,12 @@ def validate_rollback_fixture(fixture_path: Path, root: Path, manifest: dict[str
         _rollback_exact(accepted_g3[key], pins[key], f"accepted_g3_{key}")
     for service in ROLLBACK_SERVICE_NAMES:
         _rollback_exact(previous_services[service]["revision"], g3_baseline, f"previous_{service}_revision")
+        _rollback_exact(previous_services[service]["artifactKind"], "api", f"previous_{service}_artifactKind")
+        _rollback_exact(
+            previous_services[service]["artifactSourceRevision"],
+            g3_baseline,
+            f"previous_{service}_artifactSourceRevision",
+        )
         _rollback_exact(previous_services[service]["imageDigest"], accepted_g3["imageDigest"], f"previous_{service}_imageDigest")
         _rollback_exact(previous_services[service]["contract"], expected_contracts[service], f"previous_{service}_contract")
 
@@ -388,12 +443,21 @@ def _thresholds(value: Any, name: str) -> dict[str, float]:
 
 def _provider(value: Any, name: str) -> dict[str, str]:
     provider = _object(value, name)
-    if set(provider) != {"name", "model"}:
+    if set(provider) != set(PROVIDER_DESCRIPTOR_FIELDS):
         raise ContractError(f"{name}_fields_mismatch")
-    result = {key: _required(provider, key, name) for key in ("name", "model")}
+    result = {key: _required(provider, key, name) for key in PROVIDER_DESCRIPTOR_FIELDS}
     if any(not isinstance(item, str) or not item for item in result.values()):
         raise ContractError(f"{name}_invalid")
+    _exact(result, EXPECTED_PROVIDER_DESCRIPTOR, f"{name}_policy")
     return result
+
+
+def validate_runtime_provider_environment(provider: dict[str, str], environment: dict[str, str]) -> None:
+    """Require runtime argv/env provider identity to equal the authority descriptor."""
+
+    for environment_key, provider_key in RUNTIME_PROVIDER_ENV_FIELDS.items():
+        if environment.get(environment_key) != provider[provider_key]:
+            raise ContractError(f"runtime_provider_{provider_key}_mismatch")
 
 
 def _provider_relay(value: Any, name: str) -> dict[str, Any]:

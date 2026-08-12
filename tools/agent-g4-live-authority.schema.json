@@ -82,15 +82,7 @@
         "runtimeContract": { "type": "string", "const": "plane.agent-runtime/v1" },
         "apiArtifact": { "$ref": "#/$defs/apiArtifact" },
         "commandSha256": { "$ref": "#/$defs/hash" },
-        "provider": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["name", "model"],
-          "properties": {
-            "name": { "type": "string", "minLength": 1, "maxLength": 200 },
-            "model": { "type": "string", "minLength": 1, "maxLength": 200 }
-          }
-        },
+        "provider": { "$ref": "#/$defs/providerDescriptor" },
         "thresholdProfile": { "type": "string", "minLength": 1, "maxLength": 200 },
         "thresholds": { "$ref": "#/$defs/thresholds" },
         "canaries": {
@@ -122,6 +114,21 @@
         "deniedRejectionRateMin": { "type": "number", "minimum": 0, "maximum": 1 },
         "maxLatencyP95Ms": { "type": "number", "minimum": 0 },
         "maxErrorRate": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "providerDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "model", "baseUrl", "host", "path", "credentialSource", "credentialRef", "credentialName"],
+      "properties": {
+        "name": { "const": "openai-codex" },
+        "model": { "const": "gpt-5.6-luna" },
+        "baseUrl": { "const": "https://chatgpt.com/backend-api/codex/responses" },
+        "host": { "const": "chatgpt.com" },
+        "path": { "const": "/backend-api/codex/responses" },
+        "credentialSource": { "const": "chatgpt-subscription" },
+        "credentialRef": { "const": "PLANE_G4_PROVIDER_SECRET_SOURCE" },
+        "credentialName": { "const": "api_key" }
       }
     }
   }

@@ -150,8 +150,11 @@ The existing private credential frame carries only `invocationSocket`, `host`,
 creates a fresh HTTP client with an AF_UNIX `uds` transport, logical base URL
 `http://plane-provider-relay.invalid/v1`; its HTTP `Host` is the fixed logical
 relay host `plane-provider-relay.invalid`. The parent translates that admitted
-request to the pinned provider hostname `api.x.ai`; the provider path remains
-enforced by the parent relay. The bootstrap argument is
+request to the pinned ChatGPT subscription route at `chatgpt.com`; the provider
+path `/backend-api/codex/responses`, base URL
+`https://chatgpt.com/backend-api/codex/responses`, provider `openai-codex`, and
+model `gpt-5.6-luna` remain enforced by the authority/config descriptor. The
+bootstrap argument is
 `--provider-relay-socket`.
 
 The exact Hermes source commit is now integrated through
@@ -395,7 +398,12 @@ exercised rollback proof; a prose-only rollback is not sufficient.
 For an authorized disposable Compose rehearsal, render and inspect the
 resolved configuration with the exact previous pins before replacement, then
 switch API, worker, beat-worker, runtime, and the Plane supervisor control
-path as one change window:
+path as one change window. The rollback fixture validates `artifactKind` and
+`artifactSourceRevision` per service: API, worker, beat-worker, and the
+API-image `python manage.py agent_supervisor` control path use the typed API
+artifact; only the standalone `agent-runtime` service uses the typed runtime
+artifact. This mapping follows the community Compose service commands and the
+live helper's immutable API invocation image:
 
 ```sh
 docker compose -p plane-g4-load-luna --env-file deployments/cli/community/variables.env \
