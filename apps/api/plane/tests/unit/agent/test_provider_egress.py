@@ -311,7 +311,17 @@ def test_runtime_service_promotes_provider_audit_rejection_before_provider_call(
     executor._transport = RelayProbeTransport()
     snapshot = {
         "runId": RUN_ID,
-        "runtimePolicy": {"model": {"provider": PROVIDER, "model": MODEL}},
+        "runtimePolicy": {
+            "model": {"provider": PROVIDER, "model": MODEL},
+            "adapter": "openai-compatible",
+            "isolation": "single-invocation",
+            "maxEventPayloadBytes": 8192,
+            "maxArtifactBytes": 8192,
+            "maxReceiptBytes": 8192,
+            "maxCodeModeInputBytes": 4096,
+            "maxCodeModeOutputBytes": 4096,
+            "maxCodeModeCalls": 4,
+        },
     }
     invocation = {
         "correlationId": "correlation:relay",
