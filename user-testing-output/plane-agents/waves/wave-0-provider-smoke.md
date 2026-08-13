@@ -307,3 +307,31 @@ replay, or second provider call ran.
 
 No broad G3/G4 verifier, unrelated suite, load test, G5, rollout, pilot,
 deployment, source edit, or extra provider call ran.
+
+## Wave 0K — S00 policy-consumer retest at 0f855f864b
+
+Status: blocked at `api-invocation`; exactly one fresh approved lifecycle ran,
+with no retry or replay.
+
+- Candidate: `0f855f864b2448e0d943996c2f9dc977328244f4`.
+- Temporary API image digest:
+  `sha256:4ef7acb423f7bc84ce2ead1c160f41d35b697aad4bec62ce80d6b9dbceb231a3`.
+- Direct changed-function proof under `--network none` passed: incomplete Hermes
+  policy produces the bounded `runtime_configuration_pre_dispatch_failure`
+  contract without a raw exception. The focused pytest wrapper did not reach its
+  body because its autouse fixture could not resolve the absent test database.
+- Fresh run `7c90f4d3-ac59-4361-8f2f-36d2533a1f59` failed.
+- Fresh invocation `invocation:ad89fbc3-3d09-461d-ba65-d08c8f1075b8`
+  failed at `api-invocation`; the outer live result still reported an unspecified
+  runtime error.
+- Provider attempts: zero. No permitted read, denied evaluation, gateway
+  receipt, outcome, publication, successful terminal event, or replay ran.
+- Interpretation: safe consumer classification is fixed, but the real lifecycle
+  producer still omits required resolved Hermes policy fields and must be fixed
+  at its owning snapshot/dispatch seam.
+- Temporary image and all Wave 0K artifacts were removed; task-labeled
+  containers, networks, and volumes were empty. Prepared base and pinned runtime
+  remained, and Colima was returned to stopped state.
+
+No broad G3/G4 verifier, unrelated suite, load test, G5, rollout, pilot,
+deployment, source edit, or extra provider call ran.

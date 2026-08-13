@@ -164,3 +164,19 @@
 - Cleanup: clean; temporary image and all Wave 0J artifacts removed
 - Next: reproduce the API/runtime path without external provider traffic,
   expose the first concrete cause, fix only its owner, then run fresh Wave 0K
+
+## Wave 0K — consumer classification retest
+
+- Status: dirty — UT-010 remains open
+- Candidate: `0f855f864b2448e0d943996c2f9dc977328244f4`
+- Temporary API image:
+  `sha256:4ef7acb423f7bc84ce2ead1c160f41d35b697aad4bec62ce80d6b9dbceb231a3`
+- Direct network-disabled projection proof passed; the focused pytest wrapper
+  was blocked before its body by the absent test database fixture
+- One fresh run `7c90f4d3-ac59-4361-8f2f-36d2533a1f59` and invocation
+  `invocation:ad89fbc3-3d09-461d-ba65-d08c8f1075b8` still failed at
+  `api-invocation`; provider attempts remained zero and no replay ran
+- Interpretation: the consumer no longer throws `KeyError`, but the real
+  lifecycle producer still supplies an incomplete resolved runtime policy
+- Cleanup: clean; temporary image and Wave 0K artifacts removed
+- Next: fix the lifecycle/snapshot policy producer, then run fresh Wave 0L
