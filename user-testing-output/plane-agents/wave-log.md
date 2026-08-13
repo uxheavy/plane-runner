@@ -26,3 +26,16 @@
 - Cleanup: clean
 - Next: Luna root-fixes UT-001 in the established runner, then the same Maya
   task reruns S00 only; a clean smoke unlocks the three parallel journeys
+
+## Wave 0B — runner-fix retest
+
+- Status: dirty — UT-002
+- Candidate: `b414ad6672dd79815ae17ab19b436f2a1b45a173`
+- UT-001: closed; clean checkout advanced through credential staging
+- Plane lifecycle reached: one run, one invocation, and one visible
+  `run_blocker`
+- Failure: `runtime_transport_pre_dispatch_failure` / `unclassified_exception`
+- Provider attempts and requested Plane operations: zero
+- Cleanup: clean
+- Next: Luna diagnoses and fixes the established runtime transport owner, then
+  the same Maya task reruns S00 only

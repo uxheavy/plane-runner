@@ -45,3 +45,29 @@ does not represent empty directories, while `tools/agent-g4-live.sh` assumes
 - Cleanup: no labeled runtime container, network, or volume remained; disposable clones and temporary authority/config files were removed.
 
 No broad verifier, rollout, deployment, or unrelated suite ran.
+
+## Wave 0B — S00 provider smoke retest
+
+Status: dirty at the first product invocation boundary. No replay was
+attempted.
+
+- Candidate: `b414ad6672dd79815ae17ab19b436f2a1b45a173`; API/runtime artifacts remain pinned to source `1d1012f71c48615bb28b7988ce74c82421aa1d53` and Hermes `d2e655101f263329359e7d0de9d0b856202a3e4b`; no image refreeze.
+- Provider/model: `openai-codex/gpt-5.6-luna`, ChatGPT subscription route, fallback disabled.
+- Fresh authority/config: `s00-live-20260813T090120Z-wave0b-r3`; authority SHA-256 `c8e6e6292924742b9585cebe5f844a0fa409be23dbd6b6d98410660ce228fe6f`; config SHA-256 `d48cc556770a5523e9ead28ed9c0b39259ea3dbdc8403c33dfc443572ddaecc6`.
+- Contract preflight passed; elapsed live-runner time was approximately `65.5s`.
+
+```text
+event=agent.g4.live-runner.failure phase=api-invocation error_class=unspecified exit_code=1
+status=failed reasonCode=runtime_transport_pre_dispatch_failure reasonPhase=runtime_transport reasonDetail=unclassified_exception
+runRef=c02d4209-106b-4667-b314-086fe2cb3c51 runState=blocked
+invocationRef=7ef841e0-efed-45a1-9e2b-68ec1311aeff invocationState=blocked
+providerAttempts=[] terminal={present:true,kind:run_blocker}
+```
+
+The API created one run and invocation, then the runtime transport failed
+before dispatch or provider-attempt intent. GPT-5.6 Luna was not reached. No
+permitted read, denied evaluator operation, outcome, publication, requested
+operation audit, or replay occurred. Plane correctly recorded one visible
+`run_blocker`. Cleanup left no task-owned container, network, volume, checkout,
+authority/config file, or Plane test stack. No broad verifier, build, load,
+rollout, deployment, or source edit ran.
