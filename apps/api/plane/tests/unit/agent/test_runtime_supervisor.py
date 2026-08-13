@@ -19,7 +19,14 @@ from django.core.management import call_command
 from django.test import override_settings
 from django.utils import timezone
 
-from plane.agent.lifecycle import create_actor, create_assignment, create_profile, create_run, record_invocation
+from plane.agent.lifecycle import (
+    create_actor,
+    create_assignment,
+    create_profile,
+    create_run,
+    record_invocation,
+    record_provider_attempt_notice,
+)
 from plane.agent.runtime import (
     AgentRuntimeConfiguration,
     build_gateway_host_port,
@@ -46,6 +53,8 @@ from plane.db.models import (
     RuntimeUsageObservation,
     RuntimeControlState,
     RuntimeInvocationControl,
+    RuntimeProviderAttempt,
+    RuntimeProviderAttemptPhase,
 )
 from plane.db.models.operation_gateway import OperationGatewayAudit, OperationGatewayIdempotency
 
@@ -117,6 +126,20 @@ class UnknownRuntimeTransport:
     def dispatch(self, snapshot_json, envelope_json):
         self.calls += 1
         raise RuntimeDispatchError("runtime process did not produce a durable terminal result")
+
+
+class KnownDispatchFailureTransport:
+    def __init__(self):
+        self.calls = 0
+
+    def dispatch(self, snapshot_json, envelope_json):
+        self.calls += 1
+        raise RuntimeDispatchError(
+            "runtime process did not produce a durable terminal result",
+            failure_code="runtime_process_failed",
+            failure_phase="launcher",
+            failure_detail="bootstrap_argv_rejected",
+        )
 
 
 def _invocation(workspace, gateway_project, gateway_issue, create_user, *, runtime_defaults=None, suffix="extra"):
@@ -557,6 +580,70 @@ def test_supervisor_timeout_or_process_death_is_outcome_unknown_and_not_replayed
     assert control.failure_code == "outcome_unknown"
     assert transport.calls == 1
     assert RunTerminalEvent.objects.filter(run=run, visible=True).count() == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_known_pre_dispatch_failure_with_no_upstream_attempt_is_blocked_and_released(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    run, invocation = _invocation(workspace, gateway_project, gateway_issue, create_user, suffix="pre-dispatch")
+    transport = KnownDispatchFailureTransport()
+
+    first = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
+    second = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
+
+    control = RuntimeInvocationControl.objects.get(invocation=invocation)
+    assert first.state == second.state == InvocationState.BLOCKED
+    assert first.terminal_kind == second.terminal_kind == "run_blocker"
+    assert control.state == RuntimeControlState.RELEASED
+    assert control.failure_code == "runtime_process_failed"
+    assert control.outcome_unknown_at is None
+    assert not RuntimeProviderAttempt.objects.filter(invocation=invocation).exists()
+    assert transport.calls == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_known_process_failure_with_initiated_attempt_remains_outcome_unknown(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    run, invocation = _invocation(workspace, gateway_project, gateway_issue, create_user, suffix="initiated")
+    provider_attempt = {
+        "phase": RuntimeProviderAttemptPhase.INTENT,
+        "runId": str(invocation.run_id),
+        "invocationId": invocation.invocation_id,
+        "leaseId": "lease:supervisor-initiated",
+        "provider": "deterministic-local",
+        "model": "test-model",
+        "destinationHost": "provider.test",
+        "destinationPath": "/v1/test",
+        "requestId": "request:supervisor-initiated",
+        "idempotencyKey": "provider-attempt:supervisor-initiated",
+        "sequence": 1,
+        "upstreamInitiated": False,
+        "statusClass": "",
+        "errorCode": "",
+    }
+    record_provider_attempt_notice(invocation, provider_attempt)
+    provider_attempt.update(
+        {
+            "phase": RuntimeProviderAttemptPhase.STARTED,
+            "upstreamInitiated": True,
+        }
+    )
+    record_provider_attempt_notice(invocation, provider_attempt)
+    transport = KnownDispatchFailureTransport()
+
+    result = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
+
+    control = RuntimeInvocationControl.objects.get(invocation=invocation)
+    attempt = RuntimeProviderAttempt.objects.get(invocation=invocation)
+    assert result.state == InvocationState.BLOCKED
+    assert result.terminal_kind == "run_blocker"
+    assert control.state == RuntimeControlState.OUTCOME_UNKNOWN
+    assert control.failure_code == "outcome_unknown"
+    assert attempt.phase == RuntimeProviderAttemptPhase.OUTCOME_UNKNOWN
+    assert attempt.upstream_initiated is True
+    assert transport.calls == 1
 
 
 @pytest.mark.django_db(transaction=True)

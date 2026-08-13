@@ -864,7 +864,12 @@ class SubprocessRuntimeTransport(RuntimeTransport):
         try:
             process = subprocess.Popen(process_command, **popen_options)
         except (OSError, ValueError, subprocess.SubprocessError) as exc:
-            raise RuntimeDispatchError("runtime process could not be started") from exc
+            raise RuntimeDispatchError(
+                "runtime process could not be started",
+                failure_code="runtime_process_failed",
+                failure_phase="runtime_process",
+                failure_detail="process_start_failed",
+            ) from exc
 
         stdout = bytearray()
         stderr = bytearray()
@@ -944,18 +949,58 @@ class SubprocessRuntimeTransport(RuntimeTransport):
                     pass
 
         if forced_cancellation:
-            raise RuntimeDispatchError("runtime invocation was cancelled")
-        if timed_out or overflow.is_set() or write_error.is_set() or process.returncode != 0:
-            raise RuntimeDispatchError("runtime process did not produce a durable terminal result")
+            raise RuntimeDispatchError(
+                "runtime invocation was cancelled",
+                failure_code="runtime_process_cancelled",
+                failure_phase="runtime_process",
+                failure_detail="process_cancelled",
+            )
+        if timed_out:
+            raise RuntimeDispatchError(
+                "runtime process did not produce a durable terminal result",
+                failure_code="runtime_process_timeout",
+                failure_phase="runtime_process",
+                failure_detail="process_timeout",
+            )
+        if overflow.is_set() or write_error.is_set():
+            raise RuntimeDispatchError(
+                "runtime process did not produce a durable terminal result",
+                failure_code="runtime_process_output_invalid",
+                failure_phase="runtime_process",
+                failure_detail="process_output_invalid",
+            )
+        if process.returncode != 0:
+            launcher_rejected = process.returncode == 78
+            raise RuntimeDispatchError(
+                "runtime process did not produce a durable terminal result",
+                failure_code="runtime_process_failed",
+                failure_phase="launcher" if launcher_rejected else "runtime_process",
+                failure_detail="bootstrap_argv_rejected" if launcher_rejected else "process_exit",
+            )
         if not stdout or not stdout.endswith(b"\n"):
-            raise RuntimeDispatchError("runtime process output is not newline-delimited")
+            raise RuntimeDispatchError(
+                "runtime process output is not newline-delimited",
+                failure_code="runtime_process_output_invalid",
+                failure_phase="runtime_process",
+                failure_detail="process_output_invalid",
+            )
         try:
             lines = stdout[:-1].split(b"\n")
             frames = tuple(line.decode("utf-8") for line in lines if line)
         except UnicodeDecodeError as exc:
-            raise RuntimeDispatchError("runtime process output is not UTF-8") from exc
+            raise RuntimeDispatchError(
+                "runtime process output is not UTF-8",
+                failure_code="runtime_process_output_invalid",
+                failure_phase="runtime_process",
+                failure_detail="process_output_invalid",
+            ) from exc
         if not frames or len(frames) != len(lines):
-            raise RuntimeDispatchError("runtime process output contains an empty frame")
+            raise RuntimeDispatchError(
+                "runtime process output contains an empty frame",
+                failure_code="runtime_process_output_invalid",
+                failure_phase="runtime_process",
+                failure_detail="process_output_invalid",
+            )
         return frames
 
     def dispatch(self, snapshot_json: str, envelope_json: str) -> tuple[str, ...]:

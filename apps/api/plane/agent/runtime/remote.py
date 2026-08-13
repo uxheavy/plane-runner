@@ -56,6 +56,33 @@ def _request_digest(snapshot_json: str, envelope_json: str) -> str:
     ).hexdigest()
 
 
+def _structured_rejection(body: bytes) -> RuntimeDispatchError | None:
+    try:
+        value = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, TypeError, ValueError):
+        return None
+    if not isinstance(value, dict) or set(value) != {
+        "error",
+        "failureCode",
+        "failurePhase",
+        "failureDetail",
+    }:
+        return None
+    if value.get("error") != "runtime_dispatch_failed":
+        return None
+    fields = {key: value.get(key) for key in ("failureCode", "failurePhase", "failureDetail")}
+    if not all(isinstance(item, str) for item in fields.values()):
+        return None
+    if _canonical(value, "runtime rejection") != body:
+        return None
+    return RuntimeDispatchError(
+        "runtime dispatch was rejected",
+        failure_code=fields["failureCode"],
+        failure_phase=fields["failurePhase"],
+        failure_detail=fields["failureDetail"],
+    )
+
+
 class RemoteRuntimeTransport(RuntimeTransport):
     """Send one immutable Plane snapshot/envelope across the runtime seam."""
 
@@ -188,8 +215,10 @@ class RemoteRuntimeTransport(RuntimeTransport):
             if len(body) > self._max_response_bytes:
                 raise RuntimeDispatchError("runtime dispatch response exceeds its size bound")
             if response.status != 200:
-                raise RuntimeDispatchError("runtime dispatch was rejected")
+                raise _structured_rejection(body) or RuntimeDispatchError("runtime dispatch was rejected")
             return body
+        except RuntimeDispatchError:
+            raise
         except (OSError, ValueError, http.client.HTTPException) as exc:
             raise RuntimeDispatchError("runtime dispatch is unavailable") from exc
         finally:

@@ -38,6 +38,7 @@ from plane.db.models import (
     Project,
     ProjectMember,
     RunTerminalEvent,
+    RuntimeInvocationControl,
     RuntimeProviderAttempt,
     RuntimeEventIngress,
     RuntimeExitEvidence,
@@ -117,8 +118,12 @@ def build_failure_evidence(
     invocation_state,
     provider_attempts,
     terminal_kind,
+    failure_code=None,
+    failure_reason=None,
 ):
     """Return one bounded failure object without copying runtime observations."""
+
+    import json
 
     binding_fields = (
         "candidateCommit",
@@ -132,7 +137,7 @@ def build_failure_evidence(
         "runtimeContract",
         "apiArtifact",
     )
-    failure_phases = {
+    failure_stages = {
         "initialization",
         "compose",
         "audit-bootstrap",
@@ -166,6 +171,27 @@ def build_failure_evidence(
     status_classes = {"", "not_sent", "unknown", "2xx", "4xx", "5xx"}
     error_codes = {"", "pre_send_failure", "outcome_unknown", "provider_error", "runtime_error", "upstream_error"}
     terminal_kinds = {"none", "outcome_submission", "run_failure", "run_blocker", "run_cancellation"}
+    failure_codes = {
+        "runtime_transport_pre_dispatch_failure",
+        "runtime_configuration_pre_dispatch_failure",
+        "runtime_process_failed",
+        "runtime_process_timeout",
+        "runtime_process_cancelled",
+        "runtime_process_output_invalid",
+        "runtime_supervisor_pre_dispatch_failure",
+        "outcome_unknown",
+    }
+    reason_phases = {"runtime_transport", "runtime_configuration", "runtime_process", "launcher", "runtime_supervisor"}
+    failure_details = {
+        "dispatch_rejected",
+        "process_start_failed",
+        "process_exit",
+        "bootstrap_argv_rejected",
+        "process_timeout",
+        "process_cancelled",
+        "process_output_invalid",
+        "unclassified_exception",
+    }
 
     def bounded_identifier(value):
         if value is None:
@@ -255,14 +281,42 @@ def build_failure_evidence(
     if not isinstance(exit_code, int) or isinstance(exit_code, bool) or not 1 <= exit_code <= 255:
         exit_code = 1
 
+    reason = {}
+    if isinstance(failure_reason, str):
+        try:
+            candidate = json.loads(failure_reason)
+        except (TypeError, ValueError):
+            candidate = None
+        if isinstance(candidate, dict) and set(candidate) == {"failureCode", "failurePhase", "failureDetail"}:
+            reason = candidate
+    reason_code = reason.get("failureCode")
+    bounded_failure_code = (
+        reason_code
+        if isinstance(reason_code, str) and reason_code in failure_codes
+        else failure_code
+        if isinstance(failure_code, str) and failure_code in failure_codes
+        else "unspecified"
+    )
+    reason_phase = reason.get("failurePhase")
+    reason_detail = reason.get("failureDetail")
+    bounded_failure_phase = (
+        reason_phase if isinstance(reason_phase, str) and reason_phase in reason_phases else "unavailable"
+    )
+    bounded_failure_detail = (
+        reason_detail if isinstance(reason_detail, str) and reason_detail in failure_details else "unavailable"
+    )
+
     return {
         "schemaVersion": "plane-agent-g4/live-failure/v1",
         "status": "failed",
         "binding": bounded_binding,
         "failure": {
-            "phase": failure_phase if failure_phase in failure_phases else "unknown",
+            "phase": failure_phase if failure_phase in failure_stages else "unknown",
             "errorClass": error_class if error_class in error_classes else "unspecified",
             "exitCode": exit_code,
+            "reasonCode": bounded_failure_code,
+            "reasonPhase": bounded_failure_phase,
+            "reasonDetail": bounded_failure_detail,
         },
         "run": {"present": run_id is not None, "id": bounded_identifier(run_id), "state": bounded_state(run_state)},
         "invocation": {
@@ -288,13 +342,15 @@ def main() -> int:
     return_code = 0
     provider_attempts = []
     terminal = None
+    control = None
 
     def readback():
         invocation.refresh_from_db()
         run.refresh_from_db()
         attempts = list(RuntimeProviderAttempt.objects.filter(invocation=invocation).order_by("sequence")[:32])
         current_terminal = RunTerminalEvent.objects.filter(invocation=invocation, visible=True).first()
-        return attempts, current_terminal
+        control = RuntimeInvocationControl.objects.filter(invocation=invocation).first()
+        return attempts, current_terminal, control
 
     try:
         email = f"g4-live-{suffix}@plane.test"
@@ -464,7 +520,7 @@ def main() -> int:
         if invocation is not None:
             try:
                 reconcile_provider_attempts(invocation)
-                provider_attempts, terminal = readback()
+                provider_attempts, terminal, control = readback()
                 if (
                     failure is not None
                     and terminal is None
@@ -487,15 +543,15 @@ def main() -> int:
                             else "Live G4 supervisor invocation failed before provider completion."
                         ),
                     )
-                    provider_attempts, terminal = readback()
+                    provider_attempts, terminal, control = readback()
             except BaseException as exc:
                 if failure is None:
                     failure = exc
                 return_code = 1
                 try:
-                    provider_attempts, terminal = readback()
+                    provider_attempts, terminal, control = readback()
                 except BaseException:
-                    provider_attempts, terminal = [], None
+                    provider_attempts, terminal, control = [], None, None
 
         if failure is not None:
             try:
@@ -522,6 +578,8 @@ def main() -> int:
                     for attempt in provider_attempts
                 ],
                 terminal_kind=terminal.kind if terminal is not None else "none",
+                failure_code=control.failure_code if control is not None else None,
+                failure_reason=control.failure_reason if control is not None else None,
             )
 
     print(json.dumps(evidence, sort_keys=True, separators=(",", ":")))

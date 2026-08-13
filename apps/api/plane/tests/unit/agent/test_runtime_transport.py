@@ -364,3 +364,38 @@ def test_diagnostics_are_bounded_and_never_persisted(tmp_path):
             "SELECT state FROM plane_runtime_dispatch_ledger WHERE invocation_id = ?",
             ("invocation:test",),
         ).fetchone() == ("outcome_unknown",)
+
+
+def test_launcher_accepts_host_and_provider_relay_socket_arguments():
+    from plane.agent.runtime.launcher import _validate_target
+
+    command = [
+        "python3",
+        "-m",
+        "plane_runtime.g1_runtime_image.bootstrap",
+        "--once",
+        "--g1-production",
+        "--plane-host-socket",
+        "/run/plane-agent-runtime/host.sock",
+        "--provider-relay-socket",
+        "/run/plane-agent-runtime/provider.sock",
+    ]
+
+    assert _validate_target(command) == tuple(command)
+
+
+def test_runtime_dispatch_failure_diagnostic_is_allowlisted_and_never_echoes_exception():
+    secret = "authorization=secret-token transcript=/private/secret"
+    error = RuntimeDispatchError(
+        secret,
+        failure_code="runtime_process_failed",
+        failure_phase="launcher",
+        failure_detail="bootstrap_argv_rejected",
+    )
+
+    assert error.public_failure() == {
+        "failureCode": "runtime_process_failed",
+        "failurePhase": "launcher",
+        "failureDetail": "bootstrap_argv_rejected",
+    }
+    assert secret not in json.dumps(error.public_failure(), sort_keys=True)

@@ -18,6 +18,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable
 
 from .config import AgentRuntimeConfiguration, RuntimeConfigurationError
+from .contracts import (
+    RUNTIME_CONFIGURATION_PRE_DISPATCH_FAILURE,
+    RuntimeDispatchError,
+)
 from .health import RuntimeHealthStatus, RuntimeSafetyController, RuntimeSafetyStopError
 from .host_rpc import PlaneHostCall, PlaneHostHTTPClient, PlaneHostServer
 from .credentials import validate_credential_lease_metadata
@@ -478,10 +482,36 @@ class _RuntimeHTTPHandler(BaseHTTPRequestHandler):
         except RuntimeSafetyStopError:
             self._write_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "runtime_not_ready"})
             return
+        except RuntimeConfigurationError:
+            self._write_json(
+                HTTPStatus.CONFLICT,
+                {
+                    "error": "runtime_dispatch_failed",
+                    **RuntimeDispatchError(
+                        "runtime configuration rejected dispatch",
+                        failure_code=RUNTIME_CONFIGURATION_PRE_DISPATCH_FAILURE,
+                        failure_phase="runtime_configuration",
+                        failure_detail="dispatch_rejected",
+                    ).public_failure(),
+                },
+            )
+            return
+        except RuntimeDispatchError as exc:
+            self._write_json(
+                HTTPStatus.CONFLICT,
+                {"error": "runtime_dispatch_failed", **exc.public_failure()},
+            )
+            return
         except Exception:
-            # A dispatch failure is deliberately opaque. The Plane supervisor
-            # records outcome-unknown and performs lifecycle reconciliation.
-            self._write_json(HTTPStatus.CONFLICT, {"error": "runtime_dispatch_failed"})
+            # Exception text, credentials, paths, and transcripts never cross
+            # this boundary. The classification is the only durable detail.
+            self._write_json(
+                HTTPStatus.CONFLICT,
+                {
+                    "error": "runtime_dispatch_failed",
+                    **RuntimeDispatchError("runtime dispatch failed").public_failure(),
+                },
+            )
             return
         self._write_json(HTTPStatus.OK, response)
 

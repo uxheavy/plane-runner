@@ -347,6 +347,11 @@ class G4ContractTests(unittest.TestCase):
                 }
             ],
             terminal_kind="run_failure",
+            failure_code="runtime_process_failed",
+            failure_reason=(
+                '{"failureCode":"runtime_process_failed","failurePhase":"launcher",'
+                '"failureDetail":"authorization=secret-token"}'
+            ),
         )
         encoded = json.dumps(evidence, sort_keys=True, separators=(",", ":"))
         self.assertEqual(evidence["schemaVersion"], "plane-agent-g4/live-failure/v1")
@@ -359,6 +364,43 @@ class G4ContractTests(unittest.TestCase):
         for forbidden in ("do not include", "prompt", "response", "credential", "payload", "rawLogs"):
             self.assertNotIn(forbidden, encoded)
         self.assertNotRegex(encoded, re.compile(r"(?i)(password|secret|token|api[_-]?key|authorization|credential)"))
+        self.assertEqual(
+            evidence["failure"],
+            {
+                "phase": "api-invocation",
+                "errorClass": "CommandError",
+                "exitCode": 1,
+                "reasonCode": "runtime_process_failed",
+                "reasonPhase": "launcher",
+                "reasonDetail": "unavailable",
+            },
+        )
+        malformed = namespace["build_failure_evidence"](
+            binding={},
+            failure_phase="api-invocation",
+            error_class="RuntimeError",
+            exit_code=1,
+            run_id=None,
+            run_state="failed",
+            invocation_id=None,
+            invocation_state="failed",
+            provider_attempts=[],
+            terminal_kind="none",
+            failure_reason=json.dumps(
+                {
+                    "failureCode": ["secret-token"],
+                    "failurePhase": {"path": "/private/secret"},
+                    "failureDetail": ["authorization=secret-token"],
+                }
+            ),
+        )
+        self.assertEqual(malformed["failure"]["reasonCode"], "unspecified")
+        self.assertEqual(malformed["failure"]["reasonPhase"], "unavailable")
+        self.assertEqual(malformed["failure"]["reasonDetail"], "unavailable")
+        self.assertNotRegex(
+            json.dumps(malformed, sort_keys=True),
+            re.compile(r"(?i)(password|secret|token|api[_-]?key|authorization|credential)"),
+        )
 
     def test_provider_attempt_reconciliation_leaves_completed_attempt_completed(self):
         source = (ROOT / "apps/api/plane/tests/unit/agent/test_lifecycle.py").read_text(encoding="utf-8")

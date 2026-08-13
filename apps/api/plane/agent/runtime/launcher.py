@@ -31,21 +31,45 @@ def _bounded_positive(value: int, maximum: int, name: str) -> int:
 
 
 def _validate_target(command: list[str]) -> tuple[str, ...]:
-    if any(not isinstance(part, str) or not part or "\x00" in part for part in command):
+    if any(
+        not isinstance(part, str)
+        or not part
+        or "\x00" in part
+        or any(ord(char) < 0x20 or ord(char) == 0x7F for char in part)
+        for part in command
+    ):
         raise ValueError("runtime bootstrap argv is invalid")
-    base = command
-    if len(command) == 7 and command[5] == "--plane-host-socket":
-        socket_path = command[6]
+    if len(command) not in {5, 7, 9}:
+        raise ValueError("runtime bootstrap argv is invalid")
+    base = command[:5]
+    suffix = command[5:]
+    if len(suffix) not in {0, 2, 4}:
+        raise ValueError("runtime bootstrap argv is invalid")
+
+    def socket_pair(pair: tuple[str, str], name: str) -> str:
+        flag, socket_path = pair
+        expected_flag = {
+            "host": "--plane-host-socket",
+            "provider": "--provider-relay-socket",
+        }[name]
+        if flag != expected_flag:
+            raise ValueError("runtime bootstrap argv is invalid")
         if (
             not os.path.isabs(socket_path)
-            or len(socket_path.encode("utf-8")) > 512
-            or any(ord(char) < 0x20 for char in socket_path)
+            or len(os.fsencode(socket_path)) > 512
+            or any(ord(char) < 0x20 or ord(char) == 0x7F for char in socket_path)
         ):
-            raise ValueError("runtime host socket path is invalid")
-        base = command[:5]
-    elif len(command) != 5:
-        raise ValueError("runtime bootstrap argv is invalid")
-    return validate_runtime_command(base) + tuple(command[5:])
+            raise ValueError(f"runtime {name} socket path is invalid")
+        return socket_path
+
+    if len(suffix) == 2:
+        socket_pair((suffix[0], suffix[1]), "host")
+    elif len(suffix) == 4:
+        host_path = socket_pair((suffix[0], suffix[1]), "host")
+        provider_path = socket_pair((suffix[2], suffix[3]), "provider")
+        if host_path == provider_path:
+            raise ValueError("runtime socket paths must be distinct")
+    return validate_runtime_command(base) + tuple(suffix)
 
 
 def main(argv: list[str] | None = None) -> int:

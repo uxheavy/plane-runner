@@ -8,6 +8,7 @@ evidence; only the lifecycle service creates a visible terminal event.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -46,6 +47,7 @@ from plane.db.models import (
 )
 
 from .dispatch import RuntimeIngressError, dispatch_invocation, ingest_runtime_frame
+from .contracts import RUNTIME_SUPERVISOR_PRE_DISPATCH_FAILURE, RuntimeDispatchError
 
 
 DEFAULT_LEASE_SECONDS = 300
@@ -217,6 +219,31 @@ def _release(invocation_id: Any, *, state: str | None = None) -> None:
 
 def _durable_control(invocation_id: Any) -> RuntimeInvocationControl | None:
     return RuntimeInvocationControl.objects.filter(invocation_id=invocation_id).first()
+
+
+def _serialized_failure(reason: dict[str, str]) -> str:
+    return json.dumps(reason, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _terminalize_dispatch_failure(
+    invocation: RuntimeInvocation,
+    reason: dict[str, str],
+    *,
+    known_dispatch_failure: bool = False,
+) -> SupervisorResult:
+    reconcile_provider_attempts(invocation)
+    upstream_attempt_exists = RuntimeProviderAttempt.objects.filter(
+        invocation=invocation,
+        upstream_initiated=True,
+    ).exists()
+    bounded_failure = known_dispatch_failure and not upstream_attempt_exists
+    return _terminalize(
+        invocation.pk,
+        kind="run_blocker",
+        reason=_serialized_failure(reason),
+        code=reason["failureCode"] if bounded_failure else "outcome_unknown",
+        outcome_unknown=not bounded_failure,
+    )
 
 
 def runtime_invocation_cancelled(invocation_id: Any) -> bool:
@@ -451,6 +478,12 @@ def run_runtime_invocation(
             reason=str(exc),
             code="malformed_runtime_evidence",
         )
+    except RuntimeDispatchError as exc:
+        return _terminalize_dispatch_failure(
+            claim.invocation,
+            exc.public_failure(),
+            known_dispatch_failure=exc.has_allowlisted_failure,
+        )
     except Exception:
         try:
             _reconcile_accepted_usage(claim.invocation)
@@ -468,13 +501,13 @@ def run_runtime_invocation(
                 reason="Runtime cancellation stopped the child process.",
                 code="cancelled",
             )
-        reconcile_provider_attempts(claim.invocation)
-        return _terminalize(
-            claim.invocation.pk,
-            kind="run_blocker",
-            reason="Runtime process outcome is unknown; explicit reconciliation is required.",
-            code="outcome_unknown",
-            outcome_unknown=True,
+        return _terminalize_dispatch_failure(
+            claim.invocation,
+            {
+                "failureCode": RUNTIME_SUPERVISOR_PRE_DISPATCH_FAILURE,
+                "failurePhase": "runtime_supervisor",
+                "failureDetail": "unclassified_exception",
+            },
         )
 
 
