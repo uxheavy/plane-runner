@@ -333,6 +333,37 @@ with no retry or replay.
 No broad G3/G4 verifier, unrelated suite, load test, G5, rollout, pilot,
 deployment, source edit, or extra provider call ran.
 
+## Wave 0O — matched current-source runtime retest at 4ec33bb637
+
+Status: dirty at the first API-invocation boundary. Exactly one fresh approved
+lifecycle ran; no retry or replay ran.
+
+- Candidate: `4ec33bb637d4ce7e60c29e0afc50ffb503e43574`.
+- API image digest:
+  `sha256:12e056eae752fd3e305c76a806139fe9b8ea33c587f63554af645007c589b6be`.
+- Runtime image digest:
+  `sha256:c16270428c485d6ed8185a1bb3830f1d64fe04278b9837ed031642b3679adc77`.
+- Both artifacts were built once from the exact candidate. The runtime used the
+  sealed Hermes donor attested as `d2e655101f263329359e7d0de9d0b856202a3e4b`
+  with tree digest
+  `9485115c76b71c47b08d14ec4a1df7cb615301f8e151959c00a80382bdb61bbc`.
+- Fresh authority/config and config-only validation passed with ChatGPT
+  subscription routing, `openai-codex/gpt-5.6-luna`, and fallback disabled.
+- Fresh run `6fb4bcc4-503a-4aa7-b7ec-e44dfe86954f` failed.
+- Fresh invocation `invocation:65b99651-a21c-4752-aaa7-b4368f342e8a`
+  failed at `api-invocation` with an unclassified `RuntimeError`.
+- Provider attempts: zero. The permitted read, denied evaluator operation,
+  gateway receipts, outcome submission, publication, and replay did not run.
+- Plane recorded one visible `run_failure` terminal event.
+- The current bounded receipt cannot distinguish an API-side rejection from a
+  runtime process failure; no narrower root-cause claim is made.
+- Disposable images, checkout, manifest, authority/config, containers,
+  networks, volumes, relay sockets, and credential staging were removed. The
+  prepared base and pinned sealed donor remain.
+
+No broad G3/G4 verifier, unrelated suite, load test, G5, rollout, pilot,
+deployment, source edit, or extra provider call ran.
+
 ## Wave 0L — execution-dependent lifecycle proof at 0afb4cc9bb
 
 Status: stopped before live S00 at the first focused lifecycle regression

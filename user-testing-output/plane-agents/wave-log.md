@@ -254,3 +254,19 @@
   resources were removed; no external provider request ran
 - Next: one fresh GPT-5.6 Luna ChatGPT-subscription Wave 0O, stopping at its
   first failure; only a clean Wave 0O closes UT-013 and S00
+
+## Wave 0O — matched current-source live retest
+
+- Status: dirty — UT-014; UT-013 closed because both live artifacts were bound
+  to exact candidate `4ec33bb637d4ce7e60c29e0afc50ffb503e43574`
+- Fresh authority/config validation passed with ChatGPT subscription routing,
+  `openai-codex/gpt-5.6-luna`, and fallback disabled
+- One fresh run `6fb4bcc4-503a-4aa7-b7ec-e44dfe86954f` and invocation
+  `invocation:65b99651-a21c-4752-aaa7-b4368f342e8a` failed at
+  `api-invocation` before any provider-attempt intent
+- Plane recorded one visible `run_failure`; provider attempts were zero, and
+  no read, denied evaluator operation, outcome, publication, or replay ran
+- Cleanup was clean: zero task-labeled containers, networks, or volumes; all
+  disposable images and checkout/config artifacts were removed
+- Next: Luna exposes and root-fixes only the API→runtime failure owner with a
+  provider-free focused proof, then Maya runs one fresh S00 retest
