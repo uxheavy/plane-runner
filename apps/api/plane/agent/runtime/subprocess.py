@@ -32,7 +32,11 @@ from pathlib import Path
 from typing import Any
 
 from .config import RuntimeConfigurationError, validate_runtime_command
-from .contracts import RuntimeDispatchError, RuntimeTransport
+from .contracts import (
+    RUNTIME_CONFIGURATION_PRE_DISPATCH_FAILURE,
+    RuntimeDispatchError,
+    RuntimeTransport,
+)
 from .provider_egress import ProviderRelayDescriptor, ProviderRelayPolicy, _relay_bootstrap_payload
 
 
@@ -54,6 +58,16 @@ _HERMES_RUNTIME_POLICY_FIELDS = frozenset(
         "maxCodeModeInputBytes",
         "maxCodeModeOutputBytes",
         "maxCodeModeCalls",
+    }
+)
+_HERMES_REQUIRED_RUNTIME_POLICY_FIELDS = frozenset(
+    {
+        "model",
+        "adapter",
+        "isolation",
+        "maxEventPayloadBytes",
+        "maxArtifactBytes",
+        "maxReceiptBytes",
     }
 )
 _HERMES_G1_CONTRACT_DIGESTS = {
@@ -537,9 +551,24 @@ def _hermes_request_payload(snapshot_json: str, envelope_json: str) -> tuple[byt
         raise RuntimeDispatchError("runtime snapshot has no runtime policy")
     extras = set(policy).difference(_HERMES_RUNTIME_POLICY_FIELDS)
     if extras:
-        raise RuntimeDispatchError("runtime snapshot has unprojectable Hermes policy fields")
+        raise RuntimeDispatchError(
+            "runtime snapshot has unprojectable Hermes policy fields",
+            failure_code=RUNTIME_CONFIGURATION_PRE_DISPATCH_FAILURE,
+            failure_phase="runtime_configuration",
+            failure_detail="dispatch_rejected",
+            failure_subreason="runtime_configuration_rejected",
+        )
+    missing = _HERMES_REQUIRED_RUNTIME_POLICY_FIELDS.difference(policy)
+    if missing:
+        raise RuntimeDispatchError(
+            "runtime snapshot has incomplete Hermes policy",
+            failure_code=RUNTIME_CONFIGURATION_PRE_DISPATCH_FAILURE,
+            failure_phase="runtime_configuration",
+            failure_detail="dispatch_rejected",
+            failure_subreason="runtime_configuration_rejected",
+        )
     projected = dict(snapshot)
-    projected_policy = {key: policy[key] for key in _HERMES_RUNTIME_POLICY_FIELDS}
+    projected_policy = {key: policy[key] for key in _HERMES_RUNTIME_POLICY_FIELDS if key in policy}
     projected["runtimePolicy"] = projected_policy
     projected["contractDigests"] = dict(_HERMES_G1_CONTRACT_DIGESTS)
     projected.pop("contentDigest", None)

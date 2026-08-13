@@ -307,7 +307,14 @@ def test_g4_provider_dispatch_crosses_runtime_boundary_before_provider_request(t
     thread.start()
     snapshot_json, invocation_json = _dispatch_body("provider-boundary")
     snapshot = json.loads(snapshot_json)
-    snapshot["runtimePolicy"] = {"model": {"provider": "openai-codex", "model": "gpt-5.6-luna"}}
+    snapshot["runtimePolicy"] = {
+        "model": {"provider": "openai-codex", "model": "gpt-5.6-luna"},
+        "adapter": "openai-compatible",
+        "isolation": "single-invocation",
+        "maxEventPayloadBytes": 8192,
+        "maxArtifactBytes": 8192,
+        "maxReceiptBytes": 8192,
+    }
     snapshot_json = json.dumps(snapshot, sort_keys=True, separators=(",", ":"))
     try:
         frames = RemoteRuntimeTransport(
@@ -324,6 +331,40 @@ def test_g4_provider_dispatch_crosses_runtime_boundary_before_provider_request(t
         thread.join(timeout=2)
 
     assert frames == ('{"protocol":"fixture","boundary":"child-started"}',)
+
+
+def test_g4_runtime_http_classifies_incomplete_hermes_policy_without_raw_exception(tmp_path):
+    configuration = _configuration(tmp_path)
+    controller = RuntimeSafetyController(configured=True, stop_file=tmp_path / "safety-stop")
+    controller.mark_ready()
+    executor = RuntimeDispatchExecutor(configuration, controller)
+    server = _RuntimeHTTPServer(("127.0.0.1", 0), controller, configuration, executor=executor)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    snapshot_json, invocation_json = _dispatch_body("incomplete-policy")
+    snapshot = json.loads(snapshot_json)
+    snapshot["runtimePolicy"] = {
+        "model": {"provider": "openai-codex", "model": "gpt-5.6-luna"},
+    }
+    snapshot_json = json.dumps(snapshot, sort_keys=True, separators=(",", ":"))
+
+    try:
+        with pytest.raises(RuntimeDispatchError) as raised:
+            RemoteRuntimeTransport(
+                runtime_url=f"http://127.0.0.1:{server.server_port}",
+                shared_secret=configuration.shared_secret,
+            ).dispatch(snapshot_json, invocation_json)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    assert raised.value.public_failure() == {
+        "failureCode": "runtime_configuration_pre_dispatch_failure",
+        "failurePhase": "runtime_configuration",
+        "failureDetail": "dispatch_rejected",
+        "failureSubreason": "runtime_configuration_rejected",
+    }
 
 
 def test_g4_provider_dispatch_reaches_one_fake_provider_attempt_and_cleans_relay(tmp_path, monkeypatch):
