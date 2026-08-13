@@ -99,3 +99,27 @@ stale parser. No provider, tool, gateway, outcome, publication, or replay action
 occurred. One visible lifecycle blocker was recorded. Temporary image, checkout,
 authority/config, and Docker resources were removed; prepared base/runtime
 images were preserved. No broad verifier, load, G5, rollout, or deployment ran.
+
+## Wave 0D — pre-live artifact proof
+
+Status: dirty before live execution. No authority/config or S00 invocation ran.
+
+- Candidate: `1793f338342b93f8a1655f5131aab461d2b68b65`.
+- Temporary API artifact digest: `sha256:40b21ee2077bc916cd277b9acdf626c631deef4cf7db32fb1d01bea8516e1c32`; labels passed.
+- Runtime/Hermes remained unchanged.
+- Network-isolated module proof passed: `plane`, runtime credentials, and runtime config all resolved under `/workspace/apps/api`.
+
+```text
+/workspace/apps/api/plane/__init__.py
+/workspace/apps/api/plane/agent/runtime/credentials.py
+/workspace/apps/api/plane/agent/runtime/config.py
+FileNotFoundError: [Errno 2] No such file or directory: '/usr/local/bin/plane-agent-runtime-credential-resolver'
+```
+
+The expected installed resolver is absent because `apps/api/Dockerfile.g4`
+copies the candidate source but does not install its resolver script at the
+path used by production configuration. The synthetic owner-only Codex document
+was never resolved, and no credential value was displayed. No provider or Plane
+product action occurred. The proof container, temporary image, synthetic file,
+checkout, and Colima resources were cleaned; prepared base/runtime images were
+preserved. No broad verifier, load, G5, rollout, or deployment ran.

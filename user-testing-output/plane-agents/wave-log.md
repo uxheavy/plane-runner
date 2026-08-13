@@ -53,3 +53,15 @@
 - Cleanup: clean; temporary API artifact removed
 - Next: Luna fixes the established API artifact executable-source boundary,
   then Maya reruns S00 only
+
+## Wave 0D — API artifact path proof
+
+- Status: dirty — UT-004
+- Candidate: `1793f338342b93f8a1655f5131aab461d2b68b65`
+- UT-003: closed; all three runtime modules load from candidate source
+- Failure: configured `/usr/local/bin/plane-agent-runtime-credential-resolver`
+  is absent from the candidate API artifact
+- Live authority, provider attempts, and Plane product actions: zero
+- Cleanup: clean; temporary API artifact removed
+- Next: Luna installs and proves the established resolver in the artifact, then
+  Maya reruns the network-isolated proof and S00
