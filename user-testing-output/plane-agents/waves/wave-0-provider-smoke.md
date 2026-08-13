@@ -278,3 +278,32 @@ resource creation, runtime startup, or provider dispatch. No retry or replay ran
 
 No broad G3/G4 verifier, unrelated suite, load test, G5, rollout, pilot,
 deployment, or source edit ran.
+
+## Wave 0J — S00 API invocation at 96bb2649f6
+
+Status: blocked after the explicit disposable-manifest boundary passed. Exactly
+one fresh approved S00 command reached API invocation and failed. No retry,
+replay, or second provider call ran.
+
+- Candidate: `96bb2649f6356f1614a8ba2315089091b12ee938`, direct parent
+  `e26bf86cdfcda02e6a0659fc1792c8fdec665eb9`.
+- Temporary API artifact: `plane-agent-api:g4-96bb2649-wave0j`, digest
+  `sha256:76e31ae82eafcaa96cb16e8cf20576fc3e739fd622197011cd022ce073a50b73`.
+- Pinned runtime/Hermes remained unchanged at
+  `sha256:6f1c2dc5857d445e13b34f9cc9723ee5c7636c2cfe2ef213c7fc4d972855c1bd`.
+- The checkout-owned manifest, fresh authority/config, GPT-5.6 Luna subscription
+  descriptor, no-fallback binding, and config-only proof passed before live
+  side effects.
+- Fresh run `6ae053c0-2583-4032-8d08-6d2216b283ea` failed.
+- Fresh invocation `invocation:58ec752a-8aba-4a41-9368-cedd47394be4`
+  failed at `api-invocation` with exit `1`; bounded reason/detail/subreason were
+  unavailable.
+- Provider attempts: zero. Permitted read, denied evaluation, gateway receipts,
+  outcome submission, publication, and successful terminal state were not
+  reached. No replay ran.
+- The temporary image, checkout, manifest, authority/config, and generator were
+  removed. Task-labeled containers, networks, and volumes were empty; prepared
+  base and pinned runtime remained.
+
+No broad G3/G4 verifier, unrelated suite, load test, G5, rollout, pilot,
+deployment, source edit, or extra provider call ran.

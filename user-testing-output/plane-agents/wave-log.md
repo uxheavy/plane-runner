@@ -149,3 +149,18 @@
 - Cleanup: clean; temporary API image and handoff removed, pinned images retained
 - Next: add one validated manifest-path input that preserves the frozen default,
   then Maya runs one fresh Wave 0J
+
+## Wave 0J — exact-candidate API invocation
+
+- Status: dirty — UT-010; UT-009 closed
+- Candidate: `96bb2649f6356f1614a8ba2315089091b12ee938`
+- Temporary API image:
+  `sha256:76e31ae82eafcaa96cb16e8cf20576fc3e739fd622197011cd022ce073a50b73`
+- The checkout-owned manifest and config-only proof passed before side effects
+- One fresh run `6ae053c0-2583-4032-8d08-6d2216b283ea` and invocation
+  `invocation:58ec752a-8aba-4a41-9368-cedd47394be4` failed at
+  `api-invocation` with an unclassified runtime error
+- Provider attempts: zero; no replay or downstream product operation ran
+- Cleanup: clean; temporary image and all Wave 0J artifacts removed
+- Next: reproduce the API/runtime path without external provider traffic,
+  expose the first concrete cause, fix only its owner, then run fresh Wave 0K
