@@ -217,6 +217,167 @@ class G4ContractTests(unittest.TestCase):
         self.assertNotIn("api.x.ai", invoke)
         self.assertNotIn("grok-4", invoke)
 
+    def test_live_runner_resolves_selected_manifest_before_validation_and_pin_extraction(self):
+        runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+
+        self.assertIn(
+            'MANIFEST_INPUT="${PLANE_G4_LIVE_MANIFEST:-${ROOT_DIR}/tools/agent-g4-manifest.json}"',
+            runner,
+        )
+        self.assertIn("candidate.resolve(strict=True)", runner)
+        self.assertIn("resolved.is_relative_to(disposable_root)", runner)
+        resolution = runner.index('MANIFEST="$(python3 - "${ROOT_DIR}" "${MANIFEST_INPUT}"')
+        validation = runner.index("validate_agent_g4_live.py")
+        pin_extraction = runner.index('G4_G3_BASELINE="$(python3', validation)
+        self.assertLess(resolution, validation)
+        self.assertLess(validation, pin_extraction)
+        self.assertEqual(runner.count('--manifest "${MANIFEST}"'), 1)
+        self.assertNotIn('MANIFEST="${ROOT_DIR}/tools/agent-g4-manifest.json"', runner)
+
+    def test_live_runner_uses_default_and_disposable_manifest_paths_before_offline_preflight(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            clean_tools = root / "tools"
+            clean_tools.mkdir(mode=0o700)
+            for name in ("agent-g4-live.sh", "agent-g4-manifest.json", "validate_agent_g4_live.py"):
+                target = clean_tools / name
+                target.write_bytes((TOOLS / name).read_bytes())
+            (clean_tools / "agent-g4-live.sh").chmod(0o700)
+
+            disposable_path = root / "tmp" / "disposable" / "manifest.json"
+            disposable_path.parent.mkdir(mode=0o700, parents=True)
+            disposable_manifest = copy.deepcopy(MANIFEST)
+            disposable_manifest["pins"]["apiArtifact"] = {
+                "imageTag": "plane-agent-api:g4-disposable",
+                "imageDigest": "sha256:" + "1" * 64,
+                "sourceRevision": "2" * 40,
+                "contract": "plane.operation/v1",
+            }
+            disposable_path.write_text(json.dumps(disposable_manifest), encoding="utf-8")
+
+            fake_bin = root / "bin"
+            fake_bin.mkdir(mode=0o700)
+            docker_log = root / "docker.log"
+            fake_docker = fake_bin / "docker"
+            fake_docker.write_text(
+                "#!/bin/sh\n"
+                "printf '%s\\n' \"$*\" >> \"$DOCKER_LOG\"\n"
+                "if [ \"$1\" = image ] && [ \"$2\" = inspect ]; then\n"
+                "    case \"$5\" in\n"
+                "        '{{.Id}}') printf '%s\\n' \"$EXPECTED_API_DIGEST\" ;;\n"
+                "        *source.revision*) printf '%s\\n' \"$EXPECTED_API_SOURCE\" ;;\n"
+                "        *contract*) printf '%s\\n' \"$EXPECTED_API_CONTRACT\" ;;\n"
+                "        *artifact*) printf '%s\\n' 'plane-agent-api-g4' ;;\n"
+                "    esac\n"
+                "    exit 0\n"
+                "fi\n"
+                "case \" $* \" in *\" --network none \"*) exit 42 ;; esac\n"
+                "exit 0\n",
+                encoding="utf-8",
+            )
+            fake_docker.chmod(0o700)
+            fake_git = fake_bin / "git"
+            candidate = subprocess.run(
+                ["git", "-C", str(ROOT), "rev-parse", "HEAD"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            fake_git.write_text(
+                "#!/bin/sh\n"
+                f"if [ \"$1\" = rev-parse ] && [ \"$2\" = HEAD ]; then printf '%s\\n' '{candidate}'; else exit 1; fi\n",
+                encoding="utf-8",
+            )
+            fake_git.chmod(0o700)
+
+            authority_path = root / "authority.json"
+            config_path = root / "config.json"
+            provider_source = root / "synthetic-provider-source"
+            provider_source.write_text("synthetic test input", encoding="utf-8")
+            provider_source.chmod(0o600)
+
+            def run_case(manifest: dict, manifest_input: str | None) -> str:
+                _, authority, config, _ = fixture(candidate, manifest)
+                authority["authorityId"] = "authority-manifest-path"
+                config["authorityId"] = "authority-manifest-path"
+                authority_path.write_text(json.dumps(authority), encoding="utf-8")
+                config_path.write_text(json.dumps(config), encoding="utf-8")
+                environment = {
+                    "PATH": f"{fake_bin}:{os.environ['PATH']}",
+                    "DOCKER_LOG": str(docker_log),
+                    "EXPECTED_API_DIGEST": manifest["pins"]["apiArtifact"]["imageDigest"],
+                    "EXPECTED_API_SOURCE": manifest["pins"]["apiArtifact"]["sourceRevision"],
+                    "EXPECTED_API_CONTRACT": manifest["pins"]["apiArtifact"]["contract"],
+                    "PLANE_G4_EXPECTED_CANDIDATE": candidate,
+                    "PLANE_G4_LIVE_AUTHORITY": str(authority_path),
+                    "PLANE_G4_LIVE_CONFIG": str(config_path),
+                    "PLANE_G4_LIVE_COMMAND": COMMAND,
+                    "PLANE_G4_PROVIDER_SECRET_SOURCE": str(provider_source),
+                }
+                if manifest_input is not None:
+                    environment["PLANE_G4_LIVE_MANIFEST"] = manifest_input
+                result = subprocess.run(
+                    ["bash", str(clean_tools / "agent-g4-live.sh")],
+                    cwd=root,
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 42, result.stdout + result.stderr)
+                output = result.stdout + result.stderr
+                self.assertIn("phase=credential-bind-preflight", output)
+                return docker_log.read_text(encoding="utf-8")
+
+            default_log = run_case(MANIFEST, None)
+            self.assertIn(MANIFEST["pins"]["apiArtifact"]["imageTag"], default_log)
+            disposable_log = run_case(disposable_manifest, "tmp/disposable/manifest.json")
+            self.assertIn(disposable_manifest["pins"]["apiArtifact"]["imageTag"], disposable_log)
+
+    def test_live_runner_rejects_out_of_scope_manifest_before_docker(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            clean_tools = root / "tools"
+            clean_tools.mkdir(mode=0o700)
+            runner = clean_tools / "agent-g4-live.sh"
+            runner.write_bytes((TOOLS / "agent-g4-live.sh").read_bytes())
+            runner.chmod(0o700)
+            fake_bin = root / "bin"
+            fake_bin.mkdir(mode=0o700)
+            docker_log = root / "docker.log"
+            fake_docker = fake_bin / "docker"
+            fake_docker.write_text("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$DOCKER_LOG\"\n", encoding="utf-8")
+            fake_docker.chmod(0o700)
+            fake_git = fake_bin / "git"
+            candidate = "a" * 40
+            fake_git.write_text(
+                "#!/bin/sh\n"
+                f"if [ \"$1\" = rev-parse ] && [ \"$2\" = HEAD ]; then printf '%s\\n' '{candidate}'; else exit 1; fi\n",
+                encoding="utf-8",
+            )
+            fake_git.chmod(0o700)
+            environment = {
+                "PATH": f"{fake_bin}:{os.environ['PATH']}",
+                "DOCKER_LOG": str(docker_log),
+                "PLANE_G4_EXPECTED_CANDIDATE": candidate,
+                "PLANE_G4_LIVE_MANIFEST": "/etc/hosts",
+                "PLANE_G4_LIVE_AUTHORITY": str(root / "authority.json"),
+                "PLANE_G4_LIVE_CONFIG": str(root / "config.json"),
+                "PLANE_G4_LIVE_COMMAND": COMMAND,
+            }
+            result = subprocess.run(
+                ["bash", str(runner)],
+                cwd=root,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+            self.assertIn("expected=durable-or-owned-disposable-manifest", result.stderr)
+            self.assertFalse(docker_log.exists())
+
     def test_live_runner_provides_home_for_pinned_hermes_child(self):
         runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
 

@@ -163,6 +163,14 @@ no Plane-side client factory or AIAgent patch is used. The candidate image is
 pinned in the manifest below. Until a separately authorized live run proves
 it, provider/model calls remain unperformed and live G4/G5 remain incomplete.
 
+The live runner reads `PLANE_G4_LIVE_MANIFEST` when set and otherwise uses
+`tools/agent-g4-manifest.json`. A disposable exact-candidate API artifact
+manifest must be a regular file under the repository-owned `tmp/` directory;
+the runner canonicalizes and validates that path before reading credentials or
+starting Docker. Authority/config binding, artifact and runtime pins, and the
+resulting cleanup remain confined to the runner's generated project/run
+resources. Never edit the durable manifest for a disposable artifact rehearsal.
+
 ## Local development topology
 
 `./setup.sh` copies the local examples and generates the untracked

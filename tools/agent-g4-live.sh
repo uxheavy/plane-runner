@@ -20,7 +20,7 @@ PROVIDER_SECRET_FILE="${RUN_DIR}/provider-credentials"
 RUN_DIR_CREATED=0
 CREDENTIAL_STATE_VOLUME_CREATED=0
 LIVE_INVOKE_SOURCE="${ROOT_DIR}/tools/agent-g4-live-invoke.py"
-MANIFEST="${ROOT_DIR}/tools/agent-g4-manifest.json"
+MANIFEST_INPUT="${PLANE_G4_LIVE_MANIFEST:-${ROOT_DIR}/tools/agent-g4-manifest.json}"
 LIVE_AUTHORITY="${PLANE_G4_LIVE_AUTHORITY:?validated live authority path is required}"
 LIVE_CONFIG="${PLANE_G4_LIVE_CONFIG:?validated live config path is required}"
 LIVE_COMMAND="${PLANE_G4_LIVE_COMMAND:?validated live command is required}"
@@ -35,6 +35,48 @@ G4_EXPECTED_CANDIDATE="${PLANE_G4_EXPECTED_CANDIDATE:?operator-supplied exact wr
     printf 'event=agent.g4.live-runner status=failed expected=HEAD=external_expected_candidate actual=head_mismatch suggestion=use_the_exact_authorized_wrapper\n' >&2
     exit 2
 }
+
+MANIFEST="$(python3 - "${ROOT_DIR}" "${MANIFEST_INPUT}" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1]).resolve()
+candidate = Path(sys.argv[2])
+if not candidate.is_absolute():
+    candidate = root / candidate
+
+try:
+    resolved = candidate.resolve(strict=True)
+except (OSError, RuntimeError):
+    raise SystemExit("manifest_path_missing_or_unresolvable")
+
+durable = root / "tools" / "agent-g4-manifest.json"
+disposable_root = root / "tmp"
+if resolved != durable and not resolved.is_relative_to(disposable_root):
+    raise SystemExit("manifest_path_out_of_scope")
+if not resolved.is_file():
+    raise SystemExit("manifest_path_not_a_regular_file")
+print(resolved)
+PY
+)" || {
+    printf 'event=agent.g4.live-runner status=failed expected=durable-or-owned-disposable-manifest actual=%s suggestion=use-the-default-or-a-regular-manifest-under-repository-tmp\n' \
+        "${MANIFEST_INPUT}" >&2
+    exit 2
+}
+
+# Authority/config validation is the egress boundary. It must complete before
+# reading the provider source, creating a network, starting a relay/runtime, or
+# invoking any API command. The runtime environment below is derived from the
+# same validated provider descriptor; it is never a second policy input.
+python3 "${ROOT_DIR}/tools/validate_agent_g4_live.py" \
+    --authority "${LIVE_AUTHORITY}" \
+    --config "${LIVE_CONFIG}" \
+    --manifest "${MANIFEST}" \
+    --candidate "${G4_CANDIDATE}" \
+    --expected-candidate "${G4_EXPECTED_CANDIDATE}" \
+    --command "${LIVE_COMMAND}" \
+    --config-only >/dev/null
+
 G4_G3_BASELINE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["candidateBinding"]["acceptedG3Baseline"])' "${MANIFEST}")"
 G4_HERMES="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["hermesCommit"])' "${MANIFEST}")"
 G4_MCP="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["mcpGitlink"])' "${MANIFEST}")"
@@ -50,18 +92,6 @@ G4_API_CONTRACT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]
 API_IMAGE="${G4_API_IMAGE_TAG}"
 LIVE_PHASE=initialization
 
-# Authority/config validation is the egress boundary. It must complete before
-# reading the provider source, creating a network, starting a relay/runtime, or
-# invoking any API command. The runtime environment below is derived from the
-# same validated provider descriptor; it is never a second policy input.
-python3 "${ROOT_DIR}/tools/validate_agent_g4_live.py" \
-    --authority "${LIVE_AUTHORITY}" \
-    --config "${LIVE_CONFIG}" \
-    --manifest "${MANIFEST}" \
-    --candidate "${G4_CANDIDATE}" \
-    --expected-candidate "${G4_EXPECTED_CANDIDATE}" \
-    --command "${LIVE_COMMAND}" \
-    --config-only >/dev/null
 PROVIDER_DESCRIPTOR_JSON="$(python3 - "${LIVE_CONFIG}" <<'PY'
 import json
 import sys
