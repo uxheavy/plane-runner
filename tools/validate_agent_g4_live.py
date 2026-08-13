@@ -200,7 +200,13 @@ def validate_disposable_artifact_binding(manifest: dict[str, Any], candidate: st
         "runtimeSourceDigest",
         "runtimeFiles",
     }
-    if set(binding) != required:
+    source_fields = {
+        "hermesSourceKind",
+        "hermesDonorImage",
+        "hermesDonorDigest",
+        "hermesTreeDigest",
+    }
+    if set(binding) not in (required, required | source_fields):
         raise ContractError("manifest_disposableBinding_fields_mismatch")
     _exact(binding["mode"], "exact-api-runtime-candidate", "manifest_disposableBinding_mode")
     _exact(binding["candidateCommit"], candidate, "manifest_disposableBinding_candidateCommit")
@@ -230,6 +236,25 @@ def validate_disposable_artifact_binding(manifest: dict[str, Any], candidate: st
         _hash(digest, "manifest_disposableBinding_runtimeFile_sha256")
     calculated = hashlib.sha256(json.dumps(files, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
     _exact(calculated, binding["runtimeSourceDigest"], "manifest_disposableBinding_runtimeSourceDigest")
+
+    if source_fields.issubset(binding):
+        source_kind = binding["hermesSourceKind"]
+        donor_image = binding["hermesDonorImage"]
+        donor_digest = binding["hermesDonorDigest"]
+        tree_digest = binding["hermesTreeDigest"]
+        if source_kind not in {"git-checkout", "sealed-image"}:
+            raise ContractError("manifest_disposableBinding_hermesSourceKind_invalid")
+        _hash(tree_digest, "manifest_disposableBinding_hermesTreeDigest")
+        if source_kind == "sealed-image":
+            if not isinstance(donor_image, str) or not donor_image:
+                raise ContractError("manifest_disposableBinding_hermesDonorImage_missing")
+            if (
+                not isinstance(donor_digest, str)
+                or not re.fullmatch(r"sha256:[0-9a-f]{64}", donor_digest)
+            ):
+                raise ContractError("manifest_disposableBinding_hermesDonorDigest_invalid")
+        elif donor_image or donor_digest:
+            raise ContractError("manifest_disposableBinding_hermesSource_mixed")
 
     expected = exact_binding(manifest, candidate)
     _exact(expected["runtimeImageRevision"], candidate, "manifest_disposableBinding_pin_runtimeRevision")

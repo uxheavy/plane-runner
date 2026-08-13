@@ -1,13 +1,21 @@
-# Dedicated Plane Agent runtime image.  The Hermes source is staged by
-# tools/build-agent-runtime-image.py from a clean uxheavy checkout at the
-# exact commit below; no application source is mounted at runtime.
+# Dedicated Plane Agent runtime image. Hermes source is staged by
+# tools/build-agent-runtime-image.py either from a clean uxheavy checkout or
+# from a verified sealed donor image; no application source is mounted at runtime.
 ARG HERMES_COMMIT
+ARG HERMES_SOURCE_KIND
+ARG HERMES_DONOR_IMAGE
+ARG HERMES_DONOR_DIGEST
+ARG HERMES_TREE_SHA256
 ARG PLANE_REVISION
 ARG PLANE_RUNTIME_SOURCE_SHA256
 FROM company-runner-upstream-runtime:a8e53b6ac7b8@sha256:4c0d9f4dee14a4b2f59bc997baf557066f4394c4adcb285905aaa5838ed5ad39 AS runtime_base
 
 FROM scratch
 ARG HERMES_COMMIT
+ARG HERMES_SOURCE_KIND
+ARG HERMES_DONOR_IMAGE
+ARG HERMES_DONOR_DIGEST
+ARG HERMES_TREE_SHA256
 ARG PLANE_REVISION
 ARG PLANE_RUNTIME_SOURCE_SHA256
 COPY --from=runtime_base / /
@@ -32,6 +40,10 @@ LABEL org.opencontainers.image.title="Plane Agent runtime" \
       org.opencontainers.image.revision="$HERMES_COMMIT" \
       org.uxheavy.plane.hermes.commit="$HERMES_COMMIT" \
       org.uxheavy.plane.hermes.remote="https://github.com/uxheavy/hermes-agent.git" \
+      org.uxheavy.plane.hermes.source.kind="$HERMES_SOURCE_KIND" \
+      org.uxheavy.plane.hermes.donor.image="$HERMES_DONOR_IMAGE" \
+      org.uxheavy.plane.hermes.donor.digest="$HERMES_DONOR_DIGEST" \
+      org.uxheavy.plane.hermes.tree.sha256="$HERMES_TREE_SHA256" \
       org.uxheavy.plane.runtime.revision="$PLANE_REVISION" \
       org.uxheavy.plane.runtime.source.sha256="$PLANE_RUNTIME_SOURCE_SHA256" \
       org.uxheavy.plane.runtime.contract="plane.agent-runtime/v1"

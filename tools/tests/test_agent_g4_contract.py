@@ -3,15 +3,18 @@ from __future__ import annotations
 import ast
 import copy
 import hashlib
+import io
 import importlib.util
 import json
 import os
 import re
 import subprocess
+import tarfile
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 TOOLS = Path(__file__).resolve().parents[1]
@@ -182,6 +185,100 @@ def fixture(candidate: str = CANDIDATE, source_manifest: dict | None = None) -> 
 
 
 class G4ContractTests(unittest.TestCase):
+    def _donor_manifest(self):
+        return {
+            "pins": {
+                "runtimeImageTag": "plane-agent-runtime:sealed-donor",
+                "runtimeImageDigest": "sha256:" + "a" * 64,
+                "runtimeImageRevision": "b" * 40,
+                "hermesCommit": _BUILDER.HERMES_COMMIT,
+                "runtimeContract": "plane.agent-runtime/v1",
+            }
+        }
+
+    def _donor_metadata(self, *, digest=None, labels=None):
+        expected = self._donor_manifest()["pins"]
+        return {
+            "imageDigest": digest or expected["runtimeImageDigest"],
+            "labels": labels
+            or {
+                "org.uxheavy.plane.hermes.commit": expected["hermesCommit"],
+                "org.uxheavy.plane.hermes.remote": "https://github.com/uxheavy/hermes-agent.git",
+                "org.uxheavy.plane.runtime.revision": expected["runtimeImageRevision"],
+                "org.uxheavy.plane.runtime.contract": expected["runtimeContract"],
+            },
+        }
+
+    def test_sealed_donor_digest_and_labels_are_attested_against_manifest(self):
+        with mock.patch.object(_BUILDER, "image_metadata", return_value=self._donor_metadata()):
+            binding = _BUILDER.verify_donor_image(
+                "plane-agent-runtime:sealed-donor",
+                self._donor_manifest(),
+            )
+        self.assertEqual(binding["sourceKind"], "sealed-image")
+        self.assertEqual(binding["donorDigest"], "sha256:" + "a" * 64)
+
+        with mock.patch.object(
+            _BUILDER,
+            "image_metadata",
+            return_value=self._donor_metadata(digest="sha256:" + "d" * 64),
+        ), self.assertRaisesRegex(RuntimeError, "digest"):
+            _BUILDER.verify_donor_image("plane-agent-runtime:sealed-donor", self._donor_manifest())
+
+        labels = self._donor_metadata()["labels"]
+        labels["org.uxheavy.plane.hermes.commit"] = "e" * 40
+        with mock.patch.object(_BUILDER, "image_metadata", return_value=self._donor_metadata(labels=labels)), self.assertRaisesRegex(
+            RuntimeError, "label mismatch"
+        ):
+            _BUILDER.verify_donor_image("plane-agent-runtime:sealed-donor", self._donor_manifest())
+
+    def test_sealed_donor_rejects_unsafe_archive_entries(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive_path = Path(directory) / "unsafe.tar"
+            destination = Path(directory) / "hermes"
+            with tarfile.open(archive_path, "w") as archive:
+                entry = tarfile.TarInfo("opt/hermes/../escape.py")
+                entry.size = 1
+                archive.addfile(entry, io.BytesIO(b"x"))
+            with self.assertRaisesRegex(RuntimeError, "unsafe archive entry"):
+                _BUILDER.extract_safe_hermes_archive(archive_path, destination)
+
+            with tarfile.open(archive_path, "w") as archive:
+                entry = tarfile.TarInfo("opt/hermes/link")
+                entry.type = tarfile.SYMTYPE
+                entry.linkname = "/etc/passwd"
+                archive.addfile(entry)
+            with self.assertRaisesRegex(RuntimeError, "unsafe archive entry type"):
+                _BUILDER.extract_safe_hermes_archive(archive_path, destination)
+
+    def test_donor_checkout_inputs_are_mutually_exclusive(self):
+        parser = _BUILDER.build_parser()
+        with self.assertRaises(SystemExit):
+            parser.parse_args(
+                [
+                    "--hermes-checkout",
+                    "/tmp/hermes",
+                    "--hermes-donor-image",
+                    "plane-agent-runtime:sealed-donor",
+                ]
+            )
+
+    def test_mixed_hermes_source_provenance_is_rejected(self):
+        with self.assertRaisesRegex(RuntimeError, "mixed"):
+            _BUILDER.validate_hermes_source_binding(
+                _BUILDER.HERMES_SOURCE_KIND_GIT,
+                "plane-agent-runtime:sealed-donor",
+                "sha256:" + "a" * 64,
+                "b" * 64,
+            )
+
+    def test_sealed_donor_tree_digest_uses_donor_relative_keys(self):
+        files = {"run_agent.py": "a" * 64}
+        prefixed = {"hermes/run_agent.py": files["run_agent.py"]}
+        self.assertNotEqual(_BUILDER.hermes_tree_digest(files), _BUILDER.hermes_tree_digest(prefixed))
+        builder_source = (TOOLS / "build-agent-runtime-image.py").read_text(encoding="utf-8")
+        self.assertIn("inventory(pathlib.Path('/opt/hermes'),'')", builder_source)
+
     def test_runtime_builder_inventory_is_exact_candidate_source(self):
         candidate = subprocess.run(
             ["git", "-C", str(ROOT), "rev-parse", "HEAD"],
@@ -239,6 +336,34 @@ class G4ContractTests(unittest.TestCase):
         self.assertEqual(manifest["pins"]["runtimeImageRevision"], candidate)
         self.assertEqual(manifest["pins"]["apiArtifact"]["sourceRevision"], candidate)
         self.assertEqual(manifest["pins"]["hermesCommit"], "d" * 40)
+
+        sealed = _BUILDER.disposable_manifest(
+            candidate,
+            "c" * 40,
+            "d" * 40,
+            "github.com/uxheavy/hermes-agent",
+            {
+                **manifest["pins"],
+                "imageTag": "plane-agent-runtime:disposable-sealed",
+                "imageDigest": "sha256:" + "e" * 64,
+                "runtimeSourceDigest": source_digest,
+            },
+            manifest["pins"]["apiArtifact"],
+            files,
+            {
+                "sourceKind": "sealed-image",
+                "donorImage": "plane-agent-runtime:sealed-donor",
+                "donorDigest": "sha256:" + "1" * 64,
+                "treeDigest": "2" * 64,
+                "files": {"run_agent.py": "3" * 64},
+            },
+        )
+        validate_disposable_artifact_binding(sealed, candidate)
+        self.assertEqual(sealed["disposableBinding"]["hermesSourceKind"], "sealed-image")
+        mixed_source = copy.deepcopy(sealed)
+        mixed_source["disposableBinding"]["hermesSourceKind"] = "git-checkout"
+        with self.assertRaisesRegex(ContractError, "hermesSource_mixed"):
+            validate_disposable_artifact_binding(mixed_source, candidate)
 
         mixed = copy.deepcopy(manifest)
         mixed["pins"]["apiArtifact"]["sourceRevision"] = "1" * 40
