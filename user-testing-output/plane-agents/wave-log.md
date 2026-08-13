@@ -286,3 +286,20 @@
   provider invocation ran; cleanup was clean
 - Next: fix only the parent/API propagation of the existing structured runtime
   rejection, prove it provider-free, then Maya runs one fresh S00 retest
+
+## Wave 0Q — bounded result handoff retest
+
+- Status: dirty — UT-014 remains open
+- Candidate: `c1d7e28b8c7d21605388751140a5cacc38cbb5a7`
+- Matched disposable artifacts and fresh GPT-5.6 Luna subscription config passed
+- One fresh run `372c6bb8-143d-4876-a9ba-2f019369b5b7` and invocation
+  `invocation:dc439242-1556-4749-8505-7c9e72700cde` failed before any
+  provider-attempt intent; the receipt remained unspecified
+- Code trace after the run showed the new bounded result path is bypassed when
+  `call_command("agent_supervisor")` raises during supervisor setup before
+  `run_runtime_invocation()` returns
+- No read, denied evaluator operation, outcome, publication, replay, or second
+  provider invocation ran; cleanup was clean
+- Next: provider-free classification of supervisor setup failures, preserving a
+  finite safe category in Plane control state and the live receipt, then Maya
+  runs one fresh S00 retest

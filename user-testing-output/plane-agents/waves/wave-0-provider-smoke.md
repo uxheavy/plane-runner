@@ -308,6 +308,35 @@ replay, or second provider call ran.
 No broad G3/G4 verifier, unrelated suite, load test, G5, rollout, pilot,
 deployment, source edit, or extra provider call ran.
 
+## Wave 0Q — bounded result handoff retest at c1d7e28b8c
+
+Status: dirty at the first API-invocation boundary. Exactly one fresh approved
+lifecycle ran; no retry or replay ran.
+
+- Candidate: `c1d7e28b8c7d21605388751140a5cacc38cbb5a7`.
+- API image digest:
+  `sha256:358872fe149fe53fe862cc536dbdc3888f4794a6266d5b43e60bed11e2176794`.
+- Runtime image digest:
+  `sha256:cd049fdcb605048e887ea04e730a4620b94696ccfbf3815264c03cb865699656`.
+- Both artifacts were built once from the exact candidate and bound by one
+  disposable manifest using the sealed Hermes donor.
+- Fresh authority/config validation passed with ChatGPT subscription,
+  `openai-codex/gpt-5.6-luna`, and fallback disabled.
+- Fresh run `372c6bb8-143d-4876-a9ba-2f019369b5b7` failed.
+- Fresh invocation `invocation:dc439242-1556-4749-8505-7c9e72700cde`
+  failed at `api-invocation` with an unspecified failure.
+- Provider attempts: zero. No permitted read, denied evaluator operation,
+  gateway receipt, outcome, publication, or replay ran. Plane returned one
+  visible `run_failure` marker.
+- Post-run code trace identified the bypass: when supervisor setup raises before
+  `run_runtime_invocation()` returns, `call_command()` never yields a bounded
+  result and the live helper falls back to a generic failure.
+- Cleanup removed all task-owned resources and left zero labeled containers,
+  networks, or volumes; the prepared base and sealed donor remain.
+
+No broad G3/G4 verifier, unrelated suite, load test, G5, rollout, pilot,
+deployment, source edit, or extra provider call ran.
+
 ## Wave 0P — provider-audit propagation retest at d3fd5a87f2
 
 Status: dirty at the first API-invocation boundary. Exactly one fresh approved
