@@ -19,6 +19,7 @@ from plane.agent.runtime import (
     PlaneHostCall,
     PlaneHostHTTPClient,
     RuntimeConfigurationError,
+    RuntimeDispatchError,
 )
 from plane.agent.runtime.health import RuntimeSafetyController
 from plane.agent.runtime.service import _RuntimeHTTPServer
@@ -155,9 +156,10 @@ def _completed_frames(snapshot, envelope):
 
 
 class _FakeLiveRuntime:
-    def __init__(self, *, reject=False, provider_free=False):
+    def __init__(self, *, reject=False, provider_free=False, failure=None):
         self.reject = reject
         self.provider_free = provider_free
+        self.failure = failure
         self.dispatches = []
         self.fake_provider_calls = 0
         self.host_statuses = []
@@ -177,6 +179,14 @@ class _FakeLiveRuntime:
         )
         if self.reject:
             raise RuntimeConfigurationError("synthetic malformed runtime configuration")
+        if self.failure is not None:
+            raise RuntimeDispatchError(
+                "synthetic fake runtime exception at http://fake-runtime.invalid/secret with token=fake-runtime-token",
+                failure_code=self.failure["failureCode"],
+                failure_phase=self.failure["failurePhase"],
+                failure_detail=self.failure["failureDetail"],
+                failure_subreason=self.failure.get("failureSubreason"),
+            )
 
         client = PlaneHostHTTPClient(url=body["host"]["url"], auth_token=body["host"]["token"])
         if not self.provider_free:
@@ -393,6 +403,62 @@ def test_exact_live_helper_preserves_bounded_runtime_rejection(monkeypatch, tmp_
     assert evidence["providerAttempts"] == []
     assert fake_runtime.fake_provider_calls == 0
     assert len(fake_runtime.dispatches) == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_ut014_exact_live_helper_preserves_canonical_process_failure_receipt(
+    monkeypatch, tmp_path, capsys
+):
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        host_port = probe.getsockname()[1]
+    fake_runtime = _FakeLiveRuntime(
+        failure={
+            "failureCode": "runtime_process_failed",
+            "failurePhase": "runtime_process",
+            "failureDetail": "process_exit",
+        }
+    )
+
+    assert _run_literal_live_helper(monkeypatch, fake_runtime, tmp_path, host_port) == 1
+    captured = capsys.readouterr()
+    evidence = json.loads(captured.out)
+    invocation = RuntimeInvocation.objects.get(invocation_id=evidence["invocation"]["id"])
+    control = RuntimeInvocationControl.objects.get(invocation=invocation)
+    terminal = RunTerminalEvent.objects.get(invocation=invocation, visible=True)
+    expected_failure = {
+        "failureCode": "runtime_process_failed",
+        "failurePhase": "runtime_process",
+        "failureDetail": "process_exit",
+    }
+
+    assert evidence["status"] == "failed"
+    assert evidence["failure"]["reasonCode"] == expected_failure["failureCode"]
+    assert evidence["failure"]["reasonPhase"] == expected_failure["failurePhase"]
+    assert evidence["failure"]["reasonDetail"] == expected_failure["failureDetail"]
+    assert evidence["failure"]["reasonSubreason"] == "unavailable"
+    assert evidence["run"]["state"] == "blocked"
+    assert evidence["invocation"]["state"] == "blocked"
+    assert evidence["providerAttempts"] == []
+    assert evidence["terminal"] == {"present": True, "kind": "run_blocker"}
+
+    assert len(fake_runtime.dispatches) == 1
+    assert fake_runtime.fake_provider_calls == 0
+    assert invocation.state == InvocationState.BLOCKED
+    assert control.failure_code == expected_failure["failureCode"]
+    assert json.loads(control.failure_reason) == expected_failure
+    assert terminal.kind == "run_blocker"
+    assert json.loads(terminal.reason) == json.loads(control.failure_reason)
+    assert RunTerminalEvent.objects.filter(run=invocation.run, visible=True).count() == 1
+    assert not RuntimeProviderAttempt.objects.filter(invocation=invocation).exists()
+
+    persisted_and_reported = "\n".join((captured.out, captured.err, control.failure_reason, terminal.reason))
+    for raw_value in (
+        "synthetic fake runtime exception",
+        "http://fake-runtime.invalid/secret",
+        "fake-runtime-token",
+    ):
+        assert raw_value not in persisted_and_reported
 
 
 @pytest.mark.django_db(transaction=True)
