@@ -308,6 +308,31 @@ replay, or second provider call ran.
 No broad G3/G4 verifier, unrelated suite, load test, G5, rollout, pilot,
 deployment, source edit, or extra provider call ran.
 
+## Wave 0N — S00 live budget retest at 8702d282bc
+
+Status: blocked at `api-invocation`; exactly one fresh approved lifecycle ran,
+with no retry or replay.
+
+- Candidate: `8702d282bc89c9f474fde51fe15d2382bb92f959`.
+- Temporary API image digest:
+  `sha256:c8b5a7920ed1a8c67fbd9bda9c02923d9395a70a8f3748b797b19107f3e98855`.
+- Fresh disposable manifest and authority/config validation passed with
+  GPT-5.6 Luna, ChatGPT subscription routing, and fallback disabled.
+- Fresh run `a7828d3e-5cc2-4660-b644-f4d53215e77c` failed.
+- Fresh invocation `invocation:b008822a-5531-4f88-9135-9166bd14ffe3`
+  failed at the bounded `api-invocation` RuntimeError boundary.
+- Provider attempts: zero. No permitted read, denied evaluation, gateway
+  receipt, outcome, publication, successful terminal event, or replay ran.
+- The current-source literal management-command path passes with a fake runtime,
+  but the live manifest continued to bind the older runtime image. Runtime-image
+  source parity must be established before another provider call.
+- Temporary image, checkout, manifest, authority/config, and Colima were
+  removed. Task-labeled containers, networks, and volumes were empty; prepared
+  base and pinned runtime images remain.
+
+No broad G3/G4 verifier, unrelated suite, load test, G5, rollout, pilot,
+deployment, source edit, or extra provider call ran.
+
 ## Wave 0L — execution-dependent lifecycle proof at 0afb4cc9bb
 
 Status: stopped before live S00 at the first focused lifecycle regression

@@ -213,3 +213,19 @@
 - Cleanup: clean; temporary image and all Wave 0M artifacts removed
 - Next: compare the live persisted snapshot/envelope with canonical output,
   expose the bounded cause, fix only that entry-point seam, then Wave 0N
+
+## Wave 0N — live budget retest
+
+- Status: dirty — UT-013; UT-012 closed by literal-command fake path
+- Candidate: `8702d282bc89c9f474fde51fe15d2382bb92f959`
+- Temporary API image:
+  `sha256:c8b5a7920ed1a8c67fbd9bda9c02923d9395a70a8f3748b797b19107f3e98855`
+- Fresh authority/config validation passed
+- One fresh run `a7828d3e-5cc2-4660-b644-f4d53215e77c` and invocation
+  `invocation:b008822a-5531-4f88-9135-9166bd14ffe3` failed before provider
+  attempt; no replay ran
+- Current-source literal command passes offline, while live S00 retains the old
+  runtime image; compare runtime-image source/hashes before another call
+- Cleanup: clean; temporary API image and Wave 0N artifacts removed
+- Next: prove runtime artifact parity, build the current runtime artifact if
+  stale, then run fresh Wave 0O
