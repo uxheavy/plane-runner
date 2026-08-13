@@ -249,6 +249,48 @@ def _terminalize_dispatch_failure(
     )
 
 
+def terminalize_pre_dispatch_failure(
+    invocation: RuntimeInvocation,
+    failure: dict[str, str] | None = None,
+) -> SupervisorResult:
+    """Persist one bounded result when setup fails before runtime dispatch.
+
+    Expected setup failures carry the same finite classification used by the
+    serialized runtime seam.  An unclassified exception deliberately keeps
+    the invocation in ``outcome_unknown`` so a caller cannot infer that no
+    external work happened from a missing provider-attempt row.
+    """
+
+    existing = RunTerminalEvent.objects.filter(invocation=invocation).first()
+    if existing is not None:
+        invocation.refresh_from_db()
+        return SupervisorResult(invocation.invocation_id, invocation.state, existing.kind, 0)
+
+    if failure is None:
+        return _terminalize(
+            invocation.pk,
+            kind="run_blocker",
+            reason="Runtime supervisor setup did not produce a bounded result.",
+            code="outcome_unknown",
+            outcome_unknown=True,
+        )
+
+    dispatch_error = RuntimeDispatchError(
+        "runtime supervisor setup rejected dispatch",
+        failure_code=failure.get("failureCode"),
+        failure_phase=failure.get("failurePhase"),
+        failure_detail=failure.get("failureDetail"),
+        failure_subreason=failure.get("failureSubreason"),
+    )
+    if not dispatch_error.has_allowlisted_failure:
+        return terminalize_pre_dispatch_failure(invocation)
+    return _terminalize_dispatch_failure(
+        invocation,
+        dispatch_error.public_failure(),
+        known_dispatch_failure=True,
+    )
+
+
 def runtime_invocation_cancelled(invocation_id: Any) -> bool:
     """Read durable cancellation/lease state for host RPC and supervision."""
 
@@ -521,6 +563,7 @@ __all__ = [
     "SupervisorResult",
     "request_runtime_cancellation",
     "run_runtime_invocation",
+    "terminalize_pre_dispatch_failure",
     "runtime_invocation_cancelled",
     "runtime_invocation_cancellation_requested",
 ]

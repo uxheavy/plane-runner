@@ -26,8 +26,10 @@ from plane.agent.runtime import (
     RuntimeSupervisorError,
     build_gateway_host_port,
     run_runtime_invocation,
+    terminalize_pre_dispatch_failure,
     validate_runtime_command,
 )
+from plane.agent.runtime.credentials import credential_failure_subreason
 from plane.agent.runtime.provenance import RuntimeProvenanceError, preflight_runtime_provenance
 from plane.db.models import RuntimeInvocation
 from plane.operation_gateway.gateway import OperationGateway
@@ -72,6 +74,55 @@ def _supervisor_result_output(result) -> str:
     return output
 
 
+class _SupervisorSetupFailure(RuntimeError):
+    """An expected setup rejection with a safe public classification."""
+
+    def __init__(self, stage: str, failure: dict[str, str]) -> None:
+        super().__init__("runtime supervisor setup was rejected")
+        self.stage = stage
+        self.failure = failure
+
+
+def _setup_failure_subreason(stage: str, error: BaseException) -> str:
+    if stage == "credential_state":
+        return "credential_state_invalid"
+    if stage == "credential_source":
+        if not isinstance(error, RuntimeCredentialError):
+            return "credential_source_invalid"
+        subreason = credential_failure_subreason(error)
+        return subreason if subreason != "runtime_configuration_rejected" else "credential_source_invalid"
+    return "runtime_configuration_rejected"
+
+
+@contextmanager
+def _supervisor_setup_stage(stage: str):
+    """Keep setup ownership explicit without serializing exception details."""
+
+    try:
+        yield
+    except _SupervisorSetupFailure:
+        raise
+    except (
+        CommandError,
+        OSError,
+        RuntimeCredentialError,
+        RuntimeProvenanceError,
+        RuntimeSupervisorError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        raise _SupervisorSetupFailure(
+            stage,
+            {
+                "failureCode": "runtime_configuration_pre_dispatch_failure",
+                "failurePhase": "runtime_configuration",
+                "failureDetail": "dispatch_rejected",
+                "failureSubreason": _setup_failure_subreason(stage, exc),
+            },
+        ) from exc
+
+
 class Command(BaseCommand):
     help = "Claim and run one persisted Plane Agent invocation through the configured Hermes runtime."
 
@@ -94,166 +145,198 @@ class Command(BaseCommand):
         shared_secret = getattr(settings, "PLANE_AGENT_RUNTIME_SHARED_SECRET", "")
         checkout = options.get("runtime_checkout") or getattr(settings, "PLANE_AGENT_RUNTIME_CHECKOUT", None)
         expected_sha = options.get("runtime_sha") or getattr(settings, "PLANE_AGENT_RUNTIME_SHA", None)
-        try:
-            preflight_runtime_provenance(
-                str(checkout) if checkout else None,
-                str(expected_sha) if expected_sha else None,
-                remote_runtime=bool(runtime_url and shared_secret),
-            )
-        except RuntimeProvenanceError as exc:
-            raise CommandError(str(exc)) from exc
-        command = options.get("runtime_command") or getattr(settings, "PLANE_AGENT_RUNTIME_COMMAND", None)
-        if isinstance(command, str):
-            command = shlex.split(command)
-        if not command and checkout:
-            command = ("python3", "-m", "plane_runtime.g1_runtime_image.bootstrap", "--once", "--g1-production")
-        if not command:
-            raise CommandError("Configure PLANE_AGENT_RUNTIME_COMMAND or pass --runtime-command")
-        try:
-            command = validate_runtime_command(tuple(command))
-        except (TypeError, ValueError) as exc:
-            raise CommandError("the production runtime command must use the exact pinned bootstrap argv") from exc
-        resolver_configuration = getattr(settings, "PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER", "")
-        try:
-            credential_source = credential_source_from_configuration(resolver_configuration)
-        except RuntimeCredentialError as exc:
-            raise CommandError(str(exc)) from exc
-        runtime_environment = getattr(settings, "PLANE_AGENT_RUNTIME_ENVIRONMENT", {})
-        if not isinstance(runtime_environment, dict) or any(
-            not isinstance(key, str) or not key or "\x00" in key or not isinstance(value, str) or "\x00" in value
-            for key, value in runtime_environment.items()
-        ):
-            raise CommandError("PLANE_AGENT_RUNTIME_ENVIRONMENT must be a bounded host-only string mapping")
-        ledger_path = options.get("ledger_path") or getattr(
-            settings,
-            "PLANE_AGENT_RUNTIME_LEDGER_PATH",
-            "/tmp/plane-agent-runtime-ledger.sqlite",
-        )
-        credential_state_file = getattr(
-            settings,
-            "PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE",
-            "/run/plane-agent-credentials/revocations.json",
-        )
-        credential_broker = RuntimeCredentialBroker(
-            credential_source,
-            state_file=credential_state_file,
-        )
-
-        def credential_control(current_invocation):
-            actor_ref = current_invocation.run.snapshot["actorRef"]
-            _lease, values = credential_broker.issue(
-                agent_ref=actor_ref,
-                credential_ref="runtime",
-                invocation_ref=current_invocation.invocation_id,
-            )
-            return values
-
-        safety_stop_file = Path(
-            getattr(settings, "PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE", "/run/plane-agent-runtime/safety-stop")
-        )
-
-        def local_cancelled() -> bool:
-            from plane.agent.runtime.supervisor import runtime_invocation_cancelled
-
-            return runtime_invocation_cancelled(invocation.pk) or safety_stop_file.exists()
-
+        credential_broker = None
+        monitor = None
         monitor_stop = threading.Event()
-
-        def revoke_on_stop() -> None:
-            from plane.agent.runtime.supervisor import runtime_invocation_cancellation_requested
-
-            while not monitor_stop.wait(0.05):
-                if runtime_invocation_cancellation_requested(invocation.pk) or safety_stop_file.exists():
-                    credential_broker.revoke_invocation(invocation.invocation_id)
-
-        monitor = threading.Thread(target=revoke_on_stop, name="plane-runtime-credential-revoker", daemon=True)
-        monitor.start()
+        result = None
         try:
-            if runtime_url and shared_secret:
-                host_url = getattr(settings, "PLANE_AGENT_RUNTIME_HOST_URL", "")
-                host_parsed = urlsplit(host_url)
-                if (
-                    host_parsed.scheme != "http"
-                    or not host_parsed.hostname
-                    or host_parsed.username
-                    or host_parsed.password
-                    or host_parsed.query
-                    or host_parsed.fragment
+            with _supervisor_setup_stage("runtime_provenance"):
+                preflight_runtime_provenance(
+                    str(checkout) if checkout else None,
+                    str(expected_sha) if expected_sha else None,
+                    remote_runtime=bool(runtime_url and shared_secret),
+                )
+            with _supervisor_setup_stage("runtime_command"):
+                command = options.get("runtime_command") or getattr(settings, "PLANE_AGENT_RUNTIME_COMMAND", None)
+                if isinstance(command, str):
+                    command = shlex.split(command)
+                if not command and checkout:
+                    command = (
+                        "python3",
+                        "-m",
+                        "plane_runtime.g1_runtime_image.bootstrap",
+                        "--once",
+                        "--g1-production",
+                    )
+                if not command:
+                    raise CommandError("Configure PLANE_AGENT_RUNTIME_COMMAND or pass --runtime-command")
+                command = validate_runtime_command(tuple(command))
+            with _supervisor_setup_stage("credential_source"):
+                credential_source = credential_source_from_configuration(
+                    getattr(settings, "PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER", "")
+                )
+            with _supervisor_setup_stage("runtime_environment"):
+                runtime_environment = getattr(settings, "PLANE_AGENT_RUNTIME_ENVIRONMENT", {})
+                if not isinstance(runtime_environment, dict) or any(
+                    not isinstance(key, str)
+                    or not key
+                    or "\x00" in key
+                    or not isinstance(value, str)
+                    or "\x00" in value
+                    for key, value in runtime_environment.items()
                 ):
-                    raise CommandError("PLANE_AGENT_RUNTIME_HOST_URL must be an internal HTTP URL")
-                host_port = getattr(settings, "PLANE_AGENT_RUNTIME_HOST_PORT", 8091)
-                if host_parsed.port is not None:
-                    host_port = host_parsed.port
+                    raise CommandError("PLANE_AGENT_RUNTIME_ENVIRONMENT must be a bounded host-only string mapping")
+            with _supervisor_setup_stage("credential_state"):
+                ledger_path = options.get("ledger_path") or getattr(
+                    settings,
+                    "PLANE_AGENT_RUNTIME_LEDGER_PATH",
+                    "/tmp/plane-agent-runtime-ledger.sqlite",
+                )
+                credential_state_file = getattr(
+                    settings,
+                    "PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE",
+                    "/run/plane-agent-credentials/revocations.json",
+                )
+                credential_broker = RuntimeCredentialBroker(
+                    credential_source,
+                    state_file=credential_state_file,
+                )
 
-                @contextmanager
-                def host_endpoint(invocation_ref: str):
-                    if invocation_ref != invocation.invocation_id:
-                        raise RuntimeDispatchError("runtime host endpoint invocation binding is invalid")
-                    token = secrets.token_urlsafe(32)
+            def credential_control(current_invocation):
+                actor_ref = current_invocation.run.snapshot["actorRef"]
+                _lease, values = credential_broker.issue(
+                    agent_ref=actor_ref,
+                    credential_ref="runtime",
+                    invocation_ref=current_invocation.invocation_id,
+                )
+                return values
 
-                    def provider_attempt_recorder(call):
-                        notice = _provider_attempt_notice_for_plane(invocation, call)
-                        attempt = record_provider_attempt_notice(invocation, notice)
-                        return {
-                            "accepted": True,
-                            "attemptRef": f"provider-attempt:{attempt.id}",
-                            "phase": attempt.phase,
-                            "upstreamInitiated": attempt.upstream_initiated,
-                        }
+            with _supervisor_setup_stage("runtime_safety_stop"):
+                safety_stop_file = Path(
+                    getattr(settings, "PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE", "/run/plane-agent-runtime/safety-stop")
+                )
 
-                    host_port_adapter = build_gateway_host_port(
-                        invocation=invocation,
+            def local_cancelled() -> bool:
+                from plane.agent.runtime.supervisor import runtime_invocation_cancelled
+
+                return runtime_invocation_cancelled(invocation.pk) or safety_stop_file.exists()
+
+            def revoke_on_stop() -> None:
+                from plane.agent.runtime.supervisor import runtime_invocation_cancellation_requested
+
+                while not monitor_stop.wait(0.05):
+                    if runtime_invocation_cancellation_requested(invocation.pk) or safety_stop_file.exists():
+                        credential_broker.revoke_invocation(invocation.invocation_id)
+
+            with _supervisor_setup_stage("runtime_monitor"):
+                monitor = threading.Thread(
+                    target=revoke_on_stop,
+                    name="plane-runtime-credential-revoker",
+                    daemon=True,
+                )
+                monitor.start()
+
+            with _supervisor_setup_stage("runtime_transport"):
+                if runtime_url and shared_secret:
+                    host_url = getattr(settings, "PLANE_AGENT_RUNTIME_HOST_URL", "")
+                    host_parsed = urlsplit(host_url)
+                    if (
+                        host_parsed.scheme != "http"
+                        or not host_parsed.hostname
+                        or host_parsed.username
+                        or host_parsed.password
+                        or host_parsed.query
+                        or host_parsed.fragment
+                    ):
+                        raise CommandError("PLANE_AGENT_RUNTIME_HOST_URL must be an internal HTTP URL")
+                    host_port = getattr(settings, "PLANE_AGENT_RUNTIME_HOST_PORT", 8091)
+                    if host_parsed.port is not None:
+                        host_port = host_parsed.port
+
+                    @contextmanager
+                    def host_endpoint(invocation_ref: str):
+                        if invocation_ref != invocation.invocation_id:
+                            raise RuntimeDispatchError("runtime host endpoint invocation binding is invalid")
+                        token = secrets.token_urlsafe(32)
+
+                        def provider_attempt_recorder(call):
+                            notice = _provider_attempt_notice_for_plane(invocation, call)
+                            attempt = record_provider_attempt_notice(invocation, notice)
+                            return {
+                                "accepted": True,
+                                "attemptRef": f"provider-attempt:{attempt.id}",
+                                "phase": attempt.phase,
+                                "upstreamInitiated": attempt.upstream_initiated,
+                            }
+
+                        host_port_adapter = build_gateway_host_port(
+                            invocation=invocation,
+                            gateway=OperationGateway(),
+                            provider_attempt_recorder=provider_attempt_recorder,
+                        )
+                        server = PlaneHostHTTPServer(
+                            bind_host=getattr(settings, "PLANE_AGENT_RUNTIME_HOST_BIND", "0.0.0.0"),
+                            advertised_host=host_parsed.hostname,
+                            port=host_port,
+                            auth_token=token,
+                            invoke=host_port_adapter.invoke,
+                        )
+                        server.start()
+                        try:
+                            yield RuntimeHostEndpoint(url=server.url, token=token)
+                        finally:
+                            server.close()
+
+                    transport = RemoteRuntimeTransport(
+                        runtime_url=runtime_url,
+                        shared_secret=shared_secret,
+                        dispatch_path=getattr(settings, "PLANE_AGENT_RUNTIME_DISPATCH_PATH", "/v1/runtime/dispatch"),
+                        timeout_seconds=getattr(settings, "PLANE_AGENT_RUNTIME_TIMEOUT_SECONDS", 300.0),
+                        max_request_bytes=getattr(settings, "PLANE_AGENT_RUNTIME_MAX_REQUEST_BYTES", 256 * 1024),
+                        max_response_bytes=getattr(settings, "PLANE_AGENT_RUNTIME_MAX_RESPONSE_BYTES", 512 * 1024),
+                        host_endpoint_factory=host_endpoint,
+                        credential_broker=credential_broker,
+                        model_call_allowance=options.get("model_call_allowance"),
+                    )
+                else:
+                    transport = HostBoundSubprocessRuntimeTransport(
+                        command=tuple(command),
+                        cwd=options.get("runtime_cwd")
+                        or getattr(settings, "PLANE_AGENT_RUNTIME_CWD", None)
+                        or checkout,
+                        ledger_path=Path(ledger_path),
                         gateway=OperationGateway(),
-                        provider_attempt_recorder=provider_attempt_recorder,
+                        bootstrap_command=True,
+                        model_call_allowance=options.get("model_call_allowance"),
+                        environment=dict(runtime_environment),
+                        credential_control=credential_control,
+                        is_cancelled=local_cancelled,
                     )
-                    server = PlaneHostHTTPServer(
-                        bind_host=getattr(settings, "PLANE_AGENT_RUNTIME_HOST_BIND", "0.0.0.0"),
-                        advertised_host=host_parsed.hostname,
-                        port=host_port,
-                        auth_token=token,
-                        invoke=host_port_adapter.invoke,
-                    )
-                    server.start()
-                    try:
-                        yield RuntimeHostEndpoint(url=server.url, token=token)
-                    finally:
-                        server.close()
-
-                transport = RemoteRuntimeTransport(
-                    runtime_url=runtime_url,
-                    shared_secret=shared_secret,
-                    dispatch_path=getattr(settings, "PLANE_AGENT_RUNTIME_DISPATCH_PATH", "/v1/runtime/dispatch"),
-                    timeout_seconds=getattr(settings, "PLANE_AGENT_RUNTIME_TIMEOUT_SECONDS", 300.0),
-                    max_request_bytes=getattr(settings, "PLANE_AGENT_RUNTIME_MAX_REQUEST_BYTES", 256 * 1024),
-                    max_response_bytes=getattr(settings, "PLANE_AGENT_RUNTIME_MAX_RESPONSE_BYTES", 512 * 1024),
-                    host_endpoint_factory=host_endpoint,
-                    credential_broker=credential_broker,
-                    model_call_allowance=options.get("model_call_allowance"),
-                )
-            else:
-                transport = HostBoundSubprocessRuntimeTransport(
-                    command=tuple(command),
-                    cwd=options.get("runtime_cwd") or getattr(settings, "PLANE_AGENT_RUNTIME_CWD", None) or checkout,
-                    ledger_path=Path(ledger_path),
-                    gateway=OperationGateway(),
-                    bootstrap_command=True,
-                    model_call_allowance=options.get("model_call_allowance"),
-                    environment=dict(runtime_environment),
-                    credential_control=credential_control,
-                    is_cancelled=local_cancelled,
-                )
             result = run_runtime_invocation(
                 invocation,
                 transport=transport,
                 worker_id=options["worker_id"],
                 lease_seconds=options["lease_seconds"],
             )
-        except (ValueError, OSError, RuntimeCredentialError, RuntimeSupervisorError) as exc:
-            raise CommandError(str(exc)) from exc
+        except _SupervisorSetupFailure as exc:
+            terminalize_pre_dispatch_failure(invocation, exc.failure)
+            raise CommandError("agent supervisor setup was rejected") from None
+        except (ValueError, OSError, RuntimeCredentialError, RuntimeSupervisorError):
+            terminalize_pre_dispatch_failure(invocation)
+            raise CommandError("agent supervisor could not establish a bounded runtime result") from None
+        except Exception:
+            terminalize_pre_dispatch_failure(invocation)
+            raise CommandError("agent supervisor setup did not produce a bounded runtime result") from None
         finally:
             monitor_stop.set()
-            monitor.join(timeout=1)
-            credential_broker.revoke_invocation(invocation.invocation_id)
+            if monitor is not None:
+                monitor.join(timeout=1)
+            if credential_broker is not None:
+                try:
+                    credential_broker.revoke_invocation(invocation.invocation_id)
+                except Exception:
+                    if result is not None:
+                        raise CommandError("agent supervisor credential cleanup failed") from None
         self.stdout.write(
             self.style.SUCCESS(_supervisor_result_output(result))
         )

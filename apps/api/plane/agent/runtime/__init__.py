@@ -24,6 +24,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "SupervisorResult": ("supervisor", "SupervisorResult"),
     "request_runtime_cancellation": ("supervisor", "request_runtime_cancellation"),
     "run_runtime_invocation": ("supervisor", "run_runtime_invocation"),
+    "terminalize_pre_dispatch_failure": ("supervisor", "terminalize_pre_dispatch_failure"),
     "runtime_invocation_cancelled": ("supervisor", "runtime_invocation_cancelled"),
     "runtime_invocation_cancellation_requested": ("supervisor", "runtime_invocation_cancellation_requested"),
     "HOST_PROTOCOL": ("host_rpc", "HOST_PROTOCOL"),

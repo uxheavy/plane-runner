@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import runpy
 import socket
+import sys
 import threading
 from pathlib import Path
 from uuid import UUID
@@ -28,6 +29,7 @@ from plane.db.models import (
     RuntimeEventIngress,
     RuntimeExitEvidence,
     RuntimeInvocation,
+    RuntimeInvocationControl,
     RuntimeProviderAttempt,
     RuntimeProviderAttemptPhase,
 )
@@ -84,7 +86,7 @@ def _binding_environment(monkeypatch):
         monkeypatch.setenv(key, value)
 
 
-def _runtime_environment(tmp_path: Path, shared_secret: str) -> dict[str, str]:
+def _runtime_environment(tmp_path: Path, shared_secret: str, resolver: str) -> dict[str, str]:
     return {
         "PLANE_AGENT_RUNTIME_URL": "http://127.0.0.1:1",
         "PLANE_AGENT_RUNTIME_SECRET": shared_secret,
@@ -93,7 +95,7 @@ def _runtime_environment(tmp_path: Path, shared_secret: str) -> dict[str, str]:
         "PLANE_AGENT_RUNTIME_LEDGER_PATH": str(tmp_path / "dispatch-ledger.sqlite"),
         "PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE": str(tmp_path / "safety-stop"),
         "PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE": str(tmp_path / "credential-state.json"),
-        "PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER": "command:/fake/resolver",
+        "PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER": resolver,
         "PLANE_AGENT_RUNTIME_PROVIDER": "openai-codex",
         "PLANE_AGENT_RUNTIME_PROVIDER_HOST": "chatgpt.com",
         "PLANE_AGENT_RUNTIME_PROVIDER_PATH": "/backend-api/codex/responses",
@@ -153,8 +155,9 @@ def _completed_frames(snapshot, envelope):
 
 
 class _FakeLiveRuntime:
-    def __init__(self, *, reject=False):
+    def __init__(self, *, reject=False, provider_free=False):
         self.reject = reject
+        self.provider_free = provider_free
         self.dispatches = []
         self.fake_provider_calls = 0
         self.host_statuses = []
@@ -176,39 +179,40 @@ class _FakeLiveRuntime:
             raise RuntimeConfigurationError("synthetic malformed runtime configuration")
 
         client = PlaneHostHTTPClient(url=body["host"]["url"], auth_token=body["host"]["token"])
-        lease_id = body["credentialLease"]["leaseId"]
-        provider_attempt_key = "provider-attempt:ut012"
-        for phase, initiated, status_class in (
-            ("intent", False, ""),
-            ("started", True, ""),
-            ("completed", True, "2xx"),
-        ):
-            result = _host_call(
-                client,
-                snapshot,
-                envelope,
-                action="observe",
-                operation_ref="runtime.provider_attempt",
-                source="runtime",
-                input_value={
-                    "phase": phase,
-                    "leaseId": lease_id,
-                    "provider": snapshot["runtimePolicy"]["model"]["provider"],
-                    "model": snapshot["runtimePolicy"]["model"]["model"],
-                    "destinationHost": "chatgpt.com",
-                    "destinationPath": "/backend-api/codex/responses",
-                    "requestId": "request:ut012",
-                    "idempotencyKey": provider_attempt_key,
-                    "sequence": 1,
-                    "upstreamInitiated": initiated,
-                    "statusClass": status_class,
-                    "errorCode": "",
-                },
-            )
-            self.host_statuses.append((phase, result.status, result.error_code))
-            assert result.status == "ok"
-            if phase == "started":
-                self.fake_provider_calls += 1
+        if not self.provider_free:
+            lease_id = body["credentialLease"]["leaseId"]
+            provider_attempt_key = "provider-attempt:ut012"
+            for phase, initiated, status_class in (
+                ("intent", False, ""),
+                ("started", True, ""),
+                ("completed", True, "2xx"),
+            ):
+                result = _host_call(
+                    client,
+                    snapshot,
+                    envelope,
+                    action="observe",
+                    operation_ref="runtime.provider_attempt",
+                    source="runtime",
+                    input_value={
+                        "phase": phase,
+                        "leaseId": lease_id,
+                        "provider": snapshot["runtimePolicy"]["model"]["provider"],
+                        "model": snapshot["runtimePolicy"]["model"]["model"],
+                        "destinationHost": "chatgpt.com",
+                        "destinationPath": "/backend-api/codex/responses",
+                        "requestId": "request:ut012",
+                        "idempotencyKey": provider_attempt_key,
+                        "sequence": 1,
+                        "upstreamInitiated": initiated,
+                        "statusClass": status_class,
+                        "errorCode": "",
+                    },
+                )
+                self.host_statuses.append((phase, result.status, result.error_code))
+                assert result.status == "ok"
+                if phase == "started":
+                    self.fake_provider_calls += 1
 
         discovery = _host_call(
             client,
@@ -264,10 +268,40 @@ class _FakeLiveRuntime:
         return _completed_frames(snapshot, envelope)
 
 
-def _run_literal_live_helper(monkeypatch, fake_runtime, tmp_path, host_port):
+def _run_literal_live_helper(monkeypatch, fake_runtime, tmp_path, host_port, *, host_url="http://127.0.0.1"):
     _binding_environment(monkeypatch)
     shared_secret = "runtime-boundary-secret-0123456789"
-    runtime_environment = _runtime_environment(tmp_path, shared_secret)
+    auth_document = tmp_path / "codex-auth.json"
+    auth_document.write_text(
+        json.dumps(
+            {
+                "last_refresh": "2026-08-14T00:00:00Z",
+                "tokens": {
+                    "access_token": "synthetic-provider-secret",
+                    "account_id": "synthetic-account",
+                    "id_token": "synthetic-id-token",
+                    "refresh_token": "synthetic-refresh-token",
+                },
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    resolver = tmp_path / "codex-credential-resolver"
+    resolver.write_text(
+        "#!{python}\n"
+        "import json\n"
+        "from pathlib import Path\n"
+        "document = json.loads(Path({auth!r}).read_text(encoding='utf-8'))\n"
+        "print(json.dumps({{'api_key': document['tokens']['access_token']}}))\n".format(
+            python=sys.executable,
+            auth=str(auth_document),
+        ),
+        encoding="utf-8",
+    )
+    resolver.chmod(0o700)
+    resolver_configuration = f"command:{resolver}"
+    runtime_environment = _runtime_environment(tmp_path, shared_secret, resolver_configuration)
     configuration = AgentRuntimeConfiguration.from_environment(runtime_environment)
     controller = RuntimeSafetyController(configured=True, stop_file=tmp_path / "runtime-stop")
     controller.mark_ready()
@@ -279,7 +313,7 @@ def _run_literal_live_helper(monkeypatch, fake_runtime, tmp_path, host_port):
         with override_settings(
             PLANE_AGENT_RUNTIME_URL=runtime_url,
             PLANE_AGENT_RUNTIME_SHARED_SECRET=shared_secret,
-            PLANE_AGENT_RUNTIME_HOST_URL="http://127.0.0.1",
+            PLANE_AGENT_RUNTIME_HOST_URL=host_url,
             PLANE_AGENT_RUNTIME_HOST_BIND="127.0.0.1",
             PLANE_AGENT_RUNTIME_HOST_PORT=host_port,
             PLANE_AGENT_RUNTIME_DISPATCH_PATH="/v1/runtime/dispatch",
@@ -290,7 +324,9 @@ def _run_literal_live_helper(monkeypatch, fake_runtime, tmp_path, host_port):
                 "--once",
                 "--g1-production",
             ),
-            PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER={"runtime": {"api_key": "synthetic-provider-secret"}},
+            PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER=resolver_configuration,
+            PLANE_AGENT_RUNTIME_ENVIRONMENT={},
+            PLANE_AGENT_RUNTIME_LEDGER_PATH=str(tmp_path / "plane-ledger.sqlite"),
             PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE=str(tmp_path / "plane-revocations.json"),
             PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE=str(tmp_path / "plane-safety-stop"),
             PLANE_AGENT_RUNTIME_TIMEOUT_SECONDS=5,
@@ -357,3 +393,66 @@ def test_exact_live_helper_preserves_bounded_runtime_rejection(monkeypatch, tmp_
     assert evidence["providerAttempts"] == []
     assert fake_runtime.fake_provider_calls == 0
     assert len(fake_runtime.dispatches) == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_exact_live_helper_proves_setup_reaches_fake_runtime_without_provider_attempt(
+    monkeypatch, tmp_path, capsys
+):
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        host_port = probe.getsockname()[1]
+    fake_runtime = _FakeLiveRuntime(provider_free=True)
+
+    assert _run_literal_live_helper(monkeypatch, fake_runtime, tmp_path, host_port) == 0
+    evidence = json.loads(capsys.readouterr().out)
+    invocation = RuntimeInvocation.objects.get(invocation_id=evidence["invocation"]["id"])
+
+    assert evidence["status"] == "passed"
+    assert len(fake_runtime.dispatches) == 1
+    assert fake_runtime.fake_provider_calls == 0
+    assert not RuntimeProviderAttempt.objects.filter(invocation=invocation).exists()
+    assert RuntimeInvocationControl.objects.get(invocation=invocation).failure_code == ""
+
+
+@pytest.mark.django_db(transaction=True)
+def test_exact_live_helper_reads_durable_setup_failure_when_command_raises(monkeypatch, tmp_path, capsys):
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        host_port = probe.getsockname()[1]
+    fake_runtime = _FakeLiveRuntime(provider_free=True)
+
+    assert (
+        _run_literal_live_helper(
+            monkeypatch,
+            fake_runtime,
+            tmp_path,
+            host_port,
+            host_url="https://invalid-host.example",
+        )
+        == 1
+    )
+    evidence = json.loads(capsys.readouterr().out)
+    invocation = RuntimeInvocation.objects.get(invocation_id=evidence["invocation"]["id"])
+    control = RuntimeInvocationControl.objects.get(invocation=invocation)
+
+    assert evidence["failure"]["errorClass"] == "CommandError"
+    assert evidence["failure"]["reasonCode"] == "runtime_configuration_pre_dispatch_failure"
+    assert evidence["failure"]["reasonPhase"] == "runtime_configuration"
+    assert evidence["failure"]["reasonDetail"] == "dispatch_rejected"
+    assert evidence["failure"]["reasonSubreason"] == "runtime_configuration_rejected"
+    assert control.failure_reason == json.dumps(
+        {
+            "failureCode": "runtime_configuration_pre_dispatch_failure",
+            "failurePhase": "runtime_configuration",
+            "failureDetail": "dispatch_rejected",
+            "failureSubreason": "runtime_configuration_rejected",
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    assert fake_runtime.dispatches == []
+    assert fake_runtime.fake_provider_calls == 0
+    assert not RuntimeProviderAttempt.objects.filter(invocation=invocation).exists()
+    assert RunTerminalEvent.objects.filter(invocation=invocation, visible=True).count() == 1

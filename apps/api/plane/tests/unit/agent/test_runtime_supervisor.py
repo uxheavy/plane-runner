@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 
 import pytest
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from django.test import override_settings
 from django.utils import timezone
 
@@ -29,7 +29,9 @@ from plane.agent.lifecycle import (
     record_provider_attempt_notice,
 )
 from plane.db.management.commands.agent_supervisor import (
+    _SupervisorSetupFailure,
     _provider_attempt_notice_for_plane,
+    _supervisor_setup_stage,
     _supervisor_result_output,
 )
 from plane.agent.runtime import (
@@ -38,10 +40,15 @@ from plane.agent.runtime import (
     PlaneHostHTTPServer,
     RemoteRuntimeTransport,
     RuntimeCredentialBroker,
+    RuntimeCredentialError,
     RuntimeDispatchError,
     RuntimeHostEndpoint,
 )
-from plane.agent.runtime.supervisor import request_runtime_cancellation, run_runtime_invocation
+from plane.agent.runtime.supervisor import (
+    request_runtime_cancellation,
+    run_runtime_invocation,
+    terminalize_pre_dispatch_failure,
+)
 from plane.operation_gateway.gateway import OperationGateway
 from plane.db.models import (
     AgentActor,
@@ -176,6 +183,39 @@ class GenericExceptionRuntimeTransport:
     def dispatch(self, snapshot_json, envelope_json):
         self.calls += 1
         raise RuntimeError("provider-secret=must-not-leak")
+
+
+@pytest.mark.parametrize(
+    ("stage", "error"),
+    (
+        ("runtime_provenance", RuntimeError("checkout=/private/secret")),
+        ("runtime_command", ValueError("command=secret-token")),
+        ("credential_source", RuntimeCredentialError("deployment credential resolver failed")),
+        ("credential_state", RuntimeCredentialError("credential state is invalid")),
+        ("runtime_environment", TypeError("environment=/private/secret")),
+        ("runtime_transport", OSError("runtime secret=must-not-leak")),
+    ),
+)
+def test_supervisor_setup_stage_exposes_only_a_finite_safe_failure(stage, error):
+    with pytest.raises(_SupervisorSetupFailure) as raised:
+        with _supervisor_setup_stage(stage):
+            raise error
+
+    failure = raised.value
+    assert failure.stage == stage
+    assert failure.failure == {
+        "failureCode": "runtime_configuration_pre_dispatch_failure",
+        "failurePhase": "runtime_configuration",
+        "failureDetail": "dispatch_rejected",
+        "failureSubreason": (
+            "credential_resolver_failed"
+            if stage == "credential_source"
+            else "credential_state_invalid"
+            if stage == "credential_state"
+            else "runtime_configuration_rejected"
+        ),
+    }
+    assert "secret" not in str(failure).casefold()
 
 
 class KnownDispatchFailureTransport:
@@ -661,6 +701,132 @@ def test_supervisor_generic_exception_is_outcome_unknown_and_not_replayed(
     assert control.failure_code == "outcome_unknown"
     assert "provider-secret=must-not-leak" not in terminal.reason
     assert transport.calls == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_pre_dispatch_setup_failure_is_terminalized_once_without_provider_attempt(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    run, invocation = _invocation(
+        workspace,
+        gateway_project,
+        gateway_issue,
+        create_user,
+        suffix="setup-terminal",
+    )
+    failure = {
+        "failureCode": "runtime_configuration_pre_dispatch_failure",
+        "failurePhase": "runtime_configuration",
+        "failureDetail": "dispatch_rejected",
+        "failureSubreason": "runtime_configuration_rejected",
+    }
+
+    first = terminalize_pre_dispatch_failure(invocation, failure)
+    second = terminalize_pre_dispatch_failure(invocation, failure)
+
+    control = RuntimeInvocationControl.objects.get(invocation=invocation)
+    terminal = RunTerminalEvent.objects.get(invocation=invocation, visible=True)
+    assert first.state == second.state == InvocationState.BLOCKED
+    assert first.failure == failure
+    assert second.failure is None
+    assert control.state == RuntimeControlState.RELEASED
+    assert control.failure_code == failure["failureCode"]
+    assert json.loads(control.failure_reason) == failure
+    assert json.loads(terminal.reason) == failure
+    assert RunTerminalEvent.objects.filter(run=run, visible=True).count() == 1
+    assert not RuntimeProviderAttempt.objects.filter(invocation=invocation).exists()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_unclassified_pre_dispatch_setup_failure_remains_outcome_unknown(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    _run, invocation = _invocation(
+        workspace,
+        gateway_project,
+        gateway_issue,
+        create_user,
+        suffix="setup-unknown",
+    )
+
+    result = terminalize_pre_dispatch_failure(
+        invocation,
+        {
+            "failureCode": "runtime_configuration_pre_dispatch_failure",
+            "failurePhase": "runtime_configuration",
+            "failureDetail": "unclassified_exception",
+        },
+    )
+
+    control = RuntimeInvocationControl.objects.get(invocation=invocation)
+    terminal = RunTerminalEvent.objects.get(invocation=invocation, visible=True)
+    assert result.state == InvocationState.BLOCKED
+    assert result.failure is None
+    assert control.state == RuntimeControlState.OUTCOME_UNKNOWN
+    assert control.failure_code == "outcome_unknown"
+    assert control.outcome_unknown_at is not None
+    assert "runtime_configuration_pre_dispatch_failure" not in terminal.reason
+    assert "unclassified_exception" not in terminal.reason
+
+
+@pytest.mark.django_db(transaction=True)
+def test_command_error_cannot_bypass_setup_terminal_evidence(
+    tmp_path, workspace, gateway_project, gateway_issue, create_user
+):
+    run, invocation = _invocation(
+        workspace,
+        gateway_project,
+        gateway_issue,
+        create_user,
+        suffix="command-error-terminal",
+    )
+    secret = "synthetic-secret-must-not-appear"
+    with override_settings(
+        PLANE_AGENT_RUNTIME_URL="http://127.0.0.1:1",
+        PLANE_AGENT_RUNTIME_SHARED_SECRET=secret,
+        PLANE_AGENT_RUNTIME_HOST_URL="https://invalid-host.example",
+        PLANE_AGENT_RUNTIME_COMMAND=(
+            "python3",
+            "-m",
+            "plane_runtime.g1_runtime_image.bootstrap",
+            "--once",
+            "--g1-production",
+        ),
+        PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER={"runtime": {"api_key": secret}},
+        PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE=str(tmp_path / "credential-state.json"),
+        PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE=str(tmp_path / "safety-stop"),
+        PLANE_AGENT_RUNTIME_ENVIRONMENT={},
+    ):
+        with pytest.raises(CommandError, match="agent supervisor setup was rejected") as raised:
+            call_command(
+                "agent_supervisor",
+                invocation_ref=invocation.invocation_id,
+                runtime_command=list(
+                    (
+                        "python3",
+                        "-m",
+                        "plane_runtime.g1_runtime_image.bootstrap",
+                        "--once",
+                        "--g1-production",
+                    )
+                ),
+            )
+
+    control = RuntimeInvocationControl.objects.get(invocation=invocation)
+    terminal = RunTerminalEvent.objects.get(invocation=invocation, visible=True)
+    assert str(raised.value) == "agent supervisor setup was rejected"
+    assert control.failure_code == "runtime_configuration_pre_dispatch_failure"
+    assert json.loads(control.failure_reason) == {
+        "failureCode": "runtime_configuration_pre_dispatch_failure",
+        "failurePhase": "runtime_configuration",
+        "failureDetail": "dispatch_rejected",
+        "failureSubreason": "runtime_configuration_rejected",
+    }
+    assert terminal.kind == "run_blocker"
+    assert RunTerminalEvent.objects.filter(run=run, visible=True).count() == 1
+    assert not RuntimeProviderAttempt.objects.filter(invocation=invocation).exists()
+    assert secret not in str(raised.value)
+    assert secret not in control.failure_reason
 
 
 @pytest.mark.parametrize(
