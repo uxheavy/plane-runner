@@ -6,6 +6,7 @@ import sys
 import threading
 import urllib.error
 import urllib.request
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -86,6 +87,32 @@ def test_g4_deployment_credential_resolver_is_fixed_path_bounded_and_allowlisted
     source.write_text("XAI_API_KEY=first\nXAI_API_KEY=second\n", encoding="utf-8")
     with pytest.raises(RuntimeCredentialError, match="duplicate"):
         runtime_credentials.resolve_deployment_credential("runtime")
+
+
+def test_g4_packaged_credential_resolver_loads_parser_without_plane_bootstrap(tmp_path):
+    resolver = Path(__file__).parents[4] / "bin" / "plane-agent-runtime-credential-resolver"
+    source = tmp_path / "provider.env"
+    source.write_text("synthetic-provider-secret\n", encoding="utf-8")
+    probe = (
+        "import importlib.util, json, sys\n"
+        "spec = importlib.util.spec_from_file_location('resolver', sys.argv[1])\n"
+        "resolver = importlib.util.module_from_spec(spec)\n"
+        "spec.loader.exec_module(resolver)\n"
+        "parser = resolver._load_credentials_module()\n"
+        "parser.DEPLOYMENT_CREDENTIAL_SOURCE_PATH = sys.argv[2]\n"
+        "print(json.dumps(parser.resolve_deployment_credential('runtime'), sort_keys=True))\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe, str(resolver), str(source)],
+        env={"PATH": "/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == '{"api_key": "synthetic-provider-secret"}'
+    assert "plane.settings" not in result.stderr
 
 
 @pytest.mark.parametrize(

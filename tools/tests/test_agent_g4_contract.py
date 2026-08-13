@@ -217,6 +217,17 @@ class G4ContractTests(unittest.TestCase):
         self.assertNotIn("api.x.ai", invoke)
         self.assertNotIn("grok-4", invoke)
 
+    def test_live_runner_provides_home_for_pinned_hermes_child(self):
+        runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+
+        self.assertIn(
+            'RUNTIME_CHILD_ENVIRONMENT_JSON=\'{"HOME":"/tmp","HERMES_HOME":"/tmp/hermes-home"',
+            runner,
+        )
+        self.assertIn('--env PLANE_AGENT_RUNTIME_ENVIRONMENT_JSON="${RUNTIME_CHILD_ENVIRONMENT_JSON}"', runner)
+        self.assertIn('"PYTHONSAFEPATH":"1"', runner)
+        self.assertIn('"PYTHONUNBUFFERED":"1"', runner)
+
     def test_live_runner_stages_bounded_owner_only_secret_before_docker_networking(self):
         runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
         validation = runner.index("validate_agent_g4_live.py")
@@ -856,7 +867,9 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn('root / "plane/agent/runtime/credentials.py"', dockerfile)
         self.assertIn("config_module.__file__", dockerfile)
         self.assertIn('config_module.RUNTIME_PROTOCOL != "plane.agent-runtime/v1"', dockerfile)
-        self.assertIn('sys.path.insert(0, "/workspace/apps/api")', resolver)
+        self.assertIn("importlib.util.spec_from_file_location", resolver)
+        self.assertIn('_CREDENTIALS_SOURCE = "/workspace/apps/api/plane/agent/runtime/credentials.py"', resolver)
+        self.assertNotIn("from plane.agent.runtime.credentials import", resolver)
         self.assertNotIn('sys.path.insert(0, "/code")', resolver)
 
     def test_api_artifact_packages_the_candidate_resolver_at_the_production_path(self):

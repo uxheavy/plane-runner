@@ -24,6 +24,7 @@ MANIFEST="${ROOT_DIR}/tools/agent-g4-manifest.json"
 LIVE_AUTHORITY="${PLANE_G4_LIVE_AUTHORITY:?validated live authority path is required}"
 LIVE_CONFIG="${PLANE_G4_LIVE_CONFIG:?validated live config path is required}"
 LIVE_COMMAND="${PLANE_G4_LIVE_COMMAND:?validated live command is required}"
+RUNTIME_CHILD_ENVIRONMENT_JSON='{"HOME":"/tmp","HERMES_HOME":"/tmp/hermes-home","LANG":"C.UTF-8","LC_ALL":"C.UTF-8","PATH":"/usr/local/bin:/usr/bin:/bin","PYTHONPATH":"/tmp:/opt:/opt/hermes","PYTHONSAFEPATH":"1","PYTHONUNBUFFERED":"1"}'
 G4_CANDIDATE="$(git rev-parse HEAD)"
 G4_EXPECTED_CANDIDATE="${PLANE_G4_EXPECTED_CANDIDATE:?operator-supplied exact wrapper SHA is required}"
 [[ "${G4_EXPECTED_CANDIDATE}" =~ ^[0-9a-f]{40}$ ]] || {
@@ -355,7 +356,7 @@ docker run -d --name "${RUNTIME}" \
     --env PLANE_AGENT_RUNTIME_HEALTH_PATH=/health/ready \
     --env PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE=/run/plane-agent-runtime/safety-stop \
     --env PLANE_AGENT_RUNTIME_NETWORK_POLICY=none \
-    --env PLANE_AGENT_RUNTIME_ENVIRONMENT_JSON={} \
+    --env PLANE_AGENT_RUNTIME_ENVIRONMENT_JSON="${RUNTIME_CHILD_ENVIRONMENT_JSON}" \
     --env PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE="${CREDENTIAL_STATE_FILE}" \
     --env PLANE_AGENT_RUNTIME_PROVIDER="${G4_PROVIDER_NAME}" \
     --env PLANE_AGENT_RUNTIME_PROVIDER_BASE_URL="${G4_PROVIDER_BASE_URL}" \
