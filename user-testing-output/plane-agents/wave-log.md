@@ -15,10 +15,14 @@
   path absent from the old `preview` checkout. Execution follows the corrected
   GOAL.md on this named candidate branch until integration.
 
-## Wave 0 — fast provider smoke
+## Wave 0A — fast provider smoke
 
-- Status: ready
+- Status: dirty — UT-001
 - Scope: S00 only
 - Rule: do not run the full G3/G4 verifier before this smoke
-- Stop decision: first real boundary failure routes to focused diagnosis; a
-  clean smoke unlocks the three parallel persona journeys
+- Result: fresh live contract validated, but the runner stopped in `0.77s`
+  before credential staging because a clean checkout had no `tmp/` parent
+- Provider/Plane actions: zero
+- Cleanup: clean
+- Next: Luna root-fixes UT-001 in the established runner, then the same Maya
+  task reruns S00 only; a clean smoke unlocks the three parallel journeys
