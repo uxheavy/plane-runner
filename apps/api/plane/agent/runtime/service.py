@@ -407,6 +407,18 @@ def _bounded_reason(value: object) -> str:
     return value.strip()
 
 
+def _runtime_configuration_subreason(error: RuntimeConfigurationError) -> str:
+    """Return a safe category for a configuration rejection.
+
+    Runtime exception text can contain deployment paths or other local
+    details.  Only this finite category crosses the HTTP boundary.
+    """
+
+    if "provider attempt evidence was rejected by plane" in str(error).casefold():
+        return "provider_attempt_evidence_rejected"
+    return "runtime_configuration_rejected"
+
+
 def _listen_address(environment: dict[str, str] | os._Environ[str]) -> tuple[str, int]:
     host = environment.get("PLANE_AGENT_RUNTIME_BIND", "0.0.0.0")
     if not isinstance(host, str) or not host or "\x00" in host or len(host) > 255:
@@ -482,7 +494,7 @@ class _RuntimeHTTPHandler(BaseHTTPRequestHandler):
         except RuntimeSafetyStopError:
             self._write_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "runtime_not_ready"})
             return
-        except RuntimeConfigurationError:
+        except RuntimeConfigurationError as exc:
             self._write_json(
                 HTTPStatus.CONFLICT,
                 {
@@ -492,6 +504,7 @@ class _RuntimeHTTPHandler(BaseHTTPRequestHandler):
                         failure_code=RUNTIME_CONFIGURATION_PRE_DISPATCH_FAILURE,
                         failure_phase="runtime_configuration",
                         failure_detail="dispatch_rejected",
+                        failure_subreason=_runtime_configuration_subreason(exc),
                     ).public_failure(),
                 },
             )

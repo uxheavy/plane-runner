@@ -141,6 +141,45 @@ def test_g4_remote_credential_resolution_failure_is_a_single_classified_pre_disp
     assert error.failure_code == "runtime_configuration_pre_dispatch_failure"
     assert error.failure_phase == "runtime_configuration"
     assert error.failure_detail == "dispatch_rejected"
+    assert error.failure_subreason == "credential_source_unavailable"
+
+
+def test_g4_runtime_configuration_rejection_preserves_bounded_subreason_without_raw_details(tmp_path):
+    configuration = _configuration(tmp_path)
+    controller = RuntimeSafetyController(configured=True, stop_file=tmp_path / "safety-stop")
+    controller.mark_ready()
+    failure = RuntimeConfigurationError(
+        "provider attempt evidence was rejected by Plane: /private/runtime-secret=do-not-export"
+    )
+    server = _RuntimeHTTPServer(
+        ("127.0.0.1", 0),
+        controller,
+        configuration,
+        executor=SimpleNamespace(dispatch=_FailingRuntimeExecutor(failure).dispatch),
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    snapshot_json, invocation_json = _dispatch_body("configuration-subreason")
+    try:
+        with pytest.raises(RuntimeDispatchError) as raised:
+            RemoteRuntimeTransport(
+                runtime_url=f"http://127.0.0.1:{server.server_port}",
+                shared_secret=configuration.shared_secret,
+            ).dispatch(snapshot_json, invocation_json)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    error = raised.value
+    assert error.failure_subreason == "provider_attempt_evidence_rejected"
+    assert error.public_failure() == {
+        "failureCode": "runtime_configuration_pre_dispatch_failure",
+        "failurePhase": "runtime_configuration",
+        "failureDetail": "dispatch_rejected",
+        "failureSubreason": "provider_attempt_evidence_rejected",
+    }
+    assert "private/runtime-secret" not in json.dumps(error.public_failure(), sort_keys=True)
 
 
 def test_g4_runtime_dispatch_is_cross_process_and_revokes_invocation_credentials(tmp_path):

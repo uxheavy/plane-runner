@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, ContextManager, Mapping
 
 from .contracts import RUNTIME_CONFIGURATION_PRE_DISPATCH_FAILURE, RuntimeDispatchError, RuntimeTransport
-from .credentials import RuntimeCredentialBroker, RuntimeCredentialError
+from .credentials import RuntimeCredentialBroker, RuntimeCredentialError, credential_failure_subreason
 
 
 RUNTIME_DISPATCH_PROTOCOL = "plane.agent-runtime/dispatch/v1"
@@ -61,17 +61,21 @@ def _structured_rejection(body: bytes) -> RuntimeDispatchError | None:
         value = json.loads(body.decode("utf-8"))
     except (UnicodeDecodeError, TypeError, ValueError):
         return None
-    if not isinstance(value, dict) or set(value) != {
+    required = {
         "error",
         "failureCode",
         "failurePhase",
         "failureDetail",
-    }:
+    }
+    if not isinstance(value, dict) or set(value) not in (required, required | {"failureSubreason"}):
         return None
     if value.get("error") != "runtime_dispatch_failed":
         return None
     fields = {key: value.get(key) for key in ("failureCode", "failurePhase", "failureDetail")}
     if not all(isinstance(item, str) for item in fields.values()):
+        return None
+    failure_subreason = value.get("failureSubreason")
+    if failure_subreason is not None and not isinstance(failure_subreason, str):
         return None
     if _canonical(value, "runtime rejection") != body:
         return None
@@ -80,6 +84,7 @@ def _structured_rejection(body: bytes) -> RuntimeDispatchError | None:
         failure_code=fields["failureCode"],
         failure_phase=fields["failurePhase"],
         failure_detail=fields["failureDetail"],
+        failure_subreason=failure_subreason,
     )
 
 
@@ -164,6 +169,7 @@ class RemoteRuntimeTransport(RuntimeTransport):
                         failure_code=RUNTIME_CONFIGURATION_PRE_DISPATCH_FAILURE,
                         failure_phase="runtime_configuration",
                         failure_detail="dispatch_rejected",
+                        failure_subreason=credential_failure_subreason(exc),
                     ) from exc
                 lease_id = lease.lease_id
                 lease_metadata = lease.public_metadata()

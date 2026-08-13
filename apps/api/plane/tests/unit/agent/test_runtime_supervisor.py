@@ -13,6 +13,7 @@ import urllib.request
 from contextlib import nullcontext
 from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from types import SimpleNamespace
 
 import pytest
 from django.core.management import call_command
@@ -27,6 +28,7 @@ from plane.agent.lifecycle import (
     record_invocation,
     record_provider_attempt_notice,
 )
+from plane.db.management.commands.agent_supervisor import _provider_attempt_notice_for_plane
 from plane.agent.runtime import (
     AgentRuntimeConfiguration,
     build_gateway_host_port,
@@ -126,6 +128,42 @@ class UnknownRuntimeTransport:
     def dispatch(self, snapshot_json, envelope_json):
         self.calls += 1
         raise RuntimeDispatchError("runtime process did not produce a durable terminal result")
+
+
+def test_supervisor_normalizes_runtime_run_reference_before_provider_attempt_write():
+    invocation = SimpleNamespace(
+        run_id="run-uuid",
+        invocation_id="invocation:one",
+        run=SimpleNamespace(snapshot={"runId": "run:run-uuid"}),
+    )
+    call = SimpleNamespace(
+        run_id="run:run-uuid",
+        invocation_id="invocation:one",
+        input={
+            "phase": "intent",
+            "leaseId": "lease:one",
+            "provider": "openai-codex",
+            "model": "gpt-5.6-luna",
+            "destinationHost": "chatgpt.com",
+            "destinationPath": "/backend-api/codex/responses",
+            "requestId": "request:one",
+            "idempotencyKey": "provider-attempt:one",
+            "sequence": 1,
+            "upstreamInitiated": False,
+            "statusClass": "",
+            "errorCode": "",
+        },
+    )
+
+    notice = _provider_attempt_notice_for_plane(invocation, call)
+
+    assert notice["runId"] == "run-uuid"
+    assert notice["invocationId"] == "invocation:one"
+    assert notice["leaseId"] == "lease:one"
+
+    call.run_id = "run:other"
+    with pytest.raises(RuntimeDispatchError, match="binding is invalid"):
+        _provider_attempt_notice_for_plane(invocation, call)
 
 
 class GenericExceptionRuntimeTransport:

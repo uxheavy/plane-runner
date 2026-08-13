@@ -41,6 +41,25 @@ _FAILURE_DETAILS = frozenset(
     }
 )
 _UNCLASSIFIED_FAILURE_DETAIL = "unclassified_exception"
+_FAILURE_SUBREASONS = frozenset(
+    {
+        "credential_reference_not_allowed",
+        "credential_source_unavailable",
+        "credential_source_invalid",
+        "credential_source_oversized",
+        "credential_resolver_failed",
+        "credential_resolver_output_invalid",
+        "credential_lease_binding",
+        "credential_lease_expired",
+        "credential_lease_revoked",
+        "credential_lease_rotated",
+        "credential_lease_metadata_invalid",
+        "credential_state_unavailable",
+        "credential_state_invalid",
+        "provider_attempt_evidence_rejected",
+        "runtime_configuration_rejected",
+    }
+)
 
 
 class RuntimeDispatchError(ValueError):
@@ -53,6 +72,7 @@ class RuntimeDispatchError(ValueError):
         failure_code: str | None = None,
         failure_phase: str | None = None,
         failure_detail: str | None = None,
+        failure_subreason: str | None = None,
     ) -> None:
         super().__init__(message)
         classification_is_valid = (
@@ -80,15 +100,23 @@ class RuntimeDispatchError(ValueError):
             if classification_is_valid
             else _UNCLASSIFIED_FAILURE_DETAIL
         )
+        self.failure_subreason = (
+            failure_subreason
+            if isinstance(failure_subreason, str) and failure_subreason in _FAILURE_SUBREASONS
+            else None
+        )
 
     def public_failure(self) -> dict[str, str]:
         """Return only a bounded cross-process classification, never exception text."""
 
-        return {
+        failure = {
             "failureCode": self.failure_code,
             "failurePhase": self.failure_phase,
             "failureDetail": self.failure_detail,
         }
+        if self.failure_subreason is not None:
+            failure["failureSubreason"] = self.failure_subreason
+        return failure
 
 
 class RuntimeTransport(Protocol):

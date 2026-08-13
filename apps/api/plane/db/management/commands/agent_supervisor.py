@@ -32,6 +32,30 @@ from plane.db.models import RuntimeInvocation
 from plane.operation_gateway.gateway import OperationGateway
 
 
+def _provider_attempt_notice_for_plane(invocation, call):
+    """Translate the runtime run reference into Plane's model identity.
+
+    Runtime contracts use the namespaced ``run:<uuid>`` reference.  The
+    lifecycle writer accepts the persisted Django UUID as ``runId``.  Keep
+    this conversion at the trusted host boundary and reject any mismatch
+    before lifecycle mutation.
+    """
+
+    persisted_run_id = str(invocation.run_id)
+    expected_runtime_run_ref = f"run:{persisted_run_id}"
+    snapshot = getattr(invocation.run, "snapshot", None)
+    if (
+        not isinstance(snapshot, dict)
+        or snapshot.get("runId") != expected_runtime_run_ref
+        or call.run_id != expected_runtime_run_ref
+        or call.invocation_id != invocation.invocation_id
+    ):
+        raise RuntimeDispatchError("runtime provider attempt binding is invalid")
+    notice = dict(call.input)
+    notice.update({"runId": persisted_run_id, "invocationId": invocation.invocation_id})
+    return notice
+
+
 class Command(BaseCommand):
     help = "Claim and run one persisted Plane Agent invocation through the configured Hermes runtime."
 
@@ -152,8 +176,7 @@ class Command(BaseCommand):
                     token = secrets.token_urlsafe(32)
 
                     def provider_attempt_recorder(call):
-                        notice = dict(call.input)
-                        notice.update({"runId": call.run_id, "invocationId": call.invocation_id})
+                        notice = _provider_attempt_notice_for_plane(invocation, call)
                         attempt = record_provider_attempt_notice(invocation, notice)
                         return {
                             "accepted": True,

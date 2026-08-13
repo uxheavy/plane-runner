@@ -31,6 +31,45 @@ class RuntimeCredentialError(ValueError):
     """A credential lease is absent, expired, revoked, rotated, or unbound."""
 
 
+def credential_failure_subreason(error: RuntimeCredentialError) -> str:
+    """Map credential failures to a finite diagnostic vocabulary.
+
+    Exception text remains local-only.  The transport may expose only this
+    bounded category at the Plane diagnostic boundary.
+    """
+
+    message = str(error).casefold()
+    if "reference is not allowed" in message:
+        return "credential_reference_not_allowed"
+    if "resolver failed" in message:
+        return "credential_resolver_failed"
+    if "resolver returned" in message or "resolver must return" in message:
+        return "credential_resolver_output_invalid"
+    if "state is unavailable" in message:
+        return "credential_state_unavailable"
+    if "state is invalid" in message:
+        return "credential_state_invalid"
+    if "metadata is invalid" in message:
+        return "credential_lease_metadata_invalid"
+    if "bound to another" in message or "binding does not match" in message:
+        return "credential_lease_binding"
+    if "expired" in message:
+        return "credential_lease_expired"
+    if "revoked" in message:
+        return "credential_lease_revoked"
+    if "rotated" in message:
+        return "credential_lease_rotated"
+    if "oversized" in message or "too many values" in message:
+        return "credential_source_oversized"
+    if "source" in message and (
+        "invalid" in message or "not valid" in message or "fields" in message
+    ):
+        return "credential_source_invalid"
+    if "source" in message or "unavailable" in message:
+        return "credential_source_unavailable"
+    return "runtime_configuration_rejected"
+
+
 # Compose/Swarm mounts the operator-owned provider secret at this fixed path.
 # The packaged resolver never accepts a caller-selected source path.
 DEPLOYMENT_CREDENTIAL_SOURCE_PATH = "/run/secrets/plane_agent_provider_credentials"
@@ -658,6 +697,7 @@ __all__ = [
     "CredentialLease",
     "RuntimeCredentialBroker",
     "RuntimeCredentialError",
+    "credential_failure_subreason",
     "validate_credential_lease_metadata",
     "credential_source_from_configuration",
 ]
