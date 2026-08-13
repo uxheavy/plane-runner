@@ -327,31 +327,31 @@ docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose
 
 `apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` is the pin
 manifest. The current Plane deployable service candidate is the exact
-source correction `04a93d8863c532d41f4eaa08eaadf4fbe187a027`, a direct child of
-accepted wrapper `4a6d017530fc613a8cc22ec2730b4202569cc693`; the final candidate
+source correction `ec777c8bbce54a7f131f13d4ddbca0eb9b074fa8`, a direct child of
+wrapper `b34c5f9f23797a5f1769ab887536faef640dcd30`; the final candidate
 is exactly one metadata wrapper child of that source.
 Sol Medium's P1 rejection of wrapper
 `d42161bb29bf28f04246b96051cee3a88dcccd36` is closed by the existing Hermes
 adapter owner at commit `d2e655101f263329359e7d0de9d0b856202a3e4b`, a direct
 child of pinned Hermes `114eabf9d807b659e36d767e4de46ca056297ccb`. The
-current Plane source commit is `04a93d8863c532d41f4eaa08eaadf4fbe187a027`.
+current Plane source commit is `ec777c8bbce54a7f131f13d4ddbca0eb9b074fa8`.
 The final candidate is exactly one metadata wrapper child of that source. The current API artifact
 remains immutable and source-bound to
-`04a93d8863c532d41f4eaa08eaadf4fbe187a027`; the previously accepted G3
+`ec777c8bbce54a7f131f13d4ddbca0eb9b074fa8`; the previously accepted G3
 candidate is Plane commit `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
 The current binding carries Hermes commit
 `d2e655101f263329359e7d0de9d0b856202a3e4b`, MCP gitlink
 `2dc152e136d7ad952b901e5fe9364a37487297ba`, SDK gitlink
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`, runtime image tag
-`plane-agent-runtime:hermes-d2e65510-g4-04a93d88`, runtime image digest
-`sha256:ed98eaaf934c855ab3c0b3bfb053a5cbedd11c7f3ea7f57d8810aec241ad4d84`,
-runtime revision/source revision `04a93d8863c532d41f4eaa08eaadf4fbe187a027`, and runtime
+`plane-agent-runtime:hermes-d2e65510-g4-ec777c8b`, runtime image digest
+`sha256:c8f1ea4c4b12fef35c3b5368d042d75831db91f2719baea719340d0fa537fcdf`,
+runtime revision/source revision `ec777c8bbce54a7f131f13d4ddbca0eb9b074fa8`, and runtime
 contract `plane.agent-runtime/v1`. The current API artifact is tag
-`plane-agent-api:g4-04a93d88` with image digest
-`sha256:46ee3f41400398f93da111d7f793513977c59da2e5cb3bd0f8f7aebacc84f4ec` and
-source revision/image label `04a93d8863c532d41f4eaa08eaadf4fbe187a027`.
-API image tag: `plane-agent-api:g4-04a93d88`. API image digest:
-`sha256:46ee3f41400398f93da111d7f793513977c59da2e5cb3bd0f8f7aebacc84f4ec`.
+`plane-agent-api:g4-ec777c8b` with image digest
+`sha256:56978705e73a7f9648a43d0767ca855bfb90a95edb33dba3e2db9abecb3c85d8` and
+source revision/image label `ec777c8bbce54a7f131f13d4ddbca0eb9b074fa8`.
+API image tag: `plane-agent-api:g4-ec777c8b`. API image digest:
+`sha256:56978705e73a7f9648a43d0767ca855bfb90a95edb33dba3e2db9abecb3c85d8`.
 API source revision remains the exact source revision/image label above.
 API contract: `plane.operation/v1`.
 The wrapper carries these exact values from the immutable image builds. The
@@ -361,10 +361,10 @@ tests retain XAI and fail-closed mismatch coverage. G3, G4, and the live helper
 execute the image-contained `/workspace/apps/api` tree;
 they do not bind-mount a newer host API source tree. API, worker,
 `beat-worker`, supervisor, and `agent-runtime` each use the corresponding
-current artifact revision and image digest in the manifest. The Plane service revision above is the current executable artifact revision; the runtime image/runtimeRevision source is `04a93d8863c532d41f4eaa08eaadf4fbe187a027`. Here,
+current artifact revision and image digest in the manifest. The Plane service revision above is the current executable artifact revision; the runtime image/runtimeRevision source is `ec777c8bbce54a7f131f13d4ddbca0eb9b074fa8`. Here,
 `current.planeCommit` identifies the approved source parent, while the final metadata wrapper is its sole child. The
 the current service artifact revisions identify the immutable executable images
-source-bound to `04a93d8863c532d41f4eaa08eaadf4fbe187a027`; the
+source-bound to `ec777c8bbce54a7f131f13d4ddbca0eb9b074fa8`; the
 `previous` rollback section independently retains the last known-good G3
 service revisions and digests.
 The previous services use immutable image digest
