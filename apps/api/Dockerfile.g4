@@ -4,6 +4,11 @@ FROM ${BASE_API_IMAGE}
 WORKDIR /workspace/apps/api
 COPY . /workspace/apps/api
 
+# The prepared base keeps its development source under /code. Make the
+# copied candidate source authoritative for every Python command in this
+# artifact, including processes that do not inherit a working directory.
+ENV PYTHONPATH=/workspace/apps/api
+
 ARG PLANE_API_SOURCE_REVISION
 ARG PLANE_API_IMAGE_TAG
 ARG PLANE_API_CONTRACT=plane.operation/v1
@@ -28,6 +33,7 @@ RUN PLANE_API_SOURCE_REVISION="${PLANE_API_SOURCE_REVISION}" \
     PLANE_API_PROVIDER_CONFIG_SHA256="${PLANE_API_PROVIDER_CONFIG_SHA256}" \
     python - <<'PY'
 import hashlib
+import importlib
 import os
 import re
 from pathlib import Path
@@ -55,6 +61,26 @@ for relative, expected in required.items():
     actual = hashlib.sha256(path.read_bytes()).hexdigest()
     if not re.fullmatch(r"[0-9a-f]{64}", expected) or actual != expected:
         raise SystemExit(f"source hash mismatch: {relative}")
+
+plane_module = importlib.import_module("plane")
+plane_path = Path(plane_module.__file__).resolve()
+expected_plane_path = (root / "plane/__init__.py").resolve()
+if plane_path != expected_plane_path:
+    raise SystemExit(f"Plane API imported from unexpected path: {plane_path}")
+
+credentials_module = importlib.import_module("plane.agent.runtime.credentials")
+credentials_path = Path(credentials_module.__file__).resolve()
+expected_credentials_path = (root / "plane/agent/runtime/credentials.py").resolve()
+if credentials_path != expected_credentials_path:
+    raise SystemExit(f"runtime credentials imported from unexpected path: {credentials_path}")
+
+config_module = importlib.import_module("plane.agent.runtime.config")
+config_path = Path(config_module.__file__).resolve()
+expected_config_path = (root / "plane/agent/runtime/config.py").resolve()
+if config_path != expected_config_path:
+    raise SystemExit(f"runtime config imported from unexpected path: {config_path}")
+if config_module.RUNTIME_PROTOCOL != "plane.agent-runtime/v1":
+    raise SystemExit("runtime source sentinel is invalid")
 PY
 RUN command -v python >/dev/null \
     && command -v pytest >/dev/null \

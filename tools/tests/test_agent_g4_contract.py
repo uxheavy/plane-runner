@@ -771,6 +771,20 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn("org.uxheavy.plane.api.source.readback.sha256", dockerfile)
         self.assertLess(dockerfile.index("repository-root build context is not accepted"), dockerfile.index("LABEL "))
 
+    def test_api_artifact_commands_import_the_copied_candidate_source(self):
+        dockerfile = (ROOT / "apps/api/Dockerfile.g4").read_text(encoding="utf-8")
+        resolver = (ROOT / "apps/api/bin/plane-agent-runtime-credential-resolver").read_text(encoding="utf-8")
+
+        self.assertIn("ENV PYTHONPATH=/workspace/apps/api", dockerfile)
+        self.assertIn("plane_module.__file__", dockerfile)
+        self.assertIn('importlib.import_module("plane.agent.runtime.credentials")', dockerfile)
+        self.assertIn("credentials_module.__file__", dockerfile)
+        self.assertIn('root / "plane/agent/runtime/credentials.py"', dockerfile)
+        self.assertIn("config_module.__file__", dockerfile)
+        self.assertIn('config_module.RUNTIME_PROTOCOL != "plane.agent-runtime/v1"', dockerfile)
+        self.assertIn('sys.path.insert(0, "/workspace/apps/api")', resolver)
+        self.assertNotIn('sys.path.insert(0, "/code")', resolver)
+
     def test_manifest_api_artifact_passes_actual_gitleaks_and_exact_sha_validation(self):
         manifest_path = TOOLS / "agent-g4-manifest.json"
         manifest_text = manifest_path.read_text(encoding="utf-8")
