@@ -80,6 +80,13 @@ from plane.db.models import (
 AGENT_TEST_HEAD = ("db", "0140_invocation_free_cancellation_integrity")
 
 
+@pytest.fixture(scope="session")
+def django_db_use_migrations():
+    """Install the lifecycle-owned PostgreSQL triggers in this test database."""
+
+    return True
+
+
 def _restore_agent_test_head():
     call_command("bootstrap_operation_gateway_audit", phase="before-migrate", verbosity=0)
     executor = MigrationExecutor(connection)
@@ -313,6 +320,7 @@ def test_missing_or_tampered_contract_artifacts_fail_closed(tmp_path, monkeypatc
 @pytest.mark.django_db
 def test_profile_and_snapshot_are_immutable_and_direct_state_changes_use_lifecycle(assignment, profile):
     run = create_run(assignment, profile)
+    invocation = record_invocation(run, idempotency_key="idempotency:model-immutability-invocation")
 
     profile.instructions = "Changed after resolution."
     with pytest.raises(ValidationError):
@@ -322,6 +330,22 @@ def test_profile_and_snapshot_are_immutable_and_direct_state_changes_use_lifecyc
     run.snapshot["assignment"]["objective"] = "Changed after resolution."
     with pytest.raises(ValidationError):
         run.save()
+
+    invocation.envelope = deepcopy(invocation.envelope)
+    invocation.envelope["runId"] = "run:tampered"
+    with pytest.raises(ValidationError):
+        invocation.save()
+
+    run.refresh_from_db()
+    invocation.refresh_from_db()
+    run.save()
+    invocation.save()
+
+    transition_run(run, RunState.WAITING_FOR_INPUT, pending_input_ref="event:model-immutability-question")
+    run.refresh_from_db()
+    invocation.refresh_from_db()
+    assert run.state == RunState.WAITING_FOR_INPUT
+    assert invocation.state == InvocationState.WAITING_FOR_INPUT
 
     assignment.state = AssignmentState.COMPLETED
     with pytest.raises(ValidationError):
@@ -353,36 +377,78 @@ def test_postgres_guards_reject_hostile_bulk_and_raw_mutations(assignment, profi
         AssignmentContract.objects.filter(pk=assignment.pk).update(state=AssignmentState.COMPLETED)
     with pytest.raises(DatabaseError):
         RunAttempt.objects.filter(pk=run.pk).update(state=RunState.SUCCEEDED)
+    with pytest.raises(DatabaseError):
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE agent_run_attempts SET snapshot_content_digest = %s WHERE id = %s",
+                    ["snapshot:" + "0" * 64, run.id],
+                )
+    with pytest.raises(DatabaseError):
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE agent_run_attempts SET snapshot = %s::jsonb WHERE id = %s",
+                    [json.dumps({"tampered": True}), run.id],
+                )
+    with pytest.raises(DatabaseError):
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE agent_runtime_invocations SET envelope = %s::jsonb WHERE id = %s",
+                    [json.dumps({"tampered": True}), invocation.id],
+                )
+    with pytest.raises(DatabaseError):
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO agent_run_terminal_events
+                        (id, created_at, updated_at, workspace_id, project_id, invocation_id, run_id,
+                         kind, source, product_ref, product_event_ref, idempotency_key, reason, visible)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, 'run_failure', 'supervisor',
+                            %s, %s, %s, %s, TRUE)
+                    """,
+                    [
+                        uuid4(),
+                        timezone.now(),
+                        timezone.now(),
+                        run.workspace_id,
+                        run.project_id,
+                        invocation.id,
+                        other_run.id,
+                        "product-event:hostile",
+                        "product-event:hostile",
+                        "idempotency:hostile-terminal",
+                        "mismatched run binding",
+                    ],
+                )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_postgres_lifecycle_immutable_triggers_are_installed():
+    if connection.vendor != "postgresql":
+        pytest.fail("Run lifecycle immutability requires the supported PostgreSQL test database")
+
     with connection.cursor() as cursor:
-        with pytest.raises(DatabaseError):
-            cursor.execute(
-                "UPDATE agent_run_attempts SET snapshot_content_digest = %s WHERE id = %s",
-                ["snapshot:" + "0" * 64, run.id],
-            )
-        with pytest.raises(DatabaseError):
-            now = timezone.now()
-            cursor.execute(
-                """
-                INSERT INTO agent_run_terminal_events
-                    (id, created_at, updated_at, workspace_id, project_id, invocation_id, run_id,
-                     kind, source, product_ref, product_event_ref, idempotency_key, reason, visible)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, 'run_failure', 'supervisor',
-                        %s, %s, %s, %s, TRUE)
-                """,
-                [
-                    uuid4(),
-                    now,
-                    now,
-                    run.workspace_id,
-                    run.project_id,
-                    invocation.id,
-                    other_run.id,
-                    "product-event:hostile",
-                    "product-event:hostile",
-                    "idempotency:hostile-terminal",
-                    "mismatched run binding",
-                ],
-            )
+        cursor.execute(
+            """
+            SELECT relation.relname, tg.tgname, tg.tgenabled
+            FROM pg_trigger AS tg
+            JOIN pg_class AS relation ON relation.oid = tg.tgrelid
+            JOIN pg_namespace AS schema_info ON schema_info.oid = relation.relnamespace
+            WHERE schema_info.nspname = current_schema()
+              AND NOT tg.tgisinternal
+              AND relation.relname IN ('agent_run_attempts', 'agent_runtime_invocations')
+              AND tg.tgname IN ('agent_run_immutable_guard', 'agent_invocation_immutable_guard')
+            """
+        )
+        triggers = {(table, trigger, enabled) for table, trigger, enabled in cursor.fetchall()}
+
+    assert triggers == {
+        ("agent_run_attempts", "agent_run_immutable_guard", "O"),
+        ("agent_runtime_invocations", "agent_invocation_immutable_guard", "O"),
+    }
 
 
 @pytest.mark.django_db(transaction=True)
