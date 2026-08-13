@@ -65,3 +65,17 @@
 - Cleanup: clean; temporary API artifact removed
 - Next: Luna installs and proves the established resolver in the artifact, then
   Maya reruns the network-isolated proof and S00
+
+## Wave 0E — packaged resolver retest
+
+- Status: dirty — UT-005
+- Candidate: `0ae680f418afe1da78fc697cf83e53a9d8d280df`
+- UT-004: closed; candidate imports and the installed resolver's provenance,
+  permissions, byte identity, and synthetic Codex-document behavior passed
+- Plane lifecycle reached: one run, one invocation, one visible `run_blocker`
+- Failure: the real credential handoff still returns
+  `runtime_configuration_pre_dispatch_failure / dispatch_rejected`
+- Provider attempts and requested product operations: zero
+- Cleanup: clean; temporary API image removed
+- Next: Luna traces and root-fixes the broker/lease/resolver configuration
+  boundary, then Maya runs one fresh S00 Wave 0F

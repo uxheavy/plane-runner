@@ -123,3 +123,44 @@ was never resolved, and no credential value was displayed. No provider or Plane
 product action occurred. The proof container, temporary image, synthetic file,
 checkout, and Colima resources were cleaned; prepared base/runtime images were
 preserved. No broad verifier, load, G5, rollout, or deployment ran.
+
+## Wave 0E — packaged resolver retest
+
+Status: dirty at the live credential-handoff boundary. No replay was attempted.
+
+- Product source: `0ae680f418afe1da78fc697cf83e53a9d8d280df`.
+- Temporary API image: `plane-agent-api:g4-0ae680f4-wave0e`, digest `sha256:872d2e12c8077f42ef3fd55b38670817e037fd297c89fb9322c70ccec9f13862`; source and contract labels passed.
+- Runtime/Hermes image remained unchanged.
+- Fresh authority/config: `s00-live-20260813T102933Z-wave0e`; GPT-5.6 Luna through the ChatGPT subscription route; fallback disabled.
+- Build took approximately `1.7s`; the live runner exited after approximately `81s`.
+
+The required network-disabled proof passed before any live action:
+
+```text
+/workspace/apps/api/plane/__init__.py
+/workspace/apps/api/plane/agent/runtime/credentials.py
+/workspace/apps/api/plane/agent/runtime/config.py
+resolver_regular=1 mode=0755 owner=0:0 byte_identical=1
+resolver_keys=api_key_only
+```
+
+The synthetic exact Codex auth document was owner-only. No credential value was
+printed or retained in evidence.
+
+The one fresh live invocation then stopped at:
+
+```text
+status=failed reasonCode=runtime_configuration_pre_dispatch_failure reasonPhase=runtime_configuration reasonDetail=dispatch_rejected
+runRef=a8728511-7846-447f-a682-a4dfb0aa5848 runState=blocked
+invocationRef=4cfecbc9-36c0-4be2-8a02-e4ee2d128669 invocationState=blocked
+providerAttempts=[] terminal={present:true,kind=run_blocker}
+```
+
+The candidate source and packaged resolver are now proven. The remaining defect
+is within the real broker, lease, resolver, or invocation-configuration handoff.
+The provider was not reached, the permitted/denied tool canaries did not run,
+and no outcome or explicit publication occurred. Plane recorded one visible
+`run_blocker`. No prior invocation was replayed; the helper still has no replay
+step. Cleanup removed the disposable image, checkout, authority/config,
+synthetic auth, containers, networks, and volumes while preserving the prepared
+base and pinned runtime image. No broad G3/G4, G5, rollout, or deployment ran.
