@@ -303,3 +303,19 @@
 - Next: provider-free classification of supervisor setup failures, preserving a
   finite safe category in Plane control state and the live receipt, then Maya
   runs one fresh S00 retest
+
+## Wave 0R — supervisor terminalization retest
+
+- Status: dirty — UT-014 remains open
+- Candidate: `afe98be81d6feee9856c89f1a001c02be4ecf1c0`
+- Before the live run, 11 focused central Django cases passed in 5.27s for
+  setup success, bounded terminalization, idempotency, outcome-unknown safety,
+  durable readback, and zero provider attempts
+- One fresh run `0ff0a87b-a0a5-4a4e-910f-883d87a31e5a` and invocation
+  `invocation:df4bb8e5-3537-4932-aaf0-70d1424313b7` still failed before
+  provider-attempt intent with an unspecified receipt
+- No read, denied evaluator operation, outcome, publication, replay, or second
+  provider invocation ran; cleanup was clean
+- Next: provider-free exact live-helper test with a fake remote runtime returning
+  a finite HTTP rejection. Only after that propagation passes can the remaining
+  failure be assigned to real Hermes/bootstrap rather than Plane handoff

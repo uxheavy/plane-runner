@@ -308,6 +308,32 @@ replay, or second provider call ran.
 No broad G3/G4 verifier, unrelated suite, load test, G5, rollout, pilot,
 deployment, source edit, or extra provider call ran.
 
+## Wave 0R — supervisor terminalization retest at afe98be81d
+
+Status: dirty at the first API-invocation boundary. Exactly one fresh approved
+lifecycle ran; no retry or replay ran.
+
+- Candidate: `afe98be81d6feee9856c89f1a001c02be4ecf1c0`.
+- API image digest:
+  `sha256:d9ccea8ddf2b8c327cb72d3cea6bffb289f9827bf6b697e3754f1b854ccbdff7`.
+- Runtime image digest:
+  `sha256:755670b7074debdbf95c6dae225d95865186793f33f673e14ec14c27d14b7f2a`.
+- Both artifacts were built once from the exact candidate using the sealed
+  Hermes donor and one disposable manifest.
+- Fresh ChatGPT subscription / `openai-codex/gpt-5.6-luna` config validation
+  passed with fallback disabled.
+- Fresh run `0ff0a87b-a0a5-4a4e-910f-883d87a31e5a` failed.
+- Fresh invocation `invocation:df4bb8e5-3537-4932-aaf0-70d1424313b7`
+  failed at `api-invocation`; provider attempts remained zero and the receipt
+  still reported an unspecified reason.
+- No permitted read, denied evaluator operation, gateway receipt, outcome,
+  publication, or replay ran. Plane returned one visible `run_failure` marker.
+- Cleanup removed all task-owned resources and left zero labeled containers,
+  networks, or volumes; the prepared base and sealed donor remain.
+
+No broad G3/G4 verifier, unrelated suite, load test, G5, rollout, pilot,
+deployment, source edit, or extra provider call ran.
+
 ## Wave 0Q — bounded result handoff retest at c1d7e28b8c
 
 Status: dirty at the first API-invocation boundary. Exactly one fresh approved
