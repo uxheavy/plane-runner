@@ -213,6 +213,101 @@ def test_provider_attempt_evidence_failure_blocks_pre_send_upstream(tmp_path):
     assert json.loads(body) == {"error": "denied"}
     assert attempted_phases == ["intent", "failed"]
     assert upstream.calls == []
+    assert server.required_audit_failure is not None
+    assert server.required_audit_failure.phase == "intent"
+    assert server.required_audit_failure.code == "provider_attempt_evidence_rejected"
+
+
+def test_runtime_service_promotes_provider_audit_rejection_before_provider_call(tmp_path, monkeypatch):
+    state_file = tmp_path / "revocations.json"
+    broker = RuntimeCredentialBroker(
+        {"provider": {"api_key": "provider-secret"}},
+        state_file=state_file,
+    )
+    lease, credentials = broker.issue(
+        agent_ref="agent:relay", credential_ref="provider", invocation_ref=INVOCATION_ID
+    )
+    configuration = AgentRuntimeConfiguration.from_environment(
+        {
+            "PLANE_AGENT_RUNTIME_URL": "http://agent-runtime:8080",
+            "PLANE_AGENT_RUNTIME_SECRET": "r" * 40,
+            "PLANE_AGENT_RUNTIME_PROVIDER": PROVIDER,
+            "PLANE_AGENT_RUNTIME_PROVIDER_HOST": HOST,
+            "PLANE_AGENT_RUNTIME_PROVIDER_MODELS": MODEL,
+            "PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE": str(state_file),
+        }
+    )
+    controller = RuntimeSafetyController(configured=True, stop_file=tmp_path / "stop")
+    controller.mark_ready()
+    executor = RuntimeDispatchExecutor(configuration, controller)
+    callback_phases: list[str] = []
+
+    class RejectingHostClient:
+        def __init__(self, *, url: str, auth_token: str):
+            assert url == "http://plane-host.invalid"
+            assert auth_token == "host-token"
+
+        def invoke(self, call):
+            callback_phases.append(call.input["phase"])
+            return PlaneHostResult(
+                request_ref=call.request_ref,
+                correlation_id=call.correlation_id,
+                idempotency_key=call.idempotency_key,
+                status="denied",
+                replayed=False,
+                error_code="PROVIDER_ATTEMPT_REJECTED",
+            )
+
+    monkeypatch.setattr("plane.agent.runtime.service.PlaneHostHTTPClient", RejectingHostClient)
+    opened: list[object] = []
+    original_open = executor.open_provider_relay
+
+    def open_and_capture(**kwargs):
+        relay = original_open(**kwargs)
+        opened.append(relay)
+        return relay
+
+    executor.open_provider_relay = open_and_capture  # type: ignore[method-assign]
+
+    class RelayProbeTransport:
+        def dispatch_payload(self, **_kwargs):
+            relay = opened[0]
+            response = _round_trip(relay.server, request_id="request:dispatch")
+            assert response[0] == 403
+            assert json.loads(response[2]) == {"error": "denied"}
+            return ("child-failure-frame",)
+
+    executor._transport = RelayProbeTransport()
+    snapshot = {
+        "runId": RUN_ID,
+        "runtimePolicy": {"model": {"provider": PROVIDER, "model": MODEL}},
+    }
+    invocation = {
+        "correlationId": "correlation:relay",
+        "invocationId": INVOCATION_ID,
+        "runId": RUN_ID,
+        "remainingBudget": {"outputTokens": 1},
+    }
+
+    try:
+        with pytest.raises(RuntimeConfigurationError, match="provider attempt evidence"):
+            executor._execute(
+                snapshot,
+                invocation,
+                "test-digest",
+                credentials=credentials,
+                credential_lease=lease.public_metadata(),
+                allowance=1,
+                host_url="http://plane-host.invalid",
+                host_token="host-token",
+            )
+    finally:
+        for relay in opened:
+            relay.close()
+
+    assert callback_phases == ["intent", "failed"]
+    assert opened[0].required_audit_failure.phase == "intent"
+    assert opened[0].required_audit_failure.code == "provider_attempt_evidence_rejected"
 
 
 @pytest.mark.parametrize(

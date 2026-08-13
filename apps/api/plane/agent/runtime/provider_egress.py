@@ -248,6 +248,14 @@ class ProviderRelayAudit:
     error_code: str = ""
 
 
+@dataclass(frozen=True)
+class ProviderRelayAuditFailure:
+    """Bounded parent-visible state for a required audit rejection."""
+
+    phase: str
+    code: str = "provider_attempt_evidence_rejected"
+
+
 class ProviderUpstream(Protocol):
     def __call__(
         self,
@@ -503,11 +511,17 @@ class ProviderRelayServer:
         self._seen_requests: set[str] = set()
         self._calls = 0
         self._request_lock = threading.RLock()
+        self._required_audit_failure: ProviderRelayAuditFailure | None = None
         self._request_slots = threading.BoundedSemaphore(policy.max_concurrent_requests)
 
     @property
     def descriptor(self) -> ProviderRelayDescriptor:
         return self._descriptor
+
+    @property
+    def required_audit_failure(self) -> ProviderRelayAuditFailure | None:
+        with self._request_lock:
+            return self._required_audit_failure
 
     def start(self) -> ProviderRelayDescriptor:
         if self._http_server is not None:
@@ -795,6 +809,9 @@ class ProviderRelayServer:
             )
         except Exception as exc:
             if required:
+                with self._request_lock:
+                    if self._required_audit_failure is None:
+                        self._required_audit_failure = ProviderRelayAuditFailure(phase=phase)
                 raise ProviderRelayError("provider attempt evidence is unavailable") from exc
 
     def _record_identity(
@@ -922,6 +939,7 @@ __all__ = [
     "GPT56_MODEL_RE",
     "PinnedProviderHTTPSClient",
     "ProviderRelayAudit",
+    "ProviderRelayAuditFailure",
     "ProviderRelayBinding",
     "ProviderRelayDescriptor",
     "ProviderRelayError",

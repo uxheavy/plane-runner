@@ -29,6 +29,7 @@ from .provider_egress import (
     GPT56_MODEL_RE,
     PinnedProviderHTTPSClient,
     ProviderRelayAudit,
+    ProviderRelayAuditFailure,
     ProviderRelayBinding,
     ProviderRelayDescriptor,
     ProviderRelayServer,
@@ -100,6 +101,10 @@ class RuntimeProviderRelay:
     @property
     def descriptor(self) -> ProviderRelayDescriptor:
         return self.server.descriptor
+
+    @property
+    def required_audit_failure(self) -> ProviderRelayAuditFailure | None:
+        return self.server.required_audit_failure
 
     def close(self) -> None:
         self.server.close()
@@ -361,14 +366,22 @@ class RuntimeDispatchExecutor:
             def is_cancelled() -> bool:
                 return self.controller.health().safety_stop or self._is_invocation_cancelled(invocation_id)
 
-            return self._transport.dispatch_payload(
-                payload=payload,
-                run_id=run_id,
-                invocation_id=invocation_id,
-                request_digest=digest,
-                command=command,
-                is_cancelled=is_cancelled,
-            )
+            try:
+                frames = self._transport.dispatch_payload(
+                    payload=payload,
+                    run_id=run_id,
+                    invocation_id=invocation_id,
+                    request_digest=digest,
+                    command=command,
+                    is_cancelled=is_cancelled,
+                )
+            except Exception:
+                if provider_relay is not None and provider_relay.required_audit_failure is not None:
+                    raise RuntimeConfigurationError("provider attempt evidence was rejected by Plane") from None
+                raise
+            if provider_relay is not None and provider_relay.required_audit_failure is not None:
+                raise RuntimeConfigurationError("provider attempt evidence was rejected by Plane")
+            return frames
         finally:
             if server is not None:
                 server.close()
