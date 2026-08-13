@@ -94,3 +94,15 @@
 - Cleanup: clean; temporary API image removed
 - Next: Luna root-fixes the established supervisor/broker/relay lease boundary,
   then Maya runs one fresh S00 Wave 0G
+
+## Wave 0G — unshared credential-revocation state
+
+- Status: dirty — UT-007
+- Candidate: `e5b5e626fc69380ed6c02468565f56837de8fcaa`
+- UT-006: closed; canonical run binding passed its network-disabled proof
+- Failure: API and runtime use different revocation-state paths with no shared
+  mount, so runtime-side lease validation cannot observe Plane control state
+- Provider attempts and Plane product resources: zero
+- Cleanup: clean; temporary API image removed
+- Next: Luna reuses the established shared state mechanism in live-runner
+  topology, then Maya runs one fresh S00 Wave 0H

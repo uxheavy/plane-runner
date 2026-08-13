@@ -198,3 +198,27 @@ publications were zero. Plane recorded one lifecycle `run_blocker`. Replay was
 not attempted because the run did not succeed. Cleanup removed every disposable
 artifact and Docker resource while preserving the prepared base and pinned
 runtime image. No broad G3/G4, G5, rollout, or deployment ran.
+
+## Wave 0G — unshared credential-revocation state
+
+Status: dirty before live authority/configuration. No invocation or replay ran.
+
+- Source: `e5b5e626fc69380ed6c02468565f56837de8fcaa`.
+- Temporary API image digest: `sha256:6f0fdd6837ae5e4fe744330d304045708add53153d03e4b60273641a41311641`.
+- Runtime/Hermes remained pinned and unchanged.
+- Candidate provenance, resolver behavior, and canonical `run:<uuid>` provider-audit binding all passed with networking disabled.
+
+The required runner topology check failed before live setup:
+
+```text
+credential_state_env_bindings=2
+api_runtime_state_path_shared=false
+shared_state_mount_declared=false
+runtime_revocation_state_contract=unshared
+```
+
+The live runner gives Plane and the runtime different credential-revocation
+state paths and declares no shared mount, so runtime-side lease validation
+cannot observe Plane-owned revocation state. Authority/configuration, Plane
+records, runtime startup, and provider egress were not attempted. Cleanup was
+complete; no broad G3/G4, G5, rollout, or deployment ran.
