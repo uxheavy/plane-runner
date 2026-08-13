@@ -406,11 +406,19 @@ def test_exact_live_helper_proves_setup_reaches_fake_runtime_without_provider_at
 
     assert _run_literal_live_helper(monkeypatch, fake_runtime, tmp_path, host_port) == 0
     evidence = json.loads(capsys.readouterr().out)
-    invocation = RuntimeInvocation.objects.get(invocation_id=evidence["invocation"]["id"])
+    workload = evidence["summary"]["workload"]
+    invocation = RuntimeInvocation.objects.get(invocation_id=workload["invocationRef"])
+    run = RunAttempt.objects.get(pk=UUID(workload["runRef"]))
 
     assert evidence["status"] == "passed"
     assert len(fake_runtime.dispatches) == 1
+    assert fake_runtime.dispatches[0]["envelope"]["invocationId"] == invocation.invocation_id
     assert fake_runtime.fake_provider_calls == 0
+    assert invocation.state == InvocationState.SUCCEEDED
+    assert run.state == "succeeded"
+    assert workload["invocationRef"] == str(invocation.invocation_id)
+    assert workload["runRef"] == str(run.id)
+    assert RunTerminalEvent.objects.filter(invocation=invocation, visible=True).count() == 1
     assert not RuntimeProviderAttempt.objects.filter(invocation=invocation).exists()
     assert RuntimeInvocationControl.objects.get(invocation=invocation).failure_code == ""
 
