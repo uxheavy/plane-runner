@@ -34,11 +34,22 @@ from validate_agent_g4_live import (  # noqa: E402
     offline_evidence_hashes,
     validate_offline_evidence,
     validate_runtime_provider_environment,
+    validate_disposable_artifact_binding,
     validate_rollback_fixture,
     validate_rollback_runbook,
     validate_files,
 )
 from summarize_agent_g4 import summarize  # noqa: E402
+
+_BUILDER_SPEC = importlib.util.spec_from_file_location(
+    "build_agent_runtime_image", TOOLS / "build-agent-runtime-image.py"
+)
+if _BUILDER_SPEC is None or _BUILDER_SPEC.loader is None:
+    raise RuntimeError("runtime image builder module could not be loaded")
+_BUILDER = importlib.util.module_from_spec(_BUILDER_SPEC)
+sys.modules[_BUILDER_SPEC.name] = _BUILDER
+_BUILDER_SPEC.loader.exec_module(_BUILDER)
+
 PINNED_HERMES_RUN_AGENT_PATH = _RED_TEAM.PINNED_HERMES_RUN_AGENT_PATH
 PINNED_HERMES_RUN_AGENT_SHA256 = _RED_TEAM.PINNED_HERMES_RUN_AGENT_SHA256
 ProbeFailure = _RED_TEAM.ProbeFailure
@@ -171,6 +182,73 @@ def fixture(candidate: str = CANDIDATE, source_manifest: dict | None = None) -> 
 
 
 class G4ContractTests(unittest.TestCase):
+    def test_runtime_builder_inventory_is_exact_candidate_source(self):
+        candidate = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        actual = _BUILDER.runtime_file_hashes(candidate)
+        expected = {
+            path.relative_to(ROOT).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted((ROOT / "apps/api/plane/agent/runtime").rglob("*"))
+            if path.is_file() and path.suffix not in {".pyc", ".pyo"} and "__pycache__" not in path.parts
+        }
+        self.assertEqual(actual, expected)
+        pinned = "1d1012f71c48615bb28b7988ce74c82421aa1d53"
+        pinned_subprocess = subprocess.run(
+            ["git", "-C", str(ROOT), "show", f"{pinned}:apps/api/plane/agent/runtime/subprocess.py"],
+            check=True,
+            capture_output=True,
+        ).stdout
+        self.assertNotEqual(actual["apps/api/plane/agent/runtime/subprocess.py"], hashlib.sha256(pinned_subprocess).hexdigest())
+        self.assertIn("apps/api/plane/agent/runtime/credentials.py", actual)
+        self.assertIn("apps/api/plane/agent/runtime/remote.py", actual)
+        self.assertIn("apps/api/plane/agent/runtime/service.py", actual)
+        self.assertIn("apps/api/plane/agent/runtime/contracts.py", actual)
+
+    def test_disposable_manifest_binds_api_runtime_and_hermes_to_one_candidate(self):
+        candidate = "a" * 40
+        files = {"apps/api/plane/agent/runtime/subprocess.py": "b" * 64}
+        source_digest = _BUILDER.runtime_source_digest(files)
+        manifest = _BUILDER.disposable_manifest(
+            candidate,
+            "c" * 40,
+            "d" * 40,
+            "github.com/uxheavy/hermes-agent",
+            {
+                "imageTag": "plane-agent-runtime:disposable",
+                "imageDigest": "sha256:" + "e" * 64,
+                "runtimeRevision": candidate,
+                "hermesCommit": "d" * 40,
+                "hermesRemote": "github.com/uxheavy/hermes-agent",
+                "contract": "plane.agent-runtime/v1",
+                "runtimeSourceDigest": source_digest,
+            },
+            {
+                "imageTag": "plane-agent-api:disposable",
+                "imageDigest": "sha256:" + "f" * 64,
+                "sourceRevision": candidate,
+                "contract": "plane.operation/v1",
+            },
+            files,
+        )
+
+        validate_disposable_artifact_binding(manifest, candidate)
+        self.assertEqual(manifest["pins"]["runtimeImageRevision"], candidate)
+        self.assertEqual(manifest["pins"]["apiArtifact"]["sourceRevision"], candidate)
+        self.assertEqual(manifest["pins"]["hermesCommit"], "d" * 40)
+
+        mixed = copy.deepcopy(manifest)
+        mixed["pins"]["apiArtifact"]["sourceRevision"] = "1" * 40
+        with self.assertRaisesRegex(ContractError, "manifest_disposableBinding_pin_apiSourceRevision"):
+            validate_disposable_artifact_binding(mixed, candidate)
+        mixed = copy.deepcopy(manifest)
+        mixed["pins"]["runtimeImageRevision"] = "2" * 40
+        with self.assertRaisesRegex(ContractError, "manifest_disposableBinding_pin_runtimeRevision"):
+            validate_disposable_artifact_binding(mixed, candidate)
+
     def test_live_runner_exports_one_failure_object_before_disposable_teardown(self):
         source = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
         cleanup = source[source.index("cleanup()") : source.index("trap cleanup EXIT INT TERM")]
@@ -253,6 +331,8 @@ class G4ContractTests(unittest.TestCase):
                 "sourceRevision": "2" * 40,
                 "contract": "plane.operation/v1",
             }
+            disposable_manifest["pins"]["runtimeImageTag"] = "plane-agent-runtime:disposable"
+            disposable_manifest["pins"]["runtimeImageDigest"] = "sha256:" + "3" * 64
             disposable_path.write_text(json.dumps(disposable_manifest), encoding="utf-8")
 
             fake_bin = root / "bin"
@@ -263,12 +343,23 @@ class G4ContractTests(unittest.TestCase):
                 "#!/bin/sh\n"
                 "printf '%s\\n' \"$*\" >> \"$DOCKER_LOG\"\n"
                 "if [ \"$1\" = image ] && [ \"$2\" = inspect ]; then\n"
+                "    if [ \"$3\" = \"$EXPECTED_RUNTIME_IMAGE\" ]; then\n"
+                "        case \"$5\" in\n"
+                "            '{{.Id}}') printf '%s\\n' \"$EXPECTED_RUNTIME_DIGEST\" ;;\n"
+                "            *hermes.commit*) printf '%s\\n' \"$EXPECTED_HERMES\" ;;\n"
+                "            *hermes.remote*) printf '%s\\n' 'https://github.com/uxheavy/hermes-agent.git' ;;\n"
+                "            *runtime.revision*) printf '%s\\n' \"$EXPECTED_RUNTIME_REVISION\" ;;\n"
+                "            *runtime.source.sha256*) printf '%s\\n' \"$EXPECTED_RUNTIME_SOURCE_DIGEST\" ;;\n"
+                "            *runtime.contract*) printf '%s\\n' 'plane.agent-runtime/v1' ;;\n"
+                "        esac\n"
+                "    else\n"
                 "    case \"$5\" in\n"
                 "        '{{.Id}}') printf '%s\\n' \"$EXPECTED_API_DIGEST\" ;;\n"
                 "        *source.revision*) printf '%s\\n' \"$EXPECTED_API_SOURCE\" ;;\n"
                 "        *contract*) printf '%s\\n' \"$EXPECTED_API_CONTRACT\" ;;\n"
                 "        *artifact*) printf '%s\\n' 'plane-agent-api-g4' ;;\n"
                 "    esac\n"
+                "    fi\n"
                 "    exit 0\n"
                 "fi\n"
                 "case \" $* \" in *\" --network none \"*) exit 42 ;; esac\n"
@@ -283,6 +374,9 @@ class G4ContractTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
             ).stdout.strip()
+            disposable_manifest["pins"]["apiArtifact"]["sourceRevision"] = candidate
+            disposable_manifest["pins"]["runtimeImageRevision"] = candidate
+            disposable_path.write_text(json.dumps(disposable_manifest), encoding="utf-8")
             fake_git.write_text(
                 "#!/bin/sh\n"
                 f"if [ \"$1\" = rev-parse ] && [ \"$2\" = HEAD ]; then printf '%s\\n' '{candidate}'; else exit 1; fi\n",
@@ -305,9 +399,15 @@ class G4ContractTests(unittest.TestCase):
                 environment = {
                     "PATH": f"{fake_bin}:{os.environ['PATH']}",
                     "DOCKER_LOG": str(docker_log),
+                    "EXPECTED_API_IMAGE": manifest["pins"]["apiArtifact"]["imageTag"],
                     "EXPECTED_API_DIGEST": manifest["pins"]["apiArtifact"]["imageDigest"],
                     "EXPECTED_API_SOURCE": manifest["pins"]["apiArtifact"]["sourceRevision"],
                     "EXPECTED_API_CONTRACT": manifest["pins"]["apiArtifact"]["contract"],
+                    "EXPECTED_RUNTIME_IMAGE": manifest["pins"]["runtimeImageTag"],
+                    "EXPECTED_RUNTIME_DIGEST": manifest["pins"]["runtimeImageDigest"],
+                    "EXPECTED_RUNTIME_REVISION": manifest["pins"]["runtimeImageRevision"],
+                    "EXPECTED_RUNTIME_SOURCE_DIGEST": "",
+                    "EXPECTED_HERMES": manifest["pins"]["hermesCommit"],
                     "PLANE_G4_EXPECTED_CANDIDATE": candidate,
                     "PLANE_G4_LIVE_AUTHORITY": str(authority_path),
                     "PLANE_G4_LIVE_CONFIG": str(config_path),
@@ -496,12 +596,23 @@ class G4ContractTests(unittest.TestCase):
                 "#!/bin/sh\n"
                 "printf '%s\\n' \"$*\" >> \"$DOCKER_LOG\"\n"
                 "if [ \"$1\" = image ] && [ \"$2\" = inspect ]; then\n"
+                "    if [ \"$3\" = '" + MANIFEST["pins"]["runtimeImageTag"] + "' ]; then\n"
+                "        case \"$5\" in\n"
+                f"            '{{{{.Id}}}}') printf '%s\\n' '{MANIFEST['pins']['runtimeImageDigest']}' ;;\n"
+                f"            *hermes.commit*) printf '%s\\n' '{MANIFEST['pins']['hermesCommit']}' ;;\n"
+                "            *hermes.remote*) printf '%s\\n' 'https://github.com/uxheavy/hermes-agent.git' ;;\n"
+                f"            *runtime.revision*) printf '%s\\n' '{MANIFEST['pins']['runtimeImageRevision']}' ;;\n"
+                "            *runtime.source.sha256*) printf '%s\\n' '' ;;\n"
+                "            *runtime.contract*) printf '%s\\n' 'plane.agent-runtime/v1' ;;\n"
+                "        esac\n"
+                "    else\n"
                 "    case \"$5\" in\n"
                 f"        '{{{{.Id}}}}') printf '%s\\n' '{MANIFEST['pins']['apiArtifact']['imageDigest']}' ;;\n"
                 f"        *source.revision*) printf '%s\\n' '{MANIFEST['pins']['apiArtifact']['sourceRevision']}' ;;\n"
                 f"        *contract*) printf '%s\\n' '{MANIFEST['pins']['apiArtifact']['contract']}' ;;\n"
                 "        *artifact*) printf '%s\\n' 'plane-agent-api-g4' ;;\n"
                 "    esac\n"
+                "    fi\n"
                 "    exit 0\n"
                 "fi\n"
                 "case \" $* \" in *\" --network none \"*) exit 42 ;; esac\n"

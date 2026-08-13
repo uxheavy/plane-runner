@@ -3,11 +3,13 @@
 # exact commit below; no application source is mounted at runtime.
 ARG HERMES_COMMIT
 ARG PLANE_REVISION
+ARG PLANE_RUNTIME_SOURCE_SHA256
 FROM company-runner-upstream-runtime:a8e53b6ac7b8@sha256:4c0d9f4dee14a4b2f59bc997baf557066f4394c4adcb285905aaa5838ed5ad39 AS runtime_base
 
 FROM scratch
 ARG HERMES_COMMIT
 ARG PLANE_REVISION
+ARG PLANE_RUNTIME_SOURCE_SHA256
 COPY --from=runtime_base / /
 WORKDIR /opt/hermes
 ENV LANG=C.UTF-8
@@ -31,6 +33,7 @@ LABEL org.opencontainers.image.title="Plane Agent runtime" \
       org.uxheavy.plane.hermes.commit="$HERMES_COMMIT" \
       org.uxheavy.plane.hermes.remote="https://github.com/uxheavy/hermes-agent.git" \
       org.uxheavy.plane.runtime.revision="$PLANE_REVISION" \
+      org.uxheavy.plane.runtime.source.sha256="$PLANE_RUNTIME_SOURCE_SHA256" \
       org.uxheavy.plane.runtime.contract="plane.agent-runtime/v1"
 
 ENTRYPOINT ["python3", "-m", "plane_runtime.g1_runtime_image.bootstrap", "--once", "--g1-production"]

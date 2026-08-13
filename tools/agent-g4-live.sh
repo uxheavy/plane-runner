@@ -85,6 +85,7 @@ RUNTIME_IMAGE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))
 G4_RUNTIME_IMAGE_DIGEST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["runtimeImageDigest"])' "${MANIFEST}")"
 G4_RUNTIME_IMAGE_REVISION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["runtimeImageRevision"])' "${MANIFEST}")"
 G4_RUNTIME_CONTRACT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["runtimeContract"])' "${MANIFEST}")"
+G4_RUNTIME_SOURCE_DIGEST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("disposableBinding", {}).get("runtimeSourceDigest", ""))' "${MANIFEST}")"
 G4_API_IMAGE_TAG="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["apiArtifact"]["imageTag"])' "${MANIFEST}")"
 G4_API_IMAGE_DIGEST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["apiArtifact"]["imageDigest"])' "${MANIFEST}")"
 G4_API_SOURCE_REVISION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["apiArtifact"]["sourceRevision"])' "${MANIFEST}")"
@@ -131,6 +132,27 @@ api_artifact_label="$(docker image inspect "${API_IMAGE}" --format '{{index .Con
     printf '%s\n' 'event=agent.g4.live-runner status=failed expected=api-image-source-contract-artifact-labels-bound actual=label-mismatch suggestion=use-the-exact-immutable-api-artifact' >&2
     exit 2
 }
+runtime_image_id="$(docker image inspect "${RUNTIME_IMAGE}" --format '{{.Id}}' 2>/dev/null)" || {
+    printf '%s\n' 'event=agent.g4.live-runner status=failed expected=manifest-bound-runtime-image-available actual=image-unavailable suggestion=build-the-selected-runtime-artifact-from-the-same-candidate' >&2
+    exit 2
+}
+[[ "${runtime_image_id}" == "${G4_RUNTIME_IMAGE_DIGEST}" ]] || {
+    printf '%s\n' "event=agent.g4.live-runner status=failed expected=runtime-image-digest=${G4_RUNTIME_IMAGE_DIGEST} actual=${runtime_image_id} suggestion=use-the-manifest-bound-runtime-artifact" >&2
+    exit 2
+}
+runtime_hermes_label="$(docker image inspect "${RUNTIME_IMAGE}" --format '{{index .Config.Labels "org.uxheavy.plane.hermes.commit"}}')"
+runtime_hermes_remote_label="$(docker image inspect "${RUNTIME_IMAGE}" --format '{{index .Config.Labels "org.uxheavy.plane.hermes.remote"}}')"
+runtime_source_label="$(docker image inspect "${RUNTIME_IMAGE}" --format '{{index .Config.Labels "org.uxheavy.plane.runtime.revision"}}')"
+runtime_source_digest_label="$(docker image inspect "${RUNTIME_IMAGE}" --format '{{index .Config.Labels "org.uxheavy.plane.runtime.source.sha256"}}')"
+runtime_contract_label="$(docker image inspect "${RUNTIME_IMAGE}" --format '{{index .Config.Labels "org.uxheavy.plane.runtime.contract"}}')"
+[[ "${runtime_hermes_label}" == "${G4_HERMES}" && "${runtime_hermes_remote_label}" == "https://github.com/uxheavy/hermes-agent.git" && "${runtime_source_label}" == "${G4_RUNTIME_IMAGE_REVISION}" && "${runtime_contract_label}" == "${G4_RUNTIME_CONTRACT}" && "${api_source_label}" == "${runtime_source_label}" ]] || {
+    printf '%s\n' 'event=agent.g4.live-runner status=failed expected=api-runtime-hermes-source-contract-labels-bound actual=label-mismatch suggestion=build-api-and-runtime-from-one-candidate' >&2
+    exit 2
+}
+if [[ -n "${G4_RUNTIME_SOURCE_DIGEST}" && "${runtime_source_digest_label}" != "${G4_RUNTIME_SOURCE_DIGEST}" ]]; then
+    printf '%s\n' 'event=agent.g4.live-runner status=failed expected=runtime-source-hash-bound actual=source-digest-mismatch suggestion=use-the-disposable-runtime-manifest-output' >&2
+    exit 2
+fi
 
 safe_error_class() {
     python3 - "${ERROR_FILE}" <<'PY'

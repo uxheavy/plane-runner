@@ -183,6 +183,60 @@ def exact_binding(manifest: dict[str, Any], candidate: str) -> dict[str, Any]:
     return binding
 
 
+def validate_disposable_artifact_binding(manifest: dict[str, Any], candidate: str) -> None:
+    """Require a disposable manifest to bind API and runtime to one source."""
+
+    value = manifest.get("disposableBinding")
+    if value is None:
+        return
+    binding = _object(value, "manifest_disposableBinding")
+    required = {
+        "mode",
+        "candidateCommit",
+        "apiSourceRevision",
+        "runtimeRevision",
+        "hermesCommit",
+        "hermesRemote",
+        "runtimeSourceDigest",
+        "runtimeFiles",
+    }
+    if set(binding) != required:
+        raise ContractError("manifest_disposableBinding_fields_mismatch")
+    _exact(binding["mode"], "exact-api-runtime-candidate", "manifest_disposableBinding_mode")
+    _exact(binding["candidateCommit"], candidate, "manifest_disposableBinding_candidateCommit")
+    _git_sha(candidate, "manifest_disposableBinding_candidateCommit")
+    _exact(binding["apiSourceRevision"], candidate, "manifest_disposableBinding_apiSourceRevision")
+    _exact(binding["runtimeRevision"], candidate, "manifest_disposableBinding_runtimeRevision")
+    _git_sha(binding["apiSourceRevision"], "manifest_disposableBinding_apiSourceRevision")
+    _git_sha(binding["runtimeRevision"], "manifest_disposableBinding_runtimeRevision")
+
+    pins = _object(_required(manifest, "pins", "manifest"), "manifest_pins")
+    _exact(binding["hermesCommit"], _required(pins, "hermesCommit", "manifest_pins"), "manifest_disposableBinding_hermesCommit")
+    _git_sha(binding["hermesCommit"], "manifest_disposableBinding_hermesCommit")
+    _exact(binding["hermesRemote"], "github.com/uxheavy/hermes-agent", "manifest_disposableBinding_hermesRemote")
+    _hash(binding["runtimeSourceDigest"], "manifest_disposableBinding_runtimeSourceDigest")
+
+    files = _object(binding["runtimeFiles"], "manifest_disposableBinding_runtimeFiles")
+    if not files:
+        raise ContractError("manifest_disposableBinding_runtimeFiles_empty")
+    for relative, digest in files.items():
+        if (
+            not isinstance(relative, str)
+            or not relative.startswith("apps/api/plane/agent/runtime/")
+            or relative.endswith((".pyc", ".pyo"))
+            or "/__pycache__/" in relative
+        ):
+            raise ContractError("manifest_disposableBinding_runtimeFile_path_invalid")
+        _hash(digest, "manifest_disposableBinding_runtimeFile_sha256")
+    calculated = hashlib.sha256(json.dumps(files, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    _exact(calculated, binding["runtimeSourceDigest"], "manifest_disposableBinding_runtimeSourceDigest")
+
+    expected = exact_binding(manifest, candidate)
+    _exact(expected["runtimeImageRevision"], candidate, "manifest_disposableBinding_pin_runtimeRevision")
+    _exact(expected["apiArtifact"]["sourceRevision"], candidate, "manifest_disposableBinding_pin_apiSourceRevision")
+    _exact(expected["hermesCommit"], binding["hermesCommit"], "manifest_disposableBinding_pin_hermesCommit")
+
+
 def validate_api_artifact_descriptor(actual: dict[str, Any], expected: dict[str, Any]) -> None:
     """Fail closed when a selected API image is not the manifest-bound artifact."""
 
@@ -573,6 +627,7 @@ def validate_authority(
     _bool(authority, "fallbackAllowed", "authority", False)
     binding = _object(_required(authority, "binding", "authority"), "authority_binding")
     expected = exact_binding(manifest, candidate)
+    validate_disposable_artifact_binding(manifest, candidate)
     for key in BINDING_FIELDS:
         _exact(_required(binding, key, "authority_binding"), expected[key], f"authority_{key}")
     command_hash = hashlib.sha256(command.encode("utf-8")).hexdigest()
