@@ -27,6 +27,7 @@ from plane.agent.runtime import (
     operator_health_readback,
     request_operator_safety_stop,
 )
+from plane.agent.runtime import credentials as runtime_credentials
 from plane.agent.runtime.service import RUNTIME_DISPATCH_PROTOCOL, RuntimeDispatchExecutor, _RuntimeHTTPServer
 
 
@@ -120,6 +121,28 @@ def test_g4_service_and_remote_preserve_unclassified_failure_without_leaking_raw
         thread.join(timeout=2)
 
 
+def test_g4_remote_credential_resolution_failure_is_a_single_classified_pre_dispatch_boundary(tmp_path):
+    def unavailable(_credential_ref):
+        raise RuntimeCredentialError("provider credential source is unavailable")
+
+    broker = RuntimeCredentialBroker(unavailable)
+    snapshot_json, invocation_json = _dispatch_body("credential-failure")
+    transport = RemoteRuntimeTransport(
+        runtime_url="http://127.0.0.1:1",
+        shared_secret="s" * 40,
+        credential_broker=broker,
+    )
+
+    with pytest.raises(RuntimeDispatchError) as raised:
+        transport.dispatch(snapshot_json, invocation_json)
+
+    error = raised.value
+    assert error.has_allowlisted_failure is True
+    assert error.failure_code == "runtime_configuration_pre_dispatch_failure"
+    assert error.failure_phase == "runtime_configuration"
+    assert error.failure_detail == "dispatch_rejected"
+
+
 def test_g4_runtime_dispatch_is_cross_process_and_revokes_invocation_credentials(tmp_path):
     configuration = _configuration(tmp_path)
     controller = RuntimeSafetyController(configured=True, stop_file=tmp_path / "safety-stop")
@@ -144,6 +167,69 @@ def test_g4_runtime_dispatch_is_cross_process_and_revokes_invocation_credentials
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def test_g4_provider_dispatch_crosses_runtime_boundary_before_provider_request(tmp_path, monkeypatch):
+    source = tmp_path / "provider-source"
+    source.write_text(
+        json.dumps(
+            {
+                "OPENAI_API_KEY": None,
+                "last_refresh": "2026-08-13T00:00:00Z",
+                "tokens": {
+                    "access_token": "synthetic-access-token",
+                    "account_id": "synthetic-account-id",
+                    "id_token": "synthetic-id-token",
+                    "refresh_token": "synthetic-refresh-token",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runtime_credentials, "DEPLOYMENT_CREDENTIAL_SOURCE_PATH", str(source))
+    credentials = runtime_credentials.resolve_deployment_credential("runtime")
+    assert credentials == {"api_key": "synthetic-access-token"}
+    assert set(credentials) == {"api_key"}
+
+    environment = _runtime_environment(
+        tmp_path,
+        'import sys\nsys.stdin.buffer.read()\nprint(\'{"protocol":"fixture","boundary":"child-started"}\')\n',
+    )
+    environment.update(
+        {
+            "PLANE_AGENT_RUNTIME_PROVIDER": "openai-codex",
+            "PLANE_AGENT_RUNTIME_PROVIDER_HOST": "chatgpt.com",
+            "PLANE_AGENT_RUNTIME_PROVIDER_PATH": "/backend-api/codex/responses",
+            "PLANE_AGENT_RUNTIME_PROVIDER_MODELS": "gpt-5.6-luna",
+            "PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE": str(tmp_path / "credential-state.json"),
+        }
+    )
+    configuration = AgentRuntimeConfiguration.from_environment(environment)
+    controller = RuntimeSafetyController(configured=True, stop_file=tmp_path / "safety-stop")
+    controller.mark_ready()
+    executor = RuntimeDispatchExecutor(configuration, controller)
+    server = _RuntimeHTTPServer(("127.0.0.1", 0), controller, configuration, executor=executor)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    snapshot_json, invocation_json = _dispatch_body("provider-boundary")
+    snapshot = json.loads(snapshot_json)
+    snapshot["runtimePolicy"] = {"model": {"provider": "openai-codex", "model": "gpt-5.6-luna"}}
+    snapshot_json = json.dumps(snapshot, sort_keys=True, separators=(",", ":"))
+    try:
+        frames = RemoteRuntimeTransport(
+            runtime_url=f"http://127.0.0.1:{server.server_port}",
+            shared_secret=configuration.shared_secret,
+            credential_broker=RuntimeCredentialBroker({"runtime": credentials}),
+            host_endpoint_factory=lambda _invocation_id: nullcontext(
+                RuntimeHostEndpoint(url="http://127.0.0.1:1", token="host-token")
+            ),
+        ).dispatch(snapshot_json, invocation_json)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    assert frames == ('{"protocol":"fixture","boundary":"child-started"}',)
 
 
 def test_g4_remote_dispatch_preserves_success_after_expired_lease_cleanup(tmp_path, monkeypatch):

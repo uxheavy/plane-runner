@@ -138,16 +138,25 @@ class GenericExceptionRuntimeTransport:
 
 
 class KnownDispatchFailureTransport:
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        failure_code="runtime_process_failed",
+        failure_phase="launcher",
+        failure_detail="bootstrap_argv_rejected",
+    ):
         self.calls = 0
+        self.failure_code = failure_code
+        self.failure_phase = failure_phase
+        self.failure_detail = failure_detail
 
     def dispatch(self, snapshot_json, envelope_json):
         self.calls += 1
         raise RuntimeDispatchError(
             "runtime process did not produce a durable terminal result",
-            failure_code="runtime_process_failed",
-            failure_phase="launcher",
-            failure_detail="bootstrap_argv_rejected",
+            failure_code=self.failure_code,
+            failure_phase=self.failure_phase,
+            failure_detail=self.failure_detail,
         )
 
 
@@ -610,12 +619,23 @@ def test_supervisor_generic_exception_is_outcome_unknown_and_not_replayed(
     assert transport.calls == 1
 
 
+@pytest.mark.parametrize(
+    ("failure_code", "failure_phase", "failure_detail"),
+    (
+        ("runtime_process_failed", "launcher", "bootstrap_argv_rejected"),
+        ("runtime_configuration_pre_dispatch_failure", "runtime_configuration", "dispatch_rejected"),
+    ),
+)
 @pytest.mark.django_db(transaction=True)
 def test_known_pre_dispatch_failure_with_no_upstream_attempt_is_blocked_and_released(
-    workspace, gateway_project, gateway_issue, create_user
+    workspace, gateway_project, gateway_issue, create_user, failure_code, failure_phase, failure_detail
 ):
     run, invocation = _invocation(workspace, gateway_project, gateway_issue, create_user, suffix="pre-dispatch")
-    transport = KnownDispatchFailureTransport()
+    transport = KnownDispatchFailureTransport(
+        failure_code=failure_code,
+        failure_phase=failure_phase,
+        failure_detail=failure_detail,
+    )
 
     first = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
     second = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
@@ -624,7 +644,7 @@ def test_known_pre_dispatch_failure_with_no_upstream_attempt_is_blocked_and_rele
     assert first.state == second.state == InvocationState.BLOCKED
     assert first.terminal_kind == second.terminal_kind == "run_blocker"
     assert control.state == RuntimeControlState.RELEASED
-    assert control.failure_code == "runtime_process_failed"
+    assert control.failure_code == failure_code
     assert control.outcome_unknown_at is None
     assert not RuntimeProviderAttempt.objects.filter(invocation=invocation).exists()
     assert transport.calls == 1

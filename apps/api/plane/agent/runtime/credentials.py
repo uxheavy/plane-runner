@@ -35,7 +35,14 @@ class RuntimeCredentialError(ValueError):
 # The packaged resolver never accepts a caller-selected source path.
 DEPLOYMENT_CREDENTIAL_SOURCE_PATH = "/run/secrets/plane_agent_provider_credentials"
 DEPLOYMENT_CREDENTIAL_ALLOWED_REFS = frozenset({"runtime"})
-_DEPLOYMENT_CREDENTIAL_KEY = "XAI_API_KEY"
+# The deployment source is deliberately provider-neutral.  The legacy xAI
+# spelling remains accepted for existing deployments, while the live
+# ChatGPT route may provide the standard OpenAI key spelling or one opaque
+# single-line token.  The broker still exposes only the canonical api_key
+# value to the trusted runtime parent.
+_DEPLOYMENT_CREDENTIAL_KEYS = frozenset({"API_KEY", "OPENAI_API_KEY", "XAI_API_KEY", "api_key"})
+_CODEX_AUTH_DOCUMENT_KEYS = frozenset({"OPENAI_API_KEY", "last_refresh", "tokens"})
+_CODEX_AUTH_TOKEN_KEYS = frozenset({"access_token", "account_id", "id_token", "refresh_token"})
 _DEPLOYMENT_CREDENTIAL_MAX_BYTES = 64 * 1024
 _DEPLOYMENT_CREDENTIAL_MAX_VALUE_BYTES = 16 * 1024
 _DEPLOYMENT_ENV_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -52,7 +59,7 @@ def _bounded_deployment_secret(value: object) -> str:
 
 
 def _parse_deployment_dotenv(text: str) -> str:
-    found: str | None = None
+    lines: list[str] = []
     for raw_line in text.splitlines():
         if len(raw_line.encode("utf-8")) > _DEPLOYMENT_CREDENTIAL_MAX_VALUE_BYTES:
             raise RuntimeCredentialError("deployment credential source line is oversized")
@@ -61,6 +68,14 @@ def _parse_deployment_dotenv(text: str) -> str:
             continue
         if line.startswith("export "):
             line = line[7:].lstrip()
+        lines.append(line)
+    if len(lines) == 1 and "=" not in lines[0]:
+        if any(char.isspace() for char in lines[0]):
+            raise RuntimeCredentialError("deployment credential source is not valid dotenv")
+        return _bounded_deployment_secret(lines[0])
+
+    found: str | None = None
+    for line in lines:
         if "=" not in line:
             raise RuntimeCredentialError("deployment credential source is not valid dotenv")
         key, value = line.split("=", 1)
@@ -80,7 +95,7 @@ def _parse_deployment_dotenv(text: str) -> str:
             if len(value) < 2 or not value.endswith("'"):
                 raise RuntimeCredentialError("deployment credential source contains an invalid value")
             value = value[1:-1]
-        if key != _DEPLOYMENT_CREDENTIAL_KEY:
+        if key not in _DEPLOYMENT_CREDENTIAL_KEYS:
             continue
         if found is not None:
             raise RuntimeCredentialError("deployment credential source contains a duplicate key")
@@ -88,6 +103,27 @@ def _parse_deployment_dotenv(text: str) -> str:
     if found is None:
         raise RuntimeCredentialError("deployment credential source does not contain the configured provider")
     return found
+
+
+def _parse_codex_auth_document(value: object) -> str:
+    if not isinstance(value, dict) or set(value) != _CODEX_AUTH_DOCUMENT_KEYS:
+        raise RuntimeCredentialError("deployment credential JSON fields are invalid")
+    if value["OPENAI_API_KEY"] is not None:
+        raise RuntimeCredentialError("deployment credential JSON fields are invalid")
+    last_refresh = value["last_refresh"]
+    if not isinstance(last_refresh, str) or not last_refresh.strip():
+        raise RuntimeCredentialError("deployment credential JSON fields are invalid")
+    if len(last_refresh.encode("utf-8")) > _DEPLOYMENT_CREDENTIAL_MAX_VALUE_BYTES:
+        raise RuntimeCredentialError("deployment credential source value is oversized")
+    tokens = value["tokens"]
+    if not isinstance(tokens, dict) or set(tokens) != _CODEX_AUTH_TOKEN_KEYS:
+        raise RuntimeCredentialError("deployment credential JSON fields are invalid")
+    for token_name in _CODEX_AUTH_TOKEN_KEYS:
+        _bounded_deployment_secret(tokens[token_name])
+    # The relay contract accepts only its canonical bearer-token field.  The
+    # Codex refresh, ID, and account fields are validated as part of the known
+    # auth document but never leave the trusted parent.
+    return tokens["access_token"]
 
 
 def _parse_deployment_credential_document(raw: bytes) -> str:
@@ -111,9 +147,14 @@ def _parse_deployment_credential_document(raw: bytes) -> str:
             value = json.loads(stripped, object_pairs_hook=reject_duplicate_keys)
         except (TypeError, ValueError, json.JSONDecodeError) as exc:
             raise RuntimeCredentialError("deployment credential source is not valid JSON") from exc
-        if not isinstance(value, dict) or set(value) != {_DEPLOYMENT_CREDENTIAL_KEY}:
+        if isinstance(value, dict) and set(value) == _CODEX_AUTH_DOCUMENT_KEYS:
+            return _parse_codex_auth_document(value)
+        if not isinstance(value, dict) or len(value) != 1:
             raise RuntimeCredentialError("deployment credential JSON fields are invalid")
-        return _bounded_deployment_secret(value[_DEPLOYMENT_CREDENTIAL_KEY])
+        credential_key, credential_value = next(iter(value.items()))
+        if credential_key not in _DEPLOYMENT_CREDENTIAL_KEYS:
+            raise RuntimeCredentialError("deployment credential JSON fields are invalid")
+        return _bounded_deployment_secret(credential_value)
     return _parse_deployment_dotenv(text)
 
 

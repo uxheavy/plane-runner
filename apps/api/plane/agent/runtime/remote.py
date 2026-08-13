@@ -10,8 +10,8 @@ from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any, Callable, ContextManager, Mapping
 
-from .contracts import RuntimeDispatchError, RuntimeTransport
-from .credentials import RuntimeCredentialBroker
+from .contracts import RUNTIME_CONFIGURATION_PRE_DISPATCH_FAILURE, RuntimeDispatchError, RuntimeTransport
+from .credentials import RuntimeCredentialBroker, RuntimeCredentialError
 
 
 RUNTIME_DISPATCH_PROTOCOL = "plane.agent-runtime/dispatch/v1"
@@ -152,11 +152,19 @@ class RemoteRuntimeTransport(RuntimeTransport):
         credentials: Mapping[str, str] = {}
         try:
             if self._credential_broker is not None:
-                lease, values = self._credential_broker.issue(
-                    agent_ref=actor_ref,
-                    credential_ref=self._credential_ref,
-                    invocation_ref=invocation_id,
-                )
+                try:
+                    lease, values = self._credential_broker.issue(
+                        agent_ref=actor_ref,
+                        credential_ref=self._credential_ref,
+                        invocation_ref=invocation_id,
+                    )
+                except RuntimeCredentialError as exc:
+                    raise RuntimeDispatchError(
+                        "runtime credential lease rejected dispatch",
+                        failure_code=RUNTIME_CONFIGURATION_PRE_DISPATCH_FAILURE,
+                        failure_phase="runtime_configuration",
+                        failure_detail="dispatch_rejected",
+                    ) from exc
                 lease_id = lease.lease_id
                 lease_metadata = lease.public_metadata()
                 credentials = values

@@ -86,13 +86,143 @@ def test_g4_deployment_credential_resolver_is_fixed_path_bounded_and_allowlisted
         runtime_credentials.resolve_deployment_credential("runtime")
 
 
+@pytest.mark.parametrize(
+    "source_value",
+    (
+        "OPENAI_API_KEY=chatgpt-subscription-token\n",
+        "chatgpt-subscription-token\n",
+        '{"api_key":"chatgpt-subscription-token"}',
+    ),
+)
+def test_g4_deployment_credential_resolver_accepts_provider_neutral_chatgpt_sources(
+    monkeypatch, tmp_path, source_value
+):
+    source = tmp_path / "provider-source"
+    monkeypatch.setattr(runtime_credentials, "DEPLOYMENT_CREDENTIAL_SOURCE_PATH", str(source))
+    source.write_text(source_value, encoding="utf-8")
+
+    assert runtime_credentials.resolve_deployment_credential("runtime") == {"api_key": "chatgpt-subscription-token"}
+
+
+def test_g4_deployment_credential_resolver_accepts_exact_codex_auth_document_without_forwarding_unused_tokens(
+    monkeypatch, tmp_path
+):
+    source = tmp_path / "auth.json"
+    source.write_text(
+        json.dumps(
+            {
+                "OPENAI_API_KEY": None,
+                "last_refresh": "2026-08-13T00:00:00Z",
+                "tokens": {
+                    "access_token": "synthetic-access-token",
+                    "account_id": "synthetic-account-id",
+                    "id_token": "synthetic-id-token",
+                    "refresh_token": "synthetic-refresh-token",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runtime_credentials, "DEPLOYMENT_CREDENTIAL_SOURCE_PATH", str(source))
+
+    resolved = runtime_credentials.resolve_deployment_credential("runtime")
+
+    assert resolved == {"api_key": "synthetic-access-token"}
+    assert set(resolved) == {"api_key"}
+    resolved_text = json.dumps(resolved)
+    assert all(
+        unused not in resolved_text
+        for unused in ("synthetic-account-id", "synthetic-id-token", "synthetic-refresh-token")
+    )
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    (
+        lambda document: document["tokens"].pop("access_token"),
+        lambda document: document["tokens"].update(access_token=None),
+        lambda document: document["tokens"].update(account_id=None),
+        lambda document: document["tokens"].update(extra="ambiguous-token"),
+        lambda document: document.update(api_key="ambiguous-token"),
+        lambda document: document.update(OPENAI_API_KEY="ambiguous-token"),
+        lambda document: document.update(last_refresh=None),
+    ),
+    ids=(
+        "missing-access-token",
+        "null-access-token",
+        "null-account-id",
+        "extra-token",
+        "extra-top-level",
+        "non-null-openai-key",
+        "null-refresh-time",
+    ),
+)
+def test_g4_deployment_credential_resolver_rejects_malformed_ambiguous_or_null_codex_auth_documents(
+    monkeypatch, tmp_path, mutate
+):
+    source = tmp_path / "auth.json"
+    document = {
+        "OPENAI_API_KEY": None,
+        "last_refresh": "2026-08-13T00:00:00Z",
+        "tokens": {
+            "access_token": "synthetic-access-token",
+            "account_id": "synthetic-account-id",
+            "id_token": "synthetic-id-token",
+            "refresh_token": "synthetic-refresh-token",
+        },
+    }
+    mutate(document)
+    source.write_text(json.dumps(document), encoding="utf-8")
+    monkeypatch.setattr(runtime_credentials, "DEPLOYMENT_CREDENTIAL_SOURCE_PATH", str(source))
+
+    with pytest.raises(RuntimeCredentialError):
+        runtime_credentials.resolve_deployment_credential("runtime")
+
+
+def test_g4_deployment_credential_resolver_rejects_malformed_duplicate_and_oversized_codex_auth_documents(
+    monkeypatch, tmp_path
+):
+    source = tmp_path / "auth.json"
+    monkeypatch.setattr(runtime_credentials, "DEPLOYMENT_CREDENTIAL_SOURCE_PATH", str(source))
+    source.write_text('{"OPENAI_API_KEY":null,"last_refresh":"2026-08-13T00:00:00Z",', encoding="utf-8")
+    with pytest.raises(RuntimeCredentialError, match="valid JSON"):
+        runtime_credentials.resolve_deployment_credential("runtime")
+
+    source.write_text(
+        '{"OPENAI_API_KEY":null,"last_refresh":"2026-08-13T00:00:00Z",'
+        '"tokens":{"access_token":"first","access_token":"second",'
+        '"account_id":"account","id_token":"id","refresh_token":"refresh"}}',
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeCredentialError, match="valid JSON"):
+        runtime_credentials.resolve_deployment_credential("runtime")
+
+    source.write_text(
+        json.dumps(
+            {
+                "OPENAI_API_KEY": None,
+                "last_refresh": "2026-08-13T00:00:00Z",
+                "tokens": {
+                    "access_token": "x" * (runtime_credentials._DEPLOYMENT_CREDENTIAL_MAX_VALUE_BYTES + 1),
+                    "account_id": "synthetic-account-id",
+                    "id_token": "synthetic-id-token",
+                    "refresh_token": "synthetic-refresh-token",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeCredentialError, match="oversized"):
+        runtime_credentials.resolve_deployment_credential("runtime")
+
+
 def test_g4_deployment_credential_resolver_rejects_oversized_or_malformed_sources(monkeypatch, tmp_path):
     source = tmp_path / "provider.env"
     monkeypatch.setattr(runtime_credentials, "DEPLOYMENT_CREDENTIAL_SOURCE_PATH", str(source))
     source.write_text("XAI_API_KEY=\n", encoding="utf-8")
     with pytest.raises(RuntimeCredentialError):
         runtime_credentials.resolve_deployment_credential("runtime")
-    source.write_text("not-an-assignment\n", encoding="utf-8")
+    source.write_text("not-a-token\nsecond-line\n", encoding="utf-8")
     with pytest.raises(RuntimeCredentialError):
         runtime_credentials.resolve_deployment_credential("runtime")
     source.write_bytes(b"XAI_API_KEY=" + b"x" * (runtime_credentials._DEPLOYMENT_CREDENTIAL_MAX_BYTES + 1))
