@@ -79,3 +79,18 @@
 - Cleanup: clean; temporary API image removed
 - Next: Luna traces and root-fixes the broker/lease/resolver configuration
   boundary, then Maya runs one fresh S00 Wave 0F
+
+## Wave 0F — accepted credential, rejected runtime lease
+
+- Status: dirty — UT-006
+- Candidate: `5a1e5bfa93eb971fa4138aa8b9b94a7d61a63a90`
+- UT-005: closed; current resolver accepts the real Codex document and rejects
+  ambiguous input with a redacted classified error
+- Plane lifecycle reached: one actor, profile, assignment, run, invocation, and
+  lifecycle `run_blocker`
+- Failure: the downstream live runtime lease/configuration handoff still returns
+  `runtime_configuration_pre_dispatch_failure / dispatch_rejected`
+- Provider attempts and requested product operations: zero
+- Cleanup: clean; temporary API image removed
+- Next: Luna root-fixes the established supervisor/broker/relay lease boundary,
+  then Maya runs one fresh S00 Wave 0G

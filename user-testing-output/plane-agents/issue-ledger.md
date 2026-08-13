@@ -8,7 +8,8 @@ Severity: `blocker`, `friction`, `annoyance`, `positive`.
 | UT-002 | blocker  | Maya / S00     | `waves/wave-0-provider-smoke.md` | Resolver accepted only legacy XAI material and reduced credential failure to an unclassified transport exception.                | `5872cf9664ae0266e661454601d56ade5fab9579` | Wave 0C classified boundary   | closed |
 | UT-003 | blocker  | Maya / S00     | `waves/wave-0-provider-smoke.md` | G4 API artifact copied fixed source to `/workspace/apps/api`, but the resolver imported stale prepared-base source from `/code`. | `1793f338342b93f8a1655f5131aab461d2b68b65` | Wave 0D module paths passed   | closed |
 | UT-004 | blocker  | Maya / S00     | `waves/wave-0-provider-smoke.md` | Candidate API artifact did not install `plane-agent-runtime-credential-resolver` at its configured `/usr/local/bin` path.        | `642f3eebb4755a7b203f235cd9261b26d18a57ab` | Wave 0E artifact proof passed | closed |
-| UT-005 | blocker  | Maya / S00     | `waves/wave-0-provider-smoke.md` | Real broker/lease/resolver invocation configuration rejects before provider dispatch despite a proven candidate resolver image.  | Luna live credential-handoff root-fix task | S00 Wave 0F                   | open   |
+| UT-005 | blocker  | Maya / S00     | `waves/wave-0-provider-smoke.md` | Resolver required a legacy nullable top-level field instead of accepting the current Codex document shape directly.              | `bf39565d365b01d5ee399faa3dda3a9c938f353f` | Wave 0F resolver proof passed | closed |
+| UT-006 | blocker  | Maya / S00     | `waves/wave-0-provider-smoke.md` | Live supervisor-to-runtime credential lease is rejected after the candidate resolver and real document predicates pass.          | Luna runtime lease-binding root-fix task   | S00 Wave 0G                   | open   |
 
 An issue is closed only after the same persona retests the real journey and the
 affected route-map cells are clean. Test-only failures without user-visible or

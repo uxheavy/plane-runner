@@ -164,3 +164,37 @@ and no outcome or explicit publication occurred. Plane recorded one visible
 step. Cleanup removed the disposable image, checkout, authority/config,
 synthetic auth, containers, networks, and volumes while preserving the prepared
 base and pinned runtime image. No broad G3/G4, G5, rollout, or deployment ran.
+
+## Wave 0F — accepted credential, rejected runtime lease
+
+Status: dirty at the supervisor-to-runtime credential-lease boundary. No replay
+was attempted.
+
+- Product source: `5a1e5bfa93eb971fa4138aa8b9b94a7d61a63a90`.
+- Temporary API image digest: `sha256:d44d7eee9430c48820305af5934f9330f5bebc4fac60c489ebf28127f9e17cf2`.
+- Runtime/Hermes remained pinned and unchanged.
+- Fresh authority: `s00-live-20260813T112930Z-wave0f`; GPT-5.6 Luna through the ChatGPT subscription route; fallback disabled.
+
+Network-disabled proof confirmed candidate module provenance, resolver
+permissions and byte identity, current Codex document acceptance with exactly
+the `api_key` result key, and classified rejection of an unexpected shape. The
+real document also satisfied every sanitized key, type, size, and control-byte
+predicate; no value was printed.
+
+The one fresh live invocation then stopped at:
+
+```text
+status=failed reasonCode=runtime_configuration_pre_dispatch_failure reasonPhase=runtime_configuration reasonDetail=dispatch_rejected
+runRef=51351a1f-b409-47ea-8f31-cb293666a8eb runState=blocked
+invocationRef=d3ed113b-d01c-4bfa-8253-7f1987f8a224 invocationState=blocked
+providerAttempts=[] terminal={present:true,kind=run_blocker}
+```
+
+One actor, profile, assignment, run, and invocation were created. The candidate
+resolver/parser and source shape are proven; the next defect is downstream in
+the live supervisor, broker, relay, lease binding, or pinned runtime
+configuration. Provider attempts, gateway operations, outcome submissions, and
+publications were zero. Plane recorded one lifecycle `run_blocker`. Replay was
+not attempted because the run did not succeed. Cleanup removed every disposable
+artifact and Docker resource while preserving the prepared base and pinned
+runtime image. No broad G3/G4, G5, rollout, or deployment ran.
