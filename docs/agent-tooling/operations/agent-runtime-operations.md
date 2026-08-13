@@ -327,31 +327,31 @@ docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose
 
 `apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` is the pin
 manifest. The current Plane deployable service candidate is the exact
-runtime-contract source correction `99b8ba8e62a1e2311a7a0c145045c20d314f40c3` and
-the cleanup-lifecycle source correction `79995597f9b45e137ca2cdbd48756150bdf65478`.
+source correction `04a93d8863c532d41f4eaa08eaadf4fbe187a027`, a direct child of
+accepted wrapper `4a6d017530fc613a8cc22ec2730b4202569cc693`; the final candidate
+is exactly one metadata wrapper child of that source.
 Sol Medium's P1 rejection of wrapper
 `d42161bb29bf28f04246b96051cee3a88dcccd36` is closed by the existing Hermes
 adapter owner at commit `d2e655101f263329359e7d0de9d0b856202a3e4b`, a direct
 child of pinned Hermes `114eabf9d807b659e36d767e4de46ca056297ccb`. The
-current Plane source commit is `79995597f9b45e137ca2cdbd48756150bdf65478`.
-The P1 metadata wrapper is `de2a7b98dd26b65f6816f615fcfaa0060331dc31`; the
-P2 metadata wrapper is its exact single child. The current API artifact
+current Plane source commit is `04a93d8863c532d41f4eaa08eaadf4fbe187a027`.
+The final candidate is exactly one metadata wrapper child of that source. The current API artifact
 remains immutable and source-bound to
-`79995597f9b45e137ca2cdbd48756150bdf65478`; the previously accepted G3
+`04a93d8863c532d41f4eaa08eaadf4fbe187a027`; the previously accepted G3
 candidate is Plane commit `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
 The current binding carries Hermes commit
 `d2e655101f263329359e7d0de9d0b856202a3e4b`, MCP gitlink
 `2dc152e136d7ad952b901e5fe9364a37487297ba`, SDK gitlink
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`, runtime image tag
-`plane-agent-runtime:hermes-d2e65510-g4-cleanup-fix`, runtime image digest
-`sha256:28dd20b99e322ad30445715b70607bfaa453635e9df472e37b595f4b84b4e895`,
-runtime revision/source revision `79995597f9b45e137ca2cdbd48756150bdf65478`, and runtime
+`plane-agent-runtime:hermes-d2e65510-g4-04a93d88`, runtime image digest
+`sha256:ed98eaaf934c855ab3c0b3bfb053a5cbedd11c7f3ea7f57d8810aec241ad4d84`,
+runtime revision/source revision `04a93d8863c532d41f4eaa08eaadf4fbe187a027`, and runtime
 contract `plane.agent-runtime/v1`. The current API artifact is tag
-`plane-agent-api:g4-79995597` with image digest
-`sha256:a64ff214b8159d1adc1ea939d676c74f808bbc2b71ec0ac81816d3d04245111a` and
-source revision/image label `79995597f9b45e137ca2cdbd48756150bdf65478`.
-API image tag: `plane-agent-api:g4-79995597`. API image digest:
-`sha256:a64ff214b8159d1adc1ea939d676c74f808bbc2b71ec0ac81816d3d04245111a`.
+`plane-agent-api:g4-04a93d88` with image digest
+`sha256:46ee3f41400398f93da111d7f793513977c59da2e5cb3bd0f8f7aebacc84f4ec` and
+source revision/image label `04a93d8863c532d41f4eaa08eaadf4fbe187a027`.
+API image tag: `plane-agent-api:g4-04a93d88`. API image digest:
+`sha256:46ee3f41400398f93da111d7f793513977c59da2e5cb3bd0f8f7aebacc84f4ec`.
 API source revision remains the exact source revision/image label above.
 API contract: `plane.operation/v1`.
 The wrapper carries these exact values from the immutable image builds. The
@@ -361,10 +361,10 @@ tests retain XAI and fail-closed mismatch coverage. G3, G4, and the live helper
 execute the image-contained `/workspace/apps/api` tree;
 they do not bind-mount a newer host API source tree. API, worker,
 `beat-worker`, supervisor, and `agent-runtime` each use the corresponding
-current artifact revision and image digest in the manifest. The Plane service revision above is the current executable artifact revision; the runtime image/runtimeRevision source is `79995597f9b45e137ca2cdbd48756150bdf65478`. Here,
-`current.planeCommit` identifies the exact P2 metadata-wrapper candidate, while
+current artifact revision and image digest in the manifest. The Plane service revision above is the current executable artifact revision; the runtime image/runtimeRevision source is `04a93d8863c532d41f4eaa08eaadf4fbe187a027`. Here,
+`current.planeCommit` identifies the approved source parent, while the final metadata wrapper is its sole child. The
 the current service artifact revisions identify the immutable executable images
-source-bound to `79995597f9b45e137ca2cdbd48756150bdf65478`; the
+source-bound to `04a93d8863c532d41f4eaa08eaadf4fbe187a027`; the
 `previous` rollback section independently retains the last known-good G3
 service revisions and digests.
 The previous services use immutable image digest
@@ -394,6 +394,20 @@ independent G3 Hermes checkouts as bind-only inputs, while G3 removes only its
 own `.g3-runtime-logs-*` directory after checking the creation flag, namespace,
 real-directory, and non-symlink conditions. Recreate or verify both exact
 Hermes pins before another offline run; never replay a live invocation.
+
+### Retained authorized pre-provider failure
+
+The separately retained explicitly authorized live G4 receipt
+`/private/tmp/plane-g4-live-authorized.r9yP8J/receipt.json` has SHA-256
+`7b6bf435b3e1383dd68840ce6b34dce98c0aab51bfbd35408d96cd476d37e801`. It
+failed at `api-invocation` before any `RuntimeProviderAttempt`: the bounded
+evidence has `providerAttempts=[]`, `provider_requests=0`,
+`live_requests=0`, `credential_mutations=0`, and `G5_actions=0`. Its state is
+blocked with a visible `run_blocker`, and it is not `outcome_unknown`; the
+sanitized failure log SHA-256 is
+`0b91152a213e1540534cda9c74a726896dd7ad971cc89cf248567985437dc50e`. The raw
+exception was intentionally discarded, so this receipt is preserved as
+bounded failure evidence only and is never replayed.
 
 The canonical API artifact build uses `apps/api` as its Docker context because
 `apps/api/Dockerfile.g4` copies that context to `/workspace/apps/api`:
@@ -549,10 +563,13 @@ Set `PLANE_G4_RECEIPT_PATH` to retain the sanitized verifier receipt and its
 `.sha256` sidecar outside disposable cleanup. The receipt contains stage
 result lines and exact source, wrapper, image, Hermes, MCP, SDK, and runtime
 contract pins, but no raw logs, secrets, credentials, or provider payloads.
-The previously blocked live canary receipt remains retained by SHA-256
-`20be555eb93cac98a53ea3c0be1f56d3b6642179b77d9b6acf76ffd23dc76c7a`.
-That attempt is permanently `outcome_unknown`; it requires a fresh explicitly
-authorized run and must not be replayed.
+An older previously blocked live canary receipt remains retained by SHA-256
+`20be555eb93cac98a53ea3c0be1f56d3b6642179b77d9b6acf76ffd23dc76c7a`; that
+historical attempt is permanently `outcome_unknown` and must not be replayed.
+The later authorized pre-provider failure is separately retained by SHA-256
+`7b6bf435b3e1383dd68840ce6b34dce98c0aab51bfbd35408d96cd476d37e801` and is
+not `outcome_unknown` because `providerAttempts=[]` and all action counters
+are zero.
 
 The active line has no dispatch-diagnostic JSON field from donor ADR-0011;
 its equivalent diagnostic ownership is the Plane-owned
