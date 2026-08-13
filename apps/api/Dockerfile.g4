@@ -3,6 +3,8 @@ FROM ${BASE_API_IMAGE}
 
 WORKDIR /workspace/apps/api
 COPY . /workspace/apps/api
+COPY --chown=root:root ./bin/plane-agent-runtime-credential-resolver /usr/local/bin/plane-agent-runtime-credential-resolver
+RUN chmod 755 /usr/local/bin/plane-agent-runtime-credential-resolver
 
 # The prepared base keeps its development source under /code. Make the
 # copied candidate source authoritative for every Python command in this
@@ -36,6 +38,7 @@ import hashlib
 import importlib
 import os
 import re
+import stat
 from pathlib import Path
 
 root = Path("/workspace/apps/api")
@@ -61,6 +64,28 @@ for relative, expected in required.items():
     actual = hashlib.sha256(path.read_bytes()).hexdigest()
     if not re.fullmatch(r"[0-9a-f]{64}", expected) or actual != expected:
         raise SystemExit(f"source hash mismatch: {relative}")
+
+resolver_source = root / "bin/plane-agent-runtime-credential-resolver"
+installed_resolver = Path("/usr/local/bin/plane-agent-runtime-credential-resolver")
+if not resolver_source.is_file():
+    raise SystemExit("candidate credential resolver source is missing")
+try:
+    resolver_source_stat = resolver_source.lstat()
+    installed_resolver_stat = installed_resolver.lstat()
+except FileNotFoundError as exc:
+    raise SystemExit("installed credential resolver is missing") from exc
+if not stat.S_ISREG(installed_resolver_stat.st_mode):
+    raise SystemExit("installed credential resolver is not a regular file")
+if stat.S_IMODE(installed_resolver_stat.st_mode) != 0o755:
+    raise SystemExit("installed credential resolver mode is not 0755")
+if installed_resolver_stat.st_uid != 0 or installed_resolver_stat.st_gid != 0:
+    raise SystemExit("installed credential resolver is not owned by root:root")
+if not stat.S_ISREG(resolver_source_stat.st_mode):
+    raise SystemExit("candidate credential resolver source is not a regular file")
+source_sha256 = hashlib.sha256(resolver_source.read_bytes()).hexdigest()
+installed_sha256 = hashlib.sha256(installed_resolver.read_bytes()).hexdigest()
+if installed_sha256 != source_sha256:
+    raise SystemExit("installed credential resolver does not match candidate source")
 
 plane_module = importlib.import_module("plane")
 plane_path = Path(plane_module.__file__).resolve()

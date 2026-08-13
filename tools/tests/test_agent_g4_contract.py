@@ -785,6 +785,26 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn('sys.path.insert(0, "/workspace/apps/api")', resolver)
         self.assertNotIn('sys.path.insert(0, "/code")', resolver)
 
+    def test_api_artifact_packages_the_candidate_resolver_at_the_production_path(self):
+        dockerfile = (ROOT / "apps/api/Dockerfile.g4").read_text(encoding="utf-8")
+        resolver = ROOT / "apps/api/bin/plane-agent-runtime-credential-resolver"
+
+        self.assertTrue(resolver.is_file())
+        self.assertTrue(resolver.stat().st_mode & 0o111)
+        copy = (
+            "COPY --chown=root:root ./bin/plane-agent-runtime-credential-resolver "
+            "/usr/local/bin/plane-agent-runtime-credential-resolver"
+        )
+        self.assertIn(copy, dockerfile)
+        self.assertIn("RUN chmod 755 /usr/local/bin/plane-agent-runtime-credential-resolver", dockerfile)
+        self.assertIn('root / "bin/plane-agent-runtime-credential-resolver"', dockerfile)
+        self.assertIn('Path("/usr/local/bin/plane-agent-runtime-credential-resolver")', dockerfile)
+        self.assertIn("installed_resolver.lstat()", dockerfile)
+        self.assertIn("stat.S_IMODE(installed_resolver_stat.st_mode) != 0o755", dockerfile)
+        self.assertIn("installed_resolver_stat.st_uid != 0 or installed_resolver_stat.st_gid != 0", dockerfile)
+        self.assertIn("installed_sha256 != source_sha256", dockerfile)
+        self.assertLess(dockerfile.index(copy), dockerfile.index("RUN PLANE_API_SOURCE_REVISION="))
+
     def test_manifest_api_artifact_passes_actual_gitleaks_and_exact_sha_validation(self):
         manifest_path = TOOLS / "agent-g4-manifest.json"
         manifest_text = manifest_path.read_text(encoding="utf-8")
