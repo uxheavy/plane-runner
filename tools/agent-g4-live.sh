@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -Eeuo pipefail
+umask 077
 
 ROOT_DIR="$(pwd)"
 PROJECT="plane-agent-g4-live-${PPID}-${RANDOM}"
@@ -11,6 +12,7 @@ RUN_DIR="${ROOT_DIR}/tmp/${PROJECT}"
 EVIDENCE_FILE="${RUN_DIR}/evidence.json"
 ERROR_FILE="${RUN_DIR}/sanitized-error.log"
 RUNTIME_SECRET_FILE="${RUN_DIR}/runtime-secret"
+PROVIDER_SECRET_FILE="${RUN_DIR}/provider-credentials"
 LIVE_INVOKE_SOURCE="${ROOT_DIR}/tools/agent-g4-live-invoke.py"
 MANIFEST="${ROOT_DIR}/tools/agent-g4-manifest.json"
 LIVE_AUTHORITY="${PLANE_G4_LIVE_AUTHORITY:?validated live authority path is required}"
@@ -75,10 +77,6 @@ print("\t".join(provider[key] for key in (
 PY
 )"
 PROVIDER_SECRET_SOURCE="${PLANE_G4_PROVIDER_SECRET_SOURCE:?configured provider source is required}"
-[[ -r "${PROVIDER_SECRET_SOURCE}" ]] || {
-    printf '%s\n' 'event=agent.g4.live-runner status=failed expected=provider-source-readable actual=unreadable suggestion=provide-the-authorized-chatgpt-subscription-source' >&2
-    exit 2
-}
 PLANE_TEST_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48), end="")')"
 
 api_image_id="$(docker image inspect "${API_IMAGE}" --format '{{.Id}}' 2>/dev/null)" || {
@@ -141,12 +139,99 @@ cleanup() {
     docker network rm "${EGRESS}" >/dev/null 2>&1 || true
     PLANE_TEST_ENV_FILE="${ROOT_DIR}/apps/api/.env.example" \
         docker compose -p "${PROJECT}" -f "${ROOT_DIR}/docker-compose-test.yml" down -v --remove-orphans >/dev/null 2>&1 || true
+    rm -f -- "${PROVIDER_SECRET_FILE}" || true
     rm -rf -- "${RUN_DIR}"
     exit "${status}"
 }
 trap cleanup EXIT INT TERM
 
-mkdir -p -- "${RUN_DIR}"
+LIVE_PHASE=credential-staging
+mkdir -m 700 -- "${RUN_DIR}" || {
+    printf '%s\n' 'event=agent.g4.live-runner status=failed expected=invocation-run-directory actual=unavailable suggestion=use-the-repository-owned-tmp-root' >&2
+    exit 2
+}
+python3 - "${PROVIDER_SECRET_SOURCE}" "${PROVIDER_SECRET_FILE}" <<'PY' >/dev/null 2>&1 || {
+import os
+import stat
+import sys
+
+MAX_PROVIDER_SECRET_BYTES = 64 * 1024
+source_fd = None
+destination_fd = None
+destination_created = False
+committed = False
+
+try:
+    source_fd = os.open(
+        sys.argv[1],
+        os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW,
+    )
+    source_stat = os.fstat(source_fd)
+    if not stat.S_ISREG(source_stat.st_mode):
+        raise SystemExit(10)
+    if source_stat.st_size > MAX_PROVIDER_SECRET_BYTES:
+        raise SystemExit(11)
+
+    destination_fd = os.open(
+        sys.argv[2],
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW,
+        0o600,
+    )
+    destination_created = True
+    os.fchmod(destination_fd, 0o600)
+
+    copied = 0
+    while copied <= MAX_PROVIDER_SECRET_BYTES:
+        chunk = os.read(source_fd, min(1024 * 1024, MAX_PROVIDER_SECRET_BYTES - copied + 1))
+        if not chunk:
+            break
+        copied += len(chunk)
+        if copied > MAX_PROVIDER_SECRET_BYTES:
+            raise SystemExit(11)
+        view = memoryview(chunk)
+        while view:
+            written = os.write(destination_fd, view)
+            if written <= 0:
+                raise OSError("provider credential copy made no progress")
+            view = view[written:]
+
+    if copied != source_stat.st_size:
+        raise OSError("provider credential changed during copy")
+    if stat.S_IMODE(os.fstat(destination_fd).st_mode) != 0o600:
+        raise OSError("provider credential mode is not owner-only")
+    os.fsync(destination_fd)
+    committed = True
+finally:
+    if destination_fd is not None:
+        os.close(destination_fd)
+    if source_fd is not None:
+        os.close(source_fd)
+    if destination_created and not committed:
+        try:
+            os.unlink(sys.argv[2])
+        except FileNotFoundError:
+            pass
+PY
+    printf '%s\n' 'event=agent.g4.live-runner status=failed expected=regular-bounded-owner-only-provider-source actual=staging-failed suggestion=provide-a-readable-non-symlink-file-at-most-64KiB' >&2
+    exit 2
+}
+
+LIVE_PHASE=credential-bind-preflight
+docker run --rm --network none \
+    --mount type=bind,src="${PROVIDER_SECRET_FILE}",dst=/run/secrets/plane_agent_provider_credentials,readonly \
+    --entrypoint python3 "${API_IMAGE}" -c '
+import os
+import stat
+
+metadata = os.stat("/run/secrets/plane_agent_provider_credentials", follow_symlinks=False)
+if not stat.S_ISREG(metadata.st_mode):
+    raise SystemExit(1)
+if stat.S_IMODE(metadata.st_mode) != 0o600:
+    raise SystemExit(1)
+if metadata.st_size > 64 * 1024:
+    raise SystemExit(1)
+' >/dev/null 2>&1
+
 LIVE_PHASE=compose
 python3 -c 'import secrets; print(secrets.token_urlsafe(48), end="")' >"${RUNTIME_SECRET_FILE}"
 
@@ -260,7 +345,7 @@ test "${runtime_ready}" -eq 1
 LIVE_PHASE=api-invocation
 docker run --rm --network "${NETWORK}" --hostname api --network-alias api \
     --mount type=bind,src="${RUNTIME_SECRET_FILE}",dst=/run/secrets/plane_agent_runtime,readonly \
-    --mount type=bind,src="${PROVIDER_SECRET_SOURCE}",dst=/run/secrets/plane_agent_provider_credentials,readonly \
+    --mount type=bind,src="${PROVIDER_SECRET_FILE}",dst=/run/secrets/plane_agent_provider_credentials,readonly \
     --mount type=bind,src="${LIVE_INVOKE_SOURCE}",dst=/tmp/agent-g4-live-invoke.py,readonly \
     --env DJANGO_SETTINGS_MODULE=plane.settings.production \
     --env PYTHONUNBUFFERED=1 \

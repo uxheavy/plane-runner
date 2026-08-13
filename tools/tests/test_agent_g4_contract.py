@@ -215,6 +215,59 @@ class G4ContractTests(unittest.TestCase):
         self.assertNotIn("api.x.ai", invoke)
         self.assertNotIn("grok-4", invoke)
 
+    def test_live_runner_stages_bounded_owner_only_secret_before_docker_networking(self):
+        runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+        validation = runner.index("validate_agent_g4_live.py")
+        staging = runner.index("LIVE_PHASE=credential-staging")
+        network_create = runner.index("docker network create")
+        api_invocation = runner.index("LIVE_PHASE=api-invocation")
+
+        self.assertLess(validation, staging)
+        self.assertLess(staging, network_create)
+        self.assertLess(staging, api_invocation)
+        self.assertIn('PROVIDER_SECRET_FILE="${RUN_DIR}/provider-credentials"', runner)
+        staging_body = runner[staging : runner.index("LIVE_PHASE=credential-bind-preflight", staging)]
+        self.assertIn("stat.S_ISREG(source_stat.st_mode)", staging_body)
+        self.assertIn("source_stat.st_size > MAX_PROVIDER_SECRET_BYTES", staging_body)
+        self.assertIn("copied > MAX_PROVIDER_SECRET_BYTES", staging_body)
+        self.assertIn("copied != source_stat.st_size", staging_body)
+        self.assertIn("os.O_NOFOLLOW", runner)
+        self.assertIn("os.O_EXCL", runner)
+        self.assertIn("MAX_PROVIDER_SECRET_BYTES = 64 * 1024", runner)
+        self.assertIn("os.fchmod(destination_fd, 0o600)", runner)
+        self.assertIn("os.fsync(destination_fd)", runner)
+        self.assertIn("os.close(destination_fd)", runner)
+        self.assertIn("os.close(source_fd)", runner)
+        self.assertIn('mkdir -m 700 -- "${RUN_DIR}"', runner)
+        self.assertNotIn('--mount type=bind,src="${PROVIDER_SECRET_SOURCE}"', runner)
+        self.assertIn('--mount type=bind,src="${PROVIDER_SECRET_FILE}"', runner)
+
+    def test_live_runner_preflights_staged_secret_with_network_none_without_reading_contents(self):
+        runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+        preflight_start = runner.index("LIVE_PHASE=credential-bind-preflight")
+        compose_start = runner.index("LIVE_PHASE=compose", preflight_start)
+        preflight = runner[preflight_start:compose_start]
+
+        self.assertIn("docker run --rm --network none", preflight)
+        self.assertEqual(preflight.count("docker run --rm --network none"), 1)
+        self.assertIn("follow_symlinks=False", preflight)
+        self.assertIn("stat.S_IMODE(metadata.st_mode) != 0o600", preflight)
+        self.assertIn("metadata.st_size > 64 * 1024", preflight)
+        self.assertNotIn("read(", preflight)
+        self.assertNotIn("cat ", preflight)
+        self.assertNotIn("print(", preflight)
+        self.assertLess(preflight_start, runner.index("docker compose", compose_start))
+
+    def test_live_runner_cleanup_removes_staged_secret_and_exact_invocation_directory(self):
+        runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+        cleanup = runner[runner.index("cleanup()") : runner.index("trap cleanup EXIT INT TERM")]
+
+        self.assertIn('rm -f -- "${PROVIDER_SECRET_FILE}"', cleanup)
+        self.assertIn('rm -rf -- "${RUN_DIR}"', cleanup)
+        self.assertNotIn('rm -rf -- "${ROOT_DIR}"', cleanup)
+        self.assertNotIn('rm -rf -- "${ROOT_DIR}/tmp"', cleanup)
+        self.assertIn("trap cleanup EXIT INT TERM", runner)
+
     def test_provider_descriptor_mismatch_fails_before_provider_counter_or_relay_start(self):
         _, authority, _, _ = fixture()
         provider = authority["binding"]["provider"]

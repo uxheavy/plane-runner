@@ -395,19 +395,18 @@ own `.g3-runtime-logs-*` directory after checking the creation flag, namespace,
 real-directory, and non-symlink conditions. Recreate or verify both exact
 Hermes pins before another offline run; never replay a live invocation.
 
-### Retained authorized pre-provider failure
+### Retained authorized pre-container failure
 
 The separately retained explicitly authorized live G4 receipt
-`/private/tmp/plane-g4-live-authorized.r9yP8J/receipt.json` has SHA-256
-`7b6bf435b3e1383dd68840ce6b34dce98c0aab51bfbd35408d96cd476d37e801`. It
-failed at `api-invocation` before any `RuntimeProviderAttempt`: the bounded
-evidence has `providerAttempts=[]`, `provider_requests=0`,
-`live_requests=0`, `credential_mutations=0`, and `G5_actions=0`. Its state is
-blocked with a visible `run_blocker`, and it is not `outcome_unknown`; the
-sanitized failure log SHA-256 is
-`0b91152a213e1540534cda9c74a726896dd7ad971cc89cf248567985437dc50e`. The raw
-exception was intentionally discarded, so this receipt is preserved as
-bounded failure evidence only and is never replayed.
+`/private/tmp/plane-g4-live-ec777-authorized.8uFekd/receipt.json` has SHA-256
+`2013336c367397263ea1d5fdf41e46dfda5ed449c8f0be39913f5c6d5c727861`. It
+failed at `api-invocation` with Docker exit 125 because the runner directly
+mounted the caller-owned provider source under `/private/tmp`, which was not
+bind-visible to Colima. No Plane run, invocation, or evidence object was
+created. The receipt counters are `provider_requests=0`, `live_requests=0`,
+`credential_mutations=0`, and `G5_actions=0`; cleanup removed zero resources.
+This is bounded pre-container failure evidence, not live acceptance or
+`outcome_unknown`, and it must never be replayed.
 
 The canonical API artifact build uses `apps/api` as its Docker context because
 `apps/api/Dockerfile.g4` copies that context to `/workspace/apps/api`:
@@ -566,10 +565,9 @@ contract pins, but no raw logs, secrets, credentials, or provider payloads.
 An older previously blocked live canary receipt remains retained by SHA-256
 `20be555eb93cac98a53ea3c0be1f56d3b6642179b77d9b6acf76ffd23dc76c7a`; that
 historical attempt is permanently `outcome_unknown` and must not be replayed.
-The later authorized pre-provider failure is separately retained by SHA-256
-`7b6bf435b3e1383dd68840ce6b34dce98c0aab51bfbd35408d96cd476d37e801` and is
-not `outcome_unknown` because `providerAttempts=[]` and all action counters
-are zero.
+The later authorized pre-container failure is separately retained by SHA-256
+`2013336c367397263ea1d5fdf41e46dfda5ed449c8f0be39913f5c6d5c727861` and has
+zero provider/live/credential/G5 action counters.
 
 The active line has no dispatch-diagnostic JSON field from donor ADR-0011;
 its equivalent diagnostic ownership is the Plane-owned
