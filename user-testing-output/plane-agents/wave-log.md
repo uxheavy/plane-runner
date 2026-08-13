@@ -270,3 +270,19 @@
   disposable images and checkout/config artifacts were removed
 - Next: Luna exposes and root-fixes only the API→runtime failure owner with a
   provider-free focused proof, then Maya runs one fresh S00 retest
+
+## Wave 0P — provider-audit propagation retest
+
+- Status: dirty — UT-014 remains open
+- Candidate: `d3fd5a87f2af7a82231fe771d5ce1f0f0c1f3b24`
+- Matched disposable API/runtime artifacts and fresh authority/config validation
+  passed with ChatGPT subscription, `openai-codex/gpt-5.6-luna`, and no fallback
+- One fresh run `c0bf548b-5a80-47f7-b02c-0cd2def8ef43` and invocation
+  `invocation:ba0a1736-fe8c-4f3e-af1b-0b69befe19ec` failed at the same
+  `api-invocation` boundary before any provider-attempt intent
+- The runtime's new `provider_attempt_evidence_rejected` marker did not reach
+  the bounded live receipt; Plane still returned an unspecified `run_failure`
+- No read, denied evaluator operation, outcome, publication, replay, or second
+  provider invocation ran; cleanup was clean
+- Next: fix only the parent/API propagation of the existing structured runtime
+  rejection, prove it provider-free, then Maya runs one fresh S00 retest

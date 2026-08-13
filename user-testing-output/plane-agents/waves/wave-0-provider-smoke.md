@@ -308,6 +308,35 @@ replay, or second provider call ran.
 No broad G3/G4 verifier, unrelated suite, load test, G5, rollout, pilot,
 deployment, source edit, or extra provider call ran.
 
+## Wave 0P — provider-audit propagation retest at d3fd5a87f2
+
+Status: dirty at the first API-invocation boundary. Exactly one fresh approved
+lifecycle ran; no retry or replay ran.
+
+- Candidate: `d3fd5a87f2af7a82231fe771d5ce1f0f0c1f3b24`.
+- API image digest:
+  `sha256:d2293db50cf57d84b65102468a1f8108c76ebb6c3097ce2f360fac63421915f3`.
+- Runtime image digest:
+  `sha256:1d17e782bc7e85dec4bebc3e48d547d661c5cf52fc7389faedca8313c1983682`.
+- Both artifacts were built once from the exact candidate and bound by one
+  disposable manifest. The runtime used the sealed Hermes donor attested as
+  `d2e655101f263329359e7d0de9d0b856202a3e4b`.
+- Fresh authority/config validation passed with ChatGPT subscription,
+  `openai-codex/gpt-5.6-luna`, and fallback disabled.
+- Fresh run `c0bf548b-5a80-47f7-b02c-0cd2def8ef43` failed.
+- Fresh invocation `invocation:ba0a1736-fe8c-4f3e-af1b-0b69befe19ec`
+  failed at `api-invocation` with an unclassified `RuntimeError`.
+- Provider attempts: zero. The runtime's new
+  `provider_attempt_evidence_rejected` marker did not reach the bounded receipt.
+- No permitted read, denied evaluator operation, gateway receipt, outcome,
+  publication, or replay ran. Plane returned one visible `run_failure` marker.
+- Cleanup left zero task-labeled containers, networks, or volumes and removed
+  all disposable images, checkout, manifest, authority/config, and credential
+  staging. The prepared base and sealed donor remain.
+
+No broad G3/G4 verifier, unrelated suite, load test, G5, rollout, pilot,
+deployment, source edit, or extra provider call ran.
+
 ## Wave 0N — S00 live budget retest at 8702d282bc
 
 Status: blocked at `api-invocation`; exactly one fresh approved lifecycle ran,
