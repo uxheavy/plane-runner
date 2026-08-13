@@ -133,3 +133,19 @@
 - Cleanup: zero labeled containers, networks, or credential-state volumes
 - Next: one user-approved real GPT-5.6 Luna Wave 0I lifecycle, then provider-free
   replay proof if the product journey succeeds
+
+## Wave 0I — exact-candidate manifest binding
+
+- Status: dirty — UT-009
+- Candidate: `735f79bb32fe9934a98e01b2772232109d546ec7`
+- Temporary API image: `sha256:47f806e823ad871f472da9d53d814c6c4edbf5611935a2d395880eece36c8d25`
+- Focused resolver, child-environment, diagnostics, shared-state, and cleanup
+  proofs passed
+- The one live command failed in about 0.36 seconds with
+  `authority_apiArtifact_mismatch` before credential read, Plane state, runtime,
+  or provider dispatch; provider attempts remained zero and no replay occurred
+- Root cause: the runner hardcodes its checkout's frozen manifest while the
+  approved authority/config bind the disposable exact-candidate artifact
+- Cleanup: clean; temporary API image and handoff removed, pinned images retained
+- Next: add one validated manifest-path input that preserves the frozen default,
+  then Maya runs one fresh Wave 0J

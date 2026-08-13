@@ -249,3 +249,32 @@ one lifecycle `run_blocker`. No old invocation was replayed. The runner and Maya
 removed the temporary image, checkout, descriptors, containers, networks,
 volumes, and run files; prepared base and pinned runtime images remain. No broad
 G3/G4, G5, rollout, or deployment ran.
+
+## Wave 0I — S00 exact-candidate manifest binding
+
+Status: blocked at the first live authority/configuration boundary. Exactly one
+fresh approved S00 command ran; it exited before credential staging, Plane
+resource creation, runtime startup, or provider dispatch. No retry or replay ran.
+
+- Candidate: `735f79bb32fe9934a98e01b2772232109d546ec7`.
+- Temporary API artifact: `plane-agent-api:g4-735f79-wave0i`, digest
+  `sha256:47f806e823ad871f472da9d53d814c6c4edbf5611935a2d395880eece36c8d25`.
+- Pinned runtime/Hermes remained unchanged at
+  `sha256:6f1c2dc5857d445e13b34f9cc9723ee5c7636c2cfe2ef213c7fc4d972855c1bd`.
+- Network-disabled provenance, minimal-environment resolver, approved child
+  environment, bounded diagnostics, shared revocation topology, and config-only
+  authority validation passed.
+- The live command exited `1` in about `0.36s` with
+  `authority_apiArtifact_mismatch`.
+- Provider attempts: zero. No actor, profile, assignment, run, invocation,
+  gateway receipt, outcome, publication, or terminal product state was created.
+- Root cause: `tools/agent-g4-live.sh` reads the checkout's durable frozen
+  `tools/agent-g4-manifest.json`, while the disposable authority/config were
+  validated against the exact-candidate artifact manifest. The runner exposes
+  no supported way to select that manifest, creating two sources of truth.
+- Cleanup removed the temporary API image and all Wave 0I handoff artifacts;
+  labeled containers, networks, and volumes were zero. Prepared base and pinned
+  runtime images remain.
+
+No broad G3/G4 verifier, unrelated suite, load test, G5, rollout, pilot,
+deployment, or source edit ran.
