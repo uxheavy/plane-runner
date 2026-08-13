@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import threading
+import textwrap
 import time
 from contextlib import nullcontext
+from dataclasses import replace
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -28,6 +32,8 @@ from plane.agent.runtime import (
     request_operator_safety_stop,
 )
 from plane.agent.runtime import credentials as runtime_credentials
+from plane.agent.runtime.provider_egress import ProviderResponse
+from plane.agent.runtime.remote import _structured_rejection
 from plane.agent.runtime.service import RUNTIME_DISPATCH_PROTOCOL, RuntimeDispatchExecutor, _RuntimeHTTPServer
 
 
@@ -119,6 +125,56 @@ def test_g4_service_and_remote_preserve_unclassified_failure_without_leaking_raw
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def test_g4_remote_classifies_pinned_pre_subreason_runtime_rejection_with_safe_subreason():
+    class LegacyRejectionHandler(BaseHTTPRequestHandler):
+        def do_POST(self):  # noqa: N802
+            content_length = int(self.headers["Content-Length"])
+            self.rfile.read(content_length)
+            body = (
+                b'{"error":"runtime_dispatch_failed",'
+                b'"failureCode":"runtime_configuration_pre_dispatch_failure",'
+                b'"failureDetail":"dispatch_rejected",'
+                b'"failurePhase":"runtime_configuration"}'
+            )
+            self.send_response(409)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args):
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), LegacyRejectionHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    snapshot_json, invocation_json = _dispatch_body("legacy-runtime")
+    try:
+        with pytest.raises(RuntimeDispatchError) as raised:
+            RemoteRuntimeTransport(
+                runtime_url=f"http://127.0.0.1:{server.server_port}",
+                shared_secret="s" * 40,
+            ).dispatch(snapshot_json, invocation_json)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    error = raised.value
+    assert error.has_allowlisted_failure is True
+    assert error.public_failure() == {
+        "failureCode": "runtime_configuration_pre_dispatch_failure",
+        "failurePhase": "runtime_configuration",
+        "failureDetail": "dispatch_rejected",
+        "failureSubreason": "runtime_configuration_rejected",
+    }
+    assert "runtime_dispatch_failed" not in json.dumps(error.public_failure(), sort_keys=True)
+
+
+def test_g4_remote_keeps_opaque_legacy_rejection_unclassified():
+    assert _structured_rejection(b'{"error":"runtime_dispatch_failed"}') is None
 
 
 def test_g4_remote_credential_resolution_failure_is_a_single_classified_pre_dispatch_boundary(tmp_path):
@@ -268,6 +324,158 @@ def test_g4_provider_dispatch_crosses_runtime_boundary_before_provider_request(t
         thread.join(timeout=2)
 
     assert frames == ('{"protocol":"fixture","boundary":"child-started"}',)
+
+
+def test_g4_provider_dispatch_reaches_one_fake_provider_attempt_and_cleans_relay(tmp_path, monkeypatch):
+    from plane.agent.runtime.subprocess import RuntimeProcessPolicy, SubprocessRuntimeTransport
+
+    secret = "synthetic-provider-secret"
+    state_file = tmp_path / "credential-state.json"
+    child = textwrap.dedent(
+        """
+        import json
+        import socket
+        import sys
+
+        controls = sys.stdin.buffer.read().splitlines()
+        relay = json.loads(controls[1])["credentials"]
+        request = json.loads(controls[2])
+        assert set(relay) == {"host", "invocationSocket", "path", "provider", "relayToken"}
+        assert "synthetic-provider-secret" not in json.dumps(relay, sort_keys=True)
+        model = request["run"]["runtimePolicy"]["model"]["model"]
+        body = json.dumps(
+            {"model": model, "messages": [{"role": "user", "content": "synthetic"}]},
+            separators=(",", ":"),
+        ).encode()
+        wire = (
+            b"POST /backend-api/codex/responses HTTP/1.1\\r\\n"
+            + b"Host: plane-provider-relay.invalid\\r\\n"
+            + ("Authorization: Bearer " + relay["relayToken"] + "\\r\\n").encode()
+            + b"Content-Type: application/json\\r\\n"
+            + ("Content-Length: " + str(len(body)) + "\\r\\n").encode()
+            + b"X-Request-ID: request:cross-process-fake\\r\\n"
+            + ("X-Plane-Relay-Invocation: " + request["invocation"]["invocationId"] + "\\r\\n").encode()
+            + b"X-Plane-Relay-Provider: openai-codex\\r\\n"
+            + ("X-Plane-Relay-Model: " + model + "\\r\\n").encode()
+            + ("X-Plane-Relay-Run: " + request["run"]["runId"] + "\\r\\n\\r\\n").encode()
+            + body
+        )
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as channel:
+            channel.settimeout(2)
+            channel.connect(relay["invocationSocket"])
+            channel.sendall(wire)
+            response = bytearray()
+            while True:
+                chunk = channel.recv(4096)
+                if not chunk:
+                    break
+                response.extend(chunk)
+        assert b"200 OK" in response
+        print(json.dumps({"protocol": "fixture", "status": "completed"}, separators=(",", ":")))
+        """
+    )
+    environment = _runtime_environment(tmp_path, "print('{}')\n")
+    environment.update(
+        {
+            "PLANE_AGENT_RUNTIME_PROVIDER": "openai-codex",
+            "PLANE_AGENT_RUNTIME_PROVIDER_HOST": "chatgpt.com",
+            "PLANE_AGENT_RUNTIME_PROVIDER_PATH": "/backend-api/codex/responses",
+            "PLANE_AGENT_RUNTIME_PROVIDER_MODELS": "gpt-5.6-luna",
+            "PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE": str(state_file),
+        }
+    )
+    configuration = AgentRuntimeConfiguration.from_environment(environment)
+    controller = RuntimeSafetyController(configured=True, stop_file=tmp_path / "safety-stop")
+    controller.mark_ready()
+    executor = RuntimeDispatchExecutor(configuration, controller)
+    executor._transport = SubprocessRuntimeTransport(
+        command=(sys.executable, "-c", child),
+        environment=dict(os.environ),
+        ledger_path=tmp_path / "dispatch-ledger.sqlite",
+        process_policy=RuntimeProcessPolicy(enforce_kernel_policy=False),
+    )
+    executor.configuration = replace(configuration, command=(sys.executable, "-c", child))
+    fake_attempts = 0
+    relay_paths: list[Path] = []
+
+    def fake_provider(_request, credentials, _is_cancelled):
+        nonlocal fake_attempts
+        assert credentials == {"api_key": secret}
+        fake_attempts += 1
+        return ProviderResponse(
+            status_code=200,
+            headers={"content-type": "text/event-stream"},
+            body_chunks=(b"data: fake-provider\\n\\n",),
+        )
+
+    original_open = executor.open_provider_relay
+
+    def open_with_fake(**kwargs):
+        relay = original_open(upstream=fake_provider, **kwargs)
+        relay_paths.append(Path(relay.descriptor.socket_path))
+        return relay
+
+    executor.open_provider_relay = open_with_fake  # type: ignore[method-assign]
+
+    callback_phases: list[str] = []
+
+    class FixtureHostClient:
+        def __init__(self, *, url: str, auth_token: str):
+            assert url == "http://plane-host.invalid"
+            assert auth_token == "host-token"
+
+        def invoke(self, call):
+            callback_phases.append(call.input["phase"])
+            return PlaneHostResult(
+                request_ref=call.request_ref,
+                correlation_id=call.correlation_id,
+                idempotency_key=call.idempotency_key,
+                status="ok",
+                replayed=False,
+            )
+
+    monkeypatch.setattr("plane.agent.runtime.service.PlaneHostHTTPClient", FixtureHostClient)
+    server = _RuntimeHTTPServer(("127.0.0.1", 0), controller, configuration, executor=executor)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    snapshot_json, invocation_json = _dispatch_body("provider-fake")
+    snapshot = json.loads(snapshot_json)
+    snapshot["runtimePolicy"] = {
+        "model": {"provider": "openai-codex", "model": "gpt-5.6-luna"},
+        "adapter": "openai-compatible",
+        "isolation": "process",
+        "maxEventPayloadBytes": 8192,
+        "maxArtifactBytes": 8192,
+        "maxReceiptBytes": 8192,
+        "maxCodeModeInputBytes": 4096,
+        "maxCodeModeOutputBytes": 4096,
+        "maxCodeModeCalls": 4,
+    }
+    snapshot_json = json.dumps(snapshot, sort_keys=True, separators=(",", ":"))
+    try:
+        frames = RemoteRuntimeTransport(
+            runtime_url=f"http://127.0.0.1:{server.server_port}",
+            shared_secret=configuration.shared_secret,
+            credential_broker=RuntimeCredentialBroker(
+                {"runtime": {"api_key": secret}}, state_file=state_file
+            ),
+            host_endpoint_factory=lambda _invocation_id: nullcontext(
+                RuntimeHostEndpoint(url="http://plane-host.invalid", token="host-token")
+            ),
+        ).dispatch(snapshot_json, invocation_json)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    assert frames == ('{"protocol":"fixture","status":"completed"}',)
+    assert fake_attempts == 1
+    assert callback_phases == ["intent", "started", "completed"]
+    assert secret not in json.dumps(frames, sort_keys=True)
+    assert state_file.exists()
+    assert secret not in state_file.read_text(encoding="utf-8")
+    assert json.loads(state_file.read_text(encoding="utf-8"))["revokedLeases"]
+    assert relay_paths and all(not path.exists() for path in relay_paths)
 
 
 def test_g4_remote_dispatch_preserves_success_after_expired_lease_cleanup(tmp_path, monkeypatch):

@@ -182,11 +182,13 @@ class KnownDispatchFailureTransport:
         failure_code="runtime_process_failed",
         failure_phase="launcher",
         failure_detail="bootstrap_argv_rejected",
+        failure_subreason=None,
     ):
         self.calls = 0
         self.failure_code = failure_code
         self.failure_phase = failure_phase
         self.failure_detail = failure_detail
+        self.failure_subreason = failure_subreason
 
     def dispatch(self, snapshot_json, envelope_json):
         self.calls += 1
@@ -195,6 +197,7 @@ class KnownDispatchFailureTransport:
             failure_code=self.failure_code,
             failure_phase=self.failure_phase,
             failure_detail=self.failure_detail,
+            failure_subreason=self.failure_subreason,
         )
 
 
@@ -684,6 +687,39 @@ def test_known_pre_dispatch_failure_with_no_upstream_attempt_is_blocked_and_rele
     assert control.state == RuntimeControlState.RELEASED
     assert control.failure_code == failure_code
     assert control.outcome_unknown_at is None
+    assert not RuntimeProviderAttempt.objects.filter(invocation=invocation).exists()
+    assert transport.calls == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_supervisor_persists_bounded_pre_dispatch_subreason(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    run, invocation = _invocation(
+        workspace, gateway_project, gateway_issue, create_user, suffix="pre-dispatch-subreason"
+    )
+    transport = KnownDispatchFailureTransport(
+        failure_code="runtime_configuration_pre_dispatch_failure",
+        failure_phase="runtime_configuration",
+        failure_detail="dispatch_rejected",
+        failure_subreason="runtime_configuration_rejected",
+    )
+
+    result = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
+
+    control = RuntimeInvocationControl.objects.get(invocation=invocation)
+    terminal = RunTerminalEvent.objects.get(run=run, visible=True)
+    expected_reason = {
+        "failureCode": "runtime_configuration_pre_dispatch_failure",
+        "failurePhase": "runtime_configuration",
+        "failureDetail": "dispatch_rejected",
+        "failureSubreason": "runtime_configuration_rejected",
+    }
+    assert result.state == InvocationState.BLOCKED
+    assert result.terminal_kind == "run_blocker"
+    assert control.state == RuntimeControlState.RELEASED
+    assert json.loads(control.failure_reason) == expected_reason
+    assert terminal.reason == control.failure_reason
     assert not RuntimeProviderAttempt.objects.filter(invocation=invocation).exists()
     assert transport.calls == 1
 

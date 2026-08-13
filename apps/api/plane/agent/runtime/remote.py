@@ -79,6 +79,19 @@ def _structured_rejection(body: bytes) -> RuntimeDispatchError | None:
         return None
     if _canonical(value, "runtime rejection") != body:
         return None
+    if (
+        failure_subreason is None
+        and fields
+        == {
+            "failureCode": RUNTIME_CONFIGURATION_PRE_DISPATCH_FAILURE,
+            "failurePhase": "runtime_configuration",
+            "failureDetail": "dispatch_rejected",
+        }
+    ):
+        # The pinned runtime service predates failureSubreason propagation.
+        # Its redacted response is still safe to classify at this authenticated
+        # HTTP seam, so the Plane supervisor can persist a bounded reason.
+        failure_subreason = "runtime_configuration_rejected"
     return RuntimeDispatchError(
         "runtime dispatch was rejected",
         failure_code=fields["failureCode"],
@@ -229,7 +242,10 @@ class RemoteRuntimeTransport(RuntimeTransport):
             if len(body) > self._max_response_bytes:
                 raise RuntimeDispatchError("runtime dispatch response exceeds its size bound")
             if response.status != 200:
-                raise _structured_rejection(body) or RuntimeDispatchError("runtime dispatch was rejected")
+                raise (
+                    _structured_rejection(body)
+                    or RuntimeDispatchError("runtime dispatch was rejected")
+                )
             return body
         except RuntimeDispatchError:
             raise

@@ -575,7 +575,30 @@ class G4ContractTests(unittest.TestCase):
                 "reasonCode": "runtime_process_failed",
                 "reasonPhase": "launcher",
                 "reasonDetail": "unavailable",
+                "reasonSubreason": "unavailable",
             },
+        )
+        with_subreason = namespace["build_failure_evidence"](
+            binding={},
+            failure_phase="api-invocation",
+            error_class="CommandError",
+            exit_code=1,
+            run_id="run:bounded-subreason",
+            run_state="blocked",
+            invocation_id="invocation:bounded-subreason",
+            invocation_state="blocked",
+            provider_attempts=[],
+            terminal_kind="run_blocker",
+            failure_code="runtime_configuration_pre_dispatch_failure",
+            failure_reason=(
+                '{"failureCode":"runtime_configuration_pre_dispatch_failure",'
+                '"failurePhase":"runtime_configuration","failureDetail":"dispatch_rejected",'
+                '"failureSubreason":"runtime_configuration_rejected"}'
+            ),
+        )
+        self.assertEqual(
+            with_subreason["failure"]["reasonSubreason"],
+            "runtime_configuration_rejected",
         )
         malformed = namespace["build_failure_evidence"](
             binding={},
@@ -599,6 +622,7 @@ class G4ContractTests(unittest.TestCase):
         self.assertEqual(malformed["failure"]["reasonCode"], "unspecified")
         self.assertEqual(malformed["failure"]["reasonPhase"], "unavailable")
         self.assertEqual(malformed["failure"]["reasonDetail"], "unavailable")
+        self.assertEqual(malformed["failure"]["reasonSubreason"], "unavailable")
         self.assertNotRegex(
             json.dumps(malformed, sort_keys=True),
             re.compile(r"(?i)(password|secret|token|api[_-]?key|authorization|credential)"),

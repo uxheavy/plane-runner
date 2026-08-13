@@ -192,6 +192,23 @@ def build_failure_evidence(
         "process_output_invalid",
         "unclassified_exception",
     }
+    failure_subreasons = {
+        "credential_reference_not_allowed",
+        "credential_source_unavailable",
+        "credential_source_invalid",
+        "credential_source_oversized",
+        "credential_resolver_failed",
+        "credential_resolver_output_invalid",
+        "credential_lease_binding",
+        "credential_lease_expired",
+        "credential_lease_revoked",
+        "credential_lease_rotated",
+        "credential_lease_metadata_invalid",
+        "credential_state_unavailable",
+        "credential_state_invalid",
+        "provider_attempt_evidence_rejected",
+        "runtime_configuration_rejected",
+    }
 
     def bounded_identifier(value):
         if value is None:
@@ -287,7 +304,10 @@ def build_failure_evidence(
             candidate = json.loads(failure_reason)
         except (TypeError, ValueError):
             candidate = None
-        if isinstance(candidate, dict) and set(candidate) == {"failureCode", "failurePhase", "failureDetail"}:
+        if isinstance(candidate, dict) and set(candidate) in (
+            {"failureCode", "failurePhase", "failureDetail"},
+            {"failureCode", "failurePhase", "failureDetail", "failureSubreason"},
+        ):
             reason = candidate
     reason_code = reason.get("failureCode")
     bounded_failure_code = (
@@ -305,6 +325,12 @@ def build_failure_evidence(
     bounded_failure_detail = (
         reason_detail if isinstance(reason_detail, str) and reason_detail in failure_details else "unavailable"
     )
+    reason_subreason = reason.get("failureSubreason")
+    bounded_failure_subreason = (
+        reason_subreason
+        if isinstance(reason_subreason, str) and reason_subreason in failure_subreasons
+        else "unavailable"
+    )
 
     return {
         "schemaVersion": "plane-agent-g4/live-failure/v1",
@@ -317,6 +343,7 @@ def build_failure_evidence(
             "reasonCode": bounded_failure_code,
             "reasonPhase": bounded_failure_phase,
             "reasonDetail": bounded_failure_detail,
+            "reasonSubreason": bounded_failure_subreason,
         },
         "run": {"present": run_id is not None, "id": bounded_identifier(run_id), "state": bounded_state(run_state)},
         "invocation": {
