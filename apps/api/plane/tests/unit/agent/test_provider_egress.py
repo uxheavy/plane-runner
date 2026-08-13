@@ -58,6 +58,7 @@ def _round_trip(
     invocation_id: str = INVOCATION_ID,
     provider: str = PROVIDER,
     model: str = MODEL,
+    extra_headers: dict[str, str] | None = None,
 ) -> tuple[int, dict[str, str], bytes]:
     body = body or _body(model)
     token = token or server.descriptor.token
@@ -74,6 +75,7 @@ def _round_trip(
         "X-Plane-Relay-Model": model,
         "X-Plane-Relay-Run": RUN_ID,
     }
+    headers.update(extra_headers or {})
     wire = (
         f"{method} {path} HTTP/1.1\r\n"
         + "".join(f"{key}: {value}\r\n" for key, value in headers.items())
@@ -163,6 +165,35 @@ def test_permitted_provider_request_uses_invocation_af_unix_relay_and_streams_wi
     assert credentials == {"api_key": "provider-secret"}
     assert audits[-1].outcome == "allowed"
     assert "provider-secret" not in repr(audits)
+
+
+def test_codex_cache_scope_headers_are_permitted_without_forwarding_credentials(tmp_path):
+    upstream = _FixtureUpstream(
+        ProviderResponse(
+            status_code=200,
+            headers={"content-type": "text/event-stream"},
+            body_chunks=(b"data: ok\n\n",),
+        ),
+        [],
+    )
+    server = _server(tmp_path, upstream=upstream)
+    try:
+        server.start()
+        status, _headers, body = _round_trip(
+            server,
+            request_id="request:codex-cache-scope",
+            extra_headers={
+                "session_id": "invocation:relay",
+                "x-client-request-id": "request:codex-cache-scope",
+            },
+        )
+    finally:
+        server.close()
+
+    assert status == 200
+    assert body == b"data: ok\n\n"
+    assert len(upstream.calls) == 1
+    assert upstream.calls[0][1] == {"api_key": "provider-secret"}
 
 
 def test_provider_attempt_intent_precedes_upstream_and_upstream_failure_is_unknown(tmp_path):

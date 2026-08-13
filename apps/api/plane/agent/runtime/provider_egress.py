@@ -46,7 +46,11 @@ _SAFE_REQUEST_HEADERS = frozenset(
         "cache-control",
         "content-type",
         "connection",
+        # Hermes' Codex transport uses these non-secret request headers for
+        # cache scoping and SDK request correlation.
+        "session_id",
         "user-agent",
+        "x-client-request-id",
     }
 )
 _RELAY_IDENTITY_HEADERS = frozenset(
