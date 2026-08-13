@@ -244,6 +244,56 @@ class G4ContractTests(unittest.TestCase):
         self.assertNotIn('--mount type=bind,src="${PROVIDER_SECRET_SOURCE}"', runner)
         self.assertIn('--mount type=bind,src="${PROVIDER_SECRET_FILE}"', runner)
 
+    def test_live_runner_uses_one_task_owned_shared_credential_state_volume(self):
+        runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+        runtime_start = runner.index("LIVE_PHASE=runtime-start")
+        api_invocation = runner.index("LIVE_PHASE=api-invocation")
+        runtime = runner[runtime_start:api_invocation]
+        api = runner[api_invocation:]
+        cleanup = runner[runner.index("cleanup()") : runner.index("trap cleanup EXIT INT TERM")]
+
+        self.assertIn('CREDENTIAL_STATE_VOLUME="${PROJECT}_agent_runtime_credential_state"', runner)
+        self.assertIn('CREDENTIAL_STATE_TARGET="/run/plane-agent-credentials"', runner)
+        self.assertIn('CREDENTIAL_STATE_FILE="${CREDENTIAL_STATE_TARGET}/revocations.json"', runner)
+        volume_create = runner.index("docker volume create")
+        self.assertLess(volume_create, runtime_start)
+        self.assertIn("--label com.uxheavy.plane.agent-g4-credential-state=true", runner)
+        self.assertIn('--label "com.uxheavy.plane.agent-g4-project=${PROJECT}"', runner)
+
+        shared_mount = (
+            '--mount type=volume,src="${CREDENTIAL_STATE_VOLUME}",'
+            'dst="${CREDENTIAL_STATE_TARGET}",volume-nocopy'
+        )
+        runtime_shared_mount = f"{shared_mount[:-len(',volume-nocopy')]},readonly,volume-nocopy"
+        self.assertIn(runtime_shared_mount, runtime)
+        self.assertIn(shared_mount, api)
+        self.assertEqual(runner.count('src="${CREDENTIAL_STATE_VOLUME}"'), 2)
+        self.assertEqual(runtime.count("--mount type=volume"), 1)
+        self.assertEqual(api.count("--mount type=volume"), 1)
+        self.assertEqual(
+            runner.count('--env PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE="${CREDENTIAL_STATE_FILE}"'),
+            2,
+        )
+        self.assertNotIn("--tmpfs /run/plane-agent-credentials", runtime)
+        self.assertNotIn("PROVIDER_SECRET_FILE", runtime)
+        self.assertNotIn("plane_agent_provider_credentials", runtime)
+        self.assertIn(
+            '--mount type=bind,src="${PROVIDER_SECRET_FILE}",'
+            'dst=/run/secrets/plane_agent_provider_credentials,readonly',
+            api,
+        )
+
+        runtime_remove = cleanup.index('docker rm -f "${RUNTIME}"')
+        volume_remove = cleanup.index('docker volume rm "${CREDENTIAL_STATE_VOLUME}"')
+        compose_down = cleanup.index("docker compose")
+        run_dir_delete = cleanup.index('rm -rf -- "${RUN_DIR}"')
+        self.assertLess(runtime_remove, volume_remove)
+        self.assertLess(compose_down, volume_remove)
+        self.assertLess(volume_remove, run_dir_delete)
+        self.assertIn('if [[ "${CREDENTIAL_STATE_VOLUME_CREATED}" -eq 1 ]]; then', cleanup)
+        self.assertIn('CREDENTIAL_STATE_VOLUME_CREATED=1', runner[volume_create:runtime_start])
+        self.assertEqual(runner.count('docker volume rm "${CREDENTIAL_STATE_VOLUME}"'), 1)
+
     def test_live_runner_creates_missing_tmp_parent_before_pre_provider_boundary(self):
         runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
         staging = runner.index("LIVE_PHASE=credential-staging")

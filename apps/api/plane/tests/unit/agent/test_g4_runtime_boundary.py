@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 import threading
 import urllib.error
 import urllib.request
@@ -354,6 +356,51 @@ def test_g4_runtime_credential_operator_state_invalidates_active_leases_across_p
     now[0] = expiring.expires_at
     with pytest.raises(RuntimeCredentialError, match="expired"):
         broker.resolve(expiring.lease_id, agent_ref="agent-1", invocation_ref="invocation-3")
+
+
+def test_g4_runtime_process_observes_plane_revocation_from_shared_state_file(tmp_path):
+    state_file = tmp_path / "credential-revocations.json"
+    operator = RuntimeCredentialBroker(lambda _ref: {}, clock=lambda: 100.0, state_file=state_file)
+    assert operator.revoke_invocation("invocation-1") == 0
+
+    lease_metadata = {
+        "leaseId": "lease-1",
+        "agentRef": "agent-1",
+        "credentialRef": "provider",
+        "invocationRef": "invocation-1",
+        "generation": 1,
+        "issuedAt": 100.0,
+        "expiresAt": 160.0,
+        "rotationGeneration": 0,
+    }
+    probe = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import json
+import sys
+from plane.agent.runtime import RuntimeCredentialError, validate_credential_lease_metadata
+
+try:
+    validate_credential_lease_metadata(
+        json.loads(sys.argv[2]),
+        invocation_ref="invocation-1",
+        state_file=sys.argv[1],
+        clock=lambda: 100.0,
+    )
+except RuntimeCredentialError as error:
+    raise SystemExit(0 if "revoked" in str(error) else 1)
+raise SystemExit(2)
+""",
+            str(state_file),
+            json.dumps(lease_metadata, sort_keys=True),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert probe.returncode == 0, probe.stderr
 
 
 def test_provider_relay_configuration_and_public_lease_metadata_are_parent_only(tmp_path):

@@ -8,6 +8,9 @@ PROJECT="plane-agent-g4-live-${PPID}-${RANDOM}"
 NETWORK="${PROJECT}_test_env"
 EGRESS="${PROJECT}_egress"
 RUNTIME="${PROJECT}-agent-runtime"
+CREDENTIAL_STATE_VOLUME="${PROJECT}_agent_runtime_credential_state"
+CREDENTIAL_STATE_TARGET="/run/plane-agent-credentials"
+CREDENTIAL_STATE_FILE="${CREDENTIAL_STATE_TARGET}/revocations.json"
 TMP_ROOT="${ROOT_DIR}/tmp"
 RUN_DIR="${TMP_ROOT}/${PROJECT}"
 EVIDENCE_FILE="${RUN_DIR}/evidence.json"
@@ -15,6 +18,7 @@ ERROR_FILE="${RUN_DIR}/sanitized-error.log"
 RUNTIME_SECRET_FILE="${RUN_DIR}/runtime-secret"
 PROVIDER_SECRET_FILE="${RUN_DIR}/provider-credentials"
 RUN_DIR_CREATED=0
+CREDENTIAL_STATE_VOLUME_CREATED=0
 LIVE_INVOKE_SOURCE="${ROOT_DIR}/tools/agent-g4-live-invoke.py"
 MANIFEST="${ROOT_DIR}/tools/agent-g4-manifest.json"
 LIVE_AUTHORITY="${PLANE_G4_LIVE_AUTHORITY:?validated live authority path is required}"
@@ -130,6 +134,7 @@ PY
 
 cleanup() {
     local status=$?
+    local cleanup_status=0
     if [[ "${status}" -ne 0 ]]; then
         printf 'event=agent.g4.live-runner.failure phase=%s error_class=%s exit_code=%s\n' \
             "${LIVE_PHASE}" "$(safe_error_class)" "${status}"
@@ -141,9 +146,19 @@ cleanup() {
     docker network rm "${EGRESS}" >/dev/null 2>&1 || true
     PLANE_TEST_ENV_FILE="${ROOT_DIR}/apps/api/.env.example" \
         docker compose -p "${PROJECT}" -f "${ROOT_DIR}/docker-compose-test.yml" down -v --remove-orphans >/dev/null 2>&1 || true
+    if [[ "${CREDENTIAL_STATE_VOLUME_CREATED}" -eq 1 ]]; then
+        if ! docker volume rm "${CREDENTIAL_STATE_VOLUME}" >/dev/null 2>&1; then
+            printf 'event=agent.g4.live-runner status=failed phase=cleanup expected=credential-state-volume-removed actual=volume-removal-failed\n' >&2
+            cleanup_status=1
+        fi
+        CREDENTIAL_STATE_VOLUME_CREATED=0
+    fi
     if [[ "${RUN_DIR_CREATED}" -eq 1 && -d "${RUN_DIR}" && ! -L "${RUN_DIR}" ]]; then
         rm -f -- "${PROVIDER_SECRET_FILE}" || true
         rm -rf -- "${RUN_DIR}"
+    fi
+    if [[ "${cleanup_status}" -ne 0 && "${status}" -eq 0 ]]; then
+        status=1
     fi
     exit "${status}"
 }
@@ -305,6 +320,17 @@ docker run --rm --network "${NETWORK}" \
     --env AMQP_URL=amqp://plane:plane@test-mq:5672/plane \
     "${API_IMAGE}" python manage.py bootstrap_operation_gateway_audit --phase=after-migrate >/dev/null 2>&1
 
+LIVE_PHASE=credential-state-volume
+if docker volume inspect "${CREDENTIAL_STATE_VOLUME}" >/dev/null 2>&1; then
+    printf '%s\n' 'event=agent.g4.live-runner status=failed expected=new-task-owned-credential-state-volume actual=volume-name-already-exists suggestion=retry-with-a-fresh-live-run' >&2
+    exit 2
+fi
+docker volume create \
+    --label com.uxheavy.plane.agent-g4-credential-state=true \
+    --label "com.uxheavy.plane.agent-g4-project=${PROJECT}" \
+    "${CREDENTIAL_STATE_VOLUME}" >/dev/null
+CREDENTIAL_STATE_VOLUME_CREATED=1
+
 docker network create --driver bridge --label com.uxheavy.plane.agent-g4-runtime=true "${EGRESS}" >/dev/null
 
 LIVE_PHASE=runtime-start
@@ -318,9 +344,9 @@ docker run -d --name "${RUNTIME}" \
     --network "${NETWORK}" \
     --network-alias agent-runtime \
     --mount type=bind,src="${RUNTIME_SECRET_FILE}",dst=/run/secrets/plane_agent_runtime,readonly \
+    --mount type=volume,src="${CREDENTIAL_STATE_VOLUME}",dst="${CREDENTIAL_STATE_TARGET}",readonly,volume-nocopy \
     --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m \
     --tmpfs /run/plane-agent-runtime:rw,noexec,nosuid,nodev,size=1m \
-    --tmpfs /run/plane-agent-credentials:rw,noexec,nosuid,nodev,size=1m \
     --env DJANGO_SETTINGS_MODULE=plane.settings.common \
     --env PLANE_AGENT_RUNTIME_URL=http://agent-runtime:8080 \
     --env PLANE_AGENT_RUNTIME_DISPATCH_PATH=/v1/runtime/dispatch \
@@ -330,7 +356,7 @@ docker run -d --name "${RUNTIME}" \
     --env PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE=/run/plane-agent-runtime/safety-stop \
     --env PLANE_AGENT_RUNTIME_NETWORK_POLICY=none \
     --env PLANE_AGENT_RUNTIME_ENVIRONMENT_JSON={} \
-    --env PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE=/run/plane-agent-credentials/revocations.json \
+    --env PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE="${CREDENTIAL_STATE_FILE}" \
     --env PLANE_AGENT_RUNTIME_PROVIDER="${G4_PROVIDER_NAME}" \
     --env PLANE_AGENT_RUNTIME_PROVIDER_BASE_URL="${G4_PROVIDER_BASE_URL}" \
     --env PLANE_AGENT_RUNTIME_PROVIDER_HOST="${G4_PROVIDER_HOST}" \
@@ -364,6 +390,7 @@ test "${runtime_ready}" -eq 1
 LIVE_PHASE=api-invocation
 docker run --rm --network "${NETWORK}" --hostname api --network-alias api \
     --mount type=bind,src="${RUNTIME_SECRET_FILE}",dst=/run/secrets/plane_agent_runtime,readonly \
+    --mount type=volume,src="${CREDENTIAL_STATE_VOLUME}",dst="${CREDENTIAL_STATE_TARGET}",volume-nocopy \
     --mount type=bind,src="${PROVIDER_SECRET_FILE}",dst=/run/secrets/plane_agent_provider_credentials,readonly \
     --mount type=bind,src="${LIVE_INVOKE_SOURCE}",dst=/tmp/agent-g4-live-invoke.py,readonly \
     --env DJANGO_SETTINGS_MODULE=plane.settings.production \
@@ -389,7 +416,7 @@ docker run --rm --network "${NETWORK}" --hostname api --network-alias api \
     --env PLANE_AGENT_RUNTIME_DISPATCH_PATH=/v1/runtime/dispatch \
     --env PLANE_AGENT_RUNTIME_SECRET_FILE=/run/secrets/plane_agent_runtime \
     --env PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER=command:/usr/local/bin/plane-agent-runtime-credential-resolver \
-    --env PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE=/tmp/g4-live-credential-state.json \
+    --env PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE="${CREDENTIAL_STATE_FILE}" \
     --env PLANE_AGENT_RUNTIME_COMMAND='python3 -m plane_runtime.g1_runtime_image.bootstrap --once --g1-production' \
     --env PLANE_AGENT_RUNTIME_PROVIDER="${G4_PROVIDER_NAME}" \
     --env PLANE_AGENT_RUNTIME_PROVIDER_BASE_URL="${G4_PROVIDER_BASE_URL}" \
