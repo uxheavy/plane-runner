@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+import json
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from pathlib import Path
@@ -51,6 +52,7 @@ from plane.agent.lifecycle.runtime_contract import (
     validate_invocation_envelope,
     validate_run_snapshot,
 )
+from plane.agent.runtime import dispatch_invocation
 from plane.db.models import (
     AgentRole,
     AssignmentContract,
@@ -157,6 +159,94 @@ def test_five_plane_records_bind_to_one_actor_and_an_exact_l1_snapshot(assignmen
     assert run.snapshot["assignment"]["targetRef"].startswith("target:")
     assert run.snapshot["profile"]["profileRef"].startswith("profile-version:")
     validate_run_snapshot(run.snapshot)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_profile_defaults_resolve_into_an_immutable_snapshot_and_exact_envelope_dispatch(assignment, profile):
+    profile = create_profile(
+        profile.actor,
+        role=AgentRole.WORKER,
+        instructions="Resolve the configured runtime policy exactly.",
+        model_defaults={"provider": "fake-provider", "model": "fake-model"},
+        runtime_defaults={
+            "adapter": "hermes",
+            "maxEventPayloadBytes": 8192,
+            "maxArtifactBytes": 16384,
+            "maxReceiptBytes": 4096,
+            "maxCodeModeInputBytes": 2048,
+            "maxCodeModeOutputBytes": 3072,
+            "maxCodeModeCalls": 0,
+            "totalBudget": {"inputTokens": 12, "outputTokens": 8, "durationMs": 5000},
+        },
+    )
+    run = create_run(assignment, profile, idempotency_key="idempotency:resolved-policy-run")
+    invocation = record_invocation(run, idempotency_key="idempotency:resolved-policy-invocation")
+
+    expected_policy = {
+        "model": {"provider": "fake-provider", "model": "fake-model"},
+        "adapter": "hermes",
+        "isolation": "single-invocation",
+        "maxEventPayloadBytes": 8192,
+        "maxArtifactBytes": 16384,
+        "maxReceiptBytes": 4096,
+        "maxCodeModeInputBytes": 2048,
+        "maxCodeModeOutputBytes": 3072,
+        "maxCodeModeCalls": 0,
+    }
+    assert run.snapshot["runtimePolicy"] == expected_policy
+    assert run.snapshot["totalBudget"] == {"inputTokens": 12, "outputTokens": 8, "durationMs": 5000}
+    assert invocation.envelope["runSnapshotDigest"] == run.snapshot["contentDigest"]
+    assert invocation.envelope["remainingBudget"] == run.snapshot["totalBudget"]
+
+    class CaptureTransport:
+        def __init__(self):
+            self.calls = []
+
+        def dispatch(self, snapshot_json, envelope_json):
+            self.calls.append((json.loads(snapshot_json), json.loads(envelope_json)))
+            return ("{\"status\":\"accepted\"}",)
+
+    transport = CaptureTransport()
+    assert dispatch_invocation(invocation, transport) == ('{"status":"accepted"}',)
+    assert len(transport.calls) == 1
+    dispatched_snapshot, dispatched_envelope = transport.calls[0]
+    assert dispatched_snapshot == RunAttempt.objects.get(pk=run.pk).snapshot
+    assert dispatched_envelope == RuntimeInvocation.objects.get(pk=invocation.pk).envelope
+    assert dispatched_snapshot["runtimePolicy"] == expected_policy
+    with pytest.raises(DatabaseError):
+        with transaction.atomic():
+            RunAttempt.objects.filter(pk=run.pk).update(snapshot={"tampered": True})
+    with pytest.raises(DatabaseError):
+        with transaction.atomic():
+            RuntimeInvocation.objects.filter(pk=invocation.pk).update(envelope={"tampered": True})
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("mutation", ["missing", "mismatched"])
+def test_run_creation_rejects_unresolved_snapshot_policy_without_dispatch_side_effects(assignment, profile, mutation):
+    from plane.agent.lifecycle.services import _build_snapshot
+
+    supplied_snapshot = _build_snapshot(assignment, profile, uuid4())
+    if mutation == "missing":
+        supplied_snapshot["runtimePolicy"] = {"model": supplied_snapshot["runtimePolicy"]["model"]}
+    else:
+        supplied_snapshot["runtimePolicy"]["adapter"] = "unresolved-adapter"
+    supplied_snapshot["contentDigest"] = snapshot_digest(
+        {key: value for key, value in supplied_snapshot.items() if key != "contentDigest"}
+    )
+    run_count = RunAttempt.objects.count()
+    invocation_count = RuntimeInvocation.objects.count()
+
+    with pytest.raises(AgentDomainError):
+        create_run(
+            assignment,
+            profile,
+            snapshot=supplied_snapshot,
+            idempotency_key=f"idempotency:rejected-policy-{mutation}",
+        )
+
+    assert RunAttempt.objects.count() == run_count
+    assert RuntimeInvocation.objects.count() == invocation_count
 
 
 def test_g4_live_idempotency_namespace_is_accepted_by_lifecycle_normalizer():

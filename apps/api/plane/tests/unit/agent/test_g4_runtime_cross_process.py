@@ -481,16 +481,34 @@ def test_g4_provider_dispatch_reaches_one_fake_provider_attempt_and_cleans_relay
     thread.start()
     snapshot_json, invocation_json = _dispatch_body("provider-fake")
     snapshot = json.loads(snapshot_json)
-    snapshot["runtimePolicy"] = {
-        "model": {"provider": "openai-codex", "model": "gpt-5.6-luna"},
-        "adapter": "openai-compatible",
-        "isolation": "process",
-        "maxEventPayloadBytes": 8192,
-        "maxArtifactBytes": 8192,
-        "maxReceiptBytes": 8192,
-        "maxCodeModeInputBytes": 4096,
-        "maxCodeModeOutputBytes": 4096,
-        "maxCodeModeCalls": 4,
+    from plane.agent.lifecycle.services import _runtime_policy
+
+    snapshot["runtimePolicy"], _total_budget = _runtime_policy(
+        SimpleNamespace(
+            model_defaults={},
+            runtime_defaults={
+                "provider": "openai-codex",
+                "model": "gpt-5.6-luna",
+                "adapter": "openai-compatible",
+                "maxEventPayloadBytes": 8192,
+                "maxArtifactBytes": 8192,
+                "maxReceiptBytes": 8192,
+                "maxCodeModeInputBytes": 4096,
+                "maxCodeModeOutputBytes": 4096,
+                "maxCodeModeCalls": 4,
+            },
+        )
+    )
+    assert set(snapshot["runtimePolicy"]) == {
+        "model",
+        "adapter",
+        "isolation",
+        "maxEventPayloadBytes",
+        "maxArtifactBytes",
+        "maxReceiptBytes",
+        "maxCodeModeInputBytes",
+        "maxCodeModeOutputBytes",
+        "maxCodeModeCalls",
     }
     snapshot_json = json.dumps(snapshot, sort_keys=True, separators=(",", ":"))
     try:

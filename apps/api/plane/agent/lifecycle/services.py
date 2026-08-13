@@ -18,12 +18,15 @@ from plane.agent.validation import (
     MAX_AGENT_COLLECTION_ITEMS,
     PROFILE_MODEL_KEYS,
     PROFILE_RUNTIME_KEYS,
+    PLANE_AGENT_DEFAULT_MODEL,
+    PLANE_AGENT_DEFAULT_PROVIDER,
     PROFILE_TOOL_KEYS,
     AgentValueError,
     validate_bounded_json,
     validate_bounded_list,
     validate_bounded_string_list,
     validate_profile_dictionary,
+    validate_runtime_model_route,
 )
 from plane.db.models import (
     AgentActor,
@@ -653,6 +656,7 @@ def _snapshot_tool_catalog(profile, assignment):
 
 def _runtime_policy(profile):
     defaults = _as_dict(profile.runtime_defaults, "runtime_defaults")
+    model_defaults = _as_dict(profile.model_defaults, "model_defaults")
     budget = defaults.get("totalBudget", defaults.get("total_budget", {}))
     if not isinstance(budget, dict):
         raise AgentDomainError("runtime_defaults.total_budget must be an object")
@@ -664,17 +668,27 @@ def _runtime_policy(profile):
     for field, value in total_budget.items():
         if not isinstance(value, int) or isinstance(value, bool) or value < 0 or value > MAX_INTEGER:
             raise AgentDomainError(f"runtime_defaults.total_budget.{field} is invalid")
+    try:
+        model_route = validate_runtime_model_route(
+            {
+                "provider": defaults.get("provider", model_defaults.get("provider", PLANE_AGENT_DEFAULT_PROVIDER)),
+                "model": defaults.get("model", model_defaults.get("model", PLANE_AGENT_DEFAULT_MODEL)),
+            },
+            "runtime_policy.model",
+        )
+    except AgentValueError as exc:
+        raise AgentDomainError(str(exc)) from exc
     policy = {
         "model": {
             "provider": _ensure_non_empty(
-                str(defaults.get("provider", "plane")), "runtime_defaults.provider", limit=MAX_BOUNDED_TOKEN_BYTES
+                model_route["provider"], "runtime_defaults.provider", limit=MAX_BOUNDED_TOKEN_BYTES
             ),
             "model": _ensure_non_empty(
-                str(defaults.get("model", "default")), "runtime_defaults.model", limit=MAX_BOUNDED_TOKEN_BYTES
+                model_route["model"], "runtime_defaults.model", limit=MAX_BOUNDED_TOKEN_BYTES
             ),
         },
         "adapter": _ensure_non_empty(
-            str(defaults.get("adapter", "plane-agent-runtime")),
+            defaults.get("adapter", "plane-agent-runtime"),
             "runtime_defaults.adapter",
             limit=MAX_BOUNDED_TOKEN_BYTES,
         ),
@@ -708,6 +722,7 @@ def _runtime_policy(profile):
 
 def _build_snapshot(assignment, profile, run_id, snapshot=None):
     run_ref = _normalise_ref(f"run:{run_id}", "run", "run_id")
+    runtime_policy, total_budget = _runtime_policy(profile)
     if snapshot is not None:
         if not isinstance(snapshot, dict):
             raise AgentDomainError("snapshot must be an object")
@@ -718,9 +733,10 @@ def _build_snapshot(assignment, profile, run_id, snapshot=None):
             validate_run_snapshot(snapshot)
         except RuntimeContractError as exc:
             raise AgentDomainError(str(exc)) from exc
+        if snapshot["runtimePolicy"] != runtime_policy or snapshot["totalBudget"] != total_budget:
+            raise AgentDomainError("Run snapshot policy must be resolved from the selected profile")
         return snapshot
 
-    runtime_policy, total_budget = _runtime_policy(profile)
     assignment_snapshot = {
         "assignmentRef": _normalise_ref(f"assignment:{assignment.id}", "assignment", "assignment_id"),
         "revision": str(assignment.revision),

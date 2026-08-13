@@ -281,6 +281,25 @@ PROFILE_RUNTIME_KEYS = {
     "maxCodeModeCalls",
     "max_code_mode_calls",
 }
+
+PLANE_AGENT_DEFAULT_PROVIDER = "plane"
+PLANE_AGENT_DEFAULT_MODEL = "default"
+
+
+def validate_runtime_model_route(value: Any, field_name: str = "runtime_model") -> dict[str, str]:
+    """Validate the auditable model route shared by profiles and snapshots."""
+
+    if not isinstance(value, dict) or set(value) != {"provider", "model"}:
+        raise AgentValueError(f"{field_name} must contain exactly provider and model")
+    provider = value.get("provider")
+    model = value.get("model")
+    if not isinstance(provider, str) or not provider.strip():
+        raise AgentValueError(f"{field_name}.provider must be a non-empty string")
+    if not isinstance(model, str) or not model.strip():
+        raise AgentValueError(f"{field_name}.model must be a non-empty string")
+    return {"provider": provider.strip(), "model": model.strip()}
+
+
 PROFILE_TOOL_KEYS = {
     "eager",
     "eager_operations",
@@ -302,4 +321,9 @@ def validate_profile_dictionary(value: Any, field_name: str, *, allowed_keys: se
     )
     if not isinstance(result, dict):
         raise AgentValueError(f"{field_name} must be an object")
+    if field_name in {"model_defaults", "runtime_defaults"} and ({"provider", "model"} & set(result)):
+        validate_runtime_model_route(
+            {"provider": result.get("provider"), "model": result.get("model")},
+            f"{field_name}.model",
+        )
     return result
