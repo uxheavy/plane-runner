@@ -7,9 +7,10 @@ This directory contains the compact execution control surface for the non-UI Pla
 G0 through G3 are complete. Sol Medium review rejected the exact wrapper `d42161bb29bf28f04246b96051cee3a88dcccd36` on P1 because the pinned Hermes adapter did not translate Plane's typed `openai-codex` wire. The adapter blocker is closed in the canonical Hermes owner at `d2e655101f263329359e7d0de9d0b856202a3e4b`, descended directly from Hermes `114eabf9d807b659e36d767e4de46ca056297ccb`; the current Plane lifecycle source commit is `79995597f9b45e137ca2cdbd48756150bdf65478`, a direct child of wrapper `0330003e71ffda6076cee807cd8c5f6eb2e11911`. The current runtime artifact is `plane-agent-runtime:hermes-d2e65510-g4-cleanup-fix` at `sha256:28dd20b99e322ad30445715b70607bfaa453635e9df472e37b595f4b84b4e895`, labeled with Plane revision `79995597f9b45e137ca2cdbd48756150bdf65478`; the API artifact is `plane-agent-api:g4-79995597` at `sha256:a64ff214b8159d1adc1ea939d676c74f808bbc2b71ec0ac81816d3d04245111a`. The exact-image UDS probe and focused adapter tests remain bound to the GPT-5.6 Codex route, XAI preservation, and fail-closed mismatches. The lifecycle regression keeps caller-supplied current and G3 Hermes roots out of cleanup and permits deletion only for verifier-created runtime logs. This is an implementation/provenance correction, not live acceptance. The latest authorized live canary remains permanently `outcome_unknown`; its blocked-canary receipt SHA-256 is `20be555eb93cac98a53ea3c0be1f56d3b6642179b77d9b6acf76ffd23dc76c7a`. A fresh explicitly authorized run is required; that attempt must not be replayed. A separate pre-live root failure retained receipt SHA-256 `4e2a96a9fcaa5dccf5a8a1994b008016bf45aa7b8cc5c163f32aabb4cb4f958c`; it made no provider request, live invocation, credential mutation, or G5 action and is not `outcome_unknown`. Remaining risk is a fresh live G4 after the same Sol review; staged G5 remains incomplete. No chat UI is in scope.
 
 The rollback fixture deliberately separates the current candidate from the
-previous last-known-good artifacts. `current.planeCommit` is the source
-commit `79995597f9b45e137ca2cdbd48756150bdf65478`; current API services use
-the rebuilt API artifact source/revision `79995597f9b45e137ca2cdbd48756150bdf65478`,
+previous last-known-good artifacts. `current.planeCommit` is the exact P2
+metadata wrapper `de2a7b98dd26b65f6816f615fcfaa0060331dc31`; current API
+services use the rebuilt API artifact source/revision
+`79995597f9b45e137ca2cdbd48756150bdf65478`,
 while `agent-runtime` uses the Hermes `d2e655101f263329359e7d0de9d0b856202a3e4b`
 artifact above. The independent `previous` section retains the accepted G3
 service artifact digest

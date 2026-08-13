@@ -333,9 +333,10 @@ Sol Medium's P1 rejection of wrapper
 `d42161bb29bf28f04246b96051cee3a88dcccd36` is closed by the existing Hermes
 adapter owner at commit `d2e655101f263329359e7d0de9d0b856202a3e4b`, a direct
 child of pinned Hermes `114eabf9d807b659e36d767e4de46ca056297ccb`. The
-current Plane source commit is `79995597f9b45e137ca2cdbd48756150bdf65478`,
-and the final metadata wrapper is its exact single child. The current API
-artifact remains immutable and source-bound to
+current Plane source commit is `79995597f9b45e137ca2cdbd48756150bdf65478`.
+The P1 metadata wrapper is `de2a7b98dd26b65f6816f615fcfaa0060331dc31`; the
+P2 metadata wrapper is its exact single child. The current API artifact
+remains immutable and source-bound to
 `79995597f9b45e137ca2cdbd48756150bdf65478`; the previously accepted G3
 candidate is Plane commit `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
 The current binding carries Hermes commit
@@ -361,8 +362,9 @@ execute the image-contained `/workspace/apps/api` tree;
 they do not bind-mount a newer host API source tree. API, worker,
 `beat-worker`, supervisor, and `agent-runtime` each use the corresponding
 current artifact revision and image digest in the manifest. The Plane service revision above is the current executable artifact revision; the runtime image/runtimeRevision source is `79995597f9b45e137ca2cdbd48756150bdf65478`. Here,
-`current.planeCommit` is the control-plane source correction and the current
-service artifact revisions identify the rebuilt executable images; the
+`current.planeCommit` identifies the exact P2 metadata-wrapper candidate, while
+the current service artifact revisions identify the immutable executable images
+source-bound to `79995597f9b45e137ca2cdbd48756150bdf65478`; the
 `previous` rollback section independently retains the last known-good G3
 service revisions and digests.
 The previous services use immutable image digest
@@ -526,11 +528,12 @@ and the accepted G3 checkout at
 `114eabf9d807b659e36d767e4de46ca056297ccb`. The G3 prerequisite receives
 only the accepted-baseline checkout, while current G4 runtime tests receive
 only the current checkout; path equality is rejected as cross-mixing. A
-disposable checkout may be marked with
-`PLANE_G4_DISPOSABLE_HERMES_ROOT=1` only when the current path matches
-`ROOT_DIR/tmp/plane-g4-hermes-*` and the G3 path matches
-`ROOT_DIR/tmp/plane-g4-hermes-g3-*`; guarded cleanup removes those exact
-non-symlink directories and verifies they are gone. Both checkouts must
+`PLANE_G4_DISPOSABLE_HERMES_ROOT=1` is only a validation switch for caller-owned
+disposable paths: it requires the current path to match
+`ROOT_DIR/tmp/plane-g4-hermes-*` and the G3 path to match
+`ROOT_DIR/tmp/plane-g4-hermes-g3-*`. It never transfers cleanup ownership;
+G4/G3 retain both external checkouts, and the external creator removes those
+exact non-symlink directories. Both checkouts must
 retain the `https://github.com/uxheavy/hermes-agent.git` remote; a local
 filesystem clone is not an accepted provenance source even when its commit
 and worktree are otherwise exact.

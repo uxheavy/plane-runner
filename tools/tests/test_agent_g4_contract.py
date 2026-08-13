@@ -694,7 +694,7 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn('docker_bind_visibility_failed=${HERMES_ROOT}', source)
         self.assertIn('>/dev/null 2>&1; then', source[source.index("check_hermes_docker_visibility()") : g3])
 
-    def test_repo_owned_hermes_checkout_uses_guarded_cleanup(self):
+    def test_caller_owned_hermes_checkouts_survive_cleanup(self):
         source = (TOOLS / "verify-agent-g4.sh").read_text(encoding="utf-8")
         cleanup = source[source.index("cleanup()") : source.index("trap cleanup EXIT")]
         self.assertIn('G4_TEMP_PARENT="${ROOT_DIR}/tmp"', source)
