@@ -197,3 +197,19 @@
   task files removed; pinned images retained
 - Next: enforce snapshot/envelope immutability in lifecycle persistence, rerun
   the two focused tests, then run fresh Wave 0M
+
+## Wave 0M — live entry-point retest
+
+- Status: dirty — UT-012; UT-011 closed as a migration-test false negative
+- Candidate: `cb75a6474129d87b3edb077a0760f6aef03c9d68`
+- Temporary API image:
+  `sha256:b1949914f33d0600790fe0715c64727c9abae4b4e6d1b11881befb700252711a`
+- Fresh authority/config validation passed
+- One fresh run `5c7936da-5b38-408d-98b5-7a3e22a6ed62` and invocation
+  `invocation:014b8a05-869b-400d-86dd-2eca6404f5ec` failed at the
+  opaque `api-invocation` boundary; provider attempts remained zero
+- Canonical lifecycle policy and database invariants pass independently, so the
+  live entry point must be traced for a bypass/override or hidden rejection
+- Cleanup: clean; temporary image and all Wave 0M artifacts removed
+- Next: compare the live persisted snapshot/envelope with canonical output,
+  expose the bounded cause, fix only that entry-point seam, then Wave 0N

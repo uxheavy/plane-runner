@@ -331,6 +331,31 @@ lifecycle, retry, replay, or publication ran.
 No broad G3/G4 verifier, unrelated suite, load test, G5, rollout, pilot,
 deployment, source edit, or provider call ran.
 
+## Wave 0M — S00 live entry-point retest at cb75a64741
+
+Status: blocked at `api-invocation`; exactly one fresh approved lifecycle ran,
+with no retry or replay.
+
+- Candidate: `cb75a6474129d87b3edb077a0760f6aef03c9d68`.
+- Temporary API image digest:
+  `sha256:b1949914f33d0600790fe0715c64727c9abae4b4e6d1b11881befb700252711a`.
+- Fresh disposable manifest and authority/config validation passed with
+  GPT-5.6 Luna, ChatGPT subscription routing, and fallback disabled.
+- Fresh run `5c7936da-5b38-408d-98b5-7a3e22a6ed62` failed.
+- Fresh invocation `invocation:014b8a05-869b-400d-86dd-2eca6404f5ec`
+  failed at the bounded `api-invocation` RuntimeError boundary.
+- Provider attempts: zero. No permitted read, denied evaluation, gateway
+  receipt, outcome, publication, successful terminal event, or replay ran.
+- Because canonical lifecycle policy and migration-backed database invariants
+  already pass, the remaining failure belongs to the exact live entry point or
+  its diagnostic propagation and requires a persisted snapshot/envelope trace.
+- Temporary image, checkout, manifest, authority/config, and Colima were
+  removed. Task-labeled containers, networks, and volumes were empty; prepared
+  base and pinned runtime images remain.
+
+No broad G3/G4 verifier, unrelated suite, load test, G5, rollout, pilot,
+deployment, source edit, or extra provider call ran.
+
 ## Wave 0K — S00 policy-consumer retest at 0f855f864b
 
 Status: blocked at `api-invocation`; exactly one fresh approved lifecycle ran,
