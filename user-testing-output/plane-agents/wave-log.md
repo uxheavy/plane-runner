@@ -319,3 +319,25 @@
 - Next: provider-free exact live-helper test with a fake remote runtime returning
   a finite HTTP rejection. Only after that propagation passes can the remaining
   failure be assigned to real Hermes/bootstrap rather than Plane handoff
+
+## Wave 0T — live subscription retest
+
+- Status: dirty — UT-014 remains open
+- Candidate: `ecfacc0ea4712fca3cb24b37d96ca893113b5bad`; matched disposable API
+  and sealed-donor runtime artifacts were built once from this exact source
+- Fresh authority/config validation passed for ChatGPT subscription routing,
+  `openai-codex/gpt-5.6-luna`, and fallback disabled
+- One fresh run `dce717b3-d27e-48de-ad85-a9baa50a174e` and invocation
+  `invocation:81185303-1f62-46db-b48b-f79d51d346a7` reached the provider but
+  blocked at `api-invocation` with finite
+  `runtime_configuration_pre_dispatch_failure / runtime_configuration /
+dispatch_rejected / provider_attempt_evidence_rejected`
+- Eight completed upstream-initiated `2xx` provider-attempt rows were returned,
+  so the exactly-one-attempt assertion failed; no read, denial, outcome,
+  publication, successful terminal event, or replay ran
+- First owner is the trusted Plane host provider-attempt callback seam; the
+  raw callback exception is intentionally unavailable in the bounded receipt
+- Cleanup removed task resources; prepared base and pinned Hermes donor remain
+- Next: diagnose and fix only the live provider-attempt notice contract at the
+  trusted host/lifecycle seam, then run one new bounded S00; do not replay this
+  invocation

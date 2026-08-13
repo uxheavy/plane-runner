@@ -308,6 +308,64 @@ replay, or second provider call ran.
 No broad G3/G4 verifier, unrelated suite, load test, G5, rollout, pilot,
 deployment, source edit, or extra provider call ran.
 
+## Wave 0T — live subscription retest at ecfacc0ea4
+
+Status: dirty at the first concrete provider-audit rejection. Exactly one
+fresh approved lifecycle ran; no retry or replay ran.
+
+### Candidate and binding
+
+- Authoritative checkout was clean at
+  `ecfacc0ea4712fca3cb24b37d96ca893113b5bad`; the disposable clone was
+  detached and clean at that exact SHA.
+- API image digest:
+  `sha256:e7a168f6260ee3773c2a4668f2170f537d004b8b1feef15e2f775b90049d73aa`.
+- Sealed-donor runtime image digest:
+  `sha256:5d16c7f5d13879c94c0a744966c81ebcc1a98c62ee6b868986f9d50e16732b34`;
+  runtime source digest
+  `bb0342bccb492ceb0f9e99605eb7b7d461f5239da39bc0df99fb65229ba0026a`.
+- Hermes donor was `d2e655101f263329359e7d0de9d0b856202a3e4b`, digest
+  `sha256:6f1c2dc5857d445e13b34f9cc9723ee5c7636c2cfe2ef213c7fc4d972855c1bd`.
+- Fresh authority/config validation passed for ChatGPT subscription,
+  `openai-codex/gpt-5.6-luna`, with fallback disabled. Owner-only auth-file
+  metadata passed the `0600` preflight; contents and raw path were not recorded.
+
+### First failing boundary and provider evidence
+
+The single live runner exited `1` at `api-invocation` with this finite receipt:
+
+```text
+failure=runtime_configuration_pre_dispatch_failure
+reasonPhase=runtime_configuration
+reasonDetail=dispatch_rejected
+reasonSubreason=provider_attempt_evidence_rejected
+runRef=dce717b3-d27e-48de-ad85-a9baa50a174e runState=blocked
+invocationRef=invocation:81185303-1f62-46db-b48b-f79d51d346a7 invocationState=blocked
+terminal={present:true,kind=run_blocker}
+```
+
+Provider reached: yes. Plane readback contained eight provider-attempt rows,
+sequences `1` through `8`, each `phase=completed`, `upstreamInitiated=true`,
+`statusClass=2xx`, and no error code. This fails the required exactly-one-attempt
+assertion. The bounded receipt does not prove whether an additional unpersisted
+request existed, so no larger count is claimed.
+
+No permitted read, denied evaluator receipt, explicit OutcomeSubmission,
+publication, successful terminal product event, or replay was evidenced before
+the stop. One visible `run_blocker` was recorded. The first owner is the trusted
+Plane host provider-attempt callback seam: `agent_supervisor` invokes
+`record_provider_attempt_notice`, and the runtime relay converts a required
+callback exception into `provider_attempt_evidence_rejected`.
+
+### Cleanup and scope
+
+- No replay or second live journey ran.
+- The live runner removed task-owned runtime containers, networks, volumes,
+  credential staging, run files, disposable images, and checkout.
+- Prepared base and pinned Hermes donor artifacts remain unchanged.
+- No broad G3/G4/G5 verifier, load test, rollout, refreeze, deployment, UI, or
+  reviewer ran.
+
 ## Wave 0S — provider-free remote-rejection proof at 656ced1019
 
 Status: clean for the Plane remote-runtime rejection boundary; S00 remains dirty
