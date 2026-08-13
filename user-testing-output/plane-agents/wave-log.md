@@ -120,3 +120,16 @@
 - Cleanup: clean; temporary image and handoff removed
 - Next: Luna reproduces the exact cross-process path with a local fake provider,
   restores safe classification, and root-fixes the first concrete rejection
+
+## UT-008 pinned-runtime closure
+
+- Candidate: `735f79bb32` after integrating source fix `21bf76c781`
+- Root causes: the packaged resolver imported eager Plane/Django state despite
+  its intentionally minimal environment; the Hermes child lacked the existing
+  non-secret HOME/HERMES_HOME defaults
+- Exact pinned runtime path passed HTTP, launcher, Hermes/bootstrap, callback
+  socket, and AF_UNIX relay with one fake 2xx attempt
+- Callback sequence: intent → started → completed, sequence 1; no secret crossed
+- Cleanup: zero labeled containers, networks, or credential-state volumes
+- Next: one user-approved real GPT-5.6 Luna Wave 0I lifecycle, then provider-free
+  replay proof if the product journey succeeds
