@@ -10,7 +10,8 @@ Severity: `blocker`, `friction`, `annoyance`, `positive`.
 | UT-004 | blocker  | Maya / S00     | `waves/wave-0-provider-smoke.md` | Candidate API artifact did not install `plane-agent-runtime-credential-resolver` at its configured `/usr/local/bin` path.        | `642f3eebb4755a7b203f235cd9261b26d18a57ab` | Wave 0E artifact proof passed | closed |
 | UT-005 | blocker  | Maya / S00     | `waves/wave-0-provider-smoke.md` | Resolver required a legacy nullable top-level field instead of accepting the current Codex document shape directly.              | `bf39565d365b01d5ee399faa3dda3a9c938f353f` | Wave 0F resolver proof passed | closed |
 | UT-006 | blocker  | Maya / S00     | `waves/wave-0-provider-smoke.md` | Runtime sent canonical run references while Plane's provider-attempt callback compared them with bare UUIDs.                     | `df7c7fb7048b1ee41577770f1ec5c07008c66824` | Wave 0G binding proof passed  | closed |
-| UT-007 | blocker  | Maya / S00     | `waves/wave-0-provider-smoke.md` | Live runner binds Plane and runtime to different credential-revocation state paths without a shared mount.                       | Luna runner topology root-fix task         | S00 Wave 0H                   | open   |
+| UT-007 | blocker  | Maya / S00     | `waves/wave-0-provider-smoke.md` | Live runner bound Plane and runtime to different credential-revocation state paths without a shared mount.                       | `0467b13287043b30482213d434bf576ec77347d5` | Wave 0H topology proof passed | closed |
+| UT-008 | blocker  | Maya / S00     | `waves/wave-0-provider-smoke.md` | A later pre-provider runtime rejection loses its safe phase/detail before Plane records the blocked invocation.                  | Luna exact cross-process root-fix task     | S00 Wave 0I                   | open   |
 
 An issue is closed only after the same persona retests the real journey and the
 affected route-map cells are clean. Test-only failures without user-visible or

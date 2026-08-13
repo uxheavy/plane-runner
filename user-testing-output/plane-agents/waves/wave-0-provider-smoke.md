@@ -222,3 +222,30 @@ state paths and declares no shared mount, so runtime-side lease validation
 cannot observe Plane-owned revocation state. Authority/configuration, Plane
 records, runtime startup, and provider egress were not attempted. Cleanup was
 complete; no broad G3/G4, G5, rollout, or deployment ran.
+
+## Wave 0H — shared-state retest and approved live invocation
+
+Status: dirty at an unclassified runtime configuration boundary. No replay ran.
+
+- Source: `fc662d3f3521b44b719c08a57edcbdf402b0dfd5`.
+- Temporary API image digest: `sha256:7d08028a3ccb1a65224b5b6c8449e0483bd39febe9e4b688273c01b6e36fe71a`.
+- Runtime/Hermes remained pinned and unchanged.
+- Candidate provenance, resolver behavior, canonical run binding, one shared API-RW/runtime-RO credential-state volume, revocation visibility, runtime secret isolation, and exact volume cleanup all passed without networking.
+
+After the user explicitly approved the exact synthetic payload, the coordinator
+executed one fresh GPT-5.6 Luna S00 call with no fallback. It exited after about
+70 seconds with:
+
+```text
+status=failed reasonCode=runtime_configuration_pre_dispatch_failure reasonPhase=unavailable reasonDetail=unavailable
+runRef=2b4a60e1-d542-4d68-9e9f-d1c08d56591c runState=blocked
+invocationRef=77339474-80bd-4b8b-afd2-af486c952297 invocationState=blocked
+providerAttempts=[] terminal={present:true,kind=run_blocker}
+```
+
+The provider was not reached. Permitted/denied tool canaries, outcome,
+publication, and successful terminal product state did not run. Plane recorded
+one lifecycle `run_blocker`. No old invocation was replayed. The runner and Maya
+removed the temporary image, checkout, descriptors, containers, networks,
+volumes, and run files; prepared base and pinned runtime images remain. No broad
+G3/G4, G5, rollout, or deployment ran.

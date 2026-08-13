@@ -106,3 +106,17 @@
 - Cleanup: clean; temporary API image removed
 - Next: Luna reuses the established shared state mechanism in live-runner
   topology, then Maya runs one fresh S00 Wave 0H
+
+## Wave 0H — shared-state and approved live retest
+
+- Status: dirty — UT-008
+- Candidate: `fc662d3f3521b44b719c08a57edcbdf402b0dfd5`
+- UT-007: closed; the real API-RW/runtime-RO state volume and revocation
+  visibility passed, with no runtime secret exposure and exact cleanup
+- One user-approved fresh synthetic S00 lifecycle reached a run, invocation, and
+  visible `run_blocker`, but still failed pre-provider with unavailable
+  phase/detail
+- Provider attempts and requested product operations: zero; no replay
+- Cleanup: clean; temporary image and handoff removed
+- Next: Luna reproduces the exact cross-process path with a local fake provider,
+  restores safe classification, and root-fixes the first concrete rejection
