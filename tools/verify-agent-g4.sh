@@ -120,8 +120,10 @@ MCP_ROOT="${PLANE_MCP_EXTERNAL_ROOT:-${EXTERNAL_SUPERPROJECT_ROOT}/external/plan
 SDK_ROOT="${PLANE_SDK_EXTERNAL_ROOT:-${EXTERNAL_SUPERPROJECT_ROOT}/external/plane-python-sdk}"
 HERMES_ROOT="${PLANE_HERMES_EXTERNAL_ROOT:-${EXTERNAL_SUPERPROJECT_ROOT}/../hermes-agent}"
 G3_HERMES_ROOT="${PLANE_G3_HERMES_EXTERNAL_ROOT:-${EXTERNAL_SUPERPROJECT_ROOT}/../hermes-agent}"
-HERMES_ROOT_OWNED=0
-G3_HERMES_ROOT_OWNED=0
+# These are caller-supplied, Docker-bind-visible checkouts.  The verifier does
+# not create either tree, so neither may enter destructive cleanup.
+HERMES_ROOT_CREATED_BY_VERIFIER=0
+G3_HERMES_ROOT_CREATED_BY_VERIFIER=0
 DISPOSABLE_HERMES_REQUESTED="${PLANE_G4_DISPOSABLE_HERMES_ROOT:-0}"
 
 case "${1:-}" in
@@ -286,8 +288,7 @@ check_disposable_hermes_root() {
     esac
     [[ -d "${HERMES_ROOT}" && ! -L "${HERMES_ROOT}" ]] || \
         fail "disposable Hermes root is a real directory" "missing_or_symlinked_disposable_hermes_root" "prepare a clean checkout before verification"
-    HERMES_ROOT_OWNED=1
-    emit "external.hermes.checkout" passed "root=${HERMES_ROOT}" "ownership=verifier_guarded_cleanup"
+    emit "external.hermes.checkout" passed "root=${HERMES_ROOT}" "ownership=caller_supplied_no_cleanup"
 }
 
 check_disposable_g3_hermes_root() {
@@ -302,8 +303,7 @@ check_disposable_g3_hermes_root() {
         fail "G3 disposable Hermes root is a real directory" "missing_or_symlinked_g3_disposable_hermes_root" "prepare a clean accepted-baseline checkout before verification"
     [[ "${G3_HERMES_ROOT}" != "${HERMES_ROOT}" ]] || \
         fail "G3 and current Hermes roots are distinct" "cross_mixed_hermes_roots" "provide separate current and accepted-baseline checkouts"
-    G3_HERMES_ROOT_OWNED=1
-    emit "external.hermes.g3-checkout" passed "root=${G3_HERMES_ROOT}" "ownership=verifier_guarded_cleanup" "pin=${G3_HERMES_COMMIT}"
+    emit "external.hermes.g3-checkout" passed "root=${G3_HERMES_ROOT}" "ownership=caller_supplied_no_cleanup" "pin=${G3_HERMES_COMMIT}"
 }
 
 check_hermes_docker_visibility() {
@@ -733,7 +733,7 @@ check_labeled_redteam_resources() {
 }
 
 cleanup_disposable_hermes() {
-    [[ "${HERMES_ROOT_OWNED}" -eq 1 ]] || return 0
+    [[ "${HERMES_ROOT_CREATED_BY_VERIFIER}" -eq 1 ]] || return 0
     case "${HERMES_ROOT}" in
         "${G4_TEMP_PARENT}"/plane-g4-hermes-*) ;;
         *) return 1 ;;
@@ -744,7 +744,7 @@ cleanup_disposable_hermes() {
 }
 
 cleanup_disposable_g3_hermes() {
-    [[ "${G3_HERMES_ROOT_OWNED}" -eq 1 ]] || return 0
+    [[ "${G3_HERMES_ROOT_CREATED_BY_VERIFIER}" -eq 1 ]] || return 0
     case "${G3_HERMES_ROOT}" in
         "${G4_TEMP_PARENT}"/plane-g4-hermes-g3-*) ;;
         *) return 1 ;;

@@ -700,13 +700,34 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn('G4_TEMP_PARENT="${ROOT_DIR}/tmp"', source)
         self.assertIn('PLANE_G4_DISPOSABLE_HERMES_ROOT', source)
         self.assertIn('"${G4_TEMP_PARENT}"/plane-g4-hermes-*)', source)
-        self.assertIn('HERMES_ROOT_OWNED=1', source)
+        self.assertIn('HERMES_ROOT_CREATED_BY_VERIFIER=0', source)
+        self.assertNotIn('HERMES_ROOT_CREATED_BY_VERIFIER=1', source)
         self.assertIn('if ! docker run --rm --network none', source)
         cleanup_helper = source[source.index("cleanup_disposable_hermes()") : source.index("write_receipt()")]
-        self.assertIn('[[ "${HERMES_ROOT_OWNED}" -eq 1 ]] || return 0', cleanup_helper)
+        self.assertIn('[[ "${HERMES_ROOT_CREATED_BY_VERIFIER}" -eq 1 ]] || return 0', cleanup_helper)
         self.assertIn('rm -rf -- "${HERMES_ROOT}"', cleanup_helper)
         self.assertIn('[[ ! -e "${HERMES_ROOT}" ]]', cleanup_helper)
         self.assertNotIn('rm -rf -- "${G4_TEMP_PARENT}"', cleanup)
+
+    def test_external_hermes_roots_are_never_cleaned_as_g3_owned_state(self):
+        g4_source = (TOOLS / "verify-agent-g4.sh").read_text(encoding="utf-8")
+        g3_source = (TOOLS / "verify-agent-g3.sh").read_text(encoding="utf-8")
+
+        # Both Hermes paths are supplied checkouts.  Only a verifier-created
+        # path may enter a destructive cleanup branch.
+        self.assertIn("HERMES_ROOT_CREATED_BY_VERIFIER=0", g4_source)
+        self.assertIn("G3_HERMES_ROOT_CREATED_BY_VERIFIER=0", g4_source)
+        self.assertNotIn("HERMES_ROOT_CREATED_BY_VERIFIER=1", g4_source)
+        self.assertNotIn("G3_HERMES_ROOT_CREATED_BY_VERIFIER=1", g4_source)
+        g4_cleanup = g4_source[g4_source.index("cleanup_disposable_hermes()") : g4_source.index("write_receipt()")]
+        self.assertIn('[[ "${HERMES_ROOT_CREATED_BY_VERIFIER}" -eq 1 ]] || return 0', g4_cleanup)
+        self.assertIn('[[ "${G3_HERMES_ROOT_CREATED_BY_VERIFIER}" -eq 1 ]] || return 0', g4_cleanup)
+
+        g3_cleanup = g3_source[g3_source.index("cleanup_runtime_log_dir()") : g3_source.index("trap cleanup EXIT")]
+        self.assertIn("cleanup_runtime_log_dir", g3_cleanup)
+        self.assertIn("CREATED_RUNTIME_LOG_DIR", g3_cleanup)
+        self.assertNotIn('rm -rf -- "${HERMES_ROOT}"', g3_cleanup)
+        self.assertNotIn('rm -rf -- "${HERMES_PIN_ROOT}"', g3_cleanup)
 
     def test_g3_prerequisite_uses_independent_accepted_hermes_pin(self):
         source = (TOOLS / "verify-agent-g4.sh").read_text(encoding="utf-8")

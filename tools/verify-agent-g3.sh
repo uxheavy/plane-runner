@@ -225,15 +225,24 @@ if [[ -n "${G3_TEST_PATHS_OVERRIDE:-}" ]]; then
     read -r -a G3_TEST_PATHS <<< "${G3_TEST_PATHS_OVERRIDE}"
 fi
 
+cleanup_runtime_log_dir() {
+    [[ "${CREATED_RUNTIME_LOG_DIR}" -eq 1 ]] || return 0
+    case "${RUNTIME_LOG_DIR}" in
+        "${ROOT_DIR}"/.g3-runtime-logs-*) ;;
+        *) return 1 ;;
+    esac
+    [[ -d "${RUNTIME_LOG_DIR}" && ! -L "${RUNTIME_LOG_DIR}" ]] || return 1
+    rm -rf -- "${RUNTIME_LOG_DIR}"
+    [[ ! -e "${RUNTIME_LOG_DIR}" ]]
+}
+
 cleanup() {
     local status=$?
     local cleanup_status=0
     local leftovers
     trap - EXIT INT TERM
     compose down -v --remove-orphans >/dev/null 2>&1 || cleanup_status=$?
-    if [[ -n "${RUNTIME_LOG_DIR}" && -d "${RUNTIME_LOG_DIR}" ]]; then
-        rm -rf -- "${RUNTIME_LOG_DIR}"
-    fi
+    cleanup_runtime_log_dir || cleanup_status=$?
     if [[ ${CREATED_API_LOG_DIR} -eq 1 ]]; then
         rmdir -- "${ROOT_DIR}/apps/api/plane/logs" 2>/dev/null || true
     fi
