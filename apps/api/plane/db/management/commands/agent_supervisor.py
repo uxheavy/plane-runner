@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shlex
 import secrets
 import threading
@@ -54,6 +55,21 @@ def _provider_attempt_notice_for_plane(invocation, call):
     notice = dict(call.input)
     notice.update({"runId": persisted_run_id, "invocationId": invocation.invocation_id})
     return notice
+
+
+def _supervisor_result_output(result) -> str:
+    output = (
+        f"invocation={result.invocation_id} state={result.state} "
+        f"terminal={result.terminal_kind or 'none'} frames={result.accepted_frames}"
+    )
+    if result.failure is not None:
+        output += " failure=" + json.dumps(
+            result.failure,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    return output
 
 
 class Command(BaseCommand):
@@ -239,8 +255,5 @@ class Command(BaseCommand):
             monitor.join(timeout=1)
             credential_broker.revoke_invocation(invocation.invocation_id)
         self.stdout.write(
-            self.style.SUCCESS(
-                f"invocation={result.invocation_id} state={result.state} "
-                f"terminal={result.terminal_kind or 'none'} frames={result.accepted_frames}"
-            )
+            self.style.SUCCESS(_supervisor_result_output(result))
         )

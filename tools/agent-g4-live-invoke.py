@@ -356,6 +356,37 @@ def build_failure_evidence(
     }
 
 
+def _supervisor_failure_reason(output):
+    """Extract only the bounded dispatch classification emitted by Plane."""
+
+    import json
+
+    if not isinstance(output, str):
+        return None
+    allowed_keys = {
+        "failureCode",
+        "failurePhase",
+        "failureDetail",
+        "failureSubreason",
+    }
+    required_keys = allowed_keys - {"failureSubreason"}
+    for line in reversed(output.splitlines()):
+        marker = " failure="
+        if marker not in line:
+            continue
+        raw = line.rsplit(marker, 1)[1]
+        try:
+            value = json.loads(raw)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(value, dict) or set(value) not in (required_keys, allowed_keys):
+            continue
+        if not all(isinstance(item, str) for item in value.values()):
+            continue
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return None
+
+
 def main() -> int:
     started = time.monotonic()
     provider = _provider_descriptor()
@@ -370,6 +401,7 @@ def main() -> int:
     provider_attempts = []
     terminal = None
     control = None
+    supervisor_failure_reason = None
 
     def readback():
         invocation.refresh_from_db()
@@ -447,6 +479,7 @@ def main() -> int:
             stdout=stdout,
             stderr=stderr,
         )
+        supervisor_failure_reason = _supervisor_failure_reason(stdout.getvalue())
         invocation.refresh_from_db()
         run.refresh_from_db()
         correlation_id = f"correlation:{run.id}"
@@ -605,7 +638,8 @@ def main() -> int:
                 ],
                 terminal_kind=terminal.kind if terminal is not None else "none",
                 failure_code=control.failure_code if control is not None else None,
-                failure_reason=control.failure_reason if control is not None else None,
+                failure_reason=supervisor_failure_reason
+                or (control.failure_reason if control is not None else None),
             )
 
     print(json.dumps(evidence, sort_keys=True, separators=(",", ":")))

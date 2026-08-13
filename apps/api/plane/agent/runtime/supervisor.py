@@ -76,6 +76,7 @@ class SupervisorResult:
     state: str
     terminal_kind: str | None
     accepted_frames: int
+    failure: dict[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -179,6 +180,7 @@ def _terminalize(
     reason: str,
     code: str,
     outcome_unknown: bool = False,
+    failure: dict[str, str] | None = None,
 ) -> SupervisorResult:
     with transaction.atomic():
         _assignment, _run, invocation = lock_invocation_path(invocation_id)
@@ -204,7 +206,7 @@ def _terminalize(
             ],
         )
         invocation.refresh_from_db()
-        return SupervisorResult(invocation.invocation_id, invocation.state, terminal.kind, 0)
+        return SupervisorResult(invocation.invocation_id, invocation.state, terminal.kind, 0, failure)
 
 
 def _release(invocation_id: Any, *, state: str | None = None) -> None:
@@ -243,6 +245,7 @@ def _terminalize_dispatch_failure(
         reason=_serialized_failure(reason),
         code=reason["failureCode"] if bounded_failure else "outcome_unknown",
         outcome_unknown=not bounded_failure,
+        failure=dict(reason) if bounded_failure else None,
     )
 
 

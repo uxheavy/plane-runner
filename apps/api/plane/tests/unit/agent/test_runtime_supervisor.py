@@ -28,7 +28,10 @@ from plane.agent.lifecycle import (
     record_invocation,
     record_provider_attempt_notice,
 )
-from plane.db.management.commands.agent_supervisor import _provider_attempt_notice_for_plane
+from plane.db.management.commands.agent_supervisor import (
+    _provider_attempt_notice_for_plane,
+    _supervisor_result_output,
+)
 from plane.agent.runtime import (
     AgentRuntimeConfiguration,
     build_gateway_host_port,
@@ -720,6 +723,10 @@ def test_supervisor_persists_bounded_pre_dispatch_subreason(
     assert control.state == RuntimeControlState.RELEASED
     assert json.loads(control.failure_reason) == expected_reason
     assert terminal.reason == control.failure_reason
+    assert result.failure == expected_reason
+    output = _supervisor_result_output(result)
+    assert "state=blocked" in output
+    assert "failure=" + json.dumps(expected_reason, sort_keys=True, separators=(",", ":")) in output
     assert not RuntimeProviderAttempt.objects.filter(invocation=invocation).exists()
     assert transport.calls == 1
 

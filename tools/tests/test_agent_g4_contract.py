@@ -1008,6 +1008,36 @@ class G4ContractTests(unittest.TestCase):
             with_subreason["failure"]["reasonSubreason"],
             "runtime_configuration_rejected",
         )
+
+        parser = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_supervisor_failure_reason"
+        )
+        exec(
+            compile(ast.Module(body=[parser], type_ignores=[]), str(TOOLS / "agent-g4-live-invoke.py"), "exec"),
+            namespace,
+        )
+        bounded_reason = {
+            "failureCode": "runtime_configuration_pre_dispatch_failure",
+            "failurePhase": "runtime_configuration",
+            "failureDetail": "dispatch_rejected",
+            "failureSubreason": "provider_attempt_evidence_rejected",
+        }
+        parsed_reason = namespace["_supervisor_failure_reason"](
+            "invocation=invocation:bounded state=blocked terminal=run_blocker frames=0 failure="
+            + json.dumps(bounded_reason, sort_keys=True, separators=(",", ":"))
+        )
+        self.assertEqual(
+            json.loads(parsed_reason),
+            bounded_reason,
+        )
+        self.assertIsNone(
+            namespace["_supervisor_failure_reason"](
+                'failure={"failureCode":"runtime_configuration_pre_dispatch_failure",'
+                '"failurePhase":"runtime_configuration","failureDetail":"/private/secret"}'
+            )
+        )
         malformed = namespace["build_failure_evidence"](
             binding={},
             failure_phase="api-invocation",
