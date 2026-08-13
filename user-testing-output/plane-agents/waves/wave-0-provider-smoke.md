@@ -71,3 +71,31 @@ operation audit, or replay occurred. Plane correctly recorded one visible
 `run_blocker`. Cleanup left no task-owned container, network, volume, checkout,
 authority/config file, or Plane test stack. No broad verifier, build, load,
 rollout, deployment, or source edit ran.
+
+## Wave 0C — amended API source
+
+Status: dirty at the first runtime-configuration boundary. No replay was
+attempted.
+
+- Candidate: `5872cf9664ae0266e661454601d56ade5fab9579`.
+- Temporary API artifact: `plane-agent-api:g4-5872cf96-wave0c`, digest `sha256:e17d8a54e97915fcab66a5734a5ac5bd4fe34607c1b1b7e04ef013912a4a2dd1`; source/contract/artifact labels passed.
+- Runtime/Hermes artifact remained unchanged.
+- Fresh GPT-5.6 Luna authority/config and temporary candidate binding passed validation.
+- One live invocation ran for approximately `49s`.
+
+```text
+status=failed reasonCode=runtime_configuration_pre_dispatch_failure reasonPhase=runtime_configuration reasonDetail=dispatch_rejected
+runRef=12f7fcbb-5c9a-4583-8386-aad1e2fa411f runState=blocked
+invocationRef=12705a90-6b88-4eaa-87ba-2d7de3983994 invocationState=blocked
+providerAttempts=[] terminal={present:true,kind:run_blocker}
+```
+
+Sanitized inspection confirmed that the staged source is owner-only and has
+the exact supported Codex auth key/type shape. The temporary image nevertheless
+rejected credential resolution. `apps/api/Dockerfile.g4` copies amended source
+to `/workspace/apps/api`, while the installed command resolver imports the
+prepared base's `/code`; the built artifact is therefore likely executing the
+stale parser. No provider, tool, gateway, outcome, publication, or replay action
+occurred. One visible lifecycle blocker was recorded. Temporary image, checkout,
+authority/config, and Docker resources were removed; prepared base/runtime
+images were preserved. No broad verifier, load, G5, rollout, or deployment ran.

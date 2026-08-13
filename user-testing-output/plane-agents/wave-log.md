@@ -39,3 +39,17 @@
 - Cleanup: clean
 - Next: Luna diagnoses and fixes the established runtime transport owner, then
   the same Maya task reruns S00 only
+
+## Wave 0C — credential fix with temporary API artifact
+
+- Status: dirty — UT-003
+- Candidate: `5872cf9664ae0266e661454601d56ade5fab9579`
+- UT-002: closed; failure is now correctly classified as configuration
+- Temporary fixed-source API artifact built successfully; runtime unchanged
+- Plane lifecycle reached: one run, one invocation, one visible `run_blocker`
+- Failure: amended source was copied to `/workspace/apps/api`, but the command
+  resolver likely imported stale prepared-base code from `/code`
+- Provider attempts and requested product operations: zero
+- Cleanup: clean; temporary API artifact removed
+- Next: Luna fixes the established API artifact executable-source boundary,
+  then Maya reruns S00 only
