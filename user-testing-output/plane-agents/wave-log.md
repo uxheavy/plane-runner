@@ -229,3 +229,28 @@
 - Cleanup: clean; temporary API image and Wave 0N artifacts removed
 - Next: prove runtime artifact parity, build the current runtime artifact if
   stale, then run fresh Wave 0O
+
+## UT-013 prerequisite — current-source runtime artifact parity
+
+- Status: clean prerequisite; UT-013 remains open until Maya retests S00 in
+  Wave 0O
+- Candidate: `125b75641b` (imported sealed-donor fix from verified commit
+  `772cdb3958fe40c6febcc13a7862e8a59745264d`)
+- One matched API/runtime pair was built from exact source
+  `772cdb3958fe40c6febcc13a7862e8a59745264d`
+- API digest: `sha256:408a979b088d6a2f5eb6688d5a41b94a569bd7fe8fec02420c0b2799e946fa96`
+- Runtime digest: `sha256:081e9c1c0d7a23bcf5df38bcdd703db1986fc5178afd462968e7e34a4f9ea192`
+- The runtime contains the sealed, create-only-exported Hermes donor attested
+  as commit `d2e655101f263329359e7d0de9d0b856202a3e4b`; no local Git-object claim is
+  made
+- Donor digest: `sha256:6f1c2dc5857d445e13b34f9cc9723ee5c7636c2cfe2ef213c7fc4d972855c1bd`
+- Donor inventory: 8,092 regular files; deterministic tree digest
+  `9485115c76b71c47b08d14ec4a1df7cb615301f8e151959c00a80382bdb61bbc`
+- Eight focused builder/validator tests passed
+- The existing bounded real HTTP→launcher→fake-provider path passed in the
+  final API artifact: HTTP 200, exactly one `intent → started → completed`
+  provider attempt, revoked credential, and relay cleanup
+- All disposable images, containers, networks, temporary manifests, and test
+  resources were removed; no external provider request ran
+- Next: one fresh GPT-5.6 Luna ChatGPT-subscription Wave 0O, stopping at its
+  first failure; only a clean Wave 0O closes UT-013 and S00
