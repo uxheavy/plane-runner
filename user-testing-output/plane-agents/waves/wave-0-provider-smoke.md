@@ -308,6 +308,29 @@ replay, or second provider call ran.
 No broad G3/G4 verifier, unrelated suite, load test, G5, rollout, pilot,
 deployment, source edit, or extra provider call ran.
 
+## Wave 0L — execution-dependent lifecycle proof at 0afb4cc9bb
+
+Status: stopped before live S00 at the first focused lifecycle regression
+failure. No authority/config, credential read, provider request, Plane live
+lifecycle, retry, replay, or publication ran.
+
+- Candidate: `0afb4cc9bbf9be96be979c79d7802c2610898128`.
+- Temporary API image digest:
+  `sha256:4ed5eddf1024e876d38b4ee14b0eba29e8b4f55d82bab97c20ea071a08895aff`.
+- Two execution-dependent tests ran in the candidate image on an internal-only
+  Compose network with repository test dependencies.
+- Passed: canonical resolved profile policy reached the fake cross-process relay,
+  produced exactly one `intent → started → completed` attempt, and cleaned up.
+- Failed: a direct update of persisted `RunAttempt.snapshot` did not raise the
+  expected `DatabaseError`. The database therefore did not enforce the immutable
+  run snapshot required by ADR-0006/ADR-0010.
+- The live S00 was not started after this first failure.
+- Compose services/network, temporary API image, checkout, manifest/test files,
+  and Colima were removed. Prepared base and pinned runtime images remain.
+
+No broad G3/G4 verifier, unrelated suite, load test, G5, rollout, pilot,
+deployment, source edit, or provider call ran.
+
 ## Wave 0K — S00 policy-consumer retest at 0f855f864b
 
 Status: blocked at `api-invocation`; exactly one fresh approved lifecycle ran,

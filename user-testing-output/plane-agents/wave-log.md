@@ -180,3 +180,20 @@
   lifecycle producer still supplies an incomplete resolved runtime policy
 - Cleanup: clean; temporary image and Wave 0K artifacts removed
 - Next: fix the lifecycle/snapshot policy producer, then run fresh Wave 0L
+
+## Wave 0L — execution-dependent lifecycle proof
+
+- Status: dirty — UT-011; UT-010 closed by the fake cross-process path
+- Candidate: `0afb4cc9bbf9be96be979c79d7802c2610898128`
+- Temporary API image:
+  `sha256:4ed5eddf1024e876d38b4ee14b0eba29e8b4f55d82bab97c20ea071a08895aff`
+- Focused result: one pass, one failure
+- Passed: canonical profile policy flowed through the fake cross-process route
+  with exactly one `intent → started → completed` provider attempt and cleanup
+- Failed: direct database update of `RunAttempt.snapshot` did not raise the
+  expected `DatabaseError`; the immutable run-contract invariant is not enforced
+- Live S00 did not start; provider/subscription attempts remained zero
+- Cleanup: internal Compose services/network, temporary image, checkout, and
+  task files removed; pinned images retained
+- Next: enforce snapshot/envelope immutability in lifecycle persistence, rerun
+  the two focused tests, then run fresh Wave 0M
