@@ -5,6 +5,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
@@ -64,25 +65,26 @@ BINDING_KEYS = (
 )
 
 
-def fixture() -> tuple[dict, dict, dict, str]:
-    manifest = copy.deepcopy(MANIFEST)
-    manifest["candidateBinding"]["parentCommit"] = "b" * 40
-    manifest["pins"] = {
-        "hermesCommit": "c" * 40,
-        "mcpGitlink": "d" * 40,
-        "sdkGitlink": "e" * 40,
-        "runtimeImageTag": "plane-agent-runtime:hermes-e573a466-g4-ffcc2dc9",
-        "runtimeImageDigest": "sha256:" + "f" * 64,
-        "runtimeImageRevision": "1" * 40,
-        "runtimeContract": "plane.agent-runtime/v1",
-        "apiArtifact": {
-            "imageTag": "plane-agent-api:g4-test",
-            "imageDigest": "sha256:" + "0" * 64,
-            "sourceRevision": "2" * 40,
-            "contract": "plane.operation/v1",
-        },
-    }
-    binding = exact_binding(manifest, CANDIDATE)
+def fixture(candidate: str = CANDIDATE, source_manifest: dict | None = None) -> tuple[dict, dict, dict, str]:
+    manifest = copy.deepcopy(MANIFEST if source_manifest is None else source_manifest)
+    if source_manifest is None:
+        manifest["candidateBinding"]["parentCommit"] = "b" * 40
+        manifest["pins"] = {
+            "hermesCommit": "c" * 40,
+            "mcpGitlink": "d" * 40,
+            "sdkGitlink": "e" * 40,
+            "runtimeImageTag": "plane-agent-runtime:hermes-e573a466-g4-ffcc2dc9",
+            "runtimeImageDigest": "sha256:" + "f" * 64,
+            "runtimeImageRevision": "1" * 40,
+            "runtimeContract": "plane.agent-runtime/v1",
+            "apiArtifact": {
+                "imageTag": "plane-agent-api:g4-test",
+                "imageDigest": "sha256:" + "0" * 64,
+                "sourceRevision": "2" * 40,
+                "contract": "plane.operation/v1",
+            },
+        }
+    binding = exact_binding(manifest, candidate)
     import hashlib
 
     binding.update(
@@ -117,7 +119,7 @@ def fixture() -> tuple[dict, dict, dict, str]:
         "purpose": "g4-live-evaluation",
         "issuedAt": "2099-01-01T00:00:00Z",
         "expiresAt": "2099-01-02T00:00:00Z",
-        "expectedCandidate": CANDIDATE,
+        "expectedCandidate": candidate,
         "fallbackAllowed": False,
         "binding": binding,
     }
@@ -127,7 +129,7 @@ def fixture() -> tuple[dict, dict, dict, str]:
         "mode": "live",
         "offline": False,
         "fallbackAllowed": False,
-        "expectedCandidate": CANDIDATE,
+        "expectedCandidate": candidate,
         "binding": binding,
         "provider": {**binding["provider"], "fallbackUsed": False},
         "thresholdProfile": binding["thresholdProfile"],
@@ -241,6 +243,103 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn('mkdir -m 700 -- "${RUN_DIR}"', runner)
         self.assertNotIn('--mount type=bind,src="${PROVIDER_SECRET_SOURCE}"', runner)
         self.assertIn('--mount type=bind,src="${PROVIDER_SECRET_FILE}"', runner)
+
+    def test_live_runner_creates_missing_tmp_parent_before_pre_provider_boundary(self):
+        runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+        staging = runner.index("LIVE_PHASE=credential-staging")
+        run_dir = runner.index('mkdir -m 700 -- "${RUN_DIR}"', staging)
+        preflight = runner.index("LIVE_PHASE=credential-bind-preflight", run_dir)
+
+        self.assertIn('TMP_ROOT="${ROOT_DIR}/tmp"', runner)
+        self.assertIn('mkdir -m 700 -- "${TMP_ROOT}"', runner)
+        self.assertIn('if [[ -L "${TMP_ROOT}" ]]; then', runner)
+        self.assertIn('chmod 700 "${TMP_ROOT}"', runner)
+        self.assertLess(runner.index('mkdir -m 700 -- "${TMP_ROOT}"', staging), run_dir)
+        self.assertLess(run_dir, preflight)
+        self.assertIn('RUN_DIR_CREATED=1', runner[run_dir:preflight])
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            clean_tools = root / "tools"
+            clean_tools.mkdir(mode=0o700)
+            for name in ("agent-g4-live.sh", "agent-g4-manifest.json", "validate_agent_g4_live.py"):
+                target = clean_tools / name
+                target.write_bytes((TOOLS / name).read_bytes())
+            (clean_tools / "agent-g4-live.sh").chmod(0o700)
+            fake_bin = root / "bin"
+            fake_bin.mkdir(mode=0o700)
+            docker_log = root / "docker.log"
+            fake_docker = fake_bin / "docker"
+            fake_docker.write_text(
+                "#!/bin/sh\n"
+                "printf '%s\\n' \"$*\" >> \"$DOCKER_LOG\"\n"
+                "if [ \"$1\" = image ] && [ \"$2\" = inspect ]; then\n"
+                "    case \"$5\" in\n"
+                f"        '{{{{.Id}}}}') printf '%s\\n' '{MANIFEST['pins']['apiArtifact']['imageDigest']}' ;;\n"
+                f"        *source.revision*) printf '%s\\n' '{MANIFEST['pins']['apiArtifact']['sourceRevision']}' ;;\n"
+                f"        *contract*) printf '%s\\n' '{MANIFEST['pins']['apiArtifact']['contract']}' ;;\n"
+                "        *artifact*) printf '%s\\n' 'plane-agent-api-g4' ;;\n"
+                "    esac\n"
+                "    exit 0\n"
+                "fi\n"
+                "case \" $* \" in *\" --network none \"*) exit 42 ;; esac\n"
+                "exit 0\n",
+                encoding="utf-8",
+            )
+            fake_docker.chmod(0o700)
+            fake_git = fake_bin / "git"
+            candidate = subprocess.run(
+                ["git", "-C", str(ROOT), "rev-parse", "HEAD"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            fake_git.write_text(
+                "#!/bin/sh\n"
+                f"if [ \"$1\" = rev-parse ] && [ \"$2\" = HEAD ]; then printf '%s\\n' '{candidate}'; else exit 1; fi\n",
+                encoding="utf-8",
+            )
+            fake_git.chmod(0o700)
+
+            _, authority, config, _ = fixture(candidate, MANIFEST)
+            authority["authorityId"] = "authority-clean-checkout"
+            config["authorityId"] = "authority-clean-checkout"
+            authority_path = root / "authority.json"
+            config_path = root / "config.json"
+            provider_source = root / "synthetic-provider-source"
+            authority_path.write_text(json.dumps(authority), encoding="utf-8")
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            provider_source.write_text("synthetic test input", encoding="utf-8")
+            provider_source.chmod(0o600)
+
+            environment = {
+                "PATH": f"{fake_bin}:{os.environ['PATH']}",
+                "TMPDIR": str(root),
+                "DOCKER_LOG": str(docker_log),
+                "PLANE_G4_EXPECTED_CANDIDATE": candidate,
+                "PLANE_G4_LIVE_AUTHORITY": str(authority_path),
+                "PLANE_G4_LIVE_CONFIG": str(config_path),
+                "PLANE_G4_LIVE_COMMAND": COMMAND,
+                "PLANE_G4_PROVIDER_SECRET_SOURCE": str(provider_source),
+            }
+            result = subprocess.run(
+                ["bash", str(clean_tools / "agent-g4-live.sh")],
+                cwd=root,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 42, result.stdout + result.stderr)
+            output = result.stdout + result.stderr
+            self.assertIn("phase=credential-bind-preflight", output)
+            self.assertNotIn("expected=invocation-run-directory", output)
+            self.assertTrue((root / "tmp").is_dir())
+            self.assertEqual((root / "tmp").stat().st_mode & 0o777, 0o700)
+            self.assertEqual(list((root / "tmp").iterdir()), [])
+            self.assertIn("--network none", docker_log.read_text(encoding="utf-8"))
+            self.assertIn("provider-credentials", docker_log.read_text(encoding="utf-8"))
 
     def test_live_runner_preflights_staged_secret_with_network_none_without_reading_contents(self):
         runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")

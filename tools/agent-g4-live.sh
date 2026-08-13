@@ -8,11 +8,13 @@ PROJECT="plane-agent-g4-live-${PPID}-${RANDOM}"
 NETWORK="${PROJECT}_test_env"
 EGRESS="${PROJECT}_egress"
 RUNTIME="${PROJECT}-agent-runtime"
-RUN_DIR="${ROOT_DIR}/tmp/${PROJECT}"
+TMP_ROOT="${ROOT_DIR}/tmp"
+RUN_DIR="${TMP_ROOT}/${PROJECT}"
 EVIDENCE_FILE="${RUN_DIR}/evidence.json"
 ERROR_FILE="${RUN_DIR}/sanitized-error.log"
 RUNTIME_SECRET_FILE="${RUN_DIR}/runtime-secret"
 PROVIDER_SECRET_FILE="${RUN_DIR}/provider-credentials"
+RUN_DIR_CREATED=0
 LIVE_INVOKE_SOURCE="${ROOT_DIR}/tools/agent-g4-live-invoke.py"
 MANIFEST="${ROOT_DIR}/tools/agent-g4-manifest.json"
 LIVE_AUTHORITY="${PLANE_G4_LIVE_AUTHORITY:?validated live authority path is required}"
@@ -139,17 +141,34 @@ cleanup() {
     docker network rm "${EGRESS}" >/dev/null 2>&1 || true
     PLANE_TEST_ENV_FILE="${ROOT_DIR}/apps/api/.env.example" \
         docker compose -p "${PROJECT}" -f "${ROOT_DIR}/docker-compose-test.yml" down -v --remove-orphans >/dev/null 2>&1 || true
-    rm -f -- "${PROVIDER_SECRET_FILE}" || true
-    rm -rf -- "${RUN_DIR}"
+    if [[ "${RUN_DIR_CREATED}" -eq 1 && -d "${RUN_DIR}" && ! -L "${RUN_DIR}" ]]; then
+        rm -f -- "${PROVIDER_SECRET_FILE}" || true
+        rm -rf -- "${RUN_DIR}"
+    fi
     exit "${status}"
 }
 trap cleanup EXIT INT TERM
 
 LIVE_PHASE=credential-staging
+if [[ ! -d "${TMP_ROOT}" ]]; then
+    mkdir -m 700 -- "${TMP_ROOT}" || {
+        printf '%s\n' 'event=agent.g4.live-runner status=failed expected=repository-owned-tmp-root actual=unavailable suggestion=use-a-writable-repository-owned-tmp-root' >&2
+        exit 2
+    }
+fi
+if [[ -L "${TMP_ROOT}" ]]; then
+    printf '%s\n' 'event=agent.g4.live-runner status=failed expected=owner-only-non-symlink-tmp-root actual=unsafe suggestion=use-a-real-repository-owned-tmp-root' >&2
+    exit 2
+fi
+chmod 700 "${TMP_ROOT}" || {
+    printf '%s\n' 'event=agent.g4.live-runner status=failed expected=owner-only-tmp-root actual=unavailable suggestion=use-a-writable-repository-owned-tmp-root' >&2
+    exit 2
+}
 mkdir -m 700 -- "${RUN_DIR}" || {
     printf '%s\n' 'event=agent.g4.live-runner status=failed expected=invocation-run-directory actual=unavailable suggestion=use-the-repository-owned-tmp-root' >&2
     exit 2
 }
+RUN_DIR_CREATED=1
 python3 - "${PROVIDER_SECRET_SOURCE}" "${PROVIDER_SECRET_FILE}" <<'PY' >/dev/null 2>&1 || {
 import os
 import stat
