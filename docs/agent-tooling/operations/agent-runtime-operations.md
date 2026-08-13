@@ -327,29 +327,30 @@ docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose
 
 `apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` is the pin
 manifest. The current Plane deployable service candidate is the exact
-runtime-contract source correction `99b8ba8e62a1e2311a7a0c145045c20d314f40c3`.
+runtime-contract source correction `99b8ba8e62a1e2311a7a0c145045c20d314f40c3` and
+the cleanup-lifecycle source correction `79995597f9b45e137ca2cdbd48756150bdf65478`.
 Sol Medium's P1 rejection of wrapper
 `d42161bb29bf28f04246b96051cee3a88dcccd36` is closed by the existing Hermes
 adapter owner at commit `d2e655101f263329359e7d0de9d0b856202a3e4b`, a direct
 child of pinned Hermes `114eabf9d807b659e36d767e4de46ca056297ccb`. The
-current Plane source commit is `99b8ba8e62a1e2311a7a0c145045c20d314f40c3`,
+current Plane source commit is `79995597f9b45e137ca2cdbd48756150bdf65478`,
 and the final metadata wrapper is its exact single child. The current API
 artifact remains immutable and source-bound to
-`99b8ba8e62a1e2311a7a0c145045c20d314f40c3`; the previously accepted G3
+`79995597f9b45e137ca2cdbd48756150bdf65478`; the previously accepted G3
 candidate is Plane commit `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
 The current binding carries Hermes commit
 `d2e655101f263329359e7d0de9d0b856202a3e4b`, MCP gitlink
 `2dc152e136d7ad952b901e5fe9364a37487297ba`, SDK gitlink
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`, runtime image tag
-`plane-agent-runtime:hermes-d2e65510-g4-codex-fix`, runtime image digest
-`sha256:826cc9813bd4d7ab562e2bd701bea7c9c9623cd9d19e5f37bee91ca65e5ba35a`,
-runtime revision/source revision `99b8ba8e62a1e2311a7a0c145045c20d314f40c3`, and runtime
+`plane-agent-runtime:hermes-d2e65510-g4-cleanup-fix`, runtime image digest
+`sha256:28dd20b99e322ad30445715b70607bfaa453635e9df472e37b595f4b84b4e895`,
+runtime revision/source revision `79995597f9b45e137ca2cdbd48756150bdf65478`, and runtime
 contract `plane.agent-runtime/v1`. The current API artifact is tag
-`plane-agent-api:g4-99b8ba8` with image digest
-`sha256:0c87ef0b8394a40cabbc8197e58a6fd8079ac056b451104c248d3cafae3a6656` and
-source revision/image label `99b8ba8e62a1e2311a7a0c145045c20d314f40c3`.
-API image tag: `plane-agent-api:g4-99b8ba8`. API image digest:
-`sha256:0c87ef0b8394a40cabbc8197e58a6fd8079ac056b451104c248d3cafae3a6656`.
+`plane-agent-api:g4-79995597` with image digest
+`sha256:a64ff214b8159d1adc1ea939d676c74f808bbc2b71ec0ac81816d3d04245111a` and
+source revision/image label `79995597f9b45e137ca2cdbd48756150bdf65478`.
+API image tag: `plane-agent-api:g4-79995597`. API image digest:
+`sha256:a64ff214b8159d1adc1ea939d676c74f808bbc2b71ec0ac81816d3d04245111a`.
 API source revision remains the exact source revision/image label above.
 API contract: `plane.operation/v1`.
 The wrapper carries these exact values from the immutable image builds. The
@@ -359,7 +360,7 @@ tests retain XAI and fail-closed mismatch coverage. G3, G4, and the live helper
 execute the image-contained `/workspace/apps/api` tree;
 they do not bind-mount a newer host API source tree. API, worker,
 `beat-worker`, supervisor, and `agent-runtime` each use the corresponding
-current artifact revision and image digest in the manifest. The Plane service revision above is the current executable artifact revision; the runtime image/runtimeRevision source is `99b8ba8e62a1e2311a7a0c145045c20d314f40c3`. Here,
+current artifact revision and image digest in the manifest. The Plane service revision above is the current executable artifact revision; the runtime image/runtimeRevision source is `79995597f9b45e137ca2cdbd48756150bdf65478`. Here,
 `current.planeCommit` is the control-plane source correction and the current
 service artifact revisions identify the rebuilt executable images; the
 `previous` rollback section independently retains the last known-good G3
@@ -368,6 +369,29 @@ The previous services use immutable image digest
 `sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e`,
 the image pin recorded by the accepted G3 verifier. The rollback reasserts
 these immutable pins rather than accepting a mutable tag.
+
+### Pre-live verifier lifecycle incident
+
+A fresh pre-live root run on wrapper
+`0330003e71ffda6076cee807cd8c5f6eb2e11911` passed preflight, the G3
+prerequisite at `281/281`, and static scope, then failed before runtime test
+process creation at `g4-runtime-contracts`: the Docker bind source
+`/tmp/plane-g4-hermes-live-current` had been removed during G3 cleanup even
+though the disposable flags were false. The retained failed receipt has
+SHA-256
+`4e2a96a9fcaa5dccf5a8a1994b008016bf45aa7b8cc5c163f32aabb4cb4f958c` and its
+captured failure log has SHA-256
+`a412273116e90263dabade32d29e1a2b856e8dde64fe8c047c88850a5bf7bc52`.
+
+This was a pre-live infrastructure failure, not a provider result: the
+receipt counters are `provider_requests=0`, `live_requests=0`,
+`credential_mutations=0`, and `G5_actions=0`; no provider, credential, or G5
+boundary was reached, so the run is not `outcome_unknown`. The corrected
+ownership rule is structural: G4 treats both caller-supplied current and
+independent G3 Hermes checkouts as bind-only inputs, while G3 removes only its
+own `.g3-runtime-logs-*` directory after checking the creation flag, namespace,
+real-directory, and non-symlink conditions. Recreate or verify both exact
+Hermes pins before another offline run; never replay a live invocation.
 
 The canonical API artifact build uses `apps/api` as its Docker context because
 `apps/api/Dockerfile.g4` copies that context to `/workspace/apps/api`:
