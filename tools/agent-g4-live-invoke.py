@@ -421,7 +421,6 @@ def main() -> int:
                 "provider": provider["name"],
                 "model": provider["model"],
                 "adapter": "hermes",
-                "maxCodeModeCalls": 0,
             },
             created_by=user,
         )

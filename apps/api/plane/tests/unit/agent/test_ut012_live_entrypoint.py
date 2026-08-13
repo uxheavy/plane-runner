@@ -1,0 +1,359 @@
+"""UT-012: exercise the exact live helper through the supervisor command."""
+
+from __future__ import annotations
+
+import json
+import runpy
+import socket
+import threading
+from pathlib import Path
+from uuid import UUID
+
+import pytest
+from django.test import override_settings
+
+from plane.agent.lifecycle.services import _runtime_policy
+from plane.agent.runtime import (
+    AgentRuntimeConfiguration,
+    PlaneHostCall,
+    PlaneHostHTTPClient,
+    RuntimeConfigurationError,
+)
+from plane.agent.runtime.health import RuntimeSafetyController
+from plane.agent.runtime.service import _RuntimeHTTPServer
+from plane.db.models import (
+    InvocationState,
+    RunAttempt,
+    RunTerminalEvent,
+    RuntimeEventIngress,
+    RuntimeExitEvidence,
+    RuntimeInvocation,
+    RuntimeProviderAttempt,
+    RuntimeProviderAttemptPhase,
+)
+
+
+# The exact helper is mounted read-only at this path for the focused container
+# run, matching tools/agent-g4-live.sh's production mount.
+LIVE_HELPER = Path("/workspace/tools/agent-g4-live-invoke.py")
+
+
+def _binding_environment(monkeypatch):
+    revisions = {
+        "G4_CANDIDATE": "a" * 40,
+        "G4_EXPECTED_CANDIDATE": "a" * 40,
+        "G4_G3_BASELINE": "b" * 40,
+        "G4_HERMES": "c" * 40,
+        "G4_MCP": "d" * 40,
+        "G4_SDK": "e" * 40,
+        "G4_RUNTIME_IMAGE_TAG": "plane-agent-runtime:test",
+        "G4_RUNTIME_IMAGE_DIGEST": "sha256:" + "1" * 64,
+        "G4_RUNTIME_IMAGE_REVISION": "f" * 40,
+        "G4_RUNTIME_CONTRACT": "plane.agent-runtime/v1",
+        "G4_API_IMAGE_TAG": "plane-agent-api:test",
+        "G4_API_IMAGE_DIGEST": "sha256:" + "2" * 64,
+        "G4_API_SOURCE_REVISION": "a" * 40,
+        "G4_API_CONTRACT": "plane.operation/v1",
+        "G4_PERMITTED_CANARY": "ut012-permitted",
+        "G4_DENIED_CANARY": "ut012-denied",
+    }
+    provider = {
+        "name": "openai-codex",
+        "model": "gpt-5.6-luna",
+        "baseUrl": "https://chatgpt.com/backend-api/codex/responses",
+        "host": "chatgpt.com",
+        "path": "/backend-api/codex/responses",
+        "credentialSource": "command:/usr/local/bin/plane-agent-runtime-credential-resolver",
+        "credentialRef": "runtime",
+        "credentialName": "api_key",
+    }
+    monkeypatch.setenv("G4_PROVIDER_DESCRIPTOR_JSON", json.dumps(provider, sort_keys=True, separators=(",", ":")))
+    provider_environment = {
+        "PLANE_AGENT_RUNTIME_PROVIDER": provider["name"],
+        "PLANE_AGENT_RUNTIME_PROVIDER_MODELS": provider["model"],
+        "PLANE_AGENT_RUNTIME_PROVIDER_BASE_URL": provider["baseUrl"],
+        "PLANE_AGENT_RUNTIME_PROVIDER_HOST": provider["host"],
+        "PLANE_AGENT_RUNTIME_PROVIDER_PATH": provider["path"],
+        "PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_SOURCE": provider["credentialSource"],
+        "PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_REF": provider["credentialRef"],
+        "PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_NAME": provider["credentialName"],
+    }
+    for key, value in provider_environment.items():
+        monkeypatch.setenv(key, value)
+    for key, value in revisions.items():
+        monkeypatch.setenv(key, value)
+
+
+def _runtime_environment(tmp_path: Path, shared_secret: str) -> dict[str, str]:
+    return {
+        "PLANE_AGENT_RUNTIME_URL": "http://127.0.0.1:1",
+        "PLANE_AGENT_RUNTIME_SECRET": shared_secret,
+        "PLANE_AGENT_RUNTIME_COMMAND": "python3 -m plane_runtime.g1_runtime_image.bootstrap --once --g1-production",
+        "PLANE_AGENT_RUNTIME_ENVIRONMENT_JSON": "{}",
+        "PLANE_AGENT_RUNTIME_LEDGER_PATH": str(tmp_path / "dispatch-ledger.sqlite"),
+        "PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE": str(tmp_path / "safety-stop"),
+        "PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE": str(tmp_path / "credential-state.json"),
+        "PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER": "command:/fake/resolver",
+        "PLANE_AGENT_RUNTIME_PROVIDER": "openai-codex",
+        "PLANE_AGENT_RUNTIME_PROVIDER_HOST": "chatgpt.com",
+        "PLANE_AGENT_RUNTIME_PROVIDER_PATH": "/backend-api/codex/responses",
+        "PLANE_AGENT_RUNTIME_PROVIDER_MODELS": "gpt-5.6-luna",
+        "PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_NAME": "api_key",
+    }
+
+
+def _host_call(client, snapshot, envelope, *, action, operation_ref, input_value, source="model"):
+    return client.invoke(
+        PlaneHostCall(
+            run_id=snapshot["runId"],
+            invocation_id=envelope["invocationId"],
+            correlation_id=envelope["correlationId"],
+            action=action,
+            operation_ref=operation_ref,
+            input=input_value,
+            source=source,
+        )
+    )
+
+
+def _completed_frames(snapshot, envelope):
+    event = {
+        "protocol": "plane.agent-runtime/v1",
+        "trust": "untrusted",
+        "workspaceRef": snapshot["workspaceRef"],
+        "actorRef": snapshot["actorRef"],
+        "runId": snapshot["runId"],
+        "invocationId": envelope["invocationId"],
+        "sequence": 0,
+        "eventId": "event:ut012-usage",
+        "idempotencyKey": "idempotency:ut012-usage",
+        "correlationId": envelope["correlationId"],
+        "causationRef": envelope["causationRef"],
+        "observedAt": envelope["lease"]["expiresAt"],
+        "body": {
+            "kind": "usage_observed",
+            "usage": {"inputTokens": 1, "outputTokens": 1, "durationMs": 1},
+            "publication": {"action": "observation_only"},
+        },
+    }
+    exit_frame = {
+        "protocol": "plane.agent-runtime/v1",
+        "authority": "runtime_evidence_only",
+        "workspaceRef": snapshot["workspaceRef"],
+        "actorRef": snapshot["actorRef"],
+        "runId": snapshot["runId"],
+        "invocationId": envelope["invocationId"],
+        "finalSequence": 0,
+        "idempotencyKey": envelope["idempotencyKey"],
+        "correlationId": envelope["correlationId"],
+        "causationRef": envelope["causationRef"],
+        "kind": "completed",
+    }
+    return tuple(json.dumps(frame, sort_keys=True, separators=(",", ":")) for frame in (event, exit_frame))
+
+
+class _FakeLiveRuntime:
+    def __init__(self, *, reject=False):
+        self.reject = reject
+        self.dispatches = []
+        self.fake_provider_calls = 0
+        self.host_statuses = []
+
+    def dispatch(self, body):
+        snapshot = body["snapshot"]
+        envelope = body["invocation"]
+        self.dispatches.append(
+            {
+                "requestKeys": sorted(body),
+                "snapshot": snapshot,
+                "envelope": envelope,
+                "snapshotPolicyKeys": sorted(snapshot["runtimePolicy"]),
+                "envelopeKeys": sorted(envelope),
+                "credentialLeaseKeys": sorted(body["credentialLease"]),
+            }
+        )
+        if self.reject:
+            raise RuntimeConfigurationError("synthetic malformed runtime configuration")
+
+        client = PlaneHostHTTPClient(url=body["host"]["url"], auth_token=body["host"]["token"])
+        lease_id = body["credentialLease"]["leaseId"]
+        provider_attempt_key = "provider-attempt:ut012"
+        for phase, initiated, status_class in (
+            ("intent", False, ""),
+            ("started", True, ""),
+            ("completed", True, "2xx"),
+        ):
+            result = _host_call(
+                client,
+                snapshot,
+                envelope,
+                action="observe",
+                operation_ref="runtime.provider_attempt",
+                source="runtime",
+                input_value={
+                    "phase": phase,
+                    "leaseId": lease_id,
+                    "provider": snapshot["runtimePolicy"]["model"]["provider"],
+                    "model": snapshot["runtimePolicy"]["model"]["model"],
+                    "destinationHost": "chatgpt.com",
+                    "destinationPath": "/backend-api/codex/responses",
+                    "requestId": "request:ut012",
+                    "idempotencyKey": provider_attempt_key,
+                    "sequence": 1,
+                    "upstreamInitiated": initiated,
+                    "statusClass": status_class,
+                    "errorCode": "",
+                },
+            )
+            self.host_statuses.append((phase, result.status, result.error_code))
+            assert result.status == "ok"
+            if phase == "started":
+                self.fake_provider_calls += 1
+
+        discovery = _host_call(
+            client,
+            snapshot,
+            envelope,
+            action="discover",
+            operation_ref="plane.operations.discover@1",
+            input_value={"query": "work item", "limit": 5},
+        )
+        self.host_statuses.append(("discover", discovery.status, discovery.error_code))
+        assert discovery.status == "ok"
+        denied = _host_call(
+            client,
+            snapshot,
+            envelope,
+            action="mutate",
+            operation_ref="operation:agent.outcome.evaluate",
+            input_value={
+                "outcome_ref": "outcome-submission:not-authorized",
+                "evaluator_ref": snapshot["actorRef"],
+                "verdict": "revision_requested",
+            },
+        )
+        assert denied.status == "denied"
+        submitted = _host_call(
+            client,
+            snapshot,
+            envelope,
+            action="mutate",
+            operation_ref="operation:agent.outcome.submit",
+            input_value={
+                "run_ref": snapshot["runId"],
+                "summary": "UT-012 synthetic provider completion.",
+                "artifacts": ["artifact:ut012"],
+                "evidence": ["evidence:ut012"],
+            },
+        )
+        assert submitted.status == "ok"
+        outcome_ref = submitted.output["result"]["outcome"]["outcomeRef"]
+        published = _host_call(
+            client,
+            snapshot,
+            envelope,
+            action="publish",
+            operation_ref="operation:agent.outcome.publish",
+            input_value={
+                "kind": "outcome",
+                "resourceRef": outcome_ref,
+                "content": "UT-012 synthetic publication.",
+            },
+        )
+        assert published.status == "ok"
+        return _completed_frames(snapshot, envelope)
+
+
+def _run_literal_live_helper(monkeypatch, fake_runtime, tmp_path, host_port):
+    _binding_environment(monkeypatch)
+    shared_secret = "runtime-boundary-secret-0123456789"
+    runtime_environment = _runtime_environment(tmp_path, shared_secret)
+    configuration = AgentRuntimeConfiguration.from_environment(runtime_environment)
+    controller = RuntimeSafetyController(configured=True, stop_file=tmp_path / "runtime-stop")
+    controller.mark_ready()
+    server = _RuntimeHTTPServer(("127.0.0.1", 0), controller, configuration, executor=fake_runtime)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    runtime_url = f"http://127.0.0.1:{server.server_port}"
+    try:
+        with override_settings(
+            PLANE_AGENT_RUNTIME_URL=runtime_url,
+            PLANE_AGENT_RUNTIME_SHARED_SECRET=shared_secret,
+            PLANE_AGENT_RUNTIME_HOST_URL="http://127.0.0.1",
+            PLANE_AGENT_RUNTIME_HOST_BIND="127.0.0.1",
+            PLANE_AGENT_RUNTIME_HOST_PORT=host_port,
+            PLANE_AGENT_RUNTIME_DISPATCH_PATH="/v1/runtime/dispatch",
+            PLANE_AGENT_RUNTIME_COMMAND=(
+                "python3",
+                "-m",
+                "plane_runtime.g1_runtime_image.bootstrap",
+                "--once",
+                "--g1-production",
+            ),
+            PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER={"runtime": {"api_key": "synthetic-provider-secret"}},
+            PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE=str(tmp_path / "plane-revocations.json"),
+            PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE=str(tmp_path / "plane-safety-stop"),
+            PLANE_AGENT_RUNTIME_TIMEOUT_SECONDS=5,
+            PLANE_AGENT_RUNTIME_MAX_REQUEST_BYTES=256 * 1024,
+            PLANE_AGENT_RUNTIME_MAX_RESPONSE_BYTES=512 * 1024,
+        ):
+            module = runpy.run_path(str(LIVE_HELPER), run_name="ut012_live_invoke")
+            return module["main"]()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_exact_live_helper_persists_canonical_contract_and_one_fake_provider_attempt(
+    monkeypatch, tmp_path, capsys
+):
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        host_port = probe.getsockname()[1]
+    fake_runtime = _FakeLiveRuntime()
+    assert _run_literal_live_helper(monkeypatch, fake_runtime, tmp_path, host_port) == 0, fake_runtime.host_statuses
+    output = json.loads(capsys.readouterr().out)
+    assert output["status"] == "passed"
+
+    assert len(fake_runtime.dispatches) == 1
+    dispatch = fake_runtime.dispatches[0]
+    invocation = RuntimeInvocation.objects.get(invocation_id=dispatch["envelope"]["invocationId"])
+    run = RunAttempt.objects.get(pk=UUID(dispatch["snapshot"]["runId"].removeprefix("run:")))
+    expected_policy, expected_budget = _runtime_policy(run.profile_version)
+
+    assert dispatch["snapshot"] == run.snapshot
+    assert dispatch["envelope"] == invocation.envelope
+    assert run.snapshot["runtimePolicy"] == expected_policy
+    assert run.snapshot["totalBudget"] == expected_budget
+    assert dispatch["envelope"]["runSnapshotDigest"] == run.snapshot["contentDigest"]
+    assert dispatch["snapshotPolicyKeys"] == sorted(expected_policy)
+    assert dispatch["envelopeKeys"] == sorted(invocation.envelope)
+    assert fake_runtime.fake_provider_calls == 1
+    assert RuntimeProviderAttempt.objects.filter(invocation=invocation).count() == 1
+    assert RuntimeProviderAttempt.objects.get(invocation=invocation).phase == RuntimeProviderAttemptPhase.COMPLETED
+    assert invocation.state == InvocationState.SUCCEEDED
+    assert RuntimeEventIngress.objects.filter(invocation=invocation).count() == 1
+    assert RuntimeExitEvidence.objects.filter(invocation=invocation).count() == 1
+    assert RunTerminalEvent.objects.filter(invocation=invocation, visible=True).count() == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_exact_live_helper_preserves_bounded_runtime_rejection(monkeypatch, tmp_path, capsys):
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        host_port = probe.getsockname()[1]
+    fake_runtime = _FakeLiveRuntime(reject=True)
+    assert _run_literal_live_helper(monkeypatch, fake_runtime, tmp_path, host_port) == 1
+    evidence = json.loads(capsys.readouterr().out)
+
+    assert evidence["status"] == "failed"
+    assert evidence["failure"]["errorClass"] == "RuntimeError"
+    assert evidence["failure"]["reasonCode"] == "runtime_configuration_pre_dispatch_failure"
+    assert evidence["failure"]["reasonPhase"] == "runtime_configuration"
+    assert evidence["failure"]["reasonDetail"] == "dispatch_rejected"
+    assert evidence["failure"]["reasonSubreason"] == "runtime_configuration_rejected"
+    assert evidence["providerAttempts"] == []
+    assert fake_runtime.fake_provider_calls == 0
+    assert len(fake_runtime.dispatches) == 1
