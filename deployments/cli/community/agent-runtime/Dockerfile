@@ -10,6 +10,11 @@ ARG PLANE_REVISION
 ARG PLANE_RUNTIME_SOURCE_SHA256
 FROM company-runner-upstream-runtime:a8e53b6ac7b8@sha256:4c0d9f4dee14a4b2f59bc997baf557066f4394c4adcb285905aaa5838ed5ad39 AS runtime_base
 
+# The sealed upstream runner predates Hermes' Codex Responses adapter. Keep
+# the runtime image's SDK contract explicit: GPT-5.6 Codex dispatch requires
+# the Responses client, which is absent from the older base image.
+RUN python3 -m pip install --no-cache-dir --disable-pip-version-check "openai==2.24.0"
+
 FROM scratch
 ARG HERMES_COMMIT
 ARG HERMES_SOURCE_KIND
