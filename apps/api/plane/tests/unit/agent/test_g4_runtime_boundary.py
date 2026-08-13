@@ -104,25 +104,27 @@ def test_g4_deployment_credential_resolver_accepts_provider_neutral_chatgpt_sour
     assert runtime_credentials.resolve_deployment_credential("runtime") == {"api_key": "chatgpt-subscription-token"}
 
 
-def test_g4_deployment_credential_resolver_accepts_exact_codex_auth_document_without_forwarding_unused_tokens(
-    monkeypatch, tmp_path
+@pytest.mark.parametrize(
+    "include_optional_api_key",
+    (False, True),
+    ids=("current", "legacy"),
+)
+def test_g4_deployment_credential_resolver_accepts_codex_auth_document_without_forwarding_unused_tokens(
+    monkeypatch, tmp_path, include_optional_api_key
 ):
+    document = {
+        "last_refresh": "2026-08-13T00:00:00Z",
+        "tokens": {
+            "access_token": "synthetic-access-token",
+            "account_id": "synthetic-account-id",
+            "id_token": "synthetic-id-token",
+            "refresh_token": "synthetic-refresh-token",
+        },
+    }
+    if include_optional_api_key:
+        document["OPENAI_API_KEY"] = None
     source = tmp_path / "auth.json"
-    source.write_text(
-        json.dumps(
-            {
-                "OPENAI_API_KEY": None,
-                "last_refresh": "2026-08-13T00:00:00Z",
-                "tokens": {
-                    "access_token": "synthetic-access-token",
-                    "account_id": "synthetic-account-id",
-                    "id_token": "synthetic-id-token",
-                    "refresh_token": "synthetic-refresh-token",
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
+    source.write_text(json.dumps(document), encoding="utf-8")
     monkeypatch.setattr(runtime_credentials, "DEPLOYMENT_CREDENTIAL_SOURCE_PATH", str(source))
 
     resolved = runtime_credentials.resolve_deployment_credential("runtime")

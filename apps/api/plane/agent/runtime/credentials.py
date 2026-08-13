@@ -41,7 +41,11 @@ DEPLOYMENT_CREDENTIAL_ALLOWED_REFS = frozenset({"runtime"})
 # single-line token.  The broker still exposes only the canonical api_key
 # value to the trusted runtime parent.
 _DEPLOYMENT_CREDENTIAL_KEYS = frozenset({"API_KEY", "OPENAI_API_KEY", "XAI_API_KEY", "api_key"})
-_CODEX_AUTH_DOCUMENT_KEYS = frozenset({"OPENAI_API_KEY", "last_refresh", "tokens"})
+# Codex auth.json currently omits OPENAI_API_KEY. Keep accepting the older
+# shape when that field is present, but require it to remain null.
+_CODEX_AUTH_DOCUMENT_KEYS = frozenset({"last_refresh", "tokens"})
+_CODEX_AUTH_DOCUMENT_WITH_API_KEY_KEYS = frozenset({"OPENAI_API_KEY", "last_refresh", "tokens"})
+_CODEX_AUTH_DOCUMENT_SHAPES = (_CODEX_AUTH_DOCUMENT_KEYS, _CODEX_AUTH_DOCUMENT_WITH_API_KEY_KEYS)
 _CODEX_AUTH_TOKEN_KEYS = frozenset({"access_token", "account_id", "id_token", "refresh_token"})
 _DEPLOYMENT_CREDENTIAL_MAX_BYTES = 64 * 1024
 _DEPLOYMENT_CREDENTIAL_MAX_VALUE_BYTES = 16 * 1024
@@ -106,9 +110,9 @@ def _parse_deployment_dotenv(text: str) -> str:
 
 
 def _parse_codex_auth_document(value: object) -> str:
-    if not isinstance(value, dict) or set(value) != _CODEX_AUTH_DOCUMENT_KEYS:
+    if not isinstance(value, dict) or frozenset(value) not in _CODEX_AUTH_DOCUMENT_SHAPES:
         raise RuntimeCredentialError("deployment credential JSON fields are invalid")
-    if value["OPENAI_API_KEY"] is not None:
+    if "OPENAI_API_KEY" in value and value["OPENAI_API_KEY"] is not None:
         raise RuntimeCredentialError("deployment credential JSON fields are invalid")
     last_refresh = value["last_refresh"]
     if not isinstance(last_refresh, str) or not last_refresh.strip():
@@ -147,7 +151,7 @@ def _parse_deployment_credential_document(raw: bytes) -> str:
             value = json.loads(stripped, object_pairs_hook=reject_duplicate_keys)
         except (TypeError, ValueError, json.JSONDecodeError) as exc:
             raise RuntimeCredentialError("deployment credential source is not valid JSON") from exc
-        if isinstance(value, dict) and set(value) == _CODEX_AUTH_DOCUMENT_KEYS:
+        if isinstance(value, dict) and frozenset(value) in _CODEX_AUTH_DOCUMENT_SHAPES:
             return _parse_codex_auth_document(value)
         if not isinstance(value, dict) or len(value) != 1:
             raise RuntimeCredentialError("deployment credential JSON fields are invalid")

@@ -174,7 +174,6 @@ def test_g4_provider_dispatch_crosses_runtime_boundary_before_provider_request(t
     source.write_text(
         json.dumps(
             {
-                "OPENAI_API_KEY": None,
                 "last_refresh": "2026-08-13T00:00:00Z",
                 "tokens": {
                     "access_token": "synthetic-access-token",
