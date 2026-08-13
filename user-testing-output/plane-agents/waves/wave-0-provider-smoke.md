@@ -308,6 +308,30 @@ replay, or second provider call ran.
 No broad G3/G4 verifier, unrelated suite, load test, G5, rollout, pilot,
 deployment, source edit, or extra provider call ran.
 
+## Wave 0S — provider-free remote-rejection proof at 656ced1019
+
+Status: clean for the Plane remote-runtime rejection boundary; S00 remains dirty
+at the real pinned Hermes bootstrap before provider-attempt intent.
+
+- Candidate: `656ced10198e3330926a31481ec646e9d39c0f32`.
+- The exact live helper used the real `agent_supervisor` command and
+  `RemoteRuntimeTransport` against an authenticated local runtime endpoint.
+- Canonical HTTP 409 evidence preserved `runtime_process_failed`,
+  `runtime_process`, and `process_exit` through the transport, lifecycle,
+  durable control/terminal state, and final bounded live receipt.
+- The configuration-rejection and successful fake-provider controls remained
+  covered, including exactly one terminal product event, zero attempts for the
+  rejection, one attempt for success, and redacted error material.
+- Central migration-backed Docker execution passed all three focused tests in
+  `6.98s`; the test stack and volumes were then removed.
+- No product behavior changed. The proof removes Plane propagation from the
+  active failure fence. The next test must execute the real pinned Hermes
+  bootstrap provider-free and expose its first pre-relay failure before any new
+  subscription request.
+
+No broad G3/G4 verifier, unrelated suite, image refreeze, provider call, G5,
+rollout, pilot, or deployment ran.
+
 ## Wave 0R — supervisor terminalization retest at afe98be81d
 
 Status: dirty at the first API-invocation boundary. Exactly one fresh approved
