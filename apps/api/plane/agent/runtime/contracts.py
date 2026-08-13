@@ -40,6 +40,7 @@ _FAILURE_DETAILS = frozenset(
         "unclassified_exception",
     }
 )
+_UNCLASSIFIED_FAILURE_DETAIL = "unclassified_exception"
 
 
 class RuntimeDispatchError(ValueError):
@@ -61,6 +62,7 @@ class RuntimeDispatchError(ValueError):
             and failure_phase in _FAILURE_PHASES
             and isinstance(failure_detail, str)
             and failure_detail in _FAILURE_DETAILS
+            and failure_detail != _UNCLASSIFIED_FAILURE_DETAIL
         )
         self.has_allowlisted_failure = classification_is_valid
         self.failure_code = (
@@ -76,11 +78,11 @@ class RuntimeDispatchError(ValueError):
         self.failure_detail = (
             failure_detail
             if classification_is_valid
-            else "dispatch_rejected"
+            else _UNCLASSIFIED_FAILURE_DETAIL
         )
 
     def public_failure(self) -> dict[str, str]:
-        """Return only the allowlisted cross-process failure classification."""
+        """Return only a bounded cross-process classification, never exception text."""
 
         return {
             "failureCode": self.failure_code,

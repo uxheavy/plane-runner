@@ -7,6 +7,7 @@ import threading
 import time
 from contextlib import nullcontext
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -72,6 +73,51 @@ def _dispatch_body(suffix: str = "one") -> tuple[str, str]:
         json.dumps(snapshot, sort_keys=True, separators=(",", ":")),
         json.dumps(invocation, sort_keys=True, separators=(",", ":")),
     )
+
+
+class _FailingRuntimeExecutor:
+    def __init__(self, error: Exception):
+        self.error = error
+
+    def dispatch(self, body):
+        raise self.error
+
+
+@pytest.mark.parametrize(
+    "failure",
+    (
+        RuntimeDispatchError("runtime-secret=/private/transcript"),
+        RuntimeError("runtime-secret=/private/transcript"),
+    ),
+    ids=("runtime-dispatch-error", "generic-exception"),
+)
+def test_g4_service_and_remote_preserve_unclassified_failure_without_leaking_raw_error(tmp_path, failure):
+    configuration = _configuration(tmp_path)
+    controller = RuntimeSafetyController(configured=True, stop_file=tmp_path / "safety-stop")
+    controller.mark_ready()
+    server = _RuntimeHTTPServer(
+        ("127.0.0.1", 0),
+        controller,
+        configuration,
+        executor=SimpleNamespace(dispatch=_FailingRuntimeExecutor(failure).dispatch),
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    snapshot_json, invocation_json = _dispatch_body("unclassified")
+    try:
+        with pytest.raises(RuntimeDispatchError) as raised:
+            RemoteRuntimeTransport(
+                runtime_url=f"http://127.0.0.1:{server.server_port}",
+                shared_secret=configuration.shared_secret,
+            ).dispatch(snapshot_json, invocation_json)
+        error = raised.value
+        assert error.has_allowlisted_failure is False
+        assert error.failure_detail == "unclassified_exception"
+        assert "runtime-secret=/private/transcript" not in str(error)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
 
 
 def test_g4_runtime_dispatch_is_cross_process_and_revokes_invocation_credentials(tmp_path):

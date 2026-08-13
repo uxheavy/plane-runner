@@ -399,3 +399,16 @@ def test_runtime_dispatch_failure_diagnostic_is_allowlisted_and_never_echoes_exc
         "failureDetail": "bootstrap_argv_rejected",
     }
     assert secret not in json.dumps(error.public_failure(), sort_keys=True)
+
+
+def test_unclassified_runtime_dispatch_failure_is_not_allowlisted_and_is_scrubbed():
+    secret = "authorization=secret-token transcript=/private/secret"
+    error = RuntimeDispatchError(secret)
+
+    assert error.has_allowlisted_failure is False
+    assert error.public_failure() == {
+        "failureCode": "runtime_transport_pre_dispatch_failure",
+        "failurePhase": "runtime_transport",
+        "failureDetail": "unclassified_exception",
+    }
+    assert secret not in json.dumps(error.public_failure(), sort_keys=True)

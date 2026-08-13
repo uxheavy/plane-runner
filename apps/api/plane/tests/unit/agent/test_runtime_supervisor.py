@@ -128,6 +128,15 @@ class UnknownRuntimeTransport:
         raise RuntimeDispatchError("runtime process did not produce a durable terminal result")
 
 
+class GenericExceptionRuntimeTransport:
+    def __init__(self):
+        self.calls = 0
+
+    def dispatch(self, snapshot_json, envelope_json):
+        self.calls += 1
+        raise RuntimeError("provider-secret=must-not-leak")
+
+
 class KnownDispatchFailureTransport:
     def __init__(self):
         self.calls = 0
@@ -580,6 +589,25 @@ def test_supervisor_timeout_or_process_death_is_outcome_unknown_and_not_replayed
     assert control.failure_code == "outcome_unknown"
     assert transport.calls == 1
     assert RunTerminalEvent.objects.filter(run=run, visible=True).count() == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_supervisor_generic_exception_is_outcome_unknown_and_not_replayed(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    run, invocation = _invocation(workspace, gateway_project, gateway_issue, create_user, suffix="generic-exception")
+    transport = GenericExceptionRuntimeTransport()
+
+    first = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
+    second = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
+
+    control = RuntimeInvocationControl.objects.get(invocation=invocation)
+    terminal = RunTerminalEvent.objects.get(run=run, visible=True)
+    assert first.terminal_kind == second.terminal_kind == "run_blocker"
+    assert control.state == RuntimeControlState.OUTCOME_UNKNOWN
+    assert control.failure_code == "outcome_unknown"
+    assert "provider-secret=must-not-leak" not in terminal.reason
+    assert transport.calls == 1
 
 
 @pytest.mark.django_db(transaction=True)
