@@ -184,6 +184,31 @@ runner's source checkout. The runner removes the provider volume and staged
 host files during the same exact-project cleanup; no provider credential
 enters argv, environment, logs, image layers, or generated evidence.
 
+### Live runner result handoff
+
+The live runner preserves its bounded stdout receipt before destroying the
+disposable run directory. Set `PLANE_G4_LIVE_RESULT_PATH` to a new absolute
+destination when the caller needs a stable path; its existing parent must be
+owned by the caller and have no group/world permissions. If omitted, the
+runner creates a fresh `*.result` file under the repository-owned `tmp/`
+directory. Existing destinations and symlinks are refused. The published file
+is owner-only (`0600`) and is made visible atomically, so callers never read a
+partially written final result.
+
+The result file bytes are exactly the bounded bytes written to stdout. A
+failure receipt contains only the finite runner phase, error-class allowlist,
+exit code, and (for Docker exit `125`) the finite Docker reason category,
+followed by the existing schema-controlled `EVIDENCE_FILE` object when one
+exists. The raw `ERROR_FILE`, runtime transcript, model text, credentials, and
+host paths are never copied to the result file.
+
+The user-testing caller owns acknowledgment: after the runner exits, read and
+hash the result file, validate the bounded receipt, then delete that exact
+file. The runner has already removed its containers, volumes, network, staged
+secret, and `RUN_DIR`; the result file is the only handoff artifact and is not
+removed by runner cleanup. A failed read, hash, validation, or delete is an
+unacknowledged result and must use a fresh destination for the next run.
+
 ## Local development topology
 
 `./setup.sh` copies the local examples and generates the untracked

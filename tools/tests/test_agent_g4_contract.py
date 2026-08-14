@@ -377,20 +377,22 @@ class G4ContractTests(unittest.TestCase):
     def test_live_runner_exports_one_failure_object_before_disposable_teardown(self):
         source = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
         cleanup = source[source.index("cleanup()") : source.index("trap cleanup EXIT INT TERM")]
-        evidence_index = cleanup.index('cat "${EVIDENCE_FILE}"')
-        compose_down_index = cleanup.index("docker compose", evidence_index)
+        result_index = cleanup.index("agent-g4-live-result.py")
+        docker_cleanup_index = cleanup.index('docker rm -f "${RUNTIME}"', result_index)
+        compose_down_index = cleanup.index("docker compose", docker_cleanup_index)
         run_dir_delete_index = cleanup.index('rm -rf -- "${RUN_DIR}"', compose_down_index)
 
         self.assertLess(
-            evidence_index,
+            result_index,
             compose_down_index,
             "event=agent.g4.runner.failure_evidence risk=teardown_destroys_readback "
-            "expected=evidence before down-v actual=cleanup order is unsafe "
-            "suggestion=preserve exactly one JSON object before teardown",
+            "expected=result before down-v actual=cleanup order is unsafe "
+            "suggestion=preserve exactly one bounded receipt before teardown",
         )
-        self.assertLess(evidence_index, run_dir_delete_index)
-        self.assertEqual(source.count('cat "${EVIDENCE_FILE}"'), 1)
-        self.assertIn('if [[ -s "${EVIDENCE_FILE}" ]]', cleanup)
+        self.assertLess(result_index, run_dir_delete_index)
+        self.assertIn('cat "${RESULT_FILE}"', cleanup)
+        self.assertNotIn('cat "${EVIDENCE_FILE}"', cleanup)
+        self.assertIn('if [[ -n "${RESULT_FILE}" ]]', cleanup)
         self.assertIn('exit "${status}"', cleanup)
 
     def test_live_runner_uses_accepted_g3_baseline_and_existing_audit_bootstrap_order(self):
@@ -442,7 +444,12 @@ class G4ContractTests(unittest.TestCase):
             root = Path(directory)
             clean_tools = root / "tools"
             clean_tools.mkdir(mode=0o700)
-            for name in ("agent-g4-live.sh", "agent-g4-manifest.json", "validate_agent_g4_live.py"):
+            for name in (
+                "agent-g4-live.sh",
+                "agent-g4-live-result.py",
+                "agent-g4-manifest.json",
+                "validate_agent_g4_live.py",
+            ):
                 target = clean_tools / name
                 target.write_bytes((TOOLS / name).read_bytes())
             (clean_tools / "agent-g4-live.sh").chmod(0o700)
@@ -730,7 +737,12 @@ class G4ContractTests(unittest.TestCase):
             root = Path(directory)
             clean_tools = root / "tools"
             clean_tools.mkdir(mode=0o700)
-            for name in ("agent-g4-live.sh", "agent-g4-manifest.json", "validate_agent_g4_live.py"):
+            for name in (
+                "agent-g4-live.sh",
+                "agent-g4-live-result.py",
+                "agent-g4-manifest.json",
+                "validate_agent_g4_live.py",
+            ):
                 target = clean_tools / name
                 target.write_bytes((TOOLS / name).read_bytes())
             (clean_tools / "agent-g4-live.sh").chmod(0o700)
@@ -828,7 +840,10 @@ class G4ContractTests(unittest.TestCase):
             self.assertNotIn("expected=invocation-run-directory", output)
             self.assertTrue((root / "tmp").is_dir())
             self.assertEqual((root / "tmp").stat().st_mode & 0o777, 0o700)
-            self.assertEqual(list((root / "tmp").iterdir()), [])
+            result_files = list((root / "tmp").glob("*.result"))
+            self.assertEqual(len(result_files), 1)
+            self.assertEqual(result_files[0].stat().st_mode & 0o777, 0o600)
+            self.assertEqual(result_files[0].read_bytes(), result.stdout.encode())
             docker_log_text = docker_log.read_text(encoding="utf-8")
             self.assertIn("--network none", docker_log_text)
             self.assertIn("provider_credentials", docker_log_text)

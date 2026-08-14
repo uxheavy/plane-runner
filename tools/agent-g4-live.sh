@@ -18,6 +18,8 @@ EVIDENCE_FILE="${RUN_DIR}/evidence.json"
 ERROR_FILE="${RUN_DIR}/sanitized-error.log"
 RUNTIME_SECRET_FILE="${RUN_DIR}/runtime-secret"
 PROVIDER_SECRET_FILE="${RUN_DIR}/provider-credentials"
+LIVE_RESULT_PATH_INPUT="${PLANE_G4_LIVE_RESULT_PATH:-${TMP_ROOT}/${PROJECT}.result}"
+RESULT_FILE=""
 RUN_DIR_CREATED=0
 CREDENTIAL_STATE_VOLUME_CREATED=0
 PROVIDER_SECRET_VOLUME_CREATED=0
@@ -219,20 +221,66 @@ else:
 PY
 }
 
+validate_result_path() {
+    python3 - "${LIVE_RESULT_PATH_INPUT}" "${RUN_DIR}" <<'PY'
+import os
+import stat
+import sys
+from pathlib import Path
+
+candidate = Path(sys.argv[1])
+run_dir = Path(os.path.abspath(sys.argv[2]))
+if not candidate.is_absolute() or any(ord(char) < 0x20 or ord(char) == 0x7F for char in str(candidate)):
+    raise SystemExit(1)
+candidate = Path(os.path.abspath(candidate))
+parent = Path(os.path.abspath(candidate.parent))
+try:
+    resolved_parent = parent.resolve(strict=True)
+except (OSError, RuntimeError):
+    raise SystemExit(1)
+if candidate == run_dir or run_dir in candidate.parents or resolved_parent == run_dir:
+    raise SystemExit(1)
+try:
+    metadata = os.stat(resolved_parent, follow_symlinks=False)
+except OSError:
+    raise SystemExit(1)
+if not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) & 0o077:
+    raise SystemExit(1)
+candidate = resolved_parent / candidate.name
+try:
+    os.lstat(candidate)
+except FileNotFoundError:
+    pass
+except OSError:
+    raise SystemExit(1)
+else:
+    raise SystemExit(1)
+print(candidate)
+PY
+}
+
 cleanup() {
     local status=$?
     local cleanup_status=0
+    local reason_category=unavailable
+    local error_class=unavailable
     if [[ "${status}" -ne 0 ]]; then
-        local reason_category=unavailable
         if [[ "${status}" -eq 125 ]]; then
             reason_category="$(safe_docker_failure_reason)"
         fi
-        printf 'event=agent.g4.live-runner.failure phase=%s error_class=%s exit_code=%s reason_category=%s\n' \
-            "${LIVE_PHASE}" "$(safe_error_class)" "${status}" \
-            "${reason_category}"
+        error_class="$(safe_error_class)"
     fi
-    if [[ -s "${EVIDENCE_FILE}" ]]; then
-        cat "${EVIDENCE_FILE}"
+    if [[ -n "${RESULT_FILE}" ]] && ! python3 "${ROOT_DIR}/tools/agent-g4-live-result.py" \
+        --destination "${RESULT_FILE}" \
+        --evidence "${EVIDENCE_FILE}" \
+        --status "${status}" \
+        --phase "${LIVE_PHASE}" \
+        --error-class "${error_class}" \
+        --reason-category "${reason_category}" >/dev/null; then
+        printf '%s\n' 'event=agent.g4.live-runner status=failed phase=result-persistence expected=owner-only-atomic-result actual=persist-failed' >&2
+        cleanup_status=1
+    elif [[ -n "${RESULT_FILE}" ]]; then
+        cat "${RESULT_FILE}"
     fi
     docker rm -f "${RUNTIME}" >/dev/null 2>&1 || true
     docker network rm "${EGRESS}" >/dev/null 2>&1 || true
@@ -276,6 +324,10 @@ if [[ -L "${TMP_ROOT}" ]]; then
 fi
 chmod 700 "${TMP_ROOT}" || {
     printf '%s\n' 'event=agent.g4.live-runner status=failed expected=owner-only-tmp-root actual=unavailable suggestion=use-a-writable-repository-owned-tmp-root' >&2
+    exit 2
+}
+RESULT_FILE="$(validate_result_path 2>/dev/null)" || {
+    printf '%s\n' 'event=agent.g4.live-runner status=failed expected=fresh-owner-only-result-path actual=unsafe-or-colliding-path suggestion=provide-a-new-owner-only-result-path' >&2
     exit 2
 }
 mkdir -m 700 -- "${RUN_DIR}" || {
