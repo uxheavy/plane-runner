@@ -76,6 +76,18 @@ def test_catalog_digest_and_discovery_are_complete_and_stable():
     }
 
 
+def test_work_item_read_discloses_exact_uuid_input_schema():
+    assert describe_operation("work_item.read")["operation"]["inputSchema"] == {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["project_id", "issue_id"],
+        "properties": {
+            "project_id": {"type": "string", "format": "uuid"},
+            "issue_id": {"type": "string", "format": "uuid"},
+        },
+    }
+
+
 def test_progressive_disclosure_excludes_eager_prefixed_operation_refs():
     progressive = progressive_operation_ids({"eagerOperations": [{"operationRef": "operation:work_item.rename"}]})
 
