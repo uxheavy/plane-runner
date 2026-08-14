@@ -386,6 +386,7 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
             code = relay._error_code(exc)
             if request is None and isinstance(exc, _ProviderRelayAdmissionError):
                 request = exc.request
+                relay._record_attempt(request, phase="intent", upstream_initiated=False, required=True)
             if request is not None:
                 terminal_phase = "outcome_unknown" if upstream_called and code == "upstream_error" else "failed"
                 relay._record_attempt(

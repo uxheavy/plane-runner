@@ -463,7 +463,16 @@ def test_provider_relay_surfaces_budget_exhaustion_without_an_upstream_replay(tm
     assert second[0] == 403
     assert json.loads(second[2]) == {"error": "budget_exhausted"}
     assert len(upstream.calls) == 1
-    assert len(audits) == 4
+    assert len(audits) == 5
+    boundary_intent = audits[-2]
+    assert boundary_intent.phase == "intent"
+    assert boundary_intent.outcome == "allowed"
+    assert boundary_intent.reason == "intent"
+    assert boundary_intent.request_id == "request:budget-2"
+    assert boundary_intent.sequence == 2
+    assert boundary_intent.status_class == ""
+    assert boundary_intent.error_code == ""
+    assert boundary_intent.upstream_called is False
     boundary_audit = audits[-1]
     assert boundary_audit.phase == "failed"
     assert boundary_audit.outcome == "failed"
