@@ -643,6 +643,77 @@ unrelated suite ran.
   `SupervisorResult`, durable terminal state, and the bounded receipt.
 - Decision: S00 is `FAIL` and does not unlock W/M/O.
 
+## Wave 0AG — exact 053ce18c / Hermes b39be101 single fresh S00
+
+Status: primary live lifecycle passed, but S00 remains dirty because the
+bounded pass receipt did not retain the complete ordered operation/provider
+evidence and no exact no-provider replay was available after runner teardown.
+UT-018 remains open and W/M/O stay locked. Exactly one primary provider
+invocation ran; no retry, second provider call, or outcome-unknown replay ran.
+
+### Exact binding and provider-free preflight
+
+- Plane was clean at exact HEAD
+  `053ce18c8b0b29cba7115ca9411e61f54bc3a285`, branch
+  `codex/agent-functional-dogfood`. Hermes was clean at exact `main` HEAD
+  `b39be1013fd24fe05db006dc90ffc9cd05b0ca12`.
+- API image `plane-agent-api:s00-053ce18c8b` digest
+  `sha256:872f985463c8aa604066f99c14dcd2084c4cae4975d8d16aa89d05986a426ba7`;
+  runtime image `plane-agent-runtime:s00-053ce18c8b-hermes-b39` digest
+  `sha256:bca62591058b44eb093f054bdddf06b01569c6bd5427e94e741f811d7f1c2247`.
+  Labels bound Plane `053ce18c...`, Hermes `b39be101...`, Hermes tree digest
+  `f8cc0961f7d6fa1a8ee0be1ed52df437a0083c2abf890058932d8d677e41b68b`, Plane
+  runtime source digest `c5a1665e598d9d72b151a8042049250de978b6300a66358053f0816eb1509060`,
+  and contract `plane.agent-runtime/v1`.
+- Disposable manifest/authority/config SHA-256 values were
+  `795c5939fc72ba34c7960fab44645399f7c64ff8e476cb1ef28de688c117b64d`,
+  `94f1092ac605c17be53e269dab430f896564c8cd5bd315a0bce4580db265ab2a`, and
+  `536ca82ff88ff1ead0bf2a1ee52d048ca899caec04848e4e927f267c76766f02`.
+- Both contract manifests were byte-identical at
+  `714f63844ad84370e0ec467dac19fef3f79b3c47a3c4bae8493437f283913bc0`; the
+  RunSnapshot schema digest was
+  `308101c6a2c9f56e7deb5c6a07c8bc74b59831b92cbbb5b07c5a7eefc21f4947`.
+  The isolated eager-schema probe passed for `work_item.read` with canonical
+  `project_id` and `issue_id`. Authority/config validation passed before the
+  owner-only provider source was read.
+
+### One fresh primary and bounded pass
+
+- Route was `openai-codex/gpt-5.6-luna`, fallback disabled, through
+  `plane.agent-runtime/provider-relay/v1`; exact command SHA-256 was
+  `32756a110745e4b69a3c8627021527a073ac7c434b5cd6659483245674954060`.
+- The primary exited `0` with bounded `status=passed`. Refs were actor
+  `0f08003d-909c-4d95-9208-1783bacd306a`, run
+  `f46fe053-ea7f-47bc-b171-bb919d533240`, invocation
+  `invocation:0afe8909-5e4f-46d3-9c1d-0b40620f9dc7`, and terminal
+  `product-event:f91cd7ae-42e6-4170-984f-8b2e5b793cad`. Invocation state was
+  `succeeded`, terminal kind `outcome_submission`, outcome count `1`, runtime
+  event count `22`, and provider HTTP class `2xx`.
+- The bounded receipt was mode `0600`, size `3508` bytes, schema
+  `plane-agent-g4/live-evidence/v1`, and SHA-256
+  `f7b771481396e7591cd5a6bc860a22cb2888437ee95e35c8b63979d3ece5588c`.
+  Readback retained audit event count `16`; permitted/denied/submit/publish
+  outcomes were all reported as passing and observed thresholds were
+  permitted `1.0`, denied rejection `1.0`, error `0.0`, latency p95
+  `58376.915ms`. No raw prompt, model output, tool payload, provider secret,
+  or credential was retained.
+- The in-process lifecycle gate confirmed a permitted read path, recoverable
+  `agent.outcome.evaluate` denial with `NOT_AUTHORIZED`, one explicit outcome
+  submission, one explicit publication, one outcome, and a terminal event.
+  The bounded pass schema did not retain the exact read operation ID, ordered
+  provider-attempt rows/sequences, runtime event-kind counts, RuntimeExit
+  kind/category, per-operation audit rows, or transcript/publication refs; the
+  missing fields are not inferred.
+
+### Replay, cleanup, and decision
+
+The primary passed, but the existing isolated runner destroys the local
+database during its exit cleanup and exposes no post-primary exact replay
+hook. No safe exact no-provider replay was run; no replay result is claimed.
+The receipt was validated before deletion. S00 is therefore `FAIL` at the
+evidence/replay boundary; UT-018 remains open and W/M/O stay locked. No
+product source was changed.
+
 ## Wave 0AF — exact 7b538491 / Hermes b39be101 single fresh S00
 
 Status: failed at the first finite API-invocation boundary. S00 remains dirty;
