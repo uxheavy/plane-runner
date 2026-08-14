@@ -1647,3 +1647,72 @@ product source was changed.
   untouched, Colima remained running, and no unrelated state was removed.
 - Decision: S00 is `FAIL`; UT-018 and UT-019 remain `open`; W/M/O remain
   locked. No Plane or Hermes source was changed.
+
+## Wave 0AJ — exact b00e5e5b / Hermes b2f1990d single fresh S00
+
+### Exact binding and provider-free preflight
+
+- The authoritative Plane checkout was clean at
+  `b00e5e5b47c10fb2c40733ccc63dee9dd980ac85` on
+  `codex/agent-functional-dogfood`; Hermes was clean at
+  `b2f1990dcf8fb9ca5a7d811fe1645420e9dafeec` on `main`. No provider access
+  was attempted until both identities and cleanliness matched.
+- The disposable API image was
+  `plane-agent-api:s00-b00e5e5b47c1`, digest
+  `sha256:38a42c0976ad0ae9584951ce8067ffce7e54ecebc4fdadf21e22c2d5b954df5e`.
+  The disposable runtime image was
+  `plane-agent-runtime:s00-b00e5e5b47c1-hermes-b2f1990d`, digest
+  `sha256:a1ce26bac6ea8e33a3568f4c0a934f2778439f90e4e45a0370c890d8e3e73adc`.
+  Hermes tree digest was
+  `251d200eb421954afb6843c8b2be697af39e9720425a175db767650541a14c12`;
+  Plane runtime source digest was
+  `3dbd31d22bca27c722f972b2610a45d3e48ee18110457be9ec3ab668e89c7669`.
+- Fresh candidate-bound authority/config descriptors passed config-only
+  validation. The live descriptor was `openai-codex/gpt-5.6-luna` through
+  the ChatGPT subscription route with fallback disabled and the
+  `plane.agent-runtime/provider-relay/v1` contract. The exact command hash
+  was `32756a110745e4b69a3c8627021527a073ac7c434b5cd6659483245674954060`.
+- The caller created `/tmp/plane-agent-s00-0aj.s44tr8` with mode `0700` and
+  used the absent absolute result destination
+  `/tmp/plane-agent-s00-0aj.s44tr8/result.json`. The owner-only provider
+  source was `/Users/nqh/.codex/auth.json`, mode `0600`; its contents were not
+  read into evidence or printed.
+
+### One fresh primary and bounded failure
+
+- Exactly one primary process ran to completion. It returned exit `1` with
+  bounded `phase=api-invocation`, `error_class=unspecified`, and
+  `reason_category=unavailable`. The inner failure was
+  `budget_exhausted / runtime_process / process_exit /
+model_call_budget_exhausted`. Run
+  `d4f5136d-6654-416f-af0f-595e2d886e8d` and invocation
+  `invocation:3599842d-20ca-4127-bc4a-27f4722f6cf8` read back as `succeeded`.
+- Provider attempts were exactly `13`, sequences `1..13`. Every attempt was
+  `completed`, upstream initiated, `2xx`, and had an empty error code. No
+  attempt was `outcome_unknown`. RuntimeExit was present as `failed`, final
+  sequence `24`, with `failure.code=budget_exhausted` and `retryable=false`.
+  Runtime ingress counted `progress_observed:25`.
+- The bounded operation audit proved `search_workspace` success `5`,
+  `work_item.read` success `1`, `agent.outcome.evaluate` denied with
+  `NOT_AUTHORIZED` exactly `1`, `agent.outcome.submit` success `1`, and
+  `agent.outcome.publish` success `1`. The visible terminal readback was
+  present as `outcome_submission` with `code=budget_exhausted`. The failed
+  receipt did not retain transcript/publication separation fields, so this
+  wave does not claim that assertion as independently proven.
+
+### Receipt, replay, cleanup, and decision
+
+- Because the primary failed, no retry or same-invocation replay ran. The
+  replay predicate was not eligible, and no replay-side effect claim is made.
+- The bounded owner-only failure receipt was validated before deletion. It was
+  schema `plane-agent-g4/live-failure/v1`, mode `0600`, parent mode `0700`,
+  size `3621` bytes, SHA-256
+  `037c724c2e901d8fc350c44cd70cba7e17896dd0564e91a3b64034cad5cc79ef`, and
+  contained no sensitive field. The exact result path was absent after
+  acknowledgment.
+- Cleanup removed the exact disposable API/runtime images, manifest,
+  authority/config descriptors, result directory, and decision log. Post-run
+  checks found zero task-labeled containers, networks, or volumes. The
+  owner-only credential source and both source repositories were unchanged.
+- Decision: S00 is `FAIL`; UT-018 and UT-019 remain `open`; W/M/O remain
+  locked. No Plane or Hermes source was changed.

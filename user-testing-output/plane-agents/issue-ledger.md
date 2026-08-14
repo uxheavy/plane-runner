@@ -42,3 +42,29 @@ remain locked.
 An issue is closed only after the same persona retests the real journey and the
 affected route-map cells are clean. Test-only failures without user-visible or
 contract impact remain verifier diagnostics rather than dogfood issues.
+
+UT-018 / Wave 0AJ addendum: the exact b00e5e5b47c10fb2c40733ccc63dee9dd980ac85
+Plane checkout with Hermes b2f1990dcf8fb9ca5a7d811fe1645420e9dafeec reached the
+real `openai-codex/gpt-5.6-luna` route with fallback disabled. The fresh primary
+created run `d4f5136d-6654-416f-af0f-595e2d886e8d` and invocation
+`invocation:3599842d-20ca-4127-bc4a-27f4722f6cf8`, both read back as
+`succeeded`, and proved `search_workspace` success `5`, `work_item.read`
+success `1`, evaluator denial `NOT_AUTHORIZED` `1`, submit success `1`, publish
+success `1`, and terminal kind `outcome_submission`. Provider attempts were
+exactly `13`, sequences `1..13`, all completed/upstream-initiated/`2xx` with no
+`outcome_unknown`. RuntimeExit was `failed` with `budget_exhausted`,
+`retryable=false`, and final sequence `24`; the outer runner returned a bounded
+`api-invocation` failure. The owner-only failure receipt was mode `0600`,
+`3621` bytes, SHA-256
+`037c724c2e901d8fc350c44cd70cba7e17896dd0564e91a3b64034cad5cc79ef`, validated,
+and deleted. No retry or replay occurred because the primary was not fully
+successful. The receipt did not retain transcript/publication separation
+fields, so UT-018 remains open and W/M/O remain locked.
+
+UT-019 / Wave 0AJ retest: the runner accepted the new absolute fresh
+owner-only result path `/tmp/plane-agent-s00-0aj.s44tr8/result.json` with parent
+mode `0700`, and the path was absent before start. The primary crossed the
+result-path boundary and reached the provider, so the Wave 0AI relative-path
+failure was not repeated. Per the wave gate, UT-019 remains open until the
+full S00 success and replay predicate are satisfied; no retry was made after
+the bounded primary failure.

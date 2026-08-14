@@ -768,6 +768,64 @@ unrelated suite ran.
 - Decision: S00 is `FAIL`; UT-018 and UT-019 remain `open`; W/M/O remain
   locked. No Plane or Hermes source was changed.
 
+## Wave 0AJ — exact b00e5e5b / Hermes b2f1990d single fresh S00
+
+- Status: failed at the bounded runtime model-call budget boundary. S00
+  remains dirty; UT-018 and UT-019 remain open; W/M/O remain locked. Exactly
+  one fresh primary ran. No retry, replay, second provider call, source fix,
+  G4/G5 journey, rollout, or unrelated suite ran.
+- Exact Plane source was clean at `b00e5e5b47c10fb2c40733ccc63dee9dd980ac85`
+  on `codex/agent-functional-dogfood`; Hermes was clean at
+  `b2f1990dcf8fb9ca5a7d811fe1645420e9dafeec` on `main`. The exact disposable
+  API image was `plane-agent-api:s00-b00e5e5b47c1`, digest
+  `sha256:38a42c0976ad0ae9584951ce8067ffce7e54ecebc4fdadf21e22c2d5b954df5e`.
+  The exact disposable runtime image was
+  `plane-agent-runtime:s00-b00e5e5b47c1-hermes-b2f1990d`, digest
+  `sha256:a1ce26bac6ea8e33a3568f4c0a934f2778439f90e4e45a0370c890d8e3e73adc`.
+  Hermes tree digest was
+  `251d200eb421954afb6843c8b2be697af39e9720425a175db767650541a14c12` and
+  Plane runtime source digest was
+  `3dbd31d22bca27c722f972b2610a45d3e48ee18110457be9ec3ab668e89c7669`.
+- Fresh authority/config binding passed config-only validation before the
+  owner-only source was read. The route was the ChatGPT subscription
+  `openai-codex/gpt-5.6-luna`, fallback disabled, through
+  `plane.agent-runtime/provider-relay/v1`. The command hash was
+  `32756a110745e4b69a3c8627021527a073ac7c434b5cd6659483245674954060`.
+  The result destination was the fresh absolute
+  `/tmp/plane-agent-s00-0aj.s44tr8/result.json`; its parent was mode `0700`
+  and the destination was absent before start.
+- Exactly one primary process ran to completion. It returned exit `1` with
+  bounded `phase=api-invocation`, `error_class=unspecified`, and
+  `reason_category=unavailable`. The bounded failure reason was
+  `budget_exhausted / runtime_process / process_exit /
+model_call_budget_exhausted`. Run
+  `d4f5136d-6654-416f-af0f-595e2d886e8d` and invocation
+  `invocation:3599842d-20ca-4127-bc4a-27f4722f6cf8` both read back as
+  `succeeded` before the outer bounded failure.
+- Provider attempts were exactly `13`, sequences `1..13`; every row was
+  `completed`, upstream initiated, `2xx`, and had an empty error code. No
+  attempt was `outcome_unknown`. RuntimeExit was present as `failed`, final
+  sequence `24`, with `failure.code=budget_exhausted` and `retryable=false`.
+  Runtime ingress counted `progress_observed:25`.
+- The bounded audit summary proved `search_workspace=success x5`,
+  `work_item.read=success x1`, evaluator denial
+  `agent.outcome.evaluate=denied / NOT_AUTHORIZED x1`, submit success x1,
+  and publish success x1. The visible terminal readback was present as one
+  `outcome_submission` with `code=budget_exhausted`; no replay was eligible.
+  The failed receipt did not retain transcript/publication separation fields,
+  so that assertion is not claimed as independently proven by this wave.
+- The owner-only bounded failure receipt was validated before deletion. It was
+  schema `plane-agent-g4/live-failure/v1`, mode `0600`, parent mode `0700`,
+  size `3621` bytes, and SHA-256
+  `037c724c2e901d8fc350c44cd70cba7e17896dd0564e91a3b64034cad5cc79ef`.
+  No sensitive field was present. The exact result path was absent after
+  acknowledgment. The disposable manifest, authority/config descriptors,
+  exact images, and temporary decision log were removed after capture.
+- Cleanup found zero task-labeled containers, networks, or volumes. The
+  owner-only source was not changed. Plane and Hermes remained clean at their
+  exact requested heads. Decision: S00 is `FAIL`; no retry/replay, UT-018 and
+  UT-019 stay open, and W/M/O stay locked.
+
 ## Wave 0AG — exact 053ce18c / Hermes b39be101 single fresh S00
 
 Status: primary live lifecycle passed, but S00 remains dirty because the
