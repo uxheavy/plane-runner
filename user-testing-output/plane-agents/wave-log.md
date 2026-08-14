@@ -15,6 +15,84 @@
   path absent from the old `preview` checkout. Execution follows the corrected
   GOAL.md on this named candidate branch until integration.
 
+## Wave 0AM — exact 4ba604571d / Hermes d9037d5 single fresh S00
+
+- Overall decision: `FAIL`. Exactly one fresh primary ran; there was no retry,
+  second primary, fallback, UI, G4/G5 verifier, source fix, Hermes change, or
+  additional replay. The runner's internal S00 gate passed and permitted its
+  one provider-disabled same-invocation replay, but the final bounded-evidence
+  contract did not pass post-run validation, so UT-018 and UT-019 remain open.
+- Plane was clean at exact HEAD
+  `4ba604571d9582c8fabaf96f7bd457e67511b076` on
+  `codex/agent-functional-dogfood`; Hermes was clean at exact HEAD
+  `d9037d5ceb17ce8f12d7abf28cfe6ee734adcb20` on `main`. Neither source was
+  modified by this journey.
+- The disposable API artifact was
+  `plane-agent-api:s00-4ba604571d`, digest
+  `sha256:37385c05fa8bd54f57e8833858051a27dc595ded5d6469014451f5110efd23e5`.
+  The runtime artifact was
+  `plane-agent-runtime:s00-4ba604571d-hermes-d9037d5`, digest
+  `sha256:88357114efe790a9de8312d864f7914a0842769e7524ba3fa29209939f9945a5`.
+  Runtime source digest was
+  `1d8186a36447ea5dba5ba6cb55db48073a3be0dc976cec4ff2887418c0e33667` and
+  Hermes tree digest was
+  `7de6ace3830c9280302b49cf4266a59f24d91cbeb3ff9c65ed51e10f1381dc89`.
+- Fresh manifest, authority, and config SHA-256 values were
+  `6df440fa8e45dd05d4d1cc82b69e9975056af0489b37ebe8c93c644e16fb95d1`,
+  `6d2dbb92c790bbe20288d608b7f4aac25d7c8bc4a898273b52d28e7ab74ae4c3`, and
+  `8a116f2354a34408f383f49428ae74e8e183c8ecba08ae37d432a875179321af`.
+  Config-only validation passed before the owner-only credential source was
+  accessed. The provider binding was the ChatGPT subscription route
+  `openai-codex/gpt-5.6-luna`, fallback disabled, through the AF_UNIX
+  `plane.agent-runtime/provider-relay/v1` contract. The exact command hash was
+  `32756a110745e4b69a3c8627021527a073ac7c434b5cd6659483245674954060`.
+- The fresh absolute result path
+  `/tmp/plane-agent-s00-0am.s2aWOI/result.json` was absent before start under
+  a `0700` owner-only parent. The runner created one isolated workspace and
+  the `G4 Live Issue` journey. Fresh run
+  `c7cea1bc-d11d-41be-a2dc-c49dd67974fe` and invocation
+  `invocation:e9c1c597-c3fc-4261-aaaa-f4db2ed00014` read back as succeeded.
+- The bounded functional readback proved the requested product path:
+  `search_workspace` success `3`, `work_item.read` success `1`,
+  `catalog.search` and `catalog.describe` absent, exactly one deliberate
+  `agent.outcome.evaluate` denial with `NOT_AUTHORIZED`, exactly one successful
+  `agent.outcome.submit`, and exactly one successful `agent.outcome.publish`.
+  The applied publication binding had one `outcome-submission` product ref,
+  one `operation:agent.outcome.publish` ref, and matching receipt, audit,
+  application-service, operation-attempt, and product-event refs. One visible
+  terminal was `outcome_submission`; ordinary transcript evidence was one
+  separate event, not the publication. Runtime ingress counted
+  `progress_observed:18`, `transcript_evidence_observed:1`, and
+  `usage_observed:1`; no late frame was observed. RuntimeExit was
+  `completed`, final sequence `19`, with no failure.
+- The runner's ordered internal `s00Gate` predicates all passed, in order:
+  `invocation_succeeded`, `run_succeeded`,
+  `one_visible_outcome_terminal`, `one_applied_outcome_publication`,
+  `terminal_binding`, and `runtime_exit_completed`. There were `9` provider
+  attempts, sequences `1..9`, all `completed`, upstream initiated, and `2xx`;
+  none was `outcome_unknown`.
+- The permitted replay used the same invocation and idempotency key with
+  provider access disabled. It passed with zero new children, provider
+  attempts, invocations, receipts, audits, usage rows, outcomes, applied
+  publications, visible terminals, or semantic side effects.
+- The owner-only bounded success receipt was mode `0600`, `6141` bytes,
+  schema `plane-agent-g4/live-evidence/v1`, and SHA-256
+  `a8fc92228be09d67353a4dc277564ce54c1d9001eb72342672c27ece87f75a7f`.
+  Post-run standalone validation rejected it as
+  `evidence_permitted_canary_failed`: the fresh authority carried unique
+  canary IDs while the runner emitted fixed `live-permitted-read` and
+  `live-denied-evaluate` IDs. The success receipt also omitted the ordered
+  `s00Gate` projection and semantic digest required by this journey, although
+  the internal gate and replay used those checks. This is an evidence-contract
+  failure; no product-source cause or fix is claimed.
+- Cleanup removed the runner's task-labeled containers, networks, and volumes;
+  the owner credential source was not modified or printed. The receipt,
+  disposable manifest/authority/config, temporary API/runtime images, and
+  temporary stdout/stderr were retained only until this evidence update and
+  then deleted and absence-checked. Colima remained running.
+- Decision: S00 is `FAIL`; UT-018 and UT-019 remain `open`; W/M/O remain
+  locked.
+
 ## Wave 0A — fast provider smoke
 
 - Status: dirty — UT-001

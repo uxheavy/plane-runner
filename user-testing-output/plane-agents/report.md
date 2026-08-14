@@ -15,18 +15,20 @@
 | ----------------- | ----: |
 | Routes discovered |    27 |
 | Clean             |     0 |
-| Dirty             |     0 |
+| Dirty             |     1 |
 | Blocked           |     0 |
 | Untested          |    27 |
-| Blocker issues    |     0 |
+| Blocker issues    |     2 |
 | Friction issues   |     0 |
 | Annoyances        |     0 |
 
 ## Completion evidence
 
-Pending Wave 0 fast provider smoke, three-persona happy-path and boundary
-waves, targeted fix/retest loops, one final clean wave, one final full G4
-verifier, and one consolidated Sol Medium review.
+Wave 0AM completed one exact, non-UI primary. The functional Plane lifecycle
+and provider-disabled replay passed internally, but the final bounded evidence
+contract failed standalone validation (`evidence_permitted_canary_failed`), so
+S00 remains dirty and UT-018/UT-019 remain open. No source fix or Hermes change
+was made.
 
 ## Cross-persona heatmap
 
@@ -35,4 +37,7 @@ verifier, and one consolidated Sol Medium review.
 
 ## Final risks and decision
 
-Pending.
+Decision: `FAIL`. The journey is not clean enough to close S00 or unlock W/M/O.
+The remaining blocker is the success-receipt contract: it must retain the
+ordered `s00Gate` projection and semantic digest, and its canary identifiers
+must agree with the fresh authority and emitted evidence.

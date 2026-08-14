@@ -68,3 +68,30 @@ result-path boundary and reached the provider, so the Wave 0AI relative-path
 failure was not repeated. Per the wave gate, UT-019 remains open until the
 full S00 success and replay predicate are satisfied; no retry was made after
 the bounded primary failure.
+
+UT-018 / Wave 0AM addendum: the exact Plane `4ba604571d9582c8fabaf96f7bd457e67511b076`
+checkout with exact Hermes `d9037d5ceb17ce8f12d7abf28cfe6ee734adcb20` ran one
+fresh primary through the real `openai-codex/gpt-5.6-luna` ChatGPT subscription
+route with fallback disabled. The run and invocation read back as succeeded;
+the journey created the isolated workspace and `G4 Live Issue`, proved three
+workspace searches, one permitted work-item read, one `NOT_AUTHORIZED`
+evaluator denial, one submit, one applied publish binding, one visible
+`outcome_submission`, ordinary transcript evidence separate from publication,
+and `RuntimeExit.completed`. There were nine provider attempts, all completed
+upstream `2xx`, with none unknown. The ordered internal `s00Gate` passed and
+the one exact same-invocation provider-disabled replay passed with every
+requested durable and semantic delta at zero. The owner-only success receipt
+was `0600`, `6141` bytes, SHA-256
+`a8fc92228be09d67353a4dc277564ce54c1d9001eb72342672c27ece87f75a7f`.
+However, standalone live-evidence validation rejected the receipt as
+`evidence_permitted_canary_failed` because the fresh authority used unique
+canary IDs while the runner emitted fixed IDs. The receipt also did not retain
+the ordered `s00Gate` projection or semantic digest required for this journey.
+UT-018 remains open; no source fix, rerun, or Hermes modification was made.
+
+UT-019 / Wave 0AM retest: the fresh absolute result path
+`/tmp/plane-agent-s00-0am.s2aWOI/result.json` was absent before start under a
+`0700` owner-only parent, and the persisted receipt was `0600` and bounded.
+The receipt was validated for shape and hash, then deleted and absence was
+acknowledged after the evidence update. Because the final S00 evidence
+contract failed, UT-019 remains open; no retry or second replay was made.
