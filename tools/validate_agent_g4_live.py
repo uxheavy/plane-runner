@@ -788,6 +788,31 @@ _LIVE_READBACK_FIELDS = {
     "explicitPublication",
     "replay",
 }
+_LIVE_TOP_LEVEL_FIELDS = {
+    "schemaVersion",
+    "status",
+    "providerRelay",
+    "binding",
+    "provider",
+    "canaries",
+    "thresholds",
+    "readback",
+    "summary",
+}
+_LIVE_AUDIT_FIELDS = {"passed", "eventCount", "permittedOutcome", "deniedOutcome", "submitOutcome", "publishOutcome"}
+_LIVE_VERSION_FIELDS = {"passed", "binding", "source"}
+_LIVE_WORKLOAD_FIELDS = {
+    "invocationRef",
+    "runRef",
+    "actorRef",
+    "terminalEventRef",
+    "terminalKind",
+    "invocationState",
+    "outcomeCount",
+    "runtimeEventCount",
+    "providerHttpStatusClass",
+    "usage",
+}
 _LIVE_USAGE_KEYS = ("inputTokens", "outputTokens", "durationMs")
 _LIVE_PERMITTED_READ_IDS = {"work_item.read", "catalog.search"}
 
@@ -955,6 +980,8 @@ def validate_evidence(
         raise ContractError("evidence_must_be_one_json_object") from exc
     if not isinstance(evidence, dict):
         raise ContractError("evidence_must_be_one_json_object")
+    if set(evidence).difference(_LIVE_TOP_LEVEL_FIELDS):
+        raise ContractError("evidence_top_level_fields_invalid")
     _exact(_required(evidence, "schemaVersion", "evidence"), "plane-agent-g4/live-evidence/v1", "evidence_schema")
     _exact(_required(evidence, "status", "evidence"), "passed", "evidence_status")
     readback = _object(_required(evidence, "readback", "evidence"), "evidence_readback")
@@ -987,6 +1014,10 @@ def validate_evidence(
     readback = _object(_required(evidence, "readback", "evidence"), "evidence_readback")
     audit = _object(_required(readback, "audit", "evidence_readback"), "evidence_audit_readback")
     version = _object(_required(readback, "version", "evidence_readback"), "evidence_version_readback")
+    if set(audit).difference(_LIVE_AUDIT_FIELDS):
+        raise ContractError("evidence_audit_fields_invalid")
+    if set(version).difference(_LIVE_VERSION_FIELDS):
+        raise ContractError("evidence_version_fields_invalid")
     if audit.get("passed") is not True or version.get("passed") is not True:
         raise ContractError("evidence_audit_or_version_readback_failed")
     if not isinstance(audit.get("eventCount"), int) or audit["eventCount"] < 1:
@@ -994,6 +1025,8 @@ def validate_evidence(
     _exact(version.get("binding"), expected, "evidence_version_binding")
     summary_obj = _object(_required(evidence, "summary", "evidence"), "evidence_summary")
     workload = _object(_required(summary_obj, "workload", "evidence_summary"), "evidence_summary_workload")
+    if set(workload).difference(_LIVE_WORKLOAD_FIELDS):
+        raise ContractError("evidence_workload_fields_invalid")
     usage = _object(_required(workload, "usage", "evidence_summary_workload"), "evidence_summary_usage")
     if set(usage) != set(_LIVE_USAGE_KEYS) or any(
         type(value) is not int or not 0 <= value <= 10_000_000 for value in usage.values()

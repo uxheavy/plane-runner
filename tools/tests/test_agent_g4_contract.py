@@ -171,8 +171,19 @@ def fixture(candidate: str = CANDIDATE, source_manifest: dict | None = None) -> 
             },
         },
         "readback": {
-            "audit": {"passed": True, "eventCount": 2},
-            "version": {"passed": True, "binding": {key: binding[key] for key in BINDING_KEYS}},
+            "audit": {
+                "passed": True,
+                "eventCount": 2,
+                "permittedOutcome": "success",
+                "deniedOutcome": "denied",
+                "submitOutcome": "success",
+                "publishOutcome": "success",
+            },
+            "version": {
+                "passed": True,
+                "binding": {key: binding[key] for key in BINDING_KEYS},
+                "source": "candidate-manifest",
+            },
             "runtimeExit": {"present": True, "kind": "completed", "finalSequence": 0, "failure": None},
             "runtimeEventIngress": {"kindCounts": {"transcript_evidence_observed": 1}},
             "providerAttempts": [
@@ -241,10 +252,15 @@ def fixture(candidate: str = CANDIDATE, source_manifest: dict | None = None) -> 
             "durationMs": 100,
             "migrationLeaf": "0141",
             "workload": {
-                "throughput": 10.0,
-                "latencyP95Ms": 100.0,
-                "errorRate": 0.0,
-                "saturation": 0.2,
+                "invocationRef": "invocation:fixture",
+                "runRef": "run:fixture",
+                "actorRef": "actor:fixture",
+                "terminalEventRef": "product-event:fixture",
+                "terminalKind": "outcome_submission",
+                "invocationState": "succeeded",
+                "outcomeCount": 1,
+                "runtimeEventCount": 22,
+                "providerHttpStatusClass": "2xx",
                 "usage": {"inputTokens": 1, "outputTokens": 2, "durationMs": 3},
             },
         },
@@ -1163,6 +1179,26 @@ class G4ContractTests(unittest.TestCase):
         source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
         self.assertIn("_LIVE_USAGE_KEYS", source)
         self.assertNotIn("usage.usage.items()", source)
+
+    def test_live_validator_rejects_unknown_fields_at_receipt_boundaries(self):
+        cases = (
+            (lambda evidence: evidence.update({"promptPayload": "no"}), "evidence_top_level_fields_invalid"),
+            (
+                lambda evidence: evidence["readback"]["audit"].update({"toolPayload": "no"}),
+                "evidence_audit_fields_invalid",
+            ),
+            (
+                lambda evidence: evidence["readback"]["version"].update({"promptPayload": "no"}),
+                "evidence_version_fields_invalid",
+            ),
+            (
+                lambda evidence: evidence["summary"]["workload"].update({"toolPayload": "no"}),
+                "evidence_workload_fields_invalid",
+            ),
+        )
+        for mutate, reason in cases:
+            with self.subTest(reason=reason):
+                self._assert_live_fixture_rejected(mutate, reason)
 
     def test_live_semantic_digest_changes_for_issue_state_changes(self):
         source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
