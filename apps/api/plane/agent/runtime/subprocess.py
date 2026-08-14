@@ -70,15 +70,6 @@ _HERMES_REQUIRED_RUNTIME_POLICY_FIELDS = frozenset(
         "maxReceiptBytes",
     }
 )
-_HERMES_G1_CONTRACT_DIGESTS = {
-    # Frozen by the paired plane_runtime.g1_contract manifest accepted at this
-    # process boundary.
-    "runSnapshot": "e538fe79ede53e6bb2e307600dbefea507e30b996c002c3dab32d543ca0e36a2",
-    "invocationEnvelope": "b7a15d74406f1624cdb7cd95b42edfd1ffee596abe57e4f00ed60e2e23ded995",
-    "runtimeEvent": "78da5ce9d112b6545ea471e5fcae25ff5dfeb2e5db74a8d5796d0ee026823a27",
-    "runtimeExit": "86b5acaa14271b1c5f0f0fadc30f48bc5cd24ac8db0ff03ba8a91d02bceecf65",
-    "runtimeDurableState": "444c944ec8a5054f33c8662470529a1f4565d42ff06138438beceeef7967a0da",
-}
 _HERMES_DISPATCH_PROTOCOL = "plane.agent-runtime/dispatch-control/v1"
 _HERMES_CREDENTIAL_PROTOCOL = "plane.agent-runtime/credential-control/v1"
 
@@ -532,6 +523,36 @@ def _request_payload(snapshot_json: str, envelope_json: str) -> tuple[bytes, str
     return request, run_id, invocation_id, digest
 
 
+def _hermes_contract_digests() -> dict[str, str]:
+    try:
+        from ..lifecycle import runtime_contract
+    except ModuleNotFoundError as exc:
+        if exc.name != "plane.agent.lifecycle":
+            raise
+        try:
+            from plane_runtime.g1_contract import G1_CONTRACT_DIGESTS
+        except (ImportError, AttributeError) as import_error:
+            raise RuntimeDispatchError(
+                "runtime contract verifier is unavailable",
+                failure_code=RUNTIME_CONFIGURATION_PRE_DISPATCH_FAILURE,
+                failure_phase="runtime_configuration",
+                failure_detail="dispatch_rejected",
+                failure_subreason="runtime_configuration_rejected",
+            ) from import_error
+        return dict(G1_CONTRACT_DIGESTS)
+
+    try:
+        return dict(runtime_contract.contract_digests())
+    except runtime_contract.RuntimeContractError as exc:
+        raise RuntimeDispatchError(
+            "runtime contract manifest could not be verified",
+            failure_code=RUNTIME_CONFIGURATION_PRE_DISPATCH_FAILURE,
+            failure_phase="runtime_configuration",
+            failure_detail="dispatch_rejected",
+            failure_subreason="runtime_configuration_rejected",
+        ) from exc
+
+
 def _hermes_request_payload(snapshot_json: str, envelope_json: str) -> tuple[bytes, str, str, str]:
     """Project Plane's richer immutable snapshot onto exact Hermes G1 wire fields.
 
@@ -570,7 +591,7 @@ def _hermes_request_payload(snapshot_json: str, envelope_json: str) -> tuple[byt
     projected = dict(snapshot)
     projected_policy = {key: policy[key] for key in _HERMES_RUNTIME_POLICY_FIELDS if key in policy}
     projected["runtimePolicy"] = projected_policy
-    projected["contractDigests"] = dict(_HERMES_G1_CONTRACT_DIGESTS)
+    projected["contractDigests"] = _hermes_contract_digests()
     projected.pop("contentDigest", None)
     projected["contentDigest"] = (
         "snapshot:"

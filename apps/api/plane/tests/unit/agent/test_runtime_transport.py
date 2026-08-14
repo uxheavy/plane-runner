@@ -1,12 +1,16 @@
 import json
+import re
 import sqlite3
 import sys
 import textwrap
 import time
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+import plane.agent.runtime.subprocess as runtime_subprocess
+from plane.agent.lifecycle import runtime_contract
 from plane.agent.runtime import (
     HostBoundSubprocessRuntimeTransport,
     PlaneHostResult,
@@ -16,7 +20,6 @@ from plane.agent.runtime import (
 from plane.agent.runtime.subprocess import (
     _HERMES_CREDENTIAL_PROTOCOL,
     _HERMES_DISPATCH_PROTOCOL,
-    _HERMES_G1_CONTRACT_DIGESTS,
     _hermes_bootstrap_payload,
     _hermes_request_payload,
 )
@@ -38,7 +41,16 @@ ENVELOPE = json.dumps(
 )
 
 
-def test_hermes_request_projects_plane_code_mode_policy_without_mutating_plane_records():
+def test_hermes_request_projects_verified_plane_contract_digests_without_mutating_plane_records(monkeypatch):
+    expected_digests = runtime_contract.contract_digests()
+    assert expected_digests["runSnapshot"] == "308101c6a2c9f56e7deb5c6a07c8bc74b59831b92cbbb5b07c5a7eefc21f4947"
+    digest_calls = []
+
+    def verified_contract_digests():
+        digest_calls.append(True)
+        return expected_digests
+
+    monkeypatch.setattr(runtime_contract, "contract_digests", verified_contract_digests)
     snapshot = {
         "actorRef": "actor:test",
         "runId": "run:test",
@@ -78,9 +90,43 @@ def test_hermes_request_projects_plane_code_mode_policy_without_mutating_plane_r
         "maxCodeModeOutputBytes",
         "maxCodeModeCalls",
     }
-    assert projected["contractDigests"] == _HERMES_G1_CONTRACT_DIGESTS
+    assert digest_calls == [True]
+    assert projected["contractDigests"] == expected_digests
     assert projected_envelope["runSnapshotDigest"] == projected["contentDigest"]
     assert snapshot["runtimePolicy"]["maxCodeModeCalls"] == 4
+
+
+def test_hermes_request_rejects_unverified_manifest_before_child_launch(monkeypatch):
+    def rejected_contract_digests():
+        raise runtime_contract.RuntimeContractError("runtime contract manifest digest drifted")
+
+    monkeypatch.setattr(runtime_contract, "contract_digests", rejected_contract_digests)
+    snapshot = json.loads(SNAPSHOT)
+    snapshot["runtimePolicy"] = {
+        "model": "deterministic-local",
+        "adapter": "openai-compatible",
+        "isolation": "process",
+        "maxEventPayloadBytes": 8192,
+        "maxArtifactBytes": 8192,
+        "maxReceiptBytes": 8192,
+    }
+
+    with pytest.raises(RuntimeDispatchError) as raised:
+        _hermes_request_payload(json.dumps(snapshot, sort_keys=True, separators=(",", ":")), ENVELOPE)
+
+    assert raised.value.public_failure() == {
+        "failureCode": "runtime_configuration_pre_dispatch_failure",
+        "failurePhase": "runtime_configuration",
+        "failureDetail": "dispatch_rejected",
+        "failureSubreason": "runtime_configuration_rejected",
+    }
+
+
+def test_hermes_projection_has_no_handwritten_run_snapshot_digest():
+    source = Path(runtime_subprocess.__file__).read_text(encoding="utf-8")
+
+    assert "_HERMES_G1_CONTRACT_DIGESTS" not in source
+    assert re.search(r'"runSnapshot"\s*:\s*"[0-9a-f]{64}"', source) is None
 
 
 def test_hermes_bootstrap_payload_is_bounded_three_frame_private_handoff():
