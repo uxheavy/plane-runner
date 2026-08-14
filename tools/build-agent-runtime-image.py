@@ -724,8 +724,8 @@ def main() -> int:
     runtime = verify_runtime_image(
         args.tag,
         plane_revision,
-        HERMES_COMMIT,
-        HERMES_REMOTE,
+        hermes_commit,
+        hermes_remote,
         RUNTIME_CONTRACT,
         runtime_files,
         source_digest,
