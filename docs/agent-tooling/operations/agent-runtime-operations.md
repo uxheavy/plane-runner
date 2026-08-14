@@ -197,6 +197,15 @@ starting Docker. Authority/config binding, artifact and runtime pins, and the
 resulting cleanup remain confined to the runner's generated project/run
 resources. Never edit the durable manifest for a disposable artifact rehearsal.
 
+The authority and config carry the same canonical `providerRelay` projection.
+The runner's config-only preflight requires that projection and exact equality
+before it reads or stages the provider source. It forwards the validated
+authority projection to the API invocation, so the success or runtime-failure
+receipt cannot drift from the preflight contract. A relay-free failure receipt
+is accepted only when its bounded facts prove that no runtime or provider
+receipt existed; missing or mismatched relay data remains a standalone
+validation failure.
+
 For the live runner, the validated owner-only provider source is copied into a
 fresh task-owned Docker volume through the Docker client's stdin path. The
 preflight container verifies the volume file as a regular `0600` file within

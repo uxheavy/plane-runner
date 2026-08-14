@@ -345,6 +345,24 @@ def _provider_descriptor() -> dict[str, str]:
     return descriptor
 
 
+def _provider_relay_descriptor() -> dict[str, object]:
+    try:
+        descriptor = json.loads(os.environ["G4_PROVIDER_RELAY_JSON"])
+    except (KeyError, json.JSONDecodeError) as exc:
+        raise RuntimeError("live invocation provider relay descriptor is unavailable") from exc
+    required = {
+        "protocol",
+        "transport",
+        "childNetworkPolicy",
+        "externalEgressOwner",
+        "hostGatewaySeparate",
+        "hermesHookStatus",
+    }
+    if not isinstance(descriptor, dict) or set(descriptor) != required:
+        raise RuntimeError("live invocation provider relay descriptor is malformed")
+    return descriptor
+
+
 def build_failure_evidence(
     *,
     binding,
@@ -366,6 +384,7 @@ def build_failure_evidence(
     s00_gate=None,
     authority_id=None,
     canary_ids=None,
+    provider_relay=None,
     plane_host_operation_receipts=False,
     plane_operation_audit=None,
 ):
@@ -749,7 +768,7 @@ def build_failure_evidence(
     if bounded_failure_cause is not None:
         bounded_failure["reasonCause"] = bounded_failure_cause
 
-    return _attach_receipt_semantic_digest({
+    receipt = {
         "schemaVersion": "plane-agent-g4/live-failure/v1",
         "status": "failed",
         "binding": bounded_binding,
@@ -769,7 +788,10 @@ def build_failure_evidence(
         "s00Gate": _s00_gate_projection(s00_gate),
         "planeHostOperationReceipts": plane_host_operation_receipts is True,
         "planeOperationAudit": bounded_operation_audit(plane_operation_audit),
-    })
+    }
+    if provider_relay is not None:
+        receipt["providerRelay"] = provider_relay
+    return _attach_receipt_semantic_digest(receipt)
 
 
 def _supervisor_failure_reason(output):
@@ -813,6 +835,7 @@ def _supervisor_failure_reason(output):
 def main() -> int:
     started = time.monotonic()
     provider = _provider_descriptor()
+    provider_relay = _provider_relay_descriptor()
     suffix = uuid.uuid4().hex[:12]
     run = None
     invocation = None
@@ -1221,6 +1244,7 @@ def main() -> int:
             },
             runtime_event_kind_counts=runtime_event_kind_counts,
             s00_gate=s00_gate,
+            provider_relay=provider_relay,
             plane_host_operation_receipts=plane_host_operation_receipts,
             plane_operation_audit=plane_operation_audit,
         )
@@ -1228,14 +1252,7 @@ def main() -> int:
             "schemaVersion": "plane-agent-g4/live-evidence/v1",
             "status": "passed",
             "authorityId": os.environ["G4_AUTHORITY_ID"],
-            "providerRelay": {
-                "protocol": "plane.agent-runtime/provider-relay/v1",
-                "transport": "AF_UNIX",
-                "childNetworkPolicy": "none",
-                "externalEgressOwner": "agent-runtime",
-                "hostGatewaySeparate": True,
-                "hermesHookStatus": "integrated",
-            },
+            "providerRelay": provider_relay,
             "binding": binding,
             "provider": {**provider, "fallbackUsed": False},
             "canaries": _receipt_canaries(
@@ -1425,6 +1442,7 @@ def main() -> int:
                     "permitted": os.environ.get("G4_PERMITTED_CANARY"),
                     "denied": os.environ.get("G4_DENIED_CANARY"),
                 },
+                provider_relay=provider_relay,
                 plane_host_operation_receipts=plane_host_operation_receipts,
                 plane_operation_audit=plane_operation_audit,
             )

@@ -123,6 +123,17 @@ print(
 )
 PY
 )"
+G4_PROVIDER_RELAY_JSON="$(python3 - "${LIVE_AUTHORITY}" <<'PY'
+import json
+import sys
+
+authority = json.load(open(sys.argv[1], encoding="utf-8"))
+relay = authority.get("providerRelay")
+if not isinstance(relay, dict):
+    raise SystemExit("authority_provider_relay_missing")
+print(json.dumps(relay, sort_keys=True, separators=(",", ":")))
+PY
+)"
 IFS=$'\t' read -r G4_PROVIDER_NAME G4_PROVIDER_MODEL G4_PROVIDER_BASE_URL G4_PROVIDER_HOST G4_PROVIDER_PATH \
     G4_PROVIDER_CREDENTIAL_SOURCE G4_PROVIDER_CREDENTIAL_REF G4_PROVIDER_CREDENTIAL_NAME \
     <<<"$(python3 - "${PROVIDER_DESCRIPTOR_JSON}" <<'PY'
@@ -644,6 +655,7 @@ docker run --rm -i --network "${NETWORK}" --hostname api --network-alias api \
     --env G4_API_SOURCE_REVISION="${G4_API_SOURCE_REVISION}" \
     --env G4_API_CONTRACT="${G4_API_CONTRACT}" \
     --env G4_PROVIDER_DESCRIPTOR_JSON="${PROVIDER_DESCRIPTOR_JSON}" \
+    --env G4_PROVIDER_RELAY_JSON="${G4_PROVIDER_RELAY_JSON}" \
     --env G4_AUTHORITY_ID="${G4_AUTHORITY_ID}" \
     --env G4_PERMITTED_CANARY="${G4_PERMITTED_CANARY}" \
     --env G4_DENIED_CANARY="${G4_DENIED_CANARY}" \

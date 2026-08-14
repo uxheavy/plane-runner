@@ -43,6 +43,14 @@ ROLLBACK_MIGRATION = "db.0142_runtime_provider_attempts"
 ROLLBACK_OPERATION_CONTRACT = "plane.operation/v1"
 ROLLBACK_RUNTIME_CONTRACT = "plane.agent-runtime/v1"
 PROVIDER_RELAY_PROTOCOL = "plane.agent-runtime/provider-relay/v1"
+_CANONICAL_PROVIDER_RELAY = {
+    "protocol": PROVIDER_RELAY_PROTOCOL,
+    "transport": "AF_UNIX",
+    "childNetworkPolicy": "none",
+    "externalEgressOwner": "agent-runtime",
+    "hostGatewaySeparate": True,
+    "hermesHookStatus": "integrated",
+}
 MAX_EVIDENCE_BYTES = 16 * 1024
 SAFE_CANARY_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
 PROVIDER_DESCRIPTOR_FIELDS = (
@@ -75,6 +83,17 @@ RUNTIME_PROVIDER_ENV_FIELDS = {
     "PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_REF": "credentialRef",
     "PLANE_AGENT_RUNTIME_PROVIDER_CREDENTIAL_NAME": "credentialName",
 }
+
+
+def provider_relay_descriptor() -> dict[str, Any]:
+    return dict(_CANONICAL_PROVIDER_RELAY)
+
+
+def project_provider_relay(authority: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    relay = provider_relay_descriptor()
+    authority["providerRelay"] = dict(relay)
+    config["providerRelay"] = dict(relay)
+    return relay
 
 
 class ContractError(ValueError):
@@ -638,6 +657,8 @@ def validate_authority(
     candidate: str,
     expected_candidate: str,
     command: str,
+    *,
+    require_provider_relay: bool = False,
 ) -> dict[str, Any]:
     _git_sha(expected_candidate, "expectedCandidate")
     _exact(candidate, expected_candidate, "candidate_expected")
@@ -667,6 +688,10 @@ def validate_authority(
     thresholds = _thresholds(_required(binding, "thresholds", "authority_binding"), "authority_thresholds")
     canaries = _canaries(_required(binding, "canaries", "authority_binding"), "authority_canaries")
     provider_relay = _provider_relay(authority["providerRelay"], "authority_provider_relay") if "providerRelay" in authority else None
+    if require_provider_relay and provider_relay is None:
+        raise ContractError("authority_provider_relay_missing")
+    if require_provider_relay and provider_relay != provider_relay_descriptor():
+        raise ContractError("authority_provider_relay_policy_mismatch")
     return {
         "authorityId": authority_id,
         "binding": binding,
@@ -678,7 +703,13 @@ def validate_authority(
     }
 
 
-def validate_config(config: dict[str, Any], authority_info: dict[str, Any], command: str) -> None:
+def validate_config(
+    config: dict[str, Any],
+    authority_info: dict[str, Any],
+    command: str,
+    *,
+    require_provider_relay: bool = False,
+) -> None:
     _exact(_required(config, "schemaVersion", "config"), "plane-agent-g4/live-config/v1", "config_schema")
     _exact(_required(config, "authorityId", "config"), authority_info["authorityId"], "config_authority")
     _exact(_required(config, "mode", "config"), "live", "config_mode")
@@ -692,7 +723,11 @@ def validate_config(config: dict[str, Any], authority_info: dict[str, Any], comm
     binding = _object(_required(config, "binding", "config"), "config_binding")
     _exact(binding, authority_info["binding"], "config_binding")
     config_provider_relay = _provider_relay(config["providerRelay"], "config_provider_relay") if "providerRelay" in config else None
+    if require_provider_relay and config_provider_relay is None:
+        raise ContractError("config_provider_relay_missing")
     _exact(config_provider_relay, authority_info["providerRelay"], "config_provider_relay")
+    if require_provider_relay and config_provider_relay != provider_relay_descriptor():
+        raise ContractError("config_provider_relay_policy_mismatch")
     _exact(_required(config, "provider", "config"), {**authority_info["provider"], "fallbackUsed": False}, "config_provider")
     _exact(_required(config, "thresholdProfile", "config"), authority_info["thresholdProfile"], "config_threshold_profile")
     _exact(_required(config, "thresholds", "config"), authority_info["thresholds"], "config_thresholds")
@@ -1169,7 +1204,9 @@ _FAILURE_TOP_LEVEL_FIELDS = {
     "s00Gate",
     "planeHostOperationReceipts",
     "planeOperationAudit",
+    "providerRelay",
 }
+_FAILURE_REQUIRED_TOP_LEVEL_FIELDS = _FAILURE_TOP_LEVEL_FIELDS - {"providerRelay"}
 _FAILURE_STAGES = {
     "initialization",
     "compose",
@@ -1218,7 +1255,7 @@ def _validate_failure_receipt(
     authority_info: dict[str, Any],
     expected_binding: dict[str, Any],
 ) -> None:
-    if set(evidence) != _FAILURE_TOP_LEVEL_FIELDS:
+    if set(evidence).difference(_FAILURE_TOP_LEVEL_FIELDS) or not _FAILURE_REQUIRED_TOP_LEVEL_FIELDS.issubset(evidence):
         raise ContractError("evidence_failure_fields_invalid")
     _exact(evidence["schemaVersion"], "plane-agent-g4/live-failure/v1", "evidence_schema")
     _exact(evidence["status"], "failed", "evidence_status")
@@ -1340,6 +1377,20 @@ def _validate_failure_receipt(
             or not 0 <= operation["count"] <= 8
         ):
             raise ContractError("evidence_operation_audit_invalid")
+    if "providerRelay" in evidence:
+        evidence_provider_relay = _provider_relay(evidence["providerRelay"], "evidence_provider_relay")
+        _exact(evidence_provider_relay, authority_info["providerRelay"], "evidence_provider_relay")
+    elif not (
+        evidence["run"]["present"] is False
+        and evidence["invocation"]["present"] is False
+        and evidence["runtimeExit"]["present"] is False
+        and evidence["providerAttempts"] == []
+        and evidence["runtimeEventIngress"]["kindCounts"] == {}
+        and evidence["terminal"]["present"] is False
+        and evidence["planeHostOperationReceipts"] is False
+        and all(row["count"] == 0 for row in evidence["planeOperationAudit"])
+    ):
+        raise ContractError("evidence_provider_relay_missing")
     _validate_semantic_digest(evidence)
 
 
@@ -1377,9 +1428,13 @@ def validate_evidence(
     _validate_receipt_common(evidence, authority_info, expected, status="passed")
     readback = _object(_required(evidence, "readback", "evidence"), "evidence_readback")
     _validate_live_readback(readback)
-    evidence_provider_relay = _provider_relay(evidence["providerRelay"], "evidence_provider_relay") if "providerRelay" in evidence else None
+    if authority_info["providerRelay"] is None:
+        raise ContractError("evidence_provider_relay_missing_authority")
+    if "providerRelay" not in evidence:
+        raise ContractError("evidence_provider_relay_missing")
+    evidence_provider_relay = _provider_relay(evidence["providerRelay"], "evidence_provider_relay")
     _exact(evidence_provider_relay, authority_info["providerRelay"], "evidence_provider_relay")
-    if evidence_provider_relay is not None and evidence_provider_relay["hermesHookStatus"] != "integrated":
+    if evidence_provider_relay["hermesHookStatus"] != "integrated":
         raise ContractError("evidence_provider_relay_hook_not_integrated")
     _exact(_required(evidence, "provider", "evidence"), {**authority_info["provider"], "fallbackUsed": False}, "evidence_provider")
     threshold_result = _object(_required(evidence, "thresholds", "evidence"), "evidence_thresholds")
@@ -1464,8 +1519,9 @@ def main(argv: list[str] | None = None) -> int:
             args.candidate,
             args.expected_candidate,
             args.command,
+            require_provider_relay=args.config_only,
         )
-        validate_config(config, authority_info, args.command)
+        validate_config(config, authority_info, args.command, require_provider_relay=args.config_only)
         if args.config_only:
             result = {"evidenceSha256": "not_run", "collected": 0, "passed": 0}
         else:

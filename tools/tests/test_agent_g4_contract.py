@@ -37,7 +37,11 @@ from validate_agent_g4_live import (  # noqa: E402
     exact_binding,
     validate_api_artifact_descriptor,
     offline_evidence_hashes,
+    project_provider_relay,
+    provider_relay_descriptor,
     validate_offline_evidence,
+    validate_authority,
+    validate_config,
     validate_runtime_provider_environment,
     validate_disposable_artifact_binding,
     validate_rollback_fixture,
@@ -199,11 +203,13 @@ def fixture(candidate: str = CANDIDATE, source_manifest: dict | None = None) -> 
         "canaries": {key: row["id"] for key, row in binding["canaries"].items()},
         "requiredReadbacks": ["audit", "version"],
     }
+    provider_relay = project_provider_relay(authority, config)
     evidence = {
         "schemaVersion": "plane-agent-g4/live-evidence/v1",
         "status": "passed",
         "authorityId": authority["authorityId"],
         "s00Gate": s00_gate_fixture(),
+        "providerRelay": provider_relay_descriptor(),
         "binding": {key: binding[key] for key in BINDING_KEYS},
         "provider": {**binding["provider"], "fallbackUsed": False},
         "canaries": {
@@ -348,6 +354,7 @@ def failure_fixture() -> tuple[dict, dict, dict, dict]:
         invocation_state="failed",
         provider_attempts=[],
         terminal_kind="run_failure",
+        provider_relay=provider_relay_descriptor(),
     )
     return manifest, authority, config, receipt
 
@@ -1131,6 +1138,83 @@ class G4ContractTests(unittest.TestCase):
                     validate_runtime_provider_environment(provider, mismatched)
                 self.assertEqual(counters, {"provider_requests": 0, "relay_started": False})
 
+    def test_provider_relay_projection_is_shared_by_authority_config_and_receipt(self):
+        _, authority, config, evidence_text = fixture()
+        evidence = json.loads(evidence_text)
+        expected = provider_relay_descriptor()
+        self.assertEqual(authority["providerRelay"], expected)
+        self.assertEqual(config["providerRelay"], expected)
+        self.assertEqual(evidence["providerRelay"], expected)
+        self.assertIsNot(authority["providerRelay"], config["providerRelay"])
+
+    def test_live_preflight_rejects_missing_provider_relay_authority(self):
+        manifest, authority, config, _ = fixture()
+        authority.pop("providerRelay")
+        with self.assertRaisesRegex(ContractError, "authority_provider_relay_missing"):
+            validate_authority(authority, manifest, CANDIDATE, CANDIDATE, COMMAND, require_provider_relay=True)
+
+    def test_live_preflight_rejects_missing_provider_relay_config(self):
+        manifest, authority, config, _ = fixture()
+        authority_info = validate_authority(authority, manifest, CANDIDATE, CANDIDATE, COMMAND, require_provider_relay=True)
+        config.pop("providerRelay")
+        with self.assertRaisesRegex(ContractError, "config_provider_relay_missing"):
+            validate_config(config, authority_info, COMMAND, require_provider_relay=True)
+
+    def test_live_preflight_rejects_provider_relay_mismatch_before_provider_access(self):
+        manifest, authority, config, _ = fixture()
+        authority_info = validate_authority(authority, manifest, CANDIDATE, CANDIDATE, COMMAND, require_provider_relay=True)
+        config["providerRelay"]["hermesHookStatus"] = "pending"
+        with self.assertRaisesRegex(ContractError, "config_provider_relay_mismatch"):
+            validate_config(config, authority_info, COMMAND, require_provider_relay=True)
+
+    def test_live_validator_rejects_missing_receipt_provider_relay(self):
+        self._assert_live_fixture_rejected(
+            lambda evidence: evidence.pop("providerRelay"),
+            "evidence_provider_relay_missing",
+        )
+
+    def test_live_validator_rejects_tampered_provider_relay_even_with_recomputed_digest(self):
+        manifest, authority, config, evidence_text = fixture()
+        evidence = json.loads(evidence_text)
+        evidence["providerRelay"]["hermesHookStatus"] = "pending"
+        evidence["semanticDigest"] = _semantic_digest(evidence)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(evidence))
+        self.addCleanup(temp.cleanup)
+        with self.assertRaisesRegex(ContractError, "evidence_provider_relay_mismatch"):
+            validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
+
+    def test_failure_receipt_allows_absent_provider_relay_only_without_runtime_evidence(self):
+        manifest, authority, config, _ = fixture()
+        builder = invoke_helper_namespace()["build_failure_evidence"]
+        receipt = builder(
+            binding=exact_binding(manifest, CANDIDATE),
+            authority_id=authority["authorityId"],
+            canary_ids={key: row["id"] for key, row in authority["binding"]["canaries"].items()},
+            failure_phase="initialization",
+            error_class="RuntimeError",
+            exit_code=1,
+            run_id=None,
+            run_state=None,
+            invocation_id=None,
+            invocation_state=None,
+            provider_attempts=[],
+            terminal_kind="none",
+        )
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt))
+        self.addCleanup(temp.cleanup)
+        self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
+
+    def test_live_runner_projects_validated_provider_relay_into_invocation(self):
+        runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+        invoke = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+        validation = runner.index("validate_agent_g4_live.py")
+        relay_projection = runner.index("G4_PROVIDER_RELAY_JSON")
+        self.assertLess(validation, relay_projection)
+        self.assertIn('authority.get("providerRelay")', runner)
+        self.assertIn('"providerRelay": provider_relay', invoke)
+        self.assertNotIn('"protocol": "plane.agent-runtime/provider-relay/v1"', invoke)
+        self.assertIn('G4_PROVIDER_RELAY_JSON', invoke)
+
     def test_helper_failure_path_reconciles_and_emits_one_nonzero_structural_object(self):
         source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
         self.assertIn("reconcile_provider_attempts", source)
@@ -1366,6 +1450,7 @@ class G4ContractTests(unittest.TestCase):
                 "authorityId",
                 "semanticDigest",
                 "s00Gate",
+                "providerRelay",
                 "binding",
                 "provider",
                 "canaries",

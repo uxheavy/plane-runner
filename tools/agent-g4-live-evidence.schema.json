@@ -9,6 +9,7 @@
     "authorityId",
     "semanticDigest",
     "s00Gate",
+    "providerRelay",
     "binding",
     "provider",
     "canaries",

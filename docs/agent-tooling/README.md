@@ -52,6 +52,15 @@ campaign carries one typed descriptor for the only permitted program route:
 live runner validates that descriptor before reading the credential source,
 starting Docker networking, or invoking the API.
 
+The live contract owns one canonical six-field `providerRelay` projection.
+Authority and config generation use the shared projection, and config-only
+preflight requires exact equality before credential staging or provider access.
+The runner forwards the validated authority projection to the API invocation,
+which reuses those bytes in success and runtime failure receipts. A relay-free
+failure receipt is valid only when its bounded facts prove that no run,
+invocation, runtime exit, provider attempt, ingress event, or terminal existed.
+The standalone validator never treats a missing relay as a wildcard.
+
 ### Safe runtime failure observability
 
 `RuntimeExit.failure` keeps the existing `code`, bounded `message`, and
