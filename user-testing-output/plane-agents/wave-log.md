@@ -714,6 +714,60 @@ unrelated suite ran.
 - Decision: S00 is `FAIL`; UT-018 remains `open`; W/M/O remain locked. No
   product source was changed.
 
+## Wave 0AI — exact ab6d2058 / Hermes b2f1990d single fresh S00
+
+### Exact binding and provider-free preflight
+
+- The authoritative Plane checkout was clean at
+  `ab6d2058cdda89a8b11f873dc3b80daab51b5638` on
+  `codex/agent-functional-dogfood`; Hermes was clean at
+  `b2f1990dcf8fb9ca5a7d811fe1645420e9dafeec` on `main`. Both identities and
+  cleanliness were rechecked immediately before the primary process.
+- Exact disposable images were prepared only because they were absent: API
+  `plane-agent-api:s00-ab6d2058`, digest
+  `sha256:8f99583aa3133a12d7a06196dd8f1367ee2b8a3a35b839e8158bb5bce04c7323`,
+  and runtime `plane-agent-runtime:s00-ab6d2058-hermes-b2f1990d`, digest
+  `sha256:5e0d6e92053c2aba739bb1bbf217b5eeed9c92dec873ec586f0d2e8acd1fc8e2`.
+- Fresh disposable manifest, authority, and config SHA-256 values were
+  `d48bd2c4be5c0082b69635a54a5c535cc3daec8bac559724a20a506303ec4f22`,
+  `c3e0a1a63dfba9451e2605d31b5195a8dd1b535f6441a2625c4ff5e7fff6b069`, and
+  `0d09be730da922f7bfe84d4fb4588773834fde0734c96d7678cc8381a89460ce`.
+  Config-only validation and the owner-only auth-source mode check passed
+  before the primary process; the auth source was not printed or changed.
+- The configured route was `openai-codex/gpt-5.6-luna`, ChatGPT subscription,
+  fallback disabled, through `plane.agent-runtime/provider-relay/v1`.
+
+### One primary and bounded failure
+
+- Exactly one primary process was started and waited to completion. It
+  returned the bounded runner event:
+  `event=agent.g4.live-runner status=failed expected=fresh-owner-only-result-path actual=unsafe-or-colliding-path`.
+- The supplied `PLANE_G4_LIVE_RESULT_PATH` was relative
+  (`tmp/s00-exact-ab6d2058/result.json`). The runner rejected it before
+  creating the run directory, staging credentials, starting Docker, reading
+  the provider source, or contacting `chatgpt.com`.
+- Counts before cleanup were provider attempts `0`, child processes `0`, and
+  Plane actor/profile/assignment/run/invocation/receipt/audit/usage/outcome/
+  publication/terminal/semantic effects `0`. No permitted read, evaluator
+  denial, submit, publish, terminal event, or transcript observation was
+  reached. The exact invocation command hash was
+  `32756a110745e4b69a3c8627021527a073ac7c434b5cd6659483245674954060`.
+
+### Replay, receipt, cleanup, and decision
+
+- Because the primary failed at the pre-provider boundary, no retry and no
+  replay was attempted. The same-invocation zero-delta replay predicate was
+  not eligible.
+- No bounded receipt was generated: the runner rejected the result path
+  before result persistence. Receipt hash/mode/bytes are therefore
+  `not generated` / `not applicable` / `not applicable`.
+- Cleanup removed only the exact disposable API/runtime images and the fresh
+  manifest, authority, and config directory. No task-labeled containers,
+  networks, or volumes existed. The owner-only credential source was
+  untouched, Colima remained running, and no unrelated state was removed.
+- Decision: S00 is `FAIL`; UT-018 and UT-019 remain `open`; W/M/O remain
+  locked. No Plane or Hermes source was changed.
+
 ## Wave 0AG — exact 053ce18c / Hermes b39be101 single fresh S00
 
 Status: primary live lifecycle passed, but S00 remains dirty because the
