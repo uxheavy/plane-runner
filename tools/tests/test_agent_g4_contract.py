@@ -1008,6 +1008,31 @@ class G4ContractTests(unittest.TestCase):
             with_subreason["failure"]["reasonSubreason"],
             "runtime_configuration_rejected",
         )
+        budget_failure = namespace["build_failure_evidence"](
+            binding={},
+            failure_phase="api-invocation",
+            error_class="RuntimeError",
+            exit_code=1,
+            run_id="run:budget",
+            run_state="failed",
+            invocation_id="invocation:budget",
+            invocation_state="failed",
+            provider_attempts=[],
+            terminal_kind="run_failure",
+            failure_code="budget_exhausted",
+            failure_reason=(
+                '{"failureCode":"budget_exhausted",'
+                '"failurePhase":"runtime_process","failureDetail":"process_exit",'
+                '"failureSubreason":"model_call_budget_exhausted"}'
+            ),
+        )
+        self.assertEqual(budget_failure["failure"]["reasonCode"], "budget_exhausted")
+        self.assertEqual(budget_failure["failure"]["reasonPhase"], "runtime_process")
+        self.assertEqual(budget_failure["failure"]["reasonDetail"], "process_exit")
+        self.assertEqual(
+            budget_failure["failure"]["reasonSubreason"],
+            "model_call_budget_exhausted",
+        )
 
         parser = next(
             node

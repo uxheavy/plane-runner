@@ -227,6 +227,19 @@ def _serialized_failure(reason: dict[str, str]) -> str:
     return json.dumps(reason, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+def _runtime_exit_failure_classification(failure: object) -> dict[str, str] | None:
+    """Return a bounded live envelope for a finite child terminal failure."""
+
+    if not isinstance(failure, dict) or failure.get("code") != "budget_exhausted":
+        return None
+    return {
+        "failureCode": "budget_exhausted",
+        "failurePhase": "runtime_process",
+        "failureDetail": "process_exit",
+        "failureSubreason": "model_call_budget_exhausted",
+    }
+
+
 def _terminalize_dispatch_failure(
     invocation: RuntimeInvocation,
     reason: dict[str, str],
@@ -451,6 +464,12 @@ def _finish_exit(invocation: RuntimeInvocation, accepted_frames: int) -> Supervi
         if isinstance(failure, dict)
         else "Runtime invocation failed"
     )
+    failure_classification = _runtime_exit_failure_classification(failure)
+    terminal_reason = (
+        _serialized_failure(failure_classification)
+        if failure_classification is not None
+        else reason
+    )
     terminal_kind = {
         "failed": "run_failure",
         "blocked": "run_blocker",
@@ -463,7 +482,13 @@ def _finish_exit(invocation: RuntimeInvocation, accepted_frames: int) -> Supervi
             reason="Runtime exit kind is unsupported.",
             code="invalid_exit",
         )
-    return _terminalize(invocation.pk, kind=terminal_kind, reason=reason, code=code)
+    return _terminalize(
+        invocation.pk,
+        kind=terminal_kind,
+        reason=terminal_reason,
+        code=code,
+        failure=failure_classification,
+    )
 
 
 def run_runtime_invocation(

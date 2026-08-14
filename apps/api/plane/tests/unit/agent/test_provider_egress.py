@@ -124,6 +124,7 @@ class _FixtureUpstream:
 
 
 def _server(tmp_path, *, upstream: _FixtureUpstream, **kwargs: object) -> ProviderRelayServer:
+    max_calls = int(kwargs.pop("max_calls", 16))
     return ProviderRelayServer(
         socket_path=tmp_path / "provider.sock",
         binding=ProviderRelayBinding(
@@ -132,7 +133,13 @@ def _server(tmp_path, *, upstream: _FixtureUpstream, **kwargs: object) -> Provid
             provider=PROVIDER,
             model=MODEL,
         ),
-        policy=ProviderRelayPolicy(provider=PROVIDER, host=HOST, path=PATH, models=(MODEL,)),
+        policy=ProviderRelayPolicy(
+            provider=PROVIDER,
+            host=HOST,
+            path=PATH,
+            models=(MODEL,),
+            max_calls=max_calls,
+        ),
         credentials={"api_key": "provider-secret"},
         upstream=upstream,
         **kwargs,
@@ -439,6 +446,25 @@ def test_provider_relay_rejects_oversize_replay_expired_and_cancelled_requests_b
         server.close()
     assert cancelled_response[0] == 403 and json.loads(cancelled_response[2]) == {"error": "cancelled"}
     assert upstream.calls == []
+
+
+def test_provider_relay_surfaces_budget_exhaustion_without_an_upstream_replay(tmp_path):
+    upstream = _FixtureUpstream(ProviderResponse(status_code=200, headers={}, body_chunks=(b"ok",)), [])
+    audits: list[ProviderRelayAudit] = []
+    server = _server(tmp_path, upstream=upstream, max_calls=1, audit=audits.append)
+    try:
+        server.start()
+        first = _round_trip(server, request_id="request:budget-1")
+        second = _round_trip(server, request_id="request:budget-2")
+    finally:
+        server.close()
+
+    assert first[0] == 200
+    assert second[0] == 403
+    assert json.loads(second[2]) == {"error": "budget_exhausted"}
+    assert len(upstream.calls) == 1
+    assert audits[-1].error_code == "budget_exhausted"
+    assert audits[-1].upstream_called is False
 
 
 def test_provider_relay_rejects_redirects_and_closes_after_process_death(tmp_path):

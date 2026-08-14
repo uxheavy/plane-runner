@@ -179,6 +179,7 @@ def build_failure_evidence(
         "runtime_process_cancelled",
         "runtime_process_output_invalid",
         "runtime_supervisor_pre_dispatch_failure",
+        "budget_exhausted",
         "outcome_unknown",
     }
     reason_phases = {"runtime_transport", "runtime_configuration", "runtime_process", "launcher", "runtime_supervisor"}
@@ -208,6 +209,7 @@ def build_failure_evidence(
         "credential_state_invalid",
         "provider_attempt_evidence_rejected",
         "runtime_configuration_rejected",
+        "model_call_budget_exhausted",
     }
 
     def bounded_identifier(value):

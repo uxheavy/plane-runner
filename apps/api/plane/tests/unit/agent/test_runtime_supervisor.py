@@ -71,7 +71,7 @@ from plane.db.models import (
 from plane.db.models.operation_gateway import OperationGatewayAudit, OperationGatewayIdempotency
 
 
-def _runtime_frames(snapshot, envelope):
+def _runtime_frames(snapshot, envelope, *, failure=None):
     event = {
         "protocol": "plane.agent-runtime/v1",
         "trust": "untrusted",
@@ -103,7 +103,8 @@ def _runtime_frames(snapshot, envelope):
         "correlationId": envelope["correlationId"],
         "causationRef": envelope["causationRef"],
         "kind": "failed",
-        "failure": {
+        "failure": failure
+        or {
             "code": "runtime_error",
             "message": "child exited before an explicit outcome",
             "retryable": False,
@@ -119,6 +120,23 @@ class FailingRuntimeTransport:
     def dispatch(self, snapshot_json, envelope_json):
         self.calls += 1
         return _runtime_frames(json.loads(snapshot_json), json.loads(envelope_json))
+
+
+class BudgetExhaustedRuntimeTransport:
+    def __init__(self):
+        self.calls = 0
+
+    def dispatch(self, snapshot_json, envelope_json):
+        self.calls += 1
+        return _runtime_frames(
+            json.loads(snapshot_json),
+            json.loads(envelope_json),
+            failure={
+                "code": "budget_exhausted",
+                "message": "model-call allowance is exhausted",
+                "retryable": False,
+            },
+        )
 
 
 class StaticRuntimeTransport:
@@ -664,6 +682,32 @@ def test_supervisor_malformed_callback_becomes_one_visible_failure(
     assert result.state == InvocationState.FAILED
     assert result.terminal_kind == "run_failure"
     assert RunTerminalEvent.objects.filter(run=run, visible=True).count() == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_supervisor_preserves_finite_runtime_budget_failure_through_terminal_output(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    run, invocation = _invocation(workspace, gateway_project, gateway_issue, create_user, suffix="budget-exhausted")
+    transport = BudgetExhaustedRuntimeTransport()
+
+    result = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
+
+    expected = {
+        "failureCode": "budget_exhausted",
+        "failurePhase": "runtime_process",
+        "failureDetail": "process_exit",
+        "failureSubreason": "model_call_budget_exhausted",
+    }
+    control = RuntimeInvocationControl.objects.get(invocation=invocation)
+    terminal = RunTerminalEvent.objects.get(invocation=invocation, visible=True)
+    assert result.state == InvocationState.FAILED
+    assert result.failure == expected
+    assert control.failure_code == "budget_exhausted"
+    assert json.loads(control.failure_reason) == expected
+    assert json.loads(terminal.reason) == expected
+    assert expected["failureSubreason"] in _supervisor_result_output(result)
+    assert transport.calls == 1
 
 
 @pytest.mark.django_db(transaction=True)

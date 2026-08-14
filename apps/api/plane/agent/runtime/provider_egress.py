@@ -739,6 +739,8 @@ class ProviderRelayServer:
     @staticmethod
     def _error_code(error: ProviderRelayError) -> str:
         message = str(error).casefold()
+        if "model-call budget is exhausted" in message or "model call budget is exhausted" in message:
+            return "budget_exhausted"
         if "call failed" in message:
             return "upstream_error"
         if "oversized" in message or "size bound" in message:
