@@ -122,6 +122,24 @@ class FailingRuntimeTransport:
         return _runtime_frames(json.loads(snapshot_json), json.loads(envelope_json))
 
 
+class CausalRuntimeTransport:
+    def __init__(self):
+        self.calls = 0
+
+    def dispatch(self, snapshot_json, envelope_json):
+        self.calls += 1
+        return _runtime_frames(
+            json.loads(snapshot_json),
+            json.loads(envelope_json),
+            failure={
+                "code": "runtime_error",
+                "message": "raw provider callback secret should not escape the bounded result",
+                "retryable": False,
+                "cause": "host_operation_failure",
+            },
+        )
+
+
 class BudgetExhaustedRuntimeTransport:
     def __init__(self):
         self.calls = 0
@@ -747,6 +765,35 @@ def test_supervisor_preserves_finite_runtime_error_failure_through_terminal_outp
     assert json.loads(control.failure_reason) == expected
     assert json.loads(terminal.reason) == expected
     assert expected["failureSubreason"] in _supervisor_result_output(result)
+    assert transport.calls == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_supervisor_preserves_runtime_failure_cause_without_copying_raw_message(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    run, invocation = _invocation(workspace, gateway_project, gateway_issue, create_user, suffix="runtime-cause")
+    transport = CausalRuntimeTransport()
+
+    result = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
+
+    expected = {
+        "failureCode": "runtime_error",
+        "failurePhase": "runtime_process",
+        "failureDetail": "process_exit",
+        "failureSubreason": "runtime_execution_failed",
+        "failureCause": "host_operation_failure",
+    }
+    control = RuntimeInvocationControl.objects.get(invocation=invocation)
+    terminal = RunTerminalEvent.objects.get(invocation=invocation, visible=True)
+    output = _supervisor_result_output(result)
+    assert result.failure == expected
+    assert json.loads(control.failure_reason) == expected
+    assert json.loads(terminal.reason) == expected
+    assert "host_operation_failure" in output
+    assert "raw provider callback secret" not in output
+    assert "raw provider callback secret" not in control.failure_reason
+    assert "raw provider callback secret" not in terminal.reason
     assert transport.calls == 1
 
 

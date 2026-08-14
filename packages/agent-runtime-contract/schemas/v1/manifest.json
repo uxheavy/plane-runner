@@ -11,11 +11,11 @@
     },
     "runtime-event": {
       "filename": "runtime-event.schema.json",
-      "sha256": "fcbf67ce71fa90dd9661a8f2a739b8119c59357c8bf01afabf4fe92a13de9425"
+      "sha256": "78da5ce9d112b6545ea471e5fcae25ff5dfeb2e5db74a8d5796d0ee026823a27"
     },
     "runtime-exit": {
       "filename": "runtime-exit.schema.json",
-      "sha256": "055792eb1bf4931dafe19de456b15037522f0b5e8f6a0d2fedfe0e0d1d1d1c05"
+      "sha256": "86b5acaa14271b1c5f0f0fadc30f48bc5cd24ac8db0ff03ba8a91d02bceecf65"
     },
     "runtime-durable-state": {
       "filename": "runtime-durable-state.schema.json",

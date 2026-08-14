@@ -99,6 +99,14 @@ _FAILURE_CLASSIFICATIONS: dict[str, dict[str, str]] = {
         "failureSubreason": "completed_without_explicit_outcome",
     },
 }
+_RUNTIME_FAILURE_CAUSES = frozenset(
+    {
+        "host_operation_failure",
+        "cancellation_monitor_failure",
+        "invalid_usage_accounting",
+        "static_configuration_failure",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -257,7 +265,13 @@ def _runtime_exit_failure_classification(failure: object) -> dict[str, str] | No
         return None
     code = failure.get("code")
     classification = _FAILURE_CLASSIFICATIONS.get(code)
-    return dict(classification) if classification is not None else None
+    if classification is None:
+        return None
+    bounded = dict(classification)
+    cause = failure.get("cause")
+    if code == "runtime_error" and cause in _RUNTIME_FAILURE_CAUSES:
+        bounded["failureCause"] = cause
+    return bounded
 
 
 def _terminalize_dispatch_failure(

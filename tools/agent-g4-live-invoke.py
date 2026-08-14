@@ -125,6 +125,7 @@ def build_failure_evidence(
     terminal_code=None,
     terminal_reason=None,
     plane_host_operation_receipts=False,
+    plane_operation_audit=None,
 ):
     """Return one bounded failure object without copying runtime observations."""
 
@@ -223,6 +224,31 @@ def build_failure_evidence(
     }
     runtime_exit_kinds = {"completed", "waiting_for_input", "failed", "blocked", "cancelled"}
     runtime_failure_codes = {"budget_exhausted", "runtime_error"}
+    runtime_failure_causes = {
+        "host_operation_failure",
+        "cancellation_monitor_failure",
+        "invalid_usage_accounting",
+        "static_configuration_failure",
+    }
+    operation_ids = (
+        "work_item.read",
+        "catalog.search",
+        "agent.outcome.evaluate",
+        "agent.outcome.submit",
+        "agent.outcome.publish",
+    )
+    operation_statuses = {"success", "denied", "conflict", "unavailable", "absent"}
+    operation_error_codes = {
+        "NOT_AUTHORIZED",
+        "IDEMPOTENCY_CONFLICT",
+        "PLANE_CONFLICT",
+        "OPERATION_UNAVAILABLE",
+        "OUTCOME_UNKNOWN",
+        "VALIDATION_ERROR",
+        "OPERATION_REJECTED",
+        "UPSTREAM_FAILURE",
+    }
+    max_operation_audit_count = 8
     runtime_event_kinds = {
         "progress_observed",
         "conversation_publication_observed",
@@ -233,7 +259,46 @@ def build_failure_evidence(
         "failure_observed",
         "blocker_observed",
     }
-    terminal_reason_categories = failure_details | failure_subreasons
+    terminal_reason_categories = failure_details | failure_subreasons | runtime_failure_causes
+
+    def bounded_operation_audit(value):
+        summary = {
+            operation_id: {
+                "operationId": operation_id,
+                "status": "absent",
+                "errorCode": None,
+                "count": 0,
+            }
+            for operation_id in operation_ids
+        }
+        if not isinstance(value, (list, tuple)):
+            return [summary[operation_id] for operation_id in operation_ids]
+        for row in value[:64]:
+            if not isinstance(row, dict):
+                continue
+            operation_id = row.get("operationId", row.get("operation_id"))
+            if operation_id not in summary:
+                continue
+            item = summary[operation_id]
+            item["count"] = min(item["count"] + 1, max_operation_audit_count)
+            status = row.get("status")
+            outcome = row.get("outcome")
+            error_code = row.get("errorCode", row.get("error_code"))
+            if status not in operation_statuses:
+                if outcome in {"success", "replay"}:
+                    status = "success"
+                elif outcome == "denied":
+                    status = "denied"
+                elif outcome == "outcome_unknown":
+                    status = "unavailable"
+                elif outcome == "intent":
+                    status = "unavailable"
+                elif outcome == "failure":
+                    status = "conflict" if error_code in {"IDEMPOTENCY_CONFLICT", "PLANE_CONFLICT"} else "unavailable"
+            if status in operation_statuses and status != "absent":
+                item["status"] = status
+                item["errorCode"] = error_code if error_code in operation_error_codes else None
+        return [summary[operation_id] for operation_id in operation_ids]
 
     def bounded_identifier(value):
         if value is None:
@@ -323,10 +388,12 @@ def build_failure_evidence(
             candidate = json.loads(failure_reason)
         except (TypeError, ValueError):
             candidate = None
-        if isinstance(candidate, dict) and set(candidate) in (
-            {"failureCode", "failurePhase", "failureDetail"},
-            {"failureCode", "failurePhase", "failureDetail", "failureSubreason"},
-        ):
+        if isinstance(candidate, dict) and frozenset(candidate) in {
+            frozenset({"failureCode", "failurePhase", "failureDetail"}),
+            frozenset({"failureCode", "failurePhase", "failureDetail", "failureSubreason"}),
+            frozenset({"failureCode", "failurePhase", "failureDetail", "failureCause"}),
+            frozenset({"failureCode", "failurePhase", "failureDetail", "failureSubreason", "failureCause"}),
+        }:
             reason = candidate
     reason_code = reason.get("failureCode")
     bounded_failure_code = (
@@ -350,6 +417,12 @@ def build_failure_evidence(
         if isinstance(reason_subreason, str) and reason_subreason in failure_subreasons
         else "unavailable"
     )
+    reason_cause = reason.get("failureCause")
+    bounded_failure_cause = (
+        reason_cause
+        if isinstance(reason_cause, str) and reason_cause in runtime_failure_causes
+        else None
+    )
 
     bounded_runtime_exit = {"present": False, "kind": "unknown", "failure": None}
     if isinstance(runtime_exit, dict):
@@ -365,6 +438,12 @@ def build_failure_evidence(
                 "code": runtime_failure_code if runtime_failure_code in runtime_failure_codes else "unavailable",
                 "retryable": runtime_failure.get("retryable") is True,
             }
+            runtime_failure_cause = runtime_failure.get("cause")
+            if (
+                runtime_failure_code == "runtime_error"
+                and runtime_failure_cause in runtime_failure_causes
+            ):
+                bounded_runtime_exit["failure"]["cause"] = runtime_failure_cause
 
     bounded_event_kind_counts = {}
     if isinstance(runtime_event_kind_counts, dict):
@@ -385,7 +464,11 @@ def build_failure_evidence(
         except (TypeError, ValueError):
             terminal_reason_value = None
         if isinstance(terminal_reason_value, dict):
-            category = terminal_reason_value.get("failureSubreason") or terminal_reason_value.get("failureDetail")
+            category = (
+                terminal_reason_value.get("failureCause")
+                or terminal_reason_value.get("failureSubreason")
+                or terminal_reason_value.get("failureDetail")
+            )
             if category in terminal_reason_categories:
                 bounded_terminal_reason_category = category
 
@@ -403,19 +486,23 @@ def build_failure_evidence(
             }
         )
 
+    bounded_failure = {
+        "phase": failure_phase if failure_phase in failure_stages else "unknown",
+        "errorClass": error_class if error_class in error_classes else "unspecified",
+        "exitCode": exit_code,
+        "reasonCode": bounded_failure_code,
+        "reasonPhase": bounded_failure_phase,
+        "reasonDetail": bounded_failure_detail,
+        "reasonSubreason": bounded_failure_subreason,
+    }
+    if bounded_failure_cause is not None:
+        bounded_failure["reasonCause"] = bounded_failure_cause
+
     return {
         "schemaVersion": "plane-agent-g4/live-failure/v1",
         "status": "failed",
         "binding": bounded_binding,
-        "failure": {
-            "phase": failure_phase if failure_phase in failure_stages else "unknown",
-            "errorClass": error_class if error_class in error_classes else "unspecified",
-            "exitCode": exit_code,
-            "reasonCode": bounded_failure_code,
-            "reasonPhase": bounded_failure_phase,
-            "reasonDetail": bounded_failure_detail,
-            "reasonSubreason": bounded_failure_subreason,
-        },
+        "failure": bounded_failure,
         "run": {"present": run_id is not None, "id": bounded_identifier(run_id), "state": bounded_state(run_state)},
         "invocation": {
             "present": invocation_id is not None,
@@ -427,6 +514,7 @@ def build_failure_evidence(
         "providerAttempts": attempts,
         "terminal": terminal,
         "planeHostOperationReceipts": plane_host_operation_receipts is True,
+        "planeOperationAudit": bounded_operation_audit(plane_operation_audit),
     }
 
 
@@ -442,8 +530,15 @@ def _supervisor_failure_reason(output):
         "failurePhase",
         "failureDetail",
         "failureSubreason",
+        "failureCause",
     }
     required_keys = allowed_keys - {"failureSubreason"}
+    allowed_shapes = {
+        frozenset(required_keys),
+        frozenset(required_keys | {"failureSubreason"}),
+        frozenset(required_keys - {"failureCause"}),
+        frozenset((required_keys - {"failureCause"}) | {"failureSubreason"}),
+    }
     for line in reversed(output.splitlines()):
         marker = " failure="
         if marker not in line:
@@ -453,7 +548,7 @@ def _supervisor_failure_reason(output):
             value = json.loads(raw)
         except (TypeError, ValueError):
             continue
-        if not isinstance(value, dict) or set(value) not in (required_keys, allowed_keys):
+        if not isinstance(value, dict) or frozenset(value) not in allowed_shapes:
             continue
         if not all(isinstance(item, str) for item in value.values()):
             continue
@@ -478,6 +573,7 @@ def main() -> int:
     exit_evidence = None
     runtime_event_kind_counts = {}
     plane_host_operation_receipts = False
+    plane_operation_audit = []
     supervisor_failure_reason = None
 
     def readback():
@@ -492,8 +588,13 @@ def main() -> int:
             "kind", flat=True
         )[:256]:
             event_kind_counts[kind] = min(event_kind_counts.get(kind, 0) + 1, 256)
-        host_receipts = OperationGatewayAudit.objects.filter(correlation_id=f"correlation:{run.id}").exists()
-        return attempts, current_terminal, control, current_exit, event_kind_counts, host_receipts
+        operation_audit = list(
+            OperationGatewayAudit.objects.filter(correlation_id=f"correlation:{run.id}")
+            .order_by("created_at", "id")
+            .values("operation_id", "phase", "outcome", "error_code")[:64]
+        )
+        host_receipts = bool(operation_audit)
+        return attempts, current_terminal, control, current_exit, event_kind_counts, host_receipts, operation_audit
 
     try:
         email = f"g4-live-{suffix}@plane.test"
@@ -571,6 +672,7 @@ def main() -> int:
             exit_evidence,
             runtime_event_kind_counts,
             plane_host_operation_receipts,
+            plane_operation_audit,
         ) = readback()
         correlation_id = f"correlation:{run.id}"
         audits = OperationGatewayAudit.objects.filter(correlation_id=correlation_id)
@@ -674,6 +776,7 @@ def main() -> int:
                     exit_evidence,
                     runtime_event_kind_counts,
                     plane_host_operation_receipts,
+                    plane_operation_audit,
                 ) = readback()
                 if (
                     failure is not None
@@ -704,6 +807,7 @@ def main() -> int:
                         exit_evidence,
                         runtime_event_kind_counts,
                         plane_host_operation_receipts,
+                        plane_operation_audit,
                     ) = readback()
             except BaseException as exc:
                 if failure is None:
@@ -717,11 +821,13 @@ def main() -> int:
                         exit_evidence,
                         runtime_event_kind_counts,
                         plane_host_operation_receipts,
+                        plane_operation_audit,
                     ) = readback()
                 except BaseException:
                     provider_attempts, terminal, control = [], None, None
                     exit_evidence, runtime_event_kind_counts = None, {}
                     plane_host_operation_receipts = False
+                    plane_operation_audit = []
 
         if failure is not None:
             try:
@@ -767,6 +873,7 @@ def main() -> int:
                 terminal_code=control.failure_code if control is not None else None,
                 terminal_reason=terminal.reason if terminal is not None else None,
                 plane_host_operation_receipts=plane_host_operation_receipts,
+                plane_operation_audit=plane_operation_audit,
             )
 
     print(json.dumps(evidence, sort_keys=True, separators=(",", ":")))

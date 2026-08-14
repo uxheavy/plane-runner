@@ -1084,6 +1084,15 @@ class G4ContractTests(unittest.TestCase):
                 '"failureDetail":"process_exit","failureSubreason":"model_call_budget_exhausted"}'
             ),
             plane_host_operation_receipts=False,
+            plane_operation_audit=[
+                {
+                    "operation_id": "agent.outcome.evaluate",
+                    "phase": "outcome",
+                    "outcome": "denied",
+                    "error_code": "NOT_AUTHORIZED",
+                    "request_input": "must not escape",
+                }
+            ],
         )
         encoded = json.dumps(evidence, sort_keys=True, separators=(",", ":"))
         self.assertEqual(evidence["schemaVersion"], "plane-agent-g4/live-failure/v1")
@@ -1103,9 +1112,10 @@ class G4ContractTests(unittest.TestCase):
                 "providerAttempts",
                 "terminal",
                 "planeHostOperationReceipts",
+                "planeOperationAudit",
             },
         )
-        for forbidden in ("do not include", "prompt", "response", "credential", "payload", "rawLogs"):
+        for forbidden in ("do not include", "must not escape", "prompt", "response", "credential", "payload", "rawLogs"):
             self.assertNotIn(forbidden, encoded)
         self.assertNotRegex(encoded, re.compile(r"(?i)(password|secret|token|api[_-]?key|authorization|credential)"))
         self.assertEqual(
@@ -1124,6 +1134,21 @@ class G4ContractTests(unittest.TestCase):
         )
         self.assertFalse(evidence["planeHostOperationReceipts"])
         self.assertEqual(
+            evidence["planeOperationAudit"],
+            [
+                {"operationId": "work_item.read", "status": "absent", "errorCode": None, "count": 0},
+                {"operationId": "catalog.search", "status": "absent", "errorCode": None, "count": 0},
+                {
+                    "operationId": "agent.outcome.evaluate",
+                    "status": "denied",
+                    "errorCode": "NOT_AUTHORIZED",
+                    "count": 1,
+                },
+                {"operationId": "agent.outcome.submit", "status": "absent", "errorCode": None, "count": 0},
+                {"operationId": "agent.outcome.publish", "status": "absent", "errorCode": None, "count": 0},
+            ],
+        )
+        self.assertEqual(
             evidence["failure"],
             {
                 "phase": "api-invocation",
@@ -1135,6 +1160,56 @@ class G4ContractTests(unittest.TestCase):
                 "reasonSubreason": "unavailable",
             },
         )
+        operation_statuses = namespace["build_failure_evidence"](
+            binding={},
+            failure_phase="api-invocation",
+            error_class="RuntimeError",
+            exit_code=1,
+            run_id="run:operation-statuses",
+            run_state="failed",
+            invocation_id="invocation:operation-statuses",
+            invocation_state="failed",
+            provider_attempts=[],
+            terminal_kind="run_failure",
+            plane_operation_audit=(
+                [
+                    {
+                        "operation_id": "work_item.read",
+                        "phase": "outcome",
+                        "outcome": "failure",
+                        "error_code": "PLANE_CONFLICT",
+                    },
+                    {
+                        "operation_id": "agent.outcome.publish",
+                        "phase": "outcome",
+                        "outcome": "outcome_unknown",
+                        "error_code": "OUTCOME_UNKNOWN",
+                    },
+                ]
+                + [
+                    {
+                        "operation_id": "agent.outcome.submit",
+                        "phase": "outcome",
+                        "outcome": "success",
+                    }
+                ]
+                * 20
+            ),
+        )
+        statuses = {row["operationId"]: row for row in operation_statuses["planeOperationAudit"]}
+        self.assertEqual(statuses["work_item.read"], {
+            "operationId": "work_item.read",
+            "status": "conflict",
+            "errorCode": "PLANE_CONFLICT",
+            "count": 1,
+        })
+        self.assertEqual(statuses["agent.outcome.publish"], {
+            "operationId": "agent.outcome.publish",
+            "status": "unavailable",
+            "errorCode": "OUTCOME_UNKNOWN",
+            "count": 1,
+        })
+        self.assertEqual(statuses["agent.outcome.submit"]["count"], 8)
         with_subreason = namespace["build_failure_evidence"](
             binding={},
             failure_phase="api-invocation",
@@ -1198,23 +1273,38 @@ class G4ContractTests(unittest.TestCase):
                 '{"failureCode":"runtime_error",'
                 '"failurePhase":"runtime_process",'
                 '"failureDetail":"process_exit",'
-                '"failureSubreason":"runtime_execution_failed"}'
+                '"failureSubreason":"runtime_execution_failed",'
+                '"failureCause":"host_operation_failure"}'
             ),
             runtime_exit={
                 "kind": "failed",
-                "failure": {"code": "runtime_error", "retryable": False},
+                "failure": {
+                    "code": "runtime_error",
+                    "retryable": False,
+                    "cause": "host_operation_failure",
+                    "message": "raw host message must not escape",
+                },
             },
             terminal_code="runtime_error",
             terminal_reason=(
                 '{"failureCode":"runtime_error",'
                 '"failurePhase":"runtime_process",'
                 '"failureDetail":"process_exit",'
-                '"failureSubreason":"runtime_execution_failed"}'
+                '"failureSubreason":"runtime_execution_failed",'
+                '"failureCause":"host_operation_failure"}'
             ),
         )
         self.assertEqual(
             runtime_failure["runtimeExit"],
-            {"present": True, "kind": "failed", "failure": {"code": "runtime_error", "retryable": False}},
+            {
+                "present": True,
+                "kind": "failed",
+                "failure": {
+                    "code": "runtime_error",
+                    "retryable": False,
+                    "cause": "host_operation_failure",
+                },
+            },
         )
         self.assertEqual(
             runtime_failure["failure"]["reasonCode"],
@@ -1225,12 +1315,16 @@ class G4ContractTests(unittest.TestCase):
             "runtime_execution_failed",
         )
         self.assertEqual(
+            runtime_failure["failure"]["reasonCause"],
+            "host_operation_failure",
+        )
+        self.assertEqual(
             runtime_failure["terminal"],
             {
                 "present": True,
                 "kind": "run_failure",
                 "code": "runtime_error",
-                "reasonCategory": "runtime_execution_failed",
+                "reasonCategory": "host_operation_failure",
             },
         )
 
@@ -1256,6 +1350,22 @@ class G4ContractTests(unittest.TestCase):
         self.assertEqual(
             json.loads(parsed_reason),
             bounded_reason,
+        )
+        causal_reason = {
+            "failureCode": "runtime_error",
+            "failurePhase": "runtime_process",
+            "failureDetail": "process_exit",
+            "failureSubreason": "runtime_execution_failed",
+            "failureCause": "invalid_usage_accounting",
+        }
+        self.assertEqual(
+            json.loads(
+                namespace["_supervisor_failure_reason"](
+                    "state=failed failure="
+                    + json.dumps(causal_reason, sort_keys=True, separators=(",", ":"))
+                )
+            ),
+            causal_reason,
         )
         self.assertIsNone(
             namespace["_supervisor_failure_reason"](

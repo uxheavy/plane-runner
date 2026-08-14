@@ -80,6 +80,32 @@ def test_runtime_event_and_exit_use_generated_schema_validation():
         validate_runtime_event(unknown)
 
 
+def test_runtime_exit_failure_cause_is_finite_and_runtime_error_only():
+    causal = _exit()
+    causal.update(
+        {
+            "kind": "failed",
+            "failure": {
+                "code": "runtime_error",
+                "message": "safe compatibility message",
+                "retryable": False,
+                "cause": "host_operation_failure",
+            },
+        }
+    )
+    assert validate_runtime_exit(causal)["failure"]["cause"] == "host_operation_failure"
+
+    invalid_cause = copy.deepcopy(causal)
+    invalid_cause["failure"]["cause"] = "raw-host-message"
+    with pytest.raises(RuntimeContractError):
+        validate_runtime_exit(invalid_cause)
+
+    invalid_code = copy.deepcopy(causal)
+    invalid_code["failure"]["code"] = "budget_exhausted"
+    with pytest.raises(RuntimeContractError):
+        validate_runtime_exit(invalid_code)
+
+
 def test_runtime_durable_state_digest_and_revision_continuity_match_l1():
     genesis = _genesis()
     assert validate_runtime_durable_state(genesis) == genesis

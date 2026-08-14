@@ -71,12 +71,12 @@ _HERMES_REQUIRED_RUNTIME_POLICY_FIELDS = frozenset(
     }
 )
 _HERMES_G1_CONTRACT_DIGESTS = {
-    # Frozen by the exact Hermes d2e655101f263329359e7d0de9d0b856202a3e4b
-    # plane_runtime.g1_contract manifest accepted at this process boundary.
+    # Frozen by the paired plane_runtime.g1_contract manifest accepted at this
+    # process boundary.
     "runSnapshot": "e538fe79ede53e6bb2e307600dbefea507e30b996c002c3dab32d543ca0e36a2",
     "invocationEnvelope": "b7a15d74406f1624cdb7cd95b42edfd1ffee596abe57e4f00ed60e2e23ded995",
-    "runtimeEvent": "fcbf67ce71fa90dd9661a8f2a739b8119c59357c8bf01afabf4fe92a13de9425",
-    "runtimeExit": "055792eb1bf4931dafe19de456b15037522f0b5e8f6a0d2fedfe0e0d1d1d1c05",
+    "runtimeEvent": "78da5ce9d112b6545ea471e5fcae25ff5dfeb2e5db74a8d5796d0ee026823a27",
+    "runtimeExit": "86b5acaa14271b1c5f0f0fadc30f48bc5cd24ac8db0ff03ba8a91d02bceecf65",
     "runtimeDurableState": "444c944ec8a5054f33c8662470529a1f4565d42ff06138438beceeef7967a0da",
 }
 _HERMES_DISPATCH_PROTOCOL = "plane.agent-runtime/dispatch-control/v1"

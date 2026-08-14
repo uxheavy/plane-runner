@@ -52,6 +52,20 @@ campaign carries one typed descriptor for the only permitted program route:
 live runner validates that descriptor before reading the credential source,
 starting Docker networking, or invoking the API.
 
+### Safe runtime failure observability
+
+`RuntimeExit.failure` keeps the existing `code`, bounded `message`, and
+`retryable` fields and may add one allowlisted `cause` when the code is
+`runtime_error`: `host_operation_failure`, `cancellation_monitor_failure`,
+`invalid_usage_accounting`, or `static_configuration_failure`. Plane maps that
+finite value into its existing bounded failure classification; it never copies
+the runtime message into the product-facing result. The live failure result
+also carries a fixed, capped operation summary for `work_item.read`,
+`catalog.search`, `agent.outcome.evaluate`, `agent.outcome.submit`, and
+`agent.outcome.publish`, exposing only each operation's status, allowlisted
+error code, and count. Missing rows are reported as `absent`; raw audit rows,
+inputs, outputs, and messages remain outside the result.
+
 ## What is authoritative
 
 - [GOAL.md](./GOAL.md) is the active objective, success proof, phase/dependency map, and worker/reviewer protocol.

@@ -90,7 +90,21 @@ const definitions = {
       },
       message: ref("boundedText"),
       retryable: { type: "boolean" },
+      cause: {
+        enum: [
+          "host_operation_failure",
+          "cancellation_monitor_failure",
+          "invalid_usage_accounting",
+          "static_configuration_failure",
+        ],
+      },
     },
+    allOf: [
+      {
+        if: { required: ["cause"] },
+        then: { properties: { code: { const: "runtime_error" } } },
+      },
+    ],
   },
   runtimeUsage: {
     type: "object",

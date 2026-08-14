@@ -1214,18 +1214,33 @@ function parseArtifact(value: unknown, path: string): ArtifactReference {
 }
 
 function parseRuntimeFailure(value: unknown, path: string): RuntimeFailure {
-  const object = requireRecord(value, path, ["code", "message", "retryable"]);
+  const object = requireRecord(value, path, ["code", "message", "retryable"], ["cause"]);
   const codes = ["runtime_error", "lease_expired", "invalid_continuation", "budget_exhausted", "cancelled"] as const;
+  const causes = [
+    "host_operation_failure",
+    "cancellation_monitor_failure",
+    "invalid_usage_accounting",
+    "static_configuration_failure",
+  ] as const;
   if (!codes.includes(object.code as (typeof codes)[number])) {
     throw new ContractParseError(`${path}.code`, "is not a supported runtime failure code");
   }
   if (typeof object.retryable !== "boolean") {
     throw new ContractParseError(`${path}.retryable`, "must be a boolean");
   }
+  if (object.cause !== undefined) {
+    if (!causes.includes(object.cause as (typeof causes)[number])) {
+      throw new ContractParseError(`${path}.cause`, "is not a supported runtime failure cause");
+    }
+    if (object.code !== "runtime_error") {
+      throw new ContractParseError(`${path}.cause`, "requires the runtime_error failure code");
+    }
+  }
   return {
     code: object.code,
     message: parseBoundedText(object.message, `${path}.message`),
     retryable: object.retryable,
+    ...(object.cause === undefined ? {} : { cause: object.cause as RuntimeFailure["cause"] }),
   } as RuntimeFailure;
 }
 
@@ -1981,6 +1996,11 @@ export type RuntimeFailure = Readonly<{
   code: "runtime_error" | "lease_expired" | "invalid_continuation" | "budget_exhausted" | "cancelled";
   message: BoundedText;
   retryable: boolean;
+  cause?:
+    | "host_operation_failure"
+    | "cancellation_monitor_failure"
+    | "invalid_usage_accounting"
+    | "static_configuration_failure";
 }>;
 
 export type RuntimeUsage = Readonly<{
