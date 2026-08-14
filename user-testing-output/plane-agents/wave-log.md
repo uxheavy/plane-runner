@@ -643,6 +643,70 @@ unrelated suite ran.
   `SupervisorResult`, durable terminal state, and the bounded receipt.
 - Decision: S00 is `FAIL` and does not unlock W/M/O.
 
+## Wave 0AL — exact 35a129bf / Hermes d9037d5 single fresh S00
+
+- Status: `FAIL` at the pre-replay live product lifecycle assertion. S00
+  remains dirty and W/M/O stay locked. Exactly one fresh primary ran through
+  Plane runtime service and hidden Hermes. There was no retry, fallback,
+  second provider call, replay, source edit, UI test, broad verifier, or
+  unrelated suite.
+- Plane was clean at exact HEAD
+  `35a129bf7c1c55cef3319e492c51046d909959e9` on
+  `codex/agent-functional-dogfood`. Hermes was clean at exact HEAD
+  `d9037d5ceb17ce8f12d7abf28cfe6ee734adcb20` on `main`.
+- The API artifact was `plane-agent-api:s00-35a129bf7c`, digest
+  `sha256:aefd7208c28b747765c4fe549c4dbac6685b29ecbff7800870c1111fa211eaf2`.
+  The runtime artifact was
+  `plane-agent-runtime:s00-35a129bf7c-hermes-d9037d5`, digest
+  `sha256:8fba6852424c9a39eb9df189fb94988e7af2d58cb4f249842bfedad671ba9030`.
+  Runtime source digest was
+  `1d8186a36447ea5dba5ba6cb55db48073a3be0dc976cec4ff2887418c0e33667`;
+  Hermes tree digest was
+  `7de6ace3830c9280302b49cf4266a59f24d91cbeb3ff9c65ed51e10f1381dc89`.
+  Both artifacts were bound to the same candidate and
+  `plane.agent-runtime/v1`.
+- Disposable manifest, authority, and config hashes were
+  `c656776e0d9aaf3e3e9528b0ebd4c594eb31650f29389d70b1c31e877b3f499a`,
+  `6e41133e37ac8af4811dbe5374343ba4395f29d0695e6b92870927faa16ebd70`,
+  and `af7f3f4ba62c1751c09cf54c623f2349ce3cff2710fa891d1896211b43278fce`.
+  Config-only validation passed before the owner-only provider source was
+  read. The route was ChatGPT subscription
+  `openai-codex/gpt-5.6-luna`, fallback disabled, through the integrated
+  `plane.agent-runtime/provider-relay/v1` AF_UNIX contract.
+- The caller used the fresh absolute nonexistent result path
+  `/tmp/plane-agent-s00-0al.jzBSOd/result.json` under a `0700` parent.
+  The persisted receipt was mode `0600`, size `3311` bytes, schema
+  `plane-agent-g4/live-failure/v1`, redacted, and SHA-256
+  `303478fa8bad6365a2e29ede26fe629f0398d2734c9963484df4ec99817ba947`.
+- Fresh run `e8ea6b83-ecf8-47db-9953-3109b58f35e5` and invocation
+  `invocation:cf1bdf9f-4133-44ed-b2b8-f7fe098e8c1f` read back as
+  `succeeded`. The operation audit was `search_workspace` success `3`,
+  `work_item.read` success `1`, `catalog.search` absent, `catalog.describe`
+  absent, `agent.outcome.evaluate` denied `NOT_AUTHORIZED` `1`,
+  `agent.outcome.submit` success `1`, and `agent.outcome.publish` success
+  `1`. Provider attempts were exactly `10`, sequences `1..10`, all
+  `completed`, upstream initiated, and `2xx`; no attempt was
+  `outcome_unknown`. Runtime ingress counted `progress_observed:19`,
+  `transcript_evidence_observed:1`, and `usage_observed:1`. One visible
+  terminal kind was `outcome_submission`; RuntimeExit was present,
+  `completed`, with final sequence `20` and no failure.
+- The first broken boundary was the in-process API invocation lifecycle gate
+  immediately before `before_replay`. The bounded failure receipt does not
+  retain the predicate-level result for explicit applied-publication
+  separation or terminal source/product-ref binding, so no narrower cause is
+  claimed. Late-frame classification, ordinary final-text/publication
+  separation, semantic digest, owner-only receipt details beyond the bounded
+  receipt, and receipt/result equivalence were not proven. No replay was
+  eligible after this failed primary.
+- Runner cleanup removed the task Compose resources, provider staging,
+  runtime secret, run directory, and receipt after acknowledgment. Post-run
+  checks found zero task-labeled containers, networks, or volumes. The
+  disposable exact images, manifest, authority, and config were removed after
+  this evidence update. The owner-only ChatGPT source was not changed or
+  printed. Plane and Hermes remained clean at their required commits.
+- Decision: S00 is `FAIL`; UT-018 and UT-019 remain `open`; W/M/O remain
+  locked. No Plane or Hermes source was changed.
+
 ## Wave 0AK — exact c0edcab5 / Hermes 5c8a265f single fresh S00
 
 - Status: `FAIL` at the post-publication runtime boundary. S00 remains dirty;
