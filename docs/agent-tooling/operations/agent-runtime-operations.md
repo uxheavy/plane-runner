@@ -174,12 +174,15 @@ resources. Never edit the durable manifest for a disposable artifact rehearsal.
 For the live runner, the validated owner-only provider source is copied into a
 fresh task-owned Docker volume through the Docker client's stdin path. The
 preflight container verifies the volume file as a regular `0600` file within
-the 64 KiB bound, and the API invocation mounts that volume read-only. The
-provider source path is never passed to Docker as a bind source, so Docker
-Desktop and Colima do not need host visibility into the operator's temporary
-directory. The runner removes the provider volume and staged host file during
-the same exact-project cleanup; no provider credential enters argv, environment,
-logs, image layers, or generated evidence.
+the 64 KiB bound, and the API invocation mounts that volume read-only at
+`/run/secrets`. The generated runtime secret uses a separate sibling mount at
+`/run/plane-agent-runtime-secret`; it is not nested under the read-only
+provider mount. The invocation helper is streamed to the API container's
+stdin rather than bind-mounted. This avoids the nested `/run/secrets`
+mountpoint failure and avoids requiring Docker Desktop or Colima to see the
+runner's source checkout. The runner removes the provider volume and staged
+host files during the same exact-project cleanup; no provider credential
+enters argv, environment, logs, image layers, or generated evidence.
 
 ## Local development topology
 

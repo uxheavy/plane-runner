@@ -857,6 +857,55 @@ class G4ContractTests(unittest.TestCase):
         self.assertNotIn('--mount type=bind,src="${PROVIDER_SECRET_FILE}"', preflight)
         self.assertLess(preflight_start, runner.index("docker compose", compose_start))
 
+    def test_api_invocation_uses_task_volumes_and_stdin_without_invoke_source_bind_mount(self):
+        runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+        api = runner[runner.index("LIVE_PHASE=api-invocation") :]
+
+        self.assertIn('docker run --rm -i --network "${NETWORK}"', api)
+        self.assertIn('"${API_IMAGE}" python - <"${LIVE_INVOKE_SOURCE}"', api)
+        self.assertIn(
+            '--mount type=bind,src="${RUNTIME_SECRET_FILE}",dst=/run/plane-agent-runtime-secret,readonly',
+            api,
+        )
+        self.assertIn(
+            '--mount type=volume,src="${PROVIDER_SECRET_VOLUME}",dst=/run/secrets,readonly,volume-nocopy',
+            api,
+        )
+        self.assertIn(
+            '--mount type=volume,src="${CREDENTIAL_STATE_VOLUME}",dst="${CREDENTIAL_STATE_TARGET}",volume-nocopy',
+            api,
+        )
+        self.assertIn("--env PLANE_AGENT_RUNTIME_SECRET_FILE=/run/plane-agent-runtime-secret", api)
+        self.assertNotIn('--mount type=bind,src="${RUNTIME_SECRET_FILE}",dst=/run/secrets/', api)
+        self.assertNotIn('--mount type=bind,src="${LIVE_INVOKE_SOURCE}"', api)
+        self.assertNotIn("/tmp/agent-g4-live-invoke.py", api)
+        self.assertNotIn("PROVIDER_SECRET_FILE", api)
+        self.assertNotIn("PLANE_G4_PROVIDER_SECRET_SOURCE", api)
+
+    def test_live_runner_classifies_bounded_docker_mount_failures_without_raw_diagnostics(self):
+        runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+        function = runner[runner.index("safe_docker_failure_reason()") : runner.index("\ncleanup()")]
+        with tempfile.TemporaryDirectory() as directory:
+            error_file = Path(directory) / "docker-error.log"
+            raw_path = "/private/secret/provider-source"
+            raw_secret = "synthetic-provider-secret-value"
+            error_file.write_text(
+                "docker: Error response from daemon: failed to create task for container: "
+                "error mounting %s: create mountpoint read-only file system %s\n" % (raw_path, raw_secret),
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                ["bash", "-c", function + '\nERROR_FILE="$1"\nsafe_docker_failure_reason', "classifier", str(error_file)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "docker_mount_target_read_only")
+        self.assertNotIn(raw_path, result.stdout + result.stderr)
+        self.assertNotIn(raw_secret, result.stdout + result.stderr)
+
     def test_live_runner_cleanup_removes_staged_secret_and_exact_invocation_directory(self):
         runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
         cleanup = runner[runner.index("cleanup()") : runner.index("trap cleanup EXIT INT TERM")]

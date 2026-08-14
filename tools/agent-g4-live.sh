@@ -187,12 +187,49 @@ else:
 PY
 }
 
+safe_docker_failure_reason() {
+    python3 - "${ERROR_FILE}" <<'PY'
+from pathlib import Path
+import sys
+
+try:
+    text = Path(sys.argv[1]).read_bytes()[:8192].decode("utf-8", errors="replace").lower()
+except OSError:
+    print("unavailable")
+    raise SystemExit(0)
+
+if "read-only file system" in text and ("mountpoint" in text or "mount" in text):
+    print("docker_mount_target_read_only")
+elif "invalid mount config" in text or "invalid mount specification" in text:
+    print("docker_mount_invalid")
+elif "bind source path does not exist" in text or (
+    "no such file or directory" in text and ("mount" in text or "bind" in text)
+):
+    print("docker_mount_source_unavailable")
+elif "permission denied" in text and ("mount" in text or "bind" in text):
+    print("docker_mount_permission_denied")
+elif "network-scoped aliases" in text or "network is not connected" in text:
+    print("docker_network_configuration_invalid")
+elif "unable to find image" in text or "pull access denied" in text:
+    print("docker_image_unavailable")
+elif "failed to create task" in text or "oci runtime" in text:
+    print("docker_container_start_failed")
+else:
+    print("docker_precontainer_failure")
+PY
+}
+
 cleanup() {
     local status=$?
     local cleanup_status=0
     if [[ "${status}" -ne 0 ]]; then
-        printf 'event=agent.g4.live-runner.failure phase=%s error_class=%s exit_code=%s\n' \
-            "${LIVE_PHASE}" "$(safe_error_class)" "${status}"
+        local reason_category=unavailable
+        if [[ "${status}" -eq 125 ]]; then
+            reason_category="$(safe_docker_failure_reason)"
+        fi
+        printf 'event=agent.g4.live-runner.failure phase=%s error_class=%s exit_code=%s reason_category=%s\n' \
+            "${LIVE_PHASE}" "$(safe_error_class)" "${status}" \
+            "${reason_category}"
     fi
     if [[ -s "${EVIDENCE_FILE}" ]]; then
         cat "${EVIDENCE_FILE}"
@@ -486,11 +523,10 @@ done
 test "${runtime_ready}" -eq 1
 
 LIVE_PHASE=api-invocation
-docker run --rm --network "${NETWORK}" --hostname api --network-alias api \
-    --mount type=bind,src="${RUNTIME_SECRET_FILE}",dst=/run/secrets/plane_agent_runtime,readonly \
+docker run --rm -i --network "${NETWORK}" --hostname api --network-alias api \
+    --mount type=bind,src="${RUNTIME_SECRET_FILE}",dst=/run/plane-agent-runtime-secret,readonly \
     --mount type=volume,src="${CREDENTIAL_STATE_VOLUME}",dst="${CREDENTIAL_STATE_TARGET}",volume-nocopy \
     --mount type=volume,src="${PROVIDER_SECRET_VOLUME}",dst=/run/secrets,readonly,volume-nocopy \
-    --mount type=bind,src="${LIVE_INVOKE_SOURCE}",dst=/tmp/agent-g4-live-invoke.py,readonly \
     --env DJANGO_SETTINGS_MODULE=plane.settings.production \
     --env PYTHONUNBUFFERED=1 \
     --env SECRET_KEY="${PLANE_TEST_SECRET}" \
@@ -512,7 +548,7 @@ docker run --rm --network "${NETWORK}" --hostname api --network-alias api \
     --env PLANE_AGENT_RUNTIME_HOST_BIND=0.0.0.0 \
     --env PLANE_AGENT_RUNTIME_HOST_PORT=8091 \
     --env PLANE_AGENT_RUNTIME_DISPATCH_PATH=/v1/runtime/dispatch \
-    --env PLANE_AGENT_RUNTIME_SECRET_FILE=/run/secrets/plane_agent_runtime \
+    --env PLANE_AGENT_RUNTIME_SECRET_FILE=/run/plane-agent-runtime-secret \
     --env PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER=command:/usr/local/bin/plane-agent-runtime-credential-resolver \
     --env PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE="${CREDENTIAL_STATE_FILE}" \
     --env PLANE_AGENT_RUNTIME_COMMAND='python3 -m plane_runtime.g1_runtime_image.bootstrap --once --g1-production' \
@@ -541,6 +577,6 @@ docker run --rm --network "${NETWORK}" --hostname api --network-alias api \
     --env G4_PROVIDER_DESCRIPTOR_JSON="${PROVIDER_DESCRIPTOR_JSON}" \
     --env G4_PERMITTED_CANARY=live-permitted-read \
     --env G4_DENIED_CANARY=live-denied-evaluate \
-    "${API_IMAGE}" python /tmp/agent-g4-live-invoke.py >"${EVIDENCE_FILE}" 2>"${ERROR_FILE}"
+    "${API_IMAGE}" python - <"${LIVE_INVOKE_SOURCE}" >"${EVIDENCE_FILE}" 2>"${ERROR_FILE}"
 
 test -s "${EVIDENCE_FILE}"
