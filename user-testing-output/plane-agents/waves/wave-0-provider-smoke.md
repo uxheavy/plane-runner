@@ -308,6 +308,120 @@ replay, or second provider call ran.
 No broad G3/G4 verifier, unrelated suite, load test, G5, rollout, pilot,
 deployment, source edit, or extra provider call ran.
 
+## Wave 0V — patched-Hermes runtime provenance retest at cd2cba9472
+
+Status: blocked before live S00. The API artifact built, but the matched runtime
+build stopped at its built-in network-disabled source-parity check. No
+authority/config was generated, no Plane resources were created, and no
+provider call ran.
+
+### Candidate and first boundary
+
+- Plane was clean at `cd2cba9472bb8950828fc52d46104513a05565dc`.
+- Hermes was clean at `21826c256bc1fc8f56e6469e752cb2a5b991ac58`,
+  with canonical remote `https://github.com/uxheavy/hermes-agent.git` and donor
+  parent `d2e655101f263329359e7d0de9d0b856202a3e4b`.
+- Disposable API digest:
+  `sha256:7055dd7678b2658ec0edd47b4863d21568f6af1821cba4725dc2e9e31c17ac31`.
+- Rejected runtime digest:
+  `sha256:2634444eac55ff8697adcb4092a17245251ae873ca60c5270d5981cd1e53e32d`.
+- The Git archive contained 8,091 Hermes files with tree digest
+  `2b3c5ca66f93c1cdbb413c5d60b43dd92674dffc5f6d8b10b6b5b3d89e9287ef`;
+  the image contained 8,092 with digest
+  `c56206d0e22d41d7d76c994fb92c75a120311668f4378328ccb356a699811513`.
+  Plane runtime inventory matched at 16 files.
+- The sole extra path was `/opt/hermes/dotenv/__init__.py`. Hermes already
+  tracked the same compatibility source under
+  `plane_runtime/g1_runtime_image/dotenv/__init__.py`; the Dockerfile copied it
+  a second time into the attested source tree.
+
+No actor, profile, assignment, run, invocation, provider attempt, gateway
+receipt, audit receipt, outcome, publication, terminal product event, or replay
+exists for Wave 0V. The rejected images, disposable checkouts, and task-owned
+runtime resources were removed. The later Plane assembly fix moved the
+compatibility dependency outside `/opt/hermes`; exact parity, real bootstrap,
+OpenAI 2.24 Responses availability, and a finite non-retryable budget probe all
+passed before Wave 0W.
+
+## Wave 0W — exact patched-Hermes live S00 at ae82d0eaea
+
+Status: dirty at the first functional API-invocation result. Wave 0V's
+runtime-inventory defect was closed and the exact image pair passed provenance,
+but one fresh provider-backed S00 stopped before the required Plane product
+lifecycle. No retry, replay, or second provider request ran.
+
+### Candidate, artifacts, and binding
+
+- Plane was clean at
+  `ae82d0eaea5799c5fa4e44198bc35e18c6f00c0d`, direct parent
+  `cd2cba9472bb8950828fc52d46104513a05565dc`.
+- Hermes was
+  `21826c256bc1fc8f56e6469e752cb2a5b991ac58` from the canonical fork.
+- API digest:
+  `sha256:ad83edabedabdcd4ce4783c4af48659f1bdc7ae3e7d4423aef43188fb12199ed`.
+- Runtime digest:
+  `sha256:3942af4ae9667663b730a01c0e58dd2edc9e7757b8b0f4b747b4937731a8bc44`.
+- Hermes tree digest:
+  `2b3c5ca66f93c1cdbb413c5d60b43dd92674dffc5f6d8b10b6b5b3d89e9287ef`;
+  Plane runtime source digest:
+  `fce09be6e5d152f1b3025d4fc4cb079f390ca55e3a238d335eeb36e101268e24`.
+- Disposable manifest SHA-256:
+  `ea3d926ed20ce7466f073a73aaefba5da89fe2156f1b703ee69fe083e3f67582`.
+  Authority SHA-256:
+  `98099989025feb2cdb3d63cdabb04d74cc16560b6907b2afa45a1da68d068548`.
+  Config SHA-256:
+  `2438937a351ceabd674d0a782351fadadca21c84fad79d86df94e3790c1f9101`.
+  Config-only validation passed with owner-only mode `0600`.
+- Provider route: ChatGPT subscription, `openai-codex/gpt-5.6-luna`, fallback
+  disabled. Live command binding SHA-256:
+  `32756a110745e4b69a3c8627021527a073ac7c434b5cd6659483245674954060`.
+
+### Fresh live result
+
+The single live command exited `1` at `api-invocation`:
+
+```text
+schemaVersion=plane-agent-g4/live-failure/v1 status=failed
+errorClass=RuntimeError phase=api-invocation exitCode=1
+reasonCode=unspecified reasonPhase=unavailable
+reasonDetail=unavailable reasonSubreason=unavailable
+runRef=f652c272-0e9a-4b56-a107-a6f57415731b runState=failed
+invocationRef=invocation:40c71402-b1af-4a1d-8753-a281deb78ef5 invocationState=failed
+terminal={present:true,kind=run_failure}
+```
+
+The provider was reached exactly through this one journey. Durable readback
+contained 16 provider-attempt rows with contiguous sequences `1..16`; all were
+`completed`, `upstreamInitiated=true`, `statusClass=2xx`, and had no error code.
+
+The first owner is the runtime-to-Plane terminal classification/result seam.
+The candidate contains finite `budget_exhausted` mapping and its image-owned
+provider-free probe passes, but the real terminal path did not expose an
+accepted `RuntimeExit.failure.code=budget_exhausted` observation or equivalent
+`SupervisorResult.failure`. The live helper therefore emitted its generic
+lifecycle-incomplete `RuntimeError` after the invocation had failed.
+
+### Product lifecycle, safety, and cleanup
+
+- The helper created the isolated `G4 Live Issue` lifecycle and one run and
+  invocation. The bounded receipt exposed run/invocation refs and 16 provider
+  attempts.
+- No permitted Plane read receipt, denied `agent.outcome.evaluate` receipt,
+  explicit `OutcomeSubmission`, publication, successful terminal product
+  event, or technical transcript was returned.
+- Compact failure output contained only allowlisted classifications, refs,
+  provider-attempt summaries, and terminal kind. It did not expose credentials,
+  raw model responses, owner-only paths, or technical transcripts.
+- Replay was not attempted because the journey failed. No ambiguous or
+  historical invocation was replayed.
+- Cleanup removed test services, containers, networks, credential state,
+  staging, run files, disposable images, and disposable checkouts. Final
+  task-labeled containers, networks, and volumes were zero; the prepared base
+  and pinned donor remained.
+- No broad verifier, load test, G5, rollout, deployment, UI, reviewer, source
+  edit, or additional provider call ran. S00 remains dirty and does not unlock
+  W/M/O feature journeys.
+
 ## Wave 0U — provider-audit budget retest at e6d82f0545
 
 Status: dirty at the first unclassified live API-invocation result. Exactly

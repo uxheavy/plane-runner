@@ -357,3 +357,39 @@ dispatch_rejected / provider_attempt_evidence_rejected`
   remain
 - Next: expose a finite reason for the post-exchange failure provider-free
   before any new live retest; do not replay this invocation
+
+## Wave 0V — patched-Hermes runtime provenance retest
+
+- Status: blocked before S00; UT-014 remained open.
+- Candidate: `cd2cba9472bb8950828fc52d46104513a05565dc`; patched Hermes:
+  `21826c256bc1fc8f56e6469e752cb2a5b991ac58`.
+- The exact API artifact built once, but the matched runtime artifact failed
+  network-disabled source parity: the image had 8,092 Hermes files versus
+  8,091 in Git because a tracked dotenv shim was copied again at
+  `/opt/hermes/dotenv/__init__.py`.
+- No authority/config, credential read, Plane resource, provider attempt,
+  product event, or replay occurred. Cleanup was clean.
+- The Plane-owned assembly fix now keeps the compatibility dependency outside
+  `/opt/hermes`; exact parity, bootstrap, OpenAI Responses, and bounded-budget
+  probes passed before Wave 0W.
+
+## Wave 0W — exact patched-Hermes live S00
+
+- Status: dirty — UT-014 remains open; S00 does not unlock W/M/O journeys.
+- Exact Plane candidate:
+  `ae82d0eaea5799c5fa4e44198bc35e18c6f00c0d`; exact Hermes candidate:
+  `21826c256bc1fc8f56e6469e752cb2a5b991ac58`.
+- The matched API/runtime pair passed exact-source parity with the dotenv
+  dependency outside `/opt/hermes`.
+- One fresh ChatGPT subscription journey using
+  `openai-codex/gpt-5.6-luna`, with no fallback, persisted 16 contiguous
+  completed audited `2xx` provider exchanges, then failed at `api-invocation`
+  with `RuntimeError / reasonCode=unspecified`. Run
+  `f652c272-0e9a-4b56-a107-a6f57415731b` and invocation
+  `invocation:40c71402-b1af-4a1d-8753-a281deb78ef5` ended in `run_failure`.
+- No permitted read, denied evaluator operation, outcome, publication,
+  successful terminal event, or replay was evidenced. The first owner is the
+  runtime-to-Plane finite terminal classification/result handoff after the
+  provider budget boundary.
+- Cleanup completed with zero task-labeled resources; no second provider call,
+  broad verifier, rollout, or source edit ran.
