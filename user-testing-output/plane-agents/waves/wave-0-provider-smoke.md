@@ -750,3 +750,96 @@ with no retry or replay.
 
 No broad G3/G4 verifier, unrelated suite, load test, G5, rollout, pilot,
 deployment, source edit, or extra provider call ran.
+
+## Wave 0X — exact current-source live retest at 2fe13301a1
+
+Status: dirty at the first functional API-invocation result. The exact current
+API artifact and supplied exact runtime image were bound to one fresh
+candidate manifest; the live journey reached the real provider but did not
+reach the required Plane read, denial, outcome, or publication.
+
+### Candidate, binding, and command
+
+- Plane source: `2fe13301a142e836f810b72a279f81cad3bba644` on the clean
+  `codex/agent-functional-dogfood` checkout; parent
+  `db8a7d9435dcf7cdc5f6b2c64058f942e4344fa8`.
+- Hermes source: `21826c256bc1fc8f56e6469e752cb2a5b991ac58`.
+- API image: `plane-agent-api:wave-0x-2fe13301`, digest
+  `sha256:d74fd1b016fd4eb67232119f6f963feca0554b30d7805ca999297fb126eab65b`.
+- Runtime image: `plane-agent-runtime:s00-2fe13301-hermes-21826c25`, digest
+  `sha256:4814122994a680f488248c6a601a90dca5c3d89ff8bdc9369a5102c9e635730f`.
+  Its non-secret labels matched the exact Plane revision, Hermes revision, and
+  `plane.agent-runtime/v1`; its runtime source digest matched the candidate
+  tree digest `563a780b8f47a8240bfadb190b5b80a3c49679131b33164fd40103d3b594157b`.
+- The temporary manifest, authority, and config were fresh, candidate-bound,
+  and config-only validation passed. Manifest SHA-256:
+  `b262fde4957c88c64483c397c89d34252968f9d60a167a6fe8c79bdb97beb12f`.
+  Authority/config SHA-256:
+  `b4a2bb7e34c7d81dcfb3cba5dafee6bf03785eea74ff927b01d8fe48c69b4dd2` /
+  `289219a618d8ee2bb251defec5c952f31893c244a15886426a7a020bb83726bc`.
+- Provider route: ChatGPT subscription, `openai-codex/gpt-5.6-luna`, fallback
+  disabled. The owner-only credential source was accessed only after the
+  config-only validation; its contents are not in evidence.
+- Redacted live command:
+  `PLANE_G4_EXPECTED_CANDIDATE=<2fe13301a1...> PLANE_G4_LIVE_AUTHORITY=<tmp>/authority.json PLANE_G4_LIVE_CONFIG=<tmp>/config.json PLANE_G4_LIVE_MANIFEST=<tmp>/manifest.json PLANE_G4_LIVE_COMMAND='bash tools/agent-g4-live.sh' PLANE_G4_PROVIDER_SECRET_SOURCE=<existing-owner-only-chatgpt-codex-source> bash tools/agent-g4-live.sh`.
+  Command SHA-256:
+  `32756a110745e4b69a3c8627021527a073ac7c434b5cd6659483245674954060`.
+
+### Fresh live result and bounded readback
+
+- One fresh run: `0729d393-e453-40d3-9bd1-a3b4f5b11d3b`, state `failed`.
+- One fresh invocation: `invocation:b1a7d0d8-fe8b-4101-9df3-a856455f25b0`,
+  state `failed`.
+- Provider was reached. The bounded receipt exposed exactly 16 contiguous
+  completed provider attempts, sequences `1..16`, each
+  `upstreamInitiated=true`, status class `2xx`, and no error code. No second
+  live journey, retry, or replay ran. The receipt exposed completed phases;
+  separate intent/started rows were not included in its bounded output.
+- First failing boundary: `api-invocation`, outer `RuntimeError`, exit `1`,
+  terminal `run_failure`, with `reasonCode=unspecified` and unavailable phase,
+  detail, and subreason.
+- Product lifecycle readback: the run and invocation refs above are durable;
+  the bounded failure receipt did not expose actor/profile/assignment refs.
+  No permitted read, denied `agent.outcome.evaluate` receipt, explicit
+  `OutcomeSubmission`, publication, visible successful terminal product event,
+  or replay evidence was present. This leaves S00 dirty and UT-014 open.
+
+### Runtime-exit distinction required for the next finite owner
+
+- The runner's `down -v` cleanup removed the temporary database and its run
+  directory; no retained durable row or supervisor stdout exists for this
+  invocation. Therefore `RuntimeExitEvidence.kind`, raw bounded failure fields,
+  `SupervisorResult` output, terminal `failure_code/failure_reason`, and exact
+  `RuntimeEventIngress` rows cannot be recovered from this wave.
+- Source distinguishes the cases: a failed/blocked/cancelled exit with
+  `failure.code=budget_exhausted` is mapped by `_runtime_exit_failure_classification`
+  to `budget_exhausted / runtime_process / process_exit /
+  model_call_budget_exhausted`, and `SupervisorResult` emits that finite JSON.
+  A completed exit without an explicit outcome instead terminalizes
+  `missing_outcome` with no `SupervisorResult.failure`; the live helper then
+  raises its generic lifecycle-incomplete `RuntimeError`, and its current
+  bounded failure allowlist collapses `missing_outcome` to `unspecified`.
+- The observed shape—16 completed provider attempts, one `run_failure`, and
+  `reasonCode=unspecified`—is consistent with case B (completed exit without
+  explicit outcome), but is not durable proof of B; case A cannot be fully
+  excluded after cleanup. No `RuntimeExitEvidence.kind`, failure fields,
+  terminal code/reason, ingress count/kinds, model/tool progress observation,
+  tool-registration observation, or tool-call observation was retained in the
+  bounded receipt. The existing S00 prompt forbids Code Mode, so no tool
+  registration/call evidence is claimed either way.
+- Smallest next owner: preserve and expose the actual runtime exit kind and
+  bounded `missing_outcome`/`budget_exhausted` classification through the
+  supervisor command seam before another provider-backed retest. This wave
+  made no source patch and made no additional provider call.
+
+### Cleanup and scope
+
+- The runner cleaned its task-labeled containers, network, run directory, and
+  credential-state volume. Final labels: zero containers, zero networks, zero
+  credential-state volumes.
+- The disposable API image and exact clone were removed. Prepared API base
+  image `sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e`
+  and supplied runtime image were preserved.
+- No source, durable manifest, wrapper, refreeze, broad verifier, G3/G4/G5,
+  rollout, deployment, UI, or unrelated suite changed. Evidence/docs-only
+  updates are committed separately at the current dogfood branch.

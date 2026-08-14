@@ -393,3 +393,31 @@ dispatch_rejected / provider_attempt_evidence_rejected`
   provider budget boundary.
 - Cleanup completed with zero task-labeled resources; no second provider call,
   broad verifier, rollout, or source edit ran.
+
+## Wave 0X — exact current-source live retest
+
+- Scope: one fresh S00 journey only; no subthreads, retry, replay, or broad
+  verification.
+- Candidate: Plane `2fe13301a142e836f810b72a279f81cad3bba644`; Hermes
+  `21826c256bc1fc8f56e6469e752cb2a5b991ac58`.
+- Artifacts: one API image `sha256:d74fd1b016fd4eb67232119f6f963feca0554b30d7805ca999297fb126eab65b`; reused exact runtime image `sha256:4814122994a680f488248c6a601a90dca5c3d89ff8bdc9369a5102c9e635730f`.
+- Config-only candidate binding passed for ChatGPT subscription
+  `openai-codex/gpt-5.6-luna`, fallback disabled. The real owner-only source
+  was accessed only after validation and no credential value was exposed.
+- Fresh run `0729d393-e453-40d3-9bd1-a3b4f5b11d3b` and invocation
+  `invocation:b1a7d0d8-fe8b-4101-9df3-a856455f25b0` failed at
+  `api-invocation` with `RuntimeError`, `reasonCode=unspecified`, and one
+  visible `run_failure`.
+- Provider reached: 16 contiguous completed audited `2xx` exchanges, sequences
+  `1..16`, upstream initiated; no provider-free lifecycle actions followed.
+- Distinction status: durable `RuntimeExitEvidence`, `SupervisorResult`,
+  terminal code/reason, ingress kinds/count, and model/tool progress were not
+  retained after the runner's temporary database cleanup. Source says the
+  observed receipt shape favors a completed exit without explicit outcome
+  (`missing_outcome`) over a lost `budget_exhausted` failed exit, but does not
+  prove it. The next finite owner is the runtime-exit/supervisor result seam.
+- Stop decision: S00 remains dirty and UT-014 remains open. No speculative
+  source fix or additional provider call ran.
+- Cleanup: zero labeled containers/networks/credential-state volumes; the
+  disposable API image and clone were removed; prepared base/runtime images
+  preserved. Evidence is the only intended durable change from this wave.
