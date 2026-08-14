@@ -1648,6 +1648,62 @@ product source was changed.
 - Decision: S00 is `FAIL`; UT-018 and UT-019 remain `open`; W/M/O remain
   locked. No Plane or Hermes source was changed.
 
+## Wave 0AK — exact c0edcab5 / Hermes 5c8a265f single fresh S00
+
+### Exact binding and provider-free preflight
+
+- Plane was clean at exact HEAD
+  `c0edcab5577c659a3617ab2946553742f37a532e`; Hermes was clean at exact HEAD
+  `5c8a265f0a90ff198b82b5bbdefe5db328b60295`. The API artifact was
+  `plane-agent-api:s00-c0edcab5577c`, digest
+  `sha256:f5c0d5171882ab5cdd087a7f4d95e536a28b06ec66242324f4b717025082579b`;
+  the runtime artifact was
+  `plane-agent-runtime:s00-c0edcab5577c-hermes-5c8a`, digest
+  `sha256:142d38e39140dd4fc96380823da292b128ba20a684b742979545f879c08120ff`.
+  Config-only validation passed before provider staging. The route was
+  ChatGPT subscription `openai-codex/gpt-5.6-luna`, fallback disabled, through
+  `plane.agent-runtime/provider-relay/v1`. The fresh absolute result path was
+  `/tmp/plane-agent-s00-0ak.4aGIgc/result.json`, absent before start, under a
+  `0700` parent.
+
+### One primary and bounded failure
+
+- Exactly one primary ran through Plane runtime service and hidden Hermes,
+  creating the isolated workspace and `G4 Live Issue` journey. The bounded
+  operation audit was: `search_workspace` success `2`, `work_item.read`
+  success `1`, `agent.outcome.evaluate` denied `NOT_AUTHORIZED` `1`,
+  `agent.outcome.submit` success `1`, and `agent.outcome.publish` success `2`.
+  The publish exactly-once assertion failed; `catalog.search` and
+  `catalog.describe` were absent.
+- Provider attempts were exactly `10`, sequences `1..10`, all completed,
+  upstream initiated, `2xx`, with no unknown attempt. No sequence `11` or later
+  was retained. Runtime ingress counted `progress_observed:19` and
+  `outcome_submission_observed:1`. A terminal observation was present as
+  `outcome_submission`, but the runtime exit was `failed` at final sequence
+  `19`, `runtime_error`, cause `host_operation_failure`, retryable `false`.
+  Clean completed RuntimeExit therefore failed. Late-frame classification,
+  ordinary final-text/publication separation, applied-receipt details, and
+  semantic digest were not retained by the bounded failure schema.
+- First failed assertion: publish count `2` instead of `1`. The independent
+  outer broken boundary was `api-invocation` / runtime process exit. The root
+  hypothesis is limited to post-terminal runtime/host-operation termination or
+  publication coordination; no source diagnosis or fix was made.
+
+### Receipt, replay, cleanup, and decision
+
+- The owner-only result was validated in the runner's documented failure format
+  (bounded event line plus JSON): schema
+  `plane-agent-g4/live-failure/v1`, status `failed`, redacted, regular, mode
+  `0600`, parent mode `0700`, `3421` bytes, SHA-256
+  `8a759a859e02e4d2cd7c6506f9c4e15f2e2283e732f7c451e25c64bca5601416`.
+- The primary failed, so no same-invocation provider-disabled replay ran; no
+  replay zero-delta or receipt/result-equivalence claim is made. Cleanup
+  removed task-labeled Docker resources, staged auth, runtime secret, run
+  directory, exact images, manifest, descriptors, and receipt. The source
+  `/Users/nqh/.codex/auth.json` remained owner-only and unchanged; both source
+  repositories remained clean. Decision: S00 `FAIL`; UT-018/UT-019 remain
+  open; no Plane or Hermes source changed.
+
 ## Wave 0AJ — exact b00e5e5b / Hermes b2f1990d single fresh S00
 
 ### Exact binding and provider-free preflight
