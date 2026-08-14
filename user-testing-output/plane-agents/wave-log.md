@@ -875,6 +875,69 @@ unrelated suite ran.
   `SupervisorResult`, durable terminal state, and the bounded receipt.
 - Decision: S00 is `FAIL` and does not unlock W/M/O.
 
+## Wave 0AP — exact 891a1aed / Hermes 1d9818 single fresh S00
+
+- Overall decision: `FAIL`. Exactly one fresh primary ran; there was no retry,
+  second primary, fallback, UI, G4/G5 verifier, source fix, Hermes change, or
+  provider-disabled replay. The primary stopped before replay because the
+  ordered S00 gate failed at `runtime_exit_completed`.
+- Exact Plane source: `891a1aed20344ba5a445c515bc23acd76693c93d`.
+- Exact Hermes source: `1d9818e7df007d2ea4f1e3df373aaa812e022e6a`; Hermes was not
+  modified.
+- API image: `plane-agent-api:s00-0ap-891a1aed`, digest
+  `sha256:2d278f86cb70549cb7078dd2ac7e61e584d1d94d121425a8ed5ed5b444ff75ab`.
+- Runtime image: `plane-agent-runtime:s00-0ap-891a1aed-hermes-1d9818e7`,
+  digest
+  `sha256:09e0d793463f71379dcb3b3de1d9b2a0b5a31ac49c054bce5cc4d95f2d496a38`.
+  Hermes tree digest:
+  `5effc5267e2a3536b0318734f651ac20841fd80008eb1a767408594706c9492`; Plane
+  runtime source digest:
+  `1d8186a36447ea5dba5ba6cb55db48073a3be0dc976cec4ff2887418c0e33667`.
+- Provider binding was the real ChatGPT subscription route
+  `openai-codex/gpt-5.6-luna`, fallback disabled, with canonical
+  `plane.agent-runtime/provider-relay/v1` / `AF_UNIX` transport,
+  `childNetworkPolicy=none`, `externalEgressOwner=agent-runtime`,
+  `hostGatewaySeparate=true`, and `hermesHookStatus=integrated`.
+- Config-only preflight passed before the provider source was read. The fresh
+  owner-only authority was `s00-live-0ap-20260815` with canaries
+  `s00-0ap-permitted-20260815` and `s00-0ap-denied-20260815`; the result path
+  was absent before start. The bounded redacted runner command used the exact
+  candidate, manifest, descriptors, result path, and
+  `PLANE_G4_PROVIDER_SECRET_SOURCE=/Users/nqh/.codex/auth.json` without
+  transmitting repository files, raw transcripts, or credentials.
+- One fresh run `0c78d15e-9509-4ec9-a5f2-f01740be9088` and invocation
+  `invocation:fb54f115-a7e8-4624-8dd1-72548fdba8d4` reached the real provider.
+  The receipt recorded ten ordered provider attempts, sequences `1..10`, all
+  `completed`, upstream initiated, and `2xx`; no fallback or unknown attempt
+  occurred. RuntimeExit was `present=true`, `kind=failed`, final sequence `22`,
+  failure `budget_exhausted`, `retryable=false`.
+- Bounded Plane operation audit proved `search_workspace` success `3`,
+  `work_item.read` success `1`, exactly one `agent.outcome.evaluate` with
+  `status=denied`, `errorCode=NOT_AUTHORIZED`, and `count=1`, one submit
+  success, and one publish success. The S00 gate proved one visible
+  `outcome_submission`, one applied outcome publication, and matching terminal
+  binding refs. Its first failed predicate was only `runtime_exit_completed`.
+- The persisted two-line runner receipt was owner-only `0600`, `5683` bytes,
+  SHA-256
+  `a5eb2c596c91a98702f3e8697cfc24f77fdc08b865bca4747058d0ccfc1f6855`.
+  The standalone JSON body was owner-only `0600`, `5563` bytes, SHA-256
+  `681de547b72b9e773b3a0d0876b2c06ca1f5b93e50e232420476120cbadcbbf4`, and
+  passed `validate_agent_g4_live.py` as a bounded failure receipt. Its
+  semantic digest was
+  `fb3e69b5e206ea7236a6cd719944a29b8f4ab22d3ab69b7d7a6f9846689cd6b4`, and
+  independent recomputation matched. Canaries were correctly retained as
+  `not_evaluated` for this failed receipt; the provider-relay projection was
+  exact.
+- Because the primary gate failed, the conditional same-invocation
+  provider-disabled replay was not eligible; replay deltas are not applicable,
+  and no replay attempt was made.
+- Cleanup removed the receipt, standalone body, descriptors, manifest, exact
+  temporary API/runtime images, and owner-only temporary directory. Post-run
+  checks found zero labeled containers, networks, and volumes and no exact
+  temporary image tags. Plane and Hermes remained at their exact source
+  commits; the provider credential source metadata remained unchanged.
+- Decision: S00 is `FAIL`; UT-018 and UT-019 remain open and W/M/O stay locked.
+
 ## Wave 0AL — exact 35a129bf / Hermes d9037d5 single fresh S00
 
 - Status: `FAIL` at the pre-replay live product lifecycle assertion. S00

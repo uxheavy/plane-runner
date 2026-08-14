@@ -147,3 +147,35 @@ semantic digest
 receipt was deleted after validation and hashing. Because the primary failed,
 the conditional replay was not eligible; UT-019 remains open and no retry or
 second replay was made.
+
+UT-018 / Wave 0AP addendum: the exact Plane
+`891a1aed20344ba5a445c515bc23acd76693c93d` checkout with exact Hermes
+`1d9818e7df007d2ea4f1e3df373aaa812e022e6a` ran exactly one fresh primary
+through the real `openai-codex/gpt-5.6-luna` ChatGPT subscription route with
+fallback disabled. The isolated workspace and `G4 Live Issue` path completed;
+the bounded evidence recorded permitted `search_workspace` count `3`,
+`work_item.read` count `1`, exactly one durable `agent.outcome.evaluate`
+denial with `NOT_AUTHORIZED`, one submit, one applied publish, and one visible
+`outcome_submission` with matching terminal/publication refs. There were ten
+completed upstream `2xx` provider attempts, all provider attempts were
+completed, and no fallback or unknown attempt occurred. The ordered `s00Gate`
+passed invocation, run, visible terminal, applied publication, and terminal
+binding, then failed only at `runtime_exit_completed`: RuntimeExit was
+`failed` at final sequence `22` with non-retryable `budget_exhausted`.
+Therefore the full S00 journey did not pass and no replay was eligible.
+UT-018 remains open; no source fix or Hermes modification was made.
+
+UT-019 / Wave 0AP retest: the fresh absolute result path
+`/tmp/plane-agent-s00-0ap.Eor6eh/result.json` was absent before start under a
+`0700` owner-only parent. The persisted two-line runner receipt was `0600`,
+`5683` bytes, and SHA-256
+`a5eb2c596c91a98702f3e8697cfc24f77fdc08b865bca4747058d0ccfc1f6855`.
+Its standalone JSON body was `0600`, `5563` bytes, and SHA-256
+`681de547b72b9e773b3a0d0876b2c06ca1f5b93e50e232420476120cbadcbbf4`; the
+standalone validator passed with the exact authority, canary IDs, and
+provider-relay contract. Its semantic digest was
+`fb3e69b5e206ea7236a6cd719944a29b8f4ab22d3ab69b7d7a6f9846689cd6b4` and
+recomputed exactly. The receipt and all disposable artifacts were deleted
+after validation and hashing. Because the primary gate failed, replay deltas
+are not applicable; UT-019 remains open and no retry or second primary/replay
+was made.
