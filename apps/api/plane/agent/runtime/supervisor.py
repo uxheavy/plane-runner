@@ -86,6 +86,12 @@ _FAILURE_CLASSIFICATIONS: dict[str, dict[str, str]] = {
         "failureDetail": "process_exit",
         "failureSubreason": "model_call_budget_exhausted",
     },
+    "runtime_error": {
+        "failureCode": "runtime_error",
+        "failurePhase": "runtime_process",
+        "failureDetail": "process_exit",
+        "failureSubreason": "runtime_execution_failed",
+    },
     "missing_outcome": {
         "failureCode": "missing_outcome",
         "failurePhase": "runtime_supervisor",

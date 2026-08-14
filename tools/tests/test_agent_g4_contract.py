@@ -1182,6 +1182,57 @@ class G4ContractTests(unittest.TestCase):
             budget_failure["failure"]["reasonSubreason"],
             "model_call_budget_exhausted",
         )
+        runtime_failure = namespace["build_failure_evidence"](
+            binding={},
+            failure_phase="api-invocation",
+            error_class="RuntimeError",
+            exit_code=1,
+            run_id="run:runtime-error",
+            run_state="failed",
+            invocation_id="invocation:runtime-error",
+            invocation_state="failed",
+            provider_attempts=[],
+            terminal_kind="run_failure",
+            failure_code="runtime_error",
+            failure_reason=(
+                '{"failureCode":"runtime_error",'
+                '"failurePhase":"runtime_process",'
+                '"failureDetail":"process_exit",'
+                '"failureSubreason":"runtime_execution_failed"}'
+            ),
+            runtime_exit={
+                "kind": "failed",
+                "failure": {"code": "runtime_error", "retryable": False},
+            },
+            terminal_code="runtime_error",
+            terminal_reason=(
+                '{"failureCode":"runtime_error",'
+                '"failurePhase":"runtime_process",'
+                '"failureDetail":"process_exit",'
+                '"failureSubreason":"runtime_execution_failed"}'
+            ),
+        )
+        self.assertEqual(
+            runtime_failure["runtimeExit"],
+            {"present": True, "kind": "failed", "failure": {"code": "runtime_error", "retryable": False}},
+        )
+        self.assertEqual(
+            runtime_failure["failure"]["reasonCode"],
+            "runtime_error",
+        )
+        self.assertEqual(
+            runtime_failure["failure"]["reasonSubreason"],
+            "runtime_execution_failed",
+        )
+        self.assertEqual(
+            runtime_failure["terminal"],
+            {
+                "present": True,
+                "kind": "run_failure",
+                "code": "runtime_error",
+                "reasonCategory": "runtime_execution_failed",
+            },
+        )
 
         parser = next(
             node

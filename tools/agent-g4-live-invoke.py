@@ -185,6 +185,7 @@ def build_failure_evidence(
         "runtime_process_output_invalid",
         "runtime_supervisor_pre_dispatch_failure",
         "budget_exhausted",
+        "runtime_error",
         "missing_outcome",
         "outcome_unknown",
     }
@@ -217,10 +218,11 @@ def build_failure_evidence(
         "provider_attempt_evidence_rejected",
         "runtime_configuration_rejected",
         "model_call_budget_exhausted",
+        "runtime_execution_failed",
         "completed_without_explicit_outcome",
     }
     runtime_exit_kinds = {"completed", "waiting_for_input", "failed", "blocked", "cancelled"}
-    runtime_failure_codes = {"budget_exhausted"}
+    runtime_failure_codes = {"budget_exhausted", "runtime_error"}
     runtime_event_kinds = {
         "progress_observed",
         "conversation_publication_observed",

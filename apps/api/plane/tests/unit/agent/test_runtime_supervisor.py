@@ -725,6 +725,32 @@ def test_supervisor_preserves_finite_runtime_budget_failure_through_terminal_out
 
 
 @pytest.mark.django_db(transaction=True)
+def test_supervisor_preserves_finite_runtime_error_failure_through_terminal_output(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    run, invocation = _invocation(workspace, gateway_project, gateway_issue, create_user, suffix="runtime-error")
+    transport = FailingRuntimeTransport()
+
+    result = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
+
+    expected = {
+        "failureCode": "runtime_error",
+        "failurePhase": "runtime_process",
+        "failureDetail": "process_exit",
+        "failureSubreason": "runtime_execution_failed",
+    }
+    control = RuntimeInvocationControl.objects.get(invocation=invocation)
+    terminal = RunTerminalEvent.objects.get(invocation=invocation, visible=True)
+    assert result.state == InvocationState.FAILED
+    assert result.failure == expected
+    assert control.failure_code == "runtime_error"
+    assert json.loads(control.failure_reason) == expected
+    assert json.loads(terminal.reason) == expected
+    assert expected["failureSubreason"] in _supervisor_result_output(result)
+    assert transport.calls == 1
+
+
+@pytest.mark.django_db(transaction=True)
 def test_supervisor_preserves_missing_outcome_failure_through_terminal_output(
     workspace, gateway_project, gateway_issue, create_user
 ):
