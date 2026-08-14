@@ -531,3 +531,45 @@ error_class=unspecified exit_code=125`. Receipt SHA-256:
   provider-secret volumes. The two task-tagged images, exact Plane/Hermes
   clones, and fresh authority/config/manifest were removed after the bounded
   receipt was recorded; the owner credential source was untouched.
+
+## Wave 0AA — exact 336156 / Hermes 21826 single fresh S00
+
+Status: failed at the live API-invocation boundary. The corrected provider-free
+start probe passed, then exactly one fresh live S00 was run. No retry, replay,
+second live call, source fix, broad verifier, rollout, deployment, UI, or
+unrelated suite ran.
+
+- Plane source: `33615620246784a50f7804ff6768fee318cb343f`.
+- Hermes source: `21826c256bc1fc8f56e6469e752cb2a5b991ac58`, disposable clone
+  origin normalized to `https://github.com/uxheavy/hermes-agent.git`.
+- API image: `plane-agent-api:s00-3361562024`, digest
+  `sha256:6b2a4d6870cd40e0cdd78c9208108e6f5edc75d291998ee5f57488a41c315096`.
+- Runtime image: `plane-agent-runtime:s00-3361562024-hermes-21826`, digest
+  `sha256:4d0c159efee287944301fbe443838c33a39807298cb2428d93baae5731801636`.
+- Hermes tree digest: `2b3c5ca66f93c1cdbb413c5d60b43dd92674dffc5f6d8b10b6b5b3d89e9287ef`.
+- Plane runtime source digest:
+  `97139c416cdd952e67e44345dea7a57aff722b8ef0bb1671c0204463f828490d`.
+- Fresh manifest/authority/config SHA-256:
+  `4918e94264f69a758b878e00e2bf3c5b0abd3b2cbff605e918b47ef55f946471` /
+  `60bde4faf86e6fd36c203a946ac0e7fc146cf48f8a2694b878b292288346a014` /
+  `1cca0d90200baee566d85524dcfa47afb1fe9b9492a90e7fbc027ad0d96a8264`.
+- Provider binding: ChatGPT subscription, `openai-codex/gpt-5.6-luna`, fallback
+  disabled. Live command SHA-256:
+  `32756a110745e4b69a3c8627021527a073ac7c434b5cd6659483245674954060`.
+- Corrected provider-free final-shape probe printed
+  `PLANE_S00_PROVIDER_FREE_START_PROBE=passed` under `--network none`, with
+  sibling `/run/plane-agent-runtime-secret`, read-only `/run/secrets`, and
+  stdin-fed Python; labeled container/volume/network/temp cleanup verified
+  empty.
+- The one live API container exited `1` at `api-invocation`; Docker metadata
+  shows the runtime was killed by the runner cleanup with exit `137`. The
+  runner's bounded JSON was not retained by the desktop shell session before
+  cleanup. Provider exchange count, Plane refs/counts, runtime exit/event
+  kinds, terminal code/reason, gateway receipts, outcome, publication, and
+  transcript/publication separation are therefore unavailable and are not
+  inferred. Exact replay was not run.
+- Cleanup removed the task-labeled containers, networks, volumes, run files,
+  temporary descriptors, exact clones, and two task-tagged images; the owner
+  credential source was untouched. Colima was left running.
+
+S00 is `FAIL` and does not unlock W/M/O.

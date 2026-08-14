@@ -912,6 +912,68 @@ images. Retain no secret or owner credential source. No broad G3/G4/G5,
 load/rollout/deployment/UI/unrelated suite, or additional provider exchange
 ran. S00 is `FAIL` and does not unlock W/M/O.
 
+## Wave 0AA — exact 336156 / Hermes 21826 single fresh S00
+
+Status: failed at the first live API-invocation result. The corrected
+provider-free final-shape probe passed; exactly one fresh live S00 then ran.
+No retry, replay, second provider-backed journey, source fix, broad verifier,
+rollout, deployment, UI, or unrelated suite ran.
+
+### Exact binding and bounded preflight
+
+- Plane source: `33615620246784a50f7804ff6768fee318cb343f`.
+- Hermes source: `21826c256bc1fc8f56e6469e752cb2a5b991ac58`, canonical remote
+  `https://github.com/uxheavy/hermes-agent.git`.
+- API image: `plane-agent-api:s00-3361562024`, digest
+  `sha256:6b2a4d6870cd40e0cdd78c9208108e6f5edc75d291998ee5f57488a41c315096`,
+  source `33615620246784a50f7804ff6768fee318cb343f`, contract
+  `plane.operation/v1`.
+- Runtime image: `plane-agent-runtime:s00-3361562024-hermes-21826`, digest
+  `sha256:4d0c159efee287944301fbe443838c33a39807298cb2428d93baae5731801636`,
+  runtime source `33615620246784a50f7804ff6768fee318cb343f`, contract
+  `plane.agent-runtime/v1`.
+- Runtime provenance: Hermes tree digest
+  `2b3c5ca66f93c1cdbb413c5d60b43dd92674dffc5f6d8b10b6b5b3d89e9287ef`;
+  Plane runtime source digest
+  `97139c416cdd952e67e44345dea7a57aff722b8ef0bb1671c0204463f828490d`.
+- Fresh manifest/authority/config SHA-256:
+  `4918e94264f69a758b878e00e2bf3c5b0abd3b2cbff605e918b47ef55f946471` /
+  `60bde4faf86e6fd36c203a946ac0e7fc146cf48f8a2694b878b292288346a014` /
+  `1cca0d90200baee566d85524dcfa47afb1fe9b9492a90e7fbc027ad0d96a8264`.
+- Provider/model: ChatGPT subscription, `openai-codex/gpt-5.6-luna`, fallback
+  disabled. Config-only validation passed before the owner-only source was
+  read. Redacted command:
+  `PLANE_G4_EXPECTED_CANDIDATE=<336156...> PLANE_G4_LIVE_AUTHORITY=<tmp>/authority.json PLANE_G4_LIVE_CONFIG=<tmp>/config.json PLANE_G4_LIVE_MANIFEST=<tmp>/manifest.json PLANE_G4_LIVE_COMMAND='bash tools/agent-g4-live.sh' PLANE_G4_PROVIDER_SECRET_SOURCE=<existing-owner-only-chatgpt-source> bash tools/agent-g4-live.sh`.
+  Command SHA-256:
+  `32756a110745e4b69a3c8627021527a073ac7c434b5cd6659483245674954060`.
+- The corrected provider-free probe printed
+  `PLANE_S00_PROVIDER_FREE_START_PROBE=passed` with `--network none`,
+  sibling `/run/plane-agent-runtime-secret`, read-only `/run/secrets`, and
+  stdin-fed Python. Labeled probe cleanup verified zero containers, volumes,
+  networks, and temp directories.
+
+### One fresh live journey
+
+The API container for task `plane-agent-g4-live-1358-32509` exited `1` at
+`api-invocation`. Docker metadata shows the runtime container was killed by
+runner cleanup with exit `137`; this is cleanup metadata, not a runtime
+classification. The desktop shell session did not retain the runner's bounded
+JSON before the task cleanup completed. Consequently, the bounded provider
+exchange count, run/invocation refs, actor/profile/assignment readback,
+`RuntimeExitEvidence`, runtime event-kind counts, terminal code/reason, Plane
+host gateway receipt presence, permitted read, denied
+`agent.outcome.evaluate`, explicit outcome/publication, and
+transcript/publication separation are unavailable and are not inferred.
+Exact dispatch replay was not run.
+
+### Cleanup and decision
+
+The task-labeled containers, networks, volumes, run files, temporary
+manifest/authority/config, exact Plane/Hermes clones, and task-tagged API/runtime
+images were removed after this evidence was recorded; the owner credential
+source was untouched and Colima was not stopped. S00 is `FAIL` and does not
+unlock W/M/O.
+
 ## Wave 0Z — exact 1a771e4355 / Hermes 21826 single fresh S00
 
 Status: failed at the first finite API-container start boundary. S00 remains
