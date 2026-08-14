@@ -10,25 +10,28 @@ Functional completion and controlled rollout are separate outcomes. This goal en
 
 The frozen G4 artifact set below is historical offline evidence, not the active
 delivery candidate. Active work proceeds on `codex/agent-functional-dogfood`
-from Plane `9bac87db1c` and Hermes
-`21826c256bc1fc8f56e6469e752cb2a5b991ac58`. Wave 0W proved 16 contiguous
-audited GPT-5.6 Luna provider exchanges, then exposed one finite functional
-blocker: the runtime-to-Plane terminal handoff lost the expected
-`budget_exhausted` classification before any Plane read, denial, outcome, or
-publication. Fix and retest that exact user journey before starting the wider
-matrix. Rebuild immutable candidate artifacts and run the full G4 verifier only
-once after all functional journeys are clean. Do not request another Sol review
-before that point. G5 remains a separate rollout goal.
+from product source `2fe13301a142e836f810b72a279f81cad3bba644` and Hermes
+`21826c256bc1fc8f56e6469e752cb2a5b991ac58`. Wave 0X proved 16 contiguous
+audited GPT-5.6 Luna provider exchanges, then stopped before any Plane read,
+denial, outcome, or publication. The exact provider-free relay path preserves
+`budget_exhausted`, but the retained live receipt cannot distinguish that exit
+from a completed kernel turn rejected by Plane as `missing_outcome`; cleanup
+discarded the bounded exit and event evidence needed to decide. Extend the
+existing live evidence contract provider-free, then run one new S00 journey
+before starting the wider matrix. Rebuild immutable candidate artifacts and run
+the full G4 verifier only once after all functional journeys are clean. Do not
+request another Sol review before that point. G5 remains a separate rollout
+goal.
 
 ## Status and authorization
 
-| Active item        | Current truth                                                                                                                                                                                                                                             |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Delivery candidate | `codex/agent-functional-dogfood` at `9bac87db1c`; last product-source commit `ae82d0eaea5799c5fa4e44198bc35e18c6f00c0d`; Hermes `21826c256bc1fc8f56e6469e752cb2a5b991ac58`.                                                                               |
-| Functional gate    | S00 is dirty. Wave 0W recorded 16 contiguous completed audited `2xx` exchanges, then lost the finite terminal classification at the runtime-to-Plane handoff. No Plane read, denial, outcome, publication, successful terminal event, or replay followed. |
-| Next action        | Close the terminal-classification seam with the exact provider-free production chain, then run one fresh S00. Do not start W/M/O journeys before S00 passes.                                                                                              |
-| Final verification | After every functional journey is clean, rebuild immutable artifacts once, run one full production-candidate verifier, and request one consolidated Sol Medium review.                                                                                    |
-| G5                 | Out of scope. Rollout starts only under a separate authorized goal after G4 functional completion.                                                                                                                                                        |
+| Active item        | Current truth                                                                                                                                                                                                                                                                                      |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Delivery candidate | `codex/agent-functional-dogfood` at evidence commit `9047013f73`; last product-source commit `2fe13301a142e836f810b72a279f81cad3bba644`; Hermes `21826c256bc1fc8f56e6469e752cb2a5b991ac58`.                                                                                                        |
+| Functional gate    | S00 is dirty. Wave 0X recorded 16 contiguous completed audited `2xx` exchanges, then an unspecified `run_failure`. No Plane read, denial, outcome, publication, successful terminal event, or replay followed; the retained evidence cannot distinguish `budget_exhausted` from `missing_outcome`. |
+| Next action        | Preserve the bounded runtime exit, event-kind counts, terminal reason category, and gateway-receipt presence in the existing live contract; prove both failure paths provider-free; then run one fresh S00. Do not start W/M/O journeys before S00 passes.                                         |
+| Final verification | After every functional journey is clean, rebuild immutable artifacts once, run one full production-candidate verifier, and request one consolidated Sol Medium review.                                                                                                                             |
+| G5                 | Out of scope. Rollout starts only under a separate authorized goal after G4 functional completion.                                                                                                                                                                                                 |
 
 The table below preserves accepted gate history and older frozen artifact
 bindings. Its G4/dogfood rows are historical evidence and do not override the
