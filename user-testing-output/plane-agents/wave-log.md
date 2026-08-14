@@ -341,3 +341,19 @@ dispatch_rejected / provider_attempt_evidence_rejected`
 - Next: diagnose and fix only the live provider-attempt notice contract at the
   trusted host/lifecycle seam, then run one new bounded S00; do not replay this
   invocation
+
+## Wave 0U — provider-audit budget retest
+
+- Status: dirty — UT-014 remains open
+- Candidate: `e6d82f05453aec0f866b96be7b952136ec6a1a3e`; matched disposable API
+  and sealed-donor runtime artifacts were built once from this exact source
+- One fresh run `084b544f-3131-4d94-ac22-80748b654b2f` and invocation
+  `invocation:e96056cf-b3d8-4edc-a7f6-ca2171957263` failed at
+  `api-invocation` with `reasonCode=unspecified`
+- Provider exchanges were sixteen contiguous sequences `1..16`, all completed
+  `2xx` and audited, proving the separate provider-audit quota live
+- No read, denial, outcome, publication, successful terminal event, or replay
+  ran. Cleanup removed task resources; prepared base and pinned Hermes donor
+  remain
+- Next: expose a finite reason for the post-exchange failure provider-free
+  before any new live retest; do not replay this invocation

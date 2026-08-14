@@ -308,6 +308,37 @@ replay, or second provider call ran.
 No broad G3/G4 verifier, unrelated suite, load test, G5, rollout, pilot,
 deployment, source edit, or extra provider call ran.
 
+## Wave 0U — provider-audit budget retest at e6d82f0545
+
+Status: dirty at the first unclassified live API-invocation result. Exactly
+one fresh approved lifecycle ran; no retry or replay ran.
+
+- Candidate: `e6d82f05453aec0f866b96be7b952136ec6a1a3e`.
+- API image digest:
+  `sha256:6c1d1b3b848017f64322272021501ff476500a987231c136ff61c4560c746d65`.
+- Runtime image digest:
+  `sha256:2981f23a4e61b55b52da936e8ec71341e8e1bd7fc173fa45f352ee1937b84330`.
+- Hermes donor: `d2e655101f263329359e7d0de9d0b856202a3e4b`.
+- ChatGPT subscription configuration for `openai-codex/gpt-5.6-luna`
+  validated with fallback disabled.
+- Run `084b544f-3131-4d94-ac22-80748b654b2f` and invocation
+  `invocation:e96056cf-b3d8-4edc-a7f6-ca2171957263` failed at
+  `api-invocation` with `reasonCode=unspecified`, unavailable
+  phase/detail/subreason, and one visible `run_failure`.
+- Plane persisted exactly sixteen contiguous provider exchanges, sequences
+  `1..16`, each completed, upstream-initiated, audited, and `2xx`. The separate
+  provider-observation budget therefore passed its live check.
+- No permitted read, denied evaluator receipt, explicit OutcomeSubmission,
+  publication, successful terminal event, or replay occurred.
+- The bounded receipt cannot distinguish model-exchange-cap handling from a
+  later supervisor/product-lifecycle handoff failure. The next proof must expose
+  that finite reason provider-free before another live journey.
+- Cleanup removed task-owned containers, networks, volumes, images, checkout,
+  credential staging, and run files; prepared base and sealed donor remain.
+
+No broad G3/G4/G5 verifier, load test, rollout, deployment, UI, reviewer, or
+second provider-backed journey ran.
+
 ## Wave 0T — live subscription retest at ecfacc0ea4
 
 Status: dirty at the first concrete provider-audit rejection. Exactly one
