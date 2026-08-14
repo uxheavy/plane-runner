@@ -421,3 +421,58 @@ dispatch_rejected / provider_attempt_evidence_rejected`
 - Cleanup: zero labeled containers/networks/credential-state volumes; the
   disposable API image and clone were removed; prepared base/runtime images
   preserved. Evidence is the only intended durable change from this wave.
+
+## Wave 0Y — exact c3fc/Hermes 21826 single fresh S00
+
+- Status: blocked at the first finite live boundary; S00 remains dirty and
+  does not unlock W/M/O journeys. Exactly one fresh journey ran, with no
+  retry, replay, subthread, source fix, or broad verification.
+- Exact Plane source: `c3fc708e5292214fe8a7a773703a78450d5d2df7` on
+  `codex/agent-functional-dogfood`. Exact Hermes source:
+  `21826c256bc1fc8f56e6469e752cb2a5b991ac58`.
+- Matched API image: `sha256:2eb3b02cdf3c607e83c83b3747f55d89f4cd836f3b1dc4f78bdaab5e2a368273`.
+  Matched runtime image:
+  `sha256:ec37639dba79a1493de48501e14a4764ff419d029e6d5bafe03f77742d016584`.
+  Runtime Hermes tree digest:
+  `2b3c5ca66f93c1cdbb413c5d60b43dd92674dffc5f6d8b10b6b5b3d89e9287ef`;
+  runtime source digest:
+  `97139c416cdd952e67e44345dea7a57aff722b8ef0bb1671c0204463f828490d`.
+- Fresh manifest SHA-256:
+  `27b595113a669597d480e141ed24d0e0edbfac65cff1b3e98bcd8c2acf24636b`.
+  Fresh authority/config SHA-256:
+  `b28eaaf37bc7f5cec83c9afd38ec2b8b32f9a53a77ba76ccbd088d24d7348f2b` /
+  `80fe9472f9feaad8b3727e9d771328b1fe345c272219611a7da397cc78562969`.
+- Provider route was ChatGPT subscription `openai-codex/gpt-5.6-luna`, with
+  fallback disabled. The owner-only source was accessed only after
+  config-only validation; no credential value entered evidence.
+- Provider-free preflight passed on the exact runtime: the focused relay
+  bootstrap completed with one synthetic provider exchange, and the bounded
+  budget proof produced 16 successful exchanges followed by a rejected 17th
+  with `failure.code=budget_exhausted`, `retryable=false` (29 ordered frames,
+  final sequence 29).
+- Redacted command: `PLANE_G4_EXPECTED_CANDIDATE=<c3fc...>
+PLANE_G4_LIVE_AUTHORITY=<tmp>/authority.json
+PLANE_G4_LIVE_CONFIG=<tmp>/config.json PLANE_G4_LIVE_MANIFEST=<tmp>/manifest.json
+PLANE_G4_LIVE_COMMAND='bash tools/agent-g4-live.sh'
+PLANE_G4_PROVIDER_SECRET_SOURCE=<existing-owner-only-chatgpt-codex-source>
+bash tools/agent-g4-live.sh`. Command SHA-256:
+  `32756a110745e4b69a3c8627021527a073ac7c434b5cd6659483245674954060`.
+- Fresh live result: runner exit `125`, stdout
+  `event=agent.g4.live-runner.failure phase=credential-bind-preflight
+error_class=unavailable exit_code=125`, stderr empty. Preserved bounded
+  runner receipt SHA-256:
+  `62c79b15a5da9221fa9d5739a54c1d639a3ce1482dbb5a350645e27d1b7205f5`.
+- Provider exchange count: `0`. Run refs/counts: none; no Plane workspace,
+  issue, actor, profile, assignment, run, invocation, or product lifecycle
+  record was created. `RuntimeExitEvidence`: not created. Runtime event
+  count/kinds: not created. Terminal code/reason: not created. Plane host
+  gateway receipts, including the deliberate evaluator denial: not created.
+  Outcome, publication, terminal product event, and transcript/publication
+  readback: not reached. Exact dispatch replay: not run.
+- First owner: live runner / local Colima Docker bind visibility for the
+  staged owner-only provider source at `credential-bind-preflight`, before
+  Plane application state. No product-source fault is claimed.
+- Cleanup: the runner left zero task-labeled containers, networks, and
+  volumes. After evidence commit, remove only the task-owned exact Plane and
+  Hermes clones, temporary manifest/authority/config/capture, and the two
+  task-tagged images; retain no secret or owner credential source.

@@ -814,7 +814,7 @@ reach the required Plane read, denial, outcome, or publication.
 - Source distinguishes the cases: a failed/blocked/cancelled exit with
   `failure.code=budget_exhausted` is mapped by `_runtime_exit_failure_classification`
   to `budget_exhausted / runtime_process / process_exit /
-  model_call_budget_exhausted`, and `SupervisorResult` emits that finite JSON.
+model_call_budget_exhausted`, and `SupervisorResult` emits that finite JSON.
   A completed exit without an explicit outcome instead terminalizes
   `missing_outcome` with no `SupervisorResult.failure`; the live helper then
   raises its generic lifecycle-incomplete `RuntimeError`, and its current
@@ -843,3 +843,71 @@ reach the required Plane read, denial, outcome, or publication.
 - No source, durable manifest, wrapper, refreeze, broad verifier, G3/G4/G5,
   rollout, deployment, UI, or unrelated suite changed. Evidence/docs-only
   updates are committed separately at the current dogfood branch.
+
+## Wave 0Y — exact c3fc/Hermes 21826 single fresh S00
+
+Status: failed at the first finite runner preflight boundary. S00 remains
+dirty; W/M/O stay locked. This was exactly one fresh S00 journey. No retry,
+replay, subthread, source fix, or broad suite ran.
+
+### Exact binding and provider-free proof
+
+- Plane source: `c3fc708e5292214fe8a7a773703a78450d5d2df7`, branch
+  `codex/agent-functional-dogfood`.
+- Hermes source: `21826c256bc1fc8f56e6469e752cb2a5b991ac58`.
+- API image digest:
+  `sha256:2eb3b02cdf3c607e83c83b3747f55d89f4cd836f3b1dc4f78bdaab5e2a368273`.
+- Runtime image digest:
+  `sha256:ec37639dba79a1493de48501e14a4764ff419d029e6d5bafe03f77742d016584`.
+  Hermes tree digest:
+  `2b3c5ca66f93c1cdbb413c5d60b43dd92674dffc5f6d8b10b6b5b3d89e9287ef`.
+  Runtime source digest:
+  `97139c416cdd952e67e44345dea7a57aff722b8ef0bb1671c0204463f828490d`.
+- Manifest SHA-256:
+  `27b595113a669597d480e141ed24d0e0edbfac65cff1b3e98bcd8c2acf24636b`.
+  Authority/config SHA-256:
+  `b28eaaf37bc7f5cec83c9afd38ec2b8b32f9a53a77ba76ccbd088d24d7348f2b` /
+  `80fe9472f9feaad8b3727e9d771328b1fe345c272219611a7da397cc78562969`.
+- Provider: ChatGPT subscription, `openai-codex/gpt-5.6-luna`, no fallback.
+  Config-only binding passed before the owner-only provider source was read;
+  no secret was retained.
+- Provider-free exact runtime proof passed: focused relay/bootstrap completed
+  with one synthetic provider exchange; exact budget proof showed 16 success
+  exchanges and a rejected 17th with `failure.code=budget_exhausted`,
+  `retryable=false`, final ordered sequence 29. These are preflight proofs,
+  not live-provider exchanges.
+
+### One fresh live journey
+
+The redacted command was:
+
+`PLANE_G4_EXPECTED_CANDIDATE=<c3fc...> PLANE_G4_LIVE_AUTHORITY=<tmp>/authority.json PLANE_G4_LIVE_CONFIG=<tmp>/config.json PLANE_G4_LIVE_MANIFEST=<tmp>/manifest.json PLANE_G4_LIVE_COMMAND='bash tools/agent-g4-live.sh' PLANE_G4_PROVIDER_SECRET_SOURCE=<existing-owner-only-chatgpt-codex-source> bash tools/agent-g4-live.sh`
+
+Command SHA-256: `32756a110745e4b69a3c8627021527a073ac7c434b5cd6659483245674954060`.
+
+The runner returned exit `125` with the sole bounded result:
+
+`event=agent.g4.live-runner.failure phase=credential-bind-preflight error_class=unavailable exit_code=125`
+
+Stderr was empty. Preserved bounded runner receipt SHA-256:
+`62c79b15a5da9221fa9d5739a54c1d639a3ce1482dbb5a350645e27d1b7205f5`.
+The failure occurred before compose startup, Plane resource creation, the
+runtime, provider relay, or provider request. Provider exchange count was
+`0`; no run or invocation refs/counts exist. `RuntimeExitEvidence`, runtime
+event counts/kinds, terminal code/reason, and Plane host gateway receipts were
+not created. Therefore the required permitted read, denied
+`agent.outcome.evaluate`, explicit `OutcomeSubmission`, publication, visible
+terminal product event, durable readback, and exact replay were not reached.
+
+First owner: live runner / local Colima Docker bind visibility for the staged
+owner-only provider source at credential bind preflight. This is an environment
+and runner-boundary diagnosis; no Plane source fix is claimed.
+
+### Cleanup and decision
+
+The live runner reported zero task-labeled containers, networks, and volumes.
+After this evidence is committed, remove only the task-owned exact-source
+clones, temporary manifest/authority/config/capture, and tagged API/runtime
+images. Retain no secret or owner credential source. No broad G3/G4/G5,
+load/rollout/deployment/UI/unrelated suite, or additional provider exchange
+ran. S00 is `FAIL` and does not unlock W/M/O.
