@@ -1522,3 +1522,74 @@ hook. No safe exact no-provider replay was run; no replay result is claimed.
 The receipt was validated before deletion. S00 is therefore `FAIL` at the
 evidence/replay boundary; UT-018 remains open and W/M/O stay locked. No
 product source was changed.
+
+## Wave 0AH — exact f285842598 / Hermes b39be101 single fresh S00
+
+### Exact binding and provider-free preflight
+
+- The authoritative Plane checkout was clean at
+  `f2858425984c2ee038fad56e88eca5ee0aa2a0ea` on
+  `codex/agent-functional-dogfood`; Hermes was clean at
+  `b39be1013fd24fe05db006dc90ffc9cd05b0ca12` on `main`. Provider use began
+  only after these identity and cleanliness checks passed.
+- The disposable API image was bound to Plane source
+  `f2858425984c2ee038fad56e88eca5ee0aa2a0ea`, tag
+  `plane-agent-api:s00-f2858425984c`, digest
+  `sha256:79efb23152368a0e61431237ff3f801fa8fb620af0d751a3bc8ef513b1628ceb`.
+  The disposable runtime image was bound to the same Plane revision and Hermes
+  `b39be1013fd24fe05db006dc90ffc9cd05b0ca12`, tag
+  `plane-agent-runtime:s00-f2858425984c-hermes-b39be101`, digest
+  `sha256:6c1c522e6cfa9b262012bc463c78a2c552161768612405c2b08ba241ac1ab496`.
+  The runtime contract was `plane.agent-runtime/v1`; Hermes tree digest was
+  `f8cc0961f7d6fa1a8ee0be1ed52df437a0083c2abf890058932d8d677e41b68b`.
+- Fresh disposable manifest, authority, config, workspace, actor, profile,
+  assignment, run, invocation, and idempotency binding were used. Config-only,
+  source/image, and exact contract preflight passed before provider use. The
+  owner-only ChatGPT subscription source was staged only for the isolated run,
+  was not printed or retained, and remained unchanged.
+
+### One fresh primary and bounded failure
+
+- The route was `openai-codex/gpt-5.6-luna`, fallback disabled, through
+  `plane.agent-runtime/provider-relay/v1`; exact command SHA-256 was
+  `32756a110745e4b69a3c8627021527a073ac7c434b5cd6659483245674954060`.
+- Exactly one primary process was started and waited to completion. It returned
+  exit `1` with bounded failure `phase=api-invocation`,
+  `error_class=RuntimeError`, and `reason_category=unavailable`. The fresh run
+  was `2fab01a5-7751-495f-9db8-ba3627e72873`; invocation was
+  `invocation:0973f573-1b0d-49d6-8c42-a85c0528eee5`; both retained
+  `succeeded` state in the bounded handoff, with terminal kind
+  `outcome_submission` and `planeHostOperationReceipts=true`.
+- The permitted eager/progressive read path was observed: `search_workspace`
+  succeeded `3` times and `work_item.read` succeeded once. The deliberate
+  `agent.outcome.evaluate` was denied with recoverable `NOT_AUTHORIZED` once;
+  `agent.outcome.submit` succeeded once; and
+  `agent.outcome.publish` succeeded once. The bounded runtime ingress retained
+  `progress_observed=20`, `transcript_evidence_observed=1`, and
+  `usage_observed=1`; RuntimeExit was present as `completed` with final sequence
+  `21`. The terminal kind and publish operation were observed, but the full
+  exactly-one visible terminal-event assertion is not accepted because the
+  primary handoff was a failure/unknown result.
+- Provider attempts were `12`: sequences `1..4` and `6..12` were
+  `completed`/upstream-initiated/`2xx`; sequence `5` was
+  `outcome_unknown`. This is the first bounded failure for this run. No raw
+  prompts, model text, tool payloads, provider secrets, or credentials were
+  retained.
+
+### Replay, cleanup, and decision
+
+- Because the primary contained `outcome_unknown`, the exact same-invocation
+  replay predicate was not met. No retry and no replay occurred; therefore no
+  replay-side zero-delta claim is made.
+- Before deletion, the owner-only bounded failure receipt was validated for
+  schema, binding, bounded fields, permissions, size, and sensitivity. It was
+  mode `0600`, `3529` bytes, schema
+  `plane-agent-g4/live-failure/v1`, SHA-256
+  `74bc53ffdad3f11bb7f8ebba705029eedefbcebdf9aad3995cea380489d60b70`.
+- Cleanup removed the run's task containers, network, volumes, staged source,
+  runtime secret, temporary descriptors, receipt, and the two disposable exact
+  images. Post-cleanup checks found no task-labeled Docker resources or task
+  temporary artifacts; unrelated resources were preserved. Plane and Hermes
+  remained clean at their expected commits.
+- Decision: S00 is `FAIL`; UT-018 remains `open`; W/M/O remain locked. No
+  product source was changed.

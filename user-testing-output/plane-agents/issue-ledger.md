@@ -23,6 +23,21 @@ Severity: `blocker`, `friction`, `annoyance`, `positive`.
 | UT-017 | blocker  | Maya / S00     | `waves/wave-0-provider-smoke.md`; Wave 0AA result-retention gap                                                                                                                                                                                     | Wave 0AA did not retain its bounded JSON before cleanup, so that run could not prove provider-attempt count or durable readback.                                                                                                                                                                                                                                                                                           | Evidence handoff seam only; no product-source fault claimed.                                                                                                                                               | Wave 0AB exact d2e8 run wrote an owner-only bounded result, hash `f998e593c8cf967c1e884756322dbbb094c3711e8522e782c2054d9af648863d`, validated it, and acknowledged deletion.                                                                                                                                                                                                                                                                                                                     | closed |
 | UT-018 | blocker  | Maya / S00     | `waves/wave-0-provider-smoke.md`; Wave 0AG receipt SHA-256 `f7b771481396e7591cd5a6bc860a22cb2888437ee95e35c8b63979d3ece5588c` (0600, 3508 bytes); prior Wave 0AF receipt SHA-256 `e59655625dfda461f785cd9cb48a33be21aedb005138db8b949a5bb185dcdf71` | Wave 0AG exact `053ce18c8b0b29cba7115ca9411e61f54bc3a285` / Hermes `b39be1013fd24fe05db006dc90ffc9cd05b0ca12` reached a successful live invocation with no fallback, one outcome, one visible `outcome_submission` terminal ref, 2xx provider status, and passing canaries/thresholds. The bounded pass receipt did not retain ordered provider attempts, per-operation summaries, RuntimeExit fields, or replay evidence. | Evidence handoff/replay seam remains unproven; no Plane source fault is claimed. The owner-only receipt retained only bounded refs/counts and no raw prompt, tool payload, provider secret, or credential. | Wave 0AG bounded summary: actor `0f08003d-909c-4d95-9208-1783bacd306a`, run `f46fe053-ea7f-47bc-b171-bb919d533240`, invocation `invocation:0afe8909-5e4f-46d3-9c1d-0b40620f9dc7`, terminal `product-event:f91cd7ae-42e6-4170-984f-8b2e5b793cad`, runtime events `22`, audit events `16`, outcome count `1`; permitted/denied/submit/publish outcomes passed. Exact no-provider replay was not run because the existing isolated runner tears down the database before a post-primary replay hook. | open   |
 
+UT-018 / Wave 0AH addendum: the exact f2858425984c2ee038fad56e88eca5ee0aa2a0ea
+Plane checkout with Hermes b39be1013fd24fe05db006dc90ffc9cd05b0ca12 reached
+the real `openai-codex/gpt-5.6-luna` route with fallback disabled. Fresh run
+`2fab01a5-7751-495f-9db8-ba3627e72873` and invocation
+`invocation:0973f573-1b0d-49d6-8c42-a85c0528eee5` retained successful Plane
+run/invocation state, `search_workspace` success `3`, `work_item.read` success
+`1`, evaluator denial `NOT_AUTHORIZED` `1`, submit success `1`, publish success
+`1`, and terminal kind `outcome_submission`. Provider attempt sequence `5`
+was `outcome_unknown` among `12` total attempts; the bounded runner failed at
+`api-invocation`. Receipt SHA-256 was
+`74bc53ffdad3f11bb7f8ebba705029eedefbcebdf9aad3995cea380489d60b70`
+(`0600`, `3529` bytes). No retry or replay occurred because the primary was
+unknown; cleanup and source cleanliness passed. UT-018 remains open and W/M/O
+remain locked.
+
 An issue is closed only after the same persona retests the real journey and the
 affected route-map cells are clean. Test-only failures without user-visible or
 contract impact remain verifier diagnostics rather than dogfood issues.
