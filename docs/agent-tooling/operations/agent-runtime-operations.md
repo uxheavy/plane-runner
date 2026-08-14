@@ -15,6 +15,12 @@ upstream initiation, an unresolved provider request is fail-stop: never retry
 the same logical request, and wait for reconciliation or an explicitly
 authorized new-invocation policy before later execution.
 
+The typed JSON ambiguity marker is available only before the relay response
+starts. Once a Plane-relay `200` stream has started, downstream body-read
+ambiguity is fail-stop at Hermes and the same logical request is not retried.
+The relay does not buffer the whole provider response or introduce a new
+control-frame protocol for this case.
+
 ## Runtime-owned health and safety-stop interface
 
 The runtime module is deliberately importable without Django or the HTTP

@@ -54,6 +54,12 @@ state. After upstream initiation, an unresolved provider request is fail-stop:
 the same logical request is never retried, and later execution waits for
 reconciliation or an explicitly authorized new-invocation policy.
 
+The typed JSON ambiguity marker applies only before the relay response starts.
+After a Plane-relay `200` stream has started, ambiguity while reading the
+downstream body is fail-stop at Hermes and the same logical request must not be
+retried. The relay does not buffer the whole provider response or add a new
+control-frame protocol to represent that condition.
+
 ### Run snapshot and invocation envelope
 
 Plane persists one immutable `RunSnapshot` when the run is created:

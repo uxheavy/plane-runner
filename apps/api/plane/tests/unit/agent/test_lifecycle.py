@@ -60,6 +60,7 @@ from plane.db.models import (
     InputEventKind,
     InvocationState,
     OutcomeState,
+    OutcomeSubmission,
     Project,
     RecoveryIntent,
     RunLineageReason,
@@ -954,6 +955,56 @@ def test_migrated_outcome_terminal_replay_promotes_legacy_binding_without_duplic
             kind=TerminalEventKind.RUN_FAILURE,
             idempotency_key=namespaced_ref("idempotency", f"outcome-{outcome.id}"),
         )
+
+
+@pytest.mark.django_db(transaction=True)
+def test_outcome_creation_and_replay_stop_on_unknown_runtime_control(assignment, profile):
+    run = create_run(assignment, profile)
+    invocation = record_invocation(run, idempotency_key="idempotency:control-unknown-invocation")
+    control = RuntimeInvocationControl.objects.get(invocation=invocation)
+    control.state = RuntimeControlState.OUTCOME_UNKNOWN
+    control.outcome_unknown_at = timezone.now()
+    control.failure_code = "outcome_unknown"
+    control.save(_allow_lifecycle=True)
+
+    outcome_kwargs = {
+        "summary": "Must not be accepted while invocation reconciliation is pending.",
+        "idempotency_key": "idempotency:control-unknown-outcome",
+    }
+
+    def submit_outcome():
+        close_old_connections()
+        try:
+            propose_outcome(run, **outcome_kwargs)
+        except InvalidTransitionError as exc:
+            return str(exc)
+        finally:
+            close_old_connections()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: submit_outcome(), range(2)))
+    assert all(
+        "Runtime invocation outcome is unknown; explicit reconciliation is required" in result for result in results
+    )
+
+    assert not OutcomeSubmission.objects.filter(run=run).exists()
+
+    control.state = RuntimeControlState.AVAILABLE
+    control.outcome_unknown_at = None
+    control.failure_code = ""
+    control.save(_allow_lifecycle=True)
+    outcome = propose_outcome(run, **outcome_kwargs)
+    assert OutcomeSubmission.objects.filter(run=run).count() == 1
+
+    control.refresh_from_db()
+    control.state = RuntimeControlState.OUTCOME_UNKNOWN
+    control.outcome_unknown_at = timezone.now()
+    control.failure_code = "outcome_unknown"
+    control.save(_allow_lifecycle=True)
+    with pytest.raises(InvalidTransitionError, match="Runtime invocation outcome is unknown"):
+        propose_outcome(run, **outcome_kwargs)
+
+    assert OutcomeSubmission.objects.filter(pk=outcome.pk).count() == 1
 
 
 @pytest.mark.django_db(transaction=True)
