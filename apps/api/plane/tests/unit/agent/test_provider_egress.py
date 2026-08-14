@@ -222,11 +222,15 @@ def test_provider_attempt_intent_precedes_upstream_and_upstream_failure_is_unkno
         server.close()
 
     assert status == 403
-    assert json.loads(body) == {"error": "upstream_error"}
+    assert json.loads(body) == {
+        "error": "outcome_unknown",
+        "retryable": False,
+        "upstreamInitiated": True,
+    }
     assert [audit.phase for audit in audits] == ["intent", "started", "outcome_unknown"]
     assert audits[0].upstream_called is False
     assert audits[1].upstream_called is True
-    assert audits[-1].error_code == "upstream_error"
+    assert audits[-1].error_code == "outcome_unknown"
     assert audits[-1].status_class == "unknown"
     assert len(upstream.calls) == 1
 

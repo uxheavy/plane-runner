@@ -25,6 +25,7 @@ from plane.agent.lifecycle import (
     create_assignment,
     create_profile,
     create_run,
+    propose_outcome,
     record_invocation,
     record_provider_attempt_notice,
 )
@@ -62,6 +63,7 @@ from plane.db.models import (
     RunTerminalEvent,
     RuntimeEventIngress,
     RuntimeExitEvidence,
+    RuntimeInvocation,
     RuntimeUsageObservation,
     RuntimeControlState,
     RuntimeInvocationControl,
@@ -164,6 +166,70 @@ class CompletedWithoutOutcomeRuntimeTransport:
     def dispatch(self, snapshot_json, envelope_json):
         self.calls += 1
         frames = list(_runtime_frames(json.loads(snapshot_json), json.loads(envelope_json)))
+        exit_frame = json.loads(frames[-1])
+        exit_frame["kind"] = "completed"
+        exit_frame.pop("failure", None)
+        frames[-1] = json.dumps(exit_frame, sort_keys=True, separators=(",", ":"))
+        return tuple(frames)
+
+
+class CompletedExitWithUnknownProviderRuntimeTransport:
+    def __init__(self):
+        self.calls = 0
+
+    def dispatch(self, snapshot_json, envelope_json):
+        self.calls += 1
+        envelope = json.loads(envelope_json)
+        invocation = RuntimeInvocation.objects.get(invocation_id=envelope["invocationId"])
+        propose_outcome(
+            invocation.run,
+            summary="The runtime submitted an outcome before a late provider ambiguity was observed.",
+            idempotency_key="idempotency:late-provider-unknown",
+            created_by=invocation.created_by,
+        )
+        notice = {
+            "runId": str(invocation.run_id),
+            "invocationId": invocation.invocation_id,
+            "leaseId": "lease:late-provider-unknown",
+            "provider": "deterministic-local",
+            "model": "test-model",
+            "destinationHost": "provider.test",
+            "destinationPath": "/v1/test",
+            "requestId": "request:late-provider-unknown",
+            "idempotencyKey": "provider-attempt:late-provider-unknown",
+            "sequence": 1,
+        }
+        record_provider_attempt_notice(
+            invocation,
+            {
+                **notice,
+                "phase": RuntimeProviderAttemptPhase.INTENT,
+                "upstreamInitiated": False,
+                "statusClass": "",
+                "errorCode": "",
+            },
+        )
+        record_provider_attempt_notice(
+            invocation,
+            {
+                **notice,
+                "phase": RuntimeProviderAttemptPhase.STARTED,
+                "upstreamInitiated": True,
+                "statusClass": "",
+                "errorCode": "",
+            },
+        )
+        record_provider_attempt_notice(
+            invocation,
+            {
+                **notice,
+                "phase": RuntimeProviderAttemptPhase.OUTCOME_UNKNOWN,
+                "upstreamInitiated": True,
+                "statusClass": "unknown",
+                "errorCode": "outcome_unknown",
+            },
+        )
+        frames = list(_runtime_frames(json.loads(snapshot_json), envelope))
         exit_frame = json.loads(frames[-1])
         exit_frame["kind"] = "completed"
         exit_frame.pop("failure", None)
@@ -820,6 +886,28 @@ def test_supervisor_preserves_missing_outcome_failure_through_terminal_output(
     assert json.loads(control.failure_reason) == expected
     assert json.loads(terminal.reason) == expected
     assert "completed_without_explicit_outcome" in _supervisor_result_output(result)
+    assert transport.calls == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_terminal_provider_outcome_unknown_cannot_succeed_with_completed_exit_and_outcome(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    run, invocation = _invocation(workspace, gateway_project, gateway_issue, create_user, suffix="late-unknown")
+    transport = CompletedExitWithUnknownProviderRuntimeTransport()
+
+    result = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
+
+    invocation.refresh_from_db()
+    control = RuntimeInvocationControl.objects.get(invocation=invocation)
+    terminal = RunTerminalEvent.objects.get(invocation=invocation, visible=True)
+    assert OutcomeSubmission.objects.filter(run=run).count() == 1
+    assert result.state == InvocationState.OUTCOME_UNKNOWN
+    assert invocation.state == InvocationState.OUTCOME_UNKNOWN
+    assert control.state == RuntimeControlState.OUTCOME_UNKNOWN
+    assert control.failure_code == "outcome_unknown"
+    assert terminal.kind == "outcome_submission"
+    assert RuntimeExitEvidence.objects.filter(invocation=invocation, kind="completed").exists()
     assert transport.calls == 1
 
 

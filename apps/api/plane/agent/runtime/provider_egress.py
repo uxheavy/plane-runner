@@ -82,6 +82,17 @@ class ProviderRelayError(ValueError):
     """A provider relay request cannot be admitted or safely completed."""
 
 
+class ProviderRelayOutcomeUnknownError(ProviderRelayError):
+    """The provider request started, but its terminal result is ambiguous."""
+
+    error_code = "outcome_unknown"
+    retryable = False
+    upstream_initiated = True
+
+    def __init__(self) -> None:
+        super().__init__("provider request outcome is unknown")
+
+
 @dataclass(frozen=True)
 class ProviderWire:
     """The typed provider wire contract shared by runtime config and relay."""
@@ -388,7 +399,11 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
                 request = exc.request
                 relay._record_attempt(request, phase="intent", upstream_initiated=False, required=True)
             if request is not None:
-                terminal_phase = "outcome_unknown" if upstream_called and code == "upstream_error" else "failed"
+                terminal_phase = (
+                    "outcome_unknown"
+                    if upstream_called and code == "outcome_unknown" and getattr(exc, "upstream_initiated", False)
+                    else "failed"
+                )
                 relay._record_attempt(
                     request,
                     phase=terminal_phase,
@@ -410,7 +425,7 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
                     upstream_called,
                 )
             try:
-                relay._write_http_error(self.wfile, request_id, code)
+                relay._write_http_error(self.wfile, request_id, code, error=exc)
             except OSError:
                 pass
         except (OSError, TimeoutError):
@@ -691,7 +706,7 @@ class ProviderRelayServer:
         except ProviderRelayError:
             raise
         except Exception as exc:
-            raise ProviderRelayError("provider call failed") from exc
+            raise ProviderRelayOutcomeUnknownError() from exc
         if not isinstance(response, ProviderResponse) or isinstance(response.status_code, bool):
             raise ProviderRelayError("provider response is invalid")
         if 300 <= response.status_code < 400:
@@ -736,8 +751,18 @@ class ProviderRelayServer:
         channel.write(b"0\r\n\r\n")
         channel.flush()
 
-    def _write_http_error(self, channel: Any, request_id: str, code: str) -> None:
-        body = json.dumps({"error": code}, separators=(",", ":")).encode("ascii")
+    def _write_http_error(
+        self,
+        channel: Any,
+        request_id: str,
+        code: str,
+        *,
+        error: ProviderRelayError | None = None,
+    ) -> None:
+        payload: dict[str, object] = {"error": code}
+        if isinstance(error, ProviderRelayOutcomeUnknownError):
+            payload.update({"retryable": False, "upstreamInitiated": True})
+        body = json.dumps(payload, separators=(",", ":")).encode("ascii")
         headers = (
             "HTTP/1.1 403 Forbidden\r\n"
             "Connection: close\r\n"
@@ -750,6 +775,8 @@ class ProviderRelayServer:
 
     @staticmethod
     def _error_code(error: ProviderRelayError) -> str:
+        if getattr(error, "error_code", None) == "outcome_unknown":
+            return "outcome_unknown"
         message = str(error).casefold()
         if "model-call budget is exhausted" in message or "model call budget is exhausted" in message:
             return "budget_exhausted"
@@ -948,7 +975,7 @@ class PinnedProviderHTTPSClient:
             raise
         except (OSError, TimeoutError) as exc:
             connection.close()
-            raise ProviderRelayError("provider call failed") from exc
+            raise ProviderRelayOutcomeUnknownError() from exc
 
 
 __all__ = [
@@ -961,6 +988,7 @@ __all__ = [
     "ProviderRelayBinding",
     "ProviderRelayDescriptor",
     "ProviderRelayError",
+    "ProviderRelayOutcomeUnknownError",
     "ProviderRelayPolicy",
     "ProviderWire",
     "provider_wire",

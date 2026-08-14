@@ -2894,6 +2894,11 @@ def propose_outcome(run, *, summary, artifacts=None, evidence=None, idempotency_
     artifacts_value = _as_list(artifacts, "artifacts", max_items=64)
     evidence_value = _as_list(evidence, "evidence", max_items=64)
     _assignment, run = _lock_assignment_run(run.pk)
+    if run.last_invocation_id and RuntimeProviderAttempt.objects.filter(
+        invocation__invocation_id=run.last_invocation_id,
+        phase=RuntimeProviderAttemptPhase.OUTCOME_UNKNOWN,
+    ).exists():
+        raise InvalidTransitionError("Provider request outcome is unknown; explicit reconciliation is required")
     key = _normalise_idempotency(idempotency_key, "outcome idempotency_key") if idempotency_key is not None else None
     outcome_fingerprint = None
     if key is not None:

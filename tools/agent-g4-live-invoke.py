@@ -793,6 +793,11 @@ def main() -> int:
             transcript_evidence,
             explicit_publication,
         ) = readback()
+        if any(
+            attempt.phase == "outcome_unknown" or attempt.error_code == "outcome_unknown"
+            for attempt in provider_attempts
+        ):
+            raise RuntimeError("provider request outcome was unknown; pass/replay is not permitted")
         correlation_id = f"correlation:{run.id}"
         audits = OperationGatewayAudit.objects.filter(correlation_id=correlation_id)
         permitted = any(

@@ -1072,6 +1072,8 @@ class G4ContractTests(unittest.TestCase):
         self.assertLess(primary.lineno, replay.lineno)
         gate = source.index("live product lifecycle or canary evidence was incomplete")
         self.assertLess(gate, source.index("before_replay"))
+        unknown_gate = source.index("provider request outcome was unknown; pass/replay is not permitted")
+        self.assertLess(unknown_gate, source.index("before_replay"))
         self.assertLess(source.index("before_replay"), source.index("duration_ms"))
         self.assertIn('PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER={}', source)
         self.assertIn('"frames=0"', source)
@@ -1121,6 +1123,14 @@ class G4ContractTests(unittest.TestCase):
             source.index("live product lifecycle or canary evidence was incomplete"),
             source.index("replay_stdout"),
         )
+
+    def test_live_validator_rejects_any_provider_outcome_unknown_before_replay(self):
+        def mark_unknown(evidence):
+            attempt = evidence["readback"]["providerAttempts"][0]
+            attempt["phase"] = "outcome_unknown"
+            attempt["errorCode"] = "outcome_unknown"
+
+        self._assert_live_fixture_rejected(mark_unknown, "evidence_provider_attempt_outcome_unknown")
 
     def test_success_receipt_requires_bounded_replay_and_readback_facts(self):
         manifest, authority, config, evidence_text = fixture()

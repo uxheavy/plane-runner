@@ -44,6 +44,7 @@ from plane.db.models import (
     RuntimeInvocation,
     RuntimeInvocationControl,
     RuntimeProviderAttempt,
+    RuntimeProviderAttemptPhase,
 )
 
 from .dispatch import RuntimeIngressError, dispatch_invocation, ingest_runtime_frame
@@ -214,11 +215,21 @@ def _terminalize(
 ) -> SupervisorResult:
     failure = failure or _FAILURE_CLASSIFICATIONS.get(code)
     with transaction.atomic():
-        _assignment, _run, invocation = lock_invocation_path(invocation_id)
+        _assignment, run, invocation = lock_invocation_path(invocation_id)
         control = _control(invocation, lock=True)
         terminal = RunTerminalEvent.objects.filter(invocation=invocation).first()
         if terminal is None:
             terminal = finalize_invocation(invocation, kind=kind, reason=reason)
+        elif outcome_unknown and terminal.kind == "outcome_submission":
+            # An outcome callback can commit its visible event before the
+            # supervisor receives a late provider-attempt terminal notice.
+            # Keep that one visible event, but move both lifecycle records to
+            # the existing reconciliation state instead of accepting success.
+            invocation.state = InvocationState.OUTCOME_UNKNOWN
+            invocation.save(_allow_lifecycle=True, created_by_id=invocation.created_by_id)
+            run.state = RunState.OUTCOME_UNKNOWN
+            run.pending_input_ref = None
+            run.save(_allow_lifecycle=True, created_by_id=run.created_by_id)
         _set_failure(control, code=code, reason=reason, unknown=outcome_unknown)
         if not outcome_unknown:
             control.state = RuntimeControlState.RELEASED
@@ -453,6 +464,17 @@ def _finish_exit(invocation: RuntimeInvocation, accepted_frames: int) -> Supervi
                 reason="Provider attempt evidence could not be reconciled.",
                 code="provider_attempt_reconciliation_failed",
             )
+    if RuntimeProviderAttempt.objects.filter(
+        invocation=invocation,
+        phase=RuntimeProviderAttemptPhase.OUTCOME_UNKNOWN,
+    ).exists():
+        return _terminalize(
+            invocation.pk,
+            kind="run_blocker",
+            reason="Provider request outcome is unknown; explicit reconciliation is required.",
+            code="outcome_unknown",
+            outcome_unknown=True,
+        )
     exit_evidence = RuntimeExitEvidence.objects.get(invocation=invocation)
     if exit_evidence.kind == "completed":
         terminal = RunTerminalEvent.objects.filter(invocation=invocation).first()

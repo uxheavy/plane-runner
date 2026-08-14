@@ -840,6 +840,11 @@ def _validate_live_readback(evidence: dict[str, Any]) -> None:
         ):
             raise ContractError("evidence_provider_attempt_sequence_invalid")
         previous_sequence = sequence
+    if any(
+        attempt["phase"] == "outcome_unknown" or attempt["errorCode"] == "outcome_unknown"
+        for attempt in attempts
+    ):
+        raise ContractError("evidence_provider_attempt_outcome_unknown")
 
     runtime_exit = _object(_required(evidence, "runtimeExit", "evidence"), "evidence_runtime_exit")
     if (

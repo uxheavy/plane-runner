@@ -43,6 +43,17 @@ exit = await plane_runtime.execute(
 
 A run may wait for hours and span several runtime invocations, Hermes sessions, leases, containers, processes, or restarts. A safe continuation after human input or recoverable process failure may create a new invocation within the same run. An `outcome_unknown` operation is reconciled or escalated and is never blindly replayed. A deliberate fresh execution after terminal run failure or cancellation, or after human-requested revision, creates a new run.
 
+Outcome ambiguity has three distinct scopes. A provider request is
+`outcome_unknown` when its upstream request was initiated but no definitive
+provider result is available; the relay reports that bounded result without
+retry authorization. An invocation is `OUTCOME_UNKNOWN` when Plane cannot
+prove the runtime's terminal result and must reconcile it before reuse. A
+Plane mutation may independently have an `OUTCOME_UNKNOWN` gateway receipt;
+that operation result does not determine the provider-request or invocation
+state. After upstream initiation, an unresolved provider request is fail-stop:
+the same logical request is never retried, and later execution waits for
+reconciliation or an explicitly authorized new-invocation policy.
+
 ### Run snapshot and invocation envelope
 
 Plane persists one immutable `RunSnapshot` when the run is created:

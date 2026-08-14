@@ -6,6 +6,15 @@ terminal-event authority. A runtime process may be replaced after a lease
 death, but an `outcome_unknown` invocation must be reconciled by Plane before
 any replay.
 
+Keep three ambiguity scopes separate. A provider request becomes
+`outcome_unknown` after upstream initiation without a definitive result; the
+relay returns a bounded non-retryable error. An invocation becomes
+`OUTCOME_UNKNOWN` when Plane must reconcile runtime completion. A Plane
+mutation can separately have an `OUTCOME_UNKNOWN` gateway receipt. After
+upstream initiation, an unresolved provider request is fail-stop: never retry
+the same logical request, and wait for reconciliation or an explicitly
+authorized new-invocation policy before later execution.
+
 ## Runtime-owned health and safety-stop interface
 
 The runtime module is deliberately importable without Django or the HTTP
