@@ -5,6 +5,7 @@ from __future__ import annotations
 # Django must be initialized before importing Plane models and lifecycle services.
 # ruff: noqa: E402
 
+import hashlib
 import io
 import json
 import os
@@ -33,8 +34,10 @@ from plane.agent.lifecycle import (
 )
 from plane.db.models import (
     AgentRole,
-    InvocationState,
     Issue,
+    IssueAssignee,
+    IssueLabel,
+    InvocationState,
     OutcomeSubmission,
     Project,
     ProjectMember,
@@ -54,6 +57,36 @@ from plane.db.models.operation_gateway import (
     OperationGatewayIdempotency,
     OperationGatewayPublication,
 )
+
+_LIVE_USAGE_KEYS = ("inputTokens", "outputTokens", "durationMs")
+
+
+def _semantic_state_digest(snapshot: dict) -> str:
+    return hashlib.sha256(
+        json.dumps(snapshot, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()
+
+
+def _semantic_issue_digest(issue) -> str:
+    snapshot = {
+        "name": issue.name,
+        "description": issue.description_json,
+        "state": str(issue.state_id) if issue.state_id is not None else None,
+        "priority": issue.priority,
+        "assignees": sorted(
+            str(value)
+            for value in IssueAssignee.objects.filter(issue=issue, deleted_at__isnull=True).values_list(
+                "assignee_id", flat=True
+            )
+        ),
+        "labels": sorted(
+            (str(label_id), label_name)
+            for label_id, label_name in IssueLabel.objects.filter(issue=issue, deleted_at__isnull=True).values_list(
+                "label_id", "label__name"
+            )
+        ),
+    }
+    return _semantic_state_digest(snapshot)
 
 
 def _binding() -> dict[str, str]:
@@ -633,6 +666,7 @@ def main() -> int:
                 event_id = bounded_ref(event["event_id"], "event:")
                 if event_id is not None:
                     transcript_event_ids.append(event_id)
+                continue
             raw_payload = event["raw_payload"]
             body = raw_payload.get("body") if isinstance(raw_payload, dict) else None
             publication = body.get("publication") if isinstance(body, dict) else None
@@ -645,7 +679,7 @@ def main() -> int:
             if all(value is not None for value in refs.values()):
                 publication_refs.append(refs)
         operation_audit = list(
-            OperationGatewayAudit.objects.filter(correlation_id=f"correlation:{run.id}")
+            OperationGatewayAudit.objects.filter(correlation_id=f"correlation:{run.id}", phase="outcome")
             .order_by("created_at", "id")
             .values("operation_id", "phase", "outcome", "error_code")[:64]
         )
@@ -676,7 +710,7 @@ def main() -> int:
                 idempotency__correlation_id=correlation_id
             ).count(),
             "terminalEvents": RunTerminalEvent.objects.filter(run=run, visible=True).count(),
-            "semanticState": issue.name,
+            "semanticState": _semantic_issue_digest(issue),
         }
 
     try:
@@ -761,19 +795,31 @@ def main() -> int:
         ) = readback()
         correlation_id = f"correlation:{run.id}"
         audits = OperationGatewayAudit.objects.filter(correlation_id=correlation_id)
-        permitted = audits.filter(phase="outcome", outcome="success", operation_id="work_item.read").exists()
-        if not permitted:
-            permitted = audits.filter(phase="outcome", outcome="success", operation_id="catalog.search").exists()
-        denied = audits.filter(
+        permitted = any(
+            audits.filter(phase="outcome", outcome="success", operation_id=operation_id).exists()
+            for operation_id in ("work_item.read", "catalog.search")
+        )
+        evaluate_audits = audits.filter(phase="outcome", operation_id="agent.outcome.evaluate")
+        denied = evaluate_audits.filter(
             phase="outcome", outcome="denied", operation_id="agent.outcome.evaluate", error_code="NOT_AUTHORIZED"
-        ).exists()
-        submitted = audits.filter(phase="outcome", outcome="success", operation_id="agent.outcome.submit").exists()
-        published = audits.filter(phase="outcome", outcome="success", operation_id="agent.outcome.publish").exists()
+        ).count() == 1 and evaluate_audits.count() == 1
+        submitted_audits = audits.filter(phase="outcome", operation_id="agent.outcome.submit")
+        published_audits = audits.filter(phase="outcome", operation_id="agent.outcome.publish")
+        submitted = submitted_audits.filter(outcome="success").count() == 1 and submitted_audits.count() == 1
+        published = published_audits.filter(outcome="success").count() == 1 and published_audits.count() == 1
+        provider_success = any(
+            attempt.phase == "completed"
+            and attempt.upstream_initiated
+            and attempt.status_class == "2xx"
+            and attempt.error_code == ""
+            for attempt in provider_attempts
+        )
         usage = RuntimeUsageObservation.objects.filter(invocation=invocation).first()
         event_count = RuntimeEventIngress.objects.filter(invocation=invocation).count()
         outcome_count = OutcomeSubmission.objects.filter(run=run).count()
         if (
             invocation.state != InvocationState.SUCCEEDED
+            or not provider_success
             or not permitted
             or not denied
             or not submitted
@@ -825,9 +871,8 @@ def main() -> int:
             "terminalEvents",
         )
         replay_deltas = {key: after_replay[key] - before_replay[key] for key in replay_counts}
-        if any(value != 0 for value in replay_deltas.values()) or after_replay["semanticState"] != before_replay[
-            "semanticState"
-        ]:
+        semantic_side_effects = int(after_replay["semanticState"] != before_replay["semanticState"])
+        if any(value != 0 for value in replay_deltas.values()) or semantic_side_effects:
             raise RuntimeError("successful primary replay changed durable or semantic state")
         invocation.refresh_from_db()
         replay_evidence = {
@@ -835,7 +880,11 @@ def main() -> int:
             "providerAccess": "disabled",
             "sameInvocation": f"invocation={invocation.invocation_id}" in replay_output,
             "sameIdempotencyKey": invocation.idempotency_key == primary_invocation_key,
-            "new": {"children": replay_deltas["invocations"], **replay_deltas, "semanticSideEffects": 0},
+            "new": {
+                "children": replay_deltas["invocations"],
+                **replay_deltas,
+                "semanticSideEffects": semantic_side_effects,
+            },
         }
         if not replay_evidence["sameInvocation"] or not replay_evidence["sameIdempotencyKey"]:
             raise RuntimeError("successful primary replay did not preserve invocation identity")
@@ -949,7 +998,10 @@ def main() -> int:
                     "outcomeCount": outcome_count,
                     "runtimeEventCount": event_count,
                     "providerHttpStatusClass": "2xx",
-                    "usage": {key: value for key, value in usage.usage.items() if isinstance(value, (int, float))},
+                    "usage": {
+                        key: usage.usage.get(key, 0)
+                        for key in _LIVE_USAGE_KEYS
+                    },
                 },
             },
         }

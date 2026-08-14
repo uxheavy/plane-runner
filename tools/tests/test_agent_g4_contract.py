@@ -185,7 +185,12 @@ def fixture(candidate: str = CANDIDATE, source_manifest: dict | None = None) -> 
                 }
             ],
             "planeOperationAudit": [
-                {"operationId": operation_id, "status": "success", "errorCode": None, "count": 1}
+                {
+                    "operationId": operation_id,
+                    "status": "denied" if operation_id == "agent.outcome.evaluate" else "success",
+                    "errorCode": "NOT_AUTHORIZED" if operation_id == "agent.outcome.evaluate" else None,
+                    "count": 1,
+                }
                 for operation_id in (
                     "search_workspace",
                     "work_item.read",
@@ -235,13 +240,28 @@ def fixture(candidate: str = CANDIDATE, source_manifest: dict | None = None) -> 
             "counts": {"collected": 2, "passed": 2, "failed": 0, "skipped": 0, "xfail": 0, "deselected": 0},
             "durationMs": 100,
             "migrationLeaf": "0141",
-            "workload": {"throughput": 10.0, "latencyP95Ms": 100.0, "errorRate": 0.0, "saturation": 0.2},
+            "workload": {
+                "throughput": 10.0,
+                "latencyP95Ms": 100.0,
+                "errorRate": 0.0,
+                "saturation": 0.2,
+                "usage": {"inputTokens": 1, "outputTokens": 2, "durationMs": 3},
+            },
         },
     }
     return manifest, authority, config, json.dumps(evidence, sort_keys=True, separators=(",", ":"))
 
 
 class G4ContractTests(unittest.TestCase):
+    def _assert_live_fixture_rejected(self, mutate, reason):
+        manifest, authority, config, evidence_text = fixture()
+        evidence = json.loads(evidence_text)
+        mutate(evidence)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(evidence))
+        self.addCleanup(temp.cleanup)
+        with self.assertRaisesRegex(ContractError, reason):
+            validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
+
     def _donor_manifest(self):
         return {
             "pins": {
@@ -1119,12 +1139,78 @@ class G4ContractTests(unittest.TestCase):
             ],
         )
         self.assertEqual(readback["runtimeExit"]["kind"], "completed")
+        self.assertEqual(
+            readback["planeOperationAudit"][4],
+            {"operationId": "agent.outcome.evaluate", "status": "denied", "errorCode": "NOT_AUTHORIZED", "count": 1},
+        )
         self.assertEqual(readback["transcriptEvidence"]["count"], 1)
         self.assertEqual(readback["explicitPublication"]["count"], 1)
+        self.assertEqual(set(evidence["summary"]["workload"]["usage"]), {"inputTokens", "outputTokens", "durationMs"})
         self.assertEqual(set(readback["replay"]["new"].values()), {0})
         temp, paths = self.write_case(manifest, authority, config, evidence_text)
         self.addCleanup(temp.cleanup)
         self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 2)
+
+    def test_live_validator_rejects_unknown_readback_and_usage_fields(self):
+        self._assert_live_fixture_rejected(
+            lambda evidence: evidence["readback"].update({"toolPayload": {"raw": "no"}}),
+            "evidence_readback_fields_invalid",
+        )
+        self._assert_live_fixture_rejected(
+            lambda evidence: evidence["summary"]["workload"]["usage"].update({"toolPayload": 1}),
+            "evidence_usage_fields_invalid",
+        )
+        source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+        self.assertIn("_LIVE_USAGE_KEYS", source)
+        self.assertNotIn("usage.usage.items()", source)
+
+    def test_live_semantic_digest_changes_for_issue_state_changes(self):
+        source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        digest_helper = next(
+            node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_semantic_state_digest"
+        )
+        namespace = {"hashlib": hashlib, "json": json}
+        exec(
+            compile(ast.Module(body=[digest_helper], type_ignores=[]), str(TOOLS / "agent-g4-live-invoke.py"), "exec"),
+            namespace,
+        )
+        before = {
+            "name": "Issue",
+            "description": {},
+            "state": "state",
+            "priority": "none",
+            "assignees": [],
+            "labels": [],
+        }
+        after = copy.deepcopy(before)
+        after["priority"] = "high"
+        self.assertNotEqual(namespace["_semantic_state_digest"](before), namespace["_semantic_state_digest"](after))
+        for field in ("name", "description", "state", "priority", "assignees", "labels"):
+            self.assertIn(f'"{field}"', source)
+        self.assertIn("semantic_side_effects", source)
+
+    def test_live_validator_rejects_false_s00_operation_readback(self):
+        def false_evaluation(evidence):
+            evaluation = evidence["readback"]["planeOperationAudit"][4]
+            evaluation.update(status="success", errorCode=None)
+
+        self._assert_live_fixture_rejected(false_evaluation, "evidence_evaluate_not_authorized_invalid")
+
+    def test_live_validator_rejects_malformed_nested_readback(self):
+        cases = (
+            (
+                lambda evidence: evidence["readback"]["runtimeEventIngress"].pop("kindCounts"),
+                "evidence_runtime_ingress_fields_invalid",
+            ),
+            (
+                lambda evidence: evidence["readback"]["providerAttempts"][0].pop("sequence"),
+                "evidence_provider_attempt_fields_invalid",
+            ),
+        )
+        for mutate, reason in cases:
+            with self.subTest(reason=reason):
+                self._assert_live_fixture_rejected(mutate, reason)
 
     def test_live_helper_generates_namespaced_lifecycle_idempotency_keys(self):
         source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")

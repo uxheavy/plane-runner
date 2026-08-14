@@ -777,19 +777,35 @@ _LIVE_PUBLICATION_REF_PREFIXES = {
     "auditReceiptRef": "audit-receipt:",
     "productEventRef": "product-event:",
 }
+_LIVE_READBACK_FIELDS = {
+    "audit",
+    "version",
+    "runtimeExit",
+    "runtimeEventIngress",
+    "providerAttempts",
+    "planeOperationAudit",
+    "transcriptEvidence",
+    "explicitPublication",
+    "replay",
+}
+_LIVE_USAGE_KEYS = ("inputTokens", "outputTokens", "durationMs")
+_LIVE_PERMITTED_READ_IDS = {"work_item.read", "catalog.search"}
 
 
 def _validate_live_readback(evidence: dict[str, Any]) -> None:
+    if set(evidence) != _LIVE_READBACK_FIELDS:
+        raise ContractError("evidence_readback_fields_invalid")
     attempts = _required(evidence, "providerAttempts", "evidence")
-    if not isinstance(attempts, list) or len(attempts) > 32:
+    if not isinstance(attempts, list) or not attempts or len(attempts) > 32:
         raise ContractError("evidence_provider_attempts_invalid")
     previous_sequence = 0
     for row in attempts:
         attempt = _object(row, "evidence_provider_attempt")
+        if set(attempt) != {"sequence", "phase", "upstreamInitiated", "statusClass", "errorCode"}:
+            raise ContractError("evidence_provider_attempt_fields_invalid")
         sequence = attempt["sequence"]
         if (
-            set(attempt) != {"sequence", "phase", "upstreamInitiated", "statusClass", "errorCode"}
-            or type(sequence) is not int
+            type(sequence) is not int
             or not 1 <= sequence <= 256
             or sequence <= previous_sequence
             or attempt["phase"] not in _LIVE_ATTEMPT_PHASES
@@ -812,8 +828,10 @@ def _validate_live_readback(evidence: dict[str, Any]) -> None:
         raise ContractError("evidence_runtime_exit_final_sequence_invalid")
 
     ingress = _object(_required(evidence, "runtimeEventIngress", "evidence"), "evidence_runtime_ingress")
-    kind_counts = _object(ingress["kindCounts"], "evidence_runtime_ingress_counts")
-    if set(ingress) != {"kindCounts"} or set(kind_counts).difference(_LIVE_RUNTIME_EVENT_KINDS) or any(
+    if set(ingress) != {"kindCounts"}:
+        raise ContractError("evidence_runtime_ingress_fields_invalid")
+    kind_counts = _object(_required(ingress, "kindCounts", "evidence_runtime_ingress"), "evidence_runtime_ingress_counts")
+    if set(kind_counts).difference(_LIVE_RUNTIME_EVENT_KINDS) or any(
         type(count) is not int or not 0 <= count <= 256 for count in kind_counts.values()
     ):
         raise ContractError("evidence_runtime_ingress_invalid")
@@ -821,11 +839,13 @@ def _validate_live_readback(evidence: dict[str, Any]) -> None:
     audit = _required(evidence, "planeOperationAudit", "evidence")
     if not isinstance(audit, list) or len(audit) != len(_LIVE_OPERATION_IDS):
         raise ContractError("evidence_operation_audit_count_invalid")
+    operation_rows = {}
     for operation_id, row in zip(_LIVE_OPERATION_IDS, audit):
         operation = _object(row, "evidence_operation_audit")
+        if set(operation) != {"operationId", "status", "errorCode", "count"}:
+            raise ContractError("evidence_operation_audit_fields_invalid")
         if (
-            set(operation) != {"operationId", "status", "errorCode", "count"}
-            or operation["operationId"] != operation_id
+            operation["operationId"] != operation_id
             or operation["status"] not in _LIVE_OPERATION_STATUSES
             or operation["errorCode"] is not None
             and operation["errorCode"] not in _LIVE_OPERATION_ERROR_CODES
@@ -833,12 +853,36 @@ def _validate_live_readback(evidence: dict[str, Any]) -> None:
             or not 0 <= operation["count"] <= 8
         ):
             raise ContractError("evidence_operation_audit_invalid")
+        operation_rows[operation_id] = operation
+    if not any(
+        operation_rows[operation_id]["status"] == "success"
+        and operation_rows[operation_id]["errorCode"] is None
+        and operation_rows[operation_id]["count"] >= 1
+        for operation_id in _LIVE_PERMITTED_READ_IDS
+    ):
+        raise ContractError("evidence_permitted_read_success_missing")
+    evaluate = operation_rows["agent.outcome.evaluate"]
+    if evaluate["status"] != "denied" or evaluate["errorCode"] != "NOT_AUTHORIZED" or evaluate["count"] != 1:
+        raise ContractError("evidence_evaluate_not_authorized_invalid")
+    for operation_id in ("agent.outcome.submit", "agent.outcome.publish"):
+        operation = operation_rows[operation_id]
+        if operation["status"] != "success" or operation["errorCode"] is not None or operation["count"] != 1:
+            raise ContractError(f"evidence_{operation_id.replace('.', '_')}_success_invalid")
+    if not any(
+        attempt["phase"] == "completed"
+        and attempt["upstreamInitiated"] is True
+        and attempt["statusClass"] == "2xx"
+        and attempt["errorCode"] == ""
+        for attempt in attempts
+    ):
+        raise ContractError("evidence_provider_attempt_success_missing")
 
     transcript = _object(_required(evidence, "transcriptEvidence", "evidence"), "evidence_transcript")
+    if set(transcript) != {"count", "eventIds"}:
+        raise ContractError("evidence_transcript_fields_invalid")
     event_ids = transcript["eventIds"]
     if (
-        set(transcript) != {"count", "eventIds"}
-        or type(transcript["count"]) is not int
+        type(transcript["count"]) is not int
         or not 0 <= transcript["count"] <= 32
         or not isinstance(event_ids, list)
         or len(event_ids) != transcript["count"]
@@ -848,12 +892,12 @@ def _validate_live_readback(evidence: dict[str, Any]) -> None:
         raise ContractError("evidence_transcript_invalid")
 
     publication = _object(_required(evidence, "explicitPublication", "evidence"), "evidence_publication")
+    if set(publication) != {"count", "refs"}:
+        raise ContractError("evidence_publication_fields_invalid")
     refs = publication["refs"]
     if (
-        set(publication) != {"count", "refs"}
-        or type(publication["count"]) is not int
-        or publication["count"] < 1
-        or publication["count"] > 8
+        type(publication["count"]) is not int
+        or publication["count"] != 1
         or not isinstance(refs, list)
         or len(refs) != publication["count"]
     ):
@@ -868,8 +912,12 @@ def _validate_live_readback(evidence: dict[str, Any]) -> None:
             for field, prefix in _LIVE_PUBLICATION_REF_PREFIXES.items()
         ):
             raise ContractError("evidence_publication_ref_invalid")
+    if transcript["count"] < 1 or kind_counts.get("transcript_evidence_observed", 0) < 1:
+        raise ContractError("evidence_transcript_observation_missing")
 
     replay = _object(_required(evidence, "replay", "evidence"), "evidence_replay")
+    if set(replay) != {"status", "providerAccess", "sameInvocation", "sameIdempotencyKey", "new"}:
+        raise ContractError("evidence_replay_fields_invalid")
     expected_new = {
         "children",
         "providerAttempts",
@@ -882,15 +930,14 @@ def _validate_live_readback(evidence: dict[str, Any]) -> None:
         "terminalEvents",
         "semanticSideEffects",
     }
-    new = _object(replay["new"], "evidence_replay_new")
+    new = _object(_required(replay, "new", "evidence_replay"), "evidence_replay_new")
     if (
-        set(replay) != {"status", "providerAccess", "sameInvocation", "sameIdempotencyKey", "new"}
-        or replay["status"] != "passed"
+        replay["status"] != "passed"
         or replay["providerAccess"] != "disabled"
         or replay["sameInvocation"] is not True
         or replay["sameIdempotencyKey"] is not True
         or set(new) != expected_new
-        or any(value != 0 for value in new.values())
+        or any(type(value) is not int or value != 0 for value in new.values())
     ):
         raise ContractError("evidence_replay_new_effect_invalid")
 def validate_evidence(
@@ -910,7 +957,8 @@ def validate_evidence(
         raise ContractError("evidence_must_be_one_json_object")
     _exact(_required(evidence, "schemaVersion", "evidence"), "plane-agent-g4/live-evidence/v1", "evidence_schema")
     _exact(_required(evidence, "status", "evidence"), "passed", "evidence_status")
-    _validate_live_readback(_object(_required(evidence, "readback", "evidence"), "evidence_readback"))
+    readback = _object(_required(evidence, "readback", "evidence"), "evidence_readback")
+    _validate_live_readback(readback)
     expected = exact_binding(manifest, candidate)
     _exact(_required(evidence, "binding", "evidence"), expected, "evidence_binding")
     evidence_provider_relay = _provider_relay(evidence["providerRelay"], "evidence_provider_relay") if "providerRelay" in evidence else None
@@ -944,7 +992,14 @@ def validate_evidence(
     if not isinstance(audit.get("eventCount"), int) or audit["eventCount"] < 1:
         raise ContractError("evidence_audit_readback_empty")
     _exact(version.get("binding"), expected, "evidence_version_binding")
-    summary = _summary(_required(evidence, "summary", "evidence"), "evidence_summary")
+    summary_obj = _object(_required(evidence, "summary", "evidence"), "evidence_summary")
+    workload = _object(_required(summary_obj, "workload", "evidence_summary"), "evidence_summary_workload")
+    usage = _object(_required(workload, "usage", "evidence_summary_workload"), "evidence_summary_usage")
+    if set(usage) != set(_LIVE_USAGE_KEYS) or any(
+        type(value) is not int or not 0 <= value <= 10_000_000 for value in usage.values()
+    ):
+        raise ContractError("evidence_usage_fields_invalid")
+    summary = _summary(summary_obj, "evidence_summary")
     return {
         "evidenceSha256": hashlib.sha256(evidence_text.encode("utf-8")).hexdigest(),
         "collected": summary["counts"]["collected"],
