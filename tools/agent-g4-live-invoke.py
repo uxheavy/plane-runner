@@ -61,6 +61,30 @@ from plane.db.models.operation_gateway import (
 _LIVE_USAGE_KEYS = ("inputTokens", "outputTokens", "durationMs")
 
 
+def _s00_terminal_replay_gate(
+    *,
+    invocation_state,
+    terminal_kind,
+    terminal_source,
+    terminal_product_ref,
+    outcome_ref,
+    terminal_count,
+    outcome_count,
+    runtime_exit_kind,
+    runtime_exit_failure,
+):
+    return (
+        invocation_state == "succeeded"
+        and terminal_count == 1
+        and outcome_count == 1
+        and terminal_kind == "outcome_submission"
+        and terminal_source == "runtime"
+        and terminal_product_ref == outcome_ref
+        and runtime_exit_kind == "completed"
+        and runtime_exit_failure is None
+    )
+
+
 def _semantic_state_digest(snapshot: dict) -> str:
     return hashlib.sha256(
         json.dumps(snapshot, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
@@ -822,15 +846,30 @@ def main() -> int:
         usage = RuntimeUsageObservation.objects.filter(invocation=invocation).first()
         event_count = RuntimeEventIngress.objects.filter(invocation=invocation).count()
         outcome_count = OutcomeSubmission.objects.filter(run=run).count()
+        outcome = OutcomeSubmission.objects.filter(run=run).first()
+        runtime_exit_failure = (
+            exit_evidence.raw_payload.get("failure")
+            if exit_evidence is not None and isinstance(exit_evidence.raw_payload, dict)
+            else None
+        )
+        terminal_gate = _s00_terminal_replay_gate(
+            invocation_state=invocation.state,
+            terminal_kind=terminal.kind if terminal is not None else None,
+            terminal_source=terminal.source if terminal is not None else None,
+            terminal_product_ref=terminal.product_ref if terminal is not None else None,
+            outcome_ref=f"outcome-submission:{outcome.id}" if outcome is not None else None,
+            terminal_count=RunTerminalEvent.objects.filter(run=run, visible=True).count(),
+            outcome_count=outcome_count,
+            runtime_exit_kind=exit_evidence.kind if exit_evidence is not None else None,
+            runtime_exit_failure=runtime_exit_failure,
+        )
         if (
-            invocation.state != InvocationState.SUCCEEDED
+            not terminal_gate
             or not provider_success
             or not permitted
             or not denied
             or not submitted
             or not published
-            or terminal is None
-            or outcome_count != 1
             or usage is None
             or exit_evidence is None
             or transcript_evidence["count"] < 1

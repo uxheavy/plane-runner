@@ -168,6 +168,8 @@ If some lifecycle proposals use a dedicated host event-ingress endpoint rather t
 
 Every terminal invocation must map to one visible Plane terminal product event: outcome submission, failure, blocker, or cancellation. A `waiting_for_input` exit is a visible non-terminal question that pauses the run and may start a later invocation. This is a Plane lifecycle invariant, not a promise the kernel can always fulfill. If the lease expires or the container dies before a terminal observation arrives, Plane or its trusted supervisor reconciles the authoritative cause and records exactly one visible failure, blocker, or cancellation through the same application-service and audit rules. `RuntimeExit.completed` is kernel evidence, not authority to submit or accept an outcome.
 
+An applied `outcome_submission` publication requests an immediate non-cancellation terminal stop of the kernel. The stop ends kernel execution; it does not create a lifecycle cancellation or replace the applied product event. The first Plane terminal event wins. A late `RuntimeExit`, including a finite `budget_exhausted` failure, remains visible as runtime diagnostics and cannot relabel or replace that product terminal. A pass or replay requires the one applied outcome terminal and a clean `RuntimeExit.completed`; invocation state alone is insufficient. The finite budget remains a safety policy, while its numeric allowance is configuration.
+
 ### Isolation and compatibility
 
 V1 runs one active invocation per isolated process or container until Hermes process-global profile and registry state is removed or proven safe for multiplexing.

@@ -237,6 +237,31 @@ class CompletedExitWithUnknownProviderRuntimeTransport:
         return tuple(frames)
 
 
+class OutcomeBeforeLateBudgetExitRuntimeTransport:
+    def __init__(self):
+        self.calls = 0
+
+    def dispatch(self, snapshot_json, envelope_json):
+        self.calls += 1
+        envelope = json.loads(envelope_json)
+        invocation = RuntimeInvocation.objects.get(invocation_id=envelope["invocationId"])
+        propose_outcome(
+            invocation.run,
+            summary="The applied outcome must remain authoritative over a late finite exit.",
+            idempotency_key="idempotency:late-budget-outcome",
+            created_by=invocation.created_by,
+        )
+        return _runtime_frames(
+            json.loads(snapshot_json),
+            envelope,
+            failure={
+                "code": "budget_exhausted",
+                "message": "model-call allowance is exhausted after publication",
+                "retryable": False,
+            },
+        )
+
+
 class StaticRuntimeTransport:
     def __init__(self, frames):
         self.frames = tuple(frames)
@@ -805,6 +830,44 @@ def test_supervisor_preserves_finite_runtime_budget_failure_through_terminal_out
     assert json.loads(control.failure_reason) == expected
     assert json.loads(terminal.reason) == expected
     assert expected["failureSubreason"] in _supervisor_result_output(result)
+    assert transport.calls == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_supervisor_keeps_applied_outcome_and_late_budget_exit_as_split_truth(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    run, invocation = _invocation(workspace, gateway_project, gateway_issue, create_user, suffix="late-budget")
+    transport = OutcomeBeforeLateBudgetExitRuntimeTransport()
+
+    result = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
+
+    expected = {
+        "failureCode": "budget_exhausted",
+        "failurePhase": "runtime_process",
+        "failureDetail": "process_exit",
+        "failureSubreason": "model_call_budget_exhausted",
+    }
+    invocation.refresh_from_db()
+    run.refresh_from_db()
+    control = RuntimeInvocationControl.objects.get(invocation=invocation)
+    terminal = RunTerminalEvent.objects.get(invocation=invocation, visible=True)
+    exit_evidence = RuntimeExitEvidence.objects.get(invocation=invocation)
+    assert result.state == InvocationState.SUCCEEDED
+    assert result.terminal_kind == "outcome_submission"
+    assert result.failure == expected
+    assert run.state == RunState.SUCCEEDED
+    assert invocation.state == InvocationState.SUCCEEDED
+    assert control.failure_code == "budget_exhausted"
+    assert control.state == RuntimeControlState.RELEASED
+    assert terminal.kind == "outcome_submission"
+    assert RunTerminalEvent.objects.filter(run=run, visible=True).count() == 1
+    assert exit_evidence.kind == "failed"
+    assert exit_evidence.raw_payload["failure"]["code"] == "budget_exhausted"
+    assert RuntimeEventIngress.objects.filter(invocation=invocation).count() == 0
+
+    replay = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
+    assert replay.state == InvocationState.SUCCEEDED
     assert transport.calls == 1
 
 

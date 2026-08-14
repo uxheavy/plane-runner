@@ -47,7 +47,7 @@ from plane.db.models import (
     RuntimeProviderAttemptPhase,
 )
 
-from .dispatch import RuntimeIngressError, dispatch_invocation, ingest_runtime_frame
+from .dispatch import LateRuntimeEventError, RuntimeIngressError, dispatch_invocation, ingest_runtime_frame
 from .contracts import RUNTIME_SUPERVISOR_PRE_DISPATCH_FAILURE, RuntimeDispatchError
 
 
@@ -586,7 +586,10 @@ def run_runtime_invocation(
     try:
         frames = dispatch_invocation(claim.invocation, transport)
         for frame in frames:
-            ingest_runtime_frame(claim.invocation, frame)
+            try:
+                ingest_runtime_frame(claim.invocation, frame)
+            except LateRuntimeEventError:
+                continue
             accepted_frames += 1
         _reconcile_accepted_usage(claim.invocation)
         return _finish_exit(claim.invocation, accepted_frames)

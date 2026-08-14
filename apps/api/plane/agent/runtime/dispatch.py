@@ -21,13 +21,17 @@ from plane.agent.lifecycle.runtime_contract import (
     validate_runtime_exit,
 )
 from plane.agent.lifecycle import lock_invocation_path
-from plane.db.models import RuntimeEventIngress, RuntimeExitEvidence, RuntimeInvocation
+from plane.db.models import RunTerminalEvent, RuntimeEventIngress, RuntimeExitEvidence, RuntimeInvocation
 
 from .contracts import RuntimeDispatchError, RuntimeTransport
 
 
 class RuntimeIngressError(ValueError):
     """Raised when an untrusted runtime frame cannot become Plane evidence."""
+
+
+class LateRuntimeEventError(RuntimeIngressError):
+    """Raised when a runtime event arrives after Plane has applied a terminal."""
 
 
 def _contract_error(exc: RuntimeContractError, context: str) -> RuntimeIngressError:
@@ -154,6 +158,8 @@ def _ingest_event(event: dict[str, Any], invocation: RuntimeInvocation) -> Runti
     replay = _existing_event_replay(event, invocation)
     if replay is not None:
         return replay
+    if RunTerminalEvent.objects.filter(invocation=invocation, visible=True).exists():
+        raise LateRuntimeEventError("runtime event arrived after the Plane terminal event")
     if RuntimeExitEvidence.all_objects.filter(invocation=invocation).exists():
         raise RuntimeIngressError("runtime events are illegal after an exit")
     latest = RuntimeEventIngress.all_objects.filter(invocation=invocation).order_by("-sequence").first()

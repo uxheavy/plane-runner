@@ -15,6 +15,17 @@ upstream initiation, an unresolved provider request is fail-stop: never retry
 the same logical request, and wait for reconciliation or an explicitly
 authorized new-invocation policy before later execution.
 
+An applied `outcome_submission` publication requests an immediate
+non-cancellation terminal stop of the kernel. That stop ends kernel execution
+without recording a Plane cancellation. The first visible Plane terminal event
+wins. A late `RuntimeExit`, including `budget_exhausted`, remains visible in
+runtime-exit evidence and control diagnostics; it cannot replace or relabel
+the product terminal. S00 passes and replays only when one applied
+`outcome_submission` terminal is bound to the outcome and the same invocation
+has a clean `RuntimeExit.completed`. Invocation state is not enough. The
+finite budget remains a safety policy; the numeric model-call allowance is
+configuration.
+
 The typed JSON ambiguity marker is available only before the relay response
 starts. Once a Plane-relay `200` stream has started, downstream body-read
 ambiguity is fail-stop at Hermes and the same logical request is not retried.
@@ -226,9 +237,12 @@ unacknowledged result and must use a fresh destination for the next run.
 
 The S00 live invocation performs exactly one eligible replay inside the API
 invocation, after the primary has fully succeeded and before disposable
-teardown. It reuses the same invocation/idempotency identity with provider
-credentials disabled, so the existing terminal-invocation short circuit must
-return zero runtime frames. The bounded pass receipt records ordered provider
+teardown. Eligibility requires one applied `outcome_submission` terminal and a
+clean completed runtime exit. A failed, missing, or `outcome_unknown` exit
+never enters the replay branch. An eligible replay reuses the same
+invocation/idempotency identity with provider credentials disabled, so the
+existing terminal-invocation short circuit must return zero runtime frames.
+The bounded pass receipt records ordered provider
 attempts, all seven allowlisted operation summaries, RuntimeExit, runtime event
 counts, transcript-evidence event IDs/count, explicit publication refs, and
 zero deltas for provider attempts, child dispatch, invocations, receipts,
