@@ -69,6 +69,14 @@ Exactly one semantic publication is proved separately by one applied
 publication binding and its durable outcome terminal; raw audit rows, inputs,
 outputs, and messages remain outside the result.
 
+When the S00 pre-replay gate fails, the bounded failure receipt includes an
+ordered `s00Gate` predicate projection. It records the first failed predicate,
+safe lifecycle states, product references, publication kind and operation,
+terminal binding references, and bounded counts. Product publication truth
+comes from the durable Plane outcome record; the matching audit receipt only
+corroborates freshness. The projection never includes prompts, transcripts,
+payloads, tokens, credentials, or runtime messages.
+
 ## What is authoritative
 
 - [GOAL.md](./GOAL.md) is the active objective, success proof, phase/dependency map, and worker/reviewer protocol.

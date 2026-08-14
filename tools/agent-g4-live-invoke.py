@@ -59,30 +59,130 @@ from plane.db.models.operation_gateway import (
 )
 
 _LIVE_USAGE_KEYS = ("inputTokens", "outputTokens", "durationMs")
+_S00_PUBLICATION_REF_FIELDS = (
+    "productRef",
+    "operationAttemptRef",
+    "operationRef",
+    "applicationServiceRef",
+    "gatewayReceiptRef",
+    "receiptRef",
+    "auditReceiptRef",
+    "productEventRef",
+)
+
+
+def _s00_safe_ref(value):
+    if not isinstance(value, str) or not value or len(value.encode("utf-8")) > 128:
+        return "unavailable"
+    allowed = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:/-"
+    lowered = value.lower()
+    if any(term in lowered for term in ("password", "secret", "token", "credential", "authorization", "api_key")):
+        return "unavailable"
+    return value if all(character in allowed for character in value) else "unavailable"
 
 
 def _s00_terminal_replay_gate(
     *,
+    run_ref,
+    terminal_run_ref,
+    outcome_run_ref,
+    invocation_ref,
+    terminal_invocation_ref,
+    run_state,
     invocation_state,
     terminal_kind,
     terminal_source,
     terminal_product_ref,
+    terminal_product_event_ref,
     outcome_ref,
     terminal_count,
     outcome_count,
+    applied_publication_bindings,
     runtime_exit_kind,
     runtime_exit_failure,
 ):
-    return (
-        invocation_state == "succeeded"
-        and terminal_count == 1
-        and outcome_count == 1
-        and terminal_kind == "outcome_submission"
-        and terminal_source == "runtime"
-        and terminal_product_ref == outcome_ref
-        and runtime_exit_kind == "completed"
-        and runtime_exit_failure is None
-    )
+    bindings = applied_publication_bindings if isinstance(applied_publication_bindings, list) else []
+    binding_count = min(len(bindings), 256)
+    binding = bindings[0] if binding_count == 1 and isinstance(bindings[0], dict) else {}
+    publication = {
+        "count": binding_count,
+        "action": binding.get("action"),
+        "productKind": binding.get("productKind"),
+        **{
+            field: _s00_safe_ref(binding.get(field))
+            for field in _S00_PUBLICATION_REF_FIELDS
+        },
+    }
+    expected_run_ref = _s00_safe_ref(run_ref)
+    expected_invocation_ref = _s00_safe_ref(invocation_ref)
+    expected_outcome_ref = _s00_safe_ref(outcome_ref)
+    predicates = {
+        "invocation_succeeded": {
+            "passed": invocation_state == "succeeded",
+            "actual": invocation_state,
+        },
+        "run_succeeded": {
+            "passed": run_state == "succeeded",
+            "actual": run_state,
+        },
+        "one_visible_outcome_terminal": {
+            "passed": terminal_count == 1 and outcome_count == 1 and terminal_kind == "outcome_submission",
+            "terminalCount": terminal_count,
+            "outcomeCount": outcome_count,
+            "terminalKind": terminal_kind,
+        },
+        "one_applied_outcome_publication": {
+            "passed": (
+                publication["count"] == 1
+                and publication["action"] == "applied"
+                and publication["productKind"] == "outcome_submission"
+                and all(publication[field] != "unavailable" for field in _S00_PUBLICATION_REF_FIELDS)
+                and publication["operationRef"] == "operation:agent.outcome.publish"
+                and publication["productRef"] == expected_outcome_ref
+            ),
+            **publication,
+            "expectedProductRef": expected_outcome_ref,
+        },
+        "terminal_binding": {
+            "passed": (
+                terminal_source == "runtime"
+                and _s00_safe_ref(terminal_run_ref) == expected_run_ref
+                and _s00_safe_ref(outcome_run_ref) == expected_run_ref
+                and _s00_safe_ref(terminal_invocation_ref) == expected_invocation_ref
+                and _s00_safe_ref(terminal_product_ref) == expected_outcome_ref
+                and _s00_safe_ref(terminal_product_event_ref) == publication["productEventRef"]
+            ),
+            "source": terminal_source,
+            "terminalRunRef": _s00_safe_ref(terminal_run_ref),
+            "expectedRunRef": expected_run_ref,
+            "outcomeRunRef": _s00_safe_ref(outcome_run_ref),
+            "terminalInvocationRef": _s00_safe_ref(terminal_invocation_ref),
+            "expectedInvocationRef": expected_invocation_ref,
+            "terminalProductRef": _s00_safe_ref(terminal_product_ref),
+            "expectedOutcomeRef": expected_outcome_ref,
+            "terminalProductEventRef": _s00_safe_ref(terminal_product_event_ref),
+            "publishedProductEventRef": publication["productEventRef"],
+        },
+        "runtime_exit_completed": {
+            "passed": runtime_exit_kind == "completed" and runtime_exit_failure is None,
+            "kind": runtime_exit_kind,
+            "hasFailure": runtime_exit_failure is not None,
+        },
+    }
+    return {"passed": all(predicate["passed"] for predicate in predicates.values()), "predicates": predicates}
+
+
+def _s00_publication_evidence(value):
+    if not isinstance(value, dict):
+        return {"count": 0, "refs": []}
+    return {
+        "count": value.get("count", 0),
+        "refs": [
+            {field: row[field] for field in _S00_PUBLICATION_REF_FIELDS}
+            for row in value.get("refs", [])
+            if isinstance(row, dict) and all(field in row for field in _S00_PUBLICATION_REF_FIELDS)
+        ],
+    }
 
 
 def _semantic_state_digest(snapshot: dict) -> str:
@@ -186,6 +286,7 @@ def build_failure_evidence(
     runtime_event_kind_counts=None,
     terminal_code=None,
     terminal_reason=None,
+    s00_gate=None,
     plane_host_operation_receipts=False,
     plane_operation_audit=None,
 ):
@@ -403,6 +504,56 @@ def build_failure_evidence(
     def bounded_state(value):
         return value if value in invocation_states else "unknown"
 
+    def bounded_s00_gate(value):
+        predicate_fields = {
+            "invocation_succeeded": ("actual",),
+            "run_succeeded": ("actual",),
+            "one_visible_outcome_terminal": ("terminalCount", "outcomeCount", "terminalKind"),
+            "one_applied_outcome_publication": (
+                "count",
+                "action",
+                "productKind",
+                *_S00_PUBLICATION_REF_FIELDS,
+                "expectedProductRef",
+            ),
+            "terminal_binding": (
+                "source",
+                "terminalRunRef",
+                "expectedRunRef",
+                "outcomeRunRef",
+                "terminalInvocationRef",
+                "expectedInvocationRef",
+                "terminalProductRef",
+                "expectedOutcomeRef",
+                "terminalProductEventRef",
+                "publishedProductEventRef",
+            ),
+            "runtime_exit_completed": ("kind", "hasFailure"),
+        }
+        if not isinstance(value, dict) or not isinstance(value.get("predicates"), dict):
+            return {"status": "not_evaluated", "firstFailedPredicate": None, "predicates": {}}
+        predicates = {}
+        for name, fields in predicate_fields.items():
+            row = value["predicates"].get(name)
+            if not isinstance(row, dict):
+                continue
+            bounded = {"passed": row.get("passed") is True}
+            for field in fields:
+                raw = row.get(field)
+                if field in {"count", "terminalCount", "outcomeCount"}:
+                    bounded[field] = raw if type(raw) is int and 0 <= raw <= 256 else 0
+                elif field == "hasFailure":
+                    bounded[field] = raw is True
+                else:
+                    bounded[field] = _s00_safe_ref(raw)
+            predicates[name] = bounded
+        first_failed = next((name for name, row in predicates.items() if row["passed"] is not True), None)
+        return {
+            "status": "passed" if value.get("passed") is True else "failed",
+            "firstFailedPredicate": first_failed,
+            "predicates": predicates,
+        }
+
     bounded_binding = {
         key: bounded_binding_value(key, binding[key])
         for key in binding_fields
@@ -584,6 +735,7 @@ def build_failure_evidence(
         "runtimeEventIngress": {"kindCounts": bounded_event_kind_counts},
         "providerAttempts": attempts,
         "terminal": terminal,
+        "s00Gate": bounded_s00_gate(s00_gate),
         "planeHostOperationReceipts": plane_host_operation_receipts is True,
         "planeOperationAudit": bounded_operation_audit(plane_operation_audit),
     }
@@ -647,7 +799,8 @@ def main() -> int:
     plane_operation_audit = []
     supervisor_failure_reason = None
     transcript_evidence = {"count": 0, "eventIds": []}
-    explicit_publication = {"count": 0, "refs": []}
+    explicit_publication = {"count": 0, "refs": [], "bindings": []}
+    s00_gate = None
     replay_evidence = None
 
     def readback():
@@ -664,6 +817,7 @@ def main() -> int:
             event_kind_counts[kind] = min(event_kind_counts.get(kind, 0) + 1, 256)
         transcript_event_ids = []
         publication_refs = []
+        publication_bindings = []
 
         def bounded_ref(value, prefix):
             if not isinstance(value, str) or not value.startswith(prefix) or len(value.encode("utf-8")) > 128:
@@ -690,18 +844,72 @@ def main() -> int:
                 event_id = bounded_ref(event["event_id"], "event:")
                 if event_id is not None:
                     transcript_event_ids.append(event_id)
-                continue
-            raw_payload = event["raw_payload"]
-            body = raw_payload.get("body") if isinstance(raw_payload, dict) else None
-            publication = body.get("publication") if isinstance(body, dict) else None
-            if not isinstance(publication, dict) or publication.get("action") != "applied":
-                continue
+        publication_records = list(
+            OperationGatewayIdempotency.objects.filter(
+                correlation_id=f"correlation:{run.id}",
+                operation_id="agent.outcome.publish",
+                state=OperationGatewayIdempotency.State.SUCCEEDED,
+            )
+            .order_by("created_at", "id")[:32]
+        )
+        publication_audits = OperationGatewayAudit.objects.filter(
+            correlation_id=f"correlation:{run.id}",
+            operation_id="agent.outcome.publish",
+            phase="outcome",
+        )
+        for record in publication_records:
+            request_input = record.request_input if isinstance(record.request_input, dict) else {}
+            result = record.result if isinstance(record.result, dict) else {}
+            outcome_result = result.get("outcome") if isinstance(result.get("outcome"), dict) else {}
+            outcome_ref = request_input.get("outcome_ref")
+            result_outcome_ref = outcome_result.get("outcomeRef")
+            product_event_ref = outcome_result.get("productEventRef")
+            audit_receipt = str(record.audit_receipt) if record.audit_receipt is not None else None
+            request_id = str(record.request_id)
+            candidate = {
+                "action": "applied",
+                "productKind": "outcome_submission",
+                "productRef": outcome_ref,
+                "operationAttemptRef": f"operation-attempt:{request_id}",
+                "operationRef": "operation:agent.outcome.publish",
+                "applicationServiceRef": "application-service:agent-lifecycle",
+                "gatewayReceiptRef": f"gateway-receipt:{audit_receipt}" if audit_receipt is not None else None,
+                "receiptRef": f"receipt:{request_id}",
+                "auditReceiptRef": f"audit-receipt:{audit_receipt}" if audit_receipt is not None else None,
+                "productEventRef": product_event_ref,
+            }
+            fresh_publication_audit = (
+                record.audit_receipt is not None
+                and publication_audits.filter(
+                    id=record.audit_receipt,
+                    request_id=record.request_id,
+                    outcome=OperationGatewayAudit.Outcome.SUCCESS,
+                ).exists()
+                and not publication_audits.filter(outcome=OperationGatewayAudit.Outcome.REPLAY).exists()
+            )
             refs = {
-                field: bounded_ref(publication.get(field), prefix)
+                field: bounded_ref(candidate.get(field), prefix)
                 for field, prefix in publication_fields.items()
             }
-            if all(value is not None for value in refs.values()):
-                publication_refs.append(refs)
+            if (
+                request_input.get("run_ref") == f"run:{run.id}"
+                and isinstance(outcome_ref, str)
+                and outcome_ref == result_outcome_ref
+                and isinstance(product_event_ref, str)
+                and audit_receipt is not None
+                and fresh_publication_audit
+                and all(value is not None for value in refs.values())
+            ):
+                publication_bindings.append(
+                    {"action": candidate["action"], "productKind": candidate["productKind"], **refs}
+                )
+            else:
+                publication_bindings.append({})
+        publication_refs = [
+            {field: binding[field] for field in _S00_PUBLICATION_REF_FIELDS}
+            for binding in publication_bindings
+            if all(field in binding for field in _S00_PUBLICATION_REF_FIELDS)
+        ]
         operation_audit = list(
             OperationGatewayAudit.objects.filter(correlation_id=f"correlation:{run.id}", phase="outcome")
             .order_by("created_at", "id")
@@ -717,7 +925,7 @@ def main() -> int:
             host_receipts,
             operation_audit,
             {"count": len(transcript_event_ids), "eventIds": transcript_event_ids[:32]},
-            {"count": len(publication_refs), "refs": publication_refs[:8]},
+            {"count": len(publication_refs), "refs": publication_refs[:8], "bindings": publication_bindings},
         )
 
     def replay_snapshot():
@@ -833,13 +1041,7 @@ def main() -> int:
             phase="outcome", outcome="denied", operation_id="agent.outcome.evaluate", error_code="NOT_AUTHORIZED"
         ).count() == 1 and evaluate_audits.count() == 1
         submitted_audits = audits.filter(phase="outcome", operation_id="agent.outcome.submit")
-        published_audits = audits.filter(phase="outcome", operation_id="agent.outcome.publish")
         submitted = submitted_audits.filter(outcome="success").count() == 1 and submitted_audits.count() == 1
-        published = (
-            published_audits.filter(outcome="success").exists()
-            and not published_audits.exclude(outcome__in={"success", "replay"}).exists()
-            and explicit_publication["count"] == 1
-        )
         provider_success = any(
             attempt.phase == "completed"
             and attempt.upstream_initiated
@@ -856,28 +1058,36 @@ def main() -> int:
             if exit_evidence is not None and isinstance(exit_evidence.raw_payload, dict)
             else None
         )
-        terminal_gate = _s00_terminal_replay_gate(
+        s00_gate = _s00_terminal_replay_gate(
+            run_ref=f"run:{run.id}",
+            terminal_run_ref=f"run:{terminal.run_id}" if terminal is not None else None,
+            outcome_run_ref=f"run:{outcome.run_id}" if outcome is not None else None,
+            invocation_ref=invocation.invocation_id,
+            terminal_invocation_ref=(
+                terminal.invocation.invocation_id if terminal is not None else None
+            ),
+            run_state=run.state,
             invocation_state=invocation.state,
             terminal_kind=terminal.kind if terminal is not None else None,
             terminal_source=terminal.source if terminal is not None else None,
             terminal_product_ref=terminal.product_ref if terminal is not None else None,
+            terminal_product_event_ref=terminal.product_event_ref if terminal is not None else None,
             outcome_ref=f"outcome-submission:{outcome.id}" if outcome is not None else None,
             terminal_count=RunTerminalEvent.objects.filter(run=run, visible=True).count(),
             outcome_count=outcome_count,
+            applied_publication_bindings=explicit_publication["bindings"],
             runtime_exit_kind=exit_evidence.kind if exit_evidence is not None else None,
             runtime_exit_failure=runtime_exit_failure,
         )
         if (
-            not terminal_gate
+            not s00_gate["passed"]
             or not provider_success
             or not permitted
             or not denied
             or not submitted
-            or not published
             or usage is None
             or exit_evidence is None
             or transcript_evidence["count"] < 1
-            or explicit_publication["count"] != 1
         ):
             raise RuntimeError("live product lifecycle or canary evidence was incomplete")
 
@@ -1029,7 +1239,7 @@ def main() -> int:
                 "providerAttempts": bounded_readback["providerAttempts"],
                 "planeOperationAudit": bounded_readback["planeOperationAudit"],
                 "transcriptEvidence": transcript_evidence,
-                "explicitPublication": explicit_publication,
+                "explicitPublication": _s00_publication_evidence(explicit_publication),
                 "replay": replay_evidence,
             },
             "summary": {
@@ -1126,7 +1336,7 @@ def main() -> int:
                     plane_host_operation_receipts = False
                     plane_operation_audit = []
                     transcript_evidence = {"count": 0, "eventIds": []}
-                    explicit_publication = {"count": 0, "refs": []}
+                    explicit_publication = {"count": 0, "refs": [], "bindings": []}
 
         if failure is not None:
             try:
@@ -1172,6 +1382,7 @@ def main() -> int:
                 runtime_event_kind_counts=runtime_event_kind_counts,
                 terminal_code=control.failure_code if control is not None else None,
                 terminal_reason=terminal.reason if terminal is not None else None,
+                s00_gate=s00_gate,
                 plane_host_operation_receipts=plane_host_operation_receipts,
                 plane_operation_audit=plane_operation_audit,
             )

@@ -119,7 +119,7 @@ def _host_call(client, snapshot, envelope, *, action, operation_ref, input_value
     )
 
 
-def _runtime_exit_frames(snapshot, envelope, *, kind="completed", failure=None):
+def _runtime_exit_frames(snapshot, envelope, *, kind="completed", failure=None, include_transcript=False):
     event = {
         "protocol": "plane.agent-runtime/v1",
         "trust": "untrusted",
@@ -139,6 +139,25 @@ def _runtime_exit_frames(snapshot, envelope, *, kind="completed", failure=None):
             "publication": {"action": "observation_only"},
         },
     }
+    frames = [event]
+    if include_transcript:
+        frames.append(
+            {
+                **event,
+                "sequence": 1,
+                "eventId": "event:ut012-transcript",
+                "idempotencyKey": "idempotency:ut012-transcript",
+                "body": {
+                    "kind": "transcript_evidence_observed",
+                    "payload": {
+                        "kind": "inline_text",
+                        "contentType": "text/plain",
+                        "text": "Observed.",
+                    },
+                    "publication": {"action": "observation_only"},
+                },
+            }
+        )
     exit_frame = {
         "protocol": "plane.agent-runtime/v1",
         "authority": "runtime_evidence_only",
@@ -146,7 +165,7 @@ def _runtime_exit_frames(snapshot, envelope, *, kind="completed", failure=None):
         "actorRef": snapshot["actorRef"],
         "runId": snapshot["runId"],
         "invocationId": envelope["invocationId"],
-        "finalSequence": 0,
+        "finalSequence": len(frames) - 1,
         "idempotencyKey": envelope["idempotencyKey"],
         "correlationId": envelope["correlationId"],
         "causationRef": envelope["causationRef"],
@@ -154,11 +173,11 @@ def _runtime_exit_frames(snapshot, envelope, *, kind="completed", failure=None):
     }
     if failure is not None:
         exit_frame["failure"] = failure
-    return tuple(json.dumps(frame, sort_keys=True, separators=(",", ":")) for frame in (event, exit_frame))
+    return tuple(json.dumps(frame, sort_keys=True, separators=(",", ":")) for frame in (*frames, exit_frame))
 
 
-def _completed_frames(snapshot, envelope):
-    return _runtime_exit_frames(snapshot, envelope)
+def _completed_frames(snapshot, envelope, *, include_transcript=True):
+    return _runtime_exit_frames(snapshot, envelope, include_transcript=include_transcript)
 
 
 class _FakeLiveRuntime:
@@ -170,12 +189,14 @@ class _FakeLiveRuntime:
         failure=None,
         runtime_exit_failure=None,
         completed_without_outcome=False,
+        skip_publication=False,
     ):
         self.reject = reject
         self.provider_free = provider_free
         self.failure = failure
         self.runtime_exit_failure = runtime_exit_failure
         self.completed_without_outcome = completed_without_outcome
+        self.skip_publication = skip_publication
         self.dispatches = []
         self.fake_provider_calls = 0
         self.host_statuses = []
@@ -211,7 +232,7 @@ class _FakeLiveRuntime:
                 failure=self.runtime_exit_failure,
             )
         if self.completed_without_outcome:
-            return _completed_frames(snapshot, envelope)
+            return _completed_frames(snapshot, envelope, include_transcript=False)
 
         client = PlaneHostHTTPClient(url=body["host"]["url"], auth_token=body["host"]["token"])
         if not self.provider_free:
@@ -287,19 +308,20 @@ class _FakeLiveRuntime:
         )
         assert submitted.status == "ok"
         outcome_ref = submitted.output["result"]["outcome"]["outcomeRef"]
-        published = _host_call(
-            client,
-            snapshot,
-            envelope,
-            action="publish",
-            operation_ref="operation:agent.outcome.publish",
-            input_value={
-                "kind": "outcome",
-                "resourceRef": outcome_ref,
-                "content": "UT-012 synthetic publication.",
-            },
-        )
-        assert published.status == "ok"
+        if not self.skip_publication:
+            published = _host_call(
+                client,
+                snapshot,
+                envelope,
+                action="publish",
+                operation_ref="operation:agent.outcome.publish",
+                input_value={
+                    "kind": "outcome",
+                    "resourceRef": outcome_ref,
+                    "content": "UT-012 synthetic publication.",
+                },
+            )
+            assert published.status == "ok"
         return _completed_frames(snapshot, envelope)
 
 
@@ -405,7 +427,7 @@ def test_exact_live_helper_persists_canonical_contract_and_one_fake_provider_att
     assert RuntimeProviderAttempt.objects.filter(invocation=invocation).count() == 1
     assert RuntimeProviderAttempt.objects.get(invocation=invocation).phase == RuntimeProviderAttemptPhase.COMPLETED
     assert invocation.state == InvocationState.SUCCEEDED
-    assert RuntimeEventIngress.objects.filter(invocation=invocation).count() == 1
+    assert RuntimeEventIngress.objects.filter(invocation=invocation).count() == 2
     assert RuntimeExitEvidence.objects.filter(invocation=invocation).count() == 1
     assert RunTerminalEvent.objects.filter(invocation=invocation, visible=True).count() == 1
 
@@ -576,6 +598,50 @@ def test_exact_live_helper_proves_setup_reaches_fake_runtime_without_provider_at
     assert RunTerminalEvent.objects.filter(invocation=invocation, visible=True).count() == 1
     assert not RuntimeProviderAttempt.objects.filter(invocation=invocation).exists()
     assert RuntimeInvocationControl.objects.get(invocation=invocation).failure_code == ""
+
+
+@pytest.mark.django_db(transaction=True)
+def test_exact_live_helper_reports_missing_applied_publication_without_audit_fallback(
+    monkeypatch, tmp_path, capsys
+):
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        host_port = probe.getsockname()[1]
+    fake_runtime = _FakeLiveRuntime(provider_free=True, skip_publication=True)
+
+    assert _run_literal_live_helper(monkeypatch, fake_runtime, tmp_path, host_port) == 1
+    evidence = json.loads(capsys.readouterr().out)
+
+    assert evidence["status"] == "failed"
+    assert evidence["providerAttempts"] == []
+    assert evidence["s00Gate"]["status"] == "failed"
+    assert evidence["s00Gate"]["firstFailedPredicate"] == "one_applied_outcome_publication"
+    assert evidence["s00Gate"]["predicates"]["one_applied_outcome_publication"] == {
+        "passed": False,
+        "count": 0,
+        "action": "unavailable",
+        "productKind": "unavailable",
+        "productRef": "unavailable",
+        "operationRef": "unavailable",
+        "operationAttemptRef": "unavailable",
+        "applicationServiceRef": "unavailable",
+        "gatewayReceiptRef": "unavailable",
+        "receiptRef": "unavailable",
+        "auditReceiptRef": "unavailable",
+        "productEventRef": "unavailable",
+        "expectedProductRef": evidence["s00Gate"]["predicates"]["one_applied_outcome_publication"][
+            "expectedProductRef"
+        ],
+    }
+    publish_audit = next(
+        row for row in evidence["planeOperationAudit"] if row["operationId"] == "agent.outcome.publish"
+    )
+    assert publish_audit == {
+        "operationId": "agent.outcome.publish",
+        "status": "absent",
+        "errorCode": None,
+        "count": 0,
+    }
 
 
 @pytest.mark.django_db(transaction=True)

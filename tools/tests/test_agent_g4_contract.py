@@ -1097,24 +1097,61 @@ class G4ContractTests(unittest.TestCase):
             for node in tree.body
             if isinstance(node, ast.FunctionDef) and node.name == "_s00_terminal_replay_gate"
         )
+        safe_ref_node = next(
+            node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_s00_safe_ref"
+        )
+        publication_fields_node = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name) and target.id == "_S00_PUBLICATION_REF_FIELDS"
+                for target in node.targets
+            )
+        )
         namespace = {}
         exec(
-            compile(ast.Module(body=[gate_node], type_ignores=[]), str(TOOLS / "agent-g4-live-invoke.py"), "exec"),
+            compile(
+                ast.Module(body=[publication_fields_node, safe_ref_node, gate_node], type_ignores=[]),
+                str(TOOLS / "agent-g4-live-invoke.py"),
+                "exec",
+            ),
             namespace,
         )
         gate = namespace["_s00_terminal_replay_gate"]
         base = {
+            "run_ref": "run:1",
+            "terminal_run_ref": "run:1",
+            "outcome_run_ref": "run:1",
+            "invocation_ref": "invocation:1",
+            "terminal_invocation_ref": "invocation:1",
+            "run_state": "succeeded",
             "invocation_state": "succeeded",
             "terminal_kind": "outcome_submission",
             "terminal_source": "runtime",
             "terminal_product_ref": "outcome-submission:1",
+            "terminal_product_event_ref": "product-event:1",
             "outcome_ref": "outcome-submission:1",
             "terminal_count": 1,
             "outcome_count": 1,
+            "applied_publication_bindings": [
+                {
+                    "action": "applied",
+                    "productKind": "outcome_submission",
+                    "productRef": "outcome-submission:1",
+                    "operationRef": "operation:agent.outcome.publish",
+                    "operationAttemptRef": "operation-attempt:1",
+                    "applicationServiceRef": "application-service:agent-lifecycle",
+                    "gatewayReceiptRef": "gateway-receipt:1",
+                    "receiptRef": "receipt:1",
+                    "auditReceiptRef": "audit-receipt:1",
+                    "productEventRef": "product-event:1",
+                }
+            ],
             "runtime_exit_kind": "completed",
             "runtime_exit_failure": None,
         }
-        self.assertTrue(gate(**base))
+        self.assertTrue(gate(**base)["passed"])
         for change in (
             {"runtime_exit_kind": "failed", "runtime_exit_failure": {"code": "budget_exhausted"}},
             {"runtime_exit_kind": None},
@@ -1126,11 +1163,69 @@ class G4ContractTests(unittest.TestCase):
             with self.subTest(change=change):
                 candidate = dict(base)
                 candidate.update(change)
-                self.assertFalse(gate(**candidate))
-        self.assertIn("terminal_gate = _s00_terminal_replay_gate(", source)
+                self.assertFalse(gate(**candidate)["passed"])
+        self.assertIn("s00_gate = _s00_terminal_replay_gate(", source)
         self.assertLess(
-            source.index("terminal_gate = _s00_terminal_replay_gate("),
+            source.index("s00_gate = _s00_terminal_replay_gate("),
             source.index("replay_stdout"),
+        )
+
+    def test_s00_gate_reports_missing_applied_publication_without_audit_fallback(self):
+        source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        gate_node = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_s00_terminal_replay_gate"
+        )
+        safe_ref_node = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_s00_safe_ref"
+        )
+        publication_fields_node = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name) and target.id == "_S00_PUBLICATION_REF_FIELDS"
+                for target in node.targets
+            )
+        )
+        namespace = {}
+        exec(
+            compile(
+                ast.Module(body=[publication_fields_node, safe_ref_node, gate_node], type_ignores=[]),
+                str(TOOLS / "agent-g4-live-invoke.py"),
+                "exec",
+            ),
+            namespace,
+        )
+        base = {
+            "run_ref": "run:1",
+            "terminal_run_ref": "run:1",
+            "outcome_run_ref": "run:1",
+            "invocation_ref": "invocation:1",
+            "terminal_invocation_ref": "invocation:1",
+            "run_state": "succeeded",
+            "invocation_state": "succeeded",
+            "terminal_kind": "outcome_submission",
+            "terminal_source": "runtime",
+            "terminal_product_ref": "outcome-submission:1",
+            "terminal_product_event_ref": "product-event:1",
+            "outcome_ref": "outcome-submission:1",
+            "terminal_count": 1,
+            "outcome_count": 1,
+            "applied_publication_bindings": [],
+            "runtime_exit_kind": "completed",
+            "runtime_exit_failure": None,
+        }
+        result = namespace["_s00_terminal_replay_gate"](**base)
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["predicates"]["one_applied_outcome_publication"]["count"], 0)
+        self.assertEqual(
+            next(name for name, predicate in result["predicates"].items() if not predicate["passed"]),
+            "one_applied_outcome_publication",
         )
 
     def test_failed_primary_has_one_supervisor_call_and_no_replay_call(self):
@@ -1383,9 +1478,25 @@ class G4ContractTests(unittest.TestCase):
         builder = next(
             node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "build_failure_evidence"
         )
+        safe_ref = next(
+            node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_s00_safe_ref"
+        )
+        publication_fields_node = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name) and target.id == "_S00_PUBLICATION_REF_FIELDS"
+                for target in node.targets
+            )
+        )
         namespace: dict[str, object] = {}
         exec(
-            compile(ast.Module(body=[builder], type_ignores=[]), str(TOOLS / "agent-g4-live-invoke.py"), "exec"),
+            compile(
+                ast.Module(body=[publication_fields_node, safe_ref, builder], type_ignores=[]),
+                str(TOOLS / "agent-g4-live-invoke.py"),
+                "exec",
+            ),
             namespace,
         )
         evidence = namespace["build_failure_evidence"](
@@ -1431,6 +1542,26 @@ class G4ContractTests(unittest.TestCase):
                 '{"failureCode":"budget_exhausted","failurePhase":"runtime_process",'
                 '"failureDetail":"process_exit","failureSubreason":"model_call_budget_exhausted"}'
             ),
+            s00_gate={
+                "passed": False,
+                "predicates": {
+                    "one_applied_outcome_publication": {
+                        "passed": False,
+                        "count": 0,
+                        "action": None,
+                        "productKind": None,
+                        "productRef": "credential:must-not-leak",
+                        "operationRef": None,
+                        "operationAttemptRef": None,
+                        "applicationServiceRef": None,
+                        "gatewayReceiptRef": None,
+                        "receiptRef": None,
+                        "auditReceiptRef": None,
+                        "productEventRef": None,
+                        "expectedProductRef": "outcome-submission:bounded",
+                    }
+                },
+            },
             plane_host_operation_receipts=False,
             plane_operation_audit=[
                 {
@@ -1459,6 +1590,7 @@ class G4ContractTests(unittest.TestCase):
                 "runtimeEventIngress",
                 "providerAttempts",
                 "terminal",
+                "s00Gate",
                 "planeHostOperationReceipts",
                 "planeOperationAudit",
             },
@@ -1466,6 +1598,8 @@ class G4ContractTests(unittest.TestCase):
         for forbidden in ("do not include", "must not escape", "prompt", "response", "credential", "payload", "rawLogs"):
             self.assertNotIn(forbidden, encoded)
         self.assertNotRegex(encoded, re.compile(r"(?i)(password|secret|token|api[_-]?key|authorization|credential)"))
+        self.assertEqual(evidence["s00Gate"]["firstFailedPredicate"], "one_applied_outcome_publication")
+        self.assertEqual(evidence["s00Gate"]["predicates"]["one_applied_outcome_publication"]["productRef"], "unavailable")
         self.assertEqual(
             evidence["runtimeExit"],
             {
