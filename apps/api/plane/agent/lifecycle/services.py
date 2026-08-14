@@ -2290,6 +2290,14 @@ def record_provider_attempt_notice(invocation, notice: Mapping[str, object]):
     if existing is None:
         if phase != RuntimeProviderAttemptPhase.INTENT:
             raise AgentDomainError("Provider attempt must be durably intended before it starts")
+        latest = (
+            RuntimeProviderAttempt.all_objects.select_for_update()
+            .filter(invocation=stored_invocation)
+            .order_by("-sequence")
+            .first()
+        )
+        if latest is not None and sequence != latest.sequence + 1:
+            raise AgentDomainError("Provider attempt sequence is out of order")
         observation = RuntimeProviderAttempt.objects.create(
             workspace=stored_invocation.workspace,
             project=stored_invocation.project,

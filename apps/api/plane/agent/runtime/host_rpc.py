@@ -33,6 +33,13 @@ MAX_HOST_REQUEST_BYTES = 16 * 1024
 MAX_HOST_RESULT_BYTES = 8 * 1024
 MAX_HOST_INPUT_BYTES = 8 * 1024
 MAX_HOST_CALLS = 32
+# Provider-attempt evidence has three normal lifecycle notices (intent,
+# started, terminal) and may need one terminal fallback when a required
+# notice is rejected. Keep that bounded audit channel separate from the
+# model/tool callback budget while retaining the provider sequence ceiling.
+MAX_PROVIDER_ATTEMPT_SEQUENCE = 256
+MAX_PROVIDER_ATTEMPT_NOTICES_PER_SEQUENCE = 4
+MAX_HOST_OBSERVATION_CALLS = MAX_PROVIDER_ATTEMPT_SEQUENCE * MAX_PROVIDER_ATTEMPT_NOTICES_PER_SEQUENCE
 MAX_HOST_OPERATION_REF_BYTES = 256
 MAX_HOST_CONTENT_BYTES = 4 * 1024
 _ACTIONS = {"discover", "read", "mutate", "code", "publish", "observe"}
@@ -241,6 +248,10 @@ class PlaneHostCall:
         }
 
 
+def _is_provider_attempt_observation(call: PlaneHostCall) -> bool:
+    return call.action == "observe" and call.operation_ref == "runtime.provider_attempt"
+
+
 @dataclass(frozen=True)
 class PlaneHostResult:
     """Canonical host response returned to Hermes."""
@@ -340,12 +351,19 @@ class PlaneHostServer:
         socket_path: str | os.PathLike[str],
         invoke: Callable[[PlaneHostCall], PlaneHostResult],
         max_calls: int = MAX_HOST_CALLS,
+        max_observation_calls: int = MAX_HOST_OBSERVATION_CALLS,
         timeout_seconds: float = 5.0,
     ) -> None:
         if not callable(invoke):
             raise TypeError("invoke must be callable")
         if isinstance(max_calls, bool) or not isinstance(max_calls, int) or max_calls <= 0:
             raise ValueError("max_calls must be a positive integer")
+        if (
+            isinstance(max_observation_calls, bool)
+            or not isinstance(max_observation_calls, int)
+            or max_observation_calls <= 0
+        ):
+            raise ValueError("max_observation_calls must be a positive integer")
         if not isinstance(timeout_seconds, (int, float)) or timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
         self.socket_path = Path(socket_path)
@@ -353,6 +371,7 @@ class PlaneHostServer:
             raise ValueError("socket_path must be absolute")
         self._invoke = invoke
         self._max_calls = max_calls
+        self._max_observation_calls = max_observation_calls
         self._timeout_seconds = float(timeout_seconds)
         self._listener: socket.socket | None = None
         self._thread: threading.Thread | None = None
@@ -361,6 +380,7 @@ class PlaneHostServer:
         self._error: BaseException | None = None
         self._records: dict[str, PlaneHostResult] = {}
         self._call_count = 0
+        self._observation_count = 0
         self._lock = threading.RLock()
 
     @property
@@ -371,6 +391,11 @@ class PlaneHostServer:
     def call_count(self) -> int:
         with self._lock:
             return self._call_count
+
+    @property
+    def observation_count(self) -> int:
+        with self._lock:
+            return self._observation_count
 
     def start(self) -> None:
         if self._thread is not None:
@@ -487,18 +512,32 @@ class PlaneHostServer:
                     error_message=replay.error_message,
                     publication=replay.publication,
                 )
-            if self._call_count >= self._max_calls:
-                return PlaneHostResult(
-                    request_ref=call.request_ref,
-                    correlation_id=call.correlation_id,
-                    idempotency_key=call.idempotency_key,
-                    status="denied",
-                    replayed=False,
-                    output=None,
-                    error_code="HOST_BUDGET_EXCEEDED",
-                    error_message="Plane host callback budget exhausted",
-                )
-            self._call_count += 1
+            if _is_provider_attempt_observation(call):
+                if self._observation_count >= self._max_observation_calls:
+                    return PlaneHostResult(
+                        request_ref=call.request_ref,
+                        correlation_id=call.correlation_id,
+                        idempotency_key=call.idempotency_key,
+                        status="denied",
+                        replayed=False,
+                        output=None,
+                        error_code="HOST_OBSERVATION_BUDGET_EXCEEDED",
+                        error_message="Plane provider-attempt observation budget exhausted",
+                    )
+                self._observation_count += 1
+            else:
+                if self._call_count >= self._max_calls:
+                    return PlaneHostResult(
+                        request_ref=call.request_ref,
+                        correlation_id=call.correlation_id,
+                        idempotency_key=call.idempotency_key,
+                        status="denied",
+                        replayed=False,
+                        output=None,
+                        error_code="HOST_BUDGET_EXCEEDED",
+                        error_message="Plane host callback budget exhausted",
+                    )
+                self._call_count += 1
         try:
             result = self._invoke(call)
             if not isinstance(result, PlaneHostResult):
@@ -691,6 +730,7 @@ class PlaneHostHTTPServer:
         invoke: Callable[[PlaneHostCall], PlaneHostResult],
         timeout_seconds: float = 5.0,
         max_calls: int = MAX_HOST_CALLS,
+        max_observation_calls: int = MAX_HOST_OBSERVATION_CALLS,
     ) -> None:
         if not bind_host or not isinstance(bind_host, str) or len(bind_host) > 255 or "\x00" in bind_host:
             raise PlaneHostRPCError("host bind address is invalid")
@@ -702,6 +742,14 @@ class PlaneHostHTTPServer:
             # Ephemeral ports are useful for local tests; production passes a
             # fixed internal-only port from Compose.
             pass
+        if isinstance(max_calls, bool) or not isinstance(max_calls, int) or max_calls <= 0:
+            raise PlaneHostRPCError("max_calls must be a positive integer")
+        if (
+            isinstance(max_observation_calls, bool)
+            or not isinstance(max_observation_calls, int)
+            or max_observation_calls <= 0
+        ):
+            raise PlaneHostRPCError("max_observation_calls must be a positive integer")
         self.bind_host = bind_host
         self.advertised_host = advertised_host
         self.port = port
@@ -709,8 +757,10 @@ class PlaneHostHTTPServer:
         self._invoke = invoke
         self._timeout_seconds = PlaneHostHTTPClient._validate_timeout(timeout_seconds)
         self._max_calls = max_calls
+        self._max_observation_calls = max_observation_calls
         self._records: dict[str, PlaneHostResult] = {}
         self._call_count = 0
+        self._observation_count = 0
         self._lock = threading.RLock()
         self._server: _PlaneHostHTTPServer | None = None
         self._thread: threading.Thread | None = None
@@ -749,6 +799,16 @@ class PlaneHostHTTPServer:
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         self.close()
 
+    @property
+    def call_count(self) -> int:
+        with self._lock:
+            return self._call_count
+
+    @property
+    def observation_count(self) -> int:
+        with self._lock:
+            return self._observation_count
+
     def _invoke_once(self, call: PlaneHostCall) -> PlaneHostResult:
         with self._lock:
             replay = self._records.get(call.request_ref)
@@ -764,18 +824,32 @@ class PlaneHostHTTPServer:
                     error_message=replay.error_message,
                     publication=replay.publication,
                 )
-            if self._call_count >= self._max_calls:
-                return PlaneHostResult(
-                    request_ref=call.request_ref,
-                    correlation_id=call.correlation_id,
-                    idempotency_key=call.idempotency_key,
-                    status="denied",
-                    replayed=False,
-                    output=None,
-                    error_code="HOST_BUDGET_EXCEEDED",
-                    error_message="Plane host callback budget exhausted",
-                )
-            self._call_count += 1
+            if _is_provider_attempt_observation(call):
+                if self._observation_count >= self._max_observation_calls:
+                    return PlaneHostResult(
+                        request_ref=call.request_ref,
+                        correlation_id=call.correlation_id,
+                        idempotency_key=call.idempotency_key,
+                        status="denied",
+                        replayed=False,
+                        output=None,
+                        error_code="HOST_OBSERVATION_BUDGET_EXCEEDED",
+                        error_message="Plane provider-attempt observation budget exhausted",
+                    )
+                self._observation_count += 1
+            else:
+                if self._call_count >= self._max_calls:
+                    return PlaneHostResult(
+                        request_ref=call.request_ref,
+                        correlation_id=call.correlation_id,
+                        idempotency_key=call.idempotency_key,
+                        status="denied",
+                        replayed=False,
+                        output=None,
+                        error_code="HOST_BUDGET_EXCEEDED",
+                        error_message="Plane host callback budget exhausted",
+                    )
+                self._call_count += 1
         result = self._invoke(call)
         if not isinstance(result, PlaneHostResult):
             raise PlaneHostRPCError("host callback returned an invalid result")
@@ -1013,11 +1087,14 @@ def build_gateway_host_port(
 __all__ = [
     "HOST_PROTOCOL",
     "MAX_HOST_CALLS",
+    "MAX_HOST_OBSERVATION_CALLS",
     "MAX_HOST_CONTENT_BYTES",
     "MAX_HOST_INPUT_BYTES",
     "MAX_HOST_OPERATION_REF_BYTES",
     "MAX_HOST_REQUEST_BYTES",
     "MAX_HOST_RESULT_BYTES",
+    "MAX_PROVIDER_ATTEMPT_NOTICES_PER_SEQUENCE",
+    "MAX_PROVIDER_ATTEMPT_SEQUENCE",
     "HOST_HTTP_PATH",
     "PlaneHostHTTPClient",
     "PlaneHostHTTPServer",
