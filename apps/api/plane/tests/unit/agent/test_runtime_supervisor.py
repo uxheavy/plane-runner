@@ -139,6 +139,20 @@ class BudgetExhaustedRuntimeTransport:
         )
 
 
+class CompletedWithoutOutcomeRuntimeTransport:
+    def __init__(self):
+        self.calls = 0
+
+    def dispatch(self, snapshot_json, envelope_json):
+        self.calls += 1
+        frames = list(_runtime_frames(json.loads(snapshot_json), json.loads(envelope_json)))
+        exit_frame = json.loads(frames[-1])
+        exit_frame["kind"] = "completed"
+        exit_frame.pop("failure", None)
+        frames[-1] = json.dumps(exit_frame, sort_keys=True, separators=(",", ":"))
+        return tuple(frames)
+
+
 class StaticRuntimeTransport:
     def __init__(self, frames):
         self.frames = tuple(frames)
@@ -707,6 +721,32 @@ def test_supervisor_preserves_finite_runtime_budget_failure_through_terminal_out
     assert json.loads(control.failure_reason) == expected
     assert json.loads(terminal.reason) == expected
     assert expected["failureSubreason"] in _supervisor_result_output(result)
+    assert transport.calls == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_supervisor_preserves_missing_outcome_failure_through_terminal_output(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    run, invocation = _invocation(workspace, gateway_project, gateway_issue, create_user, suffix="missing-outcome")
+    transport = CompletedWithoutOutcomeRuntimeTransport()
+
+    result = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
+
+    expected = {
+        "failureCode": "missing_outcome",
+        "failurePhase": "runtime_supervisor",
+        "failureDetail": "missing_outcome",
+        "failureSubreason": "completed_without_explicit_outcome",
+    }
+    control = RuntimeInvocationControl.objects.get(invocation=invocation)
+    terminal = RunTerminalEvent.objects.get(invocation=invocation, visible=True)
+    assert result.state == InvocationState.FAILED
+    assert result.failure == expected
+    assert control.failure_code == "missing_outcome"
+    assert json.loads(control.failure_reason) == expected
+    assert json.loads(terminal.reason) == expected
+    assert "completed_without_explicit_outcome" in _supervisor_result_output(result)
     assert transport.calls == 1
 
 

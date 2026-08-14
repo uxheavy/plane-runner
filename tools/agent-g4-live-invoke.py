@@ -120,6 +120,11 @@ def build_failure_evidence(
     terminal_kind,
     failure_code=None,
     failure_reason=None,
+    runtime_exit=None,
+    runtime_event_kind_counts=None,
+    terminal_code=None,
+    terminal_reason=None,
+    plane_host_operation_receipts=False,
 ):
     """Return one bounded failure object without copying runtime observations."""
 
@@ -180,6 +185,7 @@ def build_failure_evidence(
         "runtime_process_output_invalid",
         "runtime_supervisor_pre_dispatch_failure",
         "budget_exhausted",
+        "missing_outcome",
         "outcome_unknown",
     }
     reason_phases = {"runtime_transport", "runtime_configuration", "runtime_process", "launcher", "runtime_supervisor"}
@@ -192,6 +198,7 @@ def build_failure_evidence(
         "process_cancelled",
         "process_output_invalid",
         "unclassified_exception",
+        "missing_outcome",
     }
     failure_subreasons = {
         "credential_reference_not_allowed",
@@ -210,7 +217,21 @@ def build_failure_evidence(
         "provider_attempt_evidence_rejected",
         "runtime_configuration_rejected",
         "model_call_budget_exhausted",
+        "completed_without_explicit_outcome",
     }
+    runtime_exit_kinds = {"completed", "waiting_for_input", "failed", "blocked", "cancelled"}
+    runtime_failure_codes = {"budget_exhausted"}
+    runtime_event_kinds = {
+        "progress_observed",
+        "conversation_publication_observed",
+        "input_request_observed",
+        "artifact_observed",
+        "usage_observed",
+        "outcome_submission_observed",
+        "failure_observed",
+        "blocker_observed",
+    }
+    terminal_reason_categories = failure_details | failure_subreasons
 
     def bounded_identifier(value):
         if value is None:
@@ -291,12 +312,6 @@ def build_failure_evidence(
             }
         )
 
-    if terminal_kind not in terminal_kinds:
-        terminal_kind = "unknown"
-    if terminal_kind == "unknown":
-        terminal = {"present": False, "kind": "unknown"}
-    else:
-        terminal = {"present": terminal_kind != "none", "kind": terminal_kind}
     if not isinstance(exit_code, int) or isinstance(exit_code, bool) or not 1 <= exit_code <= 255:
         exit_code = 1
 
@@ -334,6 +349,58 @@ def build_failure_evidence(
         else "unavailable"
     )
 
+    bounded_runtime_exit = {"present": False, "kind": "unknown", "failure": None}
+    if isinstance(runtime_exit, dict):
+        runtime_exit_kind = runtime_exit.get("kind")
+        bounded_runtime_exit["present"] = True
+        bounded_runtime_exit["kind"] = (
+            runtime_exit_kind if runtime_exit_kind in runtime_exit_kinds else "unknown"
+        )
+        runtime_failure = runtime_exit.get("failure")
+        if isinstance(runtime_failure, dict):
+            runtime_failure_code = runtime_failure.get("code")
+            bounded_runtime_exit["failure"] = {
+                "code": runtime_failure_code if runtime_failure_code in runtime_failure_codes else "unavailable",
+                "retryable": runtime_failure.get("retryable") is True,
+            }
+
+    bounded_event_kind_counts = {}
+    if isinstance(runtime_event_kind_counts, dict):
+        for kind, count in list(runtime_event_kind_counts.items())[: len(runtime_event_kinds)]:
+            if kind not in runtime_event_kinds:
+                continue
+            if isinstance(count, bool) or not isinstance(count, int) or not 0 <= count <= 256:
+                continue
+            bounded_event_kind_counts[kind] = count
+
+    bounded_terminal_code = (
+        terminal_code if isinstance(terminal_code, str) and terminal_code in failure_codes else "unavailable"
+    )
+    bounded_terminal_reason_category = "unavailable"
+    if isinstance(terminal_reason, str):
+        try:
+            terminal_reason_value = json.loads(terminal_reason)
+        except (TypeError, ValueError):
+            terminal_reason_value = None
+        if isinstance(terminal_reason_value, dict):
+            category = terminal_reason_value.get("failureSubreason") or terminal_reason_value.get("failureDetail")
+            if category in terminal_reason_categories:
+                bounded_terminal_reason_category = category
+
+    if terminal_kind not in terminal_kinds:
+        terminal_kind = "unknown"
+    if terminal_kind == "unknown":
+        terminal = {"present": False, "kind": "unknown"}
+    else:
+        terminal = {"present": terminal_kind != "none", "kind": terminal_kind}
+    if terminal["present"]:
+        terminal.update(
+            {
+                "code": bounded_terminal_code,
+                "reasonCategory": bounded_terminal_reason_category,
+            }
+        )
+
     return {
         "schemaVersion": "plane-agent-g4/live-failure/v1",
         "status": "failed",
@@ -353,8 +420,11 @@ def build_failure_evidence(
             "id": bounded_identifier(invocation_id),
             "state": bounded_state(invocation_state),
         },
+        "runtimeExit": bounded_runtime_exit,
+        "runtimeEventIngress": {"kindCounts": bounded_event_kind_counts},
         "providerAttempts": attempts,
         "terminal": terminal,
+        "planeHostOperationReceipts": plane_host_operation_receipts is True,
     }
 
 
@@ -403,6 +473,9 @@ def main() -> int:
     provider_attempts = []
     terminal = None
     control = None
+    exit_evidence = None
+    runtime_event_kind_counts = {}
+    plane_host_operation_receipts = False
     supervisor_failure_reason = None
 
     def readback():
@@ -411,7 +484,14 @@ def main() -> int:
         attempts = list(RuntimeProviderAttempt.objects.filter(invocation=invocation).order_by("sequence")[:32])
         current_terminal = RunTerminalEvent.objects.filter(invocation=invocation, visible=True).first()
         control = RuntimeInvocationControl.objects.filter(invocation=invocation).first()
-        return attempts, current_terminal, control
+        current_exit = RuntimeExitEvidence.objects.filter(invocation=invocation).first()
+        event_kind_counts = {}
+        for kind in RuntimeEventIngress.objects.filter(invocation=invocation).order_by("sequence").values_list(
+            "kind", flat=True
+        )[:256]:
+            event_kind_counts[kind] = min(event_kind_counts.get(kind, 0) + 1, 256)
+        host_receipts = OperationGatewayAudit.objects.filter(correlation_id=f"correlation:{run.id}").exists()
+        return attempts, current_terminal, control, current_exit, event_kind_counts, host_receipts
 
     try:
         email = f"g4-live-{suffix}@plane.test"
@@ -482,8 +562,14 @@ def main() -> int:
             stderr=stderr,
         )
         supervisor_failure_reason = _supervisor_failure_reason(stdout.getvalue())
-        invocation.refresh_from_db()
-        run.refresh_from_db()
+        (
+            provider_attempts,
+            terminal,
+            control,
+            exit_evidence,
+            runtime_event_kind_counts,
+            plane_host_operation_receipts,
+        ) = readback()
         correlation_id = f"correlation:{run.id}"
         audits = OperationGatewayAudit.objects.filter(correlation_id=correlation_id)
         permitted = audits.filter(phase="outcome", outcome="success", operation_id="work_item.read").exists()
@@ -494,9 +580,7 @@ def main() -> int:
         ).exists()
         submitted = audits.filter(phase="outcome", outcome="success", operation_id="agent.outcome.submit").exists()
         published = audits.filter(phase="outcome", outcome="success", operation_id="agent.outcome.publish").exists()
-        terminal = RunTerminalEvent.objects.filter(run=run, visible=True).first()
         usage = RuntimeUsageObservation.objects.filter(invocation=invocation).first()
-        exit_evidence = RuntimeExitEvidence.objects.filter(invocation=invocation).first()
         event_count = RuntimeEventIngress.objects.filter(invocation=invocation).count()
         outcome_count = OutcomeSubmission.objects.filter(run=run).count()
         if (
@@ -581,7 +665,14 @@ def main() -> int:
         if invocation is not None:
             try:
                 reconcile_provider_attempts(invocation)
-                provider_attempts, terminal, control = readback()
+                (
+                    provider_attempts,
+                    terminal,
+                    control,
+                    exit_evidence,
+                    runtime_event_kind_counts,
+                    plane_host_operation_receipts,
+                ) = readback()
                 if (
                     failure is not None
                     and terminal is None
@@ -604,15 +695,31 @@ def main() -> int:
                             else "Live G4 supervisor invocation failed before provider completion."
                         ),
                     )
-                    provider_attempts, terminal, control = readback()
+                    (
+                        provider_attempts,
+                        terminal,
+                        control,
+                        exit_evidence,
+                        runtime_event_kind_counts,
+                        plane_host_operation_receipts,
+                    ) = readback()
             except BaseException as exc:
                 if failure is None:
                     failure = exc
                 return_code = 1
                 try:
-                    provider_attempts, terminal, control = readback()
+                    (
+                        provider_attempts,
+                        terminal,
+                        control,
+                        exit_evidence,
+                        runtime_event_kind_counts,
+                        plane_host_operation_receipts,
+                    ) = readback()
                 except BaseException:
                     provider_attempts, terminal, control = [], None, None
+                    exit_evidence, runtime_event_kind_counts = None, {}
+                    plane_host_operation_receipts = False
 
         if failure is not None:
             try:
@@ -642,6 +749,22 @@ def main() -> int:
                 failure_code=control.failure_code if control is not None else None,
                 failure_reason=supervisor_failure_reason
                 or (control.failure_reason if control is not None else None),
+                runtime_exit=(
+                    {
+                        "kind": exit_evidence.kind,
+                        "failure": (
+                            exit_evidence.raw_payload.get("failure")
+                            if isinstance(exit_evidence.raw_payload, dict)
+                            else None
+                        ),
+                    }
+                    if exit_evidence is not None
+                    else None
+                ),
+                runtime_event_kind_counts=runtime_event_kind_counts,
+                terminal_code=control.failure_code if control is not None else None,
+                terminal_reason=terminal.reason if terminal is not None else None,
+                plane_host_operation_receipts=plane_host_operation_receipts,
             )
 
     print(json.dumps(evidence, sort_keys=True, separators=(",", ":")))

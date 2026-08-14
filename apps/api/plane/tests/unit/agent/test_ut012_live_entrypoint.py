@@ -119,7 +119,7 @@ def _host_call(client, snapshot, envelope, *, action, operation_ref, input_value
     )
 
 
-def _completed_frames(snapshot, envelope):
+def _runtime_exit_frames(snapshot, envelope, *, kind="completed", failure=None):
     event = {
         "protocol": "plane.agent-runtime/v1",
         "trust": "untrusted",
@@ -150,16 +150,32 @@ def _completed_frames(snapshot, envelope):
         "idempotencyKey": envelope["idempotencyKey"],
         "correlationId": envelope["correlationId"],
         "causationRef": envelope["causationRef"],
-        "kind": "completed",
+        "kind": kind,
     }
+    if failure is not None:
+        exit_frame["failure"] = failure
     return tuple(json.dumps(frame, sort_keys=True, separators=(",", ":")) for frame in (event, exit_frame))
 
 
+def _completed_frames(snapshot, envelope):
+    return _runtime_exit_frames(snapshot, envelope)
+
+
 class _FakeLiveRuntime:
-    def __init__(self, *, reject=False, provider_free=False, failure=None):
+    def __init__(
+        self,
+        *,
+        reject=False,
+        provider_free=False,
+        failure=None,
+        runtime_exit_failure=None,
+        completed_without_outcome=False,
+    ):
         self.reject = reject
         self.provider_free = provider_free
         self.failure = failure
+        self.runtime_exit_failure = runtime_exit_failure
+        self.completed_without_outcome = completed_without_outcome
         self.dispatches = []
         self.fake_provider_calls = 0
         self.host_statuses = []
@@ -187,6 +203,15 @@ class _FakeLiveRuntime:
                 failure_detail=self.failure["failureDetail"],
                 failure_subreason=self.failure.get("failureSubreason"),
             )
+        if self.runtime_exit_failure is not None:
+            return _runtime_exit_frames(
+                snapshot,
+                envelope,
+                kind="failed",
+                failure=self.runtime_exit_failure,
+            )
+        if self.completed_without_outcome:
+            return _completed_frames(snapshot, envelope)
 
         client = PlaneHostHTTPClient(url=body["host"]["url"], auth_token=body["host"]["token"])
         if not self.provider_free:
@@ -459,6 +484,70 @@ def test_ut014_exact_live_helper_preserves_canonical_process_failure_receipt(
         "fake-runtime-token",
     ):
         assert raw_value not in persisted_and_reported
+
+
+@pytest.mark.django_db(transaction=True)
+def test_exact_live_helper_preserves_budget_exit_and_bounded_failure_readback(
+    monkeypatch, tmp_path, capsys
+):
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        host_port = probe.getsockname()[1]
+    fake_runtime = _FakeLiveRuntime(
+        runtime_exit_failure={
+            "code": "budget_exhausted",
+            "message": "model output contains provider-secret=must-not-leak",
+            "retryable": False,
+        }
+    )
+
+    assert _run_literal_live_helper(monkeypatch, fake_runtime, tmp_path, host_port) == 1
+    evidence = json.loads(capsys.readouterr().out)
+
+    assert evidence["failure"]["reasonCode"] == "budget_exhausted"
+    assert evidence["runtimeExit"] == {
+        "present": True,
+        "kind": "failed",
+        "failure": {"code": "budget_exhausted", "retryable": False},
+    }
+    assert evidence["runtimeEventIngress"] == {"kindCounts": {"usage_observed": 1}}
+    assert evidence["terminal"] == {
+        "present": True,
+        "kind": "run_failure",
+        "code": "budget_exhausted",
+        "reasonCategory": "model_call_budget_exhausted",
+    }
+    assert evidence["planeHostOperationReceipts"] is False
+    assert "provider-secret=must-not-leak" not in json.dumps(evidence)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_exact_live_helper_preserves_missing_outcome_readback(
+    monkeypatch, tmp_path, capsys
+):
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        host_port = probe.getsockname()[1]
+    fake_runtime = _FakeLiveRuntime(completed_without_outcome=True)
+
+    assert _run_literal_live_helper(monkeypatch, fake_runtime, tmp_path, host_port) == 1
+    evidence = json.loads(capsys.readouterr().out)
+
+    assert evidence["failure"]["reasonCode"] == "missing_outcome"
+    assert evidence["failure"]["reasonSubreason"] == "completed_without_explicit_outcome"
+    assert evidence["runtimeExit"] == {
+        "present": True,
+        "kind": "completed",
+        "failure": None,
+    }
+    assert evidence["runtimeEventIngress"] == {"kindCounts": {"usage_observed": 1}}
+    assert evidence["terminal"] == {
+        "present": True,
+        "kind": "run_failure",
+        "code": "missing_outcome",
+        "reasonCategory": "completed_without_explicit_outcome",
+    }
+    assert evidence["planeHostOperationReceipts"] is False
 
 
 @pytest.mark.django_db(transaction=True)

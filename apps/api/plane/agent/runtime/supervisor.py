@@ -79,6 +79,22 @@ class SupervisorResult:
     failure: dict[str, str] | None = None
 
 
+_FAILURE_CLASSIFICATIONS: dict[str, dict[str, str]] = {
+    "budget_exhausted": {
+        "failureCode": "budget_exhausted",
+        "failurePhase": "runtime_process",
+        "failureDetail": "process_exit",
+        "failureSubreason": "model_call_budget_exhausted",
+    },
+    "missing_outcome": {
+        "failureCode": "missing_outcome",
+        "failurePhase": "runtime_supervisor",
+        "failureDetail": "missing_outcome",
+        "failureSubreason": "completed_without_explicit_outcome",
+    },
+}
+
+
 @dataclass(frozen=True)
 class _Claim:
     invocation: RuntimeInvocation
@@ -182,6 +198,7 @@ def _terminalize(
     outcome_unknown: bool = False,
     failure: dict[str, str] | None = None,
 ) -> SupervisorResult:
+    failure = failure or _FAILURE_CLASSIFICATIONS.get(code)
     with transaction.atomic():
         _assignment, _run, invocation = lock_invocation_path(invocation_id)
         control = _control(invocation, lock=True)
@@ -230,14 +247,11 @@ def _serialized_failure(reason: dict[str, str]) -> str:
 def _runtime_exit_failure_classification(failure: object) -> dict[str, str] | None:
     """Return a bounded live envelope for a finite child terminal failure."""
 
-    if not isinstance(failure, dict) or failure.get("code") != "budget_exhausted":
+    if not isinstance(failure, dict):
         return None
-    return {
-        "failureCode": "budget_exhausted",
-        "failurePhase": "runtime_process",
-        "failureDetail": "process_exit",
-        "failureSubreason": "model_call_budget_exhausted",
-    }
+    code = failure.get("code")
+    classification = _FAILURE_CLASSIFICATIONS.get(code)
+    return dict(classification) if classification is not None else None
 
 
 def _terminalize_dispatch_failure(
@@ -423,11 +437,13 @@ def _finish_exit(invocation: RuntimeInvocation, accepted_frames: int) -> Supervi
     if exit_evidence.kind == "completed":
         terminal = RunTerminalEvent.objects.filter(invocation=invocation).first()
         if terminal is None or terminal.kind != "outcome_submission":
+            failure = _FAILURE_CLASSIFICATIONS["missing_outcome"]
             return _terminalize(
                 invocation.pk,
                 kind="run_failure",
-                reason="Runtime completed without an explicit Plane outcome submission.",
+                reason=_serialized_failure(failure),
                 code="missing_outcome",
+                failure=failure,
             )
         _release(invocation.pk)
         invocation.refresh_from_db()

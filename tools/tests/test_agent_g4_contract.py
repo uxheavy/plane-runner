@@ -962,6 +962,21 @@ class G4ContractTests(unittest.TestCase):
                 '{"failureCode":"runtime_process_failed","failurePhase":"launcher",'
                 '"failureDetail":"authorization=secret-token"}'
             ),
+            runtime_exit={
+                "kind": "failed",
+                "failure": {
+                    "code": "budget_exhausted",
+                    "retryable": False,
+                    "message": "raw model text must not be copied",
+                },
+            },
+            runtime_event_kind_counts={"usage_observed": 1, "unknown_kind": 7},
+            terminal_code="budget_exhausted",
+            terminal_reason=(
+                '{"failureCode":"budget_exhausted","failurePhase":"runtime_process",'
+                '"failureDetail":"process_exit","failureSubreason":"model_call_budget_exhausted"}'
+            ),
+            plane_host_operation_receipts=False,
         )
         encoded = json.dumps(evidence, sort_keys=True, separators=(",", ":"))
         self.assertEqual(evidence["schemaVersion"], "plane-agent-g4/live-failure/v1")
@@ -969,11 +984,38 @@ class G4ContractTests(unittest.TestCase):
         self.assertLessEqual(len(encoded.encode("utf-8")), 4096)
         self.assertEqual(
             set(evidence),
-            {"schemaVersion", "status", "binding", "failure", "run", "invocation", "providerAttempts", "terminal"},
+            {
+                "schemaVersion",
+                "status",
+                "binding",
+                "failure",
+                "run",
+                "invocation",
+                "runtimeExit",
+                "runtimeEventIngress",
+                "providerAttempts",
+                "terminal",
+                "planeHostOperationReceipts",
+            },
         )
         for forbidden in ("do not include", "prompt", "response", "credential", "payload", "rawLogs"):
             self.assertNotIn(forbidden, encoded)
         self.assertNotRegex(encoded, re.compile(r"(?i)(password|secret|token|api[_-]?key|authorization|credential)"))
+        self.assertEqual(
+            evidence["runtimeExit"],
+            {"present": True, "kind": "failed", "failure": {"code": "budget_exhausted", "retryable": False}},
+        )
+        self.assertEqual(evidence["runtimeEventIngress"], {"kindCounts": {"usage_observed": 1}})
+        self.assertEqual(
+            evidence["terminal"],
+            {
+                "present": True,
+                "kind": "run_failure",
+                "code": "budget_exhausted",
+                "reasonCategory": "model_call_budget_exhausted",
+            },
+        )
+        self.assertFalse(evidence["planeHostOperationReceipts"])
         self.assertEqual(
             evidence["failure"],
             {
