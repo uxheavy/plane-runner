@@ -1110,3 +1110,88 @@ directory, and runtime secret cleanup completed; post-run label checks were
 empty. The task-tagged API/runtime images, exact disposable clones, and fresh
 manifest/authority/config were removed. The owner credential source was
 untouched and Colima was not stopped.
+
+## Wave 0AC — exact 4f8d341518 / Hermes 21826 single fresh S00
+
+Status: failed at the first finite live API-invocation result. Exactly one
+fresh isolated S00 ran. No retry, replay, second provider call, source fix,
+broad verifier, rollout, deployment, UI, or unrelated suite ran.
+
+### Exact binding and bounded preflight
+
+- Plane source: `4f8d3415189f6767daf991b50343fd8884e93918`.
+- Hermes source: `21826c256bc1fc8f56e6469e752cb2a5b991ac58`; disposable clone
+  origin normalized only to `https://github.com/uxheavy/hermes-agent.git`.
+- API image: `plane-agent-api:s00-4f8d341518`, digest
+  `sha256:f52077589af029e7e1c2b8fd7962c731d119a8fc92ff92b0aba7cc3f25953ce4`,
+  source label exact Plane SHA, artifact `plane-agent-api-g4`, contract
+  `plane.operation/v1`.
+- Runtime image: `plane-agent-runtime:s00-4f8d341518-hermes-21826`, digest
+  `sha256:1061c48002e56c575e804a5ec58922b34034b599ed67736bc9d07a81590b7d99`,
+  Hermes tree digest
+  `2b3c5ca66f93c1cdbb413c5d60b43dd92674dffc5f6d8b10b6b5b3d89e9287ef`, Plane
+  runtime source digest
+  `f55d6ee5260b49bc396f42b18840e5fcf60e9252b09a1ac8409964073e673dac`,
+  contract `plane.agent-runtime/v1`.
+- Fresh manifest/authority/config SHA-256:
+  `d83215ad40072bc16f1f9ea4ddeb420a4df1d896c938d4a777f13a5aa24bf0f2` /
+  `62f4a927bb19d86c48f9b66a02ee24fc626e0f53ee422680405ea116a831330a` /
+  `22c685d27638066731d8950efeb28268cc673cffdb06ea8d7e1752a7775162c0`.
+- Provider/model: ChatGPT subscription, `openai-codex/gpt-5.6-luna`, fallback
+  disabled; the integrated provider relay was
+  `plane-agent-runtime/provider-relay/v1` over AF_UNIX. Config-only validation
+  passed before the owner-only source was accessed; no credential value was
+  retained. Command SHA-256:
+  `32756a110745e4b69a3c8627021527a073ac7c434b5cd6659483245674954060`.
+- The exact built-API provider-free final-shape probe passed before provider
+  access with output `PLANE_S00_PROVIDER_FREE_START_PROBE=passed`,
+  `--network none`, read-only `/run/secrets`, sibling
+  `/run/plane-agent-runtime-secret`, and stdin-fed Python. Synthetic probe
+  resources were cleaned.
+
+### One fresh live journey
+
+Redacted command:
+
+`PLANE_G4_EXPECTED_CANDIDATE=<4f8d...> PLANE_G4_LIVE_AUTHORITY=<tmp>/s00-wave0ac-authority.json PLANE_G4_LIVE_CONFIG=<tmp>/s00-wave0ac-config.json PLANE_G4_LIVE_MANIFEST=<tmp>/s00-wave0ac-manifest.json PLANE_G4_LIVE_RESULT_PATH=<tmp>/s00-wave0ac-live-result.json PLANE_G4_LIVE_COMMAND='bash tools/agent-g4-live.sh' PLANE_G4_PROVIDER_SECRET_SOURCE=<owner-only-chatgpt-subscription-source> bash tools/agent-g4-live.sh`
+
+The runner configured an isolated workspace and issue named `G4 Live Issue`.
+Fresh run `69933c8b-6897-40b8-acbd-5c83fa6bd086` and invocation
+`invocation:2f2ccdc4-e5e7-4966-8a77-c20dda01d546` were created. The live
+command returned exit `1` at `api-invocation`.
+
+- Provider attempts were exactly 16, sequences `1..16`; all were `completed`,
+  upstream initiated, `2xx`, and had empty error codes. No fallback was used.
+- Runtime event ingress contained 33 `progress_observed` events. RuntimeExit
+  was present with kind `failed`, code `runtime_error`, and `retryable=false`.
+  Failure phase/detail/subreason were `runtime_process` / `process_exit` /
+  `runtime_execution_failed`.
+- The terminal event was one `run_failure` with code `runtime_error` and
+  reason category `runtime_execution_failed`.
+- `planeHostOperationReceipts=true`, but the bounded result retained no
+  actor/profile/assignment refs, durable workspace/project/issue counts,
+  permitted Plane read receipt, denied evaluator receipt, OutcomeSubmission,
+  publication, terminal product event, durable readback, or
+  transcript/publication separation refs. The required product journey was
+  not reached or proven; ordinary model final text was not treated as
+  publication. Exact dispatch replay was not run.
+
+### Cleanup and decision
+
+The explicit result path was absent before start. After exit, the bounded
+result was mode `0600`, size `3260` bytes, schema/binding/sequence/runtime/
+terminal validation passed, and its SHA-256 was
+`5a03b57b21351c3687b2959eb7db297ab9fd0d6892fb8e6cd54cbe33565968ba`. It was
+deleted with absence acknowledged; raw `ERROR_FILE` was never read or
+retained.
+
+Task containers, networks, volumes, run directory, staged source, runtime
+secret, exact disposable clones, task images, and fresh manifest/authority/
+config artifacts were removed; post-run task-resource checks were empty. The
+owner credential source was untouched and Colima was left running.
+
+First owner: runtime/Hermes execution after provider exchange. No Plane source
+fault is claimed because the finite `runtime_error` /
+`runtime_execution_failed` classification survived through `SupervisorResult`,
+durable terminal state, and the bounded receipt. S00 is `FAIL` and does not
+unlock W/M/O.
