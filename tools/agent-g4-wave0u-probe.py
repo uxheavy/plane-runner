@@ -174,8 +174,10 @@ finally:
         gateway.send_signal(signal.SIGTERM)
     gateway_stdout, gateway_stderr = gateway.communicate(timeout=10)
     provider_calls = Path('/tmp/g4-provider-call-count').read_text(encoding='utf-8') if Path('/tmp/g4-provider-call-count').exists() else 'missing'
-    if provider_calls != '16':
-        raise RuntimeError(f'bounded provider call count was {{provider_calls!r}}, expected 16')
+    if provider_calls != '17':
+        raise RuntimeError(
+            f'bounded provider call count was {{provider_calls!r}}, expected 16 successful exchanges plus one boundary rejection'
+        )
     print(json.dumps({{'serviceReturncode': service.returncode, 'serviceStdout': stdout[-2000:], 'serviceStderr': stderr[-4000:], 'gatewayReturncode': gateway.returncode, 'gatewayStderr': gateway_stderr[-1000:], 'providerCalls': provider_calls}}, sort_keys=True))
 """
     result = subprocess.run(
