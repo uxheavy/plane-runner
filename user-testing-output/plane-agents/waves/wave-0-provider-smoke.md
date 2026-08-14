@@ -1043,3 +1043,70 @@ authority/config/manifest were removed after evidence capture. The one-line
 bounded receipt remains as non-secret task evidence; the owner credential
 source was not changed or retained. No replay or additional provider exchange
 ran. S00 is `FAIL` and does not unlock W/M/O.
+
+## Wave 0AB — exact d2e8d541 / Hermes 21826 single fresh S00
+
+Status: failed at the first finite live API-invocation result. The exact API
+final-shape provider-free probe passed; exactly one fresh live S00 then ran.
+No retry, replay, second live call, source fix, broad verifier, rollout,
+deployment, UI, or unrelated suite ran.
+
+### Exact binding and bounded preflight
+
+- Plane source: `d2e8d541c7cee50815425120e76fd53aebf8b2b3`.
+- Hermes source: `21826c256bc1fc8f56e6469e752cb2a5b991ac58`, disposable clone
+  origin normalized only to `https://github.com/uxheavy/hermes-agent.git`.
+- API image: `plane-agent-api:s00-d2e8d541`, digest
+  `sha256:f79dbf92701652ab8ed159d4320475d27a932494cea76587fad8f7465b9744d9`.
+- Runtime image: `plane-agent-runtime:s00-d2e8d541-hermes-21826`, digest
+  `sha256:9d36a4fbdefe2525c3eda3fa6134c190e2f02d105a004ee57cf12bb439079218`.
+  Hermes tree digest:
+  `2b3c5ca66f93c1cdbb413c5d60b43dd92674dffc5f6d8b10b6b5b3d89e9287ef`;
+  Plane runtime source digest:
+  `97139c416cdd952e67e44345dea7a57aff722b8ef0bb1671c0204463f828490d`.
+- Fresh manifest/authority/config SHA-256:
+  `af6e97a6a86d1ddde0ea7bc97719e2bdc1de6c4b60b566e6f61dd2097d671553` /
+  `c7e5d968f203b9a148285f91b8fc98bc995680549af8654ba407fc58a6888168` /
+  `dd0889a7c450914e4748f760fea4ec5d9bbd6e4361dc281136c25a5441a4d377`.
+- Provider/model: ChatGPT subscription, `openai-codex/gpt-5.6-luna`, fallback
+  disabled. Config-only validation passed before the owner-only source was
+  read. Redacted command:
+  `PLANE_G4_EXPECTED_CANDIDATE=<d2e8...> PLANE_G4_LIVE_AUTHORITY=<tmp>/authority.json PLANE_G4_LIVE_CONFIG=<tmp>/config.json PLANE_G4_LIVE_MANIFEST=<tmp>/manifest.json PLANE_G4_LIVE_RESULT_PATH=<tmp>/s00-wave0ab-result.json PLANE_G4_LIVE_COMMAND='bash tools/agent-g4-live.sh' PLANE_G4_PROVIDER_SECRET_SOURCE=<owner-only-chatgpt-subscription-source> bash tools/agent-g4-live.sh`.
+  Command SHA-256:
+  `dd3c370ffe33e29b0fd940536e67d95de57be761248d5bbd5fc1fb08a95c98c7`.
+- Provider-free final-shape output was
+  `PLANE_S00_PROVIDER_FREE_START_PROBE=passed` under `--network none`, with
+  sibling `/run/plane-agent-runtime-secret`, read-only `/run/secrets`, and
+  stdin-fed Python. Probe cleanup left no labeled volume or secret file.
+
+### One fresh live journey
+
+- Fresh run `67f3f55d-bf30-4e34-8cd0-32c644925ce5` and invocation
+  `invocation:a4629a45-ff2a-4383-9655-a6dc630079e2` were created. The bounded
+  result retained 16 ordered provider exchanges, sequences `1..16`, all
+  completed upstream-initiated `2xx`, plus
+  `runtimeEventIngress.kindCounts={"progress_observed":33}`.
+- Runtime exit was present with `kind=failed` and failure code `unavailable`,
+  `retryable=false`. The one terminal product record was a `run_failure` with
+  code and reason category `unavailable`. The bounded
+  `planeHostOperationReceipts` flag was `true`, but operation-specific
+  permitted-read/denied-evaluator, outcome, publication, and durable readback
+  references were not retained; those required S00 assertions are therefore
+  unproven.
+- The explicit result destination was owner-only and absent before start. The
+  result was read after exit, validated for bounded schema, binding, mode,
+  size, content, ordered attempt sequence, runtime exit, ingress counts, and
+  terminal shape, then hashed as
+  `f998e593c8cf967c1e884756322dbbb094c3711e8522e782c2054d9af648863d` and
+  deleted with acknowledgment. Raw `ERROR_FILE` was not read or retained.
+- Exact dispatch replay was not run. First owner: runtime-to-Plane terminal
+  classification/result handoff after the provider boundary; no Plane source
+  fault is claimed. S00 is `FAIL` and does not unlock W/M/O.
+
+### Cleanup and decision
+
+The live runner's task-labeled container, network, volume, staged source, run
+directory, and runtime secret cleanup completed; post-run label checks were
+empty. The task-tagged API/runtime images, exact disposable clones, and fresh
+manifest/authority/config were removed. The owner credential source was
+untouched and Colima was not stopped.
