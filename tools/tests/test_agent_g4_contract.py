@@ -487,6 +487,9 @@ class G4ContractTests(unittest.TestCase):
                 "    fi\n"
                 "    exit 0\n"
                 "fi\n"
+                "if [ \"$1\" = volume ] && [ \"$2\" = inspect ]; then exit 1; fi\n"
+                "if [ \"$1\" = volume ] && [ \"$2\" = create ]; then exit 0; fi\n"
+                "if [ \"$1\" = volume ] && [ \"$2\" = rm ]; then exit 0; fi\n"
                 "case \" $* \" in *\" --network none \"*) exit 42 ;; esac\n"
                 "exit 0\n",
                 encoding="utf-8",
@@ -512,7 +515,15 @@ class G4ContractTests(unittest.TestCase):
             authority_path = root / "authority.json"
             config_path = root / "config.json"
             provider_source = root / "synthetic-provider-source"
-            provider_source.write_text("synthetic test input", encoding="utf-8")
+            provider_source.write_text(
+                json.dumps(
+                    {
+                        "auth_mode": "chatgpt",
+                        "tokens": {"access_token": "synthetic-owner-only-codex-fixture"},
+                    }
+                ),
+                encoding="utf-8",
+            )
             provider_source.chmod(0o600)
 
             def run_case(manifest: dict, manifest_input: str | None) -> str:
@@ -639,7 +650,12 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn("os.close(source_fd)", runner)
         self.assertIn('mkdir -m 700 -- "${RUN_DIR}"', runner)
         self.assertNotIn('--mount type=bind,src="${PROVIDER_SECRET_SOURCE}"', runner)
-        self.assertIn('--mount type=bind,src="${PROVIDER_SECRET_FILE}"', runner)
+        self.assertNotIn('--mount type=bind,src="${PROVIDER_SECRET_FILE}"', runner)
+        self.assertIn('PROVIDER_SECRET_VOLUME="${PROJECT}_provider_credentials"', runner)
+        self.assertIn(
+            '--mount type=volume,src="${PROVIDER_SECRET_VOLUME}",dst=/run/secrets,volume-nocopy',
+            runner,
+        )
 
     def test_live_runner_uses_one_task_owned_shared_credential_state_volume(self):
         runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
@@ -666,7 +682,7 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn(shared_mount, api)
         self.assertEqual(runner.count('src="${CREDENTIAL_STATE_VOLUME}"'), 2)
         self.assertEqual(runtime.count("--mount type=volume"), 1)
-        self.assertEqual(api.count("--mount type=volume"), 1)
+        self.assertEqual(api.count("--mount type=volume"), 2)
         self.assertEqual(
             runner.count('--env PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE="${CREDENTIAL_STATE_FILE}"'),
             2,
@@ -675,21 +691,26 @@ class G4ContractTests(unittest.TestCase):
         self.assertNotIn("PROVIDER_SECRET_FILE", runtime)
         self.assertNotIn("plane_agent_provider_credentials", runtime)
         self.assertIn(
-            '--mount type=bind,src="${PROVIDER_SECRET_FILE}",'
-            'dst=/run/secrets/plane_agent_provider_credentials,readonly',
+            '--mount type=volume,src="${PROVIDER_SECRET_VOLUME}",'
+            'dst=/run/secrets,readonly,volume-nocopy',
             api,
         )
 
         runtime_remove = cleanup.index('docker rm -f "${RUNTIME}"')
         volume_remove = cleanup.index('docker volume rm "${CREDENTIAL_STATE_VOLUME}"')
+        provider_volume_remove = cleanup.index('docker volume rm "${PROVIDER_SECRET_VOLUME}"')
         compose_down = cleanup.index("docker compose")
         run_dir_delete = cleanup.index('rm -rf -- "${RUN_DIR}"')
         self.assertLess(runtime_remove, volume_remove)
         self.assertLess(compose_down, volume_remove)
+        self.assertLess(volume_remove, provider_volume_remove)
         self.assertLess(volume_remove, run_dir_delete)
+        self.assertLess(provider_volume_remove, run_dir_delete)
         self.assertIn('if [[ "${CREDENTIAL_STATE_VOLUME_CREATED}" -eq 1 ]]; then', cleanup)
+        self.assertIn('if [[ "${PROVIDER_SECRET_VOLUME_CREATED}" -eq 1 ]]; then', cleanup)
         self.assertIn('CREDENTIAL_STATE_VOLUME_CREATED=1', runner[volume_create:runtime_start])
         self.assertEqual(runner.count('docker volume rm "${CREDENTIAL_STATE_VOLUME}"'), 1)
+        self.assertEqual(runner.count('docker volume rm "${PROVIDER_SECRET_VOLUME}"'), 1)
 
     def test_live_runner_creates_missing_tmp_parent_before_pre_provider_boundary(self):
         runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
@@ -740,6 +761,10 @@ class G4ContractTests(unittest.TestCase):
                 "    fi\n"
                 "    exit 0\n"
                 "fi\n"
+                "if [ \"$1\" = volume ] && [ \"$2\" = inspect ]; then exit 1; fi\n"
+                "if [ \"$1\" = volume ] && [ \"$2\" = create ]; then exit 0; fi\n"
+                "if [ \"$1\" = volume ] && [ \"$2\" = rm ]; then exit 0; fi\n"
+                "case \" $* \" in *provider-credentials*) exit 125 ;; esac\n"
                 "case \" $* \" in *\" --network none \"*) exit 42 ;; esac\n"
                 "exit 0\n",
                 encoding="utf-8",
@@ -767,7 +792,15 @@ class G4ContractTests(unittest.TestCase):
             provider_source = root / "synthetic-provider-source"
             authority_path.write_text(json.dumps(authority), encoding="utf-8")
             config_path.write_text(json.dumps(config), encoding="utf-8")
-            provider_source.write_text("synthetic test input", encoding="utf-8")
+            provider_source.write_text(
+                json.dumps(
+                    {
+                        "auth_mode": "chatgpt",
+                        "tokens": {"access_token": "synthetic-owner-only-codex-fixture"},
+                    }
+                ),
+                encoding="utf-8",
+            )
             provider_source.chmod(0o600)
 
             environment = {
@@ -796,23 +829,32 @@ class G4ContractTests(unittest.TestCase):
             self.assertTrue((root / "tmp").is_dir())
             self.assertEqual((root / "tmp").stat().st_mode & 0o777, 0o700)
             self.assertEqual(list((root / "tmp").iterdir()), [])
-            self.assertIn("--network none", docker_log.read_text(encoding="utf-8"))
-            self.assertIn("provider-credentials", docker_log.read_text(encoding="utf-8"))
+            docker_log_text = docker_log.read_text(encoding="utf-8")
+            self.assertIn("--network none", docker_log_text)
+            self.assertIn("provider_credentials", docker_log_text)
+            self.assertIn("type=volume,src=", docker_log_text)
+            self.assertNotIn("src=" + str(root / "tmp"), docker_log_text)
+            self.assertNotIn("synthetic-owner-only-codex-fixture", output)
+            self.assertNotIn("synthetic-owner-only-codex-fixture", docker_log_text)
+            self.assertIn("volume rm", docker_log_text)
 
-    def test_live_runner_preflights_staged_secret_with_network_none_without_reading_contents(self):
+    def test_live_runner_handoffs_staged_secret_to_network_none_volume_without_logging_contents(self):
         runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
         preflight_start = runner.index("LIVE_PHASE=credential-bind-preflight")
         compose_start = runner.index("LIVE_PHASE=compose", preflight_start)
         preflight = runner[preflight_start:compose_start]
 
-        self.assertIn("docker run --rm --network none", preflight)
-        self.assertEqual(preflight.count("docker run --rm --network none"), 1)
+        self.assertIn("docker run --rm -i --network none", preflight)
+        self.assertEqual(preflight.count("docker run --rm -i --network none"), 1)
+        self.assertIn('docker volume inspect "${PROVIDER_SECRET_VOLUME}"', preflight)
+        self.assertIn('docker volume create', preflight)
+        self.assertIn("sys.stdin.buffer.read(MAX_PROVIDER_SECRET_BYTES + 1)", preflight)
         self.assertIn("follow_symlinks=False", preflight)
         self.assertIn("stat.S_IMODE(metadata.st_mode) != 0o600", preflight)
         self.assertIn("metadata.st_size > 64 * 1024", preflight)
-        self.assertNotIn("read(", preflight)
         self.assertNotIn("cat ", preflight)
         self.assertNotIn("print(", preflight)
+        self.assertNotIn('--mount type=bind,src="${PROVIDER_SECRET_FILE}"', preflight)
         self.assertLess(preflight_start, runner.index("docker compose", compose_start))
 
     def test_live_runner_cleanup_removes_staged_secret_and_exact_invocation_directory(self):
@@ -820,6 +862,7 @@ class G4ContractTests(unittest.TestCase):
         cleanup = runner[runner.index("cleanup()") : runner.index("trap cleanup EXIT INT TERM")]
 
         self.assertIn('rm -f -- "${PROVIDER_SECRET_FILE}"', cleanup)
+        self.assertIn('docker volume rm "${PROVIDER_SECRET_VOLUME}"', cleanup)
         self.assertIn('rm -rf -- "${RUN_DIR}"', cleanup)
         self.assertNotIn('rm -rf -- "${ROOT_DIR}"', cleanup)
         self.assertNotIn('rm -rf -- "${ROOT_DIR}/tmp"', cleanup)

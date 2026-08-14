@@ -11,6 +11,7 @@ RUNTIME="${PROJECT}-agent-runtime"
 CREDENTIAL_STATE_VOLUME="${PROJECT}_agent_runtime_credential_state"
 CREDENTIAL_STATE_TARGET="/run/plane-agent-credentials"
 CREDENTIAL_STATE_FILE="${CREDENTIAL_STATE_TARGET}/revocations.json"
+PROVIDER_SECRET_VOLUME="${PROJECT}_provider_credentials"
 TMP_ROOT="${ROOT_DIR}/tmp"
 RUN_DIR="${TMP_ROOT}/${PROJECT}"
 EVIDENCE_FILE="${RUN_DIR}/evidence.json"
@@ -19,6 +20,7 @@ RUNTIME_SECRET_FILE="${RUN_DIR}/runtime-secret"
 PROVIDER_SECRET_FILE="${RUN_DIR}/provider-credentials"
 RUN_DIR_CREATED=0
 CREDENTIAL_STATE_VOLUME_CREATED=0
+PROVIDER_SECRET_VOLUME_CREATED=0
 LIVE_INVOKE_SOURCE="${ROOT_DIR}/tools/agent-g4-live-invoke.py"
 MANIFEST_INPUT="${PLANE_G4_LIVE_MANIFEST:-${ROOT_DIR}/tools/agent-g4-manifest.json}"
 LIVE_AUTHORITY="${PLANE_G4_LIVE_AUTHORITY:?validated live authority path is required}"
@@ -206,6 +208,13 @@ cleanup() {
         fi
         CREDENTIAL_STATE_VOLUME_CREATED=0
     fi
+    if [[ "${PROVIDER_SECRET_VOLUME_CREATED}" -eq 1 ]]; then
+        if ! docker volume rm "${PROVIDER_SECRET_VOLUME}" >/dev/null 2>&1; then
+            printf 'event=agent.g4.live-runner status=failed phase=cleanup expected=provider-secret-volume-removed actual=volume-removal-failed\n' >&2
+            cleanup_status=1
+        fi
+        PROVIDER_SECRET_VOLUME_CREATED=0
+    fi
     if [[ "${RUN_DIR_CREATED}" -eq 1 && -d "${RUN_DIR}" && ! -L "${RUN_DIR}" ]]; then
         rm -f -- "${PROVIDER_SECRET_FILE}" || true
         rm -rf -- "${RUN_DIR}"
@@ -304,11 +313,47 @@ PY
 }
 
 LIVE_PHASE=credential-bind-preflight
-docker run --rm --network none \
-    --mount type=bind,src="${PROVIDER_SECRET_FILE}",dst=/run/secrets/plane_agent_provider_credentials,readonly \
+if docker volume inspect "${PROVIDER_SECRET_VOLUME}" >/dev/null 2>&1; then
+    printf '%s\n' 'event=agent.g4.live-runner status=failed expected=new-task-owned-provider-secret-volume actual=volume-name-already-exists suggestion=retry-with-a-fresh-live-run' >&2
+    exit 2
+fi
+docker volume create \
+    --label com.uxheavy.plane.agent-g4-provider-secret=true \
+    --label "com.uxheavy.plane.agent-g4-project=${PROJECT}" \
+    "${PROVIDER_SECRET_VOLUME}" >/dev/null
+PROVIDER_SECRET_VOLUME_CREATED=1
+
+docker run --rm -i --network none \
+    --mount type=volume,src="${PROVIDER_SECRET_VOLUME}",dst=/run/secrets,volume-nocopy \
     --entrypoint python3 "${API_IMAGE}" -c '
 import os
 import stat
+import sys
+
+MAX_PROVIDER_SECRET_BYTES = 64 * 1024
+destination = "/run/secrets/plane_agent_provider_credentials"
+payload = sys.stdin.buffer.read(MAX_PROVIDER_SECRET_BYTES + 1)
+if len(payload) > MAX_PROVIDER_SECRET_BYTES:
+    raise SystemExit(1)
+
+destination_fd = None
+try:
+    destination_fd = os.open(
+        destination,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW,
+        0o600,
+    )
+    os.fchmod(destination_fd, 0o600)
+    view = memoryview(payload)
+    while view:
+        written = os.write(destination_fd, view)
+        if written <= 0:
+            raise OSError("provider credential handoff made no progress")
+        view = view[written:]
+    os.fsync(destination_fd)
+finally:
+    if destination_fd is not None:
+        os.close(destination_fd)
 
 metadata = os.stat("/run/secrets/plane_agent_provider_credentials", follow_symlinks=False)
 if not stat.S_ISREG(metadata.st_mode):
@@ -317,7 +362,7 @@ if stat.S_IMODE(metadata.st_mode) != 0o600:
     raise SystemExit(1)
 if metadata.st_size > 64 * 1024:
     raise SystemExit(1)
-' >/dev/null 2>&1
+' <"${PROVIDER_SECRET_FILE}" >/dev/null 2>&1
 
 LIVE_PHASE=compose
 python3 -c 'import secrets; print(secrets.token_urlsafe(48), end="")' >"${RUNTIME_SECRET_FILE}"
@@ -444,7 +489,7 @@ LIVE_PHASE=api-invocation
 docker run --rm --network "${NETWORK}" --hostname api --network-alias api \
     --mount type=bind,src="${RUNTIME_SECRET_FILE}",dst=/run/secrets/plane_agent_runtime,readonly \
     --mount type=volume,src="${CREDENTIAL_STATE_VOLUME}",dst="${CREDENTIAL_STATE_TARGET}",volume-nocopy \
-    --mount type=bind,src="${PROVIDER_SECRET_FILE}",dst=/run/secrets/plane_agent_provider_credentials,readonly \
+    --mount type=volume,src="${PROVIDER_SECRET_VOLUME}",dst=/run/secrets,readonly,volume-nocopy \
     --mount type=bind,src="${LIVE_INVOKE_SOURCE}",dst=/tmp/agent-g4-live-invoke.py,readonly \
     --env DJANGO_SETTINGS_MODULE=plane.settings.production \
     --env PYTHONUNBUFFERED=1 \
