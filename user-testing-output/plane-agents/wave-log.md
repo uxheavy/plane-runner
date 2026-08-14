@@ -643,6 +643,82 @@ unrelated suite ran.
   `SupervisorResult`, durable terminal state, and the bounded receipt.
 - Decision: S00 is `FAIL` and does not unlock W/M/O.
 
+## Wave 0AF — exact 7b538491 / Hermes b39be101 single fresh S00
+
+Status: failed at the first finite API-invocation boundary. S00 remains dirty;
+UT-018 remains open and W/M/O stay locked. Exactly one fresh primary S00
+invocation ran. No retry, no replay, no second provider invocation, no source
+change, and no broad verifier, rollout, deployment, or unrelated test ran.
+
+- Exact clean Plane source was
+  `7b5384912ab85df5638b7059f49a7d68df2f3bf0`, branch
+  `codex/agent-functional-dogfood`; exact clean Hermes source was
+  `b39be1013fd24fe05db006dc90ffc9cd05b0ca12`, branch `main`.
+- The provider-free binding proof used disposable API image
+  `plane-agent-api:s00-7b5384912a`, digest
+  `sha256:337e4e76f6576f2209d19b36594e2308e1d8f46ec10a0f4d18280d77ec9107cc`,
+  and runtime image
+  `plane-agent-runtime:s00-7b5384912a-hermes-b39be101`, digest
+  `sha256:a28ad2a6000070f11d43fcb0f90c80c1e27b7ead1389c42b3ffe885a90f515a3`.
+  The Hermes tree digest was
+  `f8cc0961f7d6fa1a8ee0be1ed52df437a0083c2abf890058932d8d677e41b68b` and
+  the Plane runtime source digest was
+  `ed823d3b79c64484a9989aa78e7a865a80a0d100c6eabf991fd2b2ed4ec9b217`.
+- The disposable manifest, authority, and config SHA-256 values were
+  `418ffd741e0be33c864ebdd6f926ff6a8981ff77b75b3e5e9201e55b76764040`,
+  `cb2b2636109aee31058582cefe47e19c05ee295dd59c23aa5306ec0cb8f2e63b`, and
+  `5815eaff5d291dddf04e7f409608019e391b257766abaa39b671e0af6e541869`.
+  Authority/config validation passed before provider-source access.
+- Contract manifests were byte-identical at SHA-256
+  `714f63844ad84370e0ec467dac19fef3f79b3c47a3c4bae8493437f283913bc0`.
+  The provider-free schema digests were run snapshot
+  `308101c6a2c9f56e7deb5c6a07c8bc74b59831b92cbbb5b07c5a7eefc21f4947`,
+  invocation envelope `b7a15d74406f1624cdb7cd95b42edfd1ffee596abe57e4f00ed60e2e23ded995`,
+  runtime event `78da5ce9d112b6545ea471e5fcae25ff5dfeb2e5db74a8d5796d0ee026823a27`,
+  runtime exit `86b5acaa14271b1c5f0f0fadc30f48bc5cd24ac8db0ff03ba8a91d02bceecf65`,
+  and durable state `444c944ec8a5054f33c8662470529a1f4565d42ff06138438beceeef7967a0da`.
+  The built API probe confirmed eager `inputSchema` with `project_id` and
+  `issue_id`; image/source parity and exact cleanup-path probes passed.
+- The configured route was the ChatGPT subscription route
+  `openai-codex/gpt-5.6-luna`, fallback disabled, through
+  `plane.agent-runtime/provider-relay/v1`. The live command SHA-256 was
+  `32756a110745e4b69a3c8627021527a073ac7c434b5cd6659483245674954060`.
+  The primary stopped before making a provider request: provider attempts
+  `0`, runtime ingress `kindCounts={}`, and `runtimeExit.present=false`.
+- The bounded owner-only receipt had schema
+  `plane-agent-g4/live-failure/v1`, status `failed`, mode `0600`, 2110 bytes,
+  and SHA-256
+  `e59655625dfda461f785cd9cb48a33be21aedb005138db8b949a5bb185dcdf71`.
+  Its finite first failure was `phase=api-invocation`, `exitCode=1`,
+  `errorClass=RuntimeError`, `reasonCode=runtime_process_failed`,
+  `reasonPhase=runtime_process`, `reasonSubreason=unavailable`,
+  `reasonDetail=process_exit`; terminal was one run blocker with code
+  `runtime_process_failed` and reason category `process_exit`.
+- The bounded receipt retained run
+  `9ab8e880-a62a-421c-8645-7f10d33f895d` and invocation
+  `invocation:cccc4be3-70ac-4fb0-89c7-1f7e9fe83fae`, both `blocked`; it did
+  not retain workspace, assignment, actor, profile, or product-outcome refs.
+  `planeHostOperationReceipts=false`. The five retained operation audit rows
+  were all `absent`/count `0`; the fixed six-operation view is:
+  `search_workspace` not reached/0, `work_item.read` absent/0,
+  `catalog.search` absent/0, `agent.outcome.evaluate` absent/0,
+  `agent.outcome.submit` absent/0, and `agent.outcome.publish` absent/0.
+  Durable counts were run `1` blocked, invocation `1` blocked, provider
+  attempts `0`, host receipts `0`, operation counts `0`, outcomes `0`, and
+  publications `0`. No model final text/transcript was retained and no
+  publication occurred; ordinary final text therefore was not publication.
+- The primary failed, so exact no-provider replay was not eligible and was not
+  run. The receipt was validated before deletion; the exact result, run
+  directory, authority/config/manifest, task-owned images, containers,
+  networks, and volumes were then removed. The owner credential source was
+  untouched (mode `0600`, owner `nqh:staff`, 4211 bytes). Post-cleanup
+  checks found no task resources or task images and Plane/Hermes remained at
+  the expected commits and clean worktrees.
+
+Decision: S00 is `FAIL`; UT-018 remains open and W/M/O stay locked. The first
+safe owner is API/runtime process availability before provider dispatch. No
+product source was changed.
+
 ## Wave 0AE — exact 2ef6123f / Hermes eb45db95 single fresh S00
 
 - Status: `FAIL` at the first finite live API-invocation result. S00 remains
@@ -697,13 +773,13 @@ unrelated suite ran.
   `model_call_budget_exhausted`.
 - The fixed five-operation summary was:
 
-  | Operation | Status | Error | Count |
-  | --- | --- | --- | ---: |
-  | `work_item.read` | `unavailable` | `VALIDATION_ERROR` | 8 |
-  | `catalog.search` | `success` | none | 2 |
-  | `agent.outcome.evaluate` | `absent` | none | 0 |
-  | `agent.outcome.submit` | `absent` | none | 0 |
-  | `agent.outcome.publish` | `absent` | none | 0 |
+  | Operation                | Status        | Error              | Count |
+  | ------------------------ | ------------- | ------------------ | ----: |
+  | `work_item.read`         | `unavailable` | `VALIDATION_ERROR` |     8 |
+  | `catalog.search`         | `success`     | none               |     2 |
+  | `agent.outcome.evaluate` | `absent`      | none               |     0 |
+  | `agent.outcome.submit`   | `absent`      | none               |     0 |
+  | `agent.outcome.publish`  | `absent`      | none               |     0 |
 
 - Gateway audit summary contained 10 rows, represented by the five operation
   counts above. `OutcomeSubmission` count was `0`; explicit publication count
@@ -772,13 +848,13 @@ unrelated suite ran.
   `phase=api-invocation`, exit `1`, with no raw error material retained.
 - The fixed five-operation summary was:
 
-  | Operation | Status | Error | Count |
-  | --- | --- | --- | ---: |
-  | `work_item.read` | `unavailable` | `VALIDATION_ERROR` | 8 |
-  | `catalog.search` | `success` | none | 2 |
-  | `agent.outcome.evaluate` | `absent` | none | 0 |
-  | `agent.outcome.submit` | `absent` | none | 0 |
-  | `agent.outcome.publish` | `absent` | none | 0 |
+  | Operation                | Status        | Error              | Count |
+  | ------------------------ | ------------- | ------------------ | ----: |
+  | `work_item.read`         | `unavailable` | `VALIDATION_ERROR` |     8 |
+  | `catalog.search`         | `success`     | none               |     2 |
+  | `agent.outcome.evaluate` | `absent`      | none               |     0 |
+  | `agent.outcome.submit`   | `absent`      | none               |     0 |
+  | `agent.outcome.publish`  | `absent`      | none               |     0 |
 
 - The successful `catalog.search` is the permitted read/discovery evidence.
   The required denied evaluator canary, explicit `OutcomeSubmission`, and
