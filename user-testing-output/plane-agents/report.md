@@ -24,17 +24,25 @@
 
 ## Completion evidence
 
-Wave 0AN completed one exact, non-UI primary from Plane
-`f8e4c98fe6e44577465c317fb75b61ba43c4fb36` with Hermes
-`d9037d5ceb17ce8f12d7abf28cfe6ee734adcb20`. The product lifecycle passed its
-ordered internal `s00Gate`, with ten completed upstream `2xx` provider attempts,
-one `NOT_AUTHORIZED` evaluator denial, one submit, one applied publication, one
-visible `outcome_submission` terminal, and `RuntimeExit.completed`. The helper's
-one same-invocation provider-disabled replay passed with zero durable and
-semantic deltas. Standalone receipt validation then failed with
-`evidence_provider_relay_mismatch` because the fresh authority/config omitted
-the provider-relay projection present in the receipt. S00 remains dirty and
-UT-018/UT-019 remain open. No source fix, rerun, or Hermes change was made.
+Wave 0AO ran one exact, non-UI primary from Plane
+`b83a94f61a141a8a1eb00d616d4288899236739e` with Hermes
+`d9037d5ceb17ce8f12d7abf28cfe6ee734adcb20`. Config-only preflight passed with
+the canonical provider-relay projection present in both authority and config.
+The primary reached the real GPT-5.6 Luna ChatGPT subscription route with
+fallback disabled and recorded 13 completed upstream `2xx` provider attempts,
+one submit, one applied publication, and one visible `outcome_submission`.
+However, the evaluator was `unavailable` once rather than `NOT_AUTHORIZED`, and
+RuntimeExit was `failed` with `runtime_error` / `host_operation_failure` at
+final sequence 23. The ordered `s00Gate` failed at
+`runtime_exit_completed`; the conditional provider-disabled replay was not
+eligible and did not run. S00 remains dirty and UT-018/UT-019 remain open. No
+source fix, rerun, or Hermes change was made.
+
+The owner-only bounded failure receipt was `0600`, `6015` bytes, SHA-256
+`0805a26d1ce73bc2d55475709879a82702c240a7fcb81890e4543356a2e12b36`, and
+semantic digest
+`357392642e3e99aba24c6b60e981da201d7c868a22c2112c91ebbffa0bd34ed9`. Its
+wrapper and JSON body passed standalone validation before deletion.
 
 ## Cross-persona heatmap
 
@@ -44,8 +52,8 @@ UT-018/UT-019 remain open. No source fix, rerun, or Hermes change was made.
 ## Final risks and decision
 
 Decision: `FAIL`. The journey is not clean enough to close S00 or unlock W/M/O.
-The remaining blocker is the fresh handoff contract. Wave 0AN's receipt had the
-ordered `s00Gate`, authority-derived canaries, and semantic digest, but the
-authority/config descriptors did not declare the provider-relay projection that
-the receipt carried. The failed standalone validation keeps UT-018 and UT-019
-open.
+The remaining blocker is the runtime terminal failure: `host_operation_failure`
+prevented `RuntimeExit.completed`, and the required evaluator denial was not
+observed. The provider-relay handoff itself passed preflight and standalone
+receipt validation. The failed primary means replay-equivalence deltas are not
+applicable; UT-018 and UT-019 remain open.

@@ -93,6 +93,89 @@
 - Decision: S00 is `FAIL`; UT-018 and UT-019 remain `open`; W/M/O remain
   locked.
 
+## Wave 0AO — exact b83a94f6 / Hermes d9037d5 single fresh S00
+
+- Overall decision: `FAIL`. Exactly one fresh provider-backed primary ran. The
+  primary failed at the runtime terminal boundary, so the conditional replay
+  was not eligible and did not run. There was no retry, second primary,
+  fallback, UI, G4/G5 verifier, source fix, or Hermes change. UT-018 and
+  UT-019 remain open; W/M/O remain locked.
+- Plane was clean at exact HEAD
+  `b83a94f61a141a8a1eb00d616d4288899236739e` on
+  `codex/agent-functional-dogfood`. Hermes was clean at exact HEAD
+  `d9037d5ceb17ce8f12d7abf28cfe6ee734adcb20` on `main`. Neither source was
+  modified by this journey.
+- The exact candidate artifacts were `plane-agent-api:s00-b83a94f6`, digest
+  `sha256:97a8348a5bd2b82688b5a833f3b73e9dce80b2a32191e9ac17fd2c78cac59b3e`,
+  and `plane-agent-runtime:s00-b83a94f6-hermes-d9037d5`, digest
+  `sha256:6b868f9a08422f531d8297670f252841af540ca3b985ac7fd3a10d60d8fa750f`.
+  Runtime source digest was
+  `1d8186a36447ea5dba5ba6cb55db48073a3be0dc976cec4ff2887418c0e33667` and
+  Hermes tree digest was
+  `7de6ace3830c9280302b49cf4266a59f24d91cbeb3ff9c65ed51e10f1381dc89`.
+- Fresh manifest, authority, and config SHA-256 values were
+  `e8e5c37866e57e13677f99fe034a20676038c0232607507c2cf22a0798384bb4`,
+  `8f88bdc5996d148b04284f9c57ca1ac0c7a5d15d8783c41ad8150bdd6bceb321`, and
+  `28ae0f95ef97892bd7c5726704841502f766a0331cfd50e6ef04b0763144f200`.
+  Config-only preflight passed before the owner-only provider source was
+  accessed. The authority was `s00-live-0ao-20260815` with fresh permitted
+  canary `s00-0ao-permitted-20260815` and denied canary
+  `s00-0ao-denied-20260815`.
+- The provider binding was the real ChatGPT subscription route
+  `openai-codex/gpt-5.6-luna`, fallback disabled, through the exact canonical
+  `providerRelay` in both authority and config:
+  `protocol=plane.agent-runtime/provider-relay/v1`, `transport=AF_UNIX`,
+  `childNetworkPolicy=none`, `externalEgressOwner=agent-runtime`,
+  `hostGatewaySeparate=true`, and `hermesHookStatus=integrated`.
+- The fresh absolute result path
+  `/tmp/plane-agent-s00-0ao.9EeB7D/result.json` was absent before start under
+  a `0700` owner-only parent. The primary produced run
+  `e31db362-ba83-4f40-a931-f65ed4fdacd7` and invocation
+  `invocation:92e29f6e-8a00-47d9-8423-207f6d39ecda`. The run and invocation
+  states were `succeeded`, but RuntimeExit was present with
+  `kind=failed`, `code=runtime_error`, `retryable=false`,
+  `cause=host_operation_failure`, and final sequence `23`. The outer bounded
+  failure was `phase=api-invocation`, exit `1`, with no raw error material
+  retained.
+- There were exactly 13 ordered provider attempts, sequences `1..13`, all
+  `completed`, upstream initiated, and `2xx`; none was unknown and no
+  fallback was used. Runtime ingress counted
+  `progress_observed=24`. Operation audit counts were
+  `search_workspace=success/4`, `work_item.read=success/2`,
+  `catalog.search=absent/0`, `catalog.describe=absent/0`,
+  `agent.outcome.evaluate=unavailable/1`,
+  `agent.outcome.submit=success/1`, and
+  `agent.outcome.publish=success/1`. The required evaluator denial was not
+  proven: the observed status was `unavailable`, not `NOT_AUTHORIZED`.
+- The failed result retained one visible `outcome_submission` terminal and one
+  applied publication binding with product ref
+  `outcome-submission:c5b5f0dc-3f7e-472a-b2e8-55f31cb6f0a4`, operation ref
+  `operation:agent.outcome.publish`, operation-attempt ref
+  `operation-attempt:18a9c1da-5717-42ed-bf8c-88115197012d`, gateway receipt
+  ref `gateway-receipt:e6ca67a5-a0b2-4607-bfea-05c8e112d58e`, audit receipt
+  ref `audit-receipt:e6ca67a5-a0b2-4607-bfea-05c8e112d58e`, receipt ref
+  `receipt:18a9c1da-5717-42ed-bf8c-88115197012d`, and product event ref
+  `product-event:4d8a01e8-b2d5-403e-aa16-9f71710616ab`. The ordered gate
+  failed only at `runtime_exit_completed`; the other five predicates passed.
+- The owner-only failure receipt was mode `0600`, full wrapper size `6015`
+  bytes, and SHA-256
+  `0805a26d1ce73bc2d55475709879a82702c240a7fcb81890e4543356a2e12b36`.
+  Its JSON body was `5895` bytes with SHA-256
+  `aca33fb027874efca85997e636cca6debc095073b89d1c0751e47d0c1aead735`.
+  The bounded failure line and body both validated, semantic digest
+  recomputation matched
+  `357392642e3e99aba24c6b60e981da201d7c868a22c2112c91ebbffa0bd34ed9`, and
+  the standalone validator passed on the JSON body. The receipt was deleted
+  only after validation and hashing.
+- Because the primary was not a full pass, no provider-disabled replay was
+  attempted; replay deltas are therefore `not eligible`, not zero. The exact
+  result, run directory, authority/config, disposable manifest, task images,
+  and runner resources were cleaned up and absence-checked. The ChatGPT
+  credential source was untouched. No Plane product-source or Hermes change
+  was made.
+- Decision: S00 is `FAIL`; UT-018 and UT-019 remain `open`; W/M/O remain
+  locked.
+
 ## Wave 0AN — exact f8e4c98f / Hermes d9037d5 single fresh S00
 
 - Overall decision: `FAIL`. Exactly one fresh primary ran. There was no retry,

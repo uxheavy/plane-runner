@@ -123,3 +123,27 @@ the provider-relay binding predicate, so the handoff and full S00 close are
 not proven. Cleanup removed the receipt and all disposable artifacts after
 validation and hashing. UT-019 remains open; no retry or second replay was
 made.
+
+UT-018 / Wave 0AO addendum: the exact Plane
+`b83a94f61a141a8a1eb00d616d4288899236739e` checkout with exact Hermes
+`d9037d5ceb17ce8f12d7abf28cfe6ee734adcb20` ran one fresh primary through the
+real `openai-codex/gpt-5.6-luna` ChatGPT subscription route with fallback
+disabled. Config-only preflight passed with the canonical provider-relay
+projection in both authority and config. The primary reached the provider
+with 13 completed upstream `2xx` attempts and no unknown attempt, and it
+retained one applied publication and one visible `outcome_submission`, but
+RuntimeExit was `failed` with `runtime_error` / `host_operation_failure` at
+final sequence 23. The evaluator operation was `unavailable` once rather
+than the required `NOT_AUTHORIZED` denial, so the complete S00 product
+journey was not proven. UT-018 remains open; no retry or replay occurred.
+
+UT-019 / Wave 0AO retest: the fresh absolute result path
+`/tmp/plane-agent-s00-0ao.9EeB7D/result.json` was absent before start under a
+`0700` owner-only parent. The bounded failure wrapper and JSON body passed
+validation; the full owner-only receipt was `0600`, `6015` bytes, and SHA-256
+`0805a26d1ce73bc2d55475709879a82702c240a7fcb81890e4543356a2e12b36`, with
+semantic digest
+`357392642e3e99aba24c6b60e981da201d7c868a22c2112c91ebbffa0bd34ed9`. The
+receipt was deleted after validation and hashing. Because the primary failed,
+the conditional replay was not eligible; UT-019 remains open and no retry or
+second replay was made.
