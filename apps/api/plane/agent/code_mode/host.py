@@ -654,7 +654,7 @@ class CodeModeHostRPC:
         return receipt
 
     def _stable_replay_response(self, raw: Mapping[str, Any], response: Mapping[str, Any]) -> Mapping[str, Any]:
-        """Make an exact host receipt replayable while preserving gateway audit."""
+        """Keep replay results stable, except where publication needs disposition."""
 
         if not response.get("idempotency", {}).get("replayed"):
             return response
@@ -670,7 +670,10 @@ class CodeModeHostRPC:
         stable["request_id"] = str(record.request_id)
         stable["correlation_id"] = record.correlation_id
         stable["audit_receipt"] = str(record.audit_receipt) if record.audit_receipt else response.get("audit_receipt")
-        stable["idempotency"] = {"key": raw["idempotency_key"], "replayed": False}
+        stable["idempotency"] = {
+            "key": raw["idempotency_key"],
+            "replayed": raw["operation_id"] == "agent.outcome.publish",
+        }
         return stable
 
     def _receipt_error(

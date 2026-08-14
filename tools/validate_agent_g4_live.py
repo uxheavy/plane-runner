@@ -894,10 +894,12 @@ def _validate_live_readback(evidence: dict[str, Any]) -> None:
     evaluate = operation_rows["agent.outcome.evaluate"]
     if evaluate["status"] != "denied" or evaluate["errorCode"] != "NOT_AUTHORIZED" or evaluate["count"] != 1:
         raise ContractError("evidence_evaluate_not_authorized_invalid")
-    for operation_id in ("agent.outcome.submit", "agent.outcome.publish"):
-        operation = operation_rows[operation_id]
-        if operation["status"] != "success" or operation["errorCode"] is not None or operation["count"] != 1:
-            raise ContractError(f"evidence_{operation_id.replace('.', '_')}_success_invalid")
+    submit = operation_rows["agent.outcome.submit"]
+    if submit["status"] != "success" or submit["errorCode"] is not None or submit["count"] != 1:
+        raise ContractError("evidence_agent_outcome_submit_success_invalid")
+    publish = operation_rows["agent.outcome.publish"]
+    if publish["status"] != "success" or publish["errorCode"] is not None or publish["count"] < 1:
+        raise ContractError("evidence_agent_outcome_publish_success_invalid")
     if not any(
         attempt["phase"] == "completed"
         and attempt["upstreamInitiated"] is True

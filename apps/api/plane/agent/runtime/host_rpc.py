@@ -510,7 +510,7 @@ class PlaneHostServer:
                     output=replay.output,
                     error_code=replay.error_code,
                     error_message=replay.error_message,
-                    publication=replay.publication,
+                    publication=None,
                 )
             if _is_provider_attempt_observation(call):
                 if self._observation_count >= self._max_observation_calls:
@@ -822,7 +822,7 @@ class PlaneHostHTTPServer:
                     output=replay.output,
                     error_code=replay.error_code,
                     error_message=replay.error_message,
-                    publication=replay.publication,
+                    publication=None,
                 )
             if _is_provider_attempt_observation(call):
                 if self._observation_count >= self._max_observation_calls:
@@ -981,7 +981,9 @@ class PlaneGatewayHostPort:
             status=result.status,
             replayed=result.replayed,
             output=result.output,
-            publication=publication,
+            # A gateway replay carries the original product result for
+            # auditability, but it is not a second applied publication.
+            publication=None if result.replayed else publication,
         )
 
     @staticmethod

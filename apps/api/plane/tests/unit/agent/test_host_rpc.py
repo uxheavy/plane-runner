@@ -112,6 +112,7 @@ def test_host_server_replays_exact_calls_without_reinvoking_the_gateway(tmp_path
             status="ok",
             replayed=False,
             output={"accepted": True},
+            publication={"action": "applied", "productRef": "outcome-submission:test"},
         )
 
     server = PlaneHostServer(socket_path=tmp_path / "host.sock", invoke=invoke)
@@ -128,8 +129,10 @@ def test_host_server_replays_exact_calls_without_reinvoking_the_gateway(tmp_path
             connection.sendall(request)
             replay = json.loads(_read_line(connection))
         assert first["status"] == "ok"
+        assert first["publication"]["action"] == "applied"
         assert replay["status"] == "replayed"
         assert replay["replayed"] is True
+        assert "publication" not in replay
         assert len(calls) == 1
     finally:
         server.close()

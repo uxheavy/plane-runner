@@ -63,8 +63,11 @@ the runtime message into the product-facing result. The live failure result
 also carries a fixed, capped operation summary for `work_item.read`,
 `catalog.search`, `agent.outcome.evaluate`, `agent.outcome.submit`, and
 `agent.outcome.publish`, exposing only each operation's status, allowlisted
-error code, and count. Missing rows are reported as `absent`; raw audit rows,
-inputs, outputs, and messages remain outside the result.
+error code, and count. The count is an audit-outcome count, so an idempotent
+publish replay may legitimately make `agent.outcome.publish` greater than one.
+Exactly one semantic publication is proved separately by one applied
+publication binding and its durable outcome terminal; raw audit rows, inputs,
+outputs, and messages remain outside the result.
 
 ## What is authoritative
 

@@ -835,7 +835,11 @@ def main() -> int:
         submitted_audits = audits.filter(phase="outcome", operation_id="agent.outcome.submit")
         published_audits = audits.filter(phase="outcome", operation_id="agent.outcome.publish")
         submitted = submitted_audits.filter(outcome="success").count() == 1 and submitted_audits.count() == 1
-        published = published_audits.filter(outcome="success").count() == 1 and published_audits.count() == 1
+        published = (
+            published_audits.filter(outcome="success").exists()
+            and not published_audits.exclude(outcome__in={"success", "replay"}).exists()
+            and explicit_publication["count"] == 1
+        )
         provider_success = any(
             attempt.phase == "completed"
             and attempt.upstream_initiated

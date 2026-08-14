@@ -1221,6 +1221,15 @@ class G4ContractTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 2)
 
+    def test_live_validator_keeps_one_applied_publication_separate_from_publish_replay_audit(self):
+        manifest, authority, config, evidence_text = fixture()
+        evidence = json.loads(evidence_text)
+        publish_row = evidence["readback"]["planeOperationAudit"][-1]
+        publish_row["count"] = 2
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(evidence))
+        self.addCleanup(temp.cleanup)
+        self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 2)
+
     def test_live_validator_rejects_unknown_readback_and_usage_fields(self):
         self._assert_live_fixture_rejected(
             lambda evidence: evidence["readback"].update({"toolPayload": {"raw": "no"}}),

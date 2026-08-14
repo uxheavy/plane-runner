@@ -205,3 +205,70 @@ def test_invocation_scoped_socket_routes_gateway_and_explicit_outcome(
     assert OperationGatewayAudit.objects.filter(operation_id="agent.outcome.submit").count() >= 2
     assert OperationGatewayAudit.objects.filter(operation_id="agent.outcome.publish").count() >= 2
     assert not server.socket_path.exists()
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_replayed_outcome_publication_is_audit_only(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    actor = create_actor(
+        workspace=workspace,
+        project=gateway_project,
+        display_name="G2 replay publication worker",
+        credential_ref="plane-credential:g2-replay-publication",
+        created_by=create_user,
+    )
+    profile = create_profile(
+        actor,
+        role=AgentRole.WORKER,
+        instructions="Use the trusted Plane host.",
+        runtime_defaults={"maxCodeModeCalls": 16},
+        created_by=create_user,
+    )
+    assignment = create_assignment(
+        actor,
+        project=gateway_project,
+        target_ref=f"issue:{gateway_issue.id}",
+        objective="Exercise publication replay accounting.",
+        acceptance_criteria=["One applied outcome publication is retained."],
+        created_by=create_user,
+    )
+    run = create_run(assignment, profile, idempotency_key="idempotency:g2-replay-run", created_by=create_user)
+    invocation = record_invocation(run, idempotency_key="idempotency:g2-replay-invocation", trigger="initial")
+    port = build_gateway_host_port(invocation=invocation, gateway=OperationGateway())
+    common = {"run_id": run.snapshot["runId"], "invocation_id": invocation.invocation_id}
+
+    submit = port.invoke(
+        _call(
+            **common,
+            action="mutate",
+            operation_ref="operation:agent.outcome.submit",
+            input={"run_ref": run.snapshot["runId"], "summary": "One submitted outcome."},
+        )
+    )
+    assert submit.status == "ok"
+    outcome_ref = submit.output["result"]["outcome"]["outcomeRef"]
+    publish_call = _call(
+        **common,
+        action="publish",
+        operation_ref="operation:agent.outcome.publish",
+        input={"kind": "outcome", "resourceRef": outcome_ref, "content": "One publication."},
+    )
+
+    applied = port.invoke(publish_call)
+    replay = port.invoke(publish_call)
+
+    assert applied.status == "ok"
+    assert applied.publication["action"] == "applied"
+    assert replay.status == "replayed"
+    assert replay.replayed is True
+    assert replay.publication is None
+    publish_audits = OperationGatewayAudit.objects.filter(
+        correlation_id="correlation:g2-host",
+        operation_id="agent.outcome.publish",
+        phase="outcome",
+    ).order_by("created_at", "id")
+    assert list(publish_audits.values_list("outcome", flat=True)) == ["success", "replay"]
+    assert OutcomeSubmission.objects.filter(run=run).count() == 1
+    assert RunTerminalEvent.objects.filter(invocation=invocation, visible=True).count() == 1
