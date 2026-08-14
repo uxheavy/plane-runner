@@ -69,13 +69,16 @@ Exactly one semantic publication is proved separately by one applied
 publication binding and its durable outcome terminal; raw audit rows, inputs,
 outputs, and messages remain outside the result.
 
-When the S00 pre-replay gate fails, the bounded failure receipt includes an
-ordered `s00Gate` predicate projection. It records the first failed predicate,
-safe lifecycle states, product references, publication kind and operation,
-terminal binding references, and bounded counts. Product publication truth
-comes from the durable Plane outcome record; the matching audit receipt only
-corroborates freshness. The projection never includes prompts, transcripts,
-payloads, tokens, credentials, or runtime messages.
+Every live success or failure receipt includes the same ordered `s00Gate`
+predicate projection. It records the first failed predicate, safe lifecycle
+states, product references, publication kind and operation, terminal binding
+references, and bounded counts. The receipt also carries the validated
+`authorityId`, authority-derived canary IDs, and a semantic SHA-256 digest over
+the complete bounded receipt body. The standalone validator recomputes that
+digest before accepting the handoff. Product publication truth comes from the
+durable Plane outcome record; the matching audit receipt only corroborates
+freshness. The projection never includes prompts, transcripts, payloads,
+tokens, credentials, or runtime messages.
 
 ## What is authoritative
 

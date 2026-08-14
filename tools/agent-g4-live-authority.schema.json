@@ -3,7 +3,16 @@
   "$id": "plane-agent-g4/live-authority/v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "authorityId", "purpose", "issuedAt", "expiresAt", "expectedCandidate", "binding", "fallbackAllowed"],
+  "required": [
+    "schemaVersion",
+    "authorityId",
+    "purpose",
+    "issuedAt",
+    "expiresAt",
+    "expectedCandidate",
+    "binding",
+    "fallbackAllowed"
+  ],
   "properties": {
     "schemaVersion": { "const": "plane-agent-g4/live-authority/v1" },
     "authorityId": { "type": "string", "minLength": 1, "maxLength": 200 },
@@ -101,7 +110,7 @@
       "additionalProperties": false,
       "required": ["id", "expectedStatus"],
       "properties": {
-        "id": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$" },
         "expectedStatus": { "enum": ["allowed", "denied"] }
       }
     },

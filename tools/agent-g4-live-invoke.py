@@ -69,6 +69,83 @@ _S00_PUBLICATION_REF_FIELDS = (
     "auditReceiptRef",
     "productEventRef",
 )
+_S00_GATE_PREDICATE_FIELDS = (
+    ("invocation_succeeded", ("actual",)),
+    ("run_succeeded", ("actual",)),
+    ("one_visible_outcome_terminal", ("terminalCount", "outcomeCount", "terminalKind")),
+    (
+        "one_applied_outcome_publication",
+        ("count", "action", "productKind", *_S00_PUBLICATION_REF_FIELDS, "expectedProductRef"),
+    ),
+    (
+        "terminal_binding",
+        (
+            "source",
+            "terminalRunRef",
+            "expectedRunRef",
+            "outcomeRunRef",
+            "terminalInvocationRef",
+            "expectedInvocationRef",
+            "terminalProductRef",
+            "expectedOutcomeRef",
+            "terminalProductEventRef",
+            "publishedProductEventRef",
+        ),
+    ),
+    ("runtime_exit_completed", ("kind", "hasFailure")),
+)
+
+
+def _s00_gate_projection(value):
+    raw_gate = value
+    raw_predicates = raw_gate.get("predicates") if isinstance(raw_gate, dict) else None
+    predicates = {}
+    for name, fields in _S00_GATE_PREDICATE_FIELDS:
+        raw = raw_predicates.get(name) if isinstance(raw_predicates, dict) else None
+        raw = raw if isinstance(raw, dict) else {}
+        bounded = {"passed": raw.get("passed") is True}
+        for field in fields:
+            raw_value = raw.get(field)
+            if field in {"count", "terminalCount", "outcomeCount"}:
+                bounded[field] = raw_value if type(raw_value) is int and 0 <= raw_value <= 256 else 0
+            elif field == "hasFailure":
+                bounded[field] = raw_value is True
+            else:
+                bounded[field] = _s00_safe_ref(raw_value)
+        predicates[name] = bounded
+    first_failed = next((name for name, row in predicates.items() if row["passed"] is not True), None)
+    return {
+        "status": "passed" if isinstance(raw_gate, dict) and raw_gate.get("passed") is True else "failed",
+        "firstFailedPredicate": first_failed,
+        "predicates": predicates,
+    }
+
+
+def _receipt_canaries(canary_ids, *, passed):
+    canary_ids = canary_ids if isinstance(canary_ids, dict) else {}
+    return {
+        key: {
+            "id": _s00_safe_ref(canary_ids.get(key)),
+            "status": expected_status if passed else "not_evaluated",
+            "passed": passed,
+        }
+        for key, expected_status in (("permitted", "allowed"), ("denied", "denied"))
+    }
+
+
+def _receipt_semantic_digest(receipt):
+    import hashlib
+    import json
+
+    payload = {key: value for key, value in receipt.items() if key != "semanticDigest"}
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
+
+
+def _attach_receipt_semantic_digest(receipt):
+    receipt["semanticDigest"] = _receipt_semantic_digest(receipt)
+    return receipt
 
 
 def _s00_safe_ref(value):
@@ -287,6 +364,8 @@ def build_failure_evidence(
     terminal_code=None,
     terminal_reason=None,
     s00_gate=None,
+    authority_id=None,
+    canary_ids=None,
     plane_host_operation_receipts=False,
     plane_operation_audit=None,
 ):
@@ -504,56 +583,6 @@ def build_failure_evidence(
     def bounded_state(value):
         return value if value in invocation_states else "unknown"
 
-    def bounded_s00_gate(value):
-        predicate_fields = {
-            "invocation_succeeded": ("actual",),
-            "run_succeeded": ("actual",),
-            "one_visible_outcome_terminal": ("terminalCount", "outcomeCount", "terminalKind"),
-            "one_applied_outcome_publication": (
-                "count",
-                "action",
-                "productKind",
-                *_S00_PUBLICATION_REF_FIELDS,
-                "expectedProductRef",
-            ),
-            "terminal_binding": (
-                "source",
-                "terminalRunRef",
-                "expectedRunRef",
-                "outcomeRunRef",
-                "terminalInvocationRef",
-                "expectedInvocationRef",
-                "terminalProductRef",
-                "expectedOutcomeRef",
-                "terminalProductEventRef",
-                "publishedProductEventRef",
-            ),
-            "runtime_exit_completed": ("kind", "hasFailure"),
-        }
-        if not isinstance(value, dict) or not isinstance(value.get("predicates"), dict):
-            return {"status": "not_evaluated", "firstFailedPredicate": None, "predicates": {}}
-        predicates = {}
-        for name, fields in predicate_fields.items():
-            row = value["predicates"].get(name)
-            if not isinstance(row, dict):
-                continue
-            bounded = {"passed": row.get("passed") is True}
-            for field in fields:
-                raw = row.get(field)
-                if field in {"count", "terminalCount", "outcomeCount"}:
-                    bounded[field] = raw if type(raw) is int and 0 <= raw <= 256 else 0
-                elif field == "hasFailure":
-                    bounded[field] = raw is True
-                else:
-                    bounded[field] = _s00_safe_ref(raw)
-            predicates[name] = bounded
-        first_failed = next((name for name, row in predicates.items() if row["passed"] is not True), None)
-        return {
-            "status": "passed" if value.get("passed") is True else "failed",
-            "firstFailedPredicate": first_failed,
-            "predicates": predicates,
-        }
-
     bounded_binding = {
         key: bounded_binding_value(key, binding[key])
         for key in binding_fields
@@ -720,10 +749,12 @@ def build_failure_evidence(
     if bounded_failure_cause is not None:
         bounded_failure["reasonCause"] = bounded_failure_cause
 
-    return {
+    return _attach_receipt_semantic_digest({
         "schemaVersion": "plane-agent-g4/live-failure/v1",
         "status": "failed",
         "binding": bounded_binding,
+        "authorityId": _s00_safe_ref(authority_id),
+        "canaries": _receipt_canaries(canary_ids, passed=False),
         "failure": bounded_failure,
         "run": {"present": run_id is not None, "id": bounded_identifier(run_id), "state": bounded_state(run_state)},
         "invocation": {
@@ -735,10 +766,10 @@ def build_failure_evidence(
         "runtimeEventIngress": {"kindCounts": bounded_event_kind_counts},
         "providerAttempts": attempts,
         "terminal": terminal,
-        "s00Gate": bounded_s00_gate(s00_gate),
+        "s00Gate": _s00_gate_projection(s00_gate),
         "planeHostOperationReceipts": plane_host_operation_receipts is True,
         "planeOperationAudit": bounded_operation_audit(plane_operation_audit),
-    }
+    })
 
 
 def _supervisor_failure_reason(output):
@@ -1189,12 +1220,14 @@ def main() -> int:
                 ),
             },
             runtime_event_kind_counts=runtime_event_kind_counts,
+            s00_gate=s00_gate,
             plane_host_operation_receipts=plane_host_operation_receipts,
             plane_operation_audit=plane_operation_audit,
         )
-        evidence = {
+        evidence = _attach_receipt_semantic_digest({
             "schemaVersion": "plane-agent-g4/live-evidence/v1",
             "status": "passed",
+            "authorityId": os.environ["G4_AUTHORITY_ID"],
             "providerRelay": {
                 "protocol": "plane.agent-runtime/provider-relay/v1",
                 "transport": "AF_UNIX",
@@ -1205,10 +1238,14 @@ def main() -> int:
             },
             "binding": binding,
             "provider": {**provider, "fallbackUsed": False},
-            "canaries": {
-                "permitted": {"id": os.environ["G4_PERMITTED_CANARY"], "status": "allowed", "passed": True},
-                "denied": {"id": os.environ["G4_DENIED_CANARY"], "status": "denied", "passed": True},
-            },
+            "canaries": _receipt_canaries(
+                {
+                    "permitted": os.environ["G4_PERMITTED_CANARY"],
+                    "denied": os.environ["G4_DENIED_CANARY"],
+                },
+                passed=True,
+            ),
+            "s00Gate": _s00_gate_projection(s00_gate),
             "thresholds": {
                 "profile": "g4-live-minimal-single-invocation",
                 "approved": {
@@ -1262,7 +1299,7 @@ def main() -> int:
                     },
                 },
             },
-        }
+        })
     except BaseException as exc:
         failure = exc
         return_code = 1
@@ -1383,11 +1420,16 @@ def main() -> int:
                 terminal_code=control.failure_code if control is not None else None,
                 terminal_reason=terminal.reason if terminal is not None else None,
                 s00_gate=s00_gate,
+                authority_id=os.environ.get("G4_AUTHORITY_ID"),
+                canary_ids={
+                    "permitted": os.environ.get("G4_PERMITTED_CANARY"),
+                    "denied": os.environ.get("G4_DENIED_CANARY"),
+                },
                 plane_host_operation_receipts=plane_host_operation_receipts,
                 plane_operation_audit=plane_operation_audit,
             )
 
-    print(json.dumps(evidence, sort_keys=True, separators=(",", ":")))
+    print(json.dumps(evidence, separators=(",", ":")))
     return return_code
 
 

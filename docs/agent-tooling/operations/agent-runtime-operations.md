@@ -242,11 +242,16 @@ clean completed runtime exit. A failed, missing, or `outcome_unknown` exit
 never enters the replay branch. An eligible replay reuses the same
 invocation/idempotency identity with provider credentials disabled, so the
 existing terminal-invocation short circuit must return zero runtime frames.
-The bounded pass receipt records ordered provider
+The bounded pass receipt records the validated authority ID, authority-derived
+canary IDs, the ordered redacted `s00Gate` projection, and a semantic SHA-256
+digest over the complete bounded receipt body. It also records ordered provider
 attempts, all seven allowlisted operation summaries, RuntimeExit, runtime event
 counts, transcript-evidence event IDs/count, explicit publication refs, and
 zero deltas for provider attempts, child dispatch, invocations, receipts,
 audits, usage, outcomes, publications, terminal events, and semantic effects.
+Failure receipts use the same gate projection and digest contract with
+not-evaluated canaries. The standalone validator recomputes the digest and
+rejects missing, tampered, mismatched, secret-bearing, or oversized receipts.
 Failed or `outcome_unknown` primaries never enter this replay branch.
 
 ## Local development topology

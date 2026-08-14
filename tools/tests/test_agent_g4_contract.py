@@ -31,6 +31,8 @@ _RED_TEAM_SPEC.loader.exec_module(_RED_TEAM)
 
 from validate_agent_g4_live import (  # noqa: E402
     ContractError,
+    MAX_EVIDENCE_BYTES,
+    _semantic_digest,
     candidate_has_exact_parent,
     exact_binding,
     validate_api_artifact_descriptor,
@@ -77,6 +79,52 @@ BINDING_KEYS = (
     "runtimeContract",
     "apiArtifact",
 )
+
+
+def s00_gate_fixture() -> dict:
+    return {
+        "status": "passed",
+        "firstFailedPredicate": None,
+        "predicates": {
+            "invocation_succeeded": {"passed": True, "actual": "succeeded"},
+            "run_succeeded": {"passed": True, "actual": "succeeded"},
+            "one_visible_outcome_terminal": {
+                "passed": True,
+                "terminalCount": 1,
+                "outcomeCount": 1,
+                "terminalKind": "outcome_submission",
+            },
+            "one_applied_outcome_publication": {
+                "passed": True,
+                "count": 1,
+                "action": "applied",
+                "productKind": "outcome_submission",
+                "productRef": "outcome-submission:one",
+                "operationAttemptRef": "operation-attempt:one",
+                "operationRef": "operation:agent.outcome.publish",
+                "applicationServiceRef": "application-service:agent-lifecycle",
+                "gatewayReceiptRef": "gateway-receipt:one",
+                "receiptRef": "receipt:one",
+                "auditReceiptRef": "audit-receipt:one",
+                "productEventRef": "product-event:one",
+                "expectedProductRef": "outcome-submission:one",
+            },
+            "terminal_binding": {
+                "passed": True,
+                "source": "runtime",
+                "terminalRunRef": "run:fixture",
+                "expectedRunRef": "run:fixture",
+                "outcomeRunRef": "run:fixture",
+                "terminalInvocationRef": "invocation:fixture",
+                "expectedInvocationRef": "invocation:fixture",
+                "terminalProductRef": "outcome-submission:one",
+                "expectedOutcomeRef": "outcome-submission:one",
+                "terminalProductEventRef": "product-event:one",
+                "publishedProductEventRef": "product-event:one",
+            },
+            "runtime_exit_completed": {"passed": True, "kind": "completed", "hasFailure": False},
+        },
+    }
 
 
 def fixture(candidate: str = CANDIDATE, source_manifest: dict | None = None) -> tuple[dict, dict, dict, str]:
@@ -154,6 +202,8 @@ def fixture(candidate: str = CANDIDATE, source_manifest: dict | None = None) -> 
     evidence = {
         "schemaVersion": "plane-agent-g4/live-evidence/v1",
         "status": "passed",
+        "authorityId": authority["authorityId"],
+        "s00Gate": s00_gate_fixture(),
         "binding": {key: binding[key] for key in BINDING_KEYS},
         "provider": {**binding["provider"], "fallbackUsed": False},
         "canaries": {
@@ -265,7 +315,41 @@ def fixture(candidate: str = CANDIDATE, source_manifest: dict | None = None) -> 
             },
         },
     }
-    return manifest, authority, config, json.dumps(evidence, sort_keys=True, separators=(",", ":"))
+    evidence["semanticDigest"] = _semantic_digest(evidence)
+    return manifest, authority, config, json.dumps(evidence, separators=(",", ":"))
+
+
+def invoke_helper_namespace() -> dict[str, object]:
+    source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    namespace: dict[str, object] = {"hashlib": hashlib, "json": json}
+    support = [node for node in tree.body if isinstance(node, (ast.Assign, ast.FunctionDef))]
+    exec(
+        compile(ast.Module(body=support, type_ignores=[]), str(TOOLS / "agent-g4-live-invoke.py"), "exec"),
+        namespace,
+    )
+    return namespace
+
+
+def failure_fixture() -> tuple[dict, dict, dict, dict]:
+    manifest, authority, config, _ = fixture()
+    binding = exact_binding(manifest, CANDIDATE)
+    builder = invoke_helper_namespace()["build_failure_evidence"]
+    receipt = builder(
+        binding=binding,
+        authority_id=authority["authorityId"],
+        canary_ids={key: row["id"] for key, row in authority["binding"]["canaries"].items()},
+        failure_phase="api-invocation",
+        error_class="RuntimeError",
+        exit_code=1,
+        run_id="run:failure",
+        run_state="failed",
+        invocation_id="invocation:failure",
+        invocation_state="failed",
+        provider_attempts=[],
+        terminal_kind="run_failure",
+    )
+    return manifest, authority, config, receipt
 
 
 class G4ContractTests(unittest.TestCase):
@@ -1276,7 +1360,19 @@ class G4ContractTests(unittest.TestCase):
         evidence = json.loads(evidence_text)
         self.assertEqual(
             set(evidence),
-            {"schemaVersion", "status", "binding", "provider", "canaries", "thresholds", "readback", "summary"},
+            {
+                "schemaVersion",
+                "status",
+                "authorityId",
+                "semanticDigest",
+                "s00Gate",
+                "binding",
+                "provider",
+                "canaries",
+                "thresholds",
+                "readback",
+                "summary",
+            },
         )
         readback = evidence["readback"]
         self.assertEqual(
@@ -1316,11 +1412,93 @@ class G4ContractTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 2)
 
+    def test_live_validator_accepts_fresh_authority_canary_ids(self):
+        manifest, authority, config, evidence_text = fixture()
+        canaries = {
+            "permitted": {"id": "fresh-permitted-0am-unique", "expectedStatus": "allowed"},
+            "denied": {"id": "fresh-denied-0am-unique", "expectedStatus": "denied"},
+        }
+        authority["binding"]["canaries"] = canaries
+        config["canaries"] = {key: row["id"] for key, row in canaries.items()}
+        evidence = json.loads(evidence_text)
+        evidence["canaries"] = {
+            key: {"id": row["id"], "status": row["expectedStatus"], "passed": True}
+            for key, row in canaries.items()
+        }
+        evidence["semanticDigest"] = _semantic_digest(evidence)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(evidence, separators=(",", ":")))
+        self.addCleanup(temp.cleanup)
+        self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 2)
+
+    def test_failure_receipt_reuses_ordered_gate_projection_and_validates_standalone(self):
+        manifest, authority, config, receipt = failure_fixture()
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt, separators=(",", ":")))
+        self.addCleanup(temp.cleanup)
+        self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
+        self.assertEqual(
+            list(receipt["s00Gate"]["predicates"]),
+            list(s00_gate_fixture()["predicates"]),
+        )
+        self.assertEqual(list(receipt["s00Gate"]), ["status", "firstFailedPredicate", "predicates"])
+        self.assertIn("semanticDigest", receipt)
+
+    def test_live_validator_rejects_missing_tampered_gate_and_digest(self):
+        self._assert_live_fixture_rejected(
+            lambda evidence: evidence.pop("s00Gate"),
+            "evidence_missing_s00Gate",
+        )
+        self._assert_live_fixture_rejected(
+            lambda evidence: evidence["s00Gate"]["predicates"]["run_succeeded"].update({"actual": "failed"}),
+            "evidence_s00Gate_run_succeeded_predicate_mismatch",
+        )
+        self._assert_live_fixture_rejected(
+            lambda evidence: evidence.update({"semanticDigest": "0" * 64}),
+            "evidence_semantic_digest_mismatch",
+        )
+        manifest, authority, config, evidence_text = fixture()
+        evidence = json.loads(evidence_text)
+        evidence["s00Gate"]["status"] = "failed"
+        evidence["s00Gate"]["firstFailedPredicate"] = "invocation_succeeded"
+        evidence["s00Gate"]["predicates"]["invocation_succeeded"] = {
+            "passed": False,
+            "actual": "failed",
+        }
+        evidence["semanticDigest"] = _semantic_digest(evidence)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(evidence, separators=(",", ":")))
+        self.addCleanup(temp.cleanup)
+        with self.assertRaisesRegex(ContractError, "evidence_s00Gate_success_failed"):
+            validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
+
+    def test_live_validator_rejects_mismatched_authority_id_sensitive_gate_and_oversized_receipt(self):
+        self._assert_live_fixture_rejected(
+            lambda evidence: evidence.update({"authorityId": "authority-other"}),
+            "evidence_authority_mismatch",
+        )
+        self._assert_live_fixture_rejected(
+            lambda evidence: evidence["s00Gate"]["predicates"]["invocation_succeeded"].update(
+                {"actual": "secret-token"}
+            ),
+            "evidence_s00Gate_invocation_succeeded_actual_sensitive",
+        )
+        manifest, authority, config, evidence_text = fixture()
+        temp, paths = self.write_case(manifest, authority, config, "x" * (MAX_EVIDENCE_BYTES + 1))
+        self.addCleanup(temp.cleanup)
+        with self.assertRaisesRegex(ContractError, "evidence_oversized"):
+            validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
+
+    def test_live_runner_derives_canaries_from_validated_authority(self):
+        source = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+        self.assertIn('binding["canaries"]["permitted"]["id"]', source)
+        self.assertIn('binding["canaries"]["denied"]["id"]', source)
+        self.assertNotIn("G4_PERMITTED_CANARY=live-permitted-read", source)
+        self.assertNotIn("G4_DENIED_CANARY=live-denied-evaluate", source)
+
     def test_live_validator_keeps_one_applied_publication_separate_from_publish_replay_audit(self):
         manifest, authority, config, evidence_text = fixture()
         evidence = json.loads(evidence_text)
         publish_row = evidence["readback"]["planeOperationAudit"][-1]
         publish_row["count"] = 2
+        evidence["semanticDigest"] = _semantic_digest(evidence)
         temp, paths = self.write_case(manifest, authority, config, json.dumps(evidence))
         self.addCleanup(temp.cleanup)
         self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 2)
@@ -1475,30 +1653,7 @@ class G4ContractTests(unittest.TestCase):
     def test_failure_evidence_is_bounded_structural_and_excludes_sensitive_runtime_data(self):
         source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
         tree = ast.parse(source)
-        builder = next(
-            node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "build_failure_evidence"
-        )
-        safe_ref = next(
-            node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_s00_safe_ref"
-        )
-        publication_fields_node = next(
-            node
-            for node in tree.body
-            if isinstance(node, ast.Assign)
-            and any(
-                isinstance(target, ast.Name) and target.id == "_S00_PUBLICATION_REF_FIELDS"
-                for target in node.targets
-            )
-        )
-        namespace: dict[str, object] = {}
-        exec(
-            compile(
-                ast.Module(body=[publication_fields_node, safe_ref, builder], type_ignores=[]),
-                str(TOOLS / "agent-g4-live-invoke.py"),
-                "exec",
-            ),
-            namespace,
-        )
+        namespace = invoke_helper_namespace()
         evidence = namespace["build_failure_evidence"](
             binding={"candidateCommit": "credential=provider-secret"},
             failure_phase="api-invocation",
@@ -1583,6 +1738,9 @@ class G4ContractTests(unittest.TestCase):
                 "schemaVersion",
                 "status",
                 "binding",
+                "authorityId",
+                "canaries",
+                "semanticDigest",
                 "failure",
                 "run",
                 "invocation",
@@ -1598,7 +1756,7 @@ class G4ContractTests(unittest.TestCase):
         for forbidden in ("do not include", "must not escape", "prompt", "response", "credential", "payload", "rawLogs"):
             self.assertNotIn(forbidden, encoded)
         self.assertNotRegex(encoded, re.compile(r"(?i)(password|secret|token|api[_-]?key|authorization|credential)"))
-        self.assertEqual(evidence["s00Gate"]["firstFailedPredicate"], "one_applied_outcome_publication")
+        self.assertEqual(evidence["s00Gate"]["firstFailedPredicate"], "invocation_succeeded")
         self.assertEqual(evidence["s00Gate"]["predicates"]["one_applied_outcome_publication"]["productRef"], "unavailable")
         self.assertEqual(
             evidence["runtimeExit"],

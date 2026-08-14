@@ -3,10 +3,25 @@
   "$id": "plane-agent-g4/live-evidence/v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "status", "binding", "provider", "canaries", "thresholds", "readback", "summary"],
+  "required": [
+    "schemaVersion",
+    "status",
+    "authorityId",
+    "semanticDigest",
+    "s00Gate",
+    "binding",
+    "provider",
+    "canaries",
+    "thresholds",
+    "readback",
+    "summary"
+  ],
   "properties": {
     "schemaVersion": { "const": "plane-agent-g4/live-evidence/v1" },
     "status": { "const": "passed" },
+    "authorityId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$" },
+    "semanticDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "s00Gate": { "$ref": "#/$defs/s00Gate" },
     "providerRelay": { "$ref": "#/$defs/providerRelay" },
     "binding": {
       "type": "object",
@@ -111,6 +126,16 @@
         "externalEgressOwner": { "const": "agent-runtime" },
         "hostGatewaySeparate": { "const": true },
         "hermesHookStatus": { "enum": ["pending", "integrated"] }
+      }
+    },
+    "s00Gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "firstFailedPredicate", "predicates"],
+      "properties": {
+        "status": { "enum": ["passed", "failed"] },
+        "firstFailedPredicate": { "type": ["string", "null"] },
+        "predicates": { "type": "object", "additionalProperties": true }
       }
     },
     "count": { "type": "integer", "minimum": 0 },

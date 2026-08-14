@@ -43,6 +43,8 @@ ROLLBACK_MIGRATION = "db.0142_runtime_provider_attempts"
 ROLLBACK_OPERATION_CONTRACT = "plane.operation/v1"
 ROLLBACK_RUNTIME_CONTRACT = "plane.agent-runtime/v1"
 PROVIDER_RELAY_PROTOCOL = "plane.agent-runtime/provider-relay/v1"
+MAX_EVIDENCE_BYTES = 16 * 1024
+SAFE_CANARY_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
 PROVIDER_DESCRIPTOR_FIELDS = (
     "name",
     "model",
@@ -624,7 +626,7 @@ def _canaries(value: Any, name: str) -> dict[str, dict[str, str]]:
         row = _object(canaries[key], f"{name}_{key}")
         if set(row) != {"id", "expectedStatus"} or row["expectedStatus"] != expected_status:
             raise ContractError(f"{name}_{key}_invalid")
-        if not isinstance(row["id"], str) or not row["id"]:
+        if not isinstance(row["id"], str) or not SAFE_CANARY_ID_RE.fullmatch(row["id"]):
             raise ContractError(f"{name}_{key}_id_invalid")
         result[key] = {"id": row["id"], "expectedStatus": expected_status}
     return result
@@ -643,7 +645,7 @@ def validate_authority(
     _exact(_required(authority, "expectedCandidate", "authority"), expected_candidate, "authority_expected_candidate")
     _exact(_required(authority, "purpose", "authority"), "g4-live-evaluation", "authority_purpose")
     authority_id = _required(authority, "authorityId", "authority")
-    if not isinstance(authority_id, str) or not authority_id:
+    if not isinstance(authority_id, str) or not SAFE_CANARY_ID_RE.fullmatch(authority_id):
         raise ContractError("authority_id_invalid")
     issued = _parse_time(_required(authority, "issuedAt", "authority"), "authority_issuedAt")
     expires = _parse_time(_required(authority, "expiresAt", "authority"), "authority_expiresAt")
@@ -791,6 +793,9 @@ _LIVE_READBACK_FIELDS = {
 _LIVE_TOP_LEVEL_FIELDS = {
     "schemaVersion",
     "status",
+    "authorityId",
+    "semanticDigest",
+    "s00Gate",
     "providerRelay",
     "binding",
     "provider",
@@ -798,6 +803,15 @@ _LIVE_TOP_LEVEL_FIELDS = {
     "thresholds",
     "readback",
     "summary",
+    "failure",
+    "run",
+    "invocation",
+    "runtimeExit",
+    "runtimeEventIngress",
+    "providerAttempts",
+    "terminal",
+    "planeHostOperationReceipts",
+    "planeOperationAudit",
 }
 _LIVE_AUDIT_FIELDS = {"passed", "eventCount", "permittedOutcome", "deniedOutcome", "submitOutcome", "publishOutcome"}
 _LIVE_VERSION_FIELDS = {"passed", "binding", "source"}
@@ -815,6 +829,170 @@ _LIVE_WORKLOAD_FIELDS = {
 }
 _LIVE_USAGE_KEYS = ("inputTokens", "outputTokens", "durationMs")
 _LIVE_PERMITTED_READ_IDS = {"work_item.read", "catalog.search"}
+_S00_GATE_PREDICATE_FIELDS = (
+    ("invocation_succeeded", ("actual",)),
+    ("run_succeeded", ("actual",)),
+    ("one_visible_outcome_terminal", ("terminalCount", "outcomeCount", "terminalKind")),
+    (
+        "one_applied_outcome_publication",
+        ("count", "action", "productKind", *_LIVE_PUBLICATION_REF_PREFIXES.keys(), "expectedProductRef"),
+    ),
+    (
+        "terminal_binding",
+        (
+            "source",
+            "terminalRunRef",
+            "expectedRunRef",
+            "outcomeRunRef",
+            "terminalInvocationRef",
+            "expectedInvocationRef",
+            "terminalProductRef",
+            "expectedOutcomeRef",
+            "terminalProductEventRef",
+            "publishedProductEventRef",
+        ),
+    ),
+    ("runtime_exit_completed", ("kind", "hasFailure")),
+)
+_S00_SAFE_REF_RE = re.compile(r"^[A-Za-z0-9_.:/-]{1,128}$")
+
+
+def _safe_ref(value: Any, name: str) -> str:
+    if not isinstance(value, str) or not _S00_SAFE_REF_RE.fullmatch(value):
+        raise ContractError(f"{name}_invalid")
+    if any(term in value.lower() for term in ("password", "secret", "token", "credential", "authorization", "api_key")):
+        raise ContractError(f"{name}_sensitive")
+    return value
+
+
+def _validate_s00_gate(value: Any) -> None:
+    gate = _object(value, "evidence_s00Gate")
+    if list(gate) != ["status", "firstFailedPredicate", "predicates"]:
+        raise ContractError("evidence_s00Gate_fields_invalid")
+    if not isinstance(gate["status"], str) or gate["status"] not in {"passed", "failed"}:
+        raise ContractError("evidence_s00Gate_status_invalid")
+    first_failed = gate["firstFailedPredicate"]
+    if first_failed is not None and (
+        not isinstance(first_failed, str) or first_failed not in dict(_S00_GATE_PREDICATE_FIELDS)
+    ):
+        raise ContractError("evidence_s00Gate_first_failed_invalid")
+    predicates = _object(gate["predicates"], "evidence_s00Gate_predicates")
+    if list(predicates) != [name for name, _ in _S00_GATE_PREDICATE_FIELDS]:
+        raise ContractError("evidence_s00Gate_predicate_order_invalid")
+
+    expected_passed = {}
+    for name, fields in _S00_GATE_PREDICATE_FIELDS:
+        row = _object(predicates[name], f"evidence_s00Gate_{name}")
+        expected_fields = ["passed", *fields]
+        if list(row) != expected_fields:
+            raise ContractError(f"evidence_s00Gate_{name}_fields_invalid")
+        if type(row["passed"]) is not bool:
+            raise ContractError(f"evidence_s00Gate_{name}_passed_invalid")
+        for field in fields:
+            if field in {"count", "terminalCount", "outcomeCount"}:
+                if type(row[field]) is not int or not 0 <= row[field] <= 256:
+                    raise ContractError(f"evidence_s00Gate_{name}_{field}_invalid")
+            elif field == "hasFailure":
+                if type(row[field]) is not bool:
+                    raise ContractError(f"evidence_s00Gate_{name}_{field}_invalid")
+            else:
+                _safe_ref(row[field], f"evidence_s00Gate_{name}_{field}")
+
+        if name in {"invocation_succeeded", "run_succeeded"}:
+            expected_passed[name] = row["actual"] == "succeeded"
+        elif name == "one_visible_outcome_terminal":
+            expected_passed[name] = (
+                row["terminalCount"] == 1
+                and row["outcomeCount"] == 1
+                and row["terminalKind"] == "outcome_submission"
+            )
+        elif name == "one_applied_outcome_publication":
+            expected_passed[name] = (
+                row["count"] == 1
+                and row["action"] == "applied"
+                and row["productKind"] == "outcome_submission"
+                and all(row[field] != "unavailable" for field in _LIVE_PUBLICATION_REF_PREFIXES)
+                and row["operationRef"] == "operation:agent.outcome.publish"
+                and row["productRef"] == row["expectedProductRef"]
+            )
+        elif name == "terminal_binding":
+            expected_passed[name] = (
+                row["source"] == "runtime"
+                and row["terminalRunRef"] == row["expectedRunRef"]
+                and row["outcomeRunRef"] == row["expectedRunRef"]
+                and row["terminalInvocationRef"] == row["expectedInvocationRef"]
+                and row["terminalProductRef"] == row["expectedOutcomeRef"]
+                and row["terminalProductEventRef"] == row["publishedProductEventRef"]
+            )
+        else:
+            expected_passed[name] = row["kind"] == "completed" and row["hasFailure"] is False
+        if row["passed"] is not expected_passed[name]:
+            raise ContractError(f"evidence_s00Gate_{name}_predicate_mismatch")
+
+    computed_first_failed = next((name for name in expected_passed if not expected_passed[name]), None)
+    if first_failed != computed_first_failed:
+        raise ContractError("evidence_s00Gate_first_failed_mismatch")
+    if gate["status"] == "passed" and computed_first_failed is not None:
+        raise ContractError("evidence_s00Gate_status_mismatch")
+    if gate["status"] == "failed" and computed_first_failed is None:
+        raise ContractError("evidence_s00Gate_status_mismatch")
+
+
+def _semantic_digest(receipt: dict[str, Any]) -> str:
+    payload = {key: value for key, value in receipt.items() if key != "semanticDigest"}
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
+
+
+def _validate_semantic_digest(evidence: dict[str, Any]) -> None:
+    _hash(_required(evidence, "semanticDigest", "evidence"), "evidence_semantic_digest")
+    _exact(evidence["semanticDigest"], _semantic_digest(evidence), "evidence_semantic_digest")
+
+
+def _validate_receipt_common(
+    evidence: dict[str, Any],
+    authority_info: dict[str, Any],
+    expected_binding: dict[str, Any],
+    *,
+    status: str,
+) -> None:
+    _exact(_required(evidence, "binding", "evidence"), expected_binding, "evidence_binding")
+    _exact(_required(evidence, "authorityId", "evidence"), authority_info["authorityId"], "evidence_authority")
+    gate = _required(evidence, "s00Gate", "evidence")
+    _validate_s00_gate(gate)
+    if status == "passed" and (gate["status"] != "passed" or gate["firstFailedPredicate"] is not None):
+        raise ContractError("evidence_s00Gate_success_failed")
+    canaries = _object(_required(evidence, "canaries", "evidence"), "evidence_canaries")
+    if list(canaries) != ["permitted", "denied"]:
+        raise ContractError("evidence_canaries_fields_invalid")
+    for key, expected_status in (("permitted", "allowed"), ("denied", "denied")):
+        row = _object(canaries[key], f"evidence_canaries_{key}")
+        if list(row) != ["id", "status", "passed"]:
+            raise ContractError(f"evidence_canaries_{key}_fields_invalid")
+        _exact(row["id"], authority_info["canaries"][key]["id"], f"evidence_canaries_{key}_id")
+        if status == "passed":
+            if row["status"] != expected_status or row["passed"] is not True:
+                raise ContractError(f"evidence_{key}_canary_failed")
+        elif row["status"] != "not_evaluated" or row["passed"] is not False:
+            raise ContractError(f"evidence_{key}_canary_failed")
+
+
+def _read_bounded_text(path: Path) -> str:
+    try:
+        if path.stat().st_size > MAX_EVIDENCE_BYTES:
+            raise ContractError("evidence_oversized")
+        value = path.read_bytes()
+    except ContractError:
+        raise
+    except (OSError, UnicodeError) as exc:
+        raise ContractError("evidence_unavailable") from exc
+    if len(value) > MAX_EVIDENCE_BYTES:
+        raise ContractError("evidence_oversized")
+    try:
+        return value.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ContractError("evidence_invalid_utf8") from exc
 
 
 def _validate_live_readback(evidence: dict[str, Any]) -> None:
@@ -972,6 +1150,199 @@ def _validate_live_readback(evidence: dict[str, Any]) -> None:
         or any(type(value) is not int or value != 0 for value in new.values())
     ):
         raise ContractError("evidence_replay_new_effect_invalid")
+
+
+_FAILURE_TOP_LEVEL_FIELDS = {
+    "schemaVersion",
+    "status",
+    "binding",
+    "authorityId",
+    "canaries",
+    "semanticDigest",
+    "failure",
+    "run",
+    "invocation",
+    "runtimeExit",
+    "runtimeEventIngress",
+    "providerAttempts",
+    "terminal",
+    "s00Gate",
+    "planeHostOperationReceipts",
+    "planeOperationAudit",
+}
+_FAILURE_STAGES = {
+    "initialization",
+    "compose",
+    "audit-bootstrap",
+    "runtime-start",
+    "runtime-health",
+    "api-invocation",
+    "unknown",
+}
+_FAILURE_ERROR_CLASSES = {
+    "CommandError",
+    "ConnectionError",
+    "FileNotFoundError",
+    "ImportError",
+    "ImproperlyConfigured",
+    "ModuleNotFoundError",
+    "OperationalError",
+    "PermissionError",
+    "RuntimeError",
+    "TimeoutError",
+    "unspecified",
+}
+_FAILURE_INVOCATION_STATES = {
+    "queued",
+    "running",
+    "waiting_for_input",
+    "succeeded",
+    "failed",
+    "blocked",
+    "cancelled",
+    "outcome_unknown",
+    "unknown",
+}
+_FAILURE_TERMINAL_KINDS = {
+    "none",
+    "outcome_submission",
+    "run_failure",
+    "run_blocker",
+    "run_cancellation",
+    "unknown",
+}
+
+
+def _validate_failure_receipt(
+    evidence: dict[str, Any],
+    authority_info: dict[str, Any],
+    expected_binding: dict[str, Any],
+) -> None:
+    if set(evidence) != _FAILURE_TOP_LEVEL_FIELDS:
+        raise ContractError("evidence_failure_fields_invalid")
+    _exact(evidence["schemaVersion"], "plane-agent-g4/live-failure/v1", "evidence_schema")
+    _exact(evidence["status"], "failed", "evidence_status")
+    _validate_receipt_common(evidence, authority_info, expected_binding, status="failed")
+
+    failure = _object(evidence["failure"], "evidence_failure")
+    required_failure_fields = {
+        "phase",
+        "errorClass",
+        "exitCode",
+        "reasonCode",
+        "reasonPhase",
+        "reasonDetail",
+        "reasonSubreason",
+    }
+    if set(failure).difference(required_failure_fields | {"reasonCause"}) or not required_failure_fields.issubset(failure):
+        raise ContractError("evidence_failure_fields_invalid")
+    if failure["phase"] not in _FAILURE_STAGES or failure["errorClass"] not in _FAILURE_ERROR_CLASSES:
+        raise ContractError("evidence_failure_classification_invalid")
+    if type(failure["exitCode"]) is not int or not 1 <= failure["exitCode"] <= 255:
+        raise ContractError("evidence_failure_exit_code_invalid")
+    for field in ("reasonCode", "reasonPhase", "reasonDetail", "reasonSubreason", "reasonCause"):
+        if field in failure:
+            _safe_ref(failure[field], f"evidence_failure_{field}")
+
+    for name in ("run", "invocation"):
+        state = _object(evidence[name], f"evidence_{name}")
+        if list(state) != ["present", "id", "state"]:
+            raise ContractError(f"evidence_{name}_fields_invalid")
+        if type(state["present"]) is not bool or state["state"] not in _FAILURE_INVOCATION_STATES:
+            raise ContractError(f"evidence_{name}_invalid")
+        if state["id"] is not None:
+            _safe_ref(state["id"], f"evidence_{name}_id")
+
+    runtime_exit = _object(evidence["runtimeExit"], "evidence_runtime_exit")
+    if list(runtime_exit) != ["present", "kind", "finalSequence", "failure"]:
+        raise ContractError("evidence_runtime_exit_fields_invalid")
+    if type(runtime_exit["present"]) is not bool or runtime_exit["kind"] not in {
+        "completed",
+        "waiting_for_input",
+        "failed",
+        "blocked",
+        "cancelled",
+        "unknown",
+    }:
+        raise ContractError("evidence_runtime_exit_invalid")
+    if runtime_exit["finalSequence"] is not None and (
+        type(runtime_exit["finalSequence"]) is not int or not 0 <= runtime_exit["finalSequence"] <= 256
+    ):
+        raise ContractError("evidence_runtime_exit_sequence_invalid")
+    if runtime_exit["failure"] is not None:
+        runtime_failure = _object(runtime_exit["failure"], "evidence_runtime_exit_failure")
+        if set(runtime_failure).difference({"code", "retryable", "cause"}) or not {
+            "code",
+            "retryable",
+        }.issubset(runtime_failure):
+            raise ContractError("evidence_runtime_exit_failure_fields_invalid")
+        if runtime_failure["code"] not in {"budget_exhausted", "runtime_error", "unavailable"} or type(
+            runtime_failure["retryable"]
+        ) is not bool:
+            raise ContractError("evidence_runtime_exit_failure_invalid")
+        if "cause" in runtime_failure:
+            _safe_ref(runtime_failure["cause"], "evidence_runtime_exit_failure_cause")
+
+    ingress = _object(evidence["runtimeEventIngress"], "evidence_runtime_ingress")
+    if list(ingress) != ["kindCounts"]:
+        raise ContractError("evidence_runtime_ingress_fields_invalid")
+    counts = _object(ingress["kindCounts"], "evidence_runtime_ingress_counts")
+    if set(counts).difference(_LIVE_RUNTIME_EVENT_KINDS) or any(
+        type(count) is not int or not 0 <= count <= 256 for count in counts.values()
+    ):
+        raise ContractError("evidence_runtime_ingress_invalid")
+
+    attempts = evidence["providerAttempts"]
+    if not isinstance(attempts, list) or len(attempts) > 32:
+        raise ContractError("evidence_provider_attempts_invalid")
+    previous_sequence = 0
+    for row in attempts:
+        attempt = _object(row, "evidence_provider_attempt")
+        if set(attempt) != {"sequence", "phase", "upstreamInitiated", "statusClass", "errorCode"}:
+            raise ContractError("evidence_provider_attempt_fields_invalid")
+        if (
+            type(attempt["sequence"]) is not int
+            or not 0 <= attempt["sequence"] <= 256
+            or attempt["sequence"] <= previous_sequence
+            or attempt["phase"] not in _LIVE_ATTEMPT_PHASES
+            or type(attempt["upstreamInitiated"]) is not bool
+            or attempt["statusClass"] not in _LIVE_ATTEMPT_STATUS_CLASSES
+            or attempt["errorCode"] not in _LIVE_ATTEMPT_ERROR_CODES
+        ):
+            raise ContractError("evidence_provider_attempt_invalid")
+        previous_sequence = attempt["sequence"]
+
+    terminal = _object(evidence["terminal"], "evidence_terminal")
+    if set(terminal).difference({"present", "kind", "code", "reasonCategory"}) or not {
+        "present",
+        "kind",
+    }.issubset(terminal):
+        raise ContractError("evidence_terminal_fields_invalid")
+    if type(terminal["present"]) is not bool or terminal["kind"] not in _FAILURE_TERMINAL_KINDS:
+        raise ContractError("evidence_terminal_invalid")
+    for field in ("code", "reasonCategory"):
+        if field in terminal:
+            _safe_ref(terminal[field], f"evidence_terminal_{field}")
+
+    if type(evidence["planeHostOperationReceipts"]) is not bool:
+        raise ContractError("evidence_host_receipts_invalid")
+    audit = evidence["planeOperationAudit"]
+    if not isinstance(audit, list) or len(audit) != len(_LIVE_OPERATION_IDS):
+        raise ContractError("evidence_operation_audit_count_invalid")
+    for operation_id, row in zip(_LIVE_OPERATION_IDS, audit):
+        operation = _object(row, "evidence_operation_audit")
+        if set(operation) != {"operationId", "status", "errorCode", "count"} or (
+            operation["operationId"] != operation_id
+            or operation["status"] not in _LIVE_OPERATION_STATUSES
+            or operation["errorCode"] is not None
+            and operation["errorCode"] not in _LIVE_OPERATION_ERROR_CODES
+            or type(operation["count"]) is not int
+            or not 0 <= operation["count"] <= 8
+        ):
+            raise ContractError("evidence_operation_audit_invalid")
+    _validate_semantic_digest(evidence)
+
+
 def validate_evidence(
     evidence_text: str,
     manifest: dict[str, Any],
@@ -979,6 +1350,8 @@ def validate_evidence(
     config: dict[str, Any],
     candidate: str,
 ) -> dict[str, Any]:
+    if len(evidence_text.encode("utf-8")) > MAX_EVIDENCE_BYTES:
+        raise ContractError("evidence_oversized")
     if SECRET_FIELD_RE.search(evidence_text):
         raise ContractError("evidence_contains_sensitive_field")
     try:
@@ -989,22 +1362,26 @@ def validate_evidence(
         raise ContractError("evidence_must_be_one_json_object")
     if set(evidence).difference(_LIVE_TOP_LEVEL_FIELDS):
         raise ContractError("evidence_top_level_fields_invalid")
-    _exact(_required(evidence, "schemaVersion", "evidence"), "plane-agent-g4/live-evidence/v1", "evidence_schema")
-    _exact(_required(evidence, "status", "evidence"), "passed", "evidence_status")
+    expected = exact_binding(manifest, candidate)
+    schema = _required(evidence, "schemaVersion", "evidence")
+    status = _required(evidence, "status", "evidence")
+    if schema == "plane-agent-g4/live-failure/v1" or status == "failed":
+        _validate_failure_receipt(evidence, authority_info, expected)
+        return {
+            "evidenceSha256": hashlib.sha256(evidence_text.encode("utf-8")).hexdigest(),
+            "collected": 0,
+            "passed": 0,
+        }
+    _exact(schema, "plane-agent-g4/live-evidence/v1", "evidence_schema")
+    _exact(status, "passed", "evidence_status")
+    _validate_receipt_common(evidence, authority_info, expected, status="passed")
     readback = _object(_required(evidence, "readback", "evidence"), "evidence_readback")
     _validate_live_readback(readback)
-    expected = exact_binding(manifest, candidate)
-    _exact(_required(evidence, "binding", "evidence"), expected, "evidence_binding")
     evidence_provider_relay = _provider_relay(evidence["providerRelay"], "evidence_provider_relay") if "providerRelay" in evidence else None
     _exact(evidence_provider_relay, authority_info["providerRelay"], "evidence_provider_relay")
     if evidence_provider_relay is not None and evidence_provider_relay["hermesHookStatus"] != "integrated":
         raise ContractError("evidence_provider_relay_hook_not_integrated")
     _exact(_required(evidence, "provider", "evidence"), {**authority_info["provider"], "fallbackUsed": False}, "evidence_provider")
-    canaries = _object(_required(evidence, "canaries", "evidence"), "evidence_canaries")
-    for key, expected_status in (("permitted", "allowed"), ("denied", "denied")):
-        row = _object(_required(canaries, key, "evidence_canaries"), f"evidence_canaries_{key}")
-        if row.get("id") != authority_info["canaries"][key]["id"] or row.get("status") != expected_status or row.get("passed") is not True:
-            raise ContractError(f"evidence_{key}_canary_failed")
     threshold_result = _object(_required(evidence, "thresholds", "evidence"), "evidence_thresholds")
     _exact(_required(threshold_result, "profile", "evidence_thresholds"), authority_info["thresholdProfile"], "evidence_threshold_profile")
     _exact(_required(threshold_result, "approved", "evidence_thresholds"), authority_info["thresholds"], "evidence_approved_thresholds")
@@ -1040,6 +1417,7 @@ def validate_evidence(
     ):
         raise ContractError("evidence_usage_fields_invalid")
     summary = _summary(summary_obj, "evidence_summary")
+    _validate_semantic_digest(evidence)
     return {
         "evidenceSha256": hashlib.sha256(evidence_text.encode("utf-8")).hexdigest(),
         "collected": summary["counts"]["collected"],
@@ -1061,7 +1439,7 @@ def validate_files(
     config = _read_json(config_path, "config")
     authority_info = validate_authority(authority, manifest, candidate, expected_candidate, command)
     validate_config(config, authority_info, command)
-    evidence = validate_evidence(evidence_path.read_text(encoding="utf-8"), manifest, authority_info, config, candidate)
+    evidence = validate_evidence(_read_bounded_text(evidence_path), manifest, authority_info, config, candidate)
     return evidence
 
 
@@ -1094,7 +1472,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.evidence is None:
                 raise ContractError("evidence_path_required")
             result = validate_evidence(
-                args.evidence.read_text(encoding="utf-8"),
+                _read_bounded_text(args.evidence),
                 manifest,
                 authority_info,
                 config,

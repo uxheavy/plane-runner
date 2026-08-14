@@ -106,6 +106,23 @@ provider.pop("fallbackUsed", None)
 print(json.dumps(provider, sort_keys=True, separators=(",", ":")))
 PY
 )"
+IFS=$'\t' read -r G4_AUTHORITY_ID G4_PERMITTED_CANARY G4_DENIED_CANARY <<<"$(python3 - "${LIVE_AUTHORITY}" <<'PY'
+import json
+import sys
+
+authority = json.load(open(sys.argv[1], encoding="utf-8"))
+binding = authority["binding"]
+print(
+    "\t".join(
+        (
+            authority["authorityId"],
+            binding["canaries"]["permitted"]["id"],
+            binding["canaries"]["denied"]["id"],
+        )
+    )
+)
+PY
+)"
 IFS=$'\t' read -r G4_PROVIDER_NAME G4_PROVIDER_MODEL G4_PROVIDER_BASE_URL G4_PROVIDER_HOST G4_PROVIDER_PATH \
     G4_PROVIDER_CREDENTIAL_SOURCE G4_PROVIDER_CREDENTIAL_REF G4_PROVIDER_CREDENTIAL_NAME \
     <<<"$(python3 - "${PROVIDER_DESCRIPTOR_JSON}" <<'PY'
@@ -627,8 +644,9 @@ docker run --rm -i --network "${NETWORK}" --hostname api --network-alias api \
     --env G4_API_SOURCE_REVISION="${G4_API_SOURCE_REVISION}" \
     --env G4_API_CONTRACT="${G4_API_CONTRACT}" \
     --env G4_PROVIDER_DESCRIPTOR_JSON="${PROVIDER_DESCRIPTOR_JSON}" \
-    --env G4_PERMITTED_CANARY=live-permitted-read \
-    --env G4_DENIED_CANARY=live-denied-evaluate \
+    --env G4_AUTHORITY_ID="${G4_AUTHORITY_ID}" \
+    --env G4_PERMITTED_CANARY="${G4_PERMITTED_CANARY}" \
+    --env G4_DENIED_CANARY="${G4_DENIED_CANARY}" \
     "${API_IMAGE}" python - <"${LIVE_INVOKE_SOURCE}" >"${EVIDENCE_FILE}" 2>"${ERROR_FILE}"
 
 test -s "${EVIDENCE_FILE}"
