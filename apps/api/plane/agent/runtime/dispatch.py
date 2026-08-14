@@ -30,10 +30,6 @@ class RuntimeIngressError(ValueError):
     """Raised when an untrusted runtime frame cannot become Plane evidence."""
 
 
-class LateRuntimeEventError(RuntimeIngressError):
-    """Raised when a runtime event arrives after Plane has applied a terminal."""
-
-
 def _contract_error(exc: RuntimeContractError, context: str) -> RuntimeIngressError:
     return RuntimeIngressError(f"{context}: {exc}")
 
@@ -158,8 +154,7 @@ def _ingest_event(event: dict[str, Any], invocation: RuntimeInvocation) -> Runti
     replay = _existing_event_replay(event, invocation)
     if replay is not None:
         return replay
-    if RunTerminalEvent.objects.filter(invocation=invocation, visible=True).exists():
-        raise LateRuntimeEventError("runtime event arrived after the Plane terminal event")
+    terminal = RunTerminalEvent.objects.filter(invocation=invocation, visible=True).first()
     if RuntimeExitEvidence.all_objects.filter(invocation=invocation).exists():
         raise RuntimeIngressError("runtime events are illegal after an exit")
     latest = RuntimeEventIngress.all_objects.filter(invocation=invocation).order_by("-sequence").first()
@@ -167,6 +162,13 @@ def _ingest_event(event: dict[str, Any], invocation: RuntimeInvocation) -> Runti
     if event["sequence"] != expected_sequence:
         raise RuntimeIngressError("runtime event sequence is out of order or gapped")
     body = event["body"]
+    raw_payload = deepcopy(event)
+    if terminal is not None:
+        raw_payload["planeIngress"] = {
+            "disposition": "late_after_terminal",
+            "authoritative": False,
+            "terminalProductEventRef": terminal.product_event_ref,
+        }
     try:
         with transaction.atomic():
             return RuntimeEventIngress.objects.create(
@@ -184,7 +186,7 @@ def _ingest_event(event: dict[str, Any], invocation: RuntimeInvocation) -> Runti
                 fingerprint=content_digest(event),
                 kind=body["kind"],
                 observed_at=event["observedAt"],
-                raw_payload=deepcopy(event),
+                raw_payload=raw_payload,
             )
     except IntegrityError as exc:
         raise RuntimeIngressError("runtime event could not be persisted without an identity collision") from exc

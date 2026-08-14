@@ -238,8 +238,9 @@ class CompletedExitWithUnknownProviderRuntimeTransport:
 
 
 class OutcomeBeforeLateBudgetExitRuntimeTransport:
-    def __init__(self):
+    def __init__(self, *, completed=False):
         self.calls = 0
+        self.completed = completed
 
     def dispatch(self, snapshot_json, envelope_json):
         self.calls += 1
@@ -251,14 +252,25 @@ class OutcomeBeforeLateBudgetExitRuntimeTransport:
             idempotency_key="idempotency:late-budget-outcome",
             created_by=invocation.created_by,
         )
-        return _runtime_frames(
-            json.loads(snapshot_json),
-            envelope,
-            failure={
-                "code": "budget_exhausted",
-                "message": "model-call allowance is exhausted after publication",
-                "retryable": False,
-            },
+        failure = {
+            "code": "budget_exhausted",
+            "message": "model-call allowance is exhausted after publication",
+            "retryable": False,
+        }
+        frames = list(_runtime_frames(json.loads(snapshot_json), envelope, failure=failure))
+        first_event = json.loads(frames[0])
+        late_event = dict(first_event)
+        late_event["sequence"] = 1
+        late_event["eventId"] = "event:late-terminal-usage"
+        late_event["idempotencyKey"] = "idempotency:late-terminal-usage"
+        exit_frame = json.loads(frames[-1])
+        exit_frame["finalSequence"] = 1
+        if self.completed:
+            exit_frame["kind"] = "completed"
+            exit_frame.pop("failure", None)
+        return tuple(
+            json.dumps(frame, sort_keys=True, separators=(",", ":"))
+            for frame in (first_event, late_event, exit_frame)
         )
 
 
@@ -863,8 +875,48 @@ def test_supervisor_keeps_applied_outcome_and_late_budget_exit_as_split_truth(
     assert terminal.kind == "outcome_submission"
     assert RunTerminalEvent.objects.filter(run=run, visible=True).count() == 1
     assert exit_evidence.kind == "failed"
+    assert exit_evidence.final_sequence == 1
     assert exit_evidence.raw_payload["failure"]["code"] == "budget_exhausted"
-    assert RuntimeEventIngress.objects.filter(invocation=invocation).count() == 0
+    late_events = RuntimeEventIngress.objects.filter(invocation=invocation).order_by("sequence")
+    assert late_events.count() == 2
+    assert all(
+        event.raw_payload["planeIngress"] == {
+            "disposition": "late_after_terminal",
+            "authoritative": False,
+            "terminalProductEventRef": terminal.product_event_ref,
+        }
+        for event in late_events
+    )
+
+    replay = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
+    assert replay.state == InvocationState.SUCCEEDED
+    assert transport.calls == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_supervisor_accepts_completed_exit_after_late_terminal_evidence(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    run, invocation = _invocation(workspace, gateway_project, gateway_issue, create_user, suffix="late-completed")
+    transport = OutcomeBeforeLateBudgetExitRuntimeTransport(completed=True)
+
+    result = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
+
+    invocation.refresh_from_db()
+    terminal = RunTerminalEvent.objects.get(invocation=invocation, visible=True)
+    exit_evidence = RuntimeExitEvidence.objects.get(invocation=invocation)
+    assert result.state == InvocationState.SUCCEEDED
+    assert result.terminal_kind == "outcome_submission"
+    assert result.failure is None
+    assert terminal.kind == "outcome_submission"
+    assert RunTerminalEvent.objects.filter(run=run, visible=True).count() == 1
+    assert exit_evidence.kind == "completed"
+    assert exit_evidence.final_sequence == 1
+    assert RuntimeEventIngress.objects.filter(invocation=invocation).count() == 2
+    assert all(
+        event.raw_payload["planeIngress"]["disposition"] == "late_after_terminal"
+        for event in RuntimeEventIngress.objects.filter(invocation=invocation)
+    )
 
     replay = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
     assert replay.state == InvocationState.SUCCEEDED
