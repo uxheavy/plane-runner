@@ -107,6 +107,16 @@ export const snapshot: RunSnapshot = createRunSnapshot(
         {
           operationRef: createOperationRef("search_workspace"),
           schemaDigest: contentDigest("d"),
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            required: ["query"],
+            properties: {
+              query: { type: "string", maxLength: 255 },
+              limit: { type: "integer", minimum: 1, maximum: 50 },
+              cursor: { type: "string", maxLength: 32 },
+            },
+          },
           disclosure: "eager",
         },
       ],

@@ -6,7 +6,10 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+from plane.agent.lifecycle.runtime_contract import MAX_BOUNDED_BYTE_COUNT
 from plane.operation_gateway.catalog import CATALOG_DIGEST, OPERATION_CATALOG, OperationDescriptor
+from plane.operation_gateway.catalog import describe_operation
+from plane.operation_gateway.contracts import canonical_json
 
 
 _RESERVED_PRESENTATION_KEYS = frozenset(
@@ -21,6 +24,8 @@ _RESERVED_PRESENTATION_KEYS = frozenset(
 )
 _PRESENTATION_KEYS = ("eager", "eager_operations", "eagerOperations")
 MAX_EAGER_OPERATIONS = 64
+MAX_EAGER_INPUT_SCHEMA_BYTES = MAX_BOUNDED_BYTE_COUNT // MAX_EAGER_OPERATIONS
+MAX_EAGER_PRESENTATION_BYTES = MAX_BOUNDED_BYTE_COUNT // 2
 _TOKEN_PATTERN = re.compile(r"[a-z0-9_]+")
 _GENERIC_ASSIGNMENT_TOKENS = frozenset(
     {
@@ -92,9 +97,18 @@ def _matches_assignment(descriptor: OperationDescriptor, tokens: set[str]) -> bo
 
 
 def _entry(descriptor: OperationDescriptor) -> dict[str, Any]:
+    input_schema = describe_operation(descriptor.operation_id)["operation"]["inputSchema"]
+    if not isinstance(input_schema, dict):
+        raise ValueError(f"{descriptor.operation_id} input schema must be a JSON Schema object")
+    input_schema_bytes = len(canonical_json(input_schema).encode("utf-8"))
+    if input_schema_bytes > MAX_EAGER_INPUT_SCHEMA_BYTES:
+        raise ValueError(
+            f"{descriptor.operation_id} input schema exceeds {MAX_EAGER_INPUT_SCHEMA_BYTES} canonical JSON bytes"
+        )
     return {
         "operationRef": descriptor.operation_ref,
         "schemaDigest": descriptor.schema_digest,
+        "inputSchema": input_schema,
         "disclosure": "eager",
     }
 
@@ -127,10 +141,16 @@ def compose_tool_catalog(profile: Any, assignment: Any) -> dict[str, Any]:
         if _matches_assignment(descriptor, tokens):
             selected.append(operation_id)
 
-    return {
+    catalog = {
         "catalogDigest": CATALOG_DIGEST,
         "eagerOperations": [_entry(OPERATION_CATALOG[operation_id]) for operation_id in selected],
     }
+    presentation_bytes = len(canonical_json(catalog).encode("utf-8"))
+    if presentation_bytes > MAX_EAGER_PRESENTATION_BYTES:
+        raise ValueError(
+            f"eager operation presentation exceeds {MAX_EAGER_PRESENTATION_BYTES} canonical JSON bytes"
+        )
+    return catalog
 
 
 def progressive_operation_ids(eager_catalog: Mapping[str, Any]) -> tuple[str, ...]:

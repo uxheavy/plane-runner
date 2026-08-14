@@ -22,6 +22,10 @@ const stringWithBytes = (constraint, extra = {}) => ({
   ...extra,
 });
 
+const MAX_EAGER_OPERATIONS = 64;
+const MAX_EAGER_INPUT_SCHEMA_BYTES = byteConstraints.serializedContract.utf8ByteMax / MAX_EAGER_OPERATIONS;
+const MAX_EAGER_PRESENTATION_BYTES = byteConstraints.serializedContract.utf8ByteMax / 2;
+
 const definitions = {
   workspaceRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("workspace") }),
   actorRef: stringWithBytes(byteConstraints.reference, { pattern: namespacedPattern("actor") }),
@@ -370,20 +374,27 @@ const context = {
 const toolCatalog = {
   type: "object",
   additionalProperties: false,
+  "x-serializedUtf8ByteMax": MAX_EAGER_PRESENTATION_BYTES,
   required: ["catalogDigest", "eagerOperations"],
   properties: {
     catalogDigest: ref("contentDigest"),
     eagerOperations: {
       type: "array",
-      maxItems: 64,
+      maxItems: MAX_EAGER_OPERATIONS,
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["operationRef", "schemaDigest", "disclosure"],
+        required: ["operationRef", "schemaDigest", "inputSchema", "disclosure"],
         properties: {
           operationRef: ref("operationRef"),
           schemaDigest: ref("contentDigest"),
-          disclosure: { enum: ["eager", "progressive"] },
+          inputSchema: {
+            type: "object",
+            additionalProperties: true,
+            maxProperties: 4096,
+            "x-serializedUtf8ByteMax": MAX_EAGER_INPUT_SCHEMA_BYTES,
+          },
+          disclosure: { const: "eager" },
         },
       },
     },

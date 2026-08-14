@@ -22,6 +22,9 @@ const TIMESTAMP_BYTE_MIN = 1;
 const TIMESTAMP_BYTE_MAX = 64;
 const MAX_BOUNDED_BYTE_COUNT = 1_048_576;
 const MAX_SERIALIZED_JSON_BYTES = 1_048_576;
+const MAX_EAGER_OPERATIONS = 64;
+const MAX_EAGER_INPUT_SCHEMA_BYTES = MAX_SERIALIZED_JSON_BYTES / MAX_EAGER_OPERATIONS;
+const MAX_EAGER_PRESENTATION_BYTES = MAX_SERIALIZED_JSON_BYTES / 2;
 declare const validatedContractBrand: unique symbol;
 
 export type PlaneAgentRuntimeProtocol = typeof PLANE_AGENT_RUNTIME_PROTOCOL;
@@ -382,15 +385,16 @@ export type VersionedContextRef = Readonly<{
   contentDigest: ContentDigest;
 }>;
 
-export type OperationDescriptor = Readonly<{
+export type EagerOperationPresentation = Readonly<{
   operationRef: OperationRef;
   schemaDigest: ContentDigest;
-  disclosure: "eager" | "progressive";
+  inputSchema: Readonly<Record<string, unknown>>;
+  disclosure: "eager";
 }>;
 
 export type ToolCatalogSnapshot = Readonly<{
   catalogDigest: ContentDigest;
-  eagerOperations: readonly OperationDescriptor[];
+  eagerOperations: readonly EagerOperationPresentation[];
 }>;
 
 export type RuntimeModelRoute = Readonly<{
@@ -1061,6 +1065,22 @@ function parseTimestamp(value: unknown, path: string): Timestamp {
   return parseString(value, path, TIMESTAMP_BYTE_MAX, TIMESTAMP_BYTE_MIN) as Timestamp;
 }
 
+function parseEagerInputSchema(value: unknown, path: string): Readonly<Record<string, unknown>> {
+  if (!isRecord(value)) {
+    throw new ContractParseError(path, "must be a bounded canonical JSON Schema object");
+  }
+  try {
+    const normalized = normalizeJsonValue(value);
+    if (!isRecord(normalized)) {
+      throw new ContractParseError(path, "must be a bounded canonical JSON Schema object");
+    }
+    measureNormalizedJsonUtf8Bytes(normalized, MAX_EAGER_INPUT_SCHEMA_BYTES);
+    return normalized;
+  } catch (_error) {
+    throw new ContractParseError(path, "must be a bounded canonical JSON Schema object");
+  }
+}
+
 function parseDigest(
   value: unknown,
   path: string,
@@ -1473,17 +1493,21 @@ function parseSnapshotContent(value: unknown, path: string): RunSnapshotContent 
     };
   });
   const catalogObject = requireRecord(object.toolCatalog, `${path}.toolCatalog`, ["catalogDigest", "eagerOperations"]);
-  if (!Array.isArray(catalogObject.eagerOperations) || catalogObject.eagerOperations.length > 64) {
-    throw new ContractParseError(`${path}.toolCatalog.eagerOperations`, "must contain at most 64 items");
+  if (!Array.isArray(catalogObject.eagerOperations) || catalogObject.eagerOperations.length > MAX_EAGER_OPERATIONS) {
+    throw new ContractParseError(
+      `${path}.toolCatalog.eagerOperations`,
+      `must contain at most ${MAX_EAGER_OPERATIONS} items`
+    );
   }
   const eagerOperations = catalogObject.eagerOperations.map((item, index) => {
     const operationObject = requireRecord(item, `${path}.toolCatalog.eagerOperations[${index}]`, [
       "operationRef",
       "schemaDigest",
+      "inputSchema",
       "disclosure",
     ]);
-    if (operationObject.disclosure !== "eager" && operationObject.disclosure !== "progressive") {
-      throw new ContractParseError(`${path}.toolCatalog.eagerOperations[${index}].disclosure`, "is not supported");
+    if (operationObject.disclosure !== "eager") {
+      throw new ContractParseError(`${path}.toolCatalog.eagerOperations[${index}].disclosure`, "must be eager");
     }
     return {
       operationRef: parseRef(
@@ -1496,9 +1520,25 @@ function parseSnapshotContent(value: unknown, path: string): RunSnapshotContent 
         `${path}.toolCatalog.eagerOperations[${index}].schemaDigest`,
         parseContentDigest
       ) as ContentDigest,
-      disclosure: operationObject.disclosure as "eager" | "progressive",
+      inputSchema: parseEagerInputSchema(
+        operationObject.inputSchema,
+        `${path}.toolCatalog.eagerOperations[${index}].inputSchema`
+      ),
+      disclosure: "eager" as const,
     };
   });
+  const catalogDigest = parseDigest(
+    catalogObject.catalogDigest,
+    `${path}.toolCatalog.catalogDigest`,
+    parseContentDigest
+  ) as ContentDigest;
+  const toolCatalog = { catalogDigest, eagerOperations };
+  if (!isCanonicalOwnedJsonUtf8ByteLengthAtMost(toolCatalog, MAX_EAGER_PRESENTATION_BYTES)) {
+    throw new ContractParseError(
+      `${path}.toolCatalog`,
+      `eager operation presentation exceeds ${MAX_EAGER_PRESENTATION_BYTES} canonical JSON bytes`
+    );
+  }
   const runtimePolicyObject = requireRecord(object.runtimePolicy, `${path}.runtimePolicy`, [
     "model",
     "adapter",
@@ -1532,14 +1572,7 @@ function parseSnapshotContent(value: unknown, path: string): RunSnapshotContent 
       behavioralPrompt: parseBoundedPrompt(profileObject.behavioralPrompt, `${path}.profile.behavioralPrompt`),
     },
     context: contexts,
-    toolCatalog: {
-      catalogDigest: parseDigest(
-        catalogObject.catalogDigest,
-        `${path}.toolCatalog.catalogDigest`,
-        parseContentDigest
-      ) as ContentDigest,
-      eagerOperations,
-    },
+    toolCatalog,
     runtimePolicy: {
       model: {
         provider: parseBoundedToken(modelObject.provider, `${path}.runtimePolicy.model.provider`),

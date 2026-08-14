@@ -88,6 +88,15 @@ def test_work_item_read_discloses_exact_uuid_input_schema():
     }
 
 
+def test_composed_eager_catalog_carries_work_item_read_input_schema():
+    catalog = compose_tool_catalog(_profile(eager=["work_item.read"]), _assignment())
+
+    eager = next(item for item in catalog["eagerOperations"] if item["operationRef"] == "operation:work_item.read")
+    assert set(eager) == {"operationRef", "schemaDigest", "inputSchema", "disclosure"}
+    assert eager["inputSchema"] == describe_operation("work_item.read")["operation"]["inputSchema"]
+    assert eager["disclosure"] == "eager"
+
+
 def test_progressive_disclosure_excludes_eager_prefixed_operation_refs():
     progressive = progressive_operation_ids({"eagerOperations": [{"operationRef": "operation:work_item.rename"}]})
 

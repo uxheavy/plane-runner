@@ -62,7 +62,7 @@ type RunSnapshot = Readonly<{
   behavioralPrompt: string;
   context: readonly VersionedContextRef[];
   toolPresentation: {
-    eagerOperations: readonly OperationDescriptor[];
+    eagerOperations: readonly EagerOperationPresentation[];
     catalogDigest: string;
   };
   model: RuntimeModelRoute;
@@ -70,6 +70,21 @@ type RunSnapshot = Readonly<{
   contractDigests: ContractDigests;
 }>;
 ```
+
+`EagerOperationPresentation` is the exact logical shape used in the snapshot:
+
+```ts
+type EagerOperationPresentation = Readonly<{
+  operationRef: string;
+  schemaDigest: string;
+  inputSchema: object;
+  disclosure: "eager";
+}>;
+```
+
+The input schema is the bounded canonical JSON Schema object from the canonical gateway descriptor. `schemaDigest` still identifies the complete descriptor, including the result schema. The immutable `RunSnapshot.contentDigest` authenticates the embedded input-schema bytes. The runtime contract permits at most 64 eager entries, 16 KiB per canonical input schema, and 512 KiB for the aggregate eager presentation. Oversize schemas are rejected rather than truncated. No result schema, alias, broad coercion, or per-operation permission is part of this presentation shape.
+
+This is a pre-release v1 contract correction found by functional dogfood. It is not a deployed compatibility migration and does not add a compatibility version or migration path.
 
 Each kernel dispatch receives a separate immutable `InvocationEnvelope`:
 

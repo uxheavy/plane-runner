@@ -337,6 +337,87 @@ describe("parsed plane.agent-runtime/v1 contract boundary", () => {
     ).toBeDefined();
   });
 
+  test("keeps eager operation presentation exact, strict, and bounded", () => {
+    const [eagerOperation] = snapshot.toolCatalog.eagerOperations;
+    if (eagerOperation === undefined) throw new Error("fixture must contain one eager operation");
+
+    expect(eagerOperation.inputSchema).toEqual({
+      type: "object",
+      additionalProperties: false,
+      required: ["query"],
+      properties: {
+        query: { type: "string", maxLength: 255 },
+        limit: { type: "integer", minimum: 1, maximum: 50 },
+        cursor: { type: "string", maxLength: 32 },
+      },
+    });
+
+    expect(() =>
+      parseRunSnapshot({
+        ...snapshot,
+        toolCatalog: {
+          ...snapshot.toolCatalog,
+          eagerOperations: [{ ...eagerOperation, unexpected: true }],
+        },
+      })
+    ).toThrow(/unknown properties/);
+
+    const tamperedInputSchema = {
+      ...eagerOperation.inputSchema,
+      properties: {
+        ...(eagerOperation.inputSchema.properties as Record<string, unknown>),
+        query: { type: "integer" },
+      },
+    };
+    expect(() =>
+      parseRunSnapshot({
+        ...snapshot,
+        toolCatalog: {
+          ...snapshot.toolCatalog,
+          eagerOperations: [{ ...eagerOperation, inputSchema: tamperedInputSchema }],
+        },
+      })
+    ).toThrow(/canonical immutable snapshot content/);
+
+    expect(() =>
+      parseRunSnapshot({
+        ...snapshot,
+        toolCatalog: {
+          ...snapshot.toolCatalog,
+          eagerOperations: [
+            {
+              ...eagerOperation,
+              inputSchema: { description: "x".repeat(16_384) },
+            },
+          ],
+        },
+      })
+    ).toThrow(/bounded canonical JSON Schema object/);
+
+    const overCount = Array.from({ length: 65 }, (_, index) => ({
+      ...eagerOperation,
+      operationRef: createOperationRef(`operation-${index}`),
+    }));
+    expect(() =>
+      parseRunSnapshot({
+        ...snapshot,
+        toolCatalog: { ...snapshot.toolCatalog, eagerOperations: overCount },
+      })
+    ).toThrow(/at most 64 items/);
+
+    const overAggregate = Array.from({ length: 64 }, (_, index) => ({
+      ...eagerOperation,
+      operationRef: createOperationRef(`operation-${index}`),
+      inputSchema: { description: "x".repeat(8_200) },
+    }));
+    expect(() =>
+      parseRunSnapshot({
+        ...snapshot,
+        toolCatalog: { ...snapshot.toolCatalog, eagerOperations: overAggregate },
+      })
+    ).toThrow(/aggregate eager operation presentation|eager operation presentation/);
+  });
+
   test("accepts only the canonical genesis and rejects alternate revision-zero states in parser and schema", () => {
     const genesis = createInitialRuntimeDurableState({
       workspaceRef: snapshot.workspaceRef,

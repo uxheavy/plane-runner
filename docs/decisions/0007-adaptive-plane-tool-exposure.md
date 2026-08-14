@@ -34,6 +34,21 @@ The universal core includes one `search_workspace` operation that returns typed 
 
 The exact universal-core membership, final names, promotion rules, and schemas remain separate catalog decisions and must be verified against real Plane work. Presentation never grants, denies, or pre-authorizes an operation; live Plane authorization remains final.
 
+The v1 run snapshot represents each eager entry as an `EagerOperationPresentation`:
+
+```ts
+type EagerOperationPresentation = {
+  operationRef: string;
+  schemaDigest: string;
+  inputSchema: object;
+  disclosure: "eager";
+};
+```
+
+`inputSchema` is the bounded canonical JSON Schema object from the gateway descriptor. `schemaDigest` continues to identify the complete canonical descriptor, including its result schema. The immutable run snapshot content digest authenticates the embedded input-schema bytes. The contract allows at most 64 entries, bounds each input schema to 16 KiB of canonical UTF-8 JSON, bounds the aggregate eager presentation to 512 KiB, and rejects oversize data without truncation. It does not include a result schema, aliases, broad coercion, or per-operation permissions.
+
+This is a pre-release v1 contract correction found by functional dogfood. It does not require a deployed compatibility migration because the contract has not been released as a compatibility promise.
+
 ## Alternatives considered
 
 ### Expose every Plane and Hermes tool eagerly

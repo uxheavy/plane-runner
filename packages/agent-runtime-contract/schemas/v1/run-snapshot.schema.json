@@ -100,6 +100,7 @@
     "toolCatalog": {
       "type": "object",
       "additionalProperties": false,
+      "x-serializedUtf8ByteMax": 524288,
       "required": ["catalogDigest", "eagerOperations"],
       "properties": {
         "catalogDigest": {
@@ -111,7 +112,7 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["operationRef", "schemaDigest", "disclosure"],
+            "required": ["operationRef", "schemaDigest", "inputSchema", "disclosure"],
             "properties": {
               "operationRef": {
                 "$ref": "#/$defs/operationRef"
@@ -119,8 +120,14 @@
               "schemaDigest": {
                 "$ref": "#/$defs/contentDigest"
               },
+              "inputSchema": {
+                "type": "object",
+                "additionalProperties": true,
+                "maxProperties": 4096,
+                "x-serializedUtf8ByteMax": 16384
+              },
               "disclosure": {
-                "enum": ["eager", "progressive"]
+                "const": "eager"
               }
             }
           }
