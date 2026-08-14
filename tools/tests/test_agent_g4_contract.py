@@ -1101,6 +1101,9 @@ class G4ContractTests(unittest.TestCase):
         runtime_policy = (ROOT / "apps/api/plane/agent/runtime/subprocess.py").read_text(encoding="utf-8")
         runtime_service = (ROOT / "apps/api/plane/agent/runtime/service.py").read_text(encoding="utf-8")
         vfork_adapter = (ROOT / "apps/api/plane/agent/runtime/sitecustomize.py").read_text(encoding="utf-8")
+        live_runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+        budget_probe = (TOOLS / "agent-g4-wave0u-probe.py").read_text(encoding="utf-8")
+        bootstrap_probe = (TOOLS / "agent-g4-ut014-real-bootstrap.py").read_text(encoding="utf-8")
         self.assertIn('"/v1/runtime/dispatch"', source)
         self.assertIn("dispatch_http=passed full_chain=passed", source)
         self.assertIn("PINNED_HERMES_RUN_AGENT_PATH = \"/opt/hermes/run_agent.py\"", source)
@@ -1113,8 +1116,27 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn("tamper_guard=fail_closed", source)
         self.assertIn("filesystem_confinement=passed", source)
         self.assertIn("validate_pinned_hermes_identity", source)
-        self.assertIn("COPY hermes/plane_runtime/g1_runtime_image/dotenv/ /opt/hermes/dotenv/", image_dockerfile)
+        self.assertIn("COPY hermes/ /opt/hermes/", image_dockerfile)
+        self.assertIn("ENV PYTHONPATH=/opt/plane/agent/dependencies:/opt:/opt/hermes", image_dockerfile)
+        self.assertIn(
+            "COPY hermes/plane_runtime/g1_runtime_image/dotenv/ /opt/plane/agent/dependencies/dotenv/",
+            image_dockerfile,
+        )
+        self.assertNotIn(
+            "COPY hermes/plane_runtime/g1_runtime_image/dotenv/ /opt/hermes/dotenv/",
+            image_dockerfile,
+        )
         self.assertIn("COPY plane_runtime_service/sitecustomize.py /opt/sitecustomize.py", image_dockerfile)
+        self.assertIn(
+            'child_environment.setdefault(\n            "PYTHONPATH",\n            "/opt/plane/agent/dependencies:/opt:/opt/hermes",\n        )',
+            runtime_service,
+        )
+        self.assertIn('"PYTHONPATH":"/tmp:/opt/plane/agent/dependencies:/opt:/opt/hermes"', live_runner)
+        self.assertIn("'PYTHONPATH': '/tmp:/opt/plane/agent/dependencies:/opt:/opt/hermes'", budget_probe)
+        self.assertIn(
+            '"PYTHONPATH": "/opt/plane:/opt/plane/agent/dependencies:/opt:/opt/hermes"',
+            bootstrap_probe,
+        )
         self.assertIn("_HERMES_CODE_MODE_CLONE_FLAGS = _SIGCHLD", runtime_policy)
         self.assertNotIn("_HERMES_BOOTSTRAP_CLONE_FLAGS", runtime_policy)
         self.assertIn("_HERMES_RPC_SOCKET_MODE = 0o600", runtime_policy)

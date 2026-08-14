@@ -185,7 +185,7 @@ def main() -> int:
                 "HERMES_HOME": str(home),
                 "LANG": "C.UTF-8",
                 "PATH": "/usr/local/bin:/usr/bin:/bin",
-                "PYTHONPATH": "/opt/plane:/opt:/opt/hermes",
+                "PYTHONPATH": "/opt/plane:/opt/plane/agent/dependencies:/opt:/opt/hermes",
                 "PYTHONDONTWRITEBYTECODE": "1",
                 "PYTHONNOUSERSITE": "1",
                 "TMPDIR": "/tmp",

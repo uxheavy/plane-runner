@@ -97,7 +97,7 @@ environment.update({{
         'LANG': 'C.UTF-8',
         'LC_ALL': 'C.UTF-8',
         'PATH': '/usr/local/bin:/usr/bin:/bin',
-        'PYTHONPATH': '/tmp:/opt:/opt/hermes',
+        'PYTHONPATH': '/tmp:/opt/plane/agent/dependencies:/opt:/opt/hermes',
         'PYTHONUNBUFFERED': '1',
     }}, sort_keys=True, separators=(',', ':')),
 }})

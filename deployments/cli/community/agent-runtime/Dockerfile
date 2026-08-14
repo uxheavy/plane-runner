@@ -27,7 +27,7 @@ COPY --from=runtime_base / /
 WORKDIR /opt/hermes
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
-ENV PYTHONPATH=/opt:/opt/hermes
+ENV PYTHONPATH=/opt/plane/agent/dependencies:/opt:/opt/hermes
 
 # The build context contains a git archive of Hermes and the Plane-owned
 # runtime transport package only.  The runtime service has no Plane source
@@ -37,8 +37,10 @@ COPY plane_runtime_service/ /opt/plane/agent/runtime/
 COPY plane_runtime_service/sitecustomize.py /opt/sitecustomize.py
 # The pinned Hermes G1 image intentionally uses this canonical no-op module
 # instead of python-dotenv so the real run_agent source remains importable
-# without ambient environment credential loading.
-COPY hermes/plane_runtime/g1_runtime_image/dotenv/ /opt/hermes/dotenv/
+# without ambient environment credential loading. Keep the compatibility
+# dependency outside /opt/hermes so that directory remains an exact projection
+# of the attested Hermes Git archive.
+COPY hermes/plane_runtime/g1_runtime_image/dotenv/ /opt/plane/agent/dependencies/dotenv/
 
 LABEL org.opencontainers.image.title="Plane Agent runtime" \
       org.opencontainers.image.source="https://github.com/uxheavy/hermes-agent" \
