@@ -725,6 +725,174 @@ def _summary(summary: Any, name: str) -> dict[str, Any]:
     return {"counts": parsed_counts, "durationMs": duration}
 
 
+_LIVE_OPERATION_IDS = (
+    "search_workspace",
+    "work_item.read",
+    "catalog.search",
+    "catalog.describe",
+    "agent.outcome.evaluate",
+    "agent.outcome.submit",
+    "agent.outcome.publish",
+)
+_LIVE_RUNTIME_EVENT_KINDS = {
+    "progress_observed",
+    "conversation_publication_observed",
+    "input_request_observed",
+    "artifact_observed",
+    "usage_observed",
+    "outcome_submission_observed",
+    "failure_observed",
+    "blocker_observed",
+    "transcript_evidence_observed",
+}
+_LIVE_OPERATION_STATUSES = {"success", "denied", "conflict", "unavailable", "absent"}
+_LIVE_OPERATION_ERROR_CODES = {
+    "NOT_AUTHORIZED",
+    "IDEMPOTENCY_CONFLICT",
+    "PLANE_CONFLICT",
+    "OPERATION_UNAVAILABLE",
+    "OUTCOME_UNKNOWN",
+    "VALIDATION_ERROR",
+    "OPERATION_REJECTED",
+    "UPSTREAM_FAILURE",
+}
+_LIVE_ATTEMPT_PHASES = {"intent", "started", "completed", "failed", "outcome_unknown", "unknown"}
+_LIVE_ATTEMPT_STATUS_CLASSES = {"", "not_sent", "unknown", "2xx", "4xx", "5xx"}
+_LIVE_ATTEMPT_ERROR_CODES = {
+    "",
+    "pre_send_failure",
+    "outcome_unknown",
+    "provider_error",
+    "runtime_error",
+    "upstream_error",
+    "unspecified",
+}
+_LIVE_PUBLICATION_REF_PREFIXES = {
+    "productRef": "outcome-submission:",
+    "operationAttemptRef": "operation-attempt:",
+    "operationRef": "operation:",
+    "applicationServiceRef": "application-service:",
+    "gatewayReceiptRef": "gateway-receipt:",
+    "receiptRef": "receipt:",
+    "auditReceiptRef": "audit-receipt:",
+    "productEventRef": "product-event:",
+}
+
+
+def _validate_live_readback(evidence: dict[str, Any]) -> None:
+    attempts = _required(evidence, "providerAttempts", "evidence")
+    if not isinstance(attempts, list) or len(attempts) > 32:
+        raise ContractError("evidence_provider_attempts_invalid")
+    previous_sequence = 0
+    for row in attempts:
+        attempt = _object(row, "evidence_provider_attempt")
+        sequence = attempt["sequence"]
+        if (
+            set(attempt) != {"sequence", "phase", "upstreamInitiated", "statusClass", "errorCode"}
+            or type(sequence) is not int
+            or not 1 <= sequence <= 256
+            or sequence <= previous_sequence
+            or attempt["phase"] not in _LIVE_ATTEMPT_PHASES
+            or type(attempt["upstreamInitiated"]) is not bool
+            or attempt["statusClass"] not in _LIVE_ATTEMPT_STATUS_CLASSES
+            or attempt["errorCode"] not in _LIVE_ATTEMPT_ERROR_CODES
+        ):
+            raise ContractError("evidence_provider_attempt_sequence_invalid")
+        previous_sequence = sequence
+
+    runtime_exit = _object(_required(evidence, "runtimeExit", "evidence"), "evidence_runtime_exit")
+    if (
+        set(runtime_exit) != {"present", "kind", "finalSequence", "failure"}
+        or runtime_exit["present"] is not True
+        or runtime_exit["kind"] != "completed"
+        or type(runtime_exit["finalSequence"]) is not int
+        or not 0 <= runtime_exit["finalSequence"] <= 256
+        or runtime_exit["failure"] is not None
+    ):
+        raise ContractError("evidence_runtime_exit_final_sequence_invalid")
+
+    ingress = _object(_required(evidence, "runtimeEventIngress", "evidence"), "evidence_runtime_ingress")
+    kind_counts = _object(ingress["kindCounts"], "evidence_runtime_ingress_counts")
+    if set(ingress) != {"kindCounts"} or set(kind_counts).difference(_LIVE_RUNTIME_EVENT_KINDS) or any(
+        type(count) is not int or not 0 <= count <= 256 for count in kind_counts.values()
+    ):
+        raise ContractError("evidence_runtime_ingress_invalid")
+
+    audit = _required(evidence, "planeOperationAudit", "evidence")
+    if not isinstance(audit, list) or len(audit) != len(_LIVE_OPERATION_IDS):
+        raise ContractError("evidence_operation_audit_count_invalid")
+    for operation_id, row in zip(_LIVE_OPERATION_IDS, audit):
+        operation = _object(row, "evidence_operation_audit")
+        if (
+            set(operation) != {"operationId", "status", "errorCode", "count"}
+            or operation["operationId"] != operation_id
+            or operation["status"] not in _LIVE_OPERATION_STATUSES
+            or operation["errorCode"] is not None
+            and operation["errorCode"] not in _LIVE_OPERATION_ERROR_CODES
+            or type(operation["count"]) is not int
+            or not 0 <= operation["count"] <= 8
+        ):
+            raise ContractError("evidence_operation_audit_invalid")
+
+    transcript = _object(_required(evidence, "transcriptEvidence", "evidence"), "evidence_transcript")
+    event_ids = transcript["eventIds"]
+    if (
+        set(transcript) != {"count", "eventIds"}
+        or type(transcript["count"]) is not int
+        or not 0 <= transcript["count"] <= 32
+        or not isinstance(event_ids, list)
+        or len(event_ids) != transcript["count"]
+        or len(event_ids) > 32
+        or any(not isinstance(event_id, str) or not re.fullmatch(r"event:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}", event_id) for event_id in event_ids)
+    ):
+        raise ContractError("evidence_transcript_invalid")
+
+    publication = _object(_required(evidence, "explicitPublication", "evidence"), "evidence_publication")
+    refs = publication["refs"]
+    if (
+        set(publication) != {"count", "refs"}
+        or type(publication["count"]) is not int
+        or publication["count"] < 1
+        or publication["count"] > 8
+        or not isinstance(refs, list)
+        or len(refs) != publication["count"]
+    ):
+        raise ContractError("evidence_publication_invalid")
+    for row in refs:
+        value = _object(row, "evidence_publication_ref")
+        if set(value) != set(_LIVE_PUBLICATION_REF_PREFIXES) or any(
+            not isinstance(value[field], str)
+            or len(value[field].encode("utf-8")) > 128
+            or not value[field].startswith(prefix)
+            or not re.fullmatch(r"[A-Za-z0-9_.:/-]+", value[field])
+            for field, prefix in _LIVE_PUBLICATION_REF_PREFIXES.items()
+        ):
+            raise ContractError("evidence_publication_ref_invalid")
+
+    replay = _object(_required(evidence, "replay", "evidence"), "evidence_replay")
+    expected_new = {
+        "children",
+        "providerAttempts",
+        "invocations",
+        "receipts",
+        "audits",
+        "usage",
+        "outcomes",
+        "publications",
+        "terminalEvents",
+        "semanticSideEffects",
+    }
+    new = _object(replay["new"], "evidence_replay_new")
+    if (
+        set(replay) != {"status", "providerAccess", "sameInvocation", "sameIdempotencyKey", "new"}
+        or replay["status"] != "passed"
+        or replay["providerAccess"] != "disabled"
+        or replay["sameInvocation"] is not True
+        or replay["sameIdempotencyKey"] is not True
+        or set(new) != expected_new
+        or any(value != 0 for value in new.values())
+    ):
+        raise ContractError("evidence_replay_new_effect_invalid")
 def validate_evidence(
     evidence_text: str,
     manifest: dict[str, Any],
@@ -742,6 +910,7 @@ def validate_evidence(
         raise ContractError("evidence_must_be_one_json_object")
     _exact(_required(evidence, "schemaVersion", "evidence"), "plane-agent-g4/live-evidence/v1", "evidence_schema")
     _exact(_required(evidence, "status", "evidence"), "passed", "evidence_status")
+    _validate_live_readback(_object(_required(evidence, "readback", "evidence"), "evidence_readback"))
     expected = exact_binding(manifest, candidate)
     _exact(_required(evidence, "binding", "evidence"), expected, "evidence_binding")
     evidence_provider_relay = _provider_relay(evidence["providerRelay"], "evidence_provider_relay") if "providerRelay" in evidence else None

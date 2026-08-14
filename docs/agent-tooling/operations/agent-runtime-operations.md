@@ -209,6 +209,17 @@ secret, and `RUN_DIR`; the result file is the only handoff artifact and is not
 removed by runner cleanup. A failed read, hash, validation, or delete is an
 unacknowledged result and must use a fresh destination for the next run.
 
+The S00 live invocation performs exactly one eligible replay inside the API
+invocation, after the primary has fully succeeded and before disposable
+teardown. It reuses the same invocation/idempotency identity with provider
+credentials disabled, so the existing terminal-invocation short circuit must
+return zero runtime frames. The bounded pass receipt records ordered provider
+attempts, all seven allowlisted operation summaries, RuntimeExit, runtime event
+counts, transcript-evidence event IDs/count, explicit publication refs, and
+zero deltas for provider attempts, child dispatch, invocations, receipts,
+audits, usage, outcomes, publications, terminal events, and semantic effects.
+Failed or `outcome_unknown` primaries never enter this replay branch.
+
 ## Local development topology
 
 `./setup.sh` copies the local examples and generates the untracked

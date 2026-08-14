@@ -39,7 +39,20 @@
     "provider": { "$ref": "#/$defs/provider" },
     "canaries": { "type": "object" },
     "thresholds": { "type": "object" },
-    "readback": { "type": "object" },
+    "readback": {
+      "type": "object",
+      "required": [
+        "audit",
+        "version",
+        "runtimeExit",
+        "runtimeEventIngress",
+        "providerAttempts",
+        "planeOperationAudit",
+        "transcriptEvidence",
+        "explicitPublication",
+        "replay"
+      ]
+    },
     "summary": { "$ref": "#/$defs/summary" }
   },
   "$defs": {
@@ -57,7 +70,17 @@
     "provider": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "model", "baseUrl", "host", "path", "credentialSource", "credentialRef", "credentialName", "fallbackUsed"],
+      "required": [
+        "name",
+        "model",
+        "baseUrl",
+        "host",
+        "path",
+        "credentialSource",
+        "credentialRef",
+        "credentialName",
+        "fallbackUsed"
+      ],
       "properties": {
         "name": { "const": "openai-codex" },
         "model": { "const": "gpt-5.6-luna" },

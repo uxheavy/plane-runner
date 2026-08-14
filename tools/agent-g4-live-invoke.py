@@ -21,6 +21,7 @@ import django
 django.setup()
 
 from django.core.management import call_command
+from django.test import override_settings
 from plane.agent.lifecycle import (
     create_actor,
     create_assignment,
@@ -48,7 +49,11 @@ from plane.db.models import (
     Workspace,
     WorkspaceMember,
 )
-from plane.db.models.operation_gateway import OperationGatewayAudit
+from plane.db.models.operation_gateway import (
+    OperationGatewayAudit,
+    OperationGatewayIdempotency,
+    OperationGatewayPublication,
+)
 
 
 def _binding() -> dict[str, str]:
@@ -231,8 +236,10 @@ def build_failure_evidence(
         "static_configuration_failure",
     }
     operation_ids = (
+        "search_workspace",
         "work_item.read",
         "catalog.search",
+        "catalog.describe",
         "agent.outcome.evaluate",
         "agent.outcome.submit",
         "agent.outcome.publish",
@@ -258,6 +265,7 @@ def build_failure_evidence(
         "outcome_submission_observed",
         "failure_observed",
         "blocker_observed",
+        "transcript_evidence_observed",
     }
     terminal_reason_categories = failure_details | failure_subreasons | runtime_failure_causes
 
@@ -424,12 +432,18 @@ def build_failure_evidence(
         else None
     )
 
-    bounded_runtime_exit = {"present": False, "kind": "unknown", "failure": None}
+    bounded_runtime_exit = {"present": False, "kind": "unknown", "finalSequence": None, "failure": None}
     if isinstance(runtime_exit, dict):
         runtime_exit_kind = runtime_exit.get("kind")
         bounded_runtime_exit["present"] = True
         bounded_runtime_exit["kind"] = (
             runtime_exit_kind if runtime_exit_kind in runtime_exit_kinds else "unknown"
+        )
+        final_sequence = runtime_exit.get("finalSequence")
+        bounded_runtime_exit["finalSequence"] = (
+            final_sequence
+            if isinstance(final_sequence, int) and not isinstance(final_sequence, bool) and 0 <= final_sequence <= 256
+            else None
         )
         runtime_failure = runtime_exit.get("failure")
         if isinstance(runtime_failure, dict):
@@ -575,6 +589,9 @@ def main() -> int:
     plane_host_operation_receipts = False
     plane_operation_audit = []
     supervisor_failure_reason = None
+    transcript_evidence = {"count": 0, "eventIds": []}
+    explicit_publication = {"count": 0, "refs": []}
+    replay_evidence = None
 
     def readback():
         invocation.refresh_from_db()
@@ -588,13 +605,79 @@ def main() -> int:
             "kind", flat=True
         )[:256]:
             event_kind_counts[kind] = min(event_kind_counts.get(kind, 0) + 1, 256)
+        transcript_event_ids = []
+        publication_refs = []
+
+        def bounded_ref(value, prefix):
+            if not isinstance(value, str) or not value.startswith(prefix) or len(value.encode("utf-8")) > 128:
+                return None
+            allowed = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:/-"
+            if any(character not in allowed for character in value):
+                return None
+            return value
+
+        publication_fields = {
+            "productRef": "outcome-submission:",
+            "operationAttemptRef": "operation-attempt:",
+            "operationRef": "operation:",
+            "applicationServiceRef": "application-service:",
+            "gatewayReceiptRef": "gateway-receipt:",
+            "receiptRef": "receipt:",
+            "auditReceiptRef": "audit-receipt:",
+            "productEventRef": "product-event:",
+        }
+        for event in RuntimeEventIngress.objects.filter(invocation=invocation).order_by("sequence").values(
+            "event_id", "kind", "raw_payload"
+        )[:256]:
+            if event["kind"] == "transcript_evidence_observed":
+                event_id = bounded_ref(event["event_id"], "event:")
+                if event_id is not None:
+                    transcript_event_ids.append(event_id)
+            raw_payload = event["raw_payload"]
+            body = raw_payload.get("body") if isinstance(raw_payload, dict) else None
+            publication = body.get("publication") if isinstance(body, dict) else None
+            if not isinstance(publication, dict) or publication.get("action") != "applied":
+                continue
+            refs = {
+                field: bounded_ref(publication.get(field), prefix)
+                for field, prefix in publication_fields.items()
+            }
+            if all(value is not None for value in refs.values()):
+                publication_refs.append(refs)
         operation_audit = list(
             OperationGatewayAudit.objects.filter(correlation_id=f"correlation:{run.id}")
             .order_by("created_at", "id")
             .values("operation_id", "phase", "outcome", "error_code")[:64]
         )
         host_receipts = bool(operation_audit)
-        return attempts, current_terminal, control, current_exit, event_kind_counts, host_receipts, operation_audit
+        return (
+            attempts,
+            current_terminal,
+            control,
+            current_exit,
+            event_kind_counts,
+            host_receipts,
+            operation_audit,
+            {"count": len(transcript_event_ids), "eventIds": transcript_event_ids[:32]},
+            {"count": len(publication_refs), "refs": publication_refs[:8]},
+        )
+
+    def replay_snapshot():
+        correlation_id = f"correlation:{run.id}"
+        issue.refresh_from_db()
+        return {
+            "providerAttempts": RuntimeProviderAttempt.objects.filter(invocation=invocation).count(),
+            "invocations": invocation.run.invocations.count(),
+            "receipts": OperationGatewayIdempotency.objects.filter(correlation_id=correlation_id).count(),
+            "audits": OperationGatewayAudit.objects.filter(correlation_id=correlation_id).count(),
+            "usage": RuntimeUsageObservation.objects.filter(invocation=invocation).count(),
+            "outcomes": OutcomeSubmission.objects.filter(run=run).count(),
+            "publications": OperationGatewayPublication.objects.filter(
+                idempotency__correlation_id=correlation_id
+            ).count(),
+            "terminalEvents": RunTerminalEvent.objects.filter(run=run, visible=True).count(),
+            "semanticState": issue.name,
+        }
 
     try:
         email = f"g4-live-{suffix}@plane.test"
@@ -673,6 +756,8 @@ def main() -> int:
             runtime_event_kind_counts,
             plane_host_operation_receipts,
             plane_operation_audit,
+            transcript_evidence,
+            explicit_publication,
         ) = readback()
         correlation_id = f"correlation:{run.id}"
         audits = OperationGatewayAudit.objects.filter(correlation_id=correlation_id)
@@ -697,10 +782,109 @@ def main() -> int:
             or outcome_count != 1
             or usage is None
             or exit_evidence is None
+            or transcript_evidence["count"] < 1
+            or explicit_publication["count"] != 1
         ):
             raise RuntimeError("live product lifecycle or canary evidence was incomplete")
+
+        before_replay = replay_snapshot()
+        primary_invocation_key = invocation.idempotency_key
+        replay_stdout = io.StringIO()
+        replay_stderr = io.StringIO()
+        with override_settings(
+            PLANE_AGENT_RUNTIME_URL="",
+            PLANE_AGENT_RUNTIME_SHARED_SECRET="",
+            PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER={},
+            PLANE_AGENT_RUNTIME_ENVIRONMENT={},
+        ):
+            call_command(
+                "agent_supervisor",
+                invocation_ref=invocation.invocation_id,
+                worker_id="g4-live-configured-worker",
+                lease_seconds=300,
+                model_call_allowance=16,
+                stdout=replay_stdout,
+                stderr=replay_stderr,
+            )
+        replay_output = replay_stdout.getvalue()
+        if (
+            f"invocation={invocation.invocation_id}" not in replay_output
+            or "state=succeeded" not in replay_output
+            or "frames=0" not in replay_output
+        ):
+            raise RuntimeError("successful primary replay did not return the terminal invocation without dispatch")
+        after_replay = replay_snapshot()
+        replay_counts = (
+            "providerAttempts",
+            "invocations",
+            "receipts",
+            "audits",
+            "usage",
+            "outcomes",
+            "publications",
+            "terminalEvents",
+        )
+        replay_deltas = {key: after_replay[key] - before_replay[key] for key in replay_counts}
+        if any(value != 0 for value in replay_deltas.values()) or after_replay["semanticState"] != before_replay[
+            "semanticState"
+        ]:
+            raise RuntimeError("successful primary replay changed durable or semantic state")
+        invocation.refresh_from_db()
+        replay_evidence = {
+            "status": "passed",
+            "providerAccess": "disabled",
+            "sameInvocation": f"invocation={invocation.invocation_id}" in replay_output,
+            "sameIdempotencyKey": invocation.idempotency_key == primary_invocation_key,
+            "new": {"children": replay_deltas["invocations"], **replay_deltas, "semanticSideEffects": 0},
+        }
+        if not replay_evidence["sameInvocation"] or not replay_evidence["sameIdempotencyKey"]:
+            raise RuntimeError("successful primary replay did not preserve invocation identity")
+        (
+            provider_attempts,
+            terminal,
+            control,
+            exit_evidence,
+            runtime_event_kind_counts,
+            plane_host_operation_receipts,
+            plane_operation_audit,
+            transcript_evidence,
+            explicit_publication,
+        ) = readback()
         duration_ms = round((time.monotonic() - started) * 1000, 3)
         binding = _binding()
+        bounded_readback = build_failure_evidence(
+            binding=binding,
+            failure_phase="api-invocation",
+            error_class="RuntimeError",
+            exit_code=1,
+            run_id=str(run.id),
+            run_state=run.state,
+            invocation_id=invocation.invocation_id,
+            invocation_state=invocation.state,
+            provider_attempts=[
+                {
+                    "sequence": attempt.sequence,
+                    "phase": attempt.phase,
+                    "upstreamInitiated": attempt.upstream_initiated,
+                    "statusClass": attempt.status_class,
+                    "errorCode": attempt.error_code,
+                }
+                for attempt in provider_attempts
+            ],
+            terminal_kind=terminal.kind,
+            runtime_exit={
+                "kind": exit_evidence.kind,
+                "finalSequence": exit_evidence.final_sequence,
+                "failure": (
+                    exit_evidence.raw_payload.get("failure")
+                    if isinstance(exit_evidence.raw_payload, dict)
+                    else None
+                ),
+            },
+            runtime_event_kind_counts=runtime_event_kind_counts,
+            plane_host_operation_receipts=plane_host_operation_receipts,
+            plane_operation_audit=plane_operation_audit,
+        )
         evidence = {
             "schemaVersion": "plane-agent-g4/live-evidence/v1",
             "status": "passed",
@@ -743,6 +927,13 @@ def main() -> int:
                     "publishOutcome": "success",
                 },
                 "version": {"passed": True, "binding": binding, "source": "candidate-manifest"},
+                "runtimeExit": bounded_readback["runtimeExit"],
+                "runtimeEventIngress": bounded_readback["runtimeEventIngress"],
+                "providerAttempts": bounded_readback["providerAttempts"],
+                "planeOperationAudit": bounded_readback["planeOperationAudit"],
+                "transcriptEvidence": transcript_evidence,
+                "explicitPublication": explicit_publication,
+                "replay": replay_evidence,
             },
             "summary": {
                 "counts": {"collected": 1, "passed": 1, "failed": 0, "skipped": 0, "xfail": 0, "deselected": 0},
@@ -777,6 +968,8 @@ def main() -> int:
                     runtime_event_kind_counts,
                     plane_host_operation_receipts,
                     plane_operation_audit,
+                    transcript_evidence,
+                    explicit_publication,
                 ) = readback()
                 if (
                     failure is not None
@@ -808,6 +1001,8 @@ def main() -> int:
                         runtime_event_kind_counts,
                         plane_host_operation_receipts,
                         plane_operation_audit,
+                        transcript_evidence,
+                        explicit_publication,
                     ) = readback()
             except BaseException as exc:
                 if failure is None:
@@ -822,12 +1017,16 @@ def main() -> int:
                         runtime_event_kind_counts,
                         plane_host_operation_receipts,
                         plane_operation_audit,
+                        transcript_evidence,
+                        explicit_publication,
                     ) = readback()
                 except BaseException:
                     provider_attempts, terminal, control = [], None, None
                     exit_evidence, runtime_event_kind_counts = None, {}
                     plane_host_operation_receipts = False
                     plane_operation_audit = []
+                    transcript_evidence = {"count": 0, "eventIds": []}
+                    explicit_publication = {"count": 0, "refs": []}
 
         if failure is not None:
             try:
@@ -860,6 +1059,7 @@ def main() -> int:
                 runtime_exit=(
                     {
                         "kind": exit_evidence.kind,
+                        "finalSequence": exit_evidence.final_sequence,
                         "failure": (
                             exit_evidence.raw_payload.get("failure")
                             if isinstance(exit_evidence.raw_payload, dict)

@@ -173,6 +173,63 @@ def fixture(candidate: str = CANDIDATE, source_manifest: dict | None = None) -> 
         "readback": {
             "audit": {"passed": True, "eventCount": 2},
             "version": {"passed": True, "binding": {key: binding[key] for key in BINDING_KEYS}},
+            "runtimeExit": {"present": True, "kind": "completed", "finalSequence": 0, "failure": None},
+            "runtimeEventIngress": {"kindCounts": {"transcript_evidence_observed": 1}},
+            "providerAttempts": [
+                {
+                    "sequence": 1,
+                    "phase": "completed",
+                    "upstreamInitiated": True,
+                    "statusClass": "2xx",
+                    "errorCode": "",
+                }
+            ],
+            "planeOperationAudit": [
+                {"operationId": operation_id, "status": "success", "errorCode": None, "count": 1}
+                for operation_id in (
+                    "search_workspace",
+                    "work_item.read",
+                    "catalog.search",
+                    "catalog.describe",
+                    "agent.outcome.evaluate",
+                    "agent.outcome.submit",
+                    "agent.outcome.publish",
+                )
+            ],
+            "transcriptEvidence": {"count": 1, "eventIds": ["event:transcript"]},
+            "explicitPublication": {
+                "count": 1,
+                "refs": [
+                    {
+                        "productRef": "outcome-submission:one",
+                        "operationAttemptRef": "operation-attempt:one",
+                        "operationRef": "operation:agent.outcome.publish",
+                        "applicationServiceRef": "application-service:agent-lifecycle",
+                        "gatewayReceiptRef": "gateway-receipt:one",
+                        "receiptRef": "receipt:one",
+                        "auditReceiptRef": "audit-receipt:one",
+                        "productEventRef": "product-event:one",
+                    }
+                ],
+            },
+            "replay": {
+                "status": "passed",
+                "providerAccess": "disabled",
+                "sameInvocation": True,
+                "sameIdempotencyKey": True,
+                "new": {
+                    "children": 0,
+                    "providerAttempts": 0,
+                    "invocations": 0,
+                    "receipts": 0,
+                    "audits": 0,
+                    "usage": 0,
+                    "outcomes": 0,
+                    "publications": 0,
+                    "terminalEvents": 0,
+                    "semanticSideEffects": 0,
+                },
+            },
         },
         "summary": {
             "counts": {"collected": 2, "passed": 2, "failed": 0, "skipped": 0, "xfail": 0, "deselected": 0},
@@ -963,6 +1020,112 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn("return_code = 1", source)
         self.assertEqual(source.count("print(json.dumps(evidence"), 1)
 
+    def test_live_helper_replays_only_after_success_with_provider_access_disabled(self):
+        source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        main = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "main")
+        supervisor_calls = [
+            node
+            for node in ast.walk(main)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "call_command"
+        ]
+        self.assertEqual(len(supervisor_calls), 2)
+        primary, replay = sorted(supervisor_calls, key=lambda node: node.lineno)
+        self.assertLess(primary.lineno, replay.lineno)
+        gate = source.index("live product lifecycle or canary evidence was incomplete")
+        self.assertLess(gate, source.index("before_replay"))
+        self.assertLess(source.index("before_replay"), source.index("duration_ms"))
+        self.assertIn('PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER={}', source)
+        self.assertIn('"frames=0"', source)
+        finally_body_calls = [
+            node
+            for node in ast.walk(main)
+            if isinstance(node, ast.Try)
+            for child in node.finalbody
+            for call in ast.walk(child)
+            if isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Name)
+            and call.func.id == "call_command"
+        ]
+        self.assertEqual(finally_body_calls, [])
+
+    def test_failed_primary_has_one_supervisor_call_and_no_replay_call(self):
+        source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        main = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "main")
+        supervisor_calls = [
+            node
+            for node in ast.walk(main)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "call_command"
+        ]
+        self.assertEqual(len(supervisor_calls), 2)
+        handlers_and_finally = [
+            child
+            for node in ast.walk(main)
+            if isinstance(node, ast.Try)
+            for child in (*node.handlers, *node.finalbody)
+        ]
+        self.assertTrue(handlers_and_finally)
+        self.assertTrue(
+            all(
+                not any(
+                    isinstance(call, ast.Call)
+                    and isinstance(call.func, ast.Name)
+                    and call.func.id == "call_command"
+                    for call in ast.walk(child)
+                )
+                for child in handlers_and_finally
+            )
+        )
+        self.assertLess(
+            source.index("live product lifecycle or canary evidence was incomplete"),
+            source.index("replay_stdout"),
+        )
+
+    def test_success_receipt_requires_bounded_replay_and_readback_facts(self):
+        manifest, authority, config, evidence_text = fixture()
+        evidence = json.loads(evidence_text)
+        self.assertEqual(
+            set(evidence),
+            {"schemaVersion", "status", "binding", "provider", "canaries", "thresholds", "readback", "summary"},
+        )
+        readback = evidence["readback"]
+        self.assertEqual(
+            set(readback).difference({"audit", "version"}),
+            {
+                "runtimeExit",
+                "runtimeEventIngress",
+                "providerAttempts",
+                "planeOperationAudit",
+                "transcriptEvidence",
+                "explicitPublication",
+                "replay",
+            },
+        )
+        self.assertEqual(
+            [row["operationId"] for row in readback["planeOperationAudit"]],
+            [
+                "search_workspace",
+                "work_item.read",
+                "catalog.search",
+                "catalog.describe",
+                "agent.outcome.evaluate",
+                "agent.outcome.submit",
+                "agent.outcome.publish",
+            ],
+        )
+        self.assertEqual(readback["runtimeExit"]["kind"], "completed")
+        self.assertEqual(readback["transcriptEvidence"]["count"], 1)
+        self.assertEqual(readback["explicitPublication"]["count"], 1)
+        self.assertEqual(set(readback["replay"]["new"].values()), {0})
+        temp, paths = self.write_case(manifest, authority, config, evidence_text)
+        self.addCleanup(temp.cleanup)
+        self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 2)
+
     def test_live_helper_generates_namespaced_lifecycle_idempotency_keys(self):
         source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
         tree = ast.parse(source)
@@ -1120,7 +1283,12 @@ class G4ContractTests(unittest.TestCase):
         self.assertNotRegex(encoded, re.compile(r"(?i)(password|secret|token|api[_-]?key|authorization|credential)"))
         self.assertEqual(
             evidence["runtimeExit"],
-            {"present": True, "kind": "failed", "failure": {"code": "budget_exhausted", "retryable": False}},
+            {
+                "present": True,
+                "kind": "failed",
+                "finalSequence": None,
+                "failure": {"code": "budget_exhausted", "retryable": False},
+            },
         )
         self.assertEqual(evidence["runtimeEventIngress"], {"kindCounts": {"usage_observed": 1}})
         self.assertEqual(
@@ -1136,8 +1304,10 @@ class G4ContractTests(unittest.TestCase):
         self.assertEqual(
             evidence["planeOperationAudit"],
             [
+                {"operationId": "search_workspace", "status": "absent", "errorCode": None, "count": 0},
                 {"operationId": "work_item.read", "status": "absent", "errorCode": None, "count": 0},
                 {"operationId": "catalog.search", "status": "absent", "errorCode": None, "count": 0},
+                {"operationId": "catalog.describe", "status": "absent", "errorCode": None, "count": 0},
                 {
                     "operationId": "agent.outcome.evaluate",
                     "status": "denied",
@@ -1299,6 +1469,7 @@ class G4ContractTests(unittest.TestCase):
             {
                 "present": True,
                 "kind": "failed",
+                "finalSequence": None,
                 "failure": {
                     "code": "runtime_error",
                     "retryable": False,
