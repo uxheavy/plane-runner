@@ -8,28 +8,31 @@ This goal covers the full Plane Agent control plane and the hidden execution ser
 
 Functional completion and controlled rollout are separate outcomes. This goal ends when the non-UI product passes the complete live dogfood matrix, the production-candidate checks, and integration into a named Plane branch. Development, allowlisted-workspace, expanded-cohort, and GA rollout are a successor goal requiring their own deployment authority; they are not evidence that the product implementation works and are not a completion condition here.
 
-Current remediation binding: Sol Medium's P1 rejection on wrapper
-`d42161bb29bf28f04246b96051cee3a88dcccd36` is closed by the canonical Hermes
-owner commit `d2e655101f263329359e7d0de9d0b856202a3e4b`, a direct child of the
-pinned Hermes `114eabf9d807b659e36d767e4de46ca056297ccb`. The Plane source
-commit is `1d1012f71c48615bb28b7988ce74c82421aa1d53`, a direct child of
-accepted wrapper `61eb87390ff8881eefc7a63f27406b358dee82e5`; the dogfood baseline
-wrapper `3f2a478209fb94049376f781d33ddd4b63a038de` is its source-bound metadata
-child. Its API and runtime
-artifacts are source-bound to that exact revision. The API artifact is
-`plane-agent-api:g4-1d1012f7` at
-`sha256:0a350d4619c9edd55769ed8efdaa2dc740de551abd682e73565b6c3f2`,
-and the runtime artifact is
-`plane-agent-runtime:hermes-d2e65510-g4-1d1012f7` at
-`sha256:6f1c2dc5857d445e13b34f9cc9723ee5c7636c2cfe2ef213c7fc4d972855c1bd`.
-The independent `previous` rollback section preserves the accepted G3
-last-known-good service artifact rather than being forced equal to the current
-candidate. This is implementation/provenance closure, not live acceptance. The
-remaining risk is the live functional dogfood matrix below. Do not request
-another Sol review until that matrix is clean and one final
-production-candidate verifier has passed.
+The frozen G4 artifact set below is historical offline evidence, not the active
+delivery candidate. Active work proceeds on `codex/agent-functional-dogfood`
+from Plane `9bac87db1c` and Hermes
+`21826c256bc1fc8f56e6469e752cb2a5b991ac58`. Wave 0W proved 16 contiguous
+audited GPT-5.6 Luna provider exchanges, then exposed one finite functional
+blocker: the runtime-to-Plane terminal handoff lost the expected
+`budget_exhausted` classification before any Plane read, denial, outcome, or
+publication. Fix and retest that exact user journey before starting the wider
+matrix. Rebuild immutable candidate artifacts and run the full G4 verifier only
+once after all functional journeys are clean. Do not request another Sol review
+before that point. G5 remains a separate rollout goal.
 
 ## Status and authorization
+
+| Active item        | Current truth                                                                                                                                                                                                                                             |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Delivery candidate | `codex/agent-functional-dogfood` at `9bac87db1c`; last product-source commit `ae82d0eaea5799c5fa4e44198bc35e18c6f00c0d`; Hermes `21826c256bc1fc8f56e6469e752cb2a5b991ac58`.                                                                               |
+| Functional gate    | S00 is dirty. Wave 0W recorded 16 contiguous completed audited `2xx` exchanges, then lost the finite terminal classification at the runtime-to-Plane handoff. No Plane read, denial, outcome, publication, successful terminal event, or replay followed. |
+| Next action        | Close the terminal-classification seam with the exact provider-free production chain, then run one fresh S00. Do not start W/M/O journeys before S00 passes.                                                                                              |
+| Final verification | After every functional journey is clean, rebuild immutable artifacts once, run one full production-candidate verifier, and request one consolidated Sol Medium review.                                                                                    |
+| G5                 | Out of scope. Rollout starts only under a separate authorized goal after G4 functional completion.                                                                                                                                                        |
+
+The table below preserves accepted gate history and older frozen artifact
+bindings. Its G4/dogfood rows are historical evidence and do not override the
+active execution status above.
 
 | Item                                | Current state                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
