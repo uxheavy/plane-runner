@@ -24,11 +24,17 @@
 
 ## Completion evidence
 
-Wave 0AM completed one exact, non-UI primary. The functional Plane lifecycle
-and provider-disabled replay passed internally, but the final bounded evidence
-contract failed standalone validation (`evidence_permitted_canary_failed`), so
-S00 remains dirty and UT-018/UT-019 remain open. No source fix or Hermes change
-was made.
+Wave 0AN completed one exact, non-UI primary from Plane
+`f8e4c98fe6e44577465c317fb75b61ba43c4fb36` with Hermes
+`d9037d5ceb17ce8f12d7abf28cfe6ee734adcb20`. The product lifecycle passed its
+ordered internal `s00Gate`, with ten completed upstream `2xx` provider attempts,
+one `NOT_AUTHORIZED` evaluator denial, one submit, one applied publication, one
+visible `outcome_submission` terminal, and `RuntimeExit.completed`. The helper's
+one same-invocation provider-disabled replay passed with zero durable and
+semantic deltas. Standalone receipt validation then failed with
+`evidence_provider_relay_mismatch` because the fresh authority/config omitted
+the provider-relay projection present in the receipt. S00 remains dirty and
+UT-018/UT-019 remain open. No source fix, rerun, or Hermes change was made.
 
 ## Cross-persona heatmap
 
@@ -38,6 +44,8 @@ was made.
 ## Final risks and decision
 
 Decision: `FAIL`. The journey is not clean enough to close S00 or unlock W/M/O.
-The remaining blocker is the success-receipt contract: it must retain the
-ordered `s00Gate` projection and semantic digest, and its canary identifiers
-must agree with the fresh authority and emitted evidence.
+The remaining blocker is the fresh handoff contract. Wave 0AN's receipt had the
+ordered `s00Gate`, authority-derived canaries, and semantic digest, but the
+authority/config descriptors did not declare the provider-relay projection that
+the receipt carried. The failed standalone validation keeps UT-018 and UT-019
+open.

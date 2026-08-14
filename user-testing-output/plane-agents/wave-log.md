@@ -93,6 +93,77 @@
 - Decision: S00 is `FAIL`; UT-018 and UT-019 remain `open`; W/M/O remain
   locked.
 
+## Wave 0AN — exact f8e4c98f / Hermes d9037d5 single fresh S00
+
+- Overall decision: `FAIL`. Exactly one fresh primary ran. There was no retry,
+  second primary, fallback, UI, G4/G5 verifier, source fix, Hermes change, or
+  second command. The primary product path and the helper's one exact same-
+  invocation provider-disabled replay passed internally, but standalone receipt
+  validation failed. UT-018 and UT-019 remain open.
+- Plane was clean at exact HEAD
+  `f8e4c98fe6e44577465c317fb75b61ba43c4fb36` on
+  `codex/agent-functional-dogfood`. Hermes was clean at exact HEAD
+  `d9037d5ceb17ce8f12d7abf28cfe6ee734adcb20` on `main`. Neither source was
+  modified by this journey.
+- The disposable API artifact was
+  `plane-agent-api:s00-f8e4c98fe6`, image digest
+  `sha256:7e2198f8ed9ab4d0d25997c85f9cbf3bfbe26fe3aa48d10f3fdc0e37473eec64`.
+  The runtime artifact was
+  `plane-agent-runtime:s00-f8e4c98fe6-hermes-d9037d5`, image digest
+  `sha256:ce446f38672070e40f6e0c90857ba944db812d652a56390dbc9c9146d36f3ebe`.
+  Runtime source digest was
+  `1d8186a36447ea5dba5ba6cb55db48073a3be0dc976cec4ff2887418c0e33667` and
+  Hermes tree digest was
+  `7de6ace3830c9280302b49cf4266a59f24d91cbeb3ff9c65ed51e10f1381dc89`.
+- Fresh manifest, authority, and config SHA-256 values were
+  `67b174561220d9023297ac38ff2ffebc983cc8fc8b969755db726029f8eb4485`,
+  `a52a50fee2ad91cd25037a9dc4483b974e323b2e4d1312fe1372812f347e2274`, and
+  `796204e6c843db4eb08b696e4b2cb109517cfd5376e3c5fed8978ce97c954c1e`.
+  Config-only validation passed before the owner-only credential source was
+  accessed. The authority was `s00-live-0an-20260815` with fresh permitted
+  canary `s00-0an-permitted-20260815` and denied canary
+  `s00-0an-denied-20260815`. The route was ChatGPT subscription
+  `openai-codex/gpt-5.6-luna`, fallback disabled, through the AF_UNIX
+  `plane.agent-runtime/provider-relay/v1` contract.
+- The fresh absolute result path
+  `/tmp/plane-agent-s00-0an.V5p5OI/result.json` was absent before start under
+  a `0700` owner-only parent. The persisted receipt was mode `0600`, `8179`
+  bytes, and SHA-256
+  `08cf95cbf8c2ffc6e9ed32ce9cad15e73b3c24e82fc85fac5160b9c9f1ecd39`.
+- Fresh actor `aadc02f4-7635-46ae-840d-305325e47b1a`, run
+  `run:41069c5e-8f16-4879-bcd0-6c2003176df0`, invocation
+  `invocation:cf2a01e5-e8df-4e94-bc82-205995e56dc4`, outcome
+  `outcome-submission:e0895d38-cd5b-4fec-a769-a6293f4da7bd`, and terminal
+  product event `product-event:4d03a1d8-d5c5-453b-845a-b400fbb4edba` read back
+  successfully. The path proved three workspace searches, one permitted
+  `work_item.read`, one `NOT_AUTHORIZED` `agent.outcome.evaluate`, one submit,
+  one applied publish, one visible `outcome_submission`, separate transcript
+  evidence, and `RuntimeExit.completed` at final sequence `19`.
+- There were exactly ten provider attempts, sequences `1..10`, all completed,
+  upstream initiated, and `2xx`; none was `outcome_unknown`. The ordered
+  internal `s00Gate` predicates all passed: `invocation_succeeded`,
+  `run_succeeded`, `one_visible_outcome_terminal`,
+  `one_applied_outcome_publication`, `terminal_binding`, and
+  `runtime_exit_completed`.
+- The one same-invocation provider-disabled replay passed with
+  `sameInvocation=true`, `sameIdempotencyKey=true`, and zero new children,
+  provider attempts, invocations, receipts, audits, usage rows, outcomes,
+  applied publications, terminal events, or semantic side effects.
+- The bounded receipt carried semantic digest
+  `e5b4ac2dcdd56a63455406ac3a2fcef650e24ce47142a2bb8f97d89b0086122b`, and
+  direct recomputation matched its full body. Standalone validation returned
+  `evidence_provider_relay_mismatch` because the fresh authority/config
+  descriptors omitted `providerRelay` while the receipt included it. This
+  handoff failure invalidates the S00 close even though the product path,
+  internal gate, and replay passed. No rerun or descriptor repair was made.
+- Runner cleanup removed task-labeled containers, networks, and volumes. The
+  owner-only credential source was not modified or printed. The receipt,
+  authority, config, manifest, disposable run directory, and task images were
+  deleted after validation and hashing, then absence-checked. Source trees
+  remained clean.
+- Decision: S00 is `FAIL`; UT-018 and UT-019 remain `open`; W/M/O remain
+  locked.
+
 ## Wave 0A — fast provider smoke
 
 - Status: dirty — UT-001

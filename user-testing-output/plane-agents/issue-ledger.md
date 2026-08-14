@@ -95,3 +95,31 @@ UT-019 / Wave 0AM retest: the fresh absolute result path
 The receipt was validated for shape and hash, then deleted and absence was
 acknowledged after the evidence update. Because the final S00 evidence
 contract failed, UT-019 remains open; no retry or second replay was made.
+
+UT-018 / Wave 0AN addendum: the exact Plane
+`f8e4c98fe6e44577465c317fb75b61ba43c4fb36` checkout with exact Hermes
+`d9037d5ceb17ce8f12d7abf28cfe6ee734adcb20` ran one fresh primary through the
+real `openai-codex/gpt-5.6-luna` ChatGPT subscription route with fallback
+disabled. The run and invocation succeeded and proved the permitted reads,
+one `NOT_AUTHORIZED` evaluator denial, one submit, one applied publish binding,
+one visible `outcome_submission`, separate transcript evidence, and
+`RuntimeExit.completed`. There were ten completed upstream `2xx` attempts with
+none unknown. The ordered internal `s00Gate` passed, and the one exact
+same-invocation provider-disabled replay passed with all durable and semantic
+deltas at zero. The owner-only receipt was `0600`, `8179` bytes, SHA-256
+`08cf95cbf8c2ffc6e9ed32ce9cad15e73b3c24e82fc85fac5160b9c9f1ecd39`, with
+semantic digest
+`e5b4ac2dcdd56a63455406ac3a2fcef650e24ce47142a2bb8f97d89b0086122b`.
+Standalone validation failed `evidence_provider_relay_mismatch` because the
+fresh authority/config omitted the provider-relay projection present in the
+receipt. UT-018 remains open. No source fix, descriptor repair, or rerun was
+made.
+
+UT-019 / Wave 0AN retest: the fresh absolute result path
+`/tmp/plane-agent-s00-0an.V5p5OI/result.json` was absent before start under a
+`0700` owner-only parent. The persisted receipt was owner-only and under the
+16 KiB bound. Hashing completed, but standalone receipt validation failed at
+the provider-relay binding predicate, so the handoff and full S00 close are
+not proven. Cleanup removed the receipt and all disposable artifacts after
+validation and hashing. UT-019 remains open; no retry or second replay was
+made.
