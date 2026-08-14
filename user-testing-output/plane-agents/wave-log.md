@@ -430,18 +430,18 @@ dispatch_rejected / provider_attempt_evidence_rejected`
 - Exact Plane source: `c3fc708e5292214fe8a7a773703a78450d5d2df7` on
   `codex/agent-functional-dogfood`. Exact Hermes source:
   `21826c256bc1fc8f56e6469e752cb2a5b991ac58`.
-- Matched API image: `sha256:2eb3b02cdf3c607e83c83b3747f55d89f4cd836f3b1dc4f78bdaab5e2a368273`.
+- Matched API image: `sha256:29410e7516ec2b8c6e36dc0c4404d9248d12524f9067db37b3cdc810011eaf11`.
   Matched runtime image:
-  `sha256:ec37639dba79a1493de48501e14a4764ff419d029e6d5bafe03f77742d016584`.
+  `sha256:27ebd1f41138d9fa651fac4fcbe58de920f7e0590ca75dbca1e57f478dc7bb8e`.
   Runtime Hermes tree digest:
   `2b3c5ca66f93c1cdbb413c5d60b43dd92674dffc5f6d8b10b6b5b3d89e9287ef`;
   runtime source digest:
   `97139c416cdd952e67e44345dea7a57aff722b8ef0bb1671c0204463f828490d`.
 - Fresh manifest SHA-256:
-  `27b595113a669597d480e141ed24d0e0edbfac65cff1b3e98bcd8c2acf24636b`.
+  `07dfd16f53e5823283720815aa99def23ba4ed002f40ad6c92577735a3175bac`.
   Fresh authority/config SHA-256:
-  `b28eaaf37bc7f5cec83c9afd38ec2b8b32f9a53a77ba76ccbd088d24d7348f2b` /
-  `80fe9472f9feaad8b3727e9d771328b1fe345c272219611a7da397cc78562969`.
+  `146917e805eb43adbd322246418b6226f928de52deb09f917badf0dc2e877c86` /
+  `ce550480f858d314bf70083f0d269ee023f8d003233383410203619563b6c5ea`.
 - Provider route was ChatGPT subscription `openai-codex/gpt-5.6-luna`, with
   fallback disabled. The owner-only source was accessed only after
   config-only validation; no credential value entered evidence.
