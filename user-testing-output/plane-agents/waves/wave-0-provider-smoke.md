@@ -974,6 +974,99 @@ images were removed after this evidence was recorded; the owner credential
 source was untouched and Colima was not stopped. S00 is `FAIL` and does not
 unlock W/M/O.
 
+## Wave 0AD — exact c137306c2d / Hermes 1a82685 single fresh S00
+
+Status: failed at the first finite live API-invocation result. Exactly one
+fresh isolated S00 ran. No retry, replay, second provider call, source fix,
+broad verifier, rollout, deployment, UI, or unrelated suite ran.
+
+### Exact binding and bounded preflight
+
+- Exact clean Plane source was
+  `c137306c2d9771c3705e3629de5474a2f09396fb`, parent
+  `0a45fb1596c031ee63bfac54afba269c51ed7ca6`, branch
+  `codex/agent-functional-dogfood`. Exact clean Hermes source was
+  `1a82685d1f55719216d292c37de9f90638a44cd9`, parent
+  `f1c1df9153728e3252d6213a21bb725f28b11580`; its local clone remote was
+  `https://github.com/uxheavy/hermes-agent.git`.
+- API image: `plane-agent-api:s00-c137306c2d97`, digest
+  `sha256:cd35033eedd27d1ea4a185e9b14e3e541b3b1c4963321369d9b8f9e44fed1338`,
+  exact Plane source label, artifact `plane-agent-api-g4`,
+  contract `plane.operation/v1`.
+- Runtime image: `plane-agent-runtime:s00-c137306c2d97-hermes-1a82685d`,
+  digest
+  `sha256:feba1e54b87898f13945a2c900a132ddc130965fa24940c0c050fb8a947cae0d`,
+  runtime source digest
+  `ed823d3b79c64484a9989aa78e7a865a80a0d100c6eabf991fd2b2ed4ec9b217`,
+  Hermes tree digest
+  `0492ab05f64105efdd7eb8ded72adca557a9b1c378bb5743b1bd3ba19631bab1`,
+  contract `plane.agent-runtime/v1`.
+- Fresh disposable manifest, authority, and config SHA-256 were
+  `4707337456ed2d43b07f25c41ea0e55b0002a81d91aa8ef8d0c608f9343b31bb`,
+  `35ac89989ab3ae6dcbf4dc3e9efb2eb7c163b3663b44cf8d15278fbdae316ad6`, and
+  `64e6fe11bc77bb5888135db9765c5f1a01fbff97071e18f45937daeebbe1d753`.
+- Config-only validation passed before the owner-only ChatGPT subscription
+  source was accessed. Provider/model binding was
+  `openai-codex/gpt-5.6-luna`, fallback disabled, through
+  `plane.agent-runtime/provider-relay/v1` over AF_UNIX. The command-string
+  SHA-256 was
+  `32756a110745e4b69a3c8627021527a073ac7c434b5cd6659483245674954060`.
+
+### One fresh live journey
+
+The runner created an isolated disposable workspace and one assignment named
+`G4 Live Issue`. Fresh run
+`cbb50c57-e95a-426b-a717-bd8325bc84b6` and invocation
+`invocation:01fd5f56-3156-4f01-9592-7ead56e3397c` were created. The live
+command returned exit `1` at `api-invocation`.
+
+- Provider-attempt readback contained 17 rows: sequences `1..16` were
+  completed, upstream initiated, and `2xx`; sequence `17` was `failed`,
+  `not_sent`, and not upstream initiated. No second provider request is
+  claimed.
+- Runtime event ingress contained `{"progress_observed":31}`. RuntimeExit
+  was present with `kind=failed`, failure `code=runtime_error`,
+  `retryable=false`, and safe `cause=host_operation_failure`.
+- The terminal product state contained one `run_failure` with code
+  `runtime_error` and reason category `host_operation_failure`.
+- `planeHostOperationReceipts=true`. The bounded five-operation summary was:
+
+  | Operation | Status | Error | Count |
+  | --- | --- | --- | ---: |
+  | `work_item.read` | `unavailable` | `VALIDATION_ERROR` | 8 |
+  | `catalog.search` | `success` | none | 2 |
+  | `agent.outcome.evaluate` | `absent` | none | 0 |
+  | `agent.outcome.submit` | `absent` | none | 0 |
+  | `agent.outcome.publish` | `absent` | none | 0 |
+
+- `catalog.search` is the permitted read/discovery evidence. The denied
+  `agent.outcome.evaluate` canary, explicit `OutcomeSubmission`, explicit
+  `agent.outcome.publish`, complete assignment/workspace readback, and exact
+  replay were not reached or proven. All mutation/publication entries were
+  absent, so no duplicate semantic side effect was evidenced.
+- The explicit owner-only bounded result path was absent before start. After
+  exit, the receipt was mode `0600`, size `3902` bytes, schema/binding/
+  runtime/exit/terminal/operation-summary validation passed, and its SHA-256
+  was `e92b8e89274f796d2b553d84b1ea9b9b05d6d065d0412b4b753fb10f50f1d0f2`.
+  It was retained until this ledger commit. Raw `ERROR_FILE`, provider
+  payloads, model output, prompts, credentials, and raw audit rows were never
+  read or retained.
+
+### Cleanup and decision
+
+- The runner removed its task containers, networks, volumes, provider staging,
+  runtime secret, run directory, and temporary database. Post-run label checks
+  found zero task-labeled containers, networks, or volumes; Colima was not
+  stopped.
+- The temporary manifest/authority/config, the task-created exact runtime image,
+  and exact local Plane/Hermes clones were removed after the evidence commit.
+  The pre-existing exact API image was not deleted; post-cleanup checks found
+  zero task-labeled containers, networks, or volumes, Colima remained running,
+  and credential metadata was unchanged.
+- First safe owner: runtime/Hermes execution after provider exchange. No Plane
+  source fault is claimed and no product source was changed. Decision: S00 is
+  `FAIL` and does not unlock W/M/O.
+
 ## Wave 0Z — exact 1a771e4355 / Hermes 21826 single fresh S00
 
 Status: failed at the first finite API-container start boundary. S00 remains
