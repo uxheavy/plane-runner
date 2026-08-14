@@ -47,10 +47,10 @@ def run(*args: str, cwd: Path | None = None, capture: bool = True) -> str:
     return result.stdout.strip() if capture else ""
 
 
-def verify_hermes(checkout: Path) -> None:
+def verify_hermes(checkout: Path, revision: str) -> None:
     actual = run("git", "-C", str(checkout), "rev-parse", "HEAD")
-    if actual != HERMES_COMMIT:
-        raise RuntimeError(f"Hermes checkout SHA is {actual}, expected {HERMES_COMMIT}")
+    if actual != revision:
+        raise RuntimeError(f"Hermes checkout SHA is {actual}, expected {revision}")
     dirty = run("git", "-C", str(checkout), "status", "--porcelain", "--untracked-files=all")
     if dirty:
         raise RuntimeError("Hermes checkout must be clean before an image is built")
@@ -373,13 +373,13 @@ def stage_plane_runtime(destination: Path, plane_revision: str) -> None:
     )
 
 
-def stage_git_hermes(checkout: Path, destination: Path) -> dict[str, str]:
+def stage_git_hermes(checkout: Path, destination: Path, revision: str) -> dict[str, str]:
     hermes = destination / "hermes"
     hermes.mkdir()
     archive_path = destination / "hermes.tar"
     with archive_path.open("wb") as archive:
         subprocess.run(
-            ["git", "-C", str(checkout), "archive", "--format=tar", HERMES_COMMIT],
+            ["git", "-C", str(checkout), "archive", "--format=tar", revision],
             stdout=archive,
             stderr=subprocess.PIPE,
             check=True,
@@ -389,8 +389,13 @@ def stage_git_hermes(checkout: Path, destination: Path) -> dict[str, str]:
     return hermes_file_hashes(hermes)
 
 
-def stage_context(checkout: Path, destination: Path, plane_revision: str) -> dict[str, object]:
-    hermes_files = stage_git_hermes(checkout, destination)
+def stage_context(
+    checkout: Path,
+    destination: Path,
+    plane_revision: str,
+    hermes_revision: str,
+) -> dict[str, object]:
+    hermes_files = stage_git_hermes(checkout, destination, hermes_revision)
     stage_plane_runtime(destination, plane_revision)
     return {
         "sourceKind": HERMES_SOURCE_KIND_GIT,
@@ -626,6 +631,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--tag", default="plane-agent-runtime:hermes-d2e65510-g4-codex-fix")
     parser.add_argument("--plane-revision", help="Build an exact clean Git revision instead of HEAD")
+    parser.add_argument(
+        "--hermes-revision",
+        default=HERMES_COMMIT,
+        help="Exact clean Hermes Git revision to stage (defaults to the donor pin)",
+    )
     parser.add_argument("--api-image", help="Current candidate API image required for disposable manifest output")
     parser.add_argument("--manifest-out", type=Path, help="Write a disposable manifest under repository tmp/")
     parser.add_argument("--manifest", type=Path, default=DURABLE_MANIFEST, help="Durable donor attestation manifest")
@@ -636,9 +646,14 @@ def main() -> int:
     args = build_parser().parse_args()
     if shutil.which("docker") is None:
         raise SystemExit("Docker CLI is required")
+    hermes_revision = str(args.hermes_revision)
+    if len(hermes_revision) != 40 or any(character not in "0123456789abcdef" for character in hermes_revision):
+        raise SystemExit("--hermes-revision must be a full lowercase Git SHA")
+    if args.hermes_donor_image and hermes_revision != HERMES_COMMIT:
+        raise SystemExit("--hermes-revision cannot override a sealed donor image")
     donor_manifest = load_manifest(args.manifest) if args.hermes_donor_image else None
     if args.hermes_checkout is not None:
-        verify_hermes(args.hermes_checkout)
+        verify_hermes(args.hermes_checkout, hermes_revision)
     plane_revision, plane_parent = verify_plane(args.plane_revision)
     runtime_files = runtime_file_hashes(plane_revision)
     source_digest = runtime_source_digest(runtime_files)
@@ -659,9 +674,14 @@ def main() -> int:
             )
         else:
             assert args.hermes_checkout is not None
-            hermes_source = stage_context(args.hermes_checkout, context, plane_revision)
+            hermes_source = stage_context(
+                args.hermes_checkout,
+                context,
+                plane_revision,
+                hermes_revision,
+            )
         hermes_commit = str(
-            hermes_source.get("hermesCommit", HERMES_COMMIT)
+            hermes_source.get("hermesCommit", hermes_revision)
         )
         hermes_remote = str(hermes_source.get("hermesRemote", HERMES_REMOTE))
         hermes_source_kind = str(hermes_source["sourceKind"])
