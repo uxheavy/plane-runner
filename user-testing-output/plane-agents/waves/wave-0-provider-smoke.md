@@ -911,3 +911,73 @@ clones, temporary manifest/authority/config/capture, and tagged API/runtime
 images. Retain no secret or owner credential source. No broad G3/G4/G5,
 load/rollout/deployment/UI/unrelated suite, or additional provider exchange
 ran. S00 is `FAIL` and does not unlock W/M/O.
+
+## Wave 0Z — exact 1a771e4355 / Hermes 21826 single fresh S00
+
+Status: failed at the first finite API-container start boundary. S00 remains
+dirty and does not unlock W/M/O. Exactly one fresh S00 journey ran; no retry,
+replay, subthread, source fix, or broad suite ran.
+
+### Exact binding and bounded preflight
+
+- Plane source: `1a771e43550ed0e67321129fa6e9dc7fd3480599`, parent
+  `fdb2fd516dfa9b01e89d70cab0d5eb81f741af62`.
+- Hermes source: `21826c256bc1fc8f56e6469e752cb2a5b991ac58`, canonical remote
+  `https://github.com/uxheavy/hermes-agent.git`.
+- API image: `plane-agent-api:s00-1a771e4355`, digest
+  `sha256:97a9893cc0ec099ee561a50cf750b75080f6f2821ba93a4818eda9c7a443aceb`.
+- Runtime image: `plane-agent-runtime:s00-1a771e4355-hermes-21826c256b`,
+  digest
+  `sha256:79010ba2e353864e95baad008c11d0fb20c3c69294f818a42c1c30c6def02b33`.
+- Runtime source digest:
+  `97139c416cdd952e67e44345dea7a57aff722b8ef0bb1671c0204463f828490d`;
+  Hermes tree digest:
+  `2b3c5ca66f93c1cdbb413c5d60b43dd92674dffc5f6d8b10b6b5b3d89e9287ef`.
+- Fresh manifest SHA-256:
+  `461acf9abad18f8666de808daba2fb9149f4acb272690c6eaecf9175802a9268`.
+  Fresh authority/config SHA-256:
+  `6515428feaa242c79138a8f807ae5391c16cf265b0f085d8bb8d978d71085cc5` /
+  `104fc8f01793cebd5c6a6290d1d20160018d49a5089764427daf32ad75deef74`.
+- Provider/model: ChatGPT subscription, `openai-codex/gpt-5.6-luna`, fallback
+  disabled. Config-only validation passed before the existing owner-only
+  source was read; no credential value was retained. Command SHA-256:
+  `32756a110745e4b69a3c8627021527a073ac7c434b5cd6659483245674954060`.
+
+### One fresh live journey
+
+Redacted command:
+
+`PLANE_G4_EXPECTED_CANDIDATE=<1a771e4355...> PLANE_G4_LIVE_AUTHORITY=<tmp>/authority.json PLANE_G4_LIVE_CONFIG=<tmp>/config.json PLANE_G4_LIVE_MANIFEST=<tmp>/manifest.json PLANE_G4_LIVE_COMMAND='bash tools/agent-g4-live.sh' PLANE_G4_PROVIDER_SECRET_SOURCE=<existing-owner-only-chatgpt-codex-source> bash tools/agent-g4-live.sh`
+
+The runner returned exit `125` at `api-invocation`. The only bounded capture
+was:
+
+`event=agent.g4.live-runner.failure phase=api-invocation error_class=unspecified exit_code=125`
+
+Preserved receipt SHA-256:
+`8557b165a4c8976da7195249249925d087e0cc8e9e420ec8110f64ca1fc29f78`.
+The runner's raw `sanitized-error.log` was removed by its cleanup trap; the
+preserved capture contains no more specific error. A read-only Docker event
+query found no matching task create/die record, so no non-secret mount/path/flag
+reason is available. No live API/provider process evidence was emitted.
+
+Provider exchange count was `0`. Run/invocation refs and all durable counts
+were none/zero: no workspace, `G4 Live Issue`, actor, profile, assignment, run,
+invocation, gateway receipts, outcome, publication, terminal product event, or
+readback. `RuntimeExitEvidence` was absent; runtime event kind counts were
+absent (`{}`); terminal code/reason was not created; Plane host gateway receipt
+presence was `false`. The permitted read, denied `agent.outcome.evaluate`,
+explicit `OutcomeSubmission`, explicit publication, durable readback, and exact
+dispatch replay were not reached. First owner: live runner / Docker
+API-container start boundary at `api-invocation`; no Plane source fault is
+claimed.
+
+### Cleanup and decision
+
+The runner and post-run read-only checks found zero task-labeled containers,
+networks, credential-state volumes, or provider-secret volumes. The two
+task-tagged images and disposable exact Plane/Hermes clones plus fresh
+authority/config/manifest were removed after evidence capture. The one-line
+bounded receipt remains as non-secret task evidence; the owner credential
+source was not changed or retained. No replay or additional provider exchange
+ran. S00 is `FAIL` and does not unlock W/M/O.

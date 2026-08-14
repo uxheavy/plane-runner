@@ -476,3 +476,58 @@ error_class=unavailable exit_code=125`, stderr empty. Preserved bounded
   volumes. After evidence commit, remove only the task-owned exact Plane and
   Hermes clones, temporary manifest/authority/config/capture, and the two
   task-tagged images; retain no secret or owner credential source.
+
+## Wave 0Z — exact 1a771e4355 / Hermes 21826 single fresh S00
+
+- Status: failed at the first API-container start boundary; S00 remains dirty
+  and W/M/O stay locked. Exactly one fresh live S00 journey ran. No retry,
+  replay, subthread, source fix, broad verifier, rollout, deployment, UI, or
+  unrelated suite ran.
+- Exact Plane source: `1a771e43550ed0e67321129fa6e9dc7fd3480599`; parent
+  `fdb2fd516dfa9b01e89d70cab0d5eb81f741af62`. Exact Hermes source:
+  `21826c256bc1fc8f56e6469e752cb2a5b991ac58`, canonical remote
+  `https://github.com/uxheavy/hermes-agent.git`.
+- Matched API artifact: `plane-agent-api:s00-1a771e4355`, image digest
+  `sha256:97a9893cc0ec099ee561a50cf750b75080f6f2821ba93a4818eda9c7a443aceb`,
+  source `1a771e43550ed0e67321129fa6e9dc7fd3480599`, contract
+  `plane.operation/v1`. Matched runtime artifact:
+  `plane-agent-runtime:s00-1a771e4355-hermes-21826c256b`, image digest
+  `sha256:79010ba2e353864e95baad008c11d0fb20c3c69294f818a42c1c30c6def02b33`,
+  runtime source `1a771e43550ed0e67321129fa6e9dc7fd3480599`, contract
+  `plane.agent-runtime/v1`.
+- Runtime provenance: Hermes tree digest
+  `2b3c5ca66f93c1cdbb413c5d60b43dd92674dffc5f6d8b10b6b5b3d89e9287ef`;
+  Plane runtime source digest
+  `97139c416cdd952e67e44345dea7a57aff722b8ef0bb1671c0204463f828490d`.
+  Fresh disposable manifest SHA-256:
+  `461acf9abad18f8666de808daba2fb9149f4acb272690c6eaecf9175802a9268`.
+  Fresh authority/config SHA-256:
+  `6515428feaa242c79138a8f807ae5391c16cf265b0f085d8bb8d978d71085cc5` /
+  `104fc8f01793cebd5c6a6290d1d20160018d49a5089764427daf32ad75deef74`.
+- Provider binding was ChatGPT subscription `openai-codex/gpt-5.6-luna`,
+  fallback disabled. Config-only validation passed before the owner-only
+  source was read; no credential value was retained. Redacted command:
+  `PLANE_G4_EXPECTED_CANDIDATE=<1a771e4355...> PLANE_G4_LIVE_AUTHORITY=<tmp>/authority.json PLANE_G4_LIVE_CONFIG=<tmp>/config.json PLANE_G4_LIVE_MANIFEST=<tmp>/manifest.json PLANE_G4_LIVE_COMMAND='bash tools/agent-g4-live.sh' PLANE_G4_PROVIDER_SECRET_SOURCE=<existing-owner-only-chatgpt-codex-source> bash tools/agent-g4-live.sh`.
+  Command SHA-256:
+  `32756a110745e4b69a3c8627021527a073ac7c434b5cd6659483245674954060`.
+- The runner returned exit `125` at `api-invocation` with the sole preserved
+  bounded line `event=agent.g4.live-runner.failure phase=api-invocation
+error_class=unspecified exit_code=125`. Receipt SHA-256:
+  `8557b165a4c8976da7195249249925d087e0cc8e9e420ec8110f64ca1fc29f78`.
+  Inspecting only the preserved capture and non-secret Docker metadata found
+  no retained raw error, no matching historical create/die event, and no more
+  specific mount/path/flag reason.
+- Live provider exchange count: `0`. Plane workspace, `G4 Live Issue`, actor,
+  profile, assignment, run, invocation, gateway receipt, outcome, publication,
+  terminal product event, and transcript/publication readback refs/counts:
+  none/zero. `RuntimeExitEvidence`: absent. Runtime event kind counts: absent
+  (`{}`). Terminal code/reason: not created. Plane host gateway receipt
+  presence: `false`. The permitted read, denied `agent.outcome.evaluate`,
+  explicit `OutcomeSubmission`, explicit publication, durable readback, and
+  exact dispatch replay were not reached.
+- First owner: live runner / Docker API-container start boundary at
+  `api-invocation`; no Plane source fault is claimed. Cleanup completed with
+  zero task-labeled containers, networks, credential-state volumes, or
+  provider-secret volumes. The two task-tagged images, exact Plane/Hermes
+  clones, and fresh authority/config/manifest were removed after the bounded
+  receipt was recorded; the owner credential source was untouched.
