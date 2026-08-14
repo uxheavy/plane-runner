@@ -226,6 +226,14 @@ class ProviderRequest:
     sequence: int = 0
 
 
+class _ProviderRelayAdmissionError(ProviderRelayError):
+    """A bounded request descriptor was available when admission failed."""
+
+    def __init__(self, message: str, request: ProviderRequest) -> None:
+        super().__init__(message)
+        self.request = request
+
+
 @dataclass(frozen=True)
 class ProviderResponse:
     status_code: int
@@ -376,6 +384,8 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
             )
         except ProviderRelayError as exc:
             code = relay._error_code(exc)
+            if request is None and isinstance(exc, _ProviderRelayAdmissionError):
+                request = exc.request
             if request is not None:
                 terminal_phase = "outcome_unknown" if upstream_called and code == "upstream_error" else "failed"
                 relay._record_attempt(
@@ -638,23 +648,24 @@ class ProviderRelayServer:
             raise ProviderRelayError("provider request model is invalid")
         self._validate_lease_and_cancellation()
         with self._request_lock:
+            request = ProviderRequest(
+                provider=self.binding.provider,
+                model=self.binding.model,
+                method=self.policy.method,
+                host=self.policy.host,
+                path=self.policy.path,
+                headers={key: value for key, value in headers.items() if key in {"accept", "user-agent"}},
+                body=raw_body,
+                request_id=request_id,
+                sequence=self._calls + 1,
+            )
             if request_id in self._seen_requests:
                 raise ProviderRelayError("relay request replayed")
             if self._calls >= self.policy.max_calls:
-                raise ProviderRelayError("provider model-call budget is exhausted")
+                raise _ProviderRelayAdmissionError("provider model-call budget is exhausted", request)
             self._seen_requests.add(request_id)
             self._calls += 1
-        return ProviderRequest(
-            provider=self.binding.provider,
-            model=self.binding.model,
-            method=self.policy.method,
-            host=self.policy.host,
-            path=self.policy.path,
-            headers={key: value for key, value in headers.items() if key in {"accept", "user-agent"}},
-            body=raw_body,
-            request_id=request_id,
-            sequence=self._calls,
-        )
+        return request
 
     @staticmethod
     def _status_class(status_code: int) -> str:

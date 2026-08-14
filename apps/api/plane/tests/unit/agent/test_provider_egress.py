@@ -463,8 +463,16 @@ def test_provider_relay_surfaces_budget_exhaustion_without_an_upstream_replay(tm
     assert second[0] == 403
     assert json.loads(second[2]) == {"error": "budget_exhausted"}
     assert len(upstream.calls) == 1
-    assert audits[-1].error_code == "budget_exhausted"
-    assert audits[-1].upstream_called is False
+    assert len(audits) == 4
+    boundary_audit = audits[-1]
+    assert boundary_audit.phase == "failed"
+    assert boundary_audit.outcome == "failed"
+    assert boundary_audit.reason == "budget_exhausted"
+    assert boundary_audit.request_id == "request:budget-2"
+    assert boundary_audit.sequence == 2
+    assert boundary_audit.status_class == "not_sent"
+    assert boundary_audit.error_code == "budget_exhausted"
+    assert boundary_audit.upstream_called is False
 
 
 def test_provider_relay_rejects_redirects_and_closes_after_process_death(tmp_path):
