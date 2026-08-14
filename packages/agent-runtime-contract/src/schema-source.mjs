@@ -102,6 +102,7 @@ const definitions = {
     allOf: [
       {
         if: { required: ["cause"] },
+        // oxlint-disable-next-line unicorn/no-thenable -- `then` is a required JSON Schema keyword.
         then: { properties: { code: { const: "runtime_error" } } },
       },
     ],
