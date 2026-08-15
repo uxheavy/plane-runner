@@ -114,6 +114,20 @@ def test_commission_descriptor_keeps_shared_profile_and_binds_each_assignment() 
     assert identity.commissions == mutation.commissions == context.commissions == ()
 
 
+def test_failure_commission_aggregate_gate_is_bounded_and_validated() -> None:
+    gate = {
+        "passed": False,
+        "failures": ["commission:identity-discovery"],
+        "operations": [],
+        "durableRecords": [],
+        "productEvents": [],
+        "evidenceKinds": [],
+    }
+
+    validator._validate_scenario_gate(gate)
+    assert "scenarioGate" in validator._FAILURE_TOP_LEVEL_FIELDS
+
+
 def test_runner_maps_every_finite_related_role_to_the_plane_role() -> None:
     source = (TOOLS / "agent-g4-live-invoke.py").read_text()
     expected = {

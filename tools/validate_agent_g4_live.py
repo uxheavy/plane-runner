@@ -1217,7 +1217,14 @@ def _validate_receipt_common(
     _exact(_required(evidence, "binding", "evidence"), expected_binding, "evidence_binding")
     _exact(_required(evidence, "authorityId", "evidence"), authority_info["authorityId"], "evidence_authority")
     if "scenario" in evidence:
-        _validate_scenario_projection(evidence["scenario"])
+        scenario = evidence["scenario"]
+        if status == "failed" and isinstance(scenario, dict) and "actual" in scenario:
+            # A bounded multi-commission failure may retain only the aggregate
+            # gate and partial route projection; do not require a complete
+            # worker route from a cell that never reached its terminal step.
+            scenario = dict(scenario)
+            scenario.pop("actual")
+        _validate_scenario_projection(scenario)
     generic = "scenario" in evidence and isinstance(evidence["scenario"], dict) and "actual" in evidence["scenario"]
     if generic:
         gate = _required(evidence, "scenarioGate", "evidence")
@@ -1513,9 +1520,12 @@ _FAILURE_TOP_LEVEL_FIELDS = {
     "planeOperationAudit",
     "providerRelay",
     "scenario",
+    "scenarioGate",
     "commissionEvidence",
 }
-_FAILURE_REQUIRED_TOP_LEVEL_FIELDS = _FAILURE_TOP_LEVEL_FIELDS - {"providerRelay", "scenario", "commissionEvidence"}
+_FAILURE_REQUIRED_TOP_LEVEL_FIELDS = _FAILURE_TOP_LEVEL_FIELDS - {
+    "providerRelay", "scenario", "scenarioGate", "commissionEvidence"
+}
 _FAILURE_STAGES = {
     "initialization",
     "compose",
@@ -1729,6 +1739,8 @@ def _validate_failure_receipt(
         and all(row["count"] == 0 for row in evidence["planeOperationAudit"])
     ):
         raise ContractError("evidence_provider_relay_missing")
+    if "scenarioGate" in evidence:
+        _validate_scenario_gate(evidence["scenarioGate"])
     _validate_semantic_digest(evidence)
 
 
