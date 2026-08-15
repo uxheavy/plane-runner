@@ -166,7 +166,7 @@ surfaces. There is no chat UI. Browser evidence is required only for existing
 object and settings pages; backend behavior is proven by product-state,
 gateway, audit, provider-attempt, and terminal-event readback.
 
-### Operational friction becomes workflow
+### Workflow-only obstacles have zero delivery weight
 
 Do not spend a product dogfood cycle, provider invocation, or independent
 review on an obstacle that a deterministic operational step removes. Encode
@@ -180,9 +180,18 @@ It must not become a product issue, persona route, phase gate, completion
 percentage item, or reason to wait for a separate review. Record only the
 workflow change and the successful retry evidence needed to prevent recurrence.
 
+Workflow-only obstacles are not findings and carry zero delivery weight. They
+do not consume a provider retry, create a blocker status, trigger a reviewer,
+reduce the reported completion percentage, or justify spawning a separate
+investigation. The task owner prepares the environment, obtains the ordinary
+execution permission available to the task, corrects the command or harness,
+and resumes the same functional route. Escalate only when the required change
+would alter product behavior, weaken a security boundary, require unavailable
+authority, or perform an external, destructive, or paid action.
+
 | Obstacle                                                                                                                                                                 | Required treatment                                                                                                                                                                   |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Local `.env` files, required services, Docker-visible paths, checkout provenance, generated local prerequisites, or a platform execution approval                        | Treat as workflow setup. Make the prerequisite and failure message explicit, automate it in the existing owner where practical, and do not count it as a Plane Agent product defect. |
+| Local `.env` files, required services, Docker-visible paths, checkout provenance, generated local prerequisites, or an ordinary platform execution approval              | Treat as workflow setup. Make the prerequisite and failure message explicit, automate it in the existing owner where practical, and do not count it as a Plane Agent product defect. |
 | Missing command authorization, sandbox approval, executable bit, local port selection, dependency preparation, command spelling, timeout, or equivalent runner mechanics | Resolve through the normal execution workflow, encode a preflight or safe default when recurrence is plausible, and resume the same route without opening a product investigation.   |
 | The same setup obstacle reappears after its workflow is explicit                                                                                                         | Treat the missing or ineffective preflight as a harness defect and fix it structurally once.                                                                                         |
 | Plane membership, role, object permission, credential validity, live authorization, or a denied semantic operation                                                       | Treat as product behavior. Exercise the real authorization path and never bypass or weaken it to advance a test.                                                                     |
