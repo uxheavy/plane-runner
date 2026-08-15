@@ -2533,6 +2533,16 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn("org.uxheavy.plane.api.source.readback.sha256", dockerfile)
         self.assertLess(dockerfile.index("repository-root build context is not accepted"), dockerfile.index("LABEL "))
 
+    def test_api_migration_verifier_mounts_candidate_source_read_only(self):
+        verifier = (TOOLS / "verify-api-migrations.sh").read_text(encoding="utf-8")
+
+        mount = '--volume "${ROOT_DIR}:/workspace:ro"'
+        workdir = "--workdir /workspace/apps/api"
+        self.assertIn(mount, verifier)
+        self.assertIn(workdir, verifier)
+        self.assertLess(verifier.index(mount), verifier.index(workdir))
+        self.assertNotIn("pip install", verifier)
+
     def test_api_artifact_commands_import_the_copied_candidate_source(self):
         dockerfile = (ROOT / "apps/api/Dockerfile.g4").read_text(encoding="utf-8")
         resolver = (ROOT / "apps/api/bin/plane-agent-runtime-credential-resolver").read_text(encoding="utf-8")

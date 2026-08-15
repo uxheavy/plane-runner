@@ -45,6 +45,7 @@ run_api() {
     docker run --rm \
         --network "${NETWORK_NAME}" \
         "${API_ENV[@]}" \
+        --volume "${ROOT_DIR}:/workspace:ro" \
         --entrypoint /bin/sh \
         --workdir /workspace/apps/api \
         "${API_TEST_IMAGE}" -c 'exec "$@"' -- "$@"
