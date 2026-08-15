@@ -103,19 +103,19 @@ def test_composed_eager_catalog_carries_work_item_read_input_schema():
     assert eager["disclosure"] == "eager"
 
 
-def test_explicit_eager_operations_control_route_presentation():
+def test_explicit_eager_operations_precede_universal_work_core():
     catalog = compose_tool_catalog(
         _profile(eager=["catalog.search", "catalog.describe", "agent.context.read"]),
         _assignment("Use private context before reading the assigned work item"),
     )
     eager_refs = [entry["operationRef"] for entry in catalog["eagerOperations"]]
 
-    assert eager_refs[:3] == [
+    assert eager_refs[:4] == [
         "operation:catalog.search",
         "operation:catalog.describe",
         "operation:agent.context.read",
+        "operation:search_workspace",
     ]
-    assert "operation:search_workspace" not in eager_refs
 
 
 def test_progressive_disclosure_excludes_eager_prefixed_operation_refs():
@@ -129,7 +129,7 @@ def test_disclosure_is_presentation_only_and_assignment_driven():
     catalog = compose_tool_catalog(_profile(eager=["work_item.rename"]), _assignment())
     eager = {entry["operationRef"] for entry in catalog["eagerOperations"]}
 
-    assert "operation:search_workspace" not in eager
+    assert "operation:search_workspace" in eager
     assert "operation:work_item.rename" in eager
     assert catalog["catalogDigest"] == CATALOG_DIGEST
 

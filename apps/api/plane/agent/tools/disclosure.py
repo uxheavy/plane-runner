@@ -124,12 +124,11 @@ def compose_tool_catalog(profile: Any, assignment: Any) -> dict[str, Any]:
         raise ValueError("tool presentation cannot define authorization or allowlists")
 
     selected: list[str] = []
-    # An explicit route owns its eager surface; the universal work core stays
-    # eager only for profiles without route presentation. This is
-    # presentation only; progressive discovery and gateway authorization stay
-    # unchanged.
+    # Keep the universal work core present, but let explicit route operations
+    # lead the model-facing presentation. This is presentation only;
+    # progressive discovery and gateway authorization stay unchanged.
     explicit_ids = _explicit_ids(presentation)
-    for operation_id in explicit_ids or ["search_workspace"]:
+    for operation_id in (*explicit_ids, "search_workspace"):
         if operation_id in OPERATION_CATALOG and operation_id not in selected:
             if len(selected) >= MAX_EAGER_OPERATIONS:
                 raise ValueError(f"eager operation presentation exceeds {MAX_EAGER_OPERATIONS} operations")
