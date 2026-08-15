@@ -617,13 +617,14 @@ def _create_with_conflict_resolution(model, *, fields, key_lookup, alternate_loo
 
 
 def _profile_prompt(profile):
-    parts = [part.strip() for part in (profile.persona, profile.instructions) if part and part.strip()]
+    parts = []
     if profile.expected_outcomes:
         outcomes = [
             _ensure_non_empty(item, f"expected_outcomes[{index}]")
             for index, item in enumerate(profile.expected_outcomes)
         ]
         parts.append("Expected outcomes:\n" + "\n".join(f"- {item}" for item in outcomes))
+    parts.extend(part.strip() for part in (profile.persona, profile.instructions) if part and part.strip())
     return _ensure_non_empty("\n\n".join(parts), "behavioral_prompt", limit=MAX_BOUNDED_PROMPT_BYTES)
 
 

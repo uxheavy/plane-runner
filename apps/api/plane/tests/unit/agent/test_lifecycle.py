@@ -235,6 +235,24 @@ def test_profile_defaults_resolve_into_an_immutable_snapshot_and_exact_envelope_
 
 
 @pytest.mark.django_db
+def test_expected_outcomes_are_high_priority_in_the_immutable_behavioral_prompt(assignment, profile):
+    profile = create_profile(
+        profile.actor,
+        role=AgentRole.WORKER,
+        persona="Persona guidance follows.",
+        instructions="Long route instructions follow.",
+        expected_outcomes=["Route step 1: invoke catalog.search exactly 1 time(s)."],
+    )
+
+    run = create_run(assignment, profile, idempotency_key="idempotency:expected-outcomes-priority")
+    prompt = run.snapshot["profile"]["behavioralPrompt"]
+
+    assert prompt.startswith("Expected outcomes:\n- Route step 1: invoke catalog.search exactly 1 time(s).")
+    assert prompt.index("Expected outcomes:") < prompt.index("Persona guidance follows.")
+    assert prompt.index("Persona guidance follows.") < prompt.index("Long route instructions follow.")
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize("mutation", ["missing", "mismatched"])
 def test_run_creation_rejects_unresolved_snapshot_policy_without_dispatch_side_effects(assignment, profile, mutation):
     from plane.agent.lifecycle.services import _build_snapshot
