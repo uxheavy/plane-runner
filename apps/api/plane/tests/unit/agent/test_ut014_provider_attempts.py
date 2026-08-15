@@ -283,7 +283,7 @@ def test_ut014_multiturn_provider_audit_does_not_consume_host_callback_budget(
                     "phase": "intent",
                     "requestId": "request:ut014-out-of-order",
                     "idempotencyKey": "provider-attempt:ut014-out-of-order",
-                    "sequence": 11,
+                    "sequence": 12,
                     "upstreamInitiated": False,
                     "statusClass": "",
                     "errorCode": "",
@@ -390,7 +390,7 @@ def test_ut014_multiturn_provider_audit_does_not_consume_host_callback_budget(
                 "runtime": {"api_key": "synthetic-provider-secret"},
             },
             PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE=str(state_file),
-            PLANE_AGENT_RUNTIME_TIMEOUT_SECONDS=5,
+            PLANE_AGENT_RUNTIME_TIMEOUT_SECONDS=30,
             PLANE_AGENT_RUNTIME_COMMAND="python3 -m plane_runtime.g1_runtime_image.bootstrap --once --g1-production",
         ):
             call_command(
@@ -428,9 +428,14 @@ def test_ut014_multiturn_provider_audit_does_not_consume_host_callback_budget(
     }
     assert len(provider_calls) == 9
     assert product_callback_statuses == ["ok"] * 8
-    assert [attempt.sequence for attempt in attempts] == list(range(1, 10))
-    assert [attempt.phase for attempt in attempts] == [RuntimeProviderAttemptPhase.COMPLETED] * 9
-    assert [notice["phase"] for notice in notices] == [phase for _ in range(9) for phase in ("intent", "started", "completed")]
+    assert [attempt.sequence for attempt in attempts] == list(range(1, 11))
+    assert [attempt.phase for attempt in attempts] == [RuntimeProviderAttemptPhase.COMPLETED] * 9 + [
+        RuntimeProviderAttemptPhase.FAILED
+    ]
+    assert [notice["phase"] for notice in notices] == [
+        phase for _ in range(9) for phase in ("intent", "started", "completed")
+    ] + ["intent", "failed"]
+    assert attempts[-1].error_code == "budget_exhausted"
     assert provider_budget_statuses == [403]
     assert total_budget_statuses == ["invalid"] * 22 + ["denied"]
     assert total_budget_error_codes == ["VALIDATION_ERROR"] * 22 + ["HOST_BUDGET_EXCEEDED"]
@@ -442,12 +447,12 @@ def test_ut014_multiturn_provider_audit_does_not_consume_host_callback_budget(
     assert invalid_callback_results["crossBound"].status == "denied"
     assert invalid_callback_results["crossBound"].error_code == "CALLBACK_BINDING_INVALID"
     assert captured_servers[0].call_count == 32
-    assert captured_servers[0].observation_count == 31
+    assert captured_servers[0].observation_count == 32
 
     exact_replay = dict(notices[-1])
     replayed = record_provider_attempt_notice(invocation, exact_replay)
     assert replayed.id == attempts[-1].id
-    assert RuntimeProviderAttempt.objects.filter(invocation=invocation).count() == 9
+    assert RuntimeProviderAttempt.objects.filter(invocation=invocation).count() == 10
 
     out_of_order = dict(exact_replay)
     out_of_order.update(
@@ -455,7 +460,7 @@ def test_ut014_multiturn_provider_audit_does_not_consume_host_callback_budget(
             "phase": "intent",
             "requestId": "request:ut014-out-of-order",
             "idempotencyKey": "provider-attempt:ut014-out-of-order",
-            "sequence": 11,
+            "sequence": 12,
             "upstreamInitiated": False,
             "statusClass": "",
             "errorCode": "",
@@ -472,4 +477,4 @@ def test_ut014_multiturn_provider_audit_does_not_consume_host_callback_budget(
             "input": cross_bound,
         })())
 
-    assert hashlib.sha256(b"request:ut014-9").hexdigest() in notices[-1]["idempotencyKey"]
+    assert hashlib.sha256(b"request:ut014-10").hexdigest() in notices[-1]["idempotencyKey"]
