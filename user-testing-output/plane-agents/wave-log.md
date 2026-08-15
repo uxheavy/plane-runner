@@ -1886,3 +1886,35 @@ product source was changed.
 - The bounded failure retained `catalog.describe`, `UNKNOWN_OPERATION`, attempt `operation-attempt:d515ed05-b826-405f-9307-69e233272840`, and receipt `audit-receipt:51aafeab-e3a8-4c5e-b3f8-86a47a0ae888`. Audit readback recorded successful `search_workspace` count `1`, `work_item.read` count `1`, `catalog.search` count `1`, and `catalog.describe` unavailable count `3`; no `agent.context.read`, Code Mode callback, `work_item.rename`, evaluator denial, submit, publish, complete scenario gate, or replay was retained. The exact result remains owner-only at `tmp/persona-wave-v6/worker-live-88ec3f3/result.json`, mode `0600`, SHA-256 `cf54d308349e78b85d075e4d8fa6f0c45a2f362d36b2fb8565009fb7d10a774f`.
 - Root cause disposition: the exact bounded fact is catalog target resolution failure. The built API artifact independently registered `catalog.describe` and `agent.context.read`, and a no-provider image check successfully described the context operation. The retained result intentionally omits raw model input; the non-secret model-facing inference is that the model confused the catalog row's `operationRef` with its `operationId` when filling `catalog.describe.operation_id`.
 - Fix commit `969337e948` projects the next route operation's exact `operationId` into the reusable route guidance and explicitly tells the Worker to copy `operationId`, never `operationRef` or an `operation:` prefix; descriptor and route-guidance regressions passed. A new exact-image rebuild and fresh Worker primary are required before any W01-W08 route claim or replay.
+
+## Wave 0BA diagnosis addendum — exact ca42e598 / Hermes bc7f13d2
+
+Root-fix source checkpoint: Plane `4cba0fd647`; the documentation checkpoint
+records this diagnosis without changing the retained receipts.
+
+- Two independent fresh Maya identity commissions reached the required
+  `openai-codex/gpt-5.6-luna` route with fallback disabled. Each retained nine
+  completed upstream `2xx` provider attempts, succeeded run/invocation state,
+  `RuntimeExit.completed`, one visible terminal, and one applied publication.
+  Neither old commission was replayed or continued; later commissions were
+  not started.
+- The exact owner-only receipts remain dirty evidence:
+  `tmp/persona-wave-v6/worker-live-de9189b5/result.json` mode `0600`, SHA-256
+  `dc0c1cbe9ff0e71e630db320e86c5bd1ce631b63c329db0928200b5fbbcc7edb`, and
+  `tmp/persona-wave-v6/worker-live-ca42e598/result.json` mode `0600`, SHA-256
+  `c798cfa136000d7dd37084ac2c3c3f8d89280075112227979693a6c357aa9004`.
+- Both final receipts were labeled `outcome_unknown / provider_relay /
+  upstream_result_unavailable / reconciliation_required`, but the durable
+  attempt rows were all completed. The later local identity scenario-gate
+  failure was therefore misclassified by the invoker's fallback that treated
+  any upstream-started attempt as unknown. No external/provider prerequisite
+  is established, and W01/W02 remain dirty pending a fresh post-fix primary
+  and eligible replay.
+- Independent runtime tracing found a second local race: bounded provider
+  response delivery and required terminal audit could finish on daemon relay
+  handlers while the runtime closed the Plane host callback first. The root
+  fix buffers the bounded upstream body before completed audit, gracefully
+  drains relay handlers, force-classifies unresolved started calls as terminal
+  unknown, performs a second forced-path drain, and preserves late audit
+  failure across dispatch cleanup. Focused provider-free owner regressions
+  must pass before a fresh provider commission.

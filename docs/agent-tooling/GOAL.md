@@ -9,26 +9,28 @@ This goal covers the full Plane Agent control plane and the hidden execution ser
 Functional completion and controlled rollout are separate outcomes. This goal ends when the non-UI product passes the complete live dogfood matrix, the production-candidate checks, and integration into a named Plane branch. Development, allowlisted-workspace, expanded-cohort, and GA rollout are a successor goal requiring their own deployment authority; they are not evidence that the product implementation works and are not a completion condition here.
 
 The older G4 artifact bindings and Wave 0X evidence below are historical, not
-the active delivery state. The current exact Plane candidate is
-`dfcd3ea543e58109b0d314e3bdfd6375c65b35ff`, with Hermes
+the active delivery state. The current exact Plane source candidate is the
+root-fix checkpoint `4cba0fd647`, with Hermes
 `bc7f13d2ab392752f2667b176c646339c49405f9`. S00 Wave 0AT passed at Plane
 `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with one fresh Luna primary and one
 eligible provider-disabled replay. Provider-free PF1 evidence is complete for
 W01–W08, M01–M08, and the tested Operator contracts. The first broader persona
-attempts proved that the accepted runner exposes only the fixed S00 commission;
-the existing runner is gaining one typed W/M/O scenario seam before those live
-routes resume. No provider-backed W/M/O result is inferred here. The final
-candidate image, exact-image red team, G4 verifier, and consolidated Sol review
-remain pending. G5 remains a separate rollout goal.
+attempts reached the provider with completed attempts but were later
+misclassified as provider reconciliation failures by the invoker; an
+independent relay shutdown/audit race was also fixed at the runtime owner.
+W01/W02 remain dirty pending one fresh post-fix provider-backed cell and
+eligible replay; W03–W08 remain unreached. The final candidate image,
+exact-image red team, G4 verifier, and consolidated Sol review remain pending.
+G5 remains a separate rollout goal.
 
 ## Status and authorization
 
 | Active item        | Current truth                                                                                                                                                                                                                                                                                                                                                                      |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Delivery candidate | Exact Plane `dfcd3ea543e58109b0d314e3bdfd6375c65b35ff`; exact Hermes `bc7f13d2ab392752f2667b176c646339c49405f9`; supporting PF1 fixes/tests include `f621fdd89797db2d1b74205c6ce6d5b0bd4725d1`, `2105fb9e21687103939a77b7e26a0959f1d50f51`, `8c9b20bf544355b20b0c9e69b0ad1ee5b48e905e`, and `76e26ce5de1f300eab93505a2c885b984f60fcd0`.                                            |
+| Delivery candidate | Exact Plane source `4cba0fd647`; exact Hermes `bc7f13d2ab392752f2667b176c646339c49405f9`; the adjacent documentation checkpoint records the retained dirty receipts and root-fix diagnosis.                                            |
 | Functional gate    | S00 Wave 0AT is clean at Plane `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with Hermes `bc7f13d2ab392752f2667b176c646339c49405f9`: ten ordered upstream `2xx` attempts, three searches, two reads, one exact `NOT_AUTHORIZED` denial, one submit, one applied publication, one matching terminal, and `RuntimeExit.completed`; replay semantic deltas were zero and cleanup passed. |
 | Provider-free PF1  | Worker W01–W08 passed 35 real Django/API/DB/CLI/socket/isolation tests unchanged. Manager M01–M08 passed 33 tests after `f621fdd89797db2d1b74205c6ce6d5b0bd4725d1` and `2105fb9e21687103939a77b7e26a0959f1d50f51`. Operator O01 and O03–O09 passed targeted real service/API/database/CLI contracts; the final exact-image red team remains pending.                               |
-| Live W/M/O wave    | The initial persona tasks stopped without route claims because the accepted live runner hardcodes the S00 Worker and prompt. One typed scenario input is being added to that existing runner; PF1 tests do not make W/M routes clean. O02 is separately clean from the real external-client closure recorded at product source `dfcd3ea543e58109b0d314e3bdfd6375c65b35ff`.         |
+| Live W/M/O wave    | Wave 0BA reached two fresh Maya identity commissions with completed provider attempts, but the invoker mislabeled later local scenario-gate failure as reconciliation uncertainty. The relay shutdown/audit race and masking defect are fixed in source `4cba0fd647`; W01/W02 remain dirty pending a fresh primary plus eligible replay, and W03–W08 are unreached. O02 remains separately clean from its real external-client closure.         |
 | Final verification | Pending clean provider-backed W/M/O routes, the final candidate image, exact-image red team, one full G4 verifier, and one consolidated Sol Medium review.                                                                                                                                                                                                                         |
 | G5                 | Out of scope. Rollout starts only under a separate authorized goal after G4 functional completion.                                                                                                                                                                                                                                                                                 |
 
