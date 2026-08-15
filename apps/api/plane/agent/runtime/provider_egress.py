@@ -89,7 +89,15 @@ class ProviderRelayOutcomeUnknownError(ProviderRelayError):
     retryable = False
     upstream_initiated = True
 
-    def __init__(self) -> None:
+    def __init__(self, *, reason_subreason: str = "upstream_exception") -> None:
+        if reason_subreason not in {
+            "upstream_exception",
+            "upstream_channel_closed",
+            "upstream_timeout",
+        }:
+            reason_subreason = "upstream_exception"
+        self.reason_phase = "provider_relay"
+        self.reason_subreason = reason_subreason
         super().__init__("provider request outcome is unknown")
 
 
@@ -269,6 +277,9 @@ class ProviderRelayAudit:
     sequence: int = 0
     status_class: str = ""
     error_code: str = ""
+    reason_phase: str = ""
+    reason_subreason: str = ""
+    event_ref: str = ""
 
 
 @dataclass(frozen=True)
@@ -416,6 +427,8 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
                         else "error"
                     ),
                     error_code=code,
+                    reason_phase=getattr(exc, "reason_phase", ""),
+                    reason_subreason=getattr(exc, "reason_subreason", ""),
                 )
             else:
                 relay._record_identity(
@@ -435,7 +448,11 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
                     phase="outcome_unknown" if upstream_called else "failed",
                     upstream_initiated=upstream_called,
                     status_class="unknown" if upstream_called else "not_sent",
-                    error_code="channel_closed",
+                    error_code="outcome_unknown" if upstream_called else "channel_closed",
+                    reason_phase="provider_relay" if upstream_called else "",
+                    reason_subreason=(
+                        "channel_closed_after_upstream" if upstream_called else ""
+                    ),
                 )
         finally:
             relay._request_slots.release()
@@ -705,8 +722,12 @@ class ProviderRelayServer:
             response = self._upstream(request, dict(self._credentials), self._is_cancelled)
         except ProviderRelayError:
             raise
+        except TimeoutError as exc:
+            raise ProviderRelayOutcomeUnknownError(reason_subreason="upstream_timeout") from exc
+        except OSError as exc:
+            raise ProviderRelayOutcomeUnknownError(reason_subreason="upstream_channel_closed") from exc
         except Exception as exc:
-            raise ProviderRelayOutcomeUnknownError() from exc
+            raise ProviderRelayOutcomeUnknownError(reason_subreason="upstream_exception") from exc
         if not isinstance(response, ProviderResponse) or isinstance(response.status_code, bool):
             raise ProviderRelayError("provider response is invalid")
         if 300 <= response.status_code < 400:
@@ -761,7 +782,15 @@ class ProviderRelayServer:
     ) -> None:
         payload: dict[str, object] = {"error": code}
         if isinstance(error, ProviderRelayOutcomeUnknownError):
-            payload.update({"retryable": False, "upstreamInitiated": True})
+            payload.update(
+                {
+                    "retryable": False,
+                    "upstreamInitiated": True,
+                    "reasonCode": error.error_code,
+                    "reasonPhase": error.reason_phase,
+                    "reasonSubreason": error.reason_subreason,
+                }
+            )
         body = json.dumps(payload, separators=(",", ":")).encode("ascii")
         headers = (
             "HTTP/1.1 403 Forbidden\r\n"
@@ -828,6 +857,8 @@ class ProviderRelayServer:
         upstream_initiated: bool,
         status_class: str = "",
         error_code: str = "",
+        reason_phase: str = "",
+        reason_subreason: str = "",
         required: bool = False,
     ) -> None:
         if self._audit is None:
@@ -850,6 +881,8 @@ class ProviderRelayServer:
                     sequence=request.sequence,
                     status_class=status_class,
                     error_code=error_code,
+                    reason_phase=reason_phase,
+                    reason_subreason=reason_subreason,
                 )
             )
         except Exception as exc:
@@ -973,9 +1006,12 @@ class PinnedProviderHTTPSClient:
             return ProviderResponse(status_code=200, headers=headers, body_chunks=chunks())
         except ProviderRelayError:
             raise
-        except (OSError, TimeoutError) as exc:
+        except TimeoutError as exc:
             connection.close()
-            raise ProviderRelayOutcomeUnknownError() from exc
+            raise ProviderRelayOutcomeUnknownError(reason_subreason="upstream_timeout") from exc
+        except OSError as exc:
+            connection.close()
+            raise ProviderRelayOutcomeUnknownError(reason_subreason="upstream_channel_closed") from exc
 
 
 __all__ = [

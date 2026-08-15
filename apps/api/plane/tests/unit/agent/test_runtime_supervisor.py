@@ -1377,15 +1377,28 @@ def test_known_process_failure_with_initiated_attempt_remains_outcome_unknown(
     transport = KnownDispatchFailureTransport()
 
     result = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
+    second = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
 
     control = RuntimeInvocationControl.objects.get(invocation=invocation)
     attempt = RuntimeProviderAttempt.objects.get(invocation=invocation)
+    terminal = RunTerminalEvent.objects.get(invocation=invocation, visible=True)
     assert result.state == InvocationState.BLOCKED
+    assert second.state == InvocationState.BLOCKED
     assert result.terminal_kind == "run_blocker"
+    assert second.terminal_kind == "run_blocker"
     assert control.state == RuntimeControlState.OUTCOME_UNKNOWN
     assert control.failure_code == "outcome_unknown"
     assert attempt.phase == RuntimeProviderAttemptPhase.OUTCOME_UNKNOWN
     assert attempt.upstream_initiated is True
+    assert result.failure == {
+        "failureCode": "outcome_unknown",
+        "failurePhase": "provider_relay",
+        "failureDetail": "upstream_result_unavailable",
+        "failureSubreason": "reconciliation_required",
+        "providerAttemptRef": f"provider-attempt:{attempt.id}",
+    }
+    assert json.loads(terminal.reason) == result.failure
+    assert RunTerminalEvent.objects.filter(run=run, visible=True).count() == 1
     assert transport.calls == 1
 
 

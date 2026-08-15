@@ -32,6 +32,7 @@ from plane.agent.lifecycle import (
     record_invocation,
     reconcile_provider_attempts,
 )
+from plane.agent.runtime.supervisor import _provider_unknown_failure
 from plane.db.models import (
     AgentRole,
     Issue,
@@ -479,7 +480,14 @@ def build_failure_evidence(
         "missing_outcome",
         "outcome_unknown",
     }
-    reason_phases = {"runtime_transport", "runtime_configuration", "runtime_process", "launcher", "runtime_supervisor"}
+    reason_phases = {
+        "runtime_transport",
+        "runtime_configuration",
+        "runtime_process",
+        "launcher",
+        "runtime_supervisor",
+        "provider_relay",
+    }
     failure_details = {
         "dispatch_rejected",
         "process_start_failed",
@@ -490,6 +498,7 @@ def build_failure_evidence(
         "process_output_invalid",
         "unclassified_exception",
         "missing_outcome",
+        "upstream_result_unavailable",
     }
     failure_subreasons = {
         "credential_reference_not_allowed",
@@ -510,6 +519,11 @@ def build_failure_evidence(
         "model_call_budget_exhausted",
         "runtime_execution_failed",
         "completed_without_explicit_outcome",
+        "upstream_exception",
+        "upstream_channel_closed",
+        "upstream_timeout",
+        "channel_closed_after_upstream",
+        "reconciliation_required",
     }
     runtime_exit_kinds = {"completed", "waiting_for_input", "failed", "blocked", "cancelled"}
     runtime_failure_codes = {"budget_exhausted", "runtime_error"}
@@ -719,7 +733,13 @@ def build_failure_evidence(
             candidate = None
         if isinstance(candidate, dict):
             base_keys = {"failureCode", "failurePhase", "failureDetail"}
-            optional_keys = {"failureSubreason", "failureCause", "hostOperationFailure"}
+            optional_keys = {
+                "failureSubreason",
+                "failureCause",
+                "hostOperationFailure",
+                "providerAttemptRef",
+                "providerEventRef",
+            }
             if base_keys.issubset(candidate) and not set(candidate).difference(
                 base_keys | optional_keys
             ):
@@ -841,6 +861,13 @@ def build_failure_evidence(
     bounded_host_failure = bounded_host_operation_failure(reason.get("hostOperationFailure"))
     if bounded_host_failure is not None:
         bounded_failure["hostOperationFailure"] = bounded_host_failure
+    for field, prefix in (
+        ("providerAttemptRef", "provider-attempt:"),
+        ("providerEventRef", "provider-event:"),
+    ):
+        value = reason.get(field)
+        if isinstance(value, str) and value.startswith(prefix) and bounded_identifier(value) != "unavailable":
+            bounded_failure[field] = bounded_identifier(value)
 
     receipt = {
         "schemaVersion": "plane-agent-g4/live-failure/v1",
@@ -883,8 +910,10 @@ def _supervisor_failure_reason(output):
         "failureDetail",
         "failureSubreason",
         "failureCause",
+        "providerAttemptRef",
+        "providerEventRef",
     }
-    required_keys = allowed_keys - {"failureSubreason"}
+    required_keys = allowed_keys - {"failureSubreason", "providerAttemptRef", "providerEventRef"}
     allowed_shapes = {
         frozenset(required_keys),
         frozenset(required_keys | {"failureSubreason"}),
@@ -932,10 +961,11 @@ def _supervisor_failure_reason(output):
         if not isinstance(value, dict):
             continue
         value_keys = frozenset(value)
-        if value_keys not in allowed_shapes:
+        diagnostic_refs = value_keys & {"providerAttemptRef", "providerEventRef"}
+        if value_keys - diagnostic_refs not in allowed_shapes:
             if (
                 "hostOperationFailure" not in value
-                or value_keys - {"hostOperationFailure"} not in allowed_shapes
+                or value_keys - diagnostic_refs - {"hostOperationFailure"} not in allowed_shapes
             ):
                 continue
         if not all(
@@ -956,7 +986,22 @@ def _supervisor_failure_reason(output):
                 continue
             value = dict(value)
             value["hostOperationFailure"] = bounded
-        return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        for field, prefix in (
+            ("providerAttemptRef", "provider-attempt:"),
+            ("providerEventRef", "provider-event:"),
+        ):
+            if field in value:
+                item = value[field]
+                allowed = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:/-"
+                if (
+                    not isinstance(item, str)
+                    or not item.startswith(prefix)
+                    or len(item.encode("utf-8")) > 128
+                    or any(character not in allowed for character in item)
+                ):
+                    break
+        else:
+            return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return None
 
 
@@ -1477,7 +1522,7 @@ def main() -> int:
             "summary": {
                 "counts": {"collected": 1, "passed": 1, "failed": 0, "skipped": 0, "xfail": 0, "deselected": 0},
                 "durationMs": duration_ms,
-                "migrationLeaf": "db.0142_runtime_provider_attempts",
+                "migrationLeaf": "db.0144_provider_attempt_diagnostics",
                 "workload": {
                     "invocationRef": str(invocation.invocation_id),
                     "runRef": str(run.id),
@@ -1528,11 +1573,14 @@ def main() -> int:
                     }
                 ):
                     initiated = any(attempt.upstream_initiated for attempt in provider_attempts)
+                    provider_failure = _provider_unknown_failure(invocation) if initiated else None
                     finalize_invocation(
                         invocation,
                         kind="run_blocker" if initiated else "run_failure",
                         reason=(
-                            "Provider request outcome is unknown; explicit reconciliation is required."
+                            json.dumps(provider_failure, sort_keys=True, separators=(",", ":"))
+                            if provider_failure is not None
+                            else "Provider request outcome is unknown; explicit reconciliation is required."
                             if initiated
                             else "Live G4 supervisor invocation failed before provider completion."
                         ),
@@ -1598,8 +1646,15 @@ def main() -> int:
                 ],
                 terminal_kind=terminal.kind if terminal is not None else "none",
                 failure_code=control.failure_code if control is not None else None,
-                failure_reason=supervisor_failure_reason
-                or (control.failure_reason if control is not None else None),
+                failure_reason=(
+                    supervisor_failure_reason
+                    or (
+                        json.dumps(_provider_unknown_failure(invocation), sort_keys=True, separators=(",", ":"))
+                        if invocation is not None and any(attempt.upstream_initiated for attempt in provider_attempts)
+                        else None
+                    )
+                    or (control.failure_reason if control is not None else None)
+                ),
                 runtime_exit=(
                     {
                         "kind": exit_evidence.kind,

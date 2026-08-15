@@ -1389,7 +1389,10 @@ def _validate_failure_receipt(
         "codeModePhase",
     }
     if (
-        set(failure).difference(required_failure_fields | {"reasonCause", "hostOperationFailure"})
+        set(failure).difference(
+            required_failure_fields
+            | {"reasonCause", "hostOperationFailure", "providerAttemptRef", "providerEventRef"}
+        )
         or not required_failure_fields.issubset(failure)
     ):
         raise ContractError("evidence_failure_fields_invalid")
@@ -1400,6 +1403,11 @@ def _validate_failure_receipt(
     for field in ("reasonCode", "reasonPhase", "reasonDetail", "reasonSubreason", "reasonCause"):
         if field in failure:
             _safe_ref(failure[field], f"evidence_failure_{field}")
+    for field, prefix in (("providerAttemptRef", "provider-attempt:"), ("providerEventRef", "provider-event:")):
+        if field in failure:
+            _safe_ref(failure[field], f"evidence_failure_{field}")
+            if not failure[field].startswith(prefix):
+                raise ContractError(f"evidence_failure_{field}_prefix_invalid")
     if "hostOperationFailure" in failure:
         host_failure = _object(failure["hostOperationFailure"], "evidence_host_operation_failure")
         if set(host_failure) != host_failure_fields:
@@ -1541,6 +1549,57 @@ def validate_evidence(
         raise ContractError("evidence_must_be_one_json_object") from exc
     if not isinstance(evidence, dict):
         raise ContractError("evidence_must_be_one_json_object")
+    if evidence.get("schemaVersion") == "plane-agent-g4/live-runner-failure/v1":
+        required = {"schemaVersion", "status", "phase", "errorClass", "exitCode", "reasonCategory"}
+        if set(evidence) != required:
+            raise ContractError("runner_failure_receipt_fields_invalid")
+        _exact(evidence["status"], "failed", "runner_failure_receipt_status")
+        if evidence["phase"] not in {
+            "initialization",
+            "credential-staging",
+            "credential-bind-preflight",
+            "credential-state-volume",
+            "compose",
+            "audit-bootstrap",
+            "migrate",
+            "runtime-start",
+            "runtime-health",
+            "api-invocation",
+        }:
+            raise ContractError("runner_failure_receipt_phase_invalid")
+        if evidence["errorClass"] not in {
+            "CommandError",
+            "ConnectionError",
+            "FileNotFoundError",
+            "ImportError",
+            "ImproperlyConfigured",
+            "ModuleNotFoundError",
+            "OperationalError",
+            "PermissionError",
+            "RuntimeError",
+            "TimeoutError",
+            "unavailable",
+            "unspecified",
+        }:
+            raise ContractError("runner_failure_receipt_error_class_invalid")
+        if type(evidence["exitCode"]) is not int or not 1 <= evidence["exitCode"] <= 255:
+            raise ContractError("runner_failure_receipt_exit_code_invalid")
+        if evidence["reasonCategory"] != "unavailable" and evidence["reasonCategory"] not in {
+            "docker_mount_target_read_only",
+            "docker_mount_invalid",
+            "docker_mount_source_unavailable",
+            "docker_mount_permission_denied",
+            "docker_network_configuration_invalid",
+            "docker_image_unavailable",
+            "docker_container_start_failed",
+            "docker_precontainer_failure",
+        }:
+            raise ContractError("runner_failure_receipt_reason_category_invalid")
+        return {
+            "evidenceSha256": hashlib.sha256(evidence_text.encode("utf-8")).hexdigest(),
+            "collected": 0,
+            "passed": 0,
+        }
     if set(evidence).difference(_LIVE_TOP_LEVEL_FIELDS):
         raise ContractError("evidence_top_level_fields_invalid")
     expected = exact_binding(manifest, candidate)

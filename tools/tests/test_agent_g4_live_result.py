@@ -49,7 +49,7 @@ class LiveResultPersistenceTests(unittest.TestCase):
             capture_output=True,
         )
 
-    def test_success_and_failure_stdout_are_exactly_the_persisted_bytes(self):
+    def test_success_and_failure_stdout_are_one_json_receipt_and_diagnostics_are_stderr(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             evidence = self._evidence(root)
@@ -72,8 +72,41 @@ class LiveResultPersistenceTests(unittest.TestCase):
             )
             self.assertEqual(failure.returncode, 0, failure.stderr)
             self.assertEqual(failure.stdout, failure_destination.read_bytes())
-            self.assertTrue(failure.stdout.startswith(b"event=agent.g4.live-runner.failure "))
-            self.assertTrue(failure.stdout.endswith(failure_evidence.read_bytes()))
+            self.assertEqual(json.loads(failure.stdout), json.loads(failure_evidence.read_bytes()))
+            self.assertIn(b"event=agent.g4.live-runner.failure ", failure.stderr)
+            self.assertNotIn(b"event=agent.g4.live-runner.failure ", failure.stdout)
+
+    def test_two_line_status_prefix_is_not_a_valid_result_receipt(self):
+        with self.assertRaises(json.JSONDecodeError):
+            json.loads(b"event=agent.g4.live-runner.failure phase=api-invocation\n{}")
+
+    def test_pre_evidence_failure_still_publishes_one_json_receipt(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            destination = root / "pre-provider.result"
+            result = self._run_helper(
+                destination,
+                root / "missing-evidence.json",
+                "--status",
+                "42",
+                "--phase",
+                "credential-bind-preflight",
+                "--error-class",
+                "RuntimeError",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                json.loads(result.stdout),
+                {
+                    "schemaVersion": "plane-agent-g4/live-runner-failure/v1",
+                    "status": "failed",
+                    "phase": "credential-bind-preflight",
+                    "errorClass": "RuntimeError",
+                    "exitCode": 42,
+                    "reasonCategory": "unavailable",
+                },
+            )
+            self.assertEqual(result.stdout, destination.read_bytes())
 
     def test_result_is_owner_only_and_survives_run_directory_deletion(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -147,7 +180,8 @@ class LiveResultPersistenceTests(unittest.TestCase):
             self.assertNotIn(raw_error.read_bytes(), persisted)
             self.assertNotIn(b"/private/secret/provider-source", persisted)
             self.assertNotIn(b"must-not-leak", persisted)
-            self.assertIn(b"reason_category=docker_container_start_failed", persisted)
+            self.assertIn(b"reason_category=docker_container_start_failed", result.stderr)
+            self.assertNotIn(b"reason_category=docker_container_start_failed", persisted)
 
             refused_destination = root / "refused.result"
             refused = self._run_helper(

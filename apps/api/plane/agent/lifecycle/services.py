@@ -2221,6 +2221,17 @@ def reconcile_runtime_usage(run, invocation, usage=None, *, created_by=None):
 
 
 _PROVIDER_ATTEMPT_PHASES = frozenset(RuntimeProviderAttemptPhase.values)
+_PROVIDER_ATTEMPT_REASON_PHASES = frozenset({"", "provider_relay"})
+_PROVIDER_ATTEMPT_REASON_SUBREASONS = frozenset(
+    {
+        "",
+        "upstream_exception",
+        "upstream_channel_closed",
+        "upstream_timeout",
+        "channel_closed_after_upstream",
+        "reconciliation_required",
+    }
+)
 
 
 def _provider_attempt_text(value, field_name, maximum):
@@ -2251,7 +2262,8 @@ def record_provider_attempt_notice(invocation, notice: Mapping[str, object]):
         "statusClass",
         "errorCode",
     }
-    if not isinstance(notice, Mapping) or set(notice) != required:
+    optional = {"reasonPhase", "reasonSubreason", "eventRef"}
+    if not isinstance(notice, Mapping) or not set(notice).issubset(required | optional) or not required.issubset(notice):
         raise AgentDomainError("Provider attempt notice fields are invalid")
     phase = notice["phase"]
     if phase not in _PROVIDER_ATTEMPT_PHASES:
@@ -2273,6 +2285,21 @@ def record_provider_attempt_notice(invocation, notice: Mapping[str, object]):
         raise AgentDomainError("Provider attempt errorCode is invalid")
     if any(ord(char) < 0x20 or ord(char) == 0x7F for char in status_class + error_code):
         raise AgentDomainError("Provider attempt status or error is invalid")
+    reason_phase = notice.get("reasonPhase", "")
+    reason_subreason = notice.get("reasonSubreason", "")
+    event_ref = notice.get("eventRef", "")
+    if not isinstance(reason_phase, str) or reason_phase not in _PROVIDER_ATTEMPT_REASON_PHASES:
+        raise AgentDomainError("Provider attempt reasonPhase is invalid")
+    if not isinstance(reason_subreason, str) or reason_subreason not in _PROVIDER_ATTEMPT_REASON_SUBREASONS:
+        raise AgentDomainError("Provider attempt reasonSubreason is invalid")
+    if event_ref:
+        _provider_attempt_text(event_ref, "eventRef", 128)
+        allowed_ref_characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:/-"
+        if (
+            not event_ref.startswith("provider-event:")
+            or any(character not in allowed_ref_characters for character in event_ref)
+        ):
+            raise AgentDomainError("Provider attempt eventRef is invalid")
     sequence = notice["sequence"]
     if isinstance(sequence, bool) or not isinstance(sequence, int) or not 1 <= sequence <= 256:
         raise AgentDomainError("Provider attempt sequence is invalid")
@@ -2336,6 +2363,9 @@ def record_provider_attempt_notice(invocation, notice: Mapping[str, object]):
             upstream_initiated=False,
             status_class=status_class,
             error_code=error_code,
+            reason_phase=reason_phase,
+            reason_subreason=reason_subreason,
+            event_ref=event_ref,
             fingerprint=content_digest(identity),
             created_by=stored_invocation.created_by,
         )
@@ -2355,6 +2385,26 @@ def record_provider_attempt_notice(invocation, notice: Mapping[str, object]):
     }
     if existing_identity != identity or existing.fingerprint != content_digest(identity):
         raise IdempotencyConflictError("Provider attempt idempotency is bound to different evidence")
+    for field, value in (
+        ("reason_phase", reason_phase),
+        ("reason_subreason", reason_subreason),
+        ("event_ref", event_ref),
+    ):
+        if value and getattr(existing, field) and getattr(existing, field) != value:
+            raise IdempotencyConflictError("Provider attempt diagnostics cannot be changed")
+
+    def apply_diagnostics():
+        changed = []
+        for field, value in (
+            ("reason_phase", reason_phase),
+            ("reason_subreason", reason_subreason),
+            ("event_ref", event_ref),
+        ):
+            if value and not getattr(existing, field):
+                setattr(existing, field, value)
+                changed.append(field)
+        return changed
+
     if existing.phase in {
         RuntimeProviderAttemptPhase.COMPLETED,
         RuntimeProviderAttemptPhase.FAILED,
@@ -2367,6 +2417,9 @@ def record_provider_attempt_notice(invocation, notice: Mapping[str, object]):
             or existing.error_code != error_code
         ):
             raise IdempotencyConflictError("Provider attempt terminal evidence cannot be changed")
+        changed = apply_diagnostics()
+        if changed:
+            existing.save(_allow_lifecycle=True, update_fields=[*changed, "updated_at"])
         return existing
     allowed_transitions = {
         RuntimeProviderAttemptPhase.INTENT: {
@@ -2381,6 +2434,9 @@ def record_provider_attempt_notice(invocation, notice: Mapping[str, object]):
         },
     }
     if phase == existing.phase:
+        changed = apply_diagnostics()
+        if changed:
+            existing.save(_allow_lifecycle=True, update_fields=[*changed, "updated_at"])
         return existing
     if phase not in allowed_transitions.get(existing.phase, set()):
         raise IdempotencyConflictError("Provider attempt lifecycle transition is invalid")
@@ -2388,10 +2444,26 @@ def record_provider_attempt_notice(invocation, notice: Mapping[str, object]):
     existing.upstream_initiated = upstream_initiated
     existing.status_class = status_class
     existing.error_code = error_code
+    if reason_phase:
+        existing.reason_phase = reason_phase
+    if reason_subreason:
+        existing.reason_subreason = reason_subreason
     existing.terminal_at = timezone.now() if terminal else None
+    if event_ref:
+        existing.event_ref = event_ref
     existing.save(
         _allow_lifecycle=True,
-        update_fields=["phase", "upstream_initiated", "status_class", "error_code", "terminal_at", "updated_at"],
+        update_fields=[
+            "phase",
+            "upstream_initiated",
+            "status_class",
+            "error_code",
+            "reason_phase",
+            "reason_subreason",
+            "event_ref",
+            "terminal_at",
+            "updated_at",
+        ],
     )
     return existing
 
@@ -2415,10 +2487,21 @@ def reconcile_provider_attempts(invocation):
         )
         attempt.status_class = "unknown" if attempt.upstream_initiated else "not_sent"
         attempt.error_code = "outcome_unknown" if attempt.upstream_initiated else "pre_send_failure"
+        if attempt.upstream_initiated:
+            attempt.reason_phase = attempt.reason_phase or "provider_relay"
+            attempt.reason_subreason = attempt.reason_subreason or "reconciliation_required"
         attempt.terminal_at = timezone.now()
         attempt.save(
             _allow_lifecycle=True,
-            update_fields=["phase", "status_class", "error_code", "terminal_at", "updated_at"],
+            update_fields=[
+                "phase",
+                "status_class",
+                "error_code",
+                "reason_phase",
+                "reason_subreason",
+                "terminal_at",
+                "updated_at",
+            ],
         )
     return tuple(attempts)
 
