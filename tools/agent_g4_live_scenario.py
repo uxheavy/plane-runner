@@ -190,6 +190,18 @@ class ScenarioDescriptor:
         return result
 
 
+def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, ...]:
+    """Render the typed route gate as bounded, ordered model-facing outcomes."""
+
+    if expected is None:
+        return ()
+    outcomes = expected.get("operationOutcomes", [])
+    return tuple(
+        f"Route step {index}: invoke {item['operationId']} exactly {item.get('count', 1)} time(s) and expect {item['outcome']}."
+        for index, item in enumerate(outcomes, start=1)
+    )
+
+
 def _pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:

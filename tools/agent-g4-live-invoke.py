@@ -1359,7 +1359,7 @@ def main() -> int:
         ]
         assignment_context_refs = []
         if scenario is not None:
-            from agent_g4_live_scenario import ASSIGNED_WORK_ITEM_ALIAS
+            from agent_g4_live_scenario import ASSIGNED_WORK_ITEM_ALIAS, model_route_expectations
 
             scenario_agent_roles = {
                 "worker": AgentRole.WORKER,
@@ -1387,6 +1387,7 @@ def main() -> int:
             assignment_objective = scenario.assignment.objective
             assignment_acceptance_criteria = list(scenario.assignment.acceptance_criteria)
             assignment_context_refs = list(scenario.assignment.context_refs)
+            profile_expected_outcomes = list(model_route_expectations(scenario.expected))
             profile_instructions = profile_instructions.replace("{{subjectUserRef}}", f"user:{user.id}")
             profile_persona = profile_persona.replace("{{subjectUserRef}}", f"user:{user.id}")
         profile = create_profile(

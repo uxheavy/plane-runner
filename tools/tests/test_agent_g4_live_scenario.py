@@ -123,6 +123,22 @@ def test_expected_predicates_are_bounded_and_retained_in_evidence() -> None:
     assert parsed.evidence()["expected"] == value["expected"]
 
 
+def test_expected_operations_render_as_ordered_model_route_outcomes() -> None:
+    expected = {
+        "operationOutcomes": [
+            {"operationId": "catalog.search", "outcome": "success", "count": 1},
+            {"operationId": "agent.context.read", "outcome": "success", "count": 1},
+            {"operationId": "agent.outcome.evaluate", "outcome": "denied", "count": 1},
+        ]
+    }
+
+    assert scenario.model_route_expectations(expected) == (
+        "Route step 1: invoke catalog.search exactly 1 time(s) and expect success.",
+        "Route step 2: invoke agent.context.read exactly 1 time(s) and expect success.",
+        "Route step 3: invoke agent.outcome.evaluate exactly 1 time(s) and expect denied.",
+    )
+
+
 def test_manager_setup_controls_and_durable_expectations_are_typed() -> None:
     value = descriptor_for("manager")
     value["setup"] = {
