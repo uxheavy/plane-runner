@@ -223,13 +223,11 @@ def _terminalize(
         elif outcome_unknown and terminal.kind == "outcome_submission":
             # An outcome callback can commit its visible event before the
             # supervisor receives a late provider-attempt terminal notice.
-            # Keep that one visible event, but move both lifecycle records to
-            # the existing reconciliation state instead of accepting success.
-            invocation.state = InvocationState.OUTCOME_UNKNOWN
-            invocation.save(_allow_lifecycle=True, created_by_id=invocation.created_by_id)
-            run.state = RunState.OUTCOME_UNKNOWN
-            run.pending_input_ref = None
-            run.save(_allow_lifecycle=True, created_by_id=run.created_by_id)
+            # Keep that one immutable event and leave product lifecycle state
+            # unchanged; control state below records the reconciliation stop.
+            # A late provider notice cannot authorize an illegal succeeded ->
+            # outcome_unknown transition.
+            pass
         _set_failure(control, code=code, reason=reason, unknown=outcome_unknown)
         if not outcome_unknown:
             control.state = RuntimeControlState.RELEASED

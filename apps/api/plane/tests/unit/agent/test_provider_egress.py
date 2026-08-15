@@ -265,7 +265,7 @@ def test_provider_timeout_is_bounded_and_repeated_request_is_not_replayed(tmp_pa
     assert second[0] == 403
     assert json.loads(second[2]) == {"error": "replay"}
     assert len(upstream.calls) == 1
-    assert [audit.phase for audit in audits] == ["intent", "started", "outcome_unknown"]
+    assert [audit.phase for audit in audits] == ["intent", "started", "outcome_unknown", "terminal"]
     assert audits[-1].reason_subreason == "upstream_timeout"
 
 

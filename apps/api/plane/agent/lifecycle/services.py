@@ -2319,6 +2319,8 @@ def record_provider_attempt_notice(invocation, notice: Mapping[str, object]):
         raise AgentDomainError("Provider attempt completion must claim an initiated request")
     if phase == RuntimeProviderAttemptPhase.OUTCOME_UNKNOWN and not upstream_initiated:
         raise AgentDomainError("Provider attempt outcome_unknown must claim an initiated request")
+    if phase == RuntimeProviderAttemptPhase.OUTCOME_UNKNOWN and not reason_phase:
+        reason_phase = "provider_relay"
 
     _assignment, run, stored_invocation = lock_invocation_path(invocation.pk)
     existing = RuntimeProviderAttempt.all_objects.select_for_update().filter(idempotency_key=idempotency_key).first()

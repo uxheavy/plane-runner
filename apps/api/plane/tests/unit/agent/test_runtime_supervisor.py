@@ -22,6 +22,7 @@ from django.test import override_settings
 from django.utils import timezone
 
 from plane.agent.lifecycle import (
+    InvalidTransitionError,
     create_actor,
     create_assignment,
     create_profile,
@@ -210,12 +211,6 @@ class CompletedExitWithUnknownProviderRuntimeTransport:
         self.calls += 1
         envelope = json.loads(envelope_json)
         invocation = RuntimeInvocation.objects.get(invocation_id=envelope["invocationId"])
-        propose_outcome(
-            invocation.run,
-            summary="The runtime submitted an outcome before a late provider ambiguity was observed.",
-            idempotency_key="idempotency:late-provider-unknown",
-            created_by=invocation.created_by,
-        )
         notice = {
             "runId": str(invocation.run_id),
             "invocationId": invocation.invocation_id,
@@ -256,8 +251,18 @@ class CompletedExitWithUnknownProviderRuntimeTransport:
                 "upstreamInitiated": True,
                 "statusClass": "unknown",
                 "errorCode": "outcome_unknown",
+                "reasonPhase": "provider_relay",
+                "reasonSubreason": "upstream_timeout",
+                "eventRef": "provider-event:" + "a" * 64,
             },
         )
+        with pytest.raises(InvalidTransitionError):
+            propose_outcome(
+                invocation.run,
+                summary="The runtime must not submit after provider ambiguity.",
+                idempotency_key="idempotency:late-provider-unknown",
+                created_by=invocation.created_by,
+            )
         frames = list(_runtime_frames(json.loads(snapshot_json), envelope))
         exit_frame = json.loads(frames[-1])
         exit_frame["kind"] = "completed"
@@ -1104,12 +1109,26 @@ def test_terminal_provider_outcome_unknown_cannot_succeed_with_completed_exit_an
     invocation.refresh_from_db()
     control = RuntimeInvocationControl.objects.get(invocation=invocation)
     terminal = RunTerminalEvent.objects.get(invocation=invocation, visible=True)
-    assert OutcomeSubmission.objects.filter(run=run).count() == 1
-    assert result.state == InvocationState.OUTCOME_UNKNOWN
-    assert invocation.state == InvocationState.OUTCOME_UNKNOWN
+    attempt = RuntimeProviderAttempt.objects.get(invocation=invocation)
+    expected_failure = {
+        "failureCode": "outcome_unknown",
+        "failurePhase": "provider_relay",
+        "failureDetail": "upstream_result_unavailable",
+        "failureSubreason": "upstream_timeout",
+        "providerAttemptRef": f"provider-attempt:{attempt.id}",
+        "providerEventRef": "provider-event:" + "a" * 64,
+    }
+    assert OutcomeSubmission.objects.filter(run=run).count() == 0
+    assert result.state == InvocationState.BLOCKED
+    assert result.terminal_kind == "run_blocker"
+    assert result.failure == expected_failure
+    assert invocation.state == InvocationState.BLOCKED
     assert control.state == RuntimeControlState.OUTCOME_UNKNOWN
     assert control.failure_code == "outcome_unknown"
-    assert terminal.kind == "outcome_submission"
+    assert terminal.kind == "run_blocker"
+    assert json.loads(control.failure_reason) == expected_failure
+    assert json.loads(terminal.reason) == expected_failure
+    assert RunTerminalEvent.objects.filter(run=run, visible=True).count() == 1
     assert RuntimeExitEvidence.objects.filter(invocation=invocation, kind="completed").exists()
     assert transport.calls == 1
 

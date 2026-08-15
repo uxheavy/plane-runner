@@ -430,7 +430,21 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
                     reason_phase=getattr(exc, "reason_phase", ""),
                     reason_subreason=getattr(exc, "reason_subreason", ""),
                 )
-            else:
+                if terminal_phase == "outcome_unknown":
+                    relay._record_attempt(
+                        request,
+                        phase="terminal",
+                        upstream_initiated=True,
+                        status_class="unknown",
+                        error_code=code,
+                        reason_phase=getattr(exc, "reason_phase", ""),
+                        reason_subreason=getattr(exc, "reason_subreason", ""),
+                    )
+            elif code != "replay":
+                # A replay is a stable response for the already-recorded
+                # attempt, not a new provider-attempt audit.  In particular,
+                # do not let the identity fallback's default terminal phase
+                # create a second terminal event for the same request.
                 relay._record_identity(
                     {},
                     "denied",
@@ -454,6 +468,16 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
                         "channel_closed_after_upstream" if upstream_called else ""
                     ),
                 )
+                if upstream_called:
+                    relay._record_attempt(
+                        request,
+                        phase="terminal",
+                        upstream_initiated=True,
+                        status_class="unknown",
+                        error_code="outcome_unknown",
+                        reason_phase="provider_relay",
+                        reason_subreason="channel_closed_after_upstream",
+                    )
         finally:
             relay._request_slots.release()
 

@@ -319,6 +319,7 @@ class RuntimeDispatchExecutor:
                         f"{audit.run_id}\n{audit.invocation_id}\n{audit.request_id}".encode("utf-8")
                     ).hexdigest()
                 )
+                provider_phase = "outcome_unknown" if audit.phase == "terminal" else audit.phase
                 result = host_client.invoke(
                     PlaneHostCall(
                         run_id=audit.run_id,
@@ -327,7 +328,7 @@ class RuntimeDispatchExecutor:
                         action="observe",
                         operation_ref="runtime.provider_attempt",
                         input={
-                            "phase": audit.phase,
+                            "phase": provider_phase,
                             "leaseId": audit.lease_id,
                             "provider": audit.provider,
                             "model": audit.model,

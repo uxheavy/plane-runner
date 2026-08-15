@@ -78,7 +78,7 @@ from plane.db.models import (
 )
 
 
-AGENT_TEST_HEAD = ("db", "0140_invocation_free_cancellation_integrity")
+AGENT_TEST_HEAD = ("db", "0144_provider_attempt_diagnostics")
 
 
 @pytest.fixture(scope="session")
@@ -1583,7 +1583,6 @@ def test_provider_attempt_diagnostics_are_bounded_and_idempotent(assignment, pro
         invocation,
         phase=RuntimeProviderAttemptPhase.INTENT,
         upstream_initiated=False,
-        diagnostics=True,
     )
     first = record_provider_attempt_notice(invocation, notice)
     started = dict(notice, phase=RuntimeProviderAttemptPhase.STARTED, upstreamInitiated=True)
@@ -1594,6 +1593,7 @@ def test_provider_attempt_diagnostics_are_bounded_and_idempotent(assignment, pro
         statusClass="unknown",
         errorCode="outcome_unknown",
         reasonSubreason="upstream_timeout",
+        eventRef="provider-event:" + "a" * 64,
     )
     second = record_provider_attempt_notice(invocation, terminal)
     replay = record_provider_attempt_notice(invocation, terminal)
