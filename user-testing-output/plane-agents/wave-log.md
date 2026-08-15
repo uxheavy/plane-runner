@@ -1947,3 +1947,22 @@ records this diagnosis without changing the retained receipts.
   terminal conflict as an ordinary nonfatal tool result is not integrated.
   No image was rebuilt and no provider attempt was spent after this finding;
   a fresh primary and eligible replay wait for that exact Hermes commit.
+
+## Wave 0BC — Hermes conflict owner integrated; final three-commission preflight
+
+- The authoritative clean Hermes checkout is now
+  `cc3e444ee25e6c19fee77b6e1fbe3d95aef1a3ea` (parent `bc7f13d2...`). Its owner
+  checks passed: 44 tests plus 9 subtests in the incremental persistence and
+  host-port suites. The focused Plane owner suite passed 58 tests, including
+  the wire-valid exact-replay/conflict contract and the unknown-state mutation
+  guard.
+- The active Plane source remains the guarded callback-binding candidate
+  `8722376f8862b5c22fa10ce4c507e0045412599a`; the final documentation
+  checkpoint will be refrozen before provider use. No provider attempt was
+  spent during this preflight. W01/W02 remain dirty and the retained f63,
+  ca42, and de9189 receipts remain dirty evidence; none will be replayed.
+- Next bounded run shape is exactly three fresh commissions on one durable
+  Maya Agent/profile: (A) W01-W02, (B) W03-W04 plus W07-W08, and (C) W05-W06.
+  Each commission must independently submit, publish, read back, and perform
+  an eligible provider-disabled replay. No route will be marked clean from
+  provider-free tests alone.
