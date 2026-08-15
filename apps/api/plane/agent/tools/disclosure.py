@@ -124,9 +124,11 @@ def compose_tool_catalog(profile: Any, assignment: Any) -> dict[str, Any]:
         raise ValueError("tool presentation cannot define authorization or allowlists")
 
     selected: list[str] = []
-    # The universal work core is one stable semantic operation. Everything
-    # else is a presentation choice and remains globally discoverable.
-    for operation_id in ("search_workspace", *_explicit_ids(presentation)):
+    # Keep the universal work core present, but let an explicit route
+    # presentation lead the model through its bounded workflow. This is
+    # presentation only; progressive discovery and gateway authorization stay
+    # unchanged.
+    for operation_id in (*_explicit_ids(presentation), "search_workspace"):
         if operation_id in OPERATION_CATALOG and operation_id not in selected:
             if len(selected) >= MAX_EAGER_OPERATIONS:
                 raise ValueError(f"eager operation presentation exceeds {MAX_EAGER_OPERATIONS} operations")
