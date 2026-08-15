@@ -268,7 +268,12 @@ def fixture(candidate: str = CANDIDATE, source_manifest: dict | None = None) -> 
                     "agent.outcome.publish",
                 )
             ],
-            "transcriptEvidence": {"count": 1, "eventIds": ["event:transcript"]},
+            "transcriptEvidence": {
+                "status": "observed",
+                "requirement": "not_required",
+                "count": 1,
+                "eventIds": ["event:transcript"],
+            },
             "explicitPublication": {
                 "count": 1,
                 "refs": [
@@ -1490,12 +1495,49 @@ class G4ContractTests(unittest.TestCase):
             {"operationId": "agent.outcome.evaluate", "status": "denied", "errorCode": "NOT_AUTHORIZED", "count": 1},
         )
         self.assertEqual(readback["transcriptEvidence"]["count"], 1)
+        self.assertEqual(readback["transcriptEvidence"]["status"], "observed")
+        self.assertEqual(readback["transcriptEvidence"]["requirement"], "not_required")
         self.assertEqual(readback["explicitPublication"]["count"], 1)
         self.assertEqual(set(evidence["summary"]["workload"]["usage"]), {"inputTokens", "outputTokens", "durationMs"})
         self.assertEqual(set(readback["replay"]["new"].values()), {0})
         temp, paths = self.write_case(manifest, authority, config, evidence_text)
         self.addCleanup(temp.cleanup)
         self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 2)
+
+    def test_live_validator_accepts_terminal_publication_without_transcript_observation(self):
+        manifest, authority, config, evidence_text = fixture()
+        evidence = json.loads(evidence_text)
+        evidence["readback"]["runtimeEventIngress"]["kindCounts"].pop(
+            "transcript_evidence_observed", None
+        )
+        evidence["readback"]["transcriptEvidence"] = {
+            "status": "not_observed",
+            "requirement": "not_required",
+            "count": 0,
+            "eventIds": [],
+        }
+        evidence["semanticDigest"] = _semantic_digest(evidence)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(evidence, separators=(",", ":")))
+        self.addCleanup(temp.cleanup)
+        self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 2)
+
+    def test_live_validator_rejects_required_transcript_observation_when_absent(self):
+        manifest, authority, config, evidence_text = fixture()
+        evidence = json.loads(evidence_text)
+        evidence["readback"]["runtimeEventIngress"]["kindCounts"].pop(
+            "transcript_evidence_observed", None
+        )
+        evidence["readback"]["transcriptEvidence"] = {
+            "status": "not_observed",
+            "requirement": "required",
+            "count": 0,
+            "eventIds": [],
+        }
+        evidence["semanticDigest"] = _semantic_digest(evidence)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(evidence, separators=(",", ":")))
+        self.addCleanup(temp.cleanup)
+        with self.assertRaisesRegex(ContractError, "evidence_transcript_observation_missing"):
+            validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
 
     def test_live_validator_accepts_fresh_authority_canary_ids(self):
         manifest, authority, config, evidence_text = fixture()

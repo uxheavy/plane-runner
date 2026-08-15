@@ -173,6 +173,34 @@ class CompletedWithoutOutcomeRuntimeTransport:
         return tuple(frames)
 
 
+class TranscriptOnlyRuntimeTransport:
+    def __init__(self):
+        self.calls = 0
+
+    def dispatch(self, snapshot_json, envelope_json):
+        self.calls += 1
+        frames = list(_runtime_frames(json.loads(snapshot_json), json.loads(envelope_json)))
+        transcript = json.loads(frames[0])
+        transcript["eventId"] = "event:ordinary-transcript"
+        transcript["idempotencyKey"] = "idempotency:ordinary-transcript"
+        transcript["body"] = {
+            "kind": "transcript_evidence_observed",
+            "payload": {
+                "kind": "inline_text",
+                "contentType": "text/plain",
+                "text": "ordinary final text only",
+            },
+            "publication": {"action": "observation_only"},
+        }
+        exit_frame = json.loads(frames[-1])
+        exit_frame["kind"] = "completed"
+        exit_frame.pop("failure", None)
+        return tuple(
+            json.dumps(frame, sort_keys=True, separators=(",", ":"))
+            for frame in (transcript, exit_frame)
+        )
+
+
 class CompletedExitWithUnknownProviderRuntimeTransport:
     def __init__(self):
         self.calls = 0
@@ -1001,6 +1029,28 @@ def test_supervisor_preserves_missing_outcome_failure_through_terminal_output(
     assert json.loads(control.failure_reason) == expected
     assert json.loads(terminal.reason) == expected
     assert "completed_without_explicit_outcome" in _supervisor_result_output(result)
+    assert transport.calls == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_supervisor_keeps_ordinary_text_as_transcript_without_product_completion(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    run, invocation = _invocation(workspace, gateway_project, gateway_issue, create_user, suffix="transcript-only")
+    transport = TranscriptOnlyRuntimeTransport()
+
+    result = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
+
+    event = RuntimeEventIngress.objects.get(invocation=invocation, kind="transcript_evidence_observed")
+    body = event.raw_payload["body"]
+    terminal = RunTerminalEvent.objects.get(invocation=invocation, visible=True)
+    assert result.state == InvocationState.FAILED
+    assert result.failure["failureCode"] == "missing_outcome"
+    assert body["payload"]["text"] == "ordinary final text only"
+    assert body["publication"] == {"action": "observation_only"}
+    assert OutcomeSubmission.objects.filter(run=run).count() == 0
+    assert RunTerminalEvent.objects.filter(run=run, kind="outcome_submission", visible=True).count() == 0
+    assert terminal.kind == "run_failure"
     assert transport.calls == 1
 
 

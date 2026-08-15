@@ -67,7 +67,10 @@
         "transcriptEvidence",
         "explicitPublication",
         "replay"
-      ]
+      ],
+      "properties": {
+        "transcriptEvidence": { "$ref": "#/$defs/transcriptEvidence" }
+      }
     },
     "summary": { "$ref": "#/$defs/summary" }
   },
@@ -127,6 +130,21 @@
         "externalEgressOwner": { "const": "agent-runtime" },
         "hostGatewaySeparate": { "const": true },
         "hermesHookStatus": { "enum": ["pending", "integrated"] }
+      }
+    },
+    "transcriptEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "requirement", "count", "eventIds"],
+      "properties": {
+        "status": { "enum": ["observed", "not_observed"] },
+        "requirement": { "enum": ["required", "not_required"] },
+        "count": { "type": "integer", "minimum": 0, "maximum": 32 },
+        "eventIds": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "type": "string", "pattern": "^event:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}$" }
+        }
       }
     },
     "s00Gate": {

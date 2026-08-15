@@ -262,6 +262,16 @@ def _s00_publication_evidence(value):
     }
 
 
+def _s00_transcript_evidence(event_ids, *, required):
+    bounded_event_ids = list(event_ids)[:32] if isinstance(event_ids, (list, tuple)) else []
+    return {
+        "status": "observed" if bounded_event_ids else "not_observed",
+        "requirement": "required" if required else "not_required",
+        "count": len(bounded_event_ids),
+        "eventIds": bounded_event_ids,
+    }
+
+
 def _semantic_state_digest(snapshot: dict) -> str:
     return hashlib.sha256(
         json.dumps(snapshot, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
@@ -852,7 +862,7 @@ def main() -> int:
     plane_host_operation_receipts = False
     plane_operation_audit = []
     supervisor_failure_reason = None
-    transcript_evidence = {"count": 0, "eventIds": []}
+    transcript_evidence = _s00_transcript_evidence([], required=True)
     explicit_publication = {"count": 0, "refs": [], "bindings": []}
     s00_gate = None
     replay_evidence = None
@@ -895,6 +905,9 @@ def main() -> int:
             "event_id", "kind", "raw_payload"
         )[:256]:
             if event["kind"] == "transcript_evidence_observed":
+                body = event["raw_payload"].get("body") if isinstance(event["raw_payload"], dict) else None
+                if not isinstance(body, dict) or body.get("publication") != {"action": "observation_only"}:
+                    raise RuntimeError("transcript evidence was not observation_only")
                 event_id = bounded_ref(event["event_id"], "event:")
                 if event_id is not None:
                     transcript_event_ids.append(event_id)
@@ -964,6 +977,10 @@ def main() -> int:
             for binding in publication_bindings
             if all(field in binding for field in _S00_PUBLICATION_REF_FIELDS)
         ]
+        transcript_evidence = _s00_transcript_evidence(
+            transcript_event_ids,
+            required=not bool(publication_records),
+        )
         operation_audit = list(
             OperationGatewayAudit.objects.filter(correlation_id=f"correlation:{run.id}", phase="outcome")
             .order_by("created_at", "id")
@@ -978,7 +995,7 @@ def main() -> int:
             event_kind_counts,
             host_receipts,
             operation_audit,
-            {"count": len(transcript_event_ids), "eventIds": transcript_event_ids[:32]},
+            transcript_evidence,
             {"count": len(publication_refs), "refs": publication_refs[:8], "bindings": publication_bindings},
         )
 
@@ -1141,7 +1158,6 @@ def main() -> int:
             or not submitted
             or usage is None
             or exit_evidence is None
-            or transcript_evidence["count"] < 1
         ):
             raise RuntimeError("live product lifecycle or canary evidence was incomplete")
 
@@ -1389,7 +1405,7 @@ def main() -> int:
                     exit_evidence, runtime_event_kind_counts = None, {}
                     plane_host_operation_receipts = False
                     plane_operation_audit = []
-                    transcript_evidence = {"count": 0, "eventIds": []}
+                    transcript_evidence = _s00_transcript_evidence([], required=True)
                     explicit_publication = {"count": 0, "refs": [], "bindings": []}
 
         if failure is not None:

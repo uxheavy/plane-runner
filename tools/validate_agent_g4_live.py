@@ -825,6 +825,8 @@ _LIVE_READBACK_FIELDS = {
     "explicitPublication",
     "replay",
 }
+_LIVE_TRANSCRIPT_STATUSES = {"observed", "not_observed"}
+_LIVE_TRANSCRIPT_REQUIREMENTS = {"required", "not_required"}
 _LIVE_TOP_LEVEL_FIELDS = {
     "schemaVersion",
     "status",
@@ -1123,11 +1125,13 @@ def _validate_live_readback(evidence: dict[str, Any]) -> None:
         raise ContractError("evidence_provider_attempt_success_missing")
 
     transcript = _object(_required(evidence, "transcriptEvidence", "evidence"), "evidence_transcript")
-    if set(transcript) != {"count", "eventIds"}:
+    if set(transcript) != {"status", "requirement", "count", "eventIds"}:
         raise ContractError("evidence_transcript_fields_invalid")
     event_ids = transcript["eventIds"]
     if (
-        type(transcript["count"]) is not int
+        transcript["status"] not in _LIVE_TRANSCRIPT_STATUSES
+        or transcript["requirement"] not in _LIVE_TRANSCRIPT_REQUIREMENTS
+        or type(transcript["count"]) is not int
         or not 0 <= transcript["count"] <= 32
         or not isinstance(event_ids, list)
         or len(event_ids) != transcript["count"]
@@ -1135,6 +1139,10 @@ def _validate_live_readback(evidence: dict[str, Any]) -> None:
         or any(not isinstance(event_id, str) or not re.fullmatch(r"event:[A-Za-z0-9][A-Za-z0-9._~/-]{0,119}", event_id) for event_id in event_ids)
     ):
         raise ContractError("evidence_transcript_invalid")
+    if transcript["status"] == "observed" and transcript["count"] < 1:
+        raise ContractError("evidence_transcript_status_invalid")
+    if transcript["status"] == "not_observed" and transcript["count"] != 0:
+        raise ContractError("evidence_transcript_status_invalid")
 
     publication = _object(_required(evidence, "explicitPublication", "evidence"), "evidence_publication")
     if set(publication) != {"count", "refs"}:
@@ -1157,7 +1165,11 @@ def _validate_live_readback(evidence: dict[str, Any]) -> None:
             for field, prefix in _LIVE_PUBLICATION_REF_PREFIXES.items()
         ):
             raise ContractError("evidence_publication_ref_invalid")
-    if transcript["count"] < 1 or kind_counts.get("transcript_evidence_observed", 0) < 1:
+    if transcript["requirement"] == "not_required" and publication["count"] != 1:
+        raise ContractError("evidence_transcript_requirement_invalid")
+    if transcript["requirement"] == "required" and (
+        transcript["count"] < 1 or kind_counts.get("transcript_evidence_observed", 0) < 1
+    ):
         raise ContractError("evidence_transcript_observation_missing")
 
     replay = _object(_required(evidence, "replay", "evidence"), "evidence_replay")
