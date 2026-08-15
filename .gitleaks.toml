@@ -1,0 +1,6 @@
+[allowlist]
+description = "Docker image references are not credentials."
+regexTarget = "match"
+regexes = [
+  '''plane-agent-api:[A-Za-z0-9._-]+''',
+]
