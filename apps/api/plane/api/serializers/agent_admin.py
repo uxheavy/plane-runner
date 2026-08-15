@@ -121,6 +121,7 @@ class ProfileVersionAdminSerializer(BaseSerializer):
 class AssignmentCreateSerializer(serializers.Serializer):
     target_ref = serializers.CharField(max_length=255, allow_blank=False, trim_whitespace=True)
     objective = serializers.CharField(max_length=4096, allow_blank=False, trim_whitespace=True)
+    plan_rationale = serializers.CharField(max_length=4096, required=False, allow_blank=True, default="")
     acceptance_criteria = serializers.ListField(
         required=True,
         min_length=1,
@@ -143,6 +144,7 @@ class AssignmentAdminSerializer(BaseSerializer):
             "revision",
             "target_ref",
             "objective",
+            "plan_rationale",
             "acceptance_criteria",
             "context_refs",
             "state",

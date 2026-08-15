@@ -2028,6 +2028,7 @@ class AgentGovernanceOperation:
             ),
             "depth": assignment.delegation_depth,
             "state": assignment.state,
+            "planRationale": assignment.plan_rationale,
             "scope": assignment.scope,
             "budget": assignment.budget,
         }
@@ -2089,6 +2090,7 @@ class AgentGovernanceOperation:
                     assignee,
                     target_ref=data["target_ref"],
                     objective=data["objective"],
+                    plan_rationale=data["plan_rationale"],
                     acceptance_criteria=data["acceptance_criteria"],
                     context_refs=data.get("context_refs"),
                     scope=data.get("scope"),

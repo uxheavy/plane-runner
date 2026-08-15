@@ -24,6 +24,7 @@ from plane.agent.lifecycle import (
     cancel_assignment,
 )
 from plane.agent.lifecycle import InvalidTransitionError
+from plane.agent.administration_extensions import build_governance_readback
 from plane.db.models import (
     AgentHRProposal,
     AgentRole,
@@ -87,6 +88,7 @@ def test_delegation_is_replay_safe_bounded_and_lineage_immutable(workspace, proj
         worker,
         target_ref="issue:child",
         objective="Implement the bounded child task.",
+        plan_rationale="The delegator isolated the child implementation path.",
         acceptance_criteria=["The child is complete."],
         scope={"queues": ["backend"]},
         budget={"inputTokens": 4},
@@ -99,6 +101,7 @@ def test_delegation_is_replay_safe_bounded_and_lineage_immutable(workspace, proj
         worker,
         target_ref="issue:child",
         objective="Implement the bounded child task.",
+        plan_rationale="The delegator isolated the child implementation path.",
         acceptance_criteria=["The child is complete."],
         scope={"queues": ["backend"]},
         budget={"inputTokens": 4},
@@ -119,16 +122,19 @@ def test_delegation_is_replay_safe_bounded_and_lineage_immutable(workspace, proj
             worker,
             target_ref="issue:another-child",
             objective="A different command.",
+            plan_rationale="The delegator attempted a conflicting replay command.",
             acceptance_criteria=["The child is complete."],
             idempotency_key="idempotency:delegation-1",
             delegated_by=delegator,
         )
+
     with pytest.raises(AgentDomainError, match="scope cannot escalate"):
         delegate_assignment(
             parent,
             worker,
             target_ref="issue:escalated",
             objective="Escape the parent scope.",
+            plan_rationale="The delegator attempted an out-of-scope child.",
             acceptance_criteria=["Denied."],
             scope={"queues": ["frontend"]},
             budget={"inputTokens": 1},
@@ -141,6 +147,7 @@ def test_delegation_is_replay_safe_bounded_and_lineage_immutable(workspace, proj
             worker,
             target_ref="issue:over-budget",
             objective="Exceed the root budget.",
+            plan_rationale="The delegator attempted an over-budget child.",
             acceptance_criteria=["Denied."],
             scope={"queues": ["backend"]},
             budget={"inputTokens": 2},
@@ -158,10 +165,97 @@ def test_delegation_is_replay_safe_bounded_and_lineage_immutable(workspace, proj
             delegator,
             target_ref="issue:grandchild",
             objective="The depth bound must hold.",
+            plan_rationale="The delegator attempted a depth-bounded child.",
             acceptance_criteria=["Denied."],
             idempotency_key="idempotency:delegation-depth",
             delegated_by=worker,
         )
+
+
+@pytest.mark.django_db
+def test_dynamic_plan_rationale_is_durable_and_readable(workspace, project, create_user):
+    delegator = _actor(workspace, name="Rationale delegator", role=AgentRole.DELEGATOR, project=project)
+    worker = _actor(workspace, name="Rationale worker", role=AgentRole.DELEGATOR, project=project)
+    parent = create_assignment(
+        delegator,
+        project=project,
+        target_ref="issue:rationale-parent",
+        objective="Coordinate the rationale test.",
+        acceptance_criteria=["The child rationale is durable."],
+        budget={"maxDepth": 1},
+        created_by=create_user,
+    )
+
+    child = delegate_assignment(
+        parent,
+        worker,
+        target_ref="issue:rationale-child",
+        objective="Complete the rationale test.",
+        acceptance_criteria=["The rationale is returned on readback."],
+        plan_rationale="The delegator selected this child to isolate the reviewable evidence path.",
+        idempotency_key="idempotency:rationale-child",
+        delegated_by=delegator,
+        created_by=create_user,
+    )
+    replay = delegate_assignment(
+        parent,
+        worker,
+        target_ref="issue:rationale-child",
+        objective="Complete the rationale test.",
+        acceptance_criteria=["The rationale is returned on readback."],
+        plan_rationale="The delegator selected this child to isolate the reviewable evidence path.",
+        idempotency_key="idempotency:rationale-child",
+        delegated_by=delegator,
+        created_by=create_user,
+    )
+
+    assert replay.id == child.id
+    assert child.plan_rationale.startswith("The delegator selected")
+    readback = build_governance_readback(workspace, limit=10, resource_id=f"assignment:{child.id}")
+    assert readback["assignments"][0]["plan_rationale"] == child.plan_rationale
+
+
+@pytest.mark.django_db
+def test_dynamic_plan_rationale_survives_gateway_replay(workspace, project, create_user):
+    delegator = _actor(workspace, name="Gateway rationale delegator", role=AgentRole.DELEGATOR, project=project)
+    worker = _actor(workspace, name="Gateway rationale worker", role=AgentRole.WORKER, project=project)
+    parent = create_assignment(
+        delegator,
+        project=project,
+        target_ref="issue:gateway-rationale-parent",
+        objective="Coordinate the gateway rationale test.",
+        acceptance_criteria=["The child rationale is returned by the gateway."],
+        budget={"maxDepth": 1},
+        created_by=create_user,
+    )
+    request = SimpleNamespace(user=delegator.principal, agent_actor_ref=f"agent-actor:{delegator.id}")
+    envelope = {
+        "schema_version": "plane.operation/v1",
+        "operation_id": "agent.assignment.delegate",
+        "workspace_slug": workspace.slug,
+        "idempotency_key": "gateway-rationale-delegation",
+        "correlation_id": "gateway-rationale-correlation",
+        "input": {
+            "parent_assignment_ref": f"assignment:{parent.id}",
+            "delegator_ref": f"agent-actor:{delegator.id}",
+            "assignee_ref": f"agent-actor:{worker.id}",
+            "target_ref": "issue:gateway-rationale-child",
+            "objective": "Complete the gateway rationale test.",
+            "plan_rationale": "The gateway must preserve the delegator's dynamic plan decision.",
+            "acceptance_criteria": ["The rationale is durable and replayable."],
+        },
+    }
+
+    response, status = OperationGateway().execute(request, envelope)
+    assert status == 200, response
+    assert response["result"]["assignment"]["planRationale"] == envelope["input"]["plan_rationale"]
+    child_ref = response["result"]["assignment"]["assignmentRef"]
+
+    replay, replay_status = OperationGateway().execute(request, envelope)
+    assert replay_status == 200
+    assert replay["idempotency"]["replayed"] is True
+    assert replay["result"]["assignment"]["assignmentRef"] == child_ref
+    assert AssignmentContract.objects.filter(lineage_of=parent).count() == 1
 
 
 @pytest.mark.django_db(transaction=True)
@@ -183,6 +277,7 @@ def test_delegation_scope_guard_allows_cross_actor_and_rejects_cross_scope_linea
         worker,
         target_ref="issue:scope-child",
         objective="Complete the scoped child.",
+        plan_rationale="The delegator assigned the child within the parent scope.",
         acceptance_criteria=["The child is complete."],
         idempotency_key="idempotency:scope-child",
         delegated_by=delegator,
@@ -263,6 +358,7 @@ def test_assignment_cancellation_reconciles_root_and_descendant_queued_runs(work
         worker,
         target_ref="issue:queued-cancel-child",
         objective="Remain queued under the cancelled parent.",
+        plan_rationale="The delegator created the queued descendant before cancellation.",
         acceptance_criteria=["The child run is terminal."],
         idempotency_key="idempotency:queued-cancel-child",
         delegated_by=delegator,
@@ -289,6 +385,7 @@ def test_assignment_cancellation_reconciles_root_and_descendant_queued_runs(work
             worker,
             target_ref="issue:queued-cancel-after",
             objective="This must never become dispatchable.",
+            plan_rationale="The delegator attempted work after parent cancellation.",
             acceptance_criteria=["Rejected."],
             idempotency_key="idempotency:queued-cancel-after",
             delegated_by=delegator,
@@ -320,6 +417,7 @@ def test_assignment_cancellation_signals_active_root_and_descendant_runtime_cont
         worker,
         target_ref="issue:active-cancel-child",
         objective="Remain active under the cancelled parent.",
+        plan_rationale="The delegator assigned the active descendant for cancellation propagation.",
         acceptance_criteria=["The child runtime is cancelled."],
         idempotency_key="idempotency:active-cancel-child",
         delegated_by=delegator,

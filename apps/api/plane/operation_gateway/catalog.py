@@ -466,6 +466,7 @@ _AGENT_DELEGATE_INPUT = {
         "assignee_ref",
         "target_ref",
         "objective",
+        "plan_rationale",
         "acceptance_criteria",
     ],
     "properties": {
@@ -474,6 +475,7 @@ _AGENT_DELEGATE_INPUT = {
         "assignee_ref": {"type": "string", "pattern": "^agent-actor:"},
         "target_ref": {"type": "string", "minLength": 1, "maxLength": 255},
         "objective": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "plan_rationale": {"type": "string", "minLength": 1, "maxLength": 4096},
         "acceptance_criteria": {"type": "array", "minItems": 1, "maxItems": 32},
         "context_refs": {"type": "array", "maxItems": 64},
         "scope": {"type": "object"},
@@ -661,6 +663,7 @@ OPERATION_CATALOG.update(
                 "assignee_ref",
                 "target_ref",
                 "objective",
+                "plan_rationale",
                 "acceptance_criteria",
             ),
             input_fields=tuple(_AGENT_DELEGATE_INPUT["properties"]),

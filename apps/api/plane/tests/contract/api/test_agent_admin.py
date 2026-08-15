@@ -115,12 +115,20 @@ def test_admin_api_proves_lifecycle_review_and_redaction(api_key_client, workspa
         {
             "target_ref": "issue:admin-readback",
             "objective": "Produce a reviewable result.",
+            "plan_rationale": "The manager isolated this assignment for durable acceptance evidence.",
             "acceptance_criteria": ["A human can accept the result."],
         },
         format="json",
     )
     assert assignment_response.status_code == 201
     assignment_id = assignment_response.json()["id"]
+    assert assignment_response.json()["plan_rationale"].startswith("The manager isolated")
+
+    governance_response = api_key_client.get(
+        _admin_url(workspace, f"governance/?resource_id=assignment:{assignment_id}&limit=1")
+    )
+    assert governance_response.status_code == 200
+    assert governance_response.json()["assignments"][0]["plan_rationale"].startswith("The manager isolated")
 
     dispatch_response = api_key_client.post(
         _admin_url(workspace, f"assignments/{assignment_id}/dispatch/"),
@@ -928,6 +936,7 @@ def test_governance_extension_api_cli_parity_and_l7_state_adapters(api_key_clien
         AgentActor.objects.get(pk=cancel_worker_id),
         target_ref="issue:governance-cancel-child",
         objective="Remain unfinished until cancellation.",
+        plan_rationale="The delegator isolated the child so parent cancellation can be observed.",
         acceptance_criteria=["The child is cancelled."],
         idempotency_key="idempotency:governance-child",
     )

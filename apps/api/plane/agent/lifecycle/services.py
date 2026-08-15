@@ -912,7 +912,17 @@ def _ensure_delegation_bounds(parent, *, child_scope, child_budget, depth):
 
 
 def _delegation_fingerprint(
-    parent, assignee, *, target_ref, objective, acceptance_criteria, context_refs, scope, budget, delegated_by
+    parent,
+    assignee,
+    *,
+    target_ref,
+    objective,
+    plan_rationale,
+    acceptance_criteria,
+    context_refs,
+    scope,
+    budget,
+    delegated_by,
 ):
     return _command_fingerprint(
         "delegate_assignment",
@@ -921,6 +931,7 @@ def _delegation_fingerprint(
             "assigneeId": _command_id(assignee),
             "targetRef": target_ref,
             "objective": objective,
+            "planRationale": plan_rationale,
             "acceptanceCriteria": acceptance_criteria,
             "contextRefs": context_refs,
             "scope": scope,
@@ -1068,6 +1079,7 @@ def create_assignment(
     *,
     target_ref,
     objective,
+    plan_rationale=None,
     acceptance_criteria=None,
     context_refs=None,
     project=None,
@@ -1084,6 +1096,7 @@ def create_assignment(
     _ensure_actor_scope(assignee, assignee.workspace, project)
     target_ref = _ensure_non_empty(target_ref, "target_ref", limit=255)
     objective = _ensure_non_empty(objective, "objective")
+    plan_rationale = _ensure_bounded_text(plan_rationale or "", "plan_rationale")
     lineage_parent = None
     if lineage_of is not None:
         lineage_parent = AssignmentContract.objects.select_for_update().get(pk=lineage_of.pk)
@@ -1094,6 +1107,8 @@ def create_assignment(
             raise AgentDomainError("Assignment lineage is outside the Agent's Plane scope")
         if delegated_by is None:
             raise AgentDomainError("Delegated assignments require a dedicated delegator")
+        if not plan_rationale.strip():
+            raise AgentDomainError("Delegated assignments require a dynamic plan rationale")
         delegated_by = _delegation_actor(delegated_by)
         if delegated_by.id != lineage_parent.assignee_id:
             raise AgentDomainError("Only the parent assignment's delegator may create its child")
@@ -1130,6 +1145,7 @@ def create_assignment(
             assignee,
             target_ref=target_ref,
             objective=objective,
+            plan_rationale=plan_rationale,
             acceptance_criteria=acceptance_criteria,
             context_refs=context_refs,
             scope=scope_value,
@@ -1165,6 +1181,7 @@ def create_assignment(
         budget=budget_value,
         target_ref=target_ref,
         objective=objective,
+        plan_rationale=plan_rationale,
         acceptance_criteria=acceptance_criteria,
         context_refs=context_refs,
         state=AssignmentState.READY,
@@ -1180,6 +1197,7 @@ def delegate_assignment(
     target_ref,
     objective,
     acceptance_criteria,
+    plan_rationale,
     context_refs=None,
     scope=None,
     budget=None,
@@ -1195,6 +1213,7 @@ def delegate_assignment(
         assignee,
         target_ref=target_ref,
         objective=objective,
+        plan_rationale=plan_rationale,
         acceptance_criteria=acceptance_criteria,
         context_refs=context_refs,
         project=parent.project,

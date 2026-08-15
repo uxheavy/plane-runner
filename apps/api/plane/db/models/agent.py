@@ -369,6 +369,7 @@ class AssignmentContract(AgentScopedModel):
     revision = models.PositiveIntegerField(default=1)
     target_ref = models.CharField(max_length=255)
     objective = models.TextField()
+    plan_rationale = models.TextField(blank=True, default="")
     acceptance_criteria = models.JSONField(default=default_list)
     context_refs = models.JSONField(default=default_list)
     state = models.CharField(max_length=32, choices=AssignmentState.choices, default=AssignmentState.READY)
@@ -409,6 +410,7 @@ class AssignmentContract(AgentScopedModel):
                 "budget",
                 "target_ref",
                 "objective",
+                "plan_rationale",
                 "acceptance_criteria",
                 "context_refs",
             ),

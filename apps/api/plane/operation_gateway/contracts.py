@@ -328,6 +328,7 @@ class GatewayOperationInputSerializer(StrictSerializer):
     assignee_ref = serializers.CharField(max_length=128, required=False, allow_blank=False)
     target_ref = serializers.CharField(max_length=255, required=False, allow_blank=False)
     objective = serializers.CharField(max_length=4096, required=False, allow_blank=False)
+    plan_rationale = serializers.CharField(max_length=4096, required=False, allow_blank=False)
     acceptance_criteria = serializers.JSONField(required=False)
     context_refs = serializers.JSONField(required=False, allow_null=True)
     scope = serializers.JSONField(required=False, allow_null=True)

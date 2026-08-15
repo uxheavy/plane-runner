@@ -57,6 +57,7 @@ class AssignmentGovernanceProjection(TypedDict):
     revision: int
     state: str
     target_ref: str
+    plan_rationale: str
     scope: Mapping[str, Any]
     budget: Mapping[str, Any]
     created_at: str
@@ -128,6 +129,7 @@ def assignment_governance_projection(assignment: AssignmentContract) -> Assignme
         "revision": assignment.revision,
         "state": assignment.state,
         "target_ref": _safe_text(assignment.target_ref, max_chars=512),
+        "plan_rationale": _safe_text(assignment.plan_rationale),
         "scope": _safe_json(assignment.scope, "assignment.scope", fallback={}),
         "budget": _safe_json(assignment.budget, "assignment.budget", fallback={}),
         "created_at": assignment.created_at.isoformat(),
