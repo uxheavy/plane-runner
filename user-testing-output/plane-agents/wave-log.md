@@ -875,6 +875,98 @@ unrelated suite ran.
   `SupervisorResult`, durable terminal state, and the bounded receipt.
 - Decision: S00 is `FAIL` and does not unlock W/M/O.
 
+## Wave 0AS — exact 10eb8033 / Hermes 4d9d4b2 single fresh S00
+
+- Status: `FAIL`. Exactly one fresh non-UI primary ran; no retry, provider-disabled replay, second primary, source/config/test change, G4/G5 verifier, UI, deployment, rollout, or external mutation ran. S00 remains dirty and W/M/O stay locked.
+- Plane source was imported locally from the authoritative exact clone at
+  `10eb8033ff9a01d67f5a4cf85772c2f5b464903f`, parent
+  `131c3f73cc894ff429c45f837eb20a236e1c69de`. Preserved 0AR commit
+  `3ed36e4383598cb8f367d21b0ac5efcd3c557bb1` was reapplied as evidence commit
+  `fa66855454093cdccc533e8587729d4f94fb2df4`, whose parent is the exact
+  `10eb...` base. The authoritative Hermes `main` was clean at
+  `4d9d4b2c76014bd74c69c79d419356f69667986d`.
+- API artifact was `plane-agent-api:s00-0as-fa668554`, digest
+  `sha256:e0926a1244918544161de26fa9e9429a1ecef362278a9a173c88676d5875b343`.
+  Runtime artifact was
+  `plane-agent-runtime:s00-0as-fa668554-hermes-4d9d4b2c`, digest
+  `sha256:627fd4809c8e5b93c5974f773da3e7896d814cc06c4db6e1a04ac4603f073f8a`.
+  Hermes tree digest was
+  `60f07ec87122fe5d154af978e7a5c70bb84b4d7ff49814462c83152ee082c76e`,
+  runtime source digest was
+  `1d8186a36447ea5dba5ba6cb55db48073a3be0dc976cec4ff2887418c0e33667`, and
+  runtime contract was `plane.agent-runtime/v1`.
+- Fresh manifest, authority, and config SHA-256 values were
+  `836d34c90eef51a382146bd1726f6f40c1d1f96117466ce2635ba5014f7220db`,
+  `49372ce96914b1b5a68da4dfcdee5f831f1b8b1997917da4a054376aaeccfb0b`, and
+  `18a41a64c557b1bfbf3c5b441b9e32a8bd7f1ef1c278f1c039a020a2dc8e0e9c`.
+  Config-only validation passed before the owner-only credential source was
+  accessed. Authority was `s00-live-0as-20260815`; canaries were
+  `s00-0as-permitted-20260815` and `s00-0as-denied-20260815`. Provider binding
+  was ChatGPT subscription `openai-codex/gpt-5.6-luna`, fallback disabled,
+  through `plane.agent-runtime/provider-relay/v1` over AF_UNIX. The exact
+  runner command SHA-256 was
+  `32756a110745e4b69a3c8627021527a073ac7c434b5cd6659483245674954060`.
+- Preflight proved clean exact source trees, canonical providerRelay /
+  authority / config equality, owner-only staged credential metadata, an
+  absent fresh owner-only result destination, and zero pre-existing task
+  cleanup-label containers, networks, and volumes. One isolated workspace and
+  `G4 Live Issue` were created. The bounded receipt retained no workspace,
+  issue, assignment, or profile refs; those absent fields are not inferred.
+- One run `run:ff56d973-8133-4b13-8c61-8f7a5dcd6c65` and invocation
+  `invocation:528d8da8-a8a6-4e27-a34f-3d3c1f9c2f0f` reached the real provider.
+  The provider attempt count was exactly `7`: ordered sequences `1..7`, all
+  `completed`, upstream initiated, `2xx`, with no fallback and no unknown
+  outcome. Operation/audit counts were:
+
+  | Operation | Status | Error | Count |
+  | --- | --- | --- | ---: |
+  | `search_workspace` | success | none | 2 |
+  | `work_item.read` | success | none | 1 |
+  | `catalog.search` | absent | none | 0 |
+  | `catalog.describe` | absent | none | 0 |
+  | `agent.outcome.evaluate` | denied | `NOT_AUTHORIZED` | 1 |
+  | `agent.outcome.submit` | success | none | 1 |
+  | `agent.outcome.publish` | success | none | 1 |
+
+- The projected S00 gate had status `passed`, first failed predicate `null`,
+  and all six predicates true: invocation/run succeeded, exactly one visible
+  `outcome_submission`, exactly one applied publication, terminal binding, and
+  `RuntimeExit.completed` with final sequence `15` and no failure. The applied
+  publication was `outcome-submission:b297e84b-8e1f-49e7-b953-7b412f326ce2`,
+  operation `operation:agent.outcome.publish`, attempt
+  `operation-attempt:5feb1f96-8f75-4438-8fae-f410b6b7a424`, gateway receipt
+  `gateway-receipt:d9e933d3-0e91-4521-a3ea-ce6fa7acb6a3`, receipt
+  `receipt:5feb1f96-8f75-4438-8fae-f410b6b7a424`, audit receipt
+  `audit-receipt:d9e933d3-0e91-4521-a3ea-ce6fa7acb6a3`, and product event
+  `product-event:7e90d59e-4182-4e4f-876f-5b57944efe50`; terminal refs matched
+  the same run, invocation, outcome, and product event.
+- The full primary contract failed after that projection. The runner returned
+  exit `1` with `RuntimeError`, phase `api-invocation`, reason code
+  `unspecified`, reason detail/phase/subreason `unavailable`. Its assertion
+  requires at least one `transcript_evidence_observed` event, but runtime
+  ingress contained only `progress_observed:14`,
+  `outcome_submission_observed:1`, and `usage_observed:1`. Ordinary model
+  final text was therefore not proven transcript-only. No replay was eligible
+  and no provider-disabled replay was attempted.
+- The owner-only persisted result was `0600`, `5362` bytes, and SHA-256
+  `4025352ae9000db7437161ff7747f977643e435fa367f02df1aaabc74d9665ee`.
+  Its standalone JSON body SHA-256 was
+  `8b07132f659597da04ee9884eda80ccc8991a5694ba3559be752db00c8077672` and
+  semantic digest was
+  `24d0e954791747457beccd0d37b974edc0bc83fe7a3e9d7f445730cf80b2fe8b`.
+  The bounded failure body validated against the exact manifest, authority,
+  config, canaries, providerRelay, bindings, permissions, redaction, and
+  attempt ordering. Failure receipts correctly report `collected:0` and
+  `passed:0`; this is validation of the failed result, not a passing S00
+  evidence result.
+- Cleanup removed the runner's task-labeled containers, networks, volumes,
+  provider staging, run directory, disposable result, descriptor files, and
+  both task image tags. Post-cleanup label checks were empty. The owner-only
+  credential source and authoritative Plane/Hermes clones were untouched.
+- Decision: S00 is `FAIL`; UT-020 is open. The first safe owner is the
+  runtime/Hermes-to-Plane transcript-evidence ingress/readback seam. No source
+  fix was made.
+
 ## Wave 0AR — exact-input preflight stop
 
 - Status: `FAIL` at setup. The prior task stopped before provider access because its saved-project Plane repository did not contain the required exact input.

@@ -211,3 +211,21 @@ recomputed exactly. The receipt and all disposable artifacts were deleted
 after validation and hashing. Because the primary gate failed, replay deltas
 are not applicable; UT-019 remains open and no retry or second primary/replay
 was made.
+
+| UT-020 | blocker | Maya / S00 | `user-testing-output/plane-agents/wave-log.md` Wave 0AS addendum | The exact live primary satisfied the projected six-predicate lifecycle gate, but the runner's full primary assertion failed because no `transcript_evidence_observed` ingress was recorded; the bounded ingress had only progress, outcome-submission, and usage events. | Runtime-to-Plane transcript-evidence ingress/readback seam after the provider exchange | No code or config change authorized; preserve the failed evidence and route to the runtime/Hermes transcript handoff owner | open |
+
+UT-020 / Wave 0AS addendum: the exact rebased Plane candidate
+`fa66855454093cdccc533e8587729d4f94fb2df4` (base
+`10eb8033ff9a01d67f5a4cf85772c2f5b464903f`, parent
+`131c3f73cc894ff429c45f837eb20a236e1c69de`) and Hermes
+`4d9d4b2c76014bd74c69c79d419356f69667986d` ran one fresh primary through
+the real `openai-codex/gpt-5.6-luna` ChatGPT subscription route with fallback
+disabled. Seven provider attempts completed with upstream `2xx` status,
+sequences `1..7`, and no unknown attempt. The bounded failure receipt passed
+standalone validation and retained the exact permitted reads, one durable
+`NOT_AUTHORIZED` evaluator denial, one submit, one publish, one applied
+publication, one visible terminal, matching refs, and `RuntimeExit.completed`.
+The runner nevertheless returned `RuntimeError` / `api-invocation` /
+`unavailable` because transcript evidence was absent. No replay or retry was
+run. The receipt and all disposable artifacts were deleted after validation
+and hashing; UT-020 remains open.
