@@ -938,6 +938,81 @@ unrelated suite ran.
   commits; the provider credential source metadata remained unchanged.
 - Decision: S00 is `FAIL`; UT-018 and UT-019 remain open and W/M/O stay locked.
 
+## Wave 0AQ: exact 131c3f73 / Hermes 326bc3de single fresh S00
+
+- Overall decision: `FAIL`. Exactly one fresh primary ran. There was no retry,
+  second primary, fallback, UI, G4/G5 verifier, source fix, Hermes change, or
+  provider-disabled replay. The primary stopped before replay because the
+  ordered S00 gate failed at `one_applied_outcome_publication`.
+- Exact clean Plane source was
+  `131c3f73cc894ff429c45f837eb20a236e1c69de`. Exact clean Hermes source was
+  `326bc3deb5c1a15468a3104343e97e0b539dec76`. Hermes was not modified.
+- The disposable API artifact was `plane-agent-api:s00-0aq-131c3f73`, digest
+  `sha256:9a38e8f0d829c54b4bcfd11fe7171004d82a19f0a1bb585121ae63e519a02f1f`.
+  Its source label was the exact Plane SHA, contract `plane.operation/v1`, and
+  artifact label `plane-agent-api-g4`.
+- The matched runtime artifact was
+  `plane-agent-runtime:s00-0aq-131c3f73-hermes-326bc3de`, digest
+  `sha256:75ea7d08067cf26ac58774114415ae96fc6572e4dcb6798b05dfd412aec26abe`.
+  Its runtime source was the exact Plane SHA, Hermes commit was the exact
+  `326bc3de` SHA, Hermes tree digest was
+  `7b9e107fed730e89e0427c9d41f941c2b75c400b15601ee73043acbf5a6662f6`, Plane
+  runtime source digest was
+  `1d8186a36447ea5dba5ba6cb55db48073a3be0dc976cec4ff2887418c0e33667`, and
+  contract was `plane.agent-runtime/v1`.
+- Disposable manifest, authority, and config SHA-256 values were
+  `726e06039fa0bd9ccc32cc3279f262d3e358d61378453eab11ebc89cc5be2337`,
+  `976f0e0af056d63be24559375e53b1c4879fd67f06752f8509033d6172966c0c`, and
+  `dabcd1a1fd5aab30fc39e31ce30a8c1bfc4e508a6d5955f05f7356f0fa3cab3e`.
+  Config-only validation passed before the owner-only provider source was
+  read. The provider was ChatGPT subscription `openai-codex/gpt-5.6-luna`,
+  fallback disabled. The exact command hash was
+  `32756a110745e4b69a3c8627021527a073ac7c434b5cd6659483245674954060`.
+  The authority was `s00-live-0aq-20260815` with permitted and denied canaries
+  `s00-0aq-permitted-20260815` and `s00-0aq-denied-20260815`. The providerRelay
+  projection was the integrated AF_UNIX
+  `plane.agent-runtime/provider-relay/v1` contract with child network policy
+  `none`, external egress owner `agent-runtime`, separate host gateway, and
+  integrated Hermes hook.
+- The fresh absolute result destination
+  `/tmp/plane-agent-s00-0aq.tPdH0a/result.json` was absent before start under
+  a `0700` owner-only parent. One isolated workspace and one `G4 Live Issue`
+  assignment were created. Fresh run
+  `e7e4dcb6-16f1-4466-92c5-85f4708d0e87` and invocation
+  `invocation:63226705-7cef-4121-84ae-9a044a910fa5` were created.
+- Provider attempts were exactly 11, sequences `1..11`. Every attempt was
+  completed, upstream initiated, and `2xx`; no fallback or unknown attempt
+  occurred. Runtime ingress counted `progress_observed:21` and
+  `outcome_submission_observed:1`. RuntimeExit was present with kind `failed`,
+  final sequence `21`, failure code `runtime_error`, retryable `false`, and
+  cause `host_operation_failure`.
+- Plane operation audit proved `search_workspace` success `2`,
+  `work_item.read` success `1`, exactly one `agent.outcome.evaluate` denial
+  with `NOT_AUTHORIZED`, one `agent.outcome.submit` success, and three
+  `agent.outcome.publish` successes. The product readback had one visible
+  `outcome_submission` terminal. The first failed S00 predicate was
+  `one_applied_outcome_publication`: count `3`, action and all applied refs
+  unavailable. `terminal_binding` and `runtime_exit_completed` were also
+  false. No replay ran, so replay deltas are not applicable.
+- The persisted two-line failure receipt was owner-only `0600`, `5557` bytes,
+  SHA-256
+  `7f2d0745b7518e2bcb0be34896f90db667495c8e07b05049414bb4597f4273c3`.
+  Its standalone JSON body was owner-only `0600`, `5437` bytes, SHA-256
+  `e99c5cca3869b91a6f96b262c685be075c551b417cc5222048b1d2f9a7a3df8e`, and
+  passed `validate_agent_g4_live.py` as
+  `plane-agent-g4/live-failure/v1`. Its semantic digest was
+  `41c8c71650958ce868fe18c94bfd09726a2bff3ded517c6104ae1003abffc997`; an
+  independent recomputation matched exactly. The receipt and standalone body
+  were deleted after validation and hashing.
+- The runner cleanup removed the task-labeled containers, networks, volumes,
+  provider staging, runtime secret, and run directory. Post-run checks found
+  zero task-labeled containers, networks, and volumes. The exact temporary API
+  and runtime images, disposable manifest, authority, config, and owner-only
+  run directory were removed during final cleanup. Plane and Hermes remained
+  at their exact source commits, and provider credential metadata was
+  unchanged.
+- Decision: S00 is `FAIL`; UT-018 and UT-019 remain open and W/M/O stay locked.
+
 ## Wave 0AL — exact 35a129bf / Hermes d9037d5 single fresh S00
 
 - Status: `FAIL` at the pre-replay live product lifecycle assertion. S00

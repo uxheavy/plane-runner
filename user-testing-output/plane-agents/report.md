@@ -24,26 +24,32 @@
 
 ## Completion evidence
 
-Wave 0AP ran one exact, non-UI primary from Plane
-`891a1aed20344ba5a445c515bc23acd76693c93d` with Hermes
-`1d9818e7df007d2ea4f1e3df373aaa812e022e6a`. Config-only preflight passed with
-the canonical provider-relay projection present in both authority and config.
-The primary reached the real GPT-5.6 Luna ChatGPT subscription route with
-fallback disabled and recorded ten completed upstream `2xx` provider attempts,
-one exact `NOT_AUTHORIZED` evaluator denial, one submit, one applied
-publication, and one visible `outcome_submission`. The ordered `s00Gate`
-passed through terminal binding but failed at `runtime_exit_completed`:
-RuntimeExit was `failed` with non-retryable `budget_exhausted` at final sequence 22. The conditional provider-disabled replay was not eligible and did not run.
-S00 remains dirty and UT-018/UT-019 remain open. No source fix, rerun, or Hermes
-change was made.
+Wave 0AQ ran one exact, non-UI primary from Plane
+`131c3f73cc894ff429c45f837eb20a236e1c69de` with Hermes
+`326bc3deb5c1a15468a3104343e97e0b539dec76`. Config-only preflight passed with
+the canonical providerRelay projection in both authority and config. The
+primary reached the real GPT-5.6 Luna ChatGPT subscription route with fallback
+disabled and recorded 11 completed upstream `2xx` provider attempts, one exact
+`NOT_AUTHORIZED` evaluator denial, one submit, and three publish audit rows.
+The visible terminal was one `outcome_submission`, but the ordered `s00Gate`
+failed first at `one_applied_outcome_publication` because the applied
+publication count was three and its refs were unavailable. RuntimeExit was
+`failed` with non-retryable `runtime_error / host_operation_failure` at final
+sequence 21. The conditional provider-disabled replay was not eligible and did
+not run. S00 remains dirty and UT-018/UT-019 remain open. No source fix,
+rerun, or Hermes change was made.
 
-The runner receipt was `0600`, `5683` bytes, SHA-256
-`a5eb2c596c91a98702f3e8697cfc24f77fdc08b865bca4747058d0ccfc1f6855`. Its
-standalone JSON body was `0600`, `5563` bytes, SHA-256
-`681de547b72b9e773b3a0d0876b2c06ca1f5b93e50e232420476120cbadcbbf4`, passed
-standalone validation, and carried semantic digest
-`fb3e69b5e206ea7236a6cd719944a29b8f4ab22d3ab69b7d7a6f9846689cd6b4`, which
-recomputed exactly. Both were deleted after validation and hashing.
+The runner receipt was `0600`, `5557` bytes, SHA-256
+`7f2d0745b7518e2bcb0be34896f90db667495c8e07b05049414bb4597f4273c3`. Its
+standalone JSON body was `0600`, `5437` bytes, SHA-256
+`e99c5cca3869b91a6f96b262c685be075c551b417cc5222048b1d2f9a7a3df8e`, and
+passed standalone failure-receipt validation. Its semantic digest was
+`41c8c71650958ce868fe18c94bfd09726a2bff3ded517c6104ae1003abffc997`, which
+recomputed exactly. The authority was `s00-live-0aq-20260815`; permitted and
+denied canaries were `s00-0aq-permitted-20260815` and
+`s00-0aq-denied-20260815`. The providerRelay was the integrated AF_UNIX
+`plane.agent-runtime/provider-relay/v1` projection. The receipt and
+standalone body were deleted after validation and hashing.
 
 ## Cross-persona heatmap
 
@@ -53,8 +59,10 @@ recomputed exactly. Both were deleted after validation and hashing.
 ## Final risks and decision
 
 Decision: `FAIL`. The journey is not clean enough to close S00 or unlock W/M/O.
-Wave 0AP proved the exact denied `NOT_AUTHORIZED` audit and the applied
-publication/terminal binding, but non-retryable `budget_exhausted` prevented
-`RuntimeExit.completed`. The provider-relay handoff and failure receipt passed
-standalone validation. The failed primary means replay-equivalence deltas are
-not applicable; UT-018 and UT-019 remain open.
+Wave 0AQ proved the exact denied `NOT_AUTHORIZED` audit and the visible
+outcome terminal, but three publish audit rows with unavailable applied refs
+failed the publication predicate, and non-retryable `runtime_error /
+host_operation_failure` prevented `RuntimeExit.completed`. The providerRelay
+handoff and failure receipt passed standalone validation. The failed primary
+means replay-equivalence deltas are not applicable; UT-018 and UT-019 remain
+open.

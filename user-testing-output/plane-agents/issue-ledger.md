@@ -179,3 +179,33 @@ recomputed exactly. The receipt and all disposable artifacts were deleted
 after validation and hashing. Because the primary gate failed, replay deltas
 are not applicable; UT-019 remains open and no retry or second primary/replay
 was made.
+
+UT-018 / Wave 0AQ addendum: the exact Plane
+`131c3f73cc894ff429c45f837eb20a236e1c69de` checkout with exact Hermes
+`326bc3deb5c1a15468a3104343e97e0b539dec76` ran exactly one fresh primary
+through the real `openai-codex/gpt-5.6-luna` ChatGPT subscription route with
+fallback disabled. The isolated workspace and `G4 Live Issue` path completed;
+the bounded evidence recorded two `search_workspace` successes, one
+`work_item.read` success, exactly one durable `agent.outcome.evaluate` denial
+with `NOT_AUTHORIZED`, one submit, and one visible `outcome_submission`. There
+were 11 completed upstream `2xx` provider attempts with no fallback or unknown
+attempt. The ordered S00 gate failed first at
+`one_applied_outcome_publication`: publish audit count was three and applied
+publication refs were unavailable. RuntimeExit was `failed` at final sequence
+21 with non-retryable `runtime_error / host_operation_failure`. No replay was
+eligible. UT-018 remains open; no source fix or Hermes modification was made.
+
+UT-019 / Wave 0AQ retest: the fresh absolute result path
+`/tmp/plane-agent-s00-0aq.tPdH0a/result.json` was absent before start under a
+`0700` owner-only parent. The persisted failure receipt was `0600`, `5557`
+bytes, and SHA-256
+`7f2d0745b7518e2bcb0be34896f90db667495c8e07b05049414bb4597f4273c3`. Its
+standalone JSON body was `0600`, `5437` bytes, and SHA-256
+`e99c5cca3869b91a6f96b262c685be075c551b417cc5222048b1d2f9a7a3df8e`; the
+standalone validator passed with authority `s00-live-0aq-20260815`, fresh
+canaries, and the canonical providerRelay. Semantic digest
+`41c8c71650958ce868fe18c94bfd09726a2bff3ded517c6104ae1003abffc997`
+recomputed exactly. The receipt and all disposable artifacts were deleted
+after validation and hashing. Because the primary gate failed, replay deltas
+are not applicable; UT-019 remains open and no retry or second primary/replay
+was made.
