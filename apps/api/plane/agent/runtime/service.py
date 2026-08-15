@@ -294,6 +294,9 @@ class RuntimeDispatchExecutor:
         temp_dir: str | None = None
         provider_relay: RuntimeProviderRelay | None = None
         host_client: PlaneHostHTTPClient | None = None
+        cleanup_error: RuntimeConfigurationError | None = None
+        result_frames: tuple[str, ...] = ()
+        dispatch_error: BaseException | None = None
         command = self.configuration.command
         try:
             provider_route = self._configured_provider_route(snapshot)
@@ -380,7 +383,7 @@ class RuntimeDispatchExecutor:
                 return self.controller.health().safety_stop or self._is_invocation_cancelled(invocation_id)
 
             try:
-                frames = self._transport.dispatch_payload(
+                result_frames = self._transport.dispatch_payload(
                     payload=payload,
                     run_id=run_id,
                     invocation_id=invocation_id,
@@ -388,20 +391,26 @@ class RuntimeDispatchExecutor:
                     command=command,
                     is_cancelled=is_cancelled,
                 )
-            except Exception:
-                if provider_relay is not None and provider_relay.required_audit_failure is not None:
-                    raise RuntimeConfigurationError("provider attempt evidence was rejected by Plane") from None
-                raise
-            if provider_relay is not None and provider_relay.required_audit_failure is not None:
-                raise RuntimeConfigurationError("provider attempt evidence was rejected by Plane")
-            return frames
+            except BaseException as exc:
+                dispatch_error = exc
+            if dispatch_error is None and provider_relay is not None and provider_relay.required_audit_failure is not None:
+                cleanup_error = RuntimeConfigurationError("provider attempt evidence was rejected by Plane")
         finally:
+            if provider_relay is not None:
+                provider_relay.close()
+                if provider_relay.required_audit_failure is not None:
+                    cleanup_error = RuntimeConfigurationError("provider attempt evidence was rejected by Plane")
             if server is not None:
                 server.close()
             if temp_dir is not None:
                 shutil.rmtree(temp_dir, ignore_errors=True)
-            if provider_relay is not None:
-                provider_relay.close()
+        if cleanup_error is not None:
+            if dispatch_error is not None:
+                raise cleanup_error from dispatch_error
+            raise cleanup_error
+        if dispatch_error is not None:
+            raise dispatch_error
+        return result_frames
 
     def _configured_provider_route(
         self, snapshot: Mapping[str, Any]

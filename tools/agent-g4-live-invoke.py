@@ -520,6 +520,7 @@ def build_failure_evidence(
     canary_ids=None,
     provider_relay=None,
     scenario=None,
+    scenario_gate=None,
     plane_host_operation_receipts=False,
     plane_operation_audit=None,
 ):
@@ -1000,6 +1001,8 @@ def build_failure_evidence(
         receipt["providerRelay"] = provider_relay
     if scenario is not None:
         receipt["scenario"] = scenario
+    if scenario_gate is not None:
+        receipt["scenarioGate"] = scenario_gate
     return _attach_receipt_semantic_digest(receipt)
 
 
@@ -1109,6 +1112,37 @@ def _supervisor_failure_reason(output):
         else:
             return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return None
+
+
+def _provider_attempts_have_unknown_evidence(provider_attempts, control=None):
+    """Classify provider uncertainty only from durable non-terminal evidence."""
+
+    if control is not None and (
+        getattr(control, "state", "") == "outcome_unknown"
+        or getattr(control, "failure_code", "") == "outcome_unknown"
+    ):
+        return True
+    return any(
+        attempt.phase == "outcome_unknown"
+        or attempt.error_code == "outcome_unknown"
+        or (
+            attempt.upstream_initiated
+            and attempt.phase in {"intent", "started"}
+            and getattr(attempt, "terminal_at", None) is None
+        )
+        for attempt in provider_attempts
+    )
+
+
+def _provider_unknown_failure_reason(invocation, provider_attempts, control=None):
+    if invocation is None or not _provider_attempts_have_unknown_evidence(provider_attempts, control):
+        return None
+    provider_failure = _provider_unknown_failure(invocation)
+    return (
+        json.dumps(provider_failure, sort_keys=True, separators=(",", ":"))
+        if provider_failure is not None
+        else None
+    )
 
 
 _SHARED_WORKER_SETUP = None
@@ -1571,10 +1605,7 @@ def _run_single(scenario) -> tuple[int, dict]:
             transcript_evidence,
             explicit_publication,
         ) = readback()
-        unknown_attempt = any(
-            attempt.phase == "outcome_unknown" or attempt.error_code == "outcome_unknown"
-            for attempt in provider_attempts
-        )
+        unknown_attempt = _provider_attempts_have_unknown_evidence(provider_attempts, control)
         if unknown_attempt:
             raise RuntimeError("provider request outcome was unknown; pass/replay is not permitted")
         if scenario is not None and scenario.controls.cancellation is not None and scenario.controls.cancellation["timing"] in {"after_provider_request", "after_publication"}:
@@ -2017,15 +2048,9 @@ def _run_single(scenario) -> tuple[int, dict]:
                 ],
                 terminal_kind=terminal.kind if terminal is not None else "none",
                 failure_code=control.failure_code if control is not None else None,
-                failure_reason=(
-                    supervisor_failure_reason
-                    or (
-                        json.dumps(_provider_unknown_failure(invocation), sort_keys=True, separators=(",", ":"))
-                        if invocation is not None and any(attempt.upstream_initiated for attempt in provider_attempts)
-                        else None
-                    )
-                    or (control.failure_reason if control is not None else None)
-                ),
+                failure_reason=supervisor_failure_reason
+                or _provider_unknown_failure_reason(invocation, provider_attempts, control)
+                or (control.failure_reason if control is not None else None),
                 runtime_exit=(
                     {
                         "kind": exit_evidence.kind,
@@ -2050,6 +2075,7 @@ def _run_single(scenario) -> tuple[int, dict]:
                 },
                 provider_relay=provider_relay,
                 scenario=scenario.evidence() if scenario is not None else None,
+                scenario_gate=scenario_gate,
                 plane_host_operation_receipts=plane_host_operation_receipts,
                 plane_operation_audit=plane_operation_audit,
             )

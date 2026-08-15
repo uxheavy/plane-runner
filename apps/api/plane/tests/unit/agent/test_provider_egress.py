@@ -5,11 +5,15 @@ import os
 import socket
 import sys
 import textwrap
+import threading
+from http.client import HTTPException
 from dataclasses import replace
 import time
 from dataclasses import dataclass
 
 import pytest
+from plane.agent.runtime import provider_egress
+from plane.agent.runtime import service as runtime_service
 
 from plane.agent.runtime import (
     AgentRuntimeConfiguration,
@@ -174,6 +178,198 @@ def test_permitted_provider_request_uses_invocation_af_unix_relay_and_streams_wi
     assert "provider-secret" not in repr(audits)
 
 
+def test_provider_relay_buffers_complete_upstream_before_child_early_close(tmp_path, monkeypatch):
+    response_consumed = threading.Event()
+    completed_audit = threading.Event()
+    audits: list[ProviderRelayAudit] = []
+
+    def upstream(_request, _credentials, _cancelled):
+        def chunks():
+            yield b"data: response.completed\n\n"
+            response_consumed.set()
+
+        return ProviderResponse(
+            status_code=200,
+            headers={"content-type": "text/event-stream"},
+            body_chunks=chunks(),
+        )
+
+    def record_audit(audit: ProviderRelayAudit) -> None:
+        audits.append(audit)
+        if audit.phase == "completed":
+            completed_audit.set()
+
+    def child_closed(_relay, _channel, _request_id, _response):
+        assert response_consumed.is_set()
+        raise BrokenPipeError("child closed after terminal SSE event")
+
+    monkeypatch.setattr(provider_egress.ProviderRelayServer, "_write_http_response", child_closed)
+    server = _server(
+        tmp_path,
+        upstream=upstream,
+        audit=record_audit,
+    )
+    try:
+        server.start()
+        with pytest.raises((ValueError, OSError)):
+            _round_trip(server, request_id="request:child-early-close")
+        assert completed_audit.wait(2)
+    finally:
+        server.close()
+
+    assert [audit.phase for audit in audits] == ["intent", "started", "completed"]
+    assert not any(audit.phase == "outcome_unknown" for audit in audits)
+
+
+def test_provider_relay_close_drains_handler_before_closing_active_channel(tmp_path):
+    audit_started = threading.Event()
+    allow_audit = threading.Event()
+    audits: list[ProviderRelayAudit] = []
+
+    def upstream(_request, _credentials, _cancelled):
+        return ProviderResponse(
+            status_code=200,
+            headers={"content-type": "text/event-stream"},
+            body_chunks=(b"data: response.completed\n\n",),
+        )
+
+    def record_audit(audit: ProviderRelayAudit) -> None:
+        audits.append(audit)
+        if audit.phase == "completed":
+            audit_started.set()
+            assert allow_audit.wait(2)
+
+    server = _server(tmp_path, upstream=upstream, audit=record_audit)
+    request_result: list[object] = []
+
+    def request() -> None:
+        try:
+            request_result.append(_round_trip(server, request_id="request:drain"))
+        except BaseException as exc:
+            request_result.append(exc)
+
+    server.start()
+    request_thread = threading.Thread(target=request)
+    request_thread.start()
+    try:
+        assert audit_started.wait(2)
+        close_done = threading.Event()
+
+        def close() -> None:
+            server.close()
+            close_done.set()
+
+        close_thread = threading.Thread(target=close)
+        close_thread.start()
+        assert not close_done.wait(0.1)
+        allow_audit.set()
+        assert close_done.wait(2)
+        close_thread.join()
+    finally:
+        allow_audit.set()
+        server.close()
+        request_thread.join()
+
+    assert not any(isinstance(item, BaseException) for item in request_result)
+    assert [audit.phase for audit in audits] == ["intent", "started", "completed"]
+    assert server.required_audit_failure is None
+
+
+def test_provider_relay_close_gracefully_drains_delayed_body(tmp_path):
+    body_started = threading.Event()
+    audits: list[ProviderRelayAudit] = []
+
+    def upstream(_request, _credentials, _cancelled):
+        def body_chunks():
+            body_started.set()
+            time.sleep(0.1)
+            yield b"data: response.completed\n\n"
+
+        return ProviderResponse(
+            status_code=200,
+            headers={"content-type": "text/event-stream"},
+            body_chunks=body_chunks(),
+        )
+
+    server = _server(tmp_path, upstream=upstream, audit=audits.append)
+    request_result: list[object] = []
+
+    def request() -> None:
+        try:
+            request_result.append(_round_trip(server, request_id="request:delayed-body"))
+        except BaseException as exc:
+            request_result.append(exc)
+
+    server.start()
+    request_thread = threading.Thread(target=request)
+    request_thread.start()
+    try:
+        assert body_started.wait(2)
+        server.close()
+    finally:
+        server.close()
+        request_thread.join()
+
+    assert not any(isinstance(item, BaseException) for item in request_result)
+    assert [audit.phase for audit in audits] == ["intent", "started", "completed"]
+    assert server.required_audit_failure is None
+
+
+def test_provider_relay_forced_close_marks_unresolved_body_unknown(tmp_path, monkeypatch):
+    monkeypatch.setattr(provider_egress, "_RELAY_DRAIN_TIMEOUT_SECONDS", 0.05)
+    body_started = threading.Event()
+    release_body = threading.Event()
+    unknown_audit_finished = threading.Event()
+    audits: list[ProviderRelayAudit] = []
+
+    def upstream(_request, _credentials, _cancelled):
+        def body_chunks():
+            body_started.set()
+            assert release_body.wait(2)
+            yield b"data: response.completed\n\n"
+
+        return ProviderResponse(
+            status_code=200,
+            headers={"content-type": "text/event-stream"},
+            body_chunks=body_chunks(),
+        )
+
+    def record_audit(audit: ProviderRelayAudit) -> None:
+        audits.append(audit)
+        if audit.phase == "outcome_unknown":
+            unknown_audit_finished.set()
+
+    server = _server(tmp_path, upstream=upstream, audit=record_audit)
+    request_result: list[object] = []
+
+    def request() -> None:
+        try:
+            request_result.append(_round_trip(server, request_id="request:forced-close"))
+        except BaseException as exc:
+            request_result.append(exc)
+
+    server.start()
+    request_thread = threading.Thread(target=request)
+    request_thread.start()
+    release_thread = threading.Thread(
+        target=lambda: (server._forced_close.wait(2), release_body.set())
+    )
+    release_thread.start()
+    try:
+        assert body_started.wait(2)
+        server.close()
+        release_thread.join()
+        request_thread.join(2)
+    finally:
+        release_body.set()
+        server.close()
+        request_thread.join()
+
+    assert [audit.phase for audit in audits] == ["intent", "started", "outcome_unknown", "terminal"]
+    assert audits[-1].reason_subreason == "upstream_channel_closed"
+    assert unknown_audit_finished.is_set()
+
+
 def test_codex_cache_scope_headers_are_permitted_without_forwarding_credentials(tmp_path):
     upstream = _FixtureUpstream(
         ProviderResponse(
@@ -267,6 +463,45 @@ def test_provider_timeout_is_bounded_and_repeated_request_is_not_replayed(tmp_pa
     assert len(upstream.calls) == 1
     assert [audit.phase for audit in audits] == ["intent", "started", "outcome_unknown", "terminal"]
     assert audits[-1].reason_subreason == "upstream_timeout"
+
+
+@pytest.mark.parametrize(
+    ("error_type", "reason_subreason"),
+    (
+        (RuntimeError, "upstream_exception"),
+        (HTTPException, "upstream_exception"),
+        (OSError, "upstream_channel_closed"),
+        (TimeoutError, "upstream_timeout"),
+    ),
+)
+def test_provider_response_body_failure_is_terminal_unknown(
+    tmp_path, error_type: type[Exception], reason_subreason: str
+):
+    def upstream(_request, _credentials, _is_cancelled):
+        def body_chunks():
+            yield b"data: partial\n\n"
+            raise error_type("fixture response body failed")
+
+        return ProviderResponse(
+            status_code=200,
+            headers={"content-type": "text/event-stream"},
+            body_chunks=body_chunks(),
+        )
+
+    audits: list[ProviderRelayAudit] = []
+    server = _server(tmp_path, upstream=upstream, audit=audits.append)
+    try:
+        server.start()
+        status, _headers, body = _round_trip(server, request_id="request:body-failure")
+    finally:
+        server.close()
+
+    assert status == 403
+    response = json.loads(body)
+    assert response["error"] == "outcome_unknown"
+    assert response["reasonSubreason"] == reason_subreason
+    assert [audit.phase for audit in audits] == ["intent", "started", "outcome_unknown", "terminal"]
+    assert audits[-1].reason_subreason == reason_subreason
 
 
 def test_provider_attempt_evidence_failure_blocks_pre_send_upstream(tmp_path):
@@ -736,6 +971,90 @@ def test_runtime_service_passes_invocation_relay_to_child_without_provider_secre
     assert len(upstream.calls) == 1
     assert upstream.calls[0][1] == credentials
     assert callback_phases == ["intent", "started", "completed"]
+
+
+@pytest.mark.parametrize("dispatch_failure", (False, True), ids=("dispatch-returns", "dispatch-raises"))
+def test_runtime_service_drains_relay_before_host_close_and_checks_late_audit(
+    tmp_path, monkeypatch, dispatch_failure
+):
+    state_file = tmp_path / "revocations.json"
+    configuration = AgentRuntimeConfiguration.from_environment(
+        {
+            "PLANE_AGENT_RUNTIME_URL": "http://agent-runtime:8080",
+            "PLANE_AGENT_RUNTIME_SECRET": "r" * 40,
+            "PLANE_AGENT_RUNTIME_PROVIDER": PROVIDER,
+            "PLANE_AGENT_RUNTIME_PROVIDER_HOST": HOST,
+            "PLANE_AGENT_RUNTIME_PROVIDER_MODELS": MODEL,
+            "PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE": str(state_file),
+        }
+    )
+    controller = RuntimeSafetyController(configured=True, stop_file=tmp_path / "stop")
+    controller.mark_ready()
+    executor = RuntimeDispatchExecutor(configuration, controller)
+    events: list[str] = []
+
+    class FixtureHostServer:
+        def __init__(self, **_kwargs):
+            pass
+
+        def start(self):
+            events.append("host.start")
+
+        def close(self):
+            events.append("host.close")
+
+    class FixtureRelay:
+        def __init__(self):
+            self.descriptor = provider_egress.ProviderRelayDescriptor(
+                socket_path=tmp_path / "relay.sock",
+                token="relay-token-012345678901234567890123456789",
+            )
+            self._required_audit_failure = None
+
+        @property
+        def required_audit_failure(self):
+            return self._required_audit_failure
+
+        def close(self):
+            events.append("relay.close")
+            self._required_audit_failure = provider_egress.ProviderRelayAuditFailure(phase="completed")
+
+    relay = FixtureRelay()
+    monkeypatch.setattr(runtime_service, "PlaneHostServer", FixtureHostServer)
+    monkeypatch.setattr(
+        runtime_service,
+        "_hermes_bootstrap_payload",
+        lambda *_args, **_kwargs: (b"payload", RUN_ID, INVOCATION_ID, "bootstrap-digest"),
+    )
+    executor.open_provider_relay = lambda **_kwargs: relay  # type: ignore[method-assign]
+
+    class FixtureTransport:
+        def dispatch_payload(self, **_kwargs):
+            if dispatch_failure:
+                raise ValueError("fixture dispatch failed")
+            return ("frame",)
+
+    executor._transport = FixtureTransport()
+    snapshot = {
+        "runId": RUN_ID,
+        "runtimePolicy": {"model": {"provider": PROVIDER, "model": MODEL}},
+    }
+    invocation = {"runId": RUN_ID, "invocationId": INVOCATION_ID, "correlationId": "correlation:relay"}
+    with pytest.raises(RuntimeConfigurationError, match="provider attempt evidence") as raised:
+        executor._execute(
+            snapshot,
+            invocation,
+            "test-digest",
+            credentials={"api_key": "provider-secret"},
+            credential_lease={"leaseId": "lease:relay"},
+            allowance=1,
+            host_url="http://plane-host.invalid",
+            host_token="host-token",
+        )
+
+    if dispatch_failure:
+        assert isinstance(raised.value.__cause__, ValueError)
+    assert events == ["host.start", "relay.close", "host.close"]
 
 
 def test_runtime_service_fails_closed_before_child_dispatch_without_lease(tmp_path):

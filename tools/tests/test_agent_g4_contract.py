@@ -14,6 +14,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 
@@ -1859,6 +1860,47 @@ class G4ContractTests(unittest.TestCase):
         )
         self.assertRegex(credential_ref, credential_pattern)
         self.assertNotRegex("runtime", credential_pattern)
+
+    def test_completed_provider_attempts_do_not_become_reconciliation_failure(self):
+        namespace = invoke_helper_namespace()
+        has_unknown = namespace["_provider_attempts_have_unknown_evidence"]
+        completed = SimpleNamespace(
+            phase="completed",
+            error_code="",
+            upstream_initiated=True,
+            terminal_at="2026-08-16T00:00:00Z",
+        )
+        control = SimpleNamespace(state="available", failure_code="")
+
+        self.assertFalse(has_unknown([completed], control))
+        self.assertTrue(has_unknown([SimpleNamespace(**{**vars(completed), "phase": "outcome_unknown"})], control))
+        self.assertTrue(has_unknown([SimpleNamespace(**{**vars(completed), "phase": "started", "terminal_at": None})], control))
+        self.assertTrue(has_unknown([completed], SimpleNamespace(state="outcome_unknown", failure_code="")))
+
+        evidence = namespace["build_failure_evidence"](
+            binding={},
+            failure_phase="api-invocation",
+            error_class="RuntimeError",
+            exit_code=1,
+            run_id="run:scenario",
+            run_state="failed",
+            invocation_id="invocation:scenario",
+            invocation_state="failed",
+            provider_attempts=[
+                {
+                    "sequence": 1,
+                    "phase": "completed",
+                    "upstreamInitiated": True,
+                    "statusClass": "2xx",
+                    "errorCode": "",
+                }
+            ],
+            terminal_kind="run_failure",
+            failure_reason='{"failureCode":"runtime_error","failurePhase":"runtime_process","failureDetail":"process_exit","failureSubreason":"runtime_execution_failed"}',
+        )
+        self.assertEqual(evidence["failure"]["reasonCode"], "runtime_error")
+        self.assertEqual(evidence["failure"]["reasonSubreason"], "runtime_execution_failed")
+        self.assertNotIn("reconciliation_required", json.dumps(evidence))
 
     def test_failure_evidence_is_bounded_structural_and_excludes_sensitive_runtime_data(self):
         source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")

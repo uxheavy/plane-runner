@@ -18,6 +18,7 @@ import socket
 import socketserver
 import ssl
 import threading
+import time
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -39,6 +40,7 @@ _DEFAULT_REQUEST_BYTES = 256 * 1024
 _DEFAULT_RESPONSE_BYTES = 2 * 1024 * 1024
 _DEFAULT_CHUNK_BYTES = 64 * 1024
 _DEFAULT_TIMEOUT_SECONDS = 30.0
+_RELAY_DRAIN_TIMEOUT_SECONDS = 2.0
 _SAFE_REQUEST_HEADERS = frozenset(
     {
         "accept",
@@ -383,6 +385,7 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
         request_id = ""
         request: ProviderRequest | None = None
         upstream_called = False
+        upstream_result_buffered = False
         acquired = relay._request_slots.acquire(blocking=False)
         if not acquired:
             relay._write_http_error(self.wfile, "", "concurrency")
@@ -397,22 +400,34 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
             relay._record_attempt(request, phase="started", upstream_initiated=True, required=True)
             upstream_called = True
             response = relay._call_upstream(request)
-            relay._write_http_response(self.wfile, request_id, response)
+            upstream_result_buffered = True
             relay._record_attempt(
                 request,
                 phase="completed",
                 upstream_initiated=True,
                 status_class=relay._status_class(response.status_code),
             )
+            relay._write_http_response(self.wfile, request_id, response)
         except ProviderRelayError as exc:
-            code = relay._error_code(exc)
-            if request is None and isinstance(exc, _ProviderRelayAdmissionError):
-                request = exc.request
+            error_for_audit: ProviderRelayError = exc
+            if (
+                request is not None
+                and upstream_called
+                and not upstream_result_buffered
+                and relay._forced_close.is_set()
+                and relay._error_code(exc) == "cancelled"
+            ):
+                error_for_audit = ProviderRelayOutcomeUnknownError(reason_subreason="upstream_channel_closed")
+            code = relay._error_code(error_for_audit)
+            if request is None and isinstance(error_for_audit, _ProviderRelayAdmissionError):
+                request = error_for_audit.request
                 relay._record_attempt(request, phase="intent", upstream_initiated=False, required=True)
-            if request is not None:
+            if request is not None and not upstream_result_buffered:
                 terminal_phase = (
                     "outcome_unknown"
-                    if upstream_called and code == "outcome_unknown" and getattr(exc, "upstream_initiated", False)
+                    if upstream_called
+                    and code == "outcome_unknown"
+                    and getattr(error_for_audit, "upstream_initiated", False)
                     else "failed"
                 )
                 relay._record_attempt(
@@ -427,8 +442,8 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
                         else "error"
                     ),
                     error_code=code,
-                    reason_phase=getattr(exc, "reason_phase", ""),
-                    reason_subreason=getattr(exc, "reason_subreason", ""),
+                    reason_phase=getattr(error_for_audit, "reason_phase", ""),
+                    reason_subreason=getattr(error_for_audit, "reason_subreason", ""),
                 )
                 if terminal_phase == "outcome_unknown":
                     relay._record_attempt(
@@ -437,10 +452,10 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
                         upstream_initiated=True,
                         status_class="unknown",
                         error_code=code,
-                        reason_phase=getattr(exc, "reason_phase", ""),
-                        reason_subreason=getattr(exc, "reason_subreason", ""),
+                        reason_phase=getattr(error_for_audit, "reason_phase", ""),
+                        reason_subreason=getattr(error_for_audit, "reason_subreason", ""),
                     )
-            elif code != "replay":
+            elif request is None and code != "replay":
                 # A replay is a stable response for the already-recorded
                 # attempt, not a new provider-attempt audit.  In particular,
                 # do not let the identity fallback's default terminal phase
@@ -448,15 +463,15 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
                 relay._record_identity(
                     {},
                     "denied",
-                    relay._audit_reason(exc, code),
+                    relay._audit_reason(error_for_audit, code),
                     upstream_called,
                 )
             try:
-                relay._write_http_error(self.wfile, request_id, code, error=exc)
+                relay._write_http_error(self.wfile, request_id, code, error=error_for_audit)
             except OSError:
                 pass
         except (OSError, TimeoutError):
-            if request is not None:
+            if request is not None and not upstream_result_buffered:
                 relay._record_attempt(
                     request,
                     phase="outcome_unknown" if upstream_called else "failed",
@@ -577,6 +592,7 @@ class ProviderRelayServer:
         self._http_server: _RelayHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self._closed = threading.Event()
+        self._forced_close = threading.Event()
         self._active: set[socket.socket] = set()
         self._active_lock = threading.RLock()
         self._seen_requests: set[str] = set()
@@ -617,30 +633,46 @@ class ProviderRelayServer:
         return self._descriptor
 
     def close(self) -> None:
-        self._closed.set()
         server = self._http_server
         self._http_server = None
         if server is not None:
             server.shutdown()
             server.server_close()
+        thread = self._thread
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=_RELAY_DRAIN_TIMEOUT_SECONDS)
+        self._thread = None
+        self._wait_for_active_handlers()
         with self._active_lock:
             active = tuple(self._active)
+        if active:
+            self._forced_close.set()
+        self._closed.set()
         for channel in active:
             try:
                 channel.shutdown(socket.SHUT_RDWR)
             except OSError:
                 pass
             channel.close()
-        thread = self._thread
-        if thread is not None and thread is not threading.current_thread():
-            thread.join(timeout=2)
-        self._thread = None
+        if active:
+            self._wait_for_active_handlers()
         try:
             if self._socket_path.is_socket():
                 self._socket_path.unlink()
         except OSError:
             pass
         self._credentials.clear()
+
+    def _wait_for_active_handlers(self) -> None:
+        deadline = time.monotonic() + _RELAY_DRAIN_TIMEOUT_SECONDS
+        while True:
+            with self._active_lock:
+                if not self._active:
+                    return
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return
+            time.sleep(min(0.01, remaining))
 
     def _register_channel(self, channel: socket.socket) -> None:
         with self._active_lock:
@@ -744,6 +776,31 @@ class ProviderRelayServer:
         self._validate_lease_and_cancellation()
         try:
             response = self._upstream(request, dict(self._credentials), self._is_cancelled)
+            if not isinstance(response, ProviderResponse) or isinstance(response.status_code, bool):
+                raise ProviderRelayError("provider response is invalid")
+            if 300 <= response.status_code < 400:
+                raise ProviderRelayError("provider redirect is not permitted")
+            if response.status_code != 200:
+                raise ProviderRelayError("provider returned an unsuccessful status")
+            try:
+                body_iterator = iter(response.body_chunks)
+            except TypeError as exc:
+                raise ProviderRelayError("provider response body is invalid") from exc
+            body_chunks: list[bytes] = []
+            total = 0
+            for chunk in body_iterator:
+                self._validate_lease_and_cancellation()
+                if not isinstance(chunk, bytes) or len(chunk) > self.policy.max_chunk_bytes:
+                    raise ProviderRelayError("provider response chunk is oversized")
+                total += len(chunk)
+                if total > self.policy.max_response_bytes:
+                    raise ProviderRelayError("provider response is oversized")
+                body_chunks.append(chunk)
+            return ProviderResponse(
+                status_code=response.status_code,
+                headers=response.headers,
+                body_chunks=tuple(body_chunks),
+            )
         except ProviderRelayError:
             raise
         except TimeoutError as exc:
@@ -752,13 +809,6 @@ class ProviderRelayServer:
             raise ProviderRelayOutcomeUnknownError(reason_subreason="upstream_channel_closed") from exc
         except Exception as exc:
             raise ProviderRelayOutcomeUnknownError(reason_subreason="upstream_exception") from exc
-        if not isinstance(response, ProviderResponse) or isinstance(response.status_code, bool):
-            raise ProviderRelayError("provider response is invalid")
-        if 300 <= response.status_code < 400:
-            raise ProviderRelayError("provider redirect is not permitted")
-        if response.status_code != 200:
-            raise ProviderRelayError("provider returned an unsuccessful status")
-        return response
 
     def _write_http_response(self, channel: Any, request_id: str, response: ProviderResponse) -> None:
         headers: dict[str, str] = {}
