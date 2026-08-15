@@ -5,16 +5,20 @@ This directory contains the compact execution control surface for the non-UI Pla
 ## Current status
 
 G0 through G3 and the offline G4 production-candidate checks are complete. The
-current named working branch starts from wrapper
-`3f2a478209fb94049376f781d33ddd4b63a038de`, whose source parent is
-`1d1012f71c48615bb28b7988ce74c82421aa1d53` and whose runtime is bound to
-Hermes `d2e655101f263329359e7d0de9d0b856202a3e4b`.
+current exact Plane candidate is
+`dfcd3ea543e58109b0d314e3bdfd6375c65b35ff`, with Hermes
+`bc7f13d2ab392752f2667b176c646339c49405f9`.
 
-Live functional acceptance is not complete. The latest authorized attempt
-failed before creating a Plane run or provider request because its credential
-source was not bind-visible to Colima. The source correction now stages the
-credential into an owner-only Docker-visible path, but it has not completed one
-real provider-backed invocation.
+S00 Wave 0AT passed at Plane
+`dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with one fresh GPT-5.6 Luna
+primary and one eligible provider-disabled replay. Provider-free PF1 evidence
+is complete for the Worker and Manager route suites and for the tested
+Operator contracts. The initial provider-backed persona tasks proved that the
+accepted runner exposes only its fixed S00 commission; a typed scenario input
+is being added to that existing runner before W/M/O routes resume. Their results
+are not inferred. O02 has a separate real external-client closure. The final
+candidate image, exact-image red team, G4 verifier, and consolidated Sol review
+remain pending.
 
 Execution now follows the backend-first user-testing loop in [GOAL.md](./GOAL.md):
 a fast GPT-5.6 Luna provider smoke, three persistent persona journeys covering
@@ -22,14 +26,10 @@ every non-UI Plane Agent feature and failure boundary, targeted root-fix/retest
 waves, one final full G4 verifier, and one consolidated Sol Medium review. The
 campaign ledgers are under `user-testing-output/plane-agents/`.
 
-The rollback fixture deliberately separates the current candidate from the
-previous last-known-good artifacts. `current.planeCommit` is the approved
-source parent `1d1012f71c48615bb28b7988ce74c82421aa1d53`; the final candidate
-wrapper is its sole child. Current API
-services use the rebuilt API artifact source/revision
-`1d1012f71c48615bb28b7988ce74c82421aa1d53`,
-while `agent-runtime` uses the Hermes `d2e655101f263329359e7d0de9d0b856202a3e4b`
-artifact above. The independent `previous` section retains the accepted G3
+The rollback fixture remains a historical offline binding separate from the
+active candidate. Its `current.planeCommit` is the approved source parent
+`1d1012f71c48615bb28b7988ce74c82421aa1d53`; its final candidate wrapper is
+that parent's sole child. The independent `previous` section retains the accepted G3
 service artifact digest
 `sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e`.
 The validator rejects cross-mixing between these current and previous

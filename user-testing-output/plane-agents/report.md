@@ -14,15 +14,25 @@
 | Metric            | Count |
 | ----------------- | ----: |
 | Routes discovered |    27 |
-| Clean             |     0 |
-| Dirty             |     1 |
+| Clean             |     2 |
+| Dirty             |     0 |
 | Blocked           |     0 |
-| Untested          |    27 |
-| Blocker issues    |     2 |
+| Untested          |    25 |
+| Blocker issues    |     0 |
 | Friction issues   |     0 |
 | Annoyances        |     0 |
 
-## Completion evidence
+## Current reconciliation
+
+The exact current Plane candidate is `dfcd3ea543e58109b0d314e3bdfd6375c65b35ff`
+with Hermes `bc7f13d2ab392752f2667b176c646339c49405f9`.
+
+- S00 is clean: Wave 0AT passed at Plane `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` and Hermes `bc7f13d2ab392752f2667b176c646339c49405f9` with ten ordered upstream `2xx` attempts, `search_workspace=3`, `work_item.read=2`, exact `NOT_AUTHORIZED` denial, one submit, one applied publication, one matching terminal, `RuntimeExit.completed`, zero replay semantic deltas, and cleanup passed.
+- Provider-free PF1 is complete: W01–W08 passed 35 real Django/API/DB/CLI/socket/isolation tests; M01–M08 passed 33 tests after the dynamic-plan and schedule-control fixes; O01 and O03–O09 passed targeted real contracts. These are supporting evidence, not provider-backed W/M route closures.
+- O02 is clean from the real external-client product journey at Plane `dfcd3ea543e58109b0d314e3bdfd6375c65b35ff`, MCP `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`: read/update/replay/archive/unarchive/search/delete, denial, durable audit/idempotency, unsupported-before-HTTP, stable bindings, SDK bearer identity, result bounds, and cleanup passed.
+- Initial provider-backed W/M/O tasks stopped without route claims because the accepted runner hardcodes the S00 Worker and prompt. One typed scenario input is being added to that existing runner before the live routes resume. The final exact-image red team, final candidate image, G4, and Sol remain pending. G5 is out of scope.
+
+## Historical completion evidence (Wave 0AQ)
 
 Wave 0AQ ran one exact, non-UI primary from Plane
 `131c3f73cc894ff429c45f837eb20a236e1c69de` with Hermes
@@ -137,7 +147,7 @@ artifacts, result, descriptor files, and disposable API/runtime images. The
 owner credential source and authoritative clones were untouched. UT-020 is
 open; S00 remains dirty and W/M/O remain locked. No replay or retry occurred.
 
-## Wave 0AT final report
+## Historical Wave 0AT report (superseded binding)
 
 0AT is `PASS` for the S00 non-UI functional user-testing wave. This record supersedes the historical stale S00 failure above; the prior failure was the now-corrected unconditional transcript assertion, not a live lifecycle or authorization failure.
 
@@ -159,3 +169,23 @@ Evidence and cleanup:
 - Cleanup passed for staged credentials, receipts, descriptors, result, run artifacts, containers, networks, volumes, and disposable images. Authoritative clones and owner credential were untouched. No source/config/test edits followed the live result.
 
 Final truth: `PASS`. S00 passed all required lifecycle, authorization-boundary, publication, terminal, transcript-truth, idempotency, evidence, and cleanup predicates. W/M/O are unlocked.
+
+## PF1 and O02 addendum
+
+PF1 provider-free support is complete for Worker W01–W08 (35 real tests),
+Manager M01–M08 (33 real tests), and tested Operator contracts O01 and O03–O09.
+The dynamic-plan rationale, schedule controls/due-fire, cumulative-budget, and
+external-client fixture evidence is bound to Plane commits
+`f621fdd89797db2d1b74205c6ce6d5b0bd4725d1`,
+`2105fb9e21687103939a77b7e26a0959f1d50f51`,
+`8c9b20bf544355b20b0c9e69b0ad1ee5b48e905e`, and
+`76e26ce5de1f300eab93505a2c885b984f60fcd0`. W/M routes remain untested at
+provider-backed persona level; the final exact-image red team remains pending.
+
+O02 is clean from the real MCP/API/database journey at Plane
+`dfcd3ea543e58109b0d314e3bdfd6375c65b35ff`, MCP
+`c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
+`7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. Read, update, replay, archive,
+unarchive, search, delete, denial, durable audit/idempotency,
+unsupported-before-HTTP, stable bindings, SDK bearer identity, 8192 accepted /
+8193 rejected result bounds, and cleanup passed.

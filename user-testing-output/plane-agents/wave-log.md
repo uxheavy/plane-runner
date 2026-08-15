@@ -918,15 +918,15 @@ unrelated suite ran.
   `completed`, upstream initiated, `2xx`, with no fallback and no unknown
   outcome. Operation/audit counts were:
 
-  | Operation | Status | Error | Count |
-  | --- | --- | --- | ---: |
-  | `search_workspace` | success | none | 2 |
-  | `work_item.read` | success | none | 1 |
-  | `catalog.search` | absent | none | 0 |
-  | `catalog.describe` | absent | none | 0 |
-  | `agent.outcome.evaluate` | denied | `NOT_AUTHORIZED` | 1 |
-  | `agent.outcome.submit` | success | none | 1 |
-  | `agent.outcome.publish` | success | none | 1 |
+  | Operation                | Status  | Error            | Count |
+  | ------------------------ | ------- | ---------------- | ----: |
+  | `search_workspace`       | success | none             |     2 |
+  | `work_item.read`         | success | none             |     1 |
+  | `catalog.search`         | absent  | none             |     0 |
+  | `catalog.describe`       | absent  | none             |     0 |
+  | `agent.outcome.evaluate` | denied  | `NOT_AUTHORIZED` |     1 |
+  | `agent.outcome.submit`   | success | none             |     1 |
+  | `agent.outcome.publish`  | success | none             |     1 |
 
 - The projected S00 gate had status `passed`, first failed predicate `null`,
   and all six predicates true: invocation/run succeeded, exactly one visible
@@ -1824,3 +1824,10 @@ product source was changed.
 - Replay: passed with provider access disabled and all required deltas zero: provider attempts, children, invocations, receipts, audits, usage, outcomes, publications, terminal events, and semantic side effects.
 - Evidence: result mode `0600`, size `8183`, SHA-256 `9dd5bdf263a01d06927e3a07961539f3c1dca51c4a05a713899c803c8c5fac8e`; semantic digest `c8aa562cff351c86863098df47ed145df829b8c486ec1a7b6eee9eeb033d0807`; standalone validation passed.
 - Cleanup: all disposable result, descriptor, credential-staging, run, image, container, network, and volume artifacts were removed. Owner credential and authoritative clones were untouched. No source/config/test changes were made after the result. S00 is clean; W/M/O are unlocked.
+
+## Current campaign reconciliation — PF1 and O02 — 2026-08-15
+
+- Current exact candidate: Plane `dfcd3ea543e58109b0d314e3bdfd6375c65b35ff`; Hermes `bc7f13d2ab392752f2667b176c646339c49405f9`. S00 remains clean from Wave 0AT at Plane `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` / Hermes `bc7f13d2ab392752f2667b176c646339c49405f9`: ten ordered upstream `2xx` attempts, required reads, exact denial, submit, applied publication, matching terminal, `RuntimeExit.completed`, zero replay semantic deltas, and cleanup passed.
+- Provider-free PF1 support passed unchanged for Worker W01–W08 (35 real Django/API/DB/CLI/socket/isolation tests), Manager M01–M08 (33 tests after Plane `f621fdd89797db2d1b74205c6ce6d5b0bd4725d1` and `2105fb9e21687103939a77b7e26a0959f1d50f51`), and tested Operator contracts O01 and O03–O09 (with Plane `8c9b20bf544355b20b0c9e69b0ad1ee5b48e905e` and `76e26ce5de1f300eab93505a2c885b984f60fcd0`). PF1 does not make W/M routes clean; the final exact-image red team remains pending.
+- O02 is clean from the real external-client product journey at Plane `dfcd3ea543e58109b0d314e3bdfd6375c65b35ff`, MCP `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`: read, update, replay, archive, unarchive, search, delete, denial, durable audit/idempotency, unsupported-before-HTTP, stable bindings, SDK bearer identity, result bounds, and cleanup passed. MCP archive/unarchive fix `b9581fc71dbab8d408d196a237c109e9cd61e153` is included in that evidence.
+- Initial provider-backed W/M/O tasks stopped without route claims because the accepted live runner hardcodes the S00 Worker and prompt. A typed scenario input is being added to that existing runner before the live routes resume; no W/M/O result is inferred. Final image/G4/Sol remain pending, and G5 is out of scope.

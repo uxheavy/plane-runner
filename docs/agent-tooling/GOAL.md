@@ -8,30 +8,29 @@ This goal covers the full Plane Agent control plane and the hidden execution ser
 
 Functional completion and controlled rollout are separate outcomes. This goal ends when the non-UI product passes the complete live dogfood matrix, the production-candidate checks, and integration into a named Plane branch. Development, allowlisted-workspace, expanded-cohort, and GA rollout are a successor goal requiring their own deployment authority; they are not evidence that the product implementation works and are not a completion condition here.
 
-The frozen G4 artifact set below is historical offline evidence, not the active
-delivery candidate. Active work proceeds on `codex/agent-functional-dogfood`
-from product source `2fe13301a142e836f810b72a279f81cad3bba644` and Hermes
-`21826c256bc1fc8f56e6469e752cb2a5b991ac58`. Wave 0X proved 16 contiguous
-audited GPT-5.6 Luna provider exchanges, then stopped before any Plane read,
-denial, outcome, or publication. The exact provider-free relay path preserves
-`budget_exhausted`, but the retained live receipt cannot distinguish that exit
-from a completed kernel turn rejected by Plane as `missing_outcome`; cleanup
-discarded the bounded exit and event evidence needed to decide. Extend the
-existing live evidence contract provider-free, then run one new S00 journey
-before starting the wider matrix. Rebuild immutable candidate artifacts and run
-the full G4 verifier only once after all functional journeys are clean. Do not
-request another Sol review before that point. G5 remains a separate rollout
-goal.
+The older G4 artifact bindings and Wave 0X evidence below are historical, not
+the active delivery state. The current exact Plane candidate is
+`dfcd3ea543e58109b0d314e3bdfd6375c65b35ff`, with Hermes
+`bc7f13d2ab392752f2667b176c646339c49405f9`. S00 Wave 0AT passed at Plane
+`dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with one fresh Luna primary and one
+eligible provider-disabled replay. Provider-free PF1 evidence is complete for
+W01–W08, M01–M08, and the tested Operator contracts. The first broader persona
+attempts proved that the accepted runner exposes only the fixed S00 commission;
+the existing runner is gaining one typed W/M/O scenario seam before those live
+routes resume. No provider-backed W/M/O result is inferred here. The final
+candidate image, exact-image red team, G4 verifier, and consolidated Sol review
+remain pending. G5 remains a separate rollout goal.
 
 ## Status and authorization
 
-| Active item        | Current truth                                                                                                                                                                                                                                                                                      |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Delivery candidate | `codex/agent-functional-dogfood` at evidence commit `9047013f73`; last product-source commit `2fe13301a142e836f810b72a279f81cad3bba644`; Hermes `21826c256bc1fc8f56e6469e752cb2a5b991ac58`.                                                                                                        |
-| Functional gate    | S00 is dirty. Wave 0X recorded 16 contiguous completed audited `2xx` exchanges, then an unspecified `run_failure`. No Plane read, denial, outcome, publication, successful terminal event, or replay followed; the retained evidence cannot distinguish `budget_exhausted` from `missing_outcome`. |
-| Next action        | Preserve the bounded runtime exit, event-kind counts, terminal reason category, and gateway-receipt presence in the existing live contract; prove both failure paths provider-free; then run one fresh S00. Do not start W/M/O journeys before S00 passes.                                         |
-| Final verification | After every functional journey is clean, rebuild immutable artifacts once, run one full production-candidate verifier, and request one consolidated Sol Medium review.                                                                                                                             |
-| G5                 | Out of scope. Rollout starts only under a separate authorized goal after G4 functional completion.                                                                                                                                                                                                 |
+| Active item        | Current truth                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Delivery candidate | Exact Plane `dfcd3ea543e58109b0d314e3bdfd6375c65b35ff`; exact Hermes `bc7f13d2ab392752f2667b176c646339c49405f9`; supporting PF1 fixes/tests include `f621fdd89797db2d1b74205c6ce6d5b0bd4725d1`, `2105fb9e21687103939a77b7e26a0959f1d50f51`, `8c9b20bf544355b20b0c9e69b0ad1ee5b48e905e`, and `76e26ce5de1f300eab93505a2c885b984f60fcd0`.                                            |
+| Functional gate    | S00 Wave 0AT is clean at Plane `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with Hermes `bc7f13d2ab392752f2667b176c646339c49405f9`: ten ordered upstream `2xx` attempts, three searches, two reads, one exact `NOT_AUTHORIZED` denial, one submit, one applied publication, one matching terminal, and `RuntimeExit.completed`; replay semantic deltas were zero and cleanup passed. |
+| Provider-free PF1  | Worker W01–W08 passed 35 real Django/API/DB/CLI/socket/isolation tests unchanged. Manager M01–M08 passed 33 tests after `f621fdd89797db2d1b74205c6ce6d5b0bd4725d1` and `2105fb9e21687103939a77b7e26a0959f1d50f51`. Operator O01 and O03–O09 passed targeted real service/API/database/CLI contracts; the final exact-image red team remains pending.                               |
+| Live W/M/O wave    | The initial persona tasks stopped without route claims because the accepted live runner hardcodes the S00 Worker and prompt. One typed scenario input is being added to that existing runner; PF1 tests do not make W/M routes clean. O02 is separately clean from the real external-client closure recorded at product source `dfcd3ea543e58109b0d314e3bdfd6375c65b35ff`.         |
+| Final verification | Pending clean provider-backed W/M/O routes, the final candidate image, exact-image red team, one full G4 verifier, and one consolidated Sol Medium review.                                                                                                                                                                                                                         |
+| G5                 | Out of scope. Rollout starts only under a separate authorized goal after G4 functional completion.                                                                                                                                                                                                                                                                                 |
 
 The table below preserves accepted gate history and older frozen artifact
 bindings. Its G4/dogfood rows are historical evidence and do not override the
