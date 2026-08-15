@@ -162,7 +162,7 @@ def test_invocation_scoped_socket_routes_gateway_and_explicit_outcome(
                 action="mutate",
                 operation_ref="operation:agent.outcome.submit",
                 input={
-                    "run_ref": run.snapshot["runId"],
+                    "run_ref": "run:substitution",
                     "summary": "The work item was renamed through the Plane gateway.",
                     "artifacts": ["artifact:g2-rename"],
                     "evidence": ["evidence:g2-gateway-audit"],
@@ -189,6 +189,106 @@ def test_invocation_scoped_socket_routes_gateway_and_explicit_outcome(
         assert publish.publication["productKind"] == "outcome_submission"
         assert publish.publication["productEventRef"].startswith("product-event:")
 
+        trusted_actor_ref = port._host.binding.actor_ref
+        port._host.request.agent_actor_ref = "actor:substitution"
+        mismatched_binding = _round_trip(
+            server.socket_path,
+            _call(
+                **common,
+                action="mutate",
+                operation_ref="operation:agent.outcome.submit",
+                input={"summary": "Must not disclose the terminal outcome."},
+            ),
+        )
+        assert mismatched_binding.status == "denied"
+        assert mismatched_binding.error_code == "CALLBACK_BINDING_INVALID"
+        assert "outcome" not in mismatched_binding.output.get("result", {})
+        port._host.request.agent_actor_ref = trusted_actor_ref
+
+        exact_duplicate_submit = _round_trip(
+            server.socket_path,
+            _call(
+                **common,
+                action="mutate",
+                operation_ref="operation:agent.outcome.submit",
+                input={
+                    "summary": "The work item was renamed through the Plane gateway.",
+                    "artifacts": ["artifact:g2-rename"],
+                    "evidence": ["evidence:g2-gateway-audit"],
+                },
+            ),
+        )
+        assert exact_duplicate_submit.status == "replayed"
+        assert exact_duplicate_submit.replayed is True
+        assert exact_duplicate_submit.error_code is None
+
+        duplicate_submit = _round_trip(
+            server.socket_path,
+            _call(
+                **common,
+                action="mutate",
+                operation_ref="operation:agent.outcome.submit",
+                input={
+                    "summary": "A conflicting duplicate terminal outcome.",
+                    "artifacts": ["artifact:g2-conflict"],
+                    "evidence": ["evidence:g2-conflict"],
+                },
+            )
+        )
+        assert duplicate_submit.status == "conflict"
+        assert duplicate_submit.error_code == "PLANE_CONFLICT"
+        assert duplicate_submit.replayed is False
+
+        wrong_binding = _round_trip(
+            server.socket_path,
+            _call(
+                run_id="run:substitution",
+                invocation_id=common["invocation_id"],
+                action="mutate",
+                operation_ref="operation:agent.outcome.submit",
+                input={
+                    "run_ref": "run:substitution",
+                    "summary": "A substituted terminal outcome.",
+                },
+            )
+        )
+        assert wrong_binding.status == "denied"
+        assert wrong_binding.error_code == "CALLBACK_BINDING_INVALID"
+        assert wrong_binding.output is None
+
+        wrong_invocation = _round_trip(
+            server.socket_path,
+            _call(
+                run_id=common["run_id"],
+                invocation_id="invocation:substitution",
+                action="mutate",
+                operation_ref="operation:agent.outcome.submit",
+                input={"run_ref": "run:substitution", "summary": "Must not disclose."},
+            ),
+        )
+        assert wrong_invocation.status == "denied"
+        assert wrong_invocation.error_code == "CALLBACK_BINDING_INVALID"
+        assert wrong_invocation.output is None
+
+        late_mutation = _round_trip(
+            server.socket_path,
+            _call(
+                **common,
+                action="mutate",
+                operation_ref="operation:work_item.rename",
+                input={
+                    "project_id": str(gateway_project.id),
+                    "issue_id": str(gateway_issue.id),
+                    "name": "G2 must not mutate after publication",
+                },
+            ),
+        )
+        assert late_mutation.status == "conflict"
+        assert late_mutation.error_code == "PLANE_CONFLICT"
+        assert late_mutation.replayed is False
+        gateway_issue.refresh_from_db()
+        assert gateway_issue.name == "G2 renamed"
+
         replay = _round_trip(server.socket_path, mutate)
         assert replay.status == "replayed"
         assert replay.replayed is True
@@ -200,6 +300,7 @@ def test_invocation_scoped_socket_routes_gateway_and_explicit_outcome(
     run.refresh_from_db()
     invocation.refresh_from_db()
     assert OutcomeSubmission.objects.filter(run=run).count() == 1
+    assert OutcomeSubmission.objects.get(run=run).run_id == run.id
     assert RunTerminalEvent.objects.filter(run=run, visible=True).count() == 1
     assert OperationGatewayAudit.objects.filter(operation_id="work_item.rename").count() == 2
     assert OperationGatewayAudit.objects.filter(operation_id="agent.outcome.submit").count() >= 2

@@ -98,6 +98,9 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert "plane_operation('code', 'operation:work_item.rename'" in mutation.assignment.objective
     assert '"subject_user_ref":"{{subjectUserRef}}"' in context.assignment.objective
     assert "private memory" in context.assignment.objective
+    assert "exact current invocation run_ref" in parsed.profile.instructions
+    assert "never invent, copy, or substitute another run reference" in parsed.profile.instructions
+    assert "after a terminal or rejected outcome callback, do not retry either terminal operation" in parsed.profile.instructions
 
 
 def test_commission_descriptor_keeps_shared_profile_and_binds_each_assignment() -> None:

@@ -25,7 +25,15 @@ from plane.agent.lifecycle.runtime_contract import (
     validate_run_snapshot,
 )
 from plane.agent.runtime.dispatch import RuntimeDispatchError, _dispatch_binding
-from plane.db.models import InvocationState, OperationGatewayIdempotency, RunState, RunAttempt, RuntimeInvocation
+from plane.db.models import (
+    InvocationState,
+    OperationGatewayIdempotency,
+    OutcomeSubmission,
+    RunAttempt,
+    RunState,
+    RunTerminalEvent,
+    RuntimeInvocation,
+)
 from plane.operation_gateway.catalog import CATALOG_DIGEST, code_mode_callback_names, get_operation
 from plane.operation_gateway.gateway import OperationGateway
 
@@ -170,9 +178,20 @@ class CodeModeHostRPC:
             "correlation_id": correlation_id,
             "input": dict(input_data) if isinstance(input_data, Mapping) else input_data,
         }
+        if operation_id in {"agent.outcome.submit", "agent.outcome.publish"} and isinstance(raw["input"], Mapping):
+            # The callback envelope is the trusted binding boundary.  A
+            # model-supplied run_ref is redundant payload and is normalized
+            # rather than allowed to redirect or poison this bound callback.
+            raw["input"] = {**raw["input"], "run_ref": self.binding.run_ref}
         invalid = self._preflight(raw)
         if invalid is not None:
             return invalid
+        terminal_observation = self._terminal_outcome_observation(raw)
+        if terminal_observation is not None:
+            return terminal_observation
+        terminal_mutation_observation = self._terminal_mutation_observation(raw)
+        if terminal_mutation_observation is not None:
+            return terminal_mutation_observation
         if operation_id == "agent.outcome.publish":
             self.invocation.refresh_from_db(fields=["state"])
             if self.invocation.state in {
@@ -238,6 +257,87 @@ class CodeModeHostRPC:
         finally:
             if not reconciled:
                 self._release(reservation)
+
+    def _terminal_outcome_observation(self, raw: Mapping[str, Any]) -> dict[str, Any] | None:
+        """Return a stable observation for a duplicate submit after terminalization."""
+
+        if raw.get("operation_id") != "agent.outcome.submit":
+            return None
+        input_data = raw.get("input")
+        if not isinstance(input_data, Mapping):
+            return None
+        self.invocation.refresh_from_db(fields=["state"])
+        self.run.refresh_from_db(fields=["state"])
+        if self.run.state not in {RunState.SUCCEEDED, RunState.FAILED, RunState.BLOCKED, RunState.CANCELLED}:
+            return None
+        outcome = OutcomeSubmission.objects.filter(run_id=self.run.id).order_by("created_at", "id").first()
+        if outcome is None:
+            return None
+        terminal = RunTerminalEvent.objects.filter(invocation_id=self.invocation.pk, visible=True).first()
+        outcome_result = {
+            "outcomeRef": f"outcome-submission:{outcome.id}",
+            "state": outcome.state,
+            "summary": outcome.summary,
+            "artifacts": outcome.artifacts,
+            "evidence": outcome.evidence,
+        }
+        if terminal is not None:
+            outcome_result["productEventRef"] = terminal.product_event_ref
+        matches = all(
+            input_data.get(field, []) == getattr(outcome, field)
+            for field in ("artifacts", "evidence")
+        ) and input_data.get("summary") == outcome.summary
+        response: dict[str, Any]
+        if matches:
+            response = {
+                "ok": True,
+                "replayed": True,
+                "correlation_id": raw["correlation_id"],
+                "idempotency": {"key": raw["idempotency_key"], "replayed": True},
+                "result": {"outcome": outcome_result},
+            }
+        else:
+            response = {
+                "ok": False,
+                "replayed": False,
+                "correlation_id": raw["correlation_id"],
+                "idempotency": {"key": raw["idempotency_key"], "replayed": False},
+                "error": {
+                    "code": "PLANE_CONFLICT",
+                    "message": "The current run already has a different terminal outcome.",
+                    "retryable": False,
+                },
+            }
+        receipt = self._receipt(raw, response)
+        receipt["terminalObservation"] = True
+        return receipt
+
+    def _terminal_mutation_observation(self, raw: Mapping[str, Any]) -> dict[str, Any] | None:
+        """Prevent a later same-batch mutation after terminal publication."""
+
+        operation_id = raw.get("operation_id")
+        if operation_id in {"agent.outcome.submit", "agent.outcome.publish"}:
+            return None
+        descriptor = get_operation(operation_id) if isinstance(operation_id, str) else None
+        if descriptor is None or descriptor.kind != "mutation":
+            return None
+        self.run.refresh_from_db(fields=["state"])
+        if self.run.state not in {RunState.SUCCEEDED, RunState.FAILED, RunState.BLOCKED, RunState.CANCELLED}:
+            return None
+        response = {
+            "ok": False,
+            "replayed": False,
+            "correlation_id": raw["correlation_id"],
+            "idempotency": {"key": raw["idempotency_key"], "replayed": False},
+            "error": {
+                "code": "PLANE_CONFLICT",
+                "message": "The current run is terminal; no later mutation was applied.",
+                "retryable": False,
+            },
+        }
+        receipt = self._receipt(raw, response)
+        receipt["terminalObservation"] = True
+        return receipt
 
     def _publish_terminal_outcome(self, raw: Mapping[str, Any]) -> dict[str, Any]:
         """Publish an existing outcome without adding usage after terminalization."""

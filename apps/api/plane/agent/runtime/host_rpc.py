@@ -1144,8 +1144,11 @@ class PlaneGatewayHostPort:
             if isinstance(error, Mapping)
             else "Plane host rejected the callback"
         )
+        terminal_observation = receipt.get("terminalObservation") is True
         status = (
-            "denied"
+            "conflict"
+            if terminal_observation and code == "PLANE_CONFLICT"
+            else "denied"
             if code in {"NOT_AUTHORIZED", "CALLBACK_BINDING_INVALID", "BUDGET_EXCEEDED", "CANCELLED"}
             else "conflict"
             if code in {"IDEMPOTENCY_CONFLICT", "PLANE_CONFLICT"}
