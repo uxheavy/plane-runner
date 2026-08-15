@@ -37,7 +37,7 @@ from plane.db.models import (
 from plane.operation_gateway.contracts import MAX_RESULT_BYTES
 from plane.operation_gateway.publications import dispatch_publication_once
 
-EXPECTED_MCP_TIP = "4b36e2664ba9a82fe2edebf89eaa76565b130398"
+EXPECTED_MCP_TIP = "c04974ed6624f17b41e63ef8182661929e77e0d3"
 EXPECTED_SDK_TIP = "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
 MCP_ROOT_ENV = "PLANE_MCP_EXTERNAL_ROOT"
 SDK_ROOT_ENV = "PLANE_SDK_EXTERNAL_ROOT"
@@ -83,7 +83,7 @@ def _load_mcp_gateway() -> tuple[Any, Path]:
         module = importlib.import_module("plane_mcp.gateway")
     finally:
         sys.path.remove(str(root))
-    assert len({route.operation_id for route in module.GATEWAY_ROUTES} | module.SPECIAL_OPERATION_IDS) == 64
+    assert len({route.operation_id for route in module.GATEWAY_ROUTES} | module.SPECIAL_OPERATION_IDS) == 65
     assert all("*" not in route.template for route in module.GATEWAY_ROUTES)
     return module, root
 
@@ -305,6 +305,14 @@ def test_external_mcp_client_crosses_plane_gateway_for_read_mutation_replay_arch
     gateway_issue.refresh_from_db()
     assert gateway_issue.archived_at is not None
 
+    unarchived = first_client.request(
+        "DELETE",
+        f"{update_path}/unarchive",
+    )
+    assert unarchived is None
+    gateway_issue.refresh_from_db()
+    assert gateway_issue.archived_at is None
+
     deleted = first_client.request(
         "DELETE",
         update_path,
@@ -319,7 +327,11 @@ def test_external_mcp_client_crosses_plane_gateway_for_read_mutation_replay_arch
     )
     assert isinstance(search, list)
     assert transport.calls
-    assert all(call["headers"].get("x-api-key") == api_token.token for call in transport.calls)
+    assert all(
+        [value for name, value in call["headers"].items() if name.lower() == "x-api-key"]
+        == [api_token.token]
+        for call in transport.calls
+    )
     assert all("Authorization" not in call["headers"] for call in transport.calls)
     assert all("caller" not in call["json"] for call in transport.calls)
 
