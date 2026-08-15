@@ -9,7 +9,7 @@ import json
 import os
 import re
 import stat
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal, TypedDict
 
@@ -32,6 +32,7 @@ MAX_EXPECTED_RECORDS = 8
 MAX_ROUTE_CHECKS = 8
 MAX_SETUP_ACTORS = 4
 MAX_SETUP_REFS = 8
+MAX_COMMISSIONS = 4
 MAX_CONTROL_INPUT_BYTES = 8 * 1024
 SAFE_REF_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.:/-]{0,255}$")
 SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]{0,95}$")
@@ -164,6 +165,13 @@ class AssignmentSpec:
 
 
 @dataclass(frozen=True)
+class CommissionSpec:
+    commission_id: str
+    assignment: AssignmentSpec
+    expected: ExpectedPredicates | None
+
+
+@dataclass(frozen=True)
 class ScenarioDescriptor:
     scenario_id: str
     actor_role: Literal["worker", "delegator"]
@@ -174,6 +182,7 @@ class ScenarioDescriptor:
     setup: SetupSpec
     controls: ControlsSpec
     descriptor_digest: str
+    commissions: tuple[CommissionSpec, ...] = ()
 
     def evidence(self) -> dict[str, Any]:
         result: dict[str, Any] = {
@@ -187,7 +196,32 @@ class ScenarioDescriptor:
             result["expected"] = self.expected
         result["setup"] = self.setup.evidence()
         result["controls"] = self.controls.evidence()
+        if self.commissions:
+            result["commissions"] = [
+                {
+                    "id": commission.commission_id,
+                    "assignment": {
+                        "targetRef": commission.assignment.target_ref,
+                        "objective": commission.assignment.objective,
+                        "acceptanceCriteria": list(commission.assignment.acceptance_criteria),
+                        "contextRefs": list(commission.assignment.context_refs),
+                    },
+                    "expected": commission.expected,
+                }
+                for commission in self.commissions
+            ]
         return result
+
+
+def commission_descriptor(descriptor: ScenarioDescriptor, commission: CommissionSpec) -> ScenarioDescriptor:
+    """Bind one bounded commission to the shared durable Agent descriptor."""
+
+    return replace(
+        descriptor,
+        assignment=commission.assignment,
+        expected=commission.expected,
+        commissions=(),
+    )
 
 
 def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, ...]:
@@ -438,6 +472,45 @@ def _expected(value: Any) -> ExpectedPredicates | None:
     return result
 
 
+def _assignment(value: Any, name: str = "assignment") -> AssignmentSpec:
+    assignment = _object(value, name)
+    _keys(assignment, {"targetRef", "objective", "acceptanceCriteria", "contextRefs"}, name)
+    return AssignmentSpec(
+        target_ref=_ref(assignment["targetRef"], f"{name}_target", 255),
+        objective=_text(assignment["objective"], f"{name}_objective", MAX_OBJECTIVE_BYTES),
+        acceptance_criteria=_string_list(
+            assignment["acceptanceCriteria"], f"{name}_acceptance", MAX_ACCEPTANCE_ITEMS, MAX_ACCEPTANCE_BYTES
+        ),
+        context_refs=_optional_string_list(
+            assignment["contextRefs"], f"{name}_context", MAX_CONTEXT_REFS, MAX_CONTEXT_REF_BYTES
+        ),
+    )
+
+
+def _commissions(value: Any) -> tuple[CommissionSpec, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list) or not 1 <= len(value) <= MAX_COMMISSIONS:
+        raise ScenarioError("scenario_commissions_invalid_list")
+    result = []
+    seen = set()
+    for index, raw in enumerate(value):
+        row = _object(raw, f"commission_{index}")
+        _keys(row, {"id", "assignment", "expected"}, f"commission_{index}")
+        commission_id = _ref(row["id"], f"commission_{index}_id", 64)
+        if commission_id in seen:
+            raise ScenarioError("scenario_commission_id_duplicate")
+        seen.add(commission_id)
+        result.append(
+            CommissionSpec(
+                commission_id=commission_id,
+                assignment=_assignment(row["assignment"], f"commission_{index}_assignment"),
+                expected=_expected(row["expected"]),
+            )
+        )
+    return tuple(result)
+
+
 def evaluate_expectations(expected: ExpectedPredicates | None, *, operations: list[dict[str, Any]], records: list[dict[str, Any]], product_events: list[dict[str, Any]], evidence_kinds: list[str]) -> dict[str, Any]:
     if expected is None:
         return {"passed": True, "failures": [], "operations": [], "durableRecords": [], "productEvents": [], "evidenceKinds": []}
@@ -485,7 +558,7 @@ def parse_descriptor_bytes(raw: bytes, expected_digest: str) -> ScenarioDescript
         raise ScenarioError("scenario_malformed_json") from exc
     descriptor = _object(value, "descriptor")
     required_keys = {"schemaVersion", "scenarioId", "actor", "profile", "assignment", "prompt"}
-    if set(descriptor).difference(required_keys | {"expected", "setup", "controls"}) or not required_keys.issubset(descriptor):
+    if set(descriptor).difference(required_keys | {"expected", "setup", "controls", "commissions"}) or not required_keys.issubset(descriptor):
         raise ScenarioError("scenario_descriptor_fields_mismatch")
     if descriptor["schemaVersion"] != SCENARIO_SCHEMA:
         raise ScenarioError("scenario_schema_version_invalid")
@@ -517,18 +590,7 @@ def parse_descriptor_bytes(raw: bytes, expected_digest: str) -> ScenarioDescript
     model_policy = ModelPolicy("openai-codex", "gpt-5.6-luna", "xhigh", False)
     tool_presentation = _tool_presentation(profile.get("toolPresentation"))
 
-    assignment = _object(descriptor["assignment"], "assignment")
-    _keys(assignment, {"targetRef", "objective", "acceptanceCriteria", "contextRefs"}, "assignment")
-    assignment_spec = AssignmentSpec(
-        target_ref=_ref(assignment["targetRef"], "assignment_target", 255),
-        objective=_text(assignment["objective"], "assignment_objective", MAX_OBJECTIVE_BYTES),
-        acceptance_criteria=_string_list(
-            assignment["acceptanceCriteria"], "assignment_acceptance", MAX_ACCEPTANCE_ITEMS, MAX_ACCEPTANCE_BYTES
-        ),
-        context_refs=_optional_string_list(
-            assignment["contextRefs"], "assignment_context", MAX_CONTEXT_REFS, MAX_CONTEXT_REF_BYTES
-        ),
-    )
+    assignment_spec = _assignment(descriptor["assignment"])
     prompt = _text(descriptor["prompt"], "prompt", MAX_PROMPT_BYTES)
     if prompt != prompt.strip():
         raise ScenarioError("scenario_prompt_outer_whitespace")
@@ -550,6 +612,7 @@ def parse_descriptor_bytes(raw: bytes, expected_digest: str) -> ScenarioDescript
         setup=setup,
         controls=_controls(descriptor.get("controls")),
         descriptor_digest=actual_digest,
+        commissions=_commissions(descriptor.get("commissions")),
     )
 
 

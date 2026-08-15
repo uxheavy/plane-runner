@@ -1111,8 +1111,151 @@ def _supervisor_failure_reason(output):
     return None
 
 
-def main() -> int:
-    scenario = _scenario_descriptor()
+_SHARED_WORKER_SETUP = None
+
+
+def _prepare_shared_worker_setup(scenario, provider, provider_relay, suffix):
+    """Create Maya once; bounded commissions then receive separate run snapshots."""
+
+    global _SHARED_WORKER_SETUP
+    if _SHARED_WORKER_SETUP is not None:
+        return _SHARED_WORKER_SETUP
+
+    email = f"g4-live-{suffix}@plane.test"
+    user = User.objects.create(email=email, username=email, first_name="G4", last_name="Live")
+    user.set_password(secrets.token_urlsafe(32))
+    user.save(update_fields=["password"])
+    workspace = Workspace.objects.create(name=f"G4 Live {suffix}", owner=user, slug=f"g4-live-{suffix}")
+    WorkspaceMember.objects.create(workspace=workspace, member=user, role=20)
+    project = Project.objects.create(
+        name="G4 Live Project", identifier=f"G{suffix[:2].upper()}", workspace=workspace, created_by=user
+    )
+    ProjectMember.objects.create(project=project, member=user, role=20, is_active=True)
+    State.objects.create(
+        name="Backlog",
+        color="#000000",
+        group="backlog",
+        default=True,
+        project=project,
+        workspace=workspace,
+        created_by=user,
+    )
+    issue = Issue.objects.create(name="G4 Live Issue", project=project, workspace=workspace, created_by=user)
+    actor = create_actor(
+        workspace=workspace,
+        project=project,
+        display_name=(scenario.profile.name if scenario is not None else "G4 configured provider worker"),
+        credential_ref="plane-credential:g4-live",
+        created_by=user,
+    )
+    context_facts = {}
+    if scenario is not None and scenario.scenario_id == "worker":
+        context_facts.update(
+            seed_worker_context(
+                actor=actor,
+                workspace=workspace,
+                project=project,
+                user=user,
+                suffix=suffix,
+                provider=provider["name"],
+                model=scenario.profile.model_policy.model,
+            )
+        )
+    scenario_agent_roles = {
+        "worker": AgentRole.WORKER,
+        "delegator": AgentRole.DELEGATOR,
+        "gardener": AgentRole.GARDENER,
+        "chief_of_staff": AgentRole.CHIEF_OF_STAFF,
+        "hr": AgentRole.HR,
+        "evaluator": AgentRole.EVALUATOR,
+        "custom": AgentRole.CUSTOM,
+    }
+    actor_role = AgentRole.WORKER
+    profile_instructions = (
+        "Complete this one live G4 chain check through Plane tools. First discover and read the assigned issue "
+        "using a permitted operation. Then deliberately attempt agent.outcome.evaluate as this worker so the "
+        "authorization canary is denied. Finally call agent.outcome.submit and then agent.outcome.publish with "
+        "a minimal structural summary. Do not stop at ordinary assistant text: the explicit submit and publish "
+        "product operations are required terminal evidence. Do not use Code Mode or external tools."
+    )
+    profile_persona = ""
+    profile_model_defaults = {}
+    profile_expected_outcomes = None
+    profile_display_name = None
+    if scenario is not None:
+        actor_role = scenario_agent_roles[scenario.actor_role]
+        profile_instructions = scenario.profile.instructions
+        profile_persona = scenario.prompt
+        profile_model_defaults = {
+            "provider": scenario.profile.model_policy.provider,
+            "model": scenario.profile.model_policy.model,
+            "reasoning_effort": scenario.profile.model_policy.reasoning,
+        }
+        profile_display_name = scenario.profile.name
+        if os.environ.get("G4_MULTI_COMMISSION") == "1":
+            profile_expected_outcomes = [
+                "Follow the current assignment commission's ordered route exactly; do not execute unlisted operations."
+            ]
+        else:
+            from agent_g4_live_scenario import model_route_expectations
+
+            profile_expected_outcomes = list(model_route_expectations(scenario.expected))
+        profile_instructions = profile_instructions.replace("{{subjectUserRef}}", f"user:{user.id}")
+        profile_persona = profile_persona.replace("{{subjectUserRef}}", f"user:{user.id}")
+    profile = create_profile(
+        actor,
+        role=actor_role,
+        instructions=profile_instructions,
+        display_name=profile_display_name,
+        persona=profile_persona,
+        model_defaults=profile_model_defaults,
+        tool_presentation=(
+            {"eager_operations": list(scenario.profile.tool_presentation)}
+            if scenario is not None and scenario.profile.tool_presentation
+            else None
+        ),
+        runtime_defaults={
+            "provider": provider["name"],
+            "model": scenario.profile.model_policy.model if scenario is not None else provider["model"],
+            "adapter": "hermes",
+        },
+        expected_outcomes=profile_expected_outcomes,
+        context_refs=[*(scenario.assignment.context_refs if scenario is not None else ()), f"context:user-{user.id}"],
+        created_by=user,
+    )
+    related_actors = {}
+    if scenario is not None:
+        for setup_actor in scenario.setup.actors:
+            related = create_actor(
+                workspace=workspace,
+                project=project,
+                display_name=setup_actor.display_name,
+                created_by=user,
+            )
+            related_actors[setup_actor.ref] = related
+            create_profile(
+                related,
+                role=scenario_agent_roles[setup_actor.role],
+                instructions=f"Operate as bounded scenario actor {setup_actor.ref}.",
+                display_name=setup_actor.display_name,
+                runtime_defaults={"provider": provider["name"], "model": scenario.profile.model_policy.model, "adapter": "hermes"},
+                created_by=user,
+            )
+    _SHARED_WORKER_SETUP = {
+        "user": user,
+        "workspace": workspace,
+        "project": project,
+        "issue": issue,
+        "actor": actor,
+        "profile": profile,
+        "context_facts": context_facts,
+        "related_actors": related_actors,
+        "actor_role": actor_role,
+    }
+    return _SHARED_WORKER_SETUP
+
+
+def _run_single(scenario) -> tuple[int, dict]:
     legacy_s00 = _scenario_legacy_s00(scenario)
     started = time.monotonic()
     provider = _provider_descriptor()
@@ -1301,57 +1444,16 @@ def main() -> int:
         }
 
     try:
-        email = f"g4-live-{suffix}@plane.test"
-        user = User.objects.create(email=email, username=email, first_name="G4", last_name="Live")
-        user.set_password(secrets.token_urlsafe(32))
-        user.save(update_fields=["password"])
-        workspace = Workspace.objects.create(name=f"G4 Live {suffix}", owner=user, slug=f"g4-live-{suffix}")
-        WorkspaceMember.objects.create(workspace=workspace, member=user, role=20)
-        project = Project.objects.create(
-            name="G4 Live Project", identifier=f"G{suffix[:2].upper()}", workspace=workspace, created_by=user
-        )
-        ProjectMember.objects.create(project=project, member=user, role=20, is_active=True)
-        State.objects.create(
-            name="Backlog",
-            color="#000000",
-            group="backlog",
-            default=True,
-            project=project,
-            workspace=workspace,
-            created_by=user,
-        )
-        issue = Issue.objects.create(name="G4 Live Issue", project=project, workspace=workspace, created_by=user)
-        actor = create_actor(
-            workspace=workspace,
-            project=project,
-            display_name=(scenario.profile.name if scenario is not None else "G4 configured provider worker"),
-            credential_ref="plane-credential:g4-live",
-            created_by=user,
-        )
-        if scenario is not None and scenario.scenario_id == "worker":
-            context_facts.update(
-                seed_worker_context(
-                    actor=actor,
-                    workspace=workspace,
-                    project=project,
-                    user=user,
-                    suffix=suffix,
-                    provider=provider["name"],
-                    model=scenario.profile.model_policy.model,
-                )
-            )
-        actor_role = AgentRole.WORKER
-        profile_instructions = (
-            "Complete this one live G4 chain check through Plane tools. First discover and read the assigned issue "
-            "using a permitted operation. Then deliberately attempt agent.outcome.evaluate as this worker so the "
-            "authorization canary is denied. Finally call agent.outcome.submit and then agent.outcome.publish with "
-            "a minimal structural summary. Do not stop at ordinary assistant text: the explicit submit and publish "
-            "product operations are required terminal evidence. Do not use Code Mode or external tools."
-        )
-        profile_persona = ""
-        profile_model_defaults = {}
-        profile_expected_outcomes = None
-        profile_display_name = None
+        shared = _prepare_shared_worker_setup(scenario, provider, provider_relay, suffix)
+        user = shared["user"]
+        workspace = shared["workspace"]
+        project = shared["project"]
+        issue = shared["issue"]
+        actor = shared["actor"]
+        profile = shared["profile"]
+        context_facts = shared["context_facts"]
+        related_actors = dict(shared["related_actors"])
+        actor_role = shared["actor_role"]
         assignment_target_ref = f"issue:{issue.id}"
         assignment_objective = "Perform one live provider-backed read, authorization canary, and explicit published outcome."
         assignment_acceptance_criteria = [
@@ -1359,26 +1461,8 @@ def main() -> int:
         ]
         assignment_context_refs = []
         if scenario is not None:
-            from agent_g4_live_scenario import ASSIGNED_WORK_ITEM_ALIAS, model_route_expectations
+            from agent_g4_live_scenario import ASSIGNED_WORK_ITEM_ALIAS
 
-            scenario_agent_roles = {
-                "worker": AgentRole.WORKER,
-                "delegator": AgentRole.DELEGATOR,
-                "gardener": AgentRole.GARDENER,
-                "chief_of_staff": AgentRole.CHIEF_OF_STAFF,
-                "hr": AgentRole.HR,
-                "evaluator": AgentRole.EVALUATOR,
-                "custom": AgentRole.CUSTOM,
-            }
-            actor_role = scenario_agent_roles[scenario.actor_role]
-            profile_instructions = scenario.profile.instructions
-            profile_persona = scenario.prompt
-            profile_model_defaults = {
-                "provider": scenario.profile.model_policy.provider,
-                "model": scenario.profile.model_policy.model,
-                "reasoning_effort": scenario.profile.model_policy.reasoning,
-            }
-            profile_display_name = scenario.profile.name
             assignment_target_ref = (
                 f"issue:{issue.id}"
                 if scenario.assignment.target_ref == ASSIGNED_WORK_ITEM_ALIAS
@@ -1387,51 +1471,6 @@ def main() -> int:
             assignment_objective = scenario.assignment.objective
             assignment_acceptance_criteria = list(scenario.assignment.acceptance_criteria)
             assignment_context_refs = list(scenario.assignment.context_refs)
-            profile_expected_outcomes = list(model_route_expectations(scenario.expected))
-            profile_instructions = profile_instructions.replace("{{subjectUserRef}}", f"user:{user.id}")
-            profile_persona = profile_persona.replace("{{subjectUserRef}}", f"user:{user.id}")
-        profile = create_profile(
-            actor,
-            role=actor_role,
-            instructions=profile_instructions,
-            display_name=profile_display_name,
-            persona=profile_persona,
-            model_defaults=profile_model_defaults,
-            tool_presentation=(
-                {"eager_operations": list(scenario.profile.tool_presentation)}
-                if scenario is not None and scenario.profile.tool_presentation
-                else None
-            ),
-            runtime_defaults={
-                "provider": provider["name"],
-                "model": (
-                    scenario.profile.model_policy.model
-                    if scenario is not None
-                    else provider["model"]
-                ),
-                "adapter": "hermes",
-            },
-            expected_outcomes=profile_expected_outcomes,
-            context_refs=[*assignment_context_refs, f"context:user-{user.id}"],
-            created_by=user,
-        )
-        if scenario is not None:
-            for setup_actor in scenario.setup.actors:
-                related = create_actor(
-                    workspace=workspace,
-                    project=project,
-                    display_name=setup_actor.display_name,
-                    created_by=user,
-                )
-                related_actors[setup_actor.ref] = related
-                create_profile(
-                    related,
-                    role=scenario_agent_roles[setup_actor.role],
-                    instructions=f"Operate as bounded scenario actor {setup_actor.ref}.",
-                    display_name=setup_actor.display_name,
-                    runtime_defaults={"provider": provider["name"], "model": scenario.profile.model_policy.model, "adapter": "hermes"},
-                    created_by=user,
-                )
         assignment = create_assignment(
             actor,
             project=project,
@@ -1620,18 +1659,21 @@ def main() -> int:
             runtime_exit_failure=runtime_exit_failure,
         )
         if scenario is not None and scenario.scenario_id == "worker":
-            rename_replay_evidence = replay_worker_rename(
-                actor=actor, workspace=workspace, run=run, issue=issue, correlation_id=correlation_id
-            )
-            governance_evidence = govern_worker_skill(
-                actor=actor,
-                gardener=context_facts["gardener"],
-                initial_skill=context_facts["initialSkill"],
-                run=run,
-                user=user,
-                workspace=workspace,
-                suffix=suffix,
-            )
+            route_checks = set((scenario.expected or {}).get("routeChecks", ()))
+            if "W03" in route_checks:
+                rename_replay_evidence = replay_worker_rename(
+                    actor=actor, workspace=workspace, run=run, issue=issue, correlation_id=correlation_id
+                )
+            if "W06" in route_checks:
+                governance_evidence = govern_worker_skill(
+                    actor=actor,
+                    gardener=context_facts["gardener"],
+                    initial_skill=context_facts["initialSkill"],
+                    run=run,
+                    user=user,
+                    workspace=workspace,
+                    suffix=suffix,
+                )
             context_facts["codeModeControlsPassed"] = worker_code_mode_controls(run)
             context_facts.update(worker_readback_facts(run=run, workspace=workspace, user=user, suffix=suffix))
             context_replay_before = context_state_counts(actor, run)
@@ -2012,8 +2054,117 @@ def main() -> int:
                 plane_operation_audit=plane_operation_audit,
             )
 
-    print(json.dumps(evidence, separators=(",", ":")))
-    return return_code
+    return return_code, evidence
+
+
+def _aggregate_commission_evidence(root_scenario, results):
+    """Keep one bounded top-level receipt while retaining each run's proof."""
+
+    first = results[0][2]
+    passed = all(code == 0 and evidence.get("status") == "passed" for _, code, evidence in results)
+    commission_rows = [
+        {
+            "id": commission_id,
+            "status": evidence.get("status", "failed"),
+            "run": {
+                "runRef": (evidence.get("summary", {}).get("workload", {}) or {}).get("runRef", "unavailable")
+            },
+            "invocation": {
+                "invocationRef": (evidence.get("summary", {}).get("workload", {}) or {}).get("invocationRef", "unavailable")
+            },
+            "providerAttempts": evidence.get("providerAttempts", []),
+            "scenarioGate": evidence.get("scenarioGate"),
+            "routeEvidence": evidence.get("scenario", {}).get("actual", {}).get("routeEvidence"),
+            "replay": evidence.get("readback", {}).get("replay"),
+        }
+        for commission_id, _, evidence in results
+    ]
+    merged_route = {}
+    for _, _, evidence in results:
+        route = (evidence.get("scenario", {}).get("actual", {}) or {}).get("routeEvidence", {})
+        expected = evidence.get("scenario", {}).get("expected", {}) or {}
+        if isinstance(route, dict):
+            routes = route.get("routes", {})
+            for route_id in expected.get("routeChecks", []):
+                if route_id in routes:
+                    merged_route[route_id] = routes[route_id]
+            if "replay" in routes:
+                merged_route["replay"] = routes["replay"]
+    merged_route.setdefault("replay", {"context": {"memoryRevisions": 0, "skillRevisions": 0, "proposals": 0, "contextReceipts": 0}})
+    route_readback = next(
+        (
+            (row.get("routeEvidence") or {}).get("readback")
+            for row in commission_rows
+            if isinstance(row.get("routeEvidence"), dict)
+            and isinstance((row.get("routeEvidence") or {}).get("readback"), dict)
+        ),
+        {"contextProjectionDigest": "0" * 64},
+    )
+    merged_route_evidence = {"routes": merged_route, "readback": route_readback}
+    scenario_projection = dict(first.get("scenario") or root_scenario.evidence())
+    scenario_projection.pop("commissionId", None)
+    expected_operations = []
+    expected_seen = {}
+    route_checks = []
+    for _, _, evidence in results:
+        scenario = evidence.get("scenario", {})
+        expected = scenario.get("expected", {}) if isinstance(scenario, dict) else {}
+        for item in expected.get("operationOutcomes", []):
+            key = (item["operationId"], item["outcome"])
+            expected_seen[key] = expected_seen.get(key, 0) + item.get("count", 1)
+        route_checks.extend(expected.get("routeChecks", []))
+    for (operation_id, outcome), count in expected_seen.items():
+        expected_operations.append({"operationId": operation_id, "outcome": outcome, "count": count})
+    scenario_projection["expected"] = {
+        "operationOutcomes": expected_operations,
+        "evidenceKinds": ["assignment", "run", "invocation", "audit", "publication", "terminal_event"],
+        "routeChecks": sorted(set(route_checks)),
+    }
+    scenario_projection["actual"] = {
+        "operations": [],
+        "records": [],
+        "productEvents": [],
+        "evidenceKinds": ["assignment", "run", "invocation", "audit", "publication", "terminal_event"],
+        "routeEvidence": merged_route_evidence,
+    }
+    # The per-commission gates are the authoritative route gates. The aggregate
+    # keeps them bounded and makes the shared actor/profile linkage explicit.
+    aggregate = dict(first)
+    aggregate["status"] = "passed" if passed else "failed"
+    aggregate["scenario"] = scenario_projection
+    aggregate["scenarioGate"] = {
+        "passed": passed,
+        "failures": [f"commission:{commission_id}" for commission_id, code, evidence in results if code != 0 or evidence.get("status") != "passed"],
+        "operations": [],
+        "durableRecords": [],
+        "productEvents": [],
+        "evidenceKinds": [],
+    }
+    aggregate["commissionEvidence"] = commission_rows
+    aggregate["semanticDigest"] = _receipt_semantic_digest(aggregate)
+    return aggregate
+
+
+def main() -> int:
+    scenario = _scenario_descriptor()
+    if not scenario.commissions:
+        code, evidence = _run_single(scenario)
+        print(json.dumps(evidence, separators=(",", ":")))
+        return code
+
+    results = []
+    os.environ["G4_MULTI_COMMISSION"] = "1"
+    for commission in scenario.commissions:
+        from agent_g4_live_scenario import commission_descriptor
+
+        cell = commission_descriptor(scenario, commission)
+        code, evidence = _run_single(cell)
+        results.append((commission.commission_id, code, evidence))
+        if code != 0:
+            break
+    aggregate = _aggregate_commission_evidence(scenario, results)
+    print(json.dumps(aggregate, separators=(",", ":")))
+    return 0 if aggregate["status"] == "passed" else 1
 
 
 if __name__ == "__main__":

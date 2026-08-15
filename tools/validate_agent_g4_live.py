@@ -895,6 +895,7 @@ _LIVE_TOP_LEVEL_FIELDS = {
     "planeOperationAudit",
     "scenario",
     "scenarioGate",
+    "commissionEvidence",
 }
 _LIVE_AUDIT_FIELDS = {"passed", "eventCount", "permittedOutcome", "deniedOutcome", "submitOutcome", "publishOutcome"}
 _LIVE_VERSION_FIELDS = {"passed", "binding", "source"}
@@ -1468,6 +1469,31 @@ def _validate_scenario_readback(evidence: dict[str, Any]) -> None:
         raise ContractError("evidence_replay_effect_invalid")
 
 
+def _validate_commission_evidence(value: Any, *, status: str) -> None:
+    rows = value
+    if not isinstance(rows, list) or not 1 <= len(rows) <= 4:
+        raise ContractError("evidence_commission_rows_invalid")
+    ids = set()
+    for row in rows:
+        item = _object(row, "evidence_commission")
+        required = {"id", "status", "run", "invocation", "providerAttempts", "scenarioGate", "routeEvidence", "replay"}
+        if set(item) != required or not isinstance(item["id"], str) or not _SAFE_REF_RE.fullmatch(item["id"]):
+            raise ContractError("evidence_commission_fields_invalid")
+        if item["id"] in ids or item["status"] not in {"passed", "failed"}:
+            raise ContractError("evidence_commission_identity_invalid")
+        ids.add(item["id"])
+        if status == "passed" and item["status"] != "passed":
+            raise ContractError("evidence_commission_failed")
+        if item["status"] == "passed":
+            _validate_scenario_gate(item["scenarioGate"])
+            _object(item["routeEvidence"], "evidence_commission_route_evidence")
+            replay = _object(item["replay"], "evidence_commission_replay")
+            if replay.get("status") != "passed" or replay.get("providerAccess") != "disabled":
+                raise ContractError("evidence_commission_replay_failed")
+        if not isinstance(item["providerAttempts"], list) or len(item["providerAttempts"]) > 32:
+            raise ContractError("evidence_commission_attempts_invalid")
+
+
 _FAILURE_TOP_LEVEL_FIELDS = {
     "schemaVersion",
     "status",
@@ -1487,8 +1513,9 @@ _FAILURE_TOP_LEVEL_FIELDS = {
     "planeOperationAudit",
     "providerRelay",
     "scenario",
+    "commissionEvidence",
 }
-_FAILURE_REQUIRED_TOP_LEVEL_FIELDS = _FAILURE_TOP_LEVEL_FIELDS - {"providerRelay", "scenario"}
+_FAILURE_REQUIRED_TOP_LEVEL_FIELDS = _FAILURE_TOP_LEVEL_FIELDS - {"providerRelay", "scenario", "commissionEvidence"}
 _FAILURE_STAGES = {
     "initialization",
     "compose",
@@ -1788,6 +1815,8 @@ def validate_evidence(
     _exact(schema, "plane-agent-g4/live-evidence/v1", "evidence_schema")
     _exact(status, "passed", "evidence_status")
     _validate_receipt_common(evidence, authority_info, expected, status="passed")
+    if "commissionEvidence" in evidence:
+        _validate_commission_evidence(evidence["commissionEvidence"], status="passed")
     readback = _object(_required(evidence, "readback", "evidence"), "evidence_readback")
     generic = "scenario" in evidence and isinstance(evidence["scenario"], dict) and "actual" in evidence["scenario"]
     if generic:

@@ -70,31 +70,38 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
 
     assert parsed.scenario_id == "worker"
-    assert parsed.expected["routeChecks"] == [f"W{index:02d}" for index in range(1, 9)]
-    assert '"subject_user_ref":"{{subjectUserRef}}"' in parsed.profile.instructions
+    assert [commission.commission_id for commission in parsed.commissions] == ["worker-core", "context-governance"]
+    assert parsed.expected is None
     assert parsed.profile.tool_presentation == (
         "catalog.search",
         "catalog.describe",
         "agent.context.read",
+        "search_workspace",
         "work_item.read",
         "work_item.rename",
         "agent.outcome.evaluate",
         "agent.outcome.submit",
         "agent.outcome.publish",
     )
-    assert 'catalog.search once with {"query":"agent.context.read","limit":5}' in parsed.profile.instructions
-    assert 'catalog.describe once with exactly {"operation_id":"agent.context.read"}' in parsed.profile.instructions
-    assert "copy the catalog row's operationId value, not its operationRef value" in parsed.profile.instructions
-    assert "no operation: prefix, operationRef field" in parsed.profile.instructions
-    assert 'agent.context.read once with exactly {"subject_user_ref":"{{subjectUserRef}}"}' in parsed.profile.instructions
-    assert 'search_workspace once with {"query":"G4 Live Issue","limit":1}' in parsed.profile.instructions
-    assert "copy its workItemReadInput project_id and issue_id verbatim" in parsed.profile.instructions
-    assert "raw UUID strings, not prefixed refs" in parsed.profile.instructions
-    assert "pass its workItemReadInput object unchanged to work_item.read" in parsed.prompt
-    assert 'send exactly {"operation_id":"agent.context.read"}' in parsed.prompt
-    assert "copy its operationId value, not its operationRef value" in parsed.prompt
-    assert "neither operation:agent.context.read nor operationRef is valid" in parsed.prompt
-    assert 'send exactly {"subject_user_ref":"{{subjectUserRef}}"} to agent.context.read' in parsed.prompt
+    core = parsed.commissions[0]
+    context = parsed.commissions[1]
+    assert core.expected["routeChecks"] == ["W01", "W02", "W03", "W04", "W07", "W08"]
+    assert context.expected["routeChecks"] == ["W05", "W06", "W07", "W08"]
+    assert "workItemReadInput unchanged" in core.assignment.objective
+    assert '"subject_user_ref":"{{subjectUserRef}}"' in context.assignment.objective
+    assert "private memory" in context.assignment.objective
+
+
+def test_commission_descriptor_keeps_shared_profile_and_binds_each_assignment() -> None:
+    raw = (TOOLS / "agent-g4-worker-v6.json").read_bytes()
+    parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
+
+    core = scenario.commission_descriptor(parsed, parsed.commissions[0])
+    context = scenario.commission_descriptor(parsed, parsed.commissions[1])
+    assert core.profile == context.profile == parsed.profile
+    assert core.assignment.target_ref == context.assignment.target_ref == scenario.ASSIGNED_WORK_ITEM_ALIAS
+    assert core.expected["routeChecks"] != context.expected["routeChecks"]
+    assert core.commissions == context.commissions == ()
 
 
 def test_runner_maps_every_finite_related_role_to_the_plane_role() -> None:

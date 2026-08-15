@@ -4,7 +4,7 @@
   "actor": { "role": "worker" },
   "profile": {
     "name": "Maya Worker",
-    "instructions": "IMPORTANT ROUTE CONTROL: the first tool call MUST be catalog.search; although search_workspace is the universal eager operation and is visible, it is not the first step of this commission. Do not call search_workspace or work_item.read until the context step succeeds. Execute one assigned work-item journey through Plane's typed operations in this exact order; make the next call immediately after each success and stop repeating successful calls: (1) catalog.search once with {\"query\":\"agent.context.read\",\"limit\":5}; (2) catalog.describe once with exactly {\"operation_id\":\"agent.context.read\"}; copy the catalog row's operationId value, not its operationRef value, into operation_id; operation_id is the field name and agent.context.read is the complete value, with no operation: prefix, operationRef field, or other identifier; (3) agent.context.read once with exactly {\"subject_user_ref\":\"{{subjectUserRef}}\"}, copying this substituted user ref literally, then use the returned memory and skill projections; (4) search_workspace once with {\"query\":\"G4 Live Issue\",\"limit\":1}; (5) select its work_item result and copy its workItemReadInput project_id and issue_id verbatim into one work_item.read call. Those are raw UUID strings, not prefixed refs such as project: or work-item:. Do not repeat catalog.search, catalog.describe, agent.context.read, search_workspace, or work_item.read after success. Use Code Mode exactly once to compose restricted TypeScript with a typed host.call_plane_operation callback for work_item.rename; do not use ordinary model mutation for the rename. Then call agent.outcome.evaluate as this Worker; it must be rejected. Submit exactly one outcome with one artifact and one evidence item, publish it exactly once, and end with a short report.",
+    "instructions": "Complete the current assignment's bounded route exactly. Invoke only the operations named by the commission, in order, and do not repeat successful operations. Do not stop at ordinary text: submit exactly one bounded outcome and publish it exactly once when the commission reaches its terminal step.",
     "modelPolicy": {
       "provider": "openai-codex",
       "model": "gpt-5.6-luna",
@@ -16,6 +16,7 @@
         "catalog.search",
         "catalog.describe",
         "agent.context.read",
+        "search_workspace",
         "work_item.read",
         "work_item.rename",
         "agent.outcome.evaluate",
@@ -26,42 +27,88 @@
   },
   "assignment": {
     "targetRef": "fixture:assigned-work-item",
-    "objective": "Use Maya's private context and subject preferences to rename the assigned work item through one typed Code Mode callback, then submit and publish one bounded outcome.",
-    "acceptanceCriteria": [
-      "Catalog discovery precedes the bounded context read.",
-      "The assigned work item is read before the semantic rename.",
-      "The rename is made by one TypeScript host callback and has a replayable receipt.",
-      "The Worker evaluator attempt is rejected and one outcome is submitted and published."
-    ],
+    "objective": "Complete the bounded Maya Worker commission selected by Plane.",
+    "acceptanceCriteria": ["Follow the current commission's ordered route and publish one bounded outcome."],
     "contextRefs": ["context:worker-journey"]
   },
-  "prompt": "You are Maya, the assigned Worker. ROUTE CONTROL: your first call is catalog.search, not search_workspace; search_workspace is visible because it is Plane's universal core, but calling it before the context read fails this commission. Execute the profile sequence immediately and use the returned context projections: private memory says to verify the rename receipt, the subject preference says to keep the final report brief, and the private skill package describes the rename callback. For catalog.describe, read the catalog.search row for agent.context.read and copy its operationId value, not its operationRef value; send exactly {\"operation_id\":\"agent.context.read\"}. The field is operation_id, the value is agent.context.read, and neither operation:agent.context.read nor operationRef is valid. Next send exactly {\"subject_user_ref\":\"{{subjectUserRef}}\"} to agent.context.read, using the substituted user ref literally; do this before workspace search and do not omit it. For the workspace read, search exactly for G4 Live Issue with limit 1, select the work_item result, and pass its workItemReadInput object unchanged to work_item.read; it contains raw UUID project_id and issue_id values, so never convert them to prefixed refs or invent identifiers. For Code Mode, generate restricted TypeScript with a typed host callback such as host.call_plane_operation('work_item.rename', { project_id: '<raw project UUID>', issue_id: '<raw issue UUID>', name: '<new name>' }, '<unique key>', '<run correlation>') and return its result. Use the exact references discovered from Plane. After the callback, use the successful receipt to prepare one artifact object and one evidence object in agent.outcome.submit. The evaluator call must use this Worker actor and the submitted outcome reference, so Plane returns NOT_AUTHORIZED. Publish only the submitted outcome. Do not expose context entries that are not returned for Maya's subject.",
-  "expected": {
-    "operationOutcomes": [
-      { "operationId": "catalog.search", "outcome": "success", "count": 1 },
-      { "operationId": "catalog.describe", "outcome": "success", "count": 1 },
-      { "operationId": "agent.context.read", "outcome": "success", "count": 1 },
-      { "operationId": "search_workspace", "outcome": "success", "count": 1 },
-      { "operationId": "work_item.read", "outcome": "success", "count": 1 },
-      { "operationId": "work_item.rename", "outcome": "success", "count": 1 },
-      { "operationId": "agent.outcome.evaluate", "outcome": "denied", "count": 1 },
-      { "operationId": "agent.outcome.submit", "outcome": "success", "count": 1 },
-      { "operationId": "agent.outcome.publish", "outcome": "success", "count": 1 }
-    ],
-    "evidenceKinds": ["assignment", "run", "invocation", "audit", "publication", "terminal_event"],
-    "durableRecords": [
-      { "kind": "assignment", "count": 1 },
-      { "kind": "run", "count": 1 },
-      { "kind": "invocation", "count": 1 },
-      { "kind": "publication", "count": 1 },
-      { "kind": "terminal_event", "count": 1 }
-    ],
-    "productEvents": [
-      { "kind": "publication", "count": 1 },
-      { "kind": "outcome_submission", "count": 1 }
-    ],
-    "routeChecks": ["W01", "W02", "W03", "W04", "W05", "W06", "W07", "W08"]
-  },
+  "prompt": "You are Maya, the assigned Worker. Follow the current assignment commission literally. Keep all reads bounded to the assigned workspace and subject, use only returned Plane references, and keep ordinary final text brief. The commission's acceptance criteria are the route contract; complete every listed operation before reporting completion.",
+  "commissions": [
+    {
+      "id": "worker-core",
+      "assignment": {
+        "targetRef": "fixture:assigned-work-item",
+        "objective": "Core Worker commission: discover the typed catalog with catalog.search using {\"query\":\"work_item.rename\",\"limit\":5}, then catalog.describe using the returned row's exact operationId for work_item.rename. Use search_workspace with {\"query\":\"G4 Live Issue\",\"limit\":1}, pass its workItemReadInput unchanged to work_item.read, then use one restricted TypeScript Code Mode host.call_plane_operation callback to invoke work_item.rename with the returned raw UUIDs. Attempt agent.outcome.evaluate as this Worker and require NOT_AUTHORIZED, then submit exactly one outcome with one artifact and one evidence item and publish it exactly once.",
+        "acceptanceCriteria": [
+          "The catalog.search result is followed by catalog.describe with the exact operationId, never operationRef.",
+          "search_workspace and work_item.read are bounded to the assigned workspace and returned raw UUID inputs.",
+          "Code Mode makes exactly one typed host callback through Plane's gateway for work_item.rename.",
+          "agent.outcome.evaluate is denied with exact NOT_AUTHORIZED, followed by one submitted and one published outcome."
+        ],
+        "contextRefs": ["context:worker-core"]
+      },
+      "expected": {
+        "operationOutcomes": [
+          { "operationId": "catalog.search", "outcome": "success", "count": 1 },
+          { "operationId": "catalog.describe", "outcome": "success", "count": 1 },
+          { "operationId": "search_workspace", "outcome": "success", "count": 1 },
+          { "operationId": "work_item.read", "outcome": "success", "count": 1 },
+          { "operationId": "work_item.rename", "outcome": "success", "count": 1 },
+          { "operationId": "agent.outcome.evaluate", "outcome": "denied", "count": 1 },
+          { "operationId": "agent.outcome.submit", "outcome": "success", "count": 1 },
+          { "operationId": "agent.outcome.publish", "outcome": "success", "count": 1 }
+        ],
+        "evidenceKinds": ["assignment", "run", "invocation", "audit", "publication", "terminal_event"],
+        "durableRecords": [
+          { "kind": "assignment", "count": 1 },
+          { "kind": "run", "count": 1 },
+          { "kind": "invocation", "count": 1 },
+          { "kind": "publication", "count": 1 },
+          { "kind": "terminal_event", "count": 1 }
+        ],
+        "productEvents": [
+          { "kind": "publication", "count": 1 },
+          { "kind": "outcome_submission", "count": 1 }
+        ],
+        "routeChecks": ["W01", "W02", "W03", "W04", "W07", "W08"]
+      }
+    },
+    {
+      "id": "context-governance",
+      "assignment": {
+        "targetRef": "fixture:assigned-work-item",
+        "objective": "Context and governance Worker commission: discover agent.context.read with catalog.search using {\"query\":\"agent.context.read\",\"limit\":5}, then catalog.describe with exactly {\"operation_id\":\"agent.context.read\"}. Read exactly one subject-bound context projection with {\"subject_user_ref\":\"{{subjectUserRef}}\"}; use Maya's private memory, subject preference, and private skill projection to compose a brief bounded outcome. Submit exactly one outcome with one evidence item and publish it exactly once. Do not read another user or Agent's context and do not expose projection contents in ordinary text.",
+        "acceptanceCriteria": [
+          "catalog.search precedes catalog.describe and the exact catalog operationId is used.",
+          "agent.context.read is called once with the substituted subject_user_ref and its separate memory, preference, and skill projections are used.",
+          "Only Maya's private skill is used; the resulting improvement remains a candidate until governed human promotion and rollback.",
+          "The commission submits exactly one bounded outcome and publishes it exactly once."
+        ],
+        "contextRefs": ["context:worker-context-governance"]
+      },
+      "expected": {
+        "operationOutcomes": [
+          { "operationId": "catalog.search", "outcome": "success", "count": 1 },
+          { "operationId": "catalog.describe", "outcome": "success", "count": 1 },
+          { "operationId": "agent.context.read", "outcome": "success", "count": 1 },
+          { "operationId": "agent.outcome.submit", "outcome": "success", "count": 1 },
+          { "operationId": "agent.outcome.publish", "outcome": "success", "count": 1 }
+        ],
+        "evidenceKinds": ["assignment", "run", "invocation", "audit", "publication", "terminal_event"],
+        "durableRecords": [
+          { "kind": "assignment", "count": 1 },
+          { "kind": "run", "count": 1 },
+          { "kind": "invocation", "count": 1 },
+          { "kind": "publication", "count": 1 },
+          { "kind": "terminal_event", "count": 1 }
+        ],
+        "productEvents": [
+          { "kind": "publication", "count": 1 },
+          { "kind": "outcome_submission", "count": 1 }
+        ],
+        "routeChecks": ["W05", "W06", "W07", "W08"]
+      }
+    }
+  ],
   "setup": {
     "preconditions": ["isolated_workspace", "assigned_work_item", "fresh_assignment", "live_authorization", "separate_runtime_service"],
     "actors": []

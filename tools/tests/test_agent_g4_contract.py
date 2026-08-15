@@ -1293,7 +1293,7 @@ class G4ContractTests(unittest.TestCase):
     def test_live_helper_replays_only_after_success_with_provider_access_disabled(self):
         source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
         tree = ast.parse(source)
-        main = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "main")
+        main = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_run_single")
         supervisor_calls = [
             node
             for node in ast.walk(main)
@@ -1465,7 +1465,7 @@ class G4ContractTests(unittest.TestCase):
     def test_failed_primary_has_one_supervisor_call_and_no_replay_call(self):
         source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
         tree = ast.parse(source)
-        main = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "main")
+        main = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_run_single")
         supervisor_calls = [
             node
             for node in ast.walk(main)
