@@ -95,7 +95,9 @@ def test_g4_packaged_credential_resolver_loads_parser_without_plane_bootstrap(tm
     source.write_text("synthetic-provider-secret\n", encoding="utf-8")
     probe = (
         "import importlib.util, json, sys\n"
-        "spec = importlib.util.spec_from_file_location('resolver', sys.argv[1])\n"
+        "from importlib.machinery import SourceFileLoader\n"
+        "loader = SourceFileLoader('resolver', sys.argv[1])\n"
+        "spec = importlib.util.spec_from_loader('resolver', loader)\n"
         "resolver = importlib.util.module_from_spec(spec)\n"
         "spec.loader.exec_module(resolver)\n"
         "parser = resolver._load_credentials_module()\n"
@@ -488,7 +490,11 @@ def test_g4_runtime_service_accepts_the_bound_chatgpt_codex_route_before_child_d
     controller = RuntimeSafetyController(configured=True, stop_file=tmp_path / "stop")
     controller.mark_ready()
     executor = RuntimeDispatchExecutor(configuration, controller)
-    relay = SimpleNamespace(descriptor=SimpleNamespace(socket_path=tmp_path / "provider.sock"), close=lambda: None)
+    relay = SimpleNamespace(
+        descriptor=SimpleNamespace(socket_path=tmp_path / "provider.sock"),
+        required_audit_failure=None,
+        close=lambda: None,
+    )
     monkeypatch.setattr(executor, "open_provider_relay", lambda **_kwargs: relay)
     monkeypatch.setattr(
         "plane.agent.runtime.service.PlaneHostServer",
