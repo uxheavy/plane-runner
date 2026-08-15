@@ -12,6 +12,7 @@ from plane.db.models import (
     AgentMemoryRevision,
     AgentSchedule,
     AgentScheduleFire,
+    AgentScheduleState,
     AgentSkillDefinition,
     AgentSkillRevision,
 )
@@ -242,3 +243,7 @@ class AgentScheduleCreateSerializer(serializers.Serializer):
 class AgentScheduleFireSerializer(serializers.Serializer):
     scheduled_for = serializers.DateTimeField()
     idempotency_key = serializers.CharField(max_length=128, required=False, allow_blank=False)
+
+
+class AgentScheduleControlSerializer(serializers.Serializer):
+    state = serializers.ChoiceField(choices=AgentScheduleState.values)

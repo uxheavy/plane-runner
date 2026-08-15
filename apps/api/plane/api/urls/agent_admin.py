@@ -39,6 +39,7 @@ from plane.api.views.agent_context_admin import (
     AgentProposalPromoteAPIEndpoint,
     AgentProposalReviewAPIEndpoint,
     AgentScheduleAdminListCreateAPIEndpoint,
+    AgentScheduleControlAPIEndpoint,
     AgentScheduleFireListAPIEndpoint,
     AgentScheduleFireRetryAPIEndpoint,
     AgentSkillAdminListCreateAPIEndpoint,
@@ -240,6 +241,11 @@ urlpatterns = [
         "workspaces/<str:slug>/agent-admin/schedules/<uuid:schedule_id>/fires/",
         AgentScheduleFireListAPIEndpoint.as_view(http_method_names=["get", "post"]),
         name="agent-admin-schedule-fires",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/schedules/<uuid:schedule_id>/control/",
+        AgentScheduleControlAPIEndpoint.as_view(http_method_names=["post"]),
+        name="agent-admin-schedule-control",
     ),
     path(
         "workspaces/<str:slug>/agent-admin/schedule-fires/<uuid:pk>/retry/",

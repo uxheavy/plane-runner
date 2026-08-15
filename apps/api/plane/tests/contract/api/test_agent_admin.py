@@ -2,18 +2,20 @@
 
 import json
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.core.cache import cache
-from django.utils import timezone
+from django.utils import timezone as django_timezone
 from rest_framework.test import APIClient
 
 from plane.db.models import (
     APIToken,
     AgentActor,
     AgentRole,
+    AgentScheduleFireState,
     AssignmentContract,
     AssignmentState,
     InputEventKind,
@@ -215,6 +217,59 @@ def test_admin_api_proves_lifecycle_review_and_redaction(api_key_client, workspa
         "gateway_readback",
     }
     assert "credential:agent-admin" not in json.dumps(readback)
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
+def test_schedule_api_control_and_due_fire_cli_are_real_lifecycle_paths(api_key_client, workspace, capsys):
+    actor_response = _actor(api_key_client, workspace, "Scheduled worker")
+    actor_id = actor_response.json()["id"]
+    schedule_response = api_key_client.post(
+        _admin_url(workspace, f"actors/{actor_id}/schedules/"),
+        {
+            "name": "Due schedule",
+            "cron_expression": "*/5 * * * *",
+            "timezone_name": "UTC",
+            "target_ref": "issue:scheduled",
+            "objective": "Create one normal scheduled assignment.",
+            "starts_at": "2026-08-05T15:00:00Z",
+        },
+        format="json",
+    )
+    assert schedule_response.status_code == 201
+    schedule_id = schedule_response.json()["id"]
+
+    paused_response = api_key_client.post(
+        _admin_url(workspace, f"schedules/{schedule_id}/control/"),
+        {"state": "paused"},
+        format="json",
+    )
+    assert paused_response.status_code == 200
+    assert paused_response.json()["state"] == "paused"
+    assert (
+        api_key_client.post(
+            _admin_url(workspace, f"schedules/{schedule_id}/control/"),
+            {"state": "paused"},
+            format="json",
+        ).json()["state"]
+        == "paused"
+    )
+
+    resumed_response = api_key_client.post(
+        _admin_url(workspace, f"schedules/{schedule_id}/control/"),
+        {"state": "enabled"},
+        format="json",
+    )
+    assert resumed_response.status_code == 200
+
+    call_command(
+        "agent_schedule_fire_due",
+        workspace_slug=workspace.slug,
+        now=datetime(2026, 8, 5, 15, 6, tzinfo=timezone.utc).isoformat(),
+    )
+    fire_output = json.loads(capsys.readouterr().out)
+    assert len(fire_output["fires"]) == 1
+    assert fire_output["fires"][0]["state"] == AgentScheduleFireState.CREATED
 
 
 @pytest.mark.contract
@@ -620,7 +675,7 @@ def test_context_admin_reuses_governance_services_and_api_cli_projection(api_key
             "cron_expression": "* * * * *",
             "target_ref": "issue:scheduled-readback",
             "objective": "Run bounded scheduled work.",
-            "starts_at": timezone.now().isoformat(),
+            "starts_at": django_timezone.now().isoformat(),
         },
         format="json",
     )

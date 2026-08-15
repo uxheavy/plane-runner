@@ -17,7 +17,7 @@ from plane.agent.memory import (
     review_proposal,
     rollback_memory,
 )
-from plane.agent.schedules import create_schedule, fire_schedule, retry_schedule_fire
+from plane.agent.schedules import create_schedule, fire_schedule, retry_schedule_fire, transition_schedule
 from plane.agent.skills import create_skill, propose_skill_change, rollback_skill
 from plane.api.serializers.agent_context_admin import (
     AgentChangeProposalAdminSerializer,
@@ -28,6 +28,7 @@ from plane.api.serializers.agent_context_admin import (
     AgentRollbackSerializer,
     AgentScheduleAdminSerializer,
     AgentScheduleCreateSerializer,
+    AgentScheduleControlSerializer,
     AgentScheduleFireAdminSerializer,
     AgentScheduleFireSerializer,
     AgentSkillAdminSerializer,
@@ -345,6 +346,18 @@ class AgentScheduleFireListAPIEndpoint(AgentAdminAPIView):
         except (ValidationError, ValueError) as exc:
             return _validation_error(exc)
         return Response(AgentScheduleFireAdminSerializer(fire).data, status=status.HTTP_201_CREATED)
+
+
+class AgentScheduleControlAPIEndpoint(AgentAdminAPIView):
+    def post(self, request, slug, schedule_id):
+        schedule = get_object_or_404(AgentSchedule, workspace__slug=slug, pk=schedule_id)
+        serializer = AgentScheduleControlSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            schedule = transition_schedule(schedule, serializer.validated_data["state"])
+        except (ValidationError, ValueError) as exc:
+            return _validation_error(exc)
+        return Response(AgentScheduleAdminSerializer(schedule).data)
 
 
 class AgentScheduleFireRetryAPIEndpoint(AgentAdminAPIView):

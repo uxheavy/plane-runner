@@ -427,11 +427,12 @@ def retry_schedule_fire(fire: AgentScheduleFire, *, now: datetime | None = None,
     )
 
 
-def fire_due_schedules(*, now: datetime | None = None, created_by=None) -> list[AgentScheduleFire]:
+def fire_due_schedules(*, workspace=None, now: datetime | None = None, created_by=None) -> list[AgentScheduleFire]:
     now = now or timezone.now()
-    schedules = AgentSchedule.objects.filter(state=AgentScheduleState.ENABLED, next_fire_at__lte=now).order_by(
-        "next_fire_at", "id"
-    )
+    schedules = AgentSchedule.objects.filter(state=AgentScheduleState.ENABLED, next_fire_at__lte=now)
+    if workspace is not None:
+        schedules = schedules.filter(workspace=workspace)
+    schedules = schedules.order_by("next_fire_at", "id")
     return [
         fire_schedule(schedule, scheduled_for=schedule.next_fire_at, now=now, created_by=created_by)
         for schedule in schedules
