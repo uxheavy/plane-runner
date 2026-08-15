@@ -211,11 +211,15 @@ Hermes and image pins. For example, from the clean candidate checkout:
 ```sh
 G4_CANDIDATE="$(git rev-parse HEAD)"
 G4_HERMES_REVISION="<exact-clean-hermes-sha>"
+G4_MCP_REVISION="<exact-clean-mcp-sha>"
+G4_SDK_REVISION="<exact-clean-sdk-sha>"
 python3 tools/build-agent-runtime-image.py \
   --hermes-checkout /path/to/hermes-agent \
   --hermes-revision "${G4_HERMES_REVISION}" \
   --plane-revision "${G4_CANDIDATE}" \
   --api-image "${G4_API_IMAGE}" \
+  --mcp-revision "${G4_MCP_REVISION}" \
+  --sdk-revision "${G4_SDK_REVISION}" \
   --manifest-out "${PWD}/tmp/plane-agent-g4-disposable-${G4_CANDIDATE}.json"
 PLANE_G4_LIVE_MANIFEST="${PWD}/tmp/plane-agent-g4-disposable-${G4_CANDIDATE}.json" \
   tools/agent-g4-live.sh

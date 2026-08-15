@@ -342,6 +342,75 @@ class PlaneHostResult:
         return value
 
 
+def _host_operation_failure_evidence(
+    call: PlaneHostCall,
+    result: PlaneHostResult | None = None,
+    *,
+    error_code: str | None = None,
+) -> dict[str, str] | None:
+    """Project one failed callback into the bounded runner evidence shape."""
+
+    if call.action == "observe":
+        return None
+    operation_id = call.operation_ref.removeprefix("operation:")
+    output = result.output if result is not None and isinstance(result.output, Mapping) else {}
+    resolved_error_code = (
+        error_code
+        or (result.error_code if result is not None else None)
+        or (
+            output.get("error", {}).get("code")
+            if isinstance(output.get("error"), Mapping)
+            else None
+        )
+    )
+    if call.action != "publish" and result is not None and (
+        (result.status == "denied" and resolved_error_code == "NOT_AUTHORIZED")
+        or (result.status == "invalid" and resolved_error_code == "VALIDATION_ERROR")
+    ):
+        # Generic tool denials and validation failures are expected operation
+        # observations. Publication failures remain terminal runtime evidence.
+        return None
+
+    request_id = output.get("requestId")
+    audit_receipt = output.get("auditReceipt") or output.get("gatewayReceipt")
+
+    def bounded_ref(value: Any, prefix: str) -> str:
+        if not isinstance(value, str) or not value:
+            return "unavailable"
+        allowed = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:-"
+        if len(value.encode("utf-8")) > 128 or any(char not in allowed for char in value):
+            return "unavailable"
+        return f"{prefix}{value}"
+
+    def bounded_code(value: Any) -> str:
+        if not isinstance(value, str) or not value:
+            return "unavailable"
+        allowed = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:-"
+        if len(value.encode("utf-8")) > 128 or any(char not in allowed for char in value):
+            return "unavailable"
+        return value
+
+    status = result.status if result is not None else "unavailable"
+    if status not in {"denied", "conflict", "unavailable", "invalid"}:
+        status = "unavailable"
+    return {
+        "operationId": bounded_code(operation_id),
+        "attemptRef": bounded_ref(request_id, "operation-attempt:")
+        if request_id is not None
+        else call.request_ref,
+        "receiptRef": bounded_ref(audit_receipt, "audit-receipt:"),
+        "status": status,
+        "errorCode": bounded_code(
+            resolved_error_code
+        ),
+        "codeModePhase": (
+            "host_callback"
+            if call.action == "code" and call.source == "code"
+            else "unavailable"
+        ),
+    }
+
+
 class PlaneHostServer:
     """Serve one invocation's host callbacks over a local Unix socket."""
 
@@ -379,6 +448,7 @@ class PlaneHostServer:
         self._closed = threading.Event()
         self._error: BaseException | None = None
         self._records: dict[str, PlaneHostResult] = {}
+        self._failure_evidence: dict[str, str] | None = None
         self._call_count = 0
         self._observation_count = 0
         self._lock = threading.RLock()
@@ -396,6 +466,25 @@ class PlaneHostServer:
     def observation_count(self) -> int:
         with self._lock:
             return self._observation_count
+
+    @property
+    def failure_evidence(self) -> dict[str, str] | None:
+        with self._lock:
+            return dict(self._failure_evidence) if self._failure_evidence is not None else None
+
+    def _record_failure(
+        self,
+        call: PlaneHostCall,
+        result: PlaneHostResult | None = None,
+        *,
+        error_code: str | None = None,
+    ):
+        evidence = _host_operation_failure_evidence(call, result, error_code=error_code)
+        if evidence is None:
+            return
+        with self._lock:
+            if self._failure_evidence is None:
+                self._failure_evidence = evidence
 
     def start(self) -> None:
         if self._thread is not None:
@@ -514,7 +603,7 @@ class PlaneHostServer:
                 )
             if _is_provider_attempt_observation(call):
                 if self._observation_count >= self._max_observation_calls:
-                    return PlaneHostResult(
+                    result = PlaneHostResult(
                         request_ref=call.request_ref,
                         correlation_id=call.correlation_id,
                         idempotency_key=call.idempotency_key,
@@ -524,10 +613,12 @@ class PlaneHostServer:
                         error_code="HOST_OBSERVATION_BUDGET_EXCEEDED",
                         error_message="Plane provider-attempt observation budget exhausted",
                     )
+                    self._record_failure(call, result)
+                    return result
                 self._observation_count += 1
             else:
                 if self._call_count >= self._max_calls:
-                    return PlaneHostResult(
+                    result = PlaneHostResult(
                         request_ref=call.request_ref,
                         correlation_id=call.correlation_id,
                         idempotency_key=call.idempotency_key,
@@ -537,6 +628,8 @@ class PlaneHostServer:
                         error_code="HOST_BUDGET_EXCEEDED",
                         error_message="Plane host callback budget exhausted",
                     )
+                    self._record_failure(call, result)
+                    return result
                 self._call_count += 1
         try:
             result = self._invoke(call)
@@ -549,9 +642,13 @@ class PlaneHostServer:
             ):
                 raise PlaneHostRPCError("host callback result is not bound to the request")
         except PlaneHostRPCError:
+            self._record_failure(call, error_code="HOST_UNAVAILABLE")
             raise
         except Exception as exc:
+            self._record_failure(call, error_code="HOST_UNAVAILABLE")
             raise PlaneHostRPCError("host callback is unavailable") from exc
+        if result.status not in {"ok", "replayed"}:
+            self._record_failure(call, result)
         with self._lock:
             self._records[call.request_ref] = result
         return result
@@ -759,6 +856,7 @@ class PlaneHostHTTPServer:
         self._max_calls = max_calls
         self._max_observation_calls = max_observation_calls
         self._records: dict[str, PlaneHostResult] = {}
+        self._failure_evidence: dict[str, str] | None = None
         self._call_count = 0
         self._observation_count = 0
         self._lock = threading.RLock()
@@ -809,6 +907,25 @@ class PlaneHostHTTPServer:
         with self._lock:
             return self._observation_count
 
+    @property
+    def failure_evidence(self) -> dict[str, str] | None:
+        with self._lock:
+            return dict(self._failure_evidence) if self._failure_evidence is not None else None
+
+    def _record_failure(
+        self,
+        call: PlaneHostCall,
+        result: PlaneHostResult | None = None,
+        *,
+        error_code: str | None = None,
+    ):
+        evidence = _host_operation_failure_evidence(call, result, error_code=error_code)
+        if evidence is None:
+            return
+        with self._lock:
+            if self._failure_evidence is None:
+                self._failure_evidence = evidence
+
     def _invoke_once(self, call: PlaneHostCall) -> PlaneHostResult:
         with self._lock:
             replay = self._records.get(call.request_ref)
@@ -826,7 +943,7 @@ class PlaneHostHTTPServer:
                 )
             if _is_provider_attempt_observation(call):
                 if self._observation_count >= self._max_observation_calls:
-                    return PlaneHostResult(
+                    result = PlaneHostResult(
                         request_ref=call.request_ref,
                         correlation_id=call.correlation_id,
                         idempotency_key=call.idempotency_key,
@@ -836,10 +953,12 @@ class PlaneHostHTTPServer:
                         error_code="HOST_OBSERVATION_BUDGET_EXCEEDED",
                         error_message="Plane provider-attempt observation budget exhausted",
                     )
+                    self._record_failure(call, result)
+                    return result
                 self._observation_count += 1
             else:
                 if self._call_count >= self._max_calls:
-                    return PlaneHostResult(
+                    result = PlaneHostResult(
                         request_ref=call.request_ref,
                         correlation_id=call.correlation_id,
                         idempotency_key=call.idempotency_key,
@@ -849,16 +968,27 @@ class PlaneHostHTTPServer:
                         error_code="HOST_BUDGET_EXCEEDED",
                         error_message="Plane host callback budget exhausted",
                     )
+                    self._record_failure(call, result)
+                    return result
                 self._call_count += 1
-        result = self._invoke(call)
-        if not isinstance(result, PlaneHostResult):
-            raise PlaneHostRPCError("host callback returned an invalid result")
-        if (
-            result.request_ref != call.request_ref
-            or result.correlation_id != call.correlation_id
-            or result.idempotency_key != call.idempotency_key
-        ):
-            raise PlaneHostRPCError("host callback result is not bound to the request")
+        try:
+            result = self._invoke(call)
+            if not isinstance(result, PlaneHostResult):
+                raise PlaneHostRPCError("host callback returned an invalid result")
+            if (
+                result.request_ref != call.request_ref
+                or result.correlation_id != call.correlation_id
+                or result.idempotency_key != call.idempotency_key
+            ):
+                raise PlaneHostRPCError("host callback result is not bound to the request")
+        except PlaneHostRPCError:
+            self._record_failure(call, error_code="HOST_UNAVAILABLE")
+            raise
+        except Exception as exc:
+            self._record_failure(call, error_code="HOST_UNAVAILABLE")
+            raise PlaneHostRPCError("host callback is unavailable") from exc
+        if result.status not in {"ok", "replayed"}:
+            self._record_failure(call, result)
         with self._lock:
             self._records[call.request_ref] = result
         return result
@@ -990,13 +1120,22 @@ class PlaneGatewayHostPort:
     def _from_receipt(call: PlaneHostCall, receipt: Mapping[str, Any]) -> PlaneHostResult:
         if receipt.get("ok"):
             replayed = bool(receipt.get("replayed", False))
+            output = dict(receipt)
+            if call.operation_ref == "operation:catalog.describe":
+                nested_result = receipt.get("result")
+                if isinstance(nested_result, Mapping) and isinstance(nested_result.get("operation"), Mapping):
+                    # Hermes' progressive disclosure seam consumes the
+                    # described operation from the host output. Preserve the
+                    # canonical gateway receipt while projecting that bounded
+                    # operation object at the adapter boundary.
+                    output["operation"] = dict(nested_result["operation"])
             return PlaneHostResult(
                 request_ref=call.request_ref,
                 correlation_id=call.correlation_id,
                 idempotency_key=call.idempotency_key,
                 status="replayed" if replayed else "ok",
                 replayed=replayed,
-                output=dict(receipt),
+                output=output,
             )
         error = receipt.get("error", {})
         code = error.get("code", "HOST_UNAVAILABLE") if isinstance(error, Mapping) else "HOST_UNAVAILABLE"

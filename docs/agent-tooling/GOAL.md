@@ -166,6 +166,52 @@ surfaces. There is no chat UI. Browser evidence is required only for existing
 object and settings pages; backend behavior is proven by product-state,
 gateway, audit, provider-attempt, and terminal-event readback.
 
+### Operational friction becomes workflow
+
+Do not spend a product dogfood cycle, provider invocation, or independent
+review on an obstacle that a deterministic operational step removes. Encode
+the step in the existing setup, preflight, runbook, or verifier; execute it;
+then continue the functional journey.
+
+Use one classification test: if resolving the obstacle changes only how the
+work is prepared or executed, and does not change Plane Agent product behavior,
+it is workflow friction. Fix it in the same execution turn whenever possible.
+It must not become a product issue, persona route, phase gate, completion
+percentage item, or reason to wait for a separate review. Record only the
+workflow change and the successful retry evidence needed to prevent recurrence.
+
+| Obstacle                                                                                                                                                                 | Required treatment                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Local `.env` files, required services, Docker-visible paths, checkout provenance, generated local prerequisites, or a platform execution approval                        | Treat as workflow setup. Make the prerequisite and failure message explicit, automate it in the existing owner where practical, and do not count it as a Plane Agent product defect. |
+| Missing command authorization, sandbox approval, executable bit, local port selection, dependency preparation, command spelling, timeout, or equivalent runner mechanics | Resolve through the normal execution workflow, encode a preflight or safe default when recurrence is plausible, and resume the same route without opening a product investigation.   |
+| The same setup obstacle reappears after its workflow is explicit                                                                                                         | Treat the missing or ineffective preflight as a harness defect and fix it structurally once.                                                                                         |
+| Plane membership, role, object permission, credential validity, live authorization, or a denied semantic operation                                                       | Treat as product behavior. Exercise the real authorization path and never bypass or weaken it to advance a test.                                                                     |
+
+Routine environment and execution authorization must therefore be resolved
+before a live invocation is spent. The delegator and workers should proceed
+through such fixes autonomously within their granted permissions instead of
+stopping for a product decision. A test route starts only after its operational
+preconditions pass; an actual Plane authorization result remains part of the
+route evidence.
+
+### Disposable checkout environment rule
+
+Before running setup, tests, verifiers, or a live journey in any disposable
+Plane clone or worktree, copy the existing local `.env` files from
+`/Users/nqh/Desktop/CODES/plane` into the same relative paths in that checkout.
+The only intended repository-relative source locations are `.env`,
+`apps/admin/.env`, `apps/api/.env`, `apps/live/.env`, `apps/space/.env`,
+`apps/web/.env`, and `external/plane-mcp-server/.env.test`; copy each only when
+present. Never recursively discover or copy environment files from `tmp/`,
+nested clones or worktrees, `.git/`, dependency trees, or generated evidence.
+The authoritative checkout is the environment-file source; do not independently
+regenerate a disposable checkout's environment when the corresponding source
+file exists. Copy bytes and file modes without reading, sourcing, printing, or
+recording values, and keep the copies ignored and outside commits. Never modify
+the source files. If a command needs an environment file that is absent from the
+authoritative checkout, stop at the setup boundary and report the missing
+relative path instead of synthesizing different configuration.
+
 | Persona                           | Real job                                                                                   | Capability ownership                                                                                                                                                                                                                                                                                            |
 | --------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Working Agent                     | Complete an assigned Plane issue and publish a reviewable result.                          | Actor/profile binding; assignment/run/invocation; discovery; native reads and mutations; restricted TypeScript Code Mode; artifacts; scoped memory and user preferences; private skills; explicit outcome submission and publication.                                                                           |

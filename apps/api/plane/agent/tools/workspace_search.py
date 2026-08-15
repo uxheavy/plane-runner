@@ -150,6 +150,13 @@ class WorkspaceSearchService:
                 "workspaceRef": _reference("workspace", workspace.id),
                 "projectRef": _reference("project", issue.project_id),
                 "key": issue.sequence_id,
+                # Preserve the typed search result while providing the exact
+                # canonical input shape for the existing authorized gateway
+                # read. The gateway still re-checks live project membership.
+                "workItemReadInput": {
+                    "project_id": str(issue.project_id),
+                    "issue_id": str(issue.id),
+                },
             }
             for issue in issues.select_related("project")
             .only("id", "name", "sequence_id", "project_id")

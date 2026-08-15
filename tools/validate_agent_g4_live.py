@@ -1380,7 +1380,18 @@ def _validate_failure_receipt(
         "reasonDetail",
         "reasonSubreason",
     }
-    if set(failure).difference(required_failure_fields | {"reasonCause"}) or not required_failure_fields.issubset(failure):
+    host_failure_fields = {
+        "operationId",
+        "attemptRef",
+        "receiptRef",
+        "status",
+        "errorCode",
+        "codeModePhase",
+    }
+    if (
+        set(failure).difference(required_failure_fields | {"reasonCause", "hostOperationFailure"})
+        or not required_failure_fields.issubset(failure)
+    ):
         raise ContractError("evidence_failure_fields_invalid")
     if failure["phase"] not in _FAILURE_STAGES or failure["errorClass"] not in _FAILURE_ERROR_CLASSES:
         raise ContractError("evidence_failure_classification_invalid")
@@ -1389,6 +1400,16 @@ def _validate_failure_receipt(
     for field in ("reasonCode", "reasonPhase", "reasonDetail", "reasonSubreason", "reasonCause"):
         if field in failure:
             _safe_ref(failure[field], f"evidence_failure_{field}")
+    if "hostOperationFailure" in failure:
+        host_failure = _object(failure["hostOperationFailure"], "evidence_host_operation_failure")
+        if set(host_failure) != host_failure_fields:
+            raise ContractError("evidence_host_operation_failure_fields_invalid")
+        if host_failure["status"] not in {"denied", "conflict", "unavailable", "invalid"}:
+            raise ContractError("evidence_host_operation_failure_status_invalid")
+        if host_failure["codeModePhase"] not in {"host_callback", "unavailable"}:
+            raise ContractError("evidence_host_operation_failure_phase_invalid")
+        for field in ("operationId", "attemptRef", "receiptRef", "errorCode"):
+            _safe_ref(host_failure[field], f"evidence_host_operation_failure_{field}")
 
     for name in ("run", "invocation"):
         state = _object(evidence[name], f"evidence_{name}")

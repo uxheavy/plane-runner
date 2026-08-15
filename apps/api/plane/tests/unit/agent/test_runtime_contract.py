@@ -9,6 +9,7 @@ from plane.agent.lifecycle.runtime_contract import (
     validate_runtime_event,
     validate_runtime_exit,
 )
+from plane.agent.runtime.host_rpc import PlaneHostCall, PlaneHostHTTPServer, PlaneHostResult, PlaneHostServer
 
 
 def _event():
@@ -104,6 +105,209 @@ def test_runtime_exit_failure_cause_is_finite_and_runtime_error_only():
     invalid_code["failure"]["code"] = "budget_exhausted"
     with pytest.raises(RuntimeContractError):
         validate_runtime_exit(invalid_code)
+
+
+def test_host_server_retains_bounded_first_operation_failure_context(tmp_path):
+    call = PlaneHostCall(
+        run_id="run:test",
+        invocation_id="invocation:test",
+        correlation_id="correlation:test",
+        action="code",
+        operation_ref="operation:work_item.rename",
+        input={"name": "bounded"},
+        source="code",
+    )
+    result = PlaneHostResult(
+        request_ref=call.request_ref,
+        correlation_id=call.correlation_id,
+        idempotency_key=call.idempotency_key,
+        status="unavailable",
+        replayed=False,
+        output={
+            "requestId": "request:test",
+            "auditReceipt": "audit:test",
+            "error": {"code": "OPERATION_UNAVAILABLE", "message": "must not escape"},
+        },
+        error_code="OPERATION_UNAVAILABLE",
+        error_message="must not escape",
+    )
+    server = PlaneHostServer(
+        socket_path=tmp_path / "host.sock",
+        invoke=lambda _call: result,
+    )
+
+    assert server._invoke_once(call) == result
+    assert server.failure_evidence == {
+        "operationId": "work_item.rename",
+        "attemptRef": "operation-attempt:request:test",
+        "receiptRef": "audit-receipt:audit:test",
+        "status": "unavailable",
+        "errorCode": "OPERATION_UNAVAILABLE",
+        "codeModePhase": "host_callback",
+    }
+
+
+def test_host_server_does_not_promote_expected_evaluator_denial_to_runtime_failure(tmp_path):
+    call = PlaneHostCall(
+        run_id="run:test",
+        invocation_id="invocation:test",
+        correlation_id="correlation:test",
+        action="mutate",
+        operation_ref="operation:agent.outcome.evaluate",
+        input={},
+        source="model",
+    )
+    result = PlaneHostResult(
+        request_ref=call.request_ref,
+        correlation_id=call.correlation_id,
+        idempotency_key=call.idempotency_key,
+        status="denied",
+        replayed=False,
+        output={"error": {"code": "NOT_AUTHORIZED"}},
+        error_code="NOT_AUTHORIZED",
+        error_message="expected denial",
+    )
+    server = PlaneHostServer(
+        socket_path=tmp_path / "host.sock",
+        invoke=lambda _call: result,
+    )
+
+    assert server._invoke_once(call) == result
+    assert server.failure_evidence is None
+
+
+def _host_failure_result(call, *, status, error_code):
+    return PlaneHostResult(
+        request_ref=call.request_ref,
+        correlation_id=call.correlation_id,
+        idempotency_key=call.idempotency_key,
+        status=status,
+        replayed=False,
+        output={"error": {"code": error_code}},
+        error_code=error_code,
+        error_message="test failure",
+    )
+
+
+def _host_failure_server(server_kind, tmp_path, invoke):
+    if server_kind == "unix":
+        return PlaneHostServer(socket_path=tmp_path / "host.sock", invoke=invoke)
+    return PlaneHostHTTPServer(
+        bind_host="127.0.0.1",
+        advertised_host="127.0.0.1",
+        port=0,
+        auth_token="test-token",
+        invoke=invoke,
+    )
+
+
+@pytest.mark.parametrize("server_kind", ["unix", "http"])
+@pytest.mark.parametrize(
+    ("status", "error_code"),
+    [("denied", "NOT_AUTHORIZED"), ("invalid", "VALIDATION_ERROR")],
+)
+def test_host_servers_skip_recoverable_generic_call_observations(tmp_path, server_kind, status, error_code):
+    call = PlaneHostCall(
+        run_id="run:test",
+        invocation_id="invocation:test",
+        correlation_id="correlation:test",
+        action="mutate",
+        operation_ref="operation:work_item.rename",
+        input={"name": "recoverable"},
+        source="model",
+    )
+    result = _host_failure_result(call, status=status, error_code=error_code)
+    server = _host_failure_server(server_kind, tmp_path, invoke=lambda _call: result)
+
+    assert server._invoke_once(call) == result
+    assert server.failure_evidence is None
+
+
+@pytest.mark.parametrize("server_kind", ["unix", "http"])
+def test_host_servers_record_publish_denial_as_fatal(tmp_path, server_kind):
+    call = PlaneHostCall(
+        run_id="run:test",
+        invocation_id="invocation:test",
+        correlation_id="correlation:test",
+        action="publish",
+        operation_ref="operation:agent.outcome.publish",
+        input={"kind": "outcome"},
+        source="model",
+    )
+    result = _host_failure_result(call, status="denied", error_code="NOT_AUTHORIZED")
+    server = _host_failure_server(server_kind, tmp_path, invoke=lambda _call: result)
+
+    assert server._invoke_once(call) == result
+    assert server.failure_evidence == {
+        "operationId": "agent.outcome.publish",
+        "attemptRef": call.request_ref,
+        "receiptRef": "unavailable",
+        "status": "denied",
+        "errorCode": "NOT_AUTHORIZED",
+        "codeModePhase": "unavailable",
+    }
+
+
+@pytest.mark.parametrize("server_kind", ["unix", "http"])
+def test_host_servers_retain_first_actual_fatal_after_recoverable_call(tmp_path, server_kind):
+    generic_call = PlaneHostCall(
+        run_id="run:test",
+        invocation_id="invocation:test",
+        correlation_id="correlation:test",
+        action="mutate",
+        operation_ref="operation:work_item.rename",
+        input={"name": "recoverable"},
+        source="model",
+    )
+    first_fatal_call = PlaneHostCall(
+        run_id="run:test",
+        invocation_id="invocation:test",
+        correlation_id="correlation:test",
+        action="code",
+        operation_ref="operation:work_item.update",
+        input={"name": "first fatal"},
+        source="code",
+    )
+    later_fatal_call = PlaneHostCall(
+        run_id="run:test",
+        invocation_id="invocation:test",
+        correlation_id="correlation:test",
+        action="code",
+        operation_ref="operation:work_item.delete",
+        input={"name": "later fatal"},
+        source="code",
+    )
+    results = {
+        generic_call.request_ref: _host_failure_result(
+            generic_call,
+            status="denied",
+            error_code="NOT_AUTHORIZED",
+        ),
+        first_fatal_call.request_ref: _host_failure_result(
+            first_fatal_call,
+            status="unavailable",
+            error_code="UPSTREAM_FAILURE",
+        ),
+        later_fatal_call.request_ref: _host_failure_result(
+            later_fatal_call,
+            status="conflict",
+            error_code="PLANE_CONFLICT",
+        ),
+    }
+    server = _host_failure_server(server_kind, tmp_path, invoke=lambda call: results[call.request_ref])
+
+    assert server._invoke_once(generic_call) == results[generic_call.request_ref]
+    assert server.failure_evidence is None
+    assert server._invoke_once(first_fatal_call) == results[first_fatal_call.request_ref]
+    assert server._invoke_once(later_fatal_call) == results[later_fatal_call.request_ref]
+    assert server.failure_evidence == {
+        "operationId": "work_item.update",
+        "attemptRef": first_fatal_call.request_ref,
+        "receiptRef": "unavailable",
+        "status": "unavailable",
+        "errorCode": "UPSTREAM_FAILURE",
+        "codeModePhase": "host_callback",
+    }
 
 
 def test_runtime_durable_state_digest_and_revision_continuity_match_l1():

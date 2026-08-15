@@ -523,23 +523,40 @@ def _request_payload(snapshot_json: str, envelope_json: str) -> tuple[bytes, str
     return request, run_id, invocation_id, digest
 
 
+def _hermes_g1_contract_digests() -> dict[str, str] | None:
+    try:
+        from plane_runtime.g1_contract import G1_CONTRACT_DIGESTS
+    except ModuleNotFoundError as exc:
+        if exc.name in {"plane_runtime", "plane_runtime.g1_contract"}:
+            return None
+        raise
+    except (ImportError, AttributeError) as import_error:
+        raise RuntimeDispatchError(
+            "runtime contract verifier is unavailable",
+            failure_code=RUNTIME_CONFIGURATION_PRE_DISPATCH_FAILURE,
+            failure_phase="runtime_configuration",
+            failure_detail="dispatch_rejected",
+            failure_subreason="runtime_configuration_rejected",
+        ) from import_error
+    return dict(G1_CONTRACT_DIGESTS)
+
+
 def _hermes_contract_digests() -> dict[str, str]:
+    g1_digests = _hermes_g1_contract_digests()
+    if g1_digests is not None:
+        return g1_digests
     try:
         from ..lifecycle import runtime_contract
     except ModuleNotFoundError as exc:
         if exc.name != "plane.agent.lifecycle":
             raise
-        try:
-            from plane_runtime.g1_contract import G1_CONTRACT_DIGESTS
-        except (ImportError, AttributeError) as import_error:
-            raise RuntimeDispatchError(
-                "runtime contract verifier is unavailable",
-                failure_code=RUNTIME_CONFIGURATION_PRE_DISPATCH_FAILURE,
-                failure_phase="runtime_configuration",
-                failure_detail="dispatch_rejected",
-                failure_subreason="runtime_configuration_rejected",
-            ) from import_error
-        return dict(G1_CONTRACT_DIGESTS)
+        raise RuntimeDispatchError(
+            "runtime contract verifier is unavailable",
+            failure_code=RUNTIME_CONFIGURATION_PRE_DISPATCH_FAILURE,
+            failure_phase="runtime_configuration",
+            failure_detail="dispatch_rejected",
+            failure_subreason="runtime_configuration_rejected",
+        ) from exc
 
     try:
         return dict(runtime_contract.contract_digests())
@@ -1134,8 +1151,14 @@ class HostBoundSubprocessRuntimeTransport(SubprocessRuntimeTransport):
         self._bootstrap_command = exact_bootstrap_command if bootstrap_command is None else bool(bootstrap_command)
         self._model_call_allowance = model_call_allowance
         self._credential_control = credential_control
+        self._host_operation_failure: dict[str, str] | None = None
+
+    @property
+    def host_operation_failure(self) -> dict[str, str] | None:
+        return dict(self._host_operation_failure) if self._host_operation_failure is not None else None
 
     def dispatch(self, snapshot_json: str, envelope_json: str) -> tuple[str, ...]:
+        self._host_operation_failure = None
         payload, run_id, invocation_id, request_digest = _hermes_request_payload(snapshot_json, envelope_json)
         if len(payload) > self._max_input_bytes:
             raise RuntimeDispatchError("runtime request exceeds the process input bound")
@@ -1205,6 +1228,7 @@ class HostBoundSubprocessRuntimeTransport(SubprocessRuntimeTransport):
             raise
         finally:
             if server is not None:
+                self._host_operation_failure = server.failure_evidence
                 server.close()
             if temp_dir is not None:
                 try:

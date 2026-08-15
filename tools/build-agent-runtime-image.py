@@ -17,7 +17,7 @@ from pathlib import Path
 from pathlib import PurePosixPath
 
 
-HERMES_COMMIT = "d2e655101f263329359e7d0de9d0b856202a3e4b"
+HERMES_COMMIT = "bc7f13d2ab392752f2667b176c646339c49405f9"
 HERMES_REMOTE = "github.com/uxheavy/hermes-agent"
 RUNTIME_CONTRACT = "plane.agent-runtime/v1"
 HERMES_SOURCE_KIND_GIT = "git-checkout"
@@ -69,6 +69,14 @@ def _image_digest(value: str, label: str) -> str:
     if not value.startswith("sha256:"):
         raise RuntimeError(f"{label} must be a sha256 image digest")
     _hash(value.removeprefix("sha256:"), label)
+    return value
+
+
+def _require_disposable_revision(value: str | None, option: str) -> str:
+    if value is None:
+        raise SystemExit(f"{option} is required with --manifest-out")
+    if len(value) != 40 or any(character not in "0123456789abcdef" for character in value):
+        raise SystemExit(f"{option} must be a full lowercase Git SHA")
     return value
 
 
@@ -556,6 +564,8 @@ def disposable_manifest(
     runtime: dict[str, str],
     api: dict[str, str],
     runtime_files: dict[str, str],
+    mcp_revision: str,
+    sdk_revision: str,
     hermes_source: dict[str, object] | None = None,
 ) -> dict[str, object]:
     manifest = json.loads(DURABLE_MANIFEST.read_text(encoding="utf-8"))
@@ -578,6 +588,8 @@ def disposable_manifest(
     pins["runtimeImageRevision"] = plane_revision
     pins["runtimeContract"] = RUNTIME_CONTRACT
     pins["hermesCommit"] = hermes_commit
+    pins["mcpGitlink"] = mcp_revision
+    pins["sdkGitlink"] = sdk_revision
     pins["apiArtifact"] = api
     disposable_binding: dict[str, object] = {
         "mode": "exact-api-runtime-candidate",
@@ -629,7 +641,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--hermes-donor-image",
         help="Use the exact sealed Hermes filesystem from the manifest-bound runtime image",
     )
-    parser.add_argument("--tag", default="plane-agent-runtime:hermes-d2e65510-g4-codex-fix")
+    parser.add_argument("--tag", default="plane-agent-runtime:hermes-bc7f13d2-g4-v5")
     parser.add_argument("--plane-revision", help="Build an exact clean Git revision instead of HEAD")
     parser.add_argument(
         "--hermes-revision",
@@ -638,12 +650,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--api-image", help="Current candidate API image required for disposable manifest output")
     parser.add_argument("--manifest-out", type=Path, help="Write a disposable manifest under repository tmp/")
+    parser.add_argument("--mcp-revision", help="Exact MCP Git revision required with --manifest-out")
+    parser.add_argument("--sdk-revision", help="Exact SDK Git revision required with --manifest-out")
     parser.add_argument("--manifest", type=Path, default=DURABLE_MANIFEST, help="Durable donor attestation manifest")
     return parser
 
 
 def main() -> int:
     args = build_parser().parse_args()
+    mcp_revision = None
+    sdk_revision = None
+    if args.manifest_out is not None:
+        mcp_revision = _require_disposable_revision(args.mcp_revision, "--mcp-revision")
+        sdk_revision = _require_disposable_revision(args.sdk_revision, "--sdk-revision")
     if shutil.which("docker") is None:
         raise SystemExit("Docker CLI is required")
     hermes_revision = str(args.hermes_revision)
@@ -745,6 +764,8 @@ def main() -> int:
             runtime,
             api,
             runtime_files,
+            mcp_revision,
+            sdk_revision,
             hermes_source,
         )
         write_disposable_manifest(args.manifest_out, manifest)

@@ -496,6 +496,8 @@ class G4ContractTests(unittest.TestCase):
 
     def test_disposable_manifest_binds_api_runtime_and_hermes_to_one_candidate(self):
         candidate = "a" * 40
+        mcp_revision = "c" * 40
+        sdk_revision = "d" * 40
         files = {"apps/api/plane/agent/runtime/subprocess.py": "b" * 64}
         source_digest = _BUILDER.runtime_source_digest(files)
         manifest = _BUILDER.disposable_manifest(
@@ -519,12 +521,18 @@ class G4ContractTests(unittest.TestCase):
                 "contract": "plane.operation/v1",
             },
             files,
+            mcp_revision,
+            sdk_revision,
         )
 
         validate_disposable_artifact_binding(manifest, candidate)
         self.assertEqual(manifest["pins"]["runtimeImageRevision"], candidate)
         self.assertEqual(manifest["pins"]["apiArtifact"]["sourceRevision"], candidate)
         self.assertEqual(manifest["pins"]["hermesCommit"], "d" * 40)
+        self.assertEqual(manifest["pins"]["mcpGitlink"], mcp_revision)
+        self.assertEqual(manifest["pins"]["sdkGitlink"], sdk_revision)
+        self.assertNotEqual(manifest["pins"]["mcpGitlink"], MANIFEST["pins"]["mcpGitlink"])
+        self.assertNotEqual(manifest["pins"]["sdkGitlink"], MANIFEST["pins"]["sdkGitlink"])
 
         sealed = _BUILDER.disposable_manifest(
             candidate,
@@ -539,6 +547,8 @@ class G4ContractTests(unittest.TestCase):
             },
             manifest["pins"]["apiArtifact"],
             files,
+            mcp_revision,
+            sdk_revision,
             {
                 "sourceKind": "sealed-image",
                 "donorImage": "plane-agent-runtime:sealed-donor",
@@ -558,10 +568,37 @@ class G4ContractTests(unittest.TestCase):
         mixed["pins"]["apiArtifact"]["sourceRevision"] = "1" * 40
         with self.assertRaisesRegex(ContractError, "manifest_disposableBinding_pin_apiSourceRevision"):
             validate_disposable_artifact_binding(mixed, candidate)
+
         mixed = copy.deepcopy(manifest)
         mixed["pins"]["runtimeImageRevision"] = "2" * 40
         with self.assertRaisesRegex(ContractError, "manifest_disposableBinding_pin_runtimeRevision"):
             validate_disposable_artifact_binding(mixed, candidate)
+
+    def test_disposable_external_revisions_are_required_and_validated_before_docker(self):
+        valid = "a" * 40
+        cases = (
+            (("--sdk-revision", valid), "--mcp-revision is required"),
+            (("--mcp-revision", valid), "--sdk-revision is required"),
+            (("--mcp-revision", "A" * 40, "--sdk-revision", valid), "--mcp-revision must be a full lowercase Git SHA"),
+            (("--mcp-revision", valid, "--sdk-revision", "z" * 40), "--sdk-revision must be a full lowercase Git SHA"),
+        )
+        for revision_args, message in cases:
+            with self.subTest(revision_args=revision_args):
+                argv = [
+                    "build-agent-runtime-image.py",
+                    "--hermes-checkout",
+                    "/tmp/hermes",
+                    "--api-image",
+                    "plane-agent-api:disposable",
+                    "--manifest-out",
+                    "/tmp/disposable.json",
+                    *revision_args,
+                ]
+                with mock.patch.object(sys, "argv", argv), mock.patch.object(
+                    _BUILDER.shutil, "which", side_effect=AssertionError("Docker check reached")
+                ), mock.patch.object(_BUILDER, "run", side_effect=AssertionError("build path reached")):
+                    with self.assertRaisesRegex(SystemExit, message):
+                        _BUILDER.main()
 
     def test_live_runner_exports_one_failure_object_before_disposable_teardown(self):
         source = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
@@ -686,7 +723,7 @@ class G4ContractTests(unittest.TestCase):
                 "if [ \"$1\" = volume ] && [ \"$2\" = inspect ]; then exit 1; fi\n"
                 "if [ \"$1\" = volume ] && [ \"$2\" = create ]; then exit 0; fi\n"
                 "if [ \"$1\" = volume ] && [ \"$2\" = rm ]; then exit 0; fi\n"
-                "case \" $* \" in *\" --network none \"*) exit 42 ;; esac\n"
+                "case \" $* \" in *plane_agent_runtime*) exit 0 ;; *\" --network none \"*) exit 42 ;; esac\n"
                 "exit 0\n",
                 encoding="utf-8",
             )
@@ -703,7 +740,8 @@ class G4ContractTests(unittest.TestCase):
             disposable_path.write_text(json.dumps(disposable_manifest), encoding="utf-8")
             fake_git.write_text(
                 "#!/bin/sh\n"
-                f"if [ \"$1\" = rev-parse ] && [ \"$2\" = HEAD ]; then printf '%s\\n' '{candidate}'; "
+                f"if [ \"$1\" = -C ] && [ \"$3\" = rev-parse ] && [ \"$4\" = HEAD ]; then printf '%s\\n' '{candidate}'; "
+                f"elif [ \"$1\" = rev-parse ] && [ \"$2\" = HEAD ]; then printf '%s\\n' '{candidate}'; "
                 f"elif [ \"$1\" = -C ] && [ \"$3\" = rev-list ]; then printf '%s %s\\n' '{candidate}' '{MANIFEST['candidateBinding']['parentCommit']}'; "
                 "else exit 1; fi\n",
                 encoding="utf-8",
@@ -786,7 +824,7 @@ class G4ContractTests(unittest.TestCase):
             candidate = "a" * 40
             fake_git.write_text(
                 "#!/bin/sh\n"
-                f"if [ \"$1\" = rev-parse ] && [ \"$2\" = HEAD ]; then printf '%s\\n' '{candidate}'; else exit 1; fi\n",
+                f"if [ \"$1\" = -C ] && [ \"$3\" = rev-parse ] && [ \"$4\" = HEAD ]; then printf '%s\\n' '{candidate}'; elif [ \"$1\" = rev-parse ] && [ \"$2\" = HEAD ]; then printf '%s\\n' '{candidate}'; else exit 1; fi\n",
                 encoding="utf-8",
             )
             fake_git.chmod(0o700)
@@ -912,20 +950,25 @@ class G4ContractTests(unittest.TestCase):
 
     def test_live_runner_creates_missing_tmp_parent_before_pre_provider_boundary(self):
         runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
-        staging = runner.index("LIVE_PHASE=credential-staging")
-        run_dir = runner.index('mkdir -m 700 -- "${RUN_DIR}"', staging)
+        checkout = runner.index("LIVE_PHASE=checkout-bind-preflight")
+        run_dir = runner.index('mkdir -m 700 -- "${RUN_DIR}"', checkout)
         preflight = runner.index("LIVE_PHASE=credential-bind-preflight", run_dir)
 
+        self.assertIn('RUNNER_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"', runner)
+        self.assertIn('ROOT_DIR="$(cd -- "${RUNNER_DIR}/.." && pwd -P)"', runner)
+        self.assertIn('git -C "${ROOT_DIR}" rev-parse HEAD', runner)
         self.assertIn('TMP_ROOT="${ROOT_DIR}/tmp"', runner)
         self.assertIn('mkdir -m 700 -- "${TMP_ROOT}"', runner)
         self.assertIn('if [[ -L "${TMP_ROOT}" ]]; then', runner)
         self.assertIn('chmod 700 "${TMP_ROOT}"', runner)
-        self.assertLess(runner.index('mkdir -m 700 -- "${TMP_ROOT}"', staging), run_dir)
+        self.assertLess(runner.index('mkdir -m 700 -- "${TMP_ROOT}"', checkout), run_dir)
         self.assertLess(run_dir, preflight)
         self.assertIn('RUN_DIR_CREATED=1', runner[run_dir:preflight])
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            outside = root / "outside"
+            outside.mkdir(mode=0o700)
             clean_tools = root / "tools"
             clean_tools.mkdir(mode=0o700)
             for name in (
@@ -968,7 +1011,7 @@ class G4ContractTests(unittest.TestCase):
                 "if [ \"$1\" = volume ] && [ \"$2\" = create ]; then exit 0; fi\n"
                 "if [ \"$1\" = volume ] && [ \"$2\" = rm ]; then exit 0; fi\n"
                 "case \" $* \" in *provider-credentials*) exit 125 ;; esac\n"
-                "case \" $* \" in *\" --network none \"*) exit 42 ;; esac\n"
+                "case \" $* \" in *plane_agent_runtime*) exit 0 ;; *\" --network none \"*) exit 42 ;; esac\n"
                 "exit 0\n",
                 encoding="utf-8",
             )
@@ -982,7 +1025,8 @@ class G4ContractTests(unittest.TestCase):
             ).stdout.strip()
             fake_git.write_text(
                 "#!/bin/sh\n"
-                f"if [ \"$1\" = rev-parse ] && [ \"$2\" = HEAD ]; then printf '%s\\n' '{candidate}'; "
+                f"if [ \"$1\" = -C ] && [ \"$3\" = rev-parse ] && [ \"$4\" = HEAD ]; then printf '%s\\n' '{candidate}'; "
+                f"elif [ \"$1\" = rev-parse ] && [ \"$2\" = HEAD ]; then printf '%s\\n' '{candidate}'; "
                 f"elif [ \"$1\" = -C ] && [ \"$3\" = rev-list ]; then printf '%s %s\\n' '{candidate}' '{MANIFEST['candidateBinding']['parentCommit']}'; "
                 "else exit 1; fi\n",
                 encoding="utf-8",
@@ -1020,7 +1064,7 @@ class G4ContractTests(unittest.TestCase):
             }
             result = subprocess.run(
                 ["bash", str(clean_tools / "agent-g4-live.sh")],
-                cwd=root,
+                cwd=outside,
                 env=environment,
                 capture_output=True,
                 text=True,
@@ -1048,10 +1092,22 @@ class G4ContractTests(unittest.TestCase):
 
     def test_live_runner_handoffs_staged_secret_to_network_none_volume_without_logging_contents(self):
         runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+        checkout_start = runner.index("LIVE_PHASE=checkout-bind-preflight")
+        credential_staging_start = runner.index("LIVE_PHASE=credential-staging")
         preflight_start = runner.index("LIVE_PHASE=credential-bind-preflight")
         compose_start = runner.index("LIVE_PHASE=compose", preflight_start)
+        checkout = runner[checkout_start:credential_staging_start]
         preflight = runner[preflight_start:compose_start]
 
+        self.assertLess(checkout_start, credential_staging_start)
+        self.assertLess(credential_staging_start, preflight_start)
+        self.assertIn('RUNTIME_SECRET_FILE="${RUN_DIR}/runtime-secret"', runner)
+        self.assertIn('chmod 600 "${RUNTIME_SECRET_FILE}"', checkout)
+        self.assertIn("docker run --rm --network none", checkout)
+        self.assertIn('dst=/run/secrets/plane_agent_runtime,readonly', checkout)
+        self.assertIn("expected=checkout-root-docker-bind-visible", checkout)
+        self.assertNotIn("PROVIDER_SECRET_SOURCE", checkout)
+        self.assertNotIn("source_fd", checkout)
         self.assertIn("docker run --rm -i --network none", preflight)
         self.assertEqual(preflight.count("docker run --rm -i --network none"), 1)
         self.assertIn('docker volume inspect "${PROVIDER_SECRET_VOLUME}"', preflight)
@@ -1118,6 +1174,7 @@ class G4ContractTests(unittest.TestCase):
         runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
         cleanup = runner[runner.index("cleanup()") : runner.index("trap cleanup EXIT INT TERM")]
 
+        self.assertIn('rm -f -- "${RUNTIME_SECRET_FILE}"', cleanup)
         self.assertIn('rm -f -- "${PROVIDER_SECRET_FILE}"', cleanup)
         self.assertIn('docker volume rm "${PROVIDER_SECRET_VOLUME}"', cleanup)
         self.assertIn('rm -rf -- "${RUN_DIR}"', cleanup)
@@ -1572,6 +1629,28 @@ class G4ContractTests(unittest.TestCase):
         )
         self.assertEqual(list(receipt["s00Gate"]), ["status", "firstFailedPredicate", "predicates"])
         self.assertIn("semanticDigest", receipt)
+
+    def test_failure_receipt_validates_bounded_host_operation_context(self):
+        manifest, authority, config, receipt = failure_fixture()
+        receipt["failure"]["hostOperationFailure"] = {
+            "operationId": "work_item.rename",
+            "attemptRef": "operation-attempt:request:worker",
+            "receiptRef": "audit-receipt:audit:worker",
+            "status": "unavailable",
+            "errorCode": "OPERATION_UNAVAILABLE",
+            "codeModePhase": "host_callback",
+        }
+        receipt["semanticDigest"] = _semantic_digest(receipt)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt, separators=(",", ":")))
+        self.addCleanup(temp.cleanup)
+        self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
+
+        receipt["failure"]["hostOperationFailure"]["errorCode"] = "secret-token"
+        receipt["semanticDigest"] = _semantic_digest(receipt)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt, separators=(",", ":")))
+        self.addCleanup(temp.cleanup)
+        with self.assertRaisesRegex(ContractError, "evidence_host_operation_failure_errorCode_sensitive"):
+            validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
 
     def test_live_validator_rejects_missing_tampered_gate_and_digest(self):
         self._assert_live_fixture_rejected(
@@ -2052,7 +2131,14 @@ class G4ContractTests(unittest.TestCase):
                 '"failurePhase":"runtime_process",'
                 '"failureDetail":"process_exit",'
                 '"failureSubreason":"runtime_execution_failed",'
-                '"failureCause":"host_operation_failure"}'
+                '"failureCause":"host_operation_failure",'
+                '"hostOperationFailure":{'
+                '"operationId":"work_item.rename",'
+                '"attemptRef":"operation-attempt:request:worker",'
+                '"receiptRef":"audit-receipt:audit:worker",'
+                '"status":"unavailable",'
+                '"errorCode":"OPERATION_UNAVAILABLE",'
+                '"codeModePhase":"host_callback"}}'
             ),
             runtime_exit={
                 "kind": "failed",
@@ -2098,6 +2184,17 @@ class G4ContractTests(unittest.TestCase):
             "host_operation_failure",
         )
         self.assertEqual(
+            runtime_failure["failure"]["hostOperationFailure"],
+            {
+                "operationId": "work_item.rename",
+                "attemptRef": "operation-attempt:request:worker",
+                "receiptRef": "audit-receipt:audit:worker",
+                "status": "unavailable",
+                "errorCode": "OPERATION_UNAVAILABLE",
+                "codeModePhase": "host_callback",
+            },
+        )
+        self.assertEqual(
             runtime_failure["terminal"],
             {
                 "present": True,
@@ -2136,6 +2233,23 @@ class G4ContractTests(unittest.TestCase):
             "failureDetail": "process_exit",
             "failureSubreason": "runtime_execution_failed",
             "failureCause": "invalid_usage_accounting",
+        }
+        self.assertEqual(
+            json.loads(
+                namespace["_supervisor_failure_reason"](
+                    "state=failed failure="
+                    + json.dumps(causal_reason, sort_keys=True, separators=(",", ":"))
+                )
+            ),
+            causal_reason,
+        )
+        causal_reason["hostOperationFailure"] = {
+            "operationId": "work_item.rename",
+            "attemptRef": "operation-attempt:request:worker",
+            "receiptRef": "audit-receipt:audit:worker",
+            "status": "unavailable",
+            "errorCode": "OPERATION_UNAVAILABLE",
+            "codeModePhase": "host_callback",
         }
         self.assertEqual(
             json.loads(

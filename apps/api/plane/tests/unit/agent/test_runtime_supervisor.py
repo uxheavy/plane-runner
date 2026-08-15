@@ -13,6 +13,7 @@ import urllib.request
 from contextlib import nullcontext
 from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -425,7 +426,16 @@ class KnownDispatchFailureTransport:
         )
 
 
-def _invocation(workspace, gateway_project, gateway_issue, create_user, *, runtime_defaults=None, suffix="extra"):
+def _invocation(
+    workspace,
+    gateway_project,
+    gateway_issue,
+    create_user,
+    *,
+    runtime_defaults=None,
+    tool_presentation=None,
+    suffix="extra",
+):
     actor = create_actor(
         workspace=workspace,
         project=gateway_project,
@@ -437,6 +447,7 @@ def _invocation(workspace, gateway_project, gateway_issue, create_user, *, runti
         role=AgentRole.WORKER,
         instructions="Run the assigned work.",
         runtime_defaults=runtime_defaults,
+        tool_presentation=tool_presentation,
     )
     assignment = create_assignment(
         actor,
@@ -498,7 +509,7 @@ def test_pinned_hermes_runs_through_http_service_launcher_and_bound_host_socket(
     dependency_path = os.environ.get("PLANE_G2_HERMES_DEPENDENCY_PATH") or os.path.join(
         checkout, "plane_runtime", "g1_runtime_image"
     )
-    expected_sha = "d2e655101f263329359e7d0de9d0b856202a3e4b"
+    expected_sha = "bc7f13d2ab392752f2667b176c646339c49405f9"
     assert os.path.isdir(checkout)
     assert (
         subprocess.run(
@@ -520,6 +531,13 @@ def test_pinned_hermes_runs_through_http_service_launcher_and_bound_host_socket(
             "adapter": "hermes",
             "maxCodeModeCalls": 16,
             "maxCodeModeOutputBytes": 131_072,
+        },
+        tool_presentation={
+            "eagerOperations": [
+                "agent.outcome.evaluate",
+                "agent.outcome.submit",
+                "agent.outcome.publish",
+            ]
         },
         suffix="g2-http-real",
     )
@@ -719,7 +737,14 @@ hermes_logging.setup_verbose_logging = lambda: None
             "PLANE_AGENT_RUNTIME_BIND": "127.0.0.1",
             "PLANE_AGENT_RUNTIME_PORT": str(runtime_port),
             "PYTHONPATH": os.pathsep.join(
-                path for path in (os.getcwd(), service_environment.get("PYTHONPATH")) if path
+                path
+                for path in (
+                    os.getcwd(),
+                    dependency_path,
+                    checkout,
+                    service_environment.get("PYTHONPATH"),
+                )
+                if path
             ),
         }
     )
@@ -1004,6 +1029,19 @@ def test_supervisor_preserves_runtime_failure_cause_without_copying_raw_message(
     assert "raw provider callback secret" not in control.failure_reason
     assert "raw provider callback secret" not in terminal.reason
     assert transport.calls == 1
+    diagnostic = {
+        "operationId": "work_item.rename",
+        "attemptRef": "operation-attempt:request:worker",
+        "receiptRef": "audit-receipt:audit:worker",
+        "status": "unavailable",
+        "errorCode": "OPERATION_UNAVAILABLE",
+        "codeModePhase": "host_callback",
+    }
+    output_with_diagnostic = _supervisor_result_output(
+        result,
+        host_operation_failure=diagnostic,
+    )
+    assert json.loads(output_with_diagnostic.split(" failure=", 1)[1])["hostOperationFailure"] == diagnostic
 
 
 @pytest.mark.django_db(transaction=True)
@@ -1396,7 +1434,7 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
     tmp_path, api_key_client, workspace, gateway_project, gateway_issue, create_user, capsys
 ):
     checkout = os.environ.get("PLANE_G2_HERMES_CHECKOUT", "/hermes")
-    expected_sha = "d2e655101f263329359e7d0de9d0b856202a3e4b"
+    expected_sha = "bc7f13d2ab392752f2667b176c646339c49405f9"
     assert os.path.isdir(checkout)
     actual_sha = subprocess.run(
         ["git", "-C", checkout, "rev-parse", "HEAD"], check=True, capture_output=True, text=True
@@ -1424,6 +1462,9 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
             "adapter": "hermes",
             "maxCodeModeCalls": 16,
             "maxCodeModeOutputBytes": 131_072,
+        },
+        tool_presentation={
+            "eagerOperations": ["agent.outcome.evaluate", "agent.outcome.submit"]
         },
         created_by=create_user,
     )
@@ -1485,22 +1526,12 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
                     arguments = {
                         "name": "plane_operation",
                         "arguments": {
-                            "action": "discover",
-                            "operationRef": "plane.operations.discover@1",
-                            "input": {"query": "work item", "limit": 32},
-                        },
-                    }
-                elif provider_stream_count == 4:
-                    function_name = "tool_call"
-                    arguments = {
-                        "name": "plane_operation",
-                        "arguments": {
                             "action": "read",
                             "operationRef": "operation:work_item.read",
                             "input": {"project_id": project_id, "issue_id": issue_id},
                         },
                     }
-                elif provider_stream_count == 5:
+                elif provider_stream_count == 4:
                     function_name = "tool_call"
                     arguments = {
                         "name": "plane_operation",
@@ -1514,17 +1545,7 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
                             },
                         },
                     }
-                elif provider_stream_count == 6:
-                    function_name = "execute_code"
-                    arguments = {
-                        "code": (
-                            "from hermes_tools import plane_operation\n"
-                            "print(plane_operation(\"code\", \"operation:catalog.search\", "
-                            "{\"query\": \"rename\", \"limit\": 5}))"
-                        )
-                    }
-                    code_callbacks.append(arguments["code"])
-                elif provider_stream_count == 7:
+                elif provider_stream_count == 5:
                     function_name = "tool_call"
                     arguments = {
                         "name": "plane_operation",
@@ -1538,7 +1559,36 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
                             },
                         },
                     }
+                elif provider_stream_count == 6:
+                    function_name = "tool_call"
+                    arguments = {
+                        "name": "plane_operation",
+                        "arguments": {
+                            "action": "read",
+                            "operationRef": "operation:catalog.search",
+                            "input": {"query": "outcome publish", "limit": 5},
+                        },
+                    }
+                elif provider_stream_count == 7:
+                    function_name = "tool_call"
+                    arguments = {
+                        "name": "plane_operation",
+                        "arguments": {
+                            "action": "read",
+                            "operationRef": "operation:catalog.describe",
+                            "input": {"operation_id": "agent.outcome.publish"},
+                        },
+                    }
                 elif provider_stream_count == 8:
+                    function_name = "execute_code"
+                    arguments = {
+                        "code": (
+                            "result = 2 + 2\n"
+                            "print(result)"
+                        )
+                    }
+                    code_callbacks.append(arguments["code"])
+                elif provider_stream_count == 9:
                     function_name = "tool_call"
                     arguments = {
                         "name": "plane_operation",
@@ -1553,7 +1603,7 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
                             },
                         },
                     }
-                elif provider_stream_count == 9:
+                elif provider_stream_count == 10:
                     function_name = "tool_call"
                     match = re.search(r"outcome-submission:[0-9a-f-]+", json.dumps(request, sort_keys=True))
                     if match is None:
@@ -1712,15 +1762,15 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
         "tool_call",
         "tool_call",
         "tool_call",
-        "execute_code",
         "tool_call",
+        "tool_call",
+        "execute_code",
         "tool_call",
         "tool_call",
     ]
     assert code_callbacks == [
-        'from hermes_tools import plane_operation\n'
-        'print(plane_operation("code", "operation:catalog.search", '
-        '{"query": "rename", "limit": 5}))'
+        'result = 2 + 2\n'
+        'print(result)'
     ]
     assert "state=succeeded" in supervisor_output
     assert provider_key not in supervisor_output
@@ -1746,6 +1796,7 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
     correlation_id = f"correlation:{run.id}"
     expected_operations = {
         "catalog.search",
+        "catalog.describe",
         "work_item.read",
         "work_item.rename",
         "agent.outcome.submit",
@@ -1758,8 +1809,9 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
         correlation_id=correlation_id,
     )
     assert set(receipts.values_list("operation_id", flat=True)) == expected_operations
-    assert receipts.count() == len(expected_operations) + 1
-    assert receipts.filter(operation_id="catalog.search").count() == 2
+    assert receipts.count() == len(expected_operations)
+    assert receipts.filter(operation_id="catalog.search").count() == 1
+    assert receipts.filter(operation_id="catalog.describe").count() == 1
     audits = OperationGatewayAudit.objects.filter(
         caller_id=actor.principal_id,
         workspace_slug=workspace.slug,
@@ -1777,6 +1829,17 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
     assert cli_readback == api_readback
     assert len(json.dumps(cli_readback, sort_keys=True).encode()) <= 8 * 1024
     assert provider_key not in json.dumps(api_readback, sort_keys=True)
+    gateway_projection = api_readback["gateway_readback"][0]
+    assert gateway_projection["receipt"]["workspace_slug"] == workspace.slug
+    assert gateway_projection["receipt"]["caller_id"] == str(actor.principal_id)
+    assert gateway_projection["receipt"]["operation_id"] == "agent.outcome.publish"
+    assert gateway_projection["receipt"]["idempotency_key"]
+    assert gateway_projection["receipt"]["correlation_id"] == correlation_id
+    assert len(gateway_projection["receipt"]["request_digest"]) == 64
+    assert gateway_projection["audit"][0]["workspace_slug"] == workspace.slug
+    assert gateway_projection["audit"][0]["caller_id"] == str(actor.principal_id)
+    assert gateway_projection["receipt"]["invocation_id"]
+    assert gateway_projection["audit"][0]["invocation_id"] == gateway_projection["receipt"]["invocation_id"]
     runtime_event_text = json.dumps(
         list(RuntimeEventIngress.objects.filter(invocation=invocation).values_list("raw_payload", flat=True)),
         sort_keys=True,
@@ -1798,8 +1861,7 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
         phase="outcome",
         outcome="success",
         correlation_id=correlation_id,
-    ).count() == 2
-    assert "ordinary final text only" in runtime_event_text
+    ).count() == 1
     assert "ordinary final text only" not in json.dumps(
         list(OperationGatewayAudit.objects.filter(caller_id=actor.principal_id).values_list("result", flat=True)),
         sort_keys=True,

@@ -1,6 +1,7 @@
 """Gateway proof for the L5 universal work core and progressive catalog."""
 
 import json
+from uuid import uuid4
 
 import pytest
 from rest_framework import status
@@ -130,6 +131,67 @@ def test_catalog_search_progressively_discovers_non_core_operation(api_key_clien
     assert filtered_response.status_code == status.HTTP_200_OK
     filtered_ids = {entry["operationId"] for entry in filtered_response.json()["result"]["operations"]}
     assert "module.list" in filtered_ids
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
+def test_catalog_describe_discovery_exposes_its_nested_input_schema(api_key_client, workspace):
+    response = api_key_client.post(
+        "/api/v1/operations/",
+        _body(workspace, "catalog.search", "catalog-search-describe-schema", {"query": ""}),
+        format="json",
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    entry = next(
+        item for item in response.json()["result"]["operations"] if item["operationId"] == "catalog.describe"
+    )
+    assert entry["inputSchema"] == {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["operation_id"],
+        "properties": {"operation_id": {"type": "string", "maxLength": 128, "minLength": 1}},
+    }
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
+def test_search_workspace_binds_visible_work_item_to_canonical_read_input(
+    api_key_client, workspace, gateway_project, gateway_issue
+):
+    search = api_key_client.post(
+        "/api/v1/operations/",
+        _body(workspace, "search_workspace", "search-work-item-input", {"query": "Gateway Issue"}),
+        format="json",
+    )
+
+    assert search.status_code == status.HTTP_200_OK
+    result = next(item for item in search.json()["result"]["results"] if item["objectType"] == "work_item")
+    assert result["workItemReadInput"] == {
+        "project_id": str(gateway_project.id),
+        "issue_id": str(gateway_issue.id),
+    }
+
+    read = api_key_client.post(
+        "/api/v1/operations/",
+        _body(workspace, "work_item.read", "read-search-bound-work-item", result["workItemReadInput"]),
+        format="json",
+    )
+    assert read.status_code == status.HTTP_200_OK
+    assert read.json()["ok"] is True
+
+    denied = api_key_client.post(
+        "/api/v1/operations/",
+        _body(
+            workspace,
+            "work_item.read",
+            "read-out-of-scope-project",
+            {"project_id": str(uuid4()), "issue_id": str(gateway_issue.id)},
+        ),
+        format="json",
+    )
+    assert denied.status_code == status.HTTP_403_FORBIDDEN
+    assert denied.json()["error"]["code"] == "NOT_AUTHORIZED"
 
 
 @pytest.mark.contract

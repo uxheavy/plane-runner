@@ -14,7 +14,6 @@ from plane.agent.validation import MAX_AGENT_READBACK_BYTES
 from plane.api.serializers.agent_admin import (
     AgentActorAdminSerializer,
     AssignmentAdminSerializer,
-    GatewayReadbackSerializer,
     OutcomeAdminSerializer,
     ProfileVersionAdminSerializer,
     RunAdminSerializer,
@@ -93,7 +92,7 @@ def _run_readback(run: RunAttempt) -> dict[str, Any]:
 
 
 def _gateway_readback(run: RunAttempt, *, limit: int) -> list[dict[str, Any]]:
-    """Read only receipts emitted for this persisted run's canonical correlation."""
+    """Read bounded receipt references emitted for this run's correlation."""
 
     receipts = OperationGatewayIdempotency.objects.filter(
         workspace_id=run.workspace_id,
@@ -114,7 +113,43 @@ def _gateway_readback(run: RunAttempt, *, limit: int) -> list[dict[str, Any]]:
             correlation_id=receipt.correlation_id,
             request_digest=receipt.request_digest,
         ).order_by("created_at", "id")[:limit]
-        readback.append(GatewayReadbackSerializer({"receipt": receipt, "audit": audit}).data)
+        readback.append(
+            {
+                "receipt": {
+                    "id": str(receipt.id),
+                    "request_id": str(receipt.request_id),
+                    "operation_id": receipt.operation_id,
+                    "workspace_slug": receipt.workspace_slug,
+                    "caller_id": str(receipt.caller_id),
+                    "invocation_id": str(receipt.invocation_id),
+                    "idempotency_key": receipt.idempotency_key,
+                    "correlation_id": receipt.correlation_id,
+                    "request_digest": receipt.request_digest,
+                    "state": receipt.state,
+                    "retryable": receipt.retryable,
+                    "audit_receipt": str(receipt.audit_receipt) if receipt.audit_receipt else None,
+                    "created_at": receipt.created_at.isoformat(),
+                    "updated_at": receipt.updated_at.isoformat(),
+                },
+                "audit": [
+                    {
+                        "id": str(row.id),
+                        "invocation_id": row.invocation_id,
+                        "phase": row.phase,
+                        "outcome": row.outcome,
+                        "request_id": str(row.request_id),
+                        "operation_id": row.operation_id,
+                        "workspace_slug": row.workspace_slug,
+                        "caller_id": str(row.caller_id),
+                        "correlation_id": row.correlation_id,
+                        "request_digest": row.request_digest,
+                        "error_code": row.error_code,
+                        "created_at": row.created_at.isoformat(),
+                    }
+                    for row in audit
+                ],
+            }
+        )
     return readback
 
 

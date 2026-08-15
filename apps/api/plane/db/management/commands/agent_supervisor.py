@@ -59,14 +59,24 @@ def _provider_attempt_notice_for_plane(invocation, call):
     return notice
 
 
-def _supervisor_result_output(result) -> str:
+def _supervisor_result_output(
+    result,
+    *,
+    host_operation_failure: dict[str, str] | None = None,
+) -> str:
     output = (
         f"invocation={result.invocation_id} state={result.state} "
         f"terminal={result.terminal_kind or 'none'} frames={result.accepted_frames}"
     )
     if result.failure is not None:
+        failure = dict(result.failure)
+        if (
+            host_operation_failure is not None
+            and result.failure.get("failureCause") == "host_operation_failure"
+        ):
+            failure["hostOperationFailure"] = dict(host_operation_failure)
         output += " failure=" + json.dumps(
-            result.failure,
+            failure,
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
@@ -149,6 +159,7 @@ class Command(BaseCommand):
         monitor = None
         monitor_stop = threading.Event()
         result = None
+        host_operation_failure = None
         try:
             with _supervisor_setup_stage("runtime_provenance"):
                 preflight_runtime_provenance(
@@ -255,9 +266,11 @@ class Command(BaseCommand):
 
                     @contextmanager
                     def host_endpoint(invocation_ref: str):
+                        nonlocal host_operation_failure
                         if invocation_ref != invocation.invocation_id:
                             raise RuntimeDispatchError("runtime host endpoint invocation binding is invalid")
                         token = secrets.token_urlsafe(32)
+                        server = None
 
                         def provider_attempt_recorder(call):
                             notice = _provider_attempt_notice_for_plane(invocation, call)
@@ -285,6 +298,8 @@ class Command(BaseCommand):
                         try:
                             yield RuntimeHostEndpoint(url=server.url, token=token)
                         finally:
+                            if server is not None:
+                                host_operation_failure = server.failure_evidence
                             server.close()
 
                     transport = RemoteRuntimeTransport(
@@ -318,6 +333,7 @@ class Command(BaseCommand):
                 worker_id=options["worker_id"],
                 lease_seconds=options["lease_seconds"],
             )
+            host_operation_failure = host_operation_failure or getattr(transport, "host_operation_failure", None)
         except _SupervisorSetupFailure as exc:
             terminalize_pre_dispatch_failure(invocation, exc.failure)
             raise CommandError("agent supervisor setup was rejected") from None
@@ -338,5 +354,7 @@ class Command(BaseCommand):
                     if result is not None:
                         raise CommandError("agent supervisor credential cleanup failed") from None
         self.stdout.write(
-            self.style.SUCCESS(_supervisor_result_output(result))
+            self.style.SUCCESS(
+                _supervisor_result_output(result, host_operation_failure=host_operation_failure)
+            )
         )

@@ -13,6 +13,8 @@ import plane.agent.runtime.subprocess as runtime_subprocess
 from plane.agent.lifecycle import runtime_contract
 from plane.agent.runtime import (
     HostBoundSubprocessRuntimeTransport,
+    PlaneGatewayHostPort,
+    PlaneHostCall,
     PlaneHostResult,
     RuntimeDispatchError,
     SubprocessRuntimeTransport,
@@ -120,6 +122,42 @@ def test_hermes_request_rejects_unverified_manifest_before_child_launch(monkeypa
         "failureDetail": "dispatch_rejected",
         "failureSubreason": "runtime_configuration_rejected",
     }
+
+
+def test_hermes_contract_projection_prefers_packaged_g1_digests(monkeypatch):
+    expected_digests = {"runSnapshot": "g1-contract"}
+    monkeypatch.setattr(runtime_subprocess, "_hermes_g1_contract_digests", lambda: expected_digests)
+    monkeypatch.setattr(runtime_contract, "contract_digests", lambda: pytest.fail("Plane lifecycle was imported"))
+
+    assert runtime_subprocess._hermes_contract_digests() == expected_digests
+
+
+def test_catalog_describe_receipt_projects_operation_for_hermes_disclosure():
+    call = PlaneHostCall(
+        run_id="run:test",
+        invocation_id="invocation:test",
+        correlation_id="correlation:test",
+        action="read",
+        operation_ref="operation:catalog.describe",
+        input={"operation_id": "agent.outcome.publish"},
+        source="model",
+    )
+    operation = {
+        "operationId": "agent.outcome.publish",
+        "operationRef": "operation:agent.outcome.publish",
+        "inputSchema": {"type": "object", "additionalProperties": False},
+    }
+    result = PlaneGatewayHostPort._from_receipt(
+        call,
+        {
+            "ok": True,
+            "replayed": False,
+            "result": {"operation": operation},
+        },
+    )
+
+    assert result.output["result"]["operation"] == operation
+    assert result.output["operation"] == operation
 
 
 def test_hermes_projection_has_no_handwritten_run_snapshot_digest():

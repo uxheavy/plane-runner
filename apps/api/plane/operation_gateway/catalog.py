@@ -390,7 +390,21 @@ _SEARCH_WORKSPACE_RESULT = {
     "additionalProperties": False,
     "required": ["results"],
     "properties": {
-        "results": {"type": "array", "maxItems": 50, "items": {"type": "object"}},
+        "results": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "workItemReadInput": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": ["project_id", "issue_id"],
+                        "properties": {"project_id": _UUID, "issue_id": _UUID},
+                    }
+                },
+            },
+        },
         "nextCursor": {"type": ["string", "null"]},
     },
 }
@@ -1605,7 +1619,14 @@ _CATALOG_SEARCH_FIELDS = (
 
 
 def _catalog_search_entry(entry: dict[str, Any]) -> dict[str, Any]:
-    return {field: entry[field] for field in _CATALOG_SEARCH_FIELDS if field in entry}
+    result = {field: entry[field] for field in _CATALOG_SEARCH_FIELDS if field in entry}
+    # The nested callback input is otherwise opaque: catalog search deliberately
+    # returns a compact view, while catalog.describe has a strict input parser.
+    # Keep the progressive result bounded but expose the exact schema needed to
+    # invoke the next discovery step.
+    if entry.get("operationId") == "catalog.describe":
+        result["inputSchema"] = entry["inputSchema"]
+    return result
 
 
 def catalog_search(query: str = "", *, limit: int | None = None, cursor: str | None = None) -> dict[str, Any]:

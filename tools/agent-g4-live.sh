@@ -3,7 +3,8 @@
 set -Eeuo pipefail
 umask 077
 
-ROOT_DIR="$(pwd)"
+RUNNER_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+ROOT_DIR="$(cd -- "${RUNNER_DIR}/.." && pwd -P)"
 PROJECT="plane-agent-g4-live-${PPID}-${RANDOM}"
 NETWORK="${PROJECT}_test_env"
 EGRESS="${PROJECT}_egress"
@@ -36,7 +37,7 @@ LIVE_AUTHORITY="${PLANE_G4_LIVE_AUTHORITY:?validated live authority path is requ
 LIVE_CONFIG="${PLANE_G4_LIVE_CONFIG:?validated live config path is required}"
 LIVE_COMMAND="${PLANE_G4_LIVE_COMMAND:?validated live command is required}"
 RUNTIME_CHILD_ENVIRONMENT_JSON='{"HOME":"/tmp","HERMES_HOME":"/tmp/hermes-home","LANG":"C.UTF-8","LC_ALL":"C.UTF-8","PATH":"/usr/local/bin:/usr/bin:/bin","PYTHONPATH":"/tmp:/opt/plane/agent/dependencies:/opt:/opt/hermes","PYTHONSAFEPATH":"1","PYTHONUNBUFFERED":"1"}'
-G4_CANDIDATE="$(git rev-parse HEAD)"
+G4_CANDIDATE="$(git -C "${ROOT_DIR}" rev-parse HEAD)"
 G4_EXPECTED_CANDIDATE="${PLANE_G4_EXPECTED_CANDIDATE:?operator-supplied exact wrapper SHA is required}"
 [[ "${G4_EXPECTED_CANDIDATE}" =~ ^[0-9a-f]{40}$ ]] || {
     printf 'event=agent.g4.live-runner status=failed expected=full_external_expected_candidate_sha actual=invalid suggestion=set_Plane_G4_EXPECTED_CANDIDATE\n' >&2
@@ -357,6 +358,7 @@ cleanup() {
         SCENARIO_VOLUME_CREATED=0
     fi
     if [[ "${RUN_DIR_CREATED}" -eq 1 && -d "${RUN_DIR}" && ! -L "${RUN_DIR}" ]]; then
+        rm -f -- "${RUNTIME_SECRET_FILE}" || true
         rm -f -- "${PROVIDER_SECRET_FILE}" || true
         rm -rf -- "${RUN_DIR}"
     fi
@@ -367,7 +369,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-LIVE_PHASE=credential-staging
+LIVE_PHASE=checkout-bind-preflight
 if [[ ! -d "${TMP_ROOT}" ]]; then
     mkdir -m 700 -- "${TMP_ROOT}" || {
         printf '%s\n' 'event=agent.g4.live-runner status=failed expected=repository-owned-tmp-root actual=unavailable suggestion=use-a-writable-repository-owned-tmp-root' >&2
@@ -391,6 +393,32 @@ mkdir -m 700 -- "${RUN_DIR}" || {
     exit 2
 }
 RUN_DIR_CREATED=1
+python3 -c 'import secrets; print(secrets.token_urlsafe(48), end="")' >"${RUNTIME_SECRET_FILE}" || {
+    printf '%s\n' 'event=agent.g4.live-runner status=failed phase=checkout-bind-preflight expected=owner-only-runtime-secret actual=staging-failed suggestion=use-a-writable-repository-owned-tmp-root' >&2
+    exit 2
+}
+chmod 600 "${RUNTIME_SECRET_FILE}" || {
+    printf '%s\n' 'event=agent.g4.live-runner status=failed phase=checkout-bind-preflight expected=owner-only-runtime-secret actual=permission-failed suggestion=use-a-writable-repository-owned-tmp-root' >&2
+    exit 2
+}
+
+if ! docker run --rm --network none \
+    --mount type=bind,src="${RUNTIME_SECRET_FILE}",dst=/run/secrets/plane_agent_runtime,readonly \
+    --entrypoint python3 "${API_IMAGE}" -c '
+import os
+import stat
+
+metadata = os.stat("/run/secrets/plane_agent_runtime", follow_symlinks=False)
+if not stat.S_ISREG(metadata.st_mode):
+    raise SystemExit(1)
+if stat.S_IMODE(metadata.st_mode) != 0o600:
+    raise SystemExit(1)
+' >/dev/null 2>&1; then
+    printf 'event=agent.g4.live-runner status=failed phase=checkout-bind-preflight expected=checkout-root-docker-bind-visible actual=runtime-secret-bind-unavailable root=%s suggestion=run-from-a-Docker-visible-checkout-under-the-Plane-project-root\n' \
+        "${ROOT_DIR}" >&2
+    exit 2
+fi
+
 if [[ "${SCENARIO_ENABLED}" -eq 1 ]]; then
     LIVE_PHASE=scenario-staging
     if docker volume inspect "${SCENARIO_VOLUME}" >/dev/null 2>&1; then
@@ -472,6 +500,7 @@ if len(payload) > 131072 or hashlib.sha256(payload).hexdigest() != sys.argv[1]:
         "PYTHONPATH=/run/plane-scenario:/workspace/apps/api"
     )
 fi
+LIVE_PHASE=credential-staging
 PROVIDER_SECRET_SOURCE="${PLANE_G4_PROVIDER_SECRET_SOURCE:?configured provider source is required}"
 python3 - "${PROVIDER_SECRET_SOURCE}" "${PROVIDER_SECRET_FILE}" <<'PY' >/dev/null 2>&1 || {
 import os
@@ -592,7 +621,6 @@ if metadata.st_size > 64 * 1024:
 ' <"${PROVIDER_SECRET_FILE}" >/dev/null 2>&1
 
 LIVE_PHASE=compose
-python3 -c 'import secrets; print(secrets.token_urlsafe(48), end="")' >"${RUNTIME_SECRET_FILE}"
 
 PLANE_TEST_ENV_FILE="${ROOT_DIR}/apps/api/.env.example" \
     docker compose -p "${PROJECT}" -f "${ROOT_DIR}/docker-compose-test.yml" \

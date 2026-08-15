@@ -606,6 +606,43 @@ def build_failure_evidence(
             return "unavailable"
         return text
 
+    def bounded_host_operation_failure(value):
+        required = {
+            "operationId",
+            "attemptRef",
+            "receiptRef",
+            "status",
+            "errorCode",
+            "codeModePhase",
+        }
+        if not isinstance(value, dict) or set(value) != required:
+            return None
+        status = value.get("status")
+        phase = value.get("codeModePhase")
+        if status not in {"denied", "conflict", "unavailable", "invalid"}:
+            return None
+        if phase not in {"host_callback", "unavailable"}:
+            return None
+        operation_id = bounded_identifier(value.get("operationId"))
+        attempt_ref = bounded_identifier(value.get("attemptRef"))
+        receipt_ref = bounded_identifier(value.get("receiptRef"))
+        error_code = bounded_identifier(value.get("errorCode"))
+        if (
+            operation_id is None
+            or attempt_ref is None
+            or receipt_ref is None
+            or error_code is None
+        ):
+            return None
+        return {
+            "operationId": operation_id,
+            "attemptRef": attempt_ref,
+            "receiptRef": receipt_ref,
+            "status": status,
+            "errorCode": error_code,
+            "codeModePhase": phase,
+        }
+
     def bounded_binding_value(key, value):
         if not isinstance(value, str) or len(value.encode("utf-8")) > 128:
             return "unavailable"
@@ -680,13 +717,19 @@ def build_failure_evidence(
             candidate = json.loads(failure_reason)
         except (TypeError, ValueError):
             candidate = None
-        if isinstance(candidate, dict) and frozenset(candidate) in {
-            frozenset({"failureCode", "failurePhase", "failureDetail"}),
-            frozenset({"failureCode", "failurePhase", "failureDetail", "failureSubreason"}),
-            frozenset({"failureCode", "failurePhase", "failureDetail", "failureCause"}),
-            frozenset({"failureCode", "failurePhase", "failureDetail", "failureSubreason", "failureCause"}),
-        }:
-            reason = candidate
+        if isinstance(candidate, dict):
+            base_keys = {"failureCode", "failurePhase", "failureDetail"}
+            optional_keys = {"failureSubreason", "failureCause", "hostOperationFailure"}
+            if base_keys.issubset(candidate) and not set(candidate).difference(
+                base_keys | optional_keys
+            ):
+                reason = dict(candidate)
+                if "hostOperationFailure" in reason:
+                    bounded_host_failure = bounded_host_operation_failure(reason["hostOperationFailure"])
+                    if bounded_host_failure is None:
+                        reason.pop("hostOperationFailure", None)
+                    else:
+                        reason["hostOperationFailure"] = bounded_host_failure
     reason_code = reason.get("failureCode")
     bounded_failure_code = (
         reason_code
@@ -795,6 +838,9 @@ def build_failure_evidence(
     }
     if bounded_failure_cause is not None:
         bounded_failure["reasonCause"] = bounded_failure_cause
+    bounded_host_failure = bounded_host_operation_failure(reason.get("hostOperationFailure"))
+    if bounded_host_failure is not None:
+        bounded_failure["hostOperationFailure"] = bounded_host_failure
 
     receipt = {
         "schemaVersion": "plane-agent-g4/live-failure/v1",
@@ -845,6 +891,35 @@ def _supervisor_failure_reason(output):
         frozenset(required_keys - {"failureCause"}),
         frozenset((required_keys - {"failureCause"}) | {"failureSubreason"}),
     }
+    host_failure_fields = {
+        "operationId",
+        "attemptRef",
+        "receiptRef",
+        "status",
+        "errorCode",
+        "codeModePhase",
+    }
+
+    def bounded_host_failure(value):
+        if not isinstance(value, dict) or set(value) != host_failure_fields:
+            return None
+        if value["status"] not in {"denied", "conflict", "unavailable", "invalid"}:
+            return None
+        if value["codeModePhase"] not in {"host_callback", "unavailable"}:
+            return None
+        allowed = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:-"
+        bounded = {}
+        for field in ("operationId", "attemptRef", "receiptRef", "errorCode"):
+            item = value[field]
+            if not isinstance(item, str) or not item or len(item.encode("utf-8")) > 128:
+                return None
+            if any(char not in allowed for char in item):
+                return None
+            bounded[field] = item
+        bounded["status"] = value["status"]
+        bounded["codeModePhase"] = value["codeModePhase"]
+        return bounded
+
     for line in reversed(output.splitlines()):
         marker = " failure="
         if marker not in line:
@@ -854,10 +929,33 @@ def _supervisor_failure_reason(output):
             value = json.loads(raw)
         except (TypeError, ValueError):
             continue
-        if not isinstance(value, dict) or frozenset(value) not in allowed_shapes:
+        if not isinstance(value, dict):
             continue
-        if not all(isinstance(item, str) for item in value.values()):
+        value_keys = frozenset(value)
+        if value_keys not in allowed_shapes:
+            if (
+                "hostOperationFailure" not in value
+                or value_keys - {"hostOperationFailure"} not in allowed_shapes
+            ):
+                continue
+        if not all(
+            isinstance(value.get(item), str)
+            for item in (
+                "failureCode",
+                "failurePhase",
+                "failureDetail",
+                "failureSubreason",
+                "failureCause",
+            )
+            if item in value
+        ):
             continue
+        if "hostOperationFailure" in value:
+            bounded = bounded_host_failure(value["hostOperationFailure"])
+            if bounded is None:
+                continue
+            value = dict(value)
+            value["hostOperationFailure"] = bounded
         return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return None
 

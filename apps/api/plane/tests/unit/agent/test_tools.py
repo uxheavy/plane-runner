@@ -88,6 +88,12 @@ def test_work_item_read_discloses_exact_uuid_input_schema():
     }
 
 
+def test_catalog_search_discloses_nested_describe_input_schema():
+    entry = next(item for item in catalog_search("")["operations"] if item["operationId"] == "catalog.describe")
+
+    assert entry["inputSchema"] == describe_operation("catalog.describe")["operation"]["inputSchema"]
+
+
 def test_composed_eager_catalog_carries_work_item_read_input_schema():
     catalog = compose_tool_catalog(_profile(eager=["work_item.read"]), _assignment())
 
