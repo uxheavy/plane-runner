@@ -12,12 +12,19 @@ CREDENTIAL_STATE_VOLUME="${PROJECT}_agent_runtime_credential_state"
 CREDENTIAL_STATE_TARGET="/run/plane-agent-credentials"
 CREDENTIAL_STATE_FILE="${CREDENTIAL_STATE_TARGET}/revocations.json"
 PROVIDER_SECRET_VOLUME="${PROJECT}_provider_credentials"
+SCENARIO_VOLUME="${PROJECT}_scenario_descriptor"
 TMP_ROOT="${ROOT_DIR}/tmp"
 RUN_DIR="${TMP_ROOT}/${PROJECT}"
 EVIDENCE_FILE="${RUN_DIR}/evidence.json"
 ERROR_FILE="${RUN_DIR}/sanitized-error.log"
 RUNTIME_SECRET_FILE="${RUN_DIR}/runtime-secret"
 PROVIDER_SECRET_FILE="${RUN_DIR}/provider-credentials"
+SCENARIO_DESCRIPTOR_PATH_INPUT="${PLANE_G4_SCENARIO_DESCRIPTOR:-}"
+SCENARIO_DESCRIPTOR_SHA256="${PLANE_G4_SCENARIO_SHA256:-}"
+SCENARIO_ENABLED=0
+SCENARIO_VOLUME_CREATED=0
+SCENARIO_MOUNT_ARGS=()
+SCENARIO_ENV_ARGS=()
 LIVE_RESULT_PATH_INPUT="${PLANE_G4_LIVE_RESULT_PATH:-${TMP_ROOT}/${PROJECT}.result}"
 RESULT_FILE=""
 RUN_DIR_CREATED=0
@@ -80,6 +87,21 @@ python3 "${ROOT_DIR}/tools/validate_agent_g4_live.py" \
     --expected-candidate "${G4_EXPECTED_CANDIDATE}" \
     --command "${LIVE_COMMAND}" \
     --config-only >/dev/null
+
+if [[ -n "${SCENARIO_DESCRIPTOR_PATH_INPUT}" || -n "${SCENARIO_DESCRIPTOR_SHA256}" ]]; then
+    if [[ -z "${SCENARIO_DESCRIPTOR_PATH_INPUT}" || -z "${SCENARIO_DESCRIPTOR_SHA256}" ]]; then
+        printf '%s\n' 'event=agent.g4.live-runner status=failed expected=scenario-path-and-sha256-pair actual=missing-input suggestion=provide-both-owner-only-scenario-inputs' >&2
+        exit 2
+    fi
+    python3 "${ROOT_DIR}/tools/agent_g4_live_scenario.py" \
+        --descriptor "${SCENARIO_DESCRIPTOR_PATH_INPUT}" \
+        --sha256 "${SCENARIO_DESCRIPTOR_SHA256}" \
+        >/dev/null || {
+        printf '%s\n' 'event=agent.g4.live-runner status=failed expected=validated-owner-only-scenario-descriptor actual=validation-failed suggestion=check-version-role-model-prompt-bounds-and-digest' >&2
+        exit 2
+    }
+    SCENARIO_ENABLED=1
+fi
 
 G4_G3_BASELINE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["candidateBinding"]["acceptedG3Baseline"])' "${MANIFEST}")"
 G4_HERMES="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pins"]["hermesCommit"])' "${MANIFEST}")"
@@ -146,7 +168,6 @@ print("\t".join(provider[key] for key in (
 )))
 PY
 )"
-PROVIDER_SECRET_SOURCE="${PLANE_G4_PROVIDER_SECRET_SOURCE:?configured provider source is required}"
 PLANE_TEST_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48), end="")')"
 
 api_image_id="$(docker image inspect "${API_IMAGE}" --format '{{.Id}}' 2>/dev/null)" || {
@@ -328,6 +349,13 @@ cleanup() {
         fi
         PROVIDER_SECRET_VOLUME_CREATED=0
     fi
+    if [[ "${SCENARIO_VOLUME_CREATED}" -eq 1 ]]; then
+        if ! docker volume rm "${SCENARIO_VOLUME}" >/dev/null 2>&1; then
+            printf 'event=agent.g4.live-runner status=failed phase=cleanup expected=scenario-volume-removed actual=volume-removal-failed\n' >&2
+            cleanup_status=1
+        fi
+        SCENARIO_VOLUME_CREATED=0
+    fi
     if [[ "${RUN_DIR_CREATED}" -eq 1 && -d "${RUN_DIR}" && ! -L "${RUN_DIR}" ]]; then
         rm -f -- "${PROVIDER_SECRET_FILE}" || true
         rm -rf -- "${RUN_DIR}"
@@ -363,6 +391,88 @@ mkdir -m 700 -- "${RUN_DIR}" || {
     exit 2
 }
 RUN_DIR_CREATED=1
+if [[ "${SCENARIO_ENABLED}" -eq 1 ]]; then
+    LIVE_PHASE=scenario-staging
+    if docker volume inspect "${SCENARIO_VOLUME}" >/dev/null 2>&1; then
+        printf '%s\n' 'event=agent.g4.live-runner status=failed expected=new-task-owned-scenario-volume actual=volume-name-already-exists suggestion=retry-with-a-fresh-live-run' >&2
+        exit 2
+    fi
+    docker volume create \
+        --label com.uxheavy.plane.agent-g4-scenario=true \
+        --label "com.uxheavy.plane.agent-g4-project=${PROJECT}" \
+        "${SCENARIO_VOLUME}" >/dev/null
+    SCENARIO_VOLUME_CREATED=1
+    docker run --rm -i --network none \
+        --mount type=volume,src="${SCENARIO_VOLUME}",dst=/run/plane-scenario,volume-nocopy \
+        --entrypoint python3 "${API_IMAGE}" -c '
+import os
+import stat
+import sys
+
+payload = sys.stdin.buffer.read(131073)
+if len(payload) > 131072:
+    raise SystemExit(1)
+fd = os.open(
+    "/run/plane-scenario/descriptor.json",
+    os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW,
+    0o600,
+)
+try:
+    os.fchmod(fd, 0o600)
+    offset = 0
+    while offset < len(payload):
+        offset += os.write(fd, payload[offset:])
+    os.fsync(fd)
+finally:
+    os.close(fd)
+metadata = os.stat("/run/plane-scenario/descriptor.json", follow_symlinks=False)
+if not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o600:
+    raise SystemExit(1)
+' <"${SCENARIO_DESCRIPTOR_PATH_INPUT}" >/dev/null 2>&1
+    docker run --rm -i --network none \
+        --mount type=volume,src="${SCENARIO_VOLUME}",dst=/run/plane-scenario,volume-nocopy \
+        --entrypoint python3 "${API_IMAGE}" -c '
+import os
+import shutil
+import stat
+
+destination = "/run/plane-scenario/agent_g4_live_scenario.py"
+fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
+try:
+    os.fchmod(fd, 0o600)
+    with os.fdopen(fd, "wb", closefd=False) as output:
+        shutil.copyfileobj(os.fdopen(0, "rb", closefd=False), output, 65536)
+    os.fsync(fd)
+finally:
+    os.close(fd)
+metadata = os.stat(destination, follow_symlinks=False)
+if not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o600:
+    raise SystemExit(1)
+' <"${ROOT_DIR}/tools/agent_g4_live_scenario.py" >/dev/null 2>&1
+    docker run --rm --network none \
+        --mount type=volume,src="${SCENARIO_VOLUME}",dst=/run/plane-scenario,readonly,volume-nocopy \
+        --entrypoint python3 "${API_IMAGE}" -c '
+import hashlib
+import sys
+
+payload = open("/run/plane-scenario/descriptor.json", "rb").read(131073)
+if len(payload) > 131072 or hashlib.sha256(payload).hexdigest() != sys.argv[1]:
+    raise SystemExit(1)
+' "${SCENARIO_DESCRIPTOR_SHA256}" >/dev/null 2>&1
+    SCENARIO_MOUNT_ARGS=(
+        --mount
+        "type=volume,src=${SCENARIO_VOLUME},dst=/run/plane-scenario,readonly,volume-nocopy"
+    )
+    SCENARIO_ENV_ARGS=(
+        --env
+        "G4_SCENARIO_DESCRIPTOR=/run/plane-scenario/descriptor.json"
+        --env
+        "G4_SCENARIO_SHA256=${SCENARIO_DESCRIPTOR_SHA256}"
+        --env
+        "PYTHONPATH=/run/plane-scenario:/workspace/apps/api"
+    )
+fi
+PROVIDER_SECRET_SOURCE="${PLANE_G4_PROVIDER_SECRET_SOURCE:?configured provider source is required}"
 python3 - "${PROVIDER_SECRET_SOURCE}" "${PROVIDER_SECRET_FILE}" <<'PY' >/dev/null 2>&1 || {
 import os
 import stat
@@ -604,6 +714,7 @@ test "${runtime_ready}" -eq 1
 
 LIVE_PHASE=api-invocation
 docker run --rm -i --network "${NETWORK}" --hostname api --network-alias api \
+    "${SCENARIO_MOUNT_ARGS[@]}" \
     --mount type=bind,src="${RUNTIME_SECRET_FILE}",dst=/run/plane-agent-runtime-secret,readonly \
     --mount type=volume,src="${CREDENTIAL_STATE_VOLUME}",dst="${CREDENTIAL_STATE_TARGET}",volume-nocopy \
     --mount type=volume,src="${PROVIDER_SECRET_VOLUME}",dst=/run/secrets,readonly,volume-nocopy \
@@ -659,6 +770,7 @@ docker run --rm -i --network "${NETWORK}" --hostname api --network-alias api \
     --env G4_AUTHORITY_ID="${G4_AUTHORITY_ID}" \
     --env G4_PERMITTED_CANARY="${G4_PERMITTED_CANARY}" \
     --env G4_DENIED_CANARY="${G4_DENIED_CANARY}" \
+    "${SCENARIO_ENV_ARGS[@]}" \
     "${API_IMAGE}" python - <"${LIVE_INVOKE_SOURCE}" >"${EVIDENCE_FILE}" 2>"${ERROR_FILE}"
 
 test -s "${EVIDENCE_FILE}"

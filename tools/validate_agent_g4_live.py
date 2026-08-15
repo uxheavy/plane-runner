@@ -283,6 +283,43 @@ def validate_disposable_artifact_binding(manifest: dict[str, Any], candidate: st
     _exact(expected["hermesCommit"], binding["hermesCommit"], "manifest_disposableBinding_pin_hermesCommit")
 
 
+def _commit_parents(repo_root: Path, candidate: str) -> list[str]:
+    result = subprocess.run(
+        ["git", "-C", str(repo_root), "rev-list", "--parents", "-n", "1", candidate],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise ContractError("candidate_parent_lookup_failed")
+    values = result.stdout.strip().split()
+    if not values or values[0] != candidate:
+        raise ContractError("candidate_parent_lookup_invalid")
+    return values[1:]
+
+
+def validate_candidate_binding(manifest: dict[str, Any], candidate: str, repo_root: Path) -> None:
+    """Bind the selected manifest to either the exact wrapper or a full disposable candidate."""
+
+    candidate_binding = _object(_required(manifest, "candidateBinding", "manifest"), "candidateBinding")
+    mode = _required(candidate_binding, "mode", "candidateBinding")
+    disposable = manifest.get("disposableBinding")
+    if mode == "exact-single-child":
+        if disposable is not None:
+            raise ContractError("exact_single_child_disposable_binding_unexpected")
+        parent = _required(candidate_binding, "parentCommit", "candidateBinding")
+        _git_sha(parent, "candidateBinding_parentCommit")
+        if not candidate_has_exact_parent(_commit_parents(repo_root, candidate), parent):
+            raise ContractError("candidate_is_not_exact_single_child")
+        return
+    if mode == "disposable-exact-candidate":
+        if disposable is None:
+            raise ContractError("disposable_binding_required")
+        validate_disposable_artifact_binding(manifest, candidate)
+        return
+    raise ContractError("candidate_binding_mode_unsupported")
+
+
 def validate_api_artifact_descriptor(actual: dict[str, Any], expected: dict[str, Any]) -> None:
     """Fail closed when a selected API image is not the manifest-bound artifact."""
 
@@ -657,6 +694,7 @@ def validate_authority(
     candidate: str,
     expected_candidate: str,
     command: str,
+    repo_root: Path | None = None,
     *,
     require_provider_relay: bool = False,
 ) -> dict[str, Any]:
@@ -675,7 +713,13 @@ def validate_authority(
     _bool(authority, "fallbackAllowed", "authority", False)
     binding = _object(_required(authority, "binding", "authority"), "authority_binding")
     expected = exact_binding(manifest, candidate)
-    validate_disposable_artifact_binding(manifest, candidate)
+    if repo_root is None:
+        # Pure contract callers use synthetic commits. The real runner passes a
+        # repository root during config-only preflight so Git ancestry is
+        # checked before credentials, Docker, or provider access.
+        validate_disposable_artifact_binding(manifest, candidate)
+    else:
+        validate_candidate_binding(manifest, candidate, repo_root)
     for key in BINDING_FIELDS:
         _exact(_required(binding, key, "authority_binding"), expected[key], f"authority_{key}")
     command_hash = hashlib.sha256(command.encode("utf-8")).hexdigest()
@@ -849,6 +893,7 @@ _LIVE_TOP_LEVEL_FIELDS = {
     "terminal",
     "planeHostOperationReceipts",
     "planeOperationAudit",
+    "scenario",
 }
 _LIVE_AUDIT_FIELDS = {"passed", "eventCount", "permittedOutcome", "deniedOutcome", "submitOutcome", "publishOutcome"}
 _LIVE_VERSION_FIELDS = {"passed", "binding", "source"}
@@ -982,6 +1027,55 @@ def _semantic_digest(receipt: dict[str, Any]) -> str:
     ).hexdigest()
 
 
+_SCENARIO_ACTOR_ROLES = {
+    "worker": "worker",
+    "manager": "delegator",
+    "operator": "worker",
+}
+_SCENARIO_OUTCOMES = {"success", "denied", "not_observed"}
+
+
+def _validate_scenario_projection(value: Any) -> None:
+    scenario = _object(value, "evidence_scenario")
+    required = {"id", "descriptorDigest", "schemaVersion", "actorRole", "profileName"}
+    if set(scenario).difference(required | {"expected"}) or not required.issubset(scenario):
+        raise ContractError("evidence_scenario_fields_invalid")
+    scenario_id = scenario["id"]
+    if scenario_id not in _SCENARIO_ACTOR_ROLES or scenario["actorRole"] != _SCENARIO_ACTOR_ROLES[scenario_id]:
+        raise ContractError("evidence_scenario_identity_invalid")
+    if not isinstance(scenario["descriptorDigest"], str) or not HASH_RE.fullmatch(scenario["descriptorDigest"]):
+        raise ContractError("evidence_scenario_digest_invalid")
+    _exact(scenario["schemaVersion"], "plane.agent-scenario/v1", "evidence_scenario_schema")
+    if (
+        not isinstance(scenario["profileName"], str)
+        or not 1 <= len(scenario["profileName"].encode("utf-8")) <= 96
+        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._ -]{0,95}", scenario["profileName"])
+    ):
+        raise ContractError("evidence_scenario_profile_invalid")
+    if "expected" not in scenario:
+        return
+    expected = _object(scenario["expected"], "evidence_scenario_expected")
+    if set(expected) != {"operationOutcomes", "evidenceKinds"}:
+        raise ContractError("evidence_scenario_expected_fields_invalid")
+    operations = expected["operationOutcomes"]
+    if not isinstance(operations, list) or len(operations) > 16:
+        raise ContractError("evidence_scenario_expected_operations_invalid")
+    for operation in operations:
+        row = _object(operation, "evidence_scenario_expected_operation")
+        if set(row) != {"operationId", "outcome"}:
+            raise ContractError("evidence_scenario_expected_operation_fields_invalid")
+        _safe_ref(row["operationId"], "evidence_scenario_expected_operation_id")
+        if row["outcome"] not in _SCENARIO_OUTCOMES:
+            raise ContractError("evidence_scenario_expected_operation_outcome_invalid")
+    evidence_kinds = expected["evidenceKinds"]
+    if (
+        not isinstance(evidence_kinds, list)
+        or len(evidence_kinds) > 16
+        or any(not isinstance(kind, str) or not _S00_SAFE_REF_RE.fullmatch(kind) for kind in evidence_kinds)
+    ):
+        raise ContractError("evidence_scenario_expected_evidence_invalid")
+
+
 def _validate_semantic_digest(evidence: dict[str, Any]) -> None:
     _hash(_required(evidence, "semanticDigest", "evidence"), "evidence_semantic_digest")
     _exact(evidence["semanticDigest"], _semantic_digest(evidence), "evidence_semantic_digest")
@@ -996,6 +1090,8 @@ def _validate_receipt_common(
 ) -> None:
     _exact(_required(evidence, "binding", "evidence"), expected_binding, "evidence_binding")
     _exact(_required(evidence, "authorityId", "evidence"), authority_info["authorityId"], "evidence_authority")
+    if "scenario" in evidence:
+        _validate_scenario_projection(evidence["scenario"])
     gate = _required(evidence, "s00Gate", "evidence")
     _validate_s00_gate(gate)
     if status == "passed" and (gate["status"] != "passed" or gate["firstFailedPredicate"] is not None):
@@ -1217,8 +1313,9 @@ _FAILURE_TOP_LEVEL_FIELDS = {
     "planeHostOperationReceipts",
     "planeOperationAudit",
     "providerRelay",
+    "scenario",
 }
-_FAILURE_REQUIRED_TOP_LEVEL_FIELDS = _FAILURE_TOP_LEVEL_FIELDS - {"providerRelay"}
+_FAILURE_REQUIRED_TOP_LEVEL_FIELDS = _FAILURE_TOP_LEVEL_FIELDS - {"providerRelay", "scenario"}
 _FAILURE_STAGES = {
     "initialization",
     "compose",
@@ -1531,6 +1628,7 @@ def main(argv: list[str] | None = None) -> int:
             args.candidate,
             args.expected_candidate,
             args.command,
+            Path.cwd(),
             require_provider_relay=args.config_only,
         )
         validate_config(config, authority_info, args.command, require_provider_relay=args.config_only)

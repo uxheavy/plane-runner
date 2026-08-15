@@ -22,6 +22,7 @@
     "status": { "const": "passed" },
     "authorityId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$" },
     "semanticDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "scenario": { "$ref": "#/$defs/scenario" },
     "s00Gate": { "$ref": "#/$defs/s00Gate" },
     "providerRelay": { "$ref": "#/$defs/providerRelay" },
     "binding": {
@@ -110,6 +111,43 @@
         "credentialRef": { "const": "PLANE_G4_PROVIDER_SECRET_SOURCE" },
         "credentialName": { "const": "api_key" },
         "fallbackUsed": { "const": false }
+      }
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "descriptorDigest", "schemaVersion", "actorRole", "profileName"],
+      "properties": {
+        "id": { "enum": ["worker", "manager", "operator"] },
+        "descriptorDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "schemaVersion": { "const": "plane.agent-scenario/v1" },
+        "actorRole": { "enum": ["worker", "delegator"] },
+        "profileName": { "type": "string", "minLength": 1, "maxLength": 96 },
+        "expected": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operationOutcomes", "evidenceKinds"],
+          "properties": {
+            "operationOutcomes": {
+              "type": "array",
+              "maxItems": 16,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["operationId", "outcome"],
+                "properties": {
+                  "operationId": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_.:/-]{0,127}$" },
+                  "outcome": { "enum": ["success", "denied", "not_observed"] }
+                }
+              }
+            },
+            "evidenceKinds": {
+              "type": "array",
+              "maxItems": 16,
+              "items": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_.:/-]{0,127}$" }
+            }
+          }
+        }
       }
     },
     "providerRelay": {

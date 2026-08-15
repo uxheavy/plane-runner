@@ -373,6 +373,23 @@ def _provider_relay_descriptor() -> dict[str, object]:
     return descriptor
 
 
+def _scenario_descriptor():
+    path = os.environ.get("G4_SCENARIO_DESCRIPTOR")
+    digest = os.environ.get("G4_SCENARIO_SHA256")
+    if not path and not digest:
+        return None
+    if not path or not digest:
+        raise RuntimeError("live invocation scenario descriptor inputs are incomplete")
+    try:
+        from agent_g4_live_scenario import ScenarioError, load_descriptor
+    except ImportError as exc:
+        raise RuntimeError("live invocation scenario parser is unavailable") from exc
+    try:
+        return load_descriptor(path, digest)
+    except ScenarioError as exc:
+        raise RuntimeError(f"live invocation scenario descriptor rejected: {exc}") from exc
+
+
 def build_failure_evidence(
     *,
     binding,
@@ -395,6 +412,7 @@ def build_failure_evidence(
     authority_id=None,
     canary_ids=None,
     provider_relay=None,
+    scenario=None,
     plane_host_operation_receipts=False,
     plane_operation_audit=None,
 ):
@@ -801,6 +819,8 @@ def build_failure_evidence(
     }
     if provider_relay is not None:
         receipt["providerRelay"] = provider_relay
+    if scenario is not None:
+        receipt["scenario"] = scenario
     return _attach_receipt_semantic_digest(receipt)
 
 
@@ -843,6 +863,7 @@ def _supervisor_failure_reason(output):
 
 
 def main() -> int:
+    scenario = _scenario_descriptor()
     started = time.monotonic()
     provider = _provider_descriptor()
     provider_relay = _provider_relay_descriptor()
@@ -1040,35 +1061,77 @@ def main() -> int:
         actor = create_actor(
             workspace=workspace,
             project=project,
-            display_name="G4 configured provider worker",
+            display_name=(scenario.profile.name if scenario is not None else "G4 configured provider worker"),
             credential_ref="plane-credential:g4-live",
             created_by=user,
         )
+        actor_role = AgentRole.WORKER
+        profile_instructions = (
+            "Complete this one live G4 chain check through Plane tools. First discover and read the assigned issue "
+            "using a permitted operation. Then deliberately attempt agent.outcome.evaluate as this worker so the "
+            "authorization canary is denied. Finally call agent.outcome.submit and then agent.outcome.publish with "
+            "a minimal structural summary. Do not stop at ordinary assistant text: the explicit submit and publish "
+            "product operations are required terminal evidence. Do not use Code Mode or external tools."
+        )
+        profile_persona = ""
+        profile_model_defaults = {}
+        profile_expected_outcomes = None
+        profile_display_name = None
+        assignment_target_ref = f"issue:{issue.id}"
+        assignment_objective = "Perform one live provider-backed read, authorization canary, and explicit published outcome."
+        assignment_acceptance_criteria = [
+            "A permitted read, denied evaluation, and explicit submitted and published outcome exist."
+        ]
+        assignment_context_refs = []
+        if scenario is not None:
+            from agent_g4_live_scenario import ASSIGNED_WORK_ITEM_ALIAS
+
+            actor_role = {
+                "worker": AgentRole.WORKER,
+                "delegator": AgentRole.DELEGATOR,
+            }[scenario.actor_role]
+            profile_instructions = scenario.profile.instructions
+            profile_persona = scenario.prompt
+            profile_model_defaults = {
+                "provider": scenario.profile.model_policy.provider,
+                "model": scenario.profile.model_policy.model,
+                "reasoning_effort": scenario.profile.model_policy.reasoning,
+            }
+            profile_display_name = scenario.profile.name
+            assignment_target_ref = (
+                f"issue:{issue.id}"
+                if scenario.assignment.target_ref == ASSIGNED_WORK_ITEM_ALIAS
+                else scenario.assignment.target_ref
+            )
+            assignment_objective = scenario.assignment.objective
+            assignment_acceptance_criteria = list(scenario.assignment.acceptance_criteria)
+            assignment_context_refs = list(scenario.assignment.context_refs)
         profile = create_profile(
             actor,
-            role=AgentRole.WORKER,
-            instructions=(
-                "Complete this one live G4 chain check through Plane tools. First discover and read the assigned issue "
-                "using a permitted operation. Then deliberately attempt agent.outcome.evaluate as this worker so the "
-                "authorization canary is denied. Finally call agent.outcome.submit and then agent.outcome.publish with "
-                "a minimal structural summary. Do not stop at ordinary assistant text: the explicit submit and publish "
-                "product operations are required terminal evidence. Do not use Code Mode or external tools."
-            ),
+            role=actor_role,
+            instructions=profile_instructions,
+            display_name=profile_display_name,
+            persona=profile_persona,
+            model_defaults=profile_model_defaults,
             runtime_defaults={
                 "provider": provider["name"],
-                "model": provider["model"],
+                "model": (
+                    scenario.profile.model_policy.model
+                    if scenario is not None
+                    else provider["model"]
+                ),
                 "adapter": "hermes",
             },
+            expected_outcomes=profile_expected_outcomes,
             created_by=user,
         )
         assignment = create_assignment(
             actor,
             project=project,
-            target_ref=f"issue:{issue.id}",
-            objective="Perform one live provider-backed read, authorization canary, and explicit published outcome.",
-            acceptance_criteria=[
-                "A permitted read, denied evaluation, and explicit submitted and published outcome exist."
-            ],
+            target_ref=assignment_target_ref,
+            objective=assignment_objective,
+            acceptance_criteria=assignment_acceptance_criteria,
+            context_refs=assignment_context_refs,
             created_by=user,
         )
         run = create_run(assignment, profile, idempotency_key=f"idempotency:g4-live-run-{suffix}", created_by=user)
@@ -1261,6 +1324,7 @@ def main() -> int:
             runtime_event_kind_counts=runtime_event_kind_counts,
             s00_gate=s00_gate,
             provider_relay=provider_relay,
+            scenario=scenario.evidence() if scenario is not None else None,
             plane_host_operation_receipts=plane_host_operation_receipts,
             plane_operation_audit=plane_operation_audit,
         )
@@ -1333,6 +1397,8 @@ def main() -> int:
                 },
             },
         })
+        if scenario is not None:
+            evidence["scenario"] = scenario.evidence()
     except BaseException as exc:
         failure = exc
         return_code = 1
@@ -1459,6 +1525,7 @@ def main() -> int:
                     "denied": os.environ.get("G4_DENIED_CANARY"),
                 },
                 provider_relay=provider_relay,
+                scenario=scenario.evidence() if scenario is not None else None,
                 plane_host_operation_receipts=plane_host_operation_receipts,
                 plane_operation_audit=plane_operation_audit,
             )

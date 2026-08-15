@@ -197,6 +197,61 @@ starting Docker. Authority/config binding, artifact and runtime pins, and the
 resulting cleanup remain confined to the runner's generated project/run
 resources. Never edit the durable manifest for a disposable artifact rehearsal.
 
+The durable `candidateBinding.mode=exact-single-child` contract is intentionally
+narrow: with no `disposableBinding`, the selected `HEAD` must have exactly one
+parent and that parent must equal `candidateBinding.parentCommit`. An advanced
+dogfood branch is rejected during config-only preflight, before provider-source
+read, Docker, relay, DNS, or product mutation. For
+`candidateBinding.mode=disposable-exact-candidate`, use the existing
+`tools/build-agent-runtime-image.py` path to build and attest the exact API and
+runtime candidate, then point the runner at the generated manifest; a complete
+`disposableBinding` must bind its API/runtime revisions to `HEAD` and retain the
+Hermes and image pins. For example, from the clean candidate checkout:
+
+```sh
+G4_CANDIDATE="$(git rev-parse HEAD)"
+G4_HERMES_REVISION="<exact-clean-hermes-sha>"
+python3 tools/build-agent-runtime-image.py \
+  --hermes-checkout /path/to/hermes-agent \
+  --hermes-revision "${G4_HERMES_REVISION}" \
+  --plane-revision "${G4_CANDIDATE}" \
+  --api-image "${G4_API_IMAGE}" \
+  --manifest-out "${PWD}/tmp/plane-agent-g4-disposable-${G4_CANDIDATE}.json"
+PLANE_G4_LIVE_MANIFEST="${PWD}/tmp/plane-agent-g4-disposable-${G4_CANDIDATE}.json" \
+  tools/agent-g4-live.sh
+```
+
+The builder's existing `--hermes-donor-image` mode is equivalent when the
+manifest-bound sealed Hermes image is the selected source. Do not hand-edit the
+durable manifest, and do not treat a missing disposable binding as proof for an
+advanced candidate.
+
+The default invocation has no scenario environment and remains the S00
+worker/profile/assignment contract. A user-testing commission may supply one
+owner-only descriptor and its exact digest:
+
+```sh
+PLANE_G4_SCENARIO_DESCRIPTOR="${PWD}/tmp/worker-scenario.json" \
+PLANE_G4_SCENARIO_SHA256="$(shasum -a 256 "${PWD}/tmp/worker-scenario.json" | awk '{print $1}')" \
+tools/agent-g4-live.sh
+```
+
+The versioned `plane.agent-scenario/v1` descriptor supports `worker`, `manager`,
+and `operator` identities. It contains only the Plane actor role, immutable
+profile instructions/model policy, assignment target/objective/acceptance and
+context references, a bounded prompt, and optional bounded evidence predicates.
+The reserved target `fixture:assigned-work-item` resolves to the real issue
+created by the existing live invocation; other target references remain exact.
+The runner validates the owner-only non-symlink path, digest, schema, fields,
+role/model, bounds, and credential-like values before reading the provider
+source, starting relay/runtime or network/DNS, making a provider request, or
+mutating Plane. It stages the descriptor into a task-owned read-only Docker
+volume and records the scenario ID and descriptor digest in retained evidence.
+Scenario/profile data changes behavior and tool presentation only; the live
+Plane actor and its permissions remain separately provisioned authority. The
+descriptor has no credentials, executable hooks, imports/shell, workflow DSL,
+bootstrap operations, or alternate permission allowlist.
+
 The authority and config carry the same canonical `providerRelay` projection.
 The runner's config-only preflight requires that projection and exact equality
 before it reads or stages the provider source. It forwards the validated

@@ -703,7 +703,9 @@ class G4ContractTests(unittest.TestCase):
             disposable_path.write_text(json.dumps(disposable_manifest), encoding="utf-8")
             fake_git.write_text(
                 "#!/bin/sh\n"
-                f"if [ \"$1\" = rev-parse ] && [ \"$2\" = HEAD ]; then printf '%s\\n' '{candidate}'; else exit 1; fi\n",
+                f"if [ \"$1\" = rev-parse ] && [ \"$2\" = HEAD ]; then printf '%s\\n' '{candidate}'; "
+                f"elif [ \"$1\" = -C ] && [ \"$3\" = rev-list ]; then printf '%s %s\\n' '{candidate}' '{MANIFEST['candidateBinding']['parentCommit']}'; "
+                "else exit 1; fi\n",
                 encoding="utf-8",
             )
             fake_git.chmod(0o700)
@@ -980,7 +982,9 @@ class G4ContractTests(unittest.TestCase):
             ).stdout.strip()
             fake_git.write_text(
                 "#!/bin/sh\n"
-                f"if [ \"$1\" = rev-parse ] && [ \"$2\" = HEAD ]; then printf '%s\\n' '{candidate}'; else exit 1; fi\n",
+                f"if [ \"$1\" = rev-parse ] && [ \"$2\" = HEAD ]; then printf '%s\\n' '{candidate}'; "
+                f"elif [ \"$1\" = -C ] && [ \"$3\" = rev-list ]; then printf '%s %s\\n' '{candidate}' '{MANIFEST['candidateBinding']['parentCommit']}'; "
+                "else exit 1; fi\n",
                 encoding="utf-8",
             )
             fake_git.chmod(0o700)
