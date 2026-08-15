@@ -1,6 +1,6 @@
 # Plane Agent functional coverage map
 
-Target: exact current Plane source candidate `8681f2e7db`; documentation is
+Target: exact current Plane source candidate `8722376f88`; documentation is
 committed in the adjacent callback-binding checkpoint.
 with Hermes `bc7f13d2ab392752f2667b176c646339c49405f9`. No chat UI is in scope.
 Use existing Plane object/settings pages only where they already exist; the
