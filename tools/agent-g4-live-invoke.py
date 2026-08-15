@@ -68,7 +68,7 @@ from plane.db.models.operation_gateway import (
 )
 
 if os.environ.get("G4_SCENARIO_DESCRIPTOR"):
-    from plane.agent_g4_worker_route import (
+    from agent_g4_worker_route import (
         attempt_actor_substitution,
         build_worker_route_evidence,
         context_state_counts,
