@@ -289,12 +289,13 @@ directory. Existing destinations and symlinks are refused. The published file
 is owner-only (`0600`) and is made visible atomically, so callers never read a
 partially written final result.
 
-The result file bytes are exactly the bounded bytes written to stdout. A
-failure receipt contains only the finite runner phase, error-class allowlist,
-exit code, and (for Docker exit `125`) the finite Docker reason category,
-followed by the existing schema-controlled `EVIDENCE_FILE` object when one
-exists. The raw `ERROR_FILE`, runtime transcript, model text, credentials, and
-host paths are never copied to the result file.
+The result file bytes are exactly one schema-controlled JSON receipt: the
+existing `EVIDENCE_FILE` object when the API reached its evidence boundary, or
+the finite `plane-agent-g4/live-runner-failure/v1` receipt for a failure before
+that boundary. Human failure status is written to stderr and is never
+prepended to the result, so callers can parse the result with one JSON decode.
+The raw `ERROR_FILE`, runtime transcript, model text, credentials, and host
+paths are never copied to the result file.
 
 The user-testing caller owns acknowledgment: after the runner exits, read and
 hash the result file, validate the bounded receipt, then delete that exact

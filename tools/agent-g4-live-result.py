@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Persist the bounded stdout receipt from the disposable G4 live runner."""
+"""Persist one bounded JSON receipt from the disposable G4 live runner."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ EVIDENCE_SCHEMAS = {
     "plane-agent-g4/live-evidence/v1",
     "plane-agent-g4/live-failure/v1",
 }
+RUNNER_FAILURE_SCHEMA = "plane-agent-g4/live-runner-failure/v1"
 FAILURE_PHASES = {
     "initialization",
     "credential-staging",
@@ -126,6 +127,26 @@ def _bounded_failure_line(*, phase: str, error_class: str, exit_code: int, reaso
     return (
         f"event=agent.g4.live-runner.failure phase={phase} error_class={error_class} "
         f"exit_code={exit_code} reason_category={reason_category}\n"
+    ).encode("ascii")
+
+
+def _runner_failure_receipt(*, phase: str, error_class: str, exit_code: int, reason_category: str) -> bytes:
+    _bounded_failure_line(
+        phase=phase,
+        error_class=error_class,
+        exit_code=exit_code,
+        reason_category=reason_category,
+    )
+    return json.dumps(
+        {
+            "schemaVersion": RUNNER_FAILURE_SCHEMA,
+            "status": "failed",
+            "phase": phase,
+            "errorClass": error_class,
+            "exitCode": exit_code,
+            "reasonCategory": reason_category,
+        },
+        separators=(",", ":"),
     ).encode("ascii")
 
 
@@ -237,22 +258,29 @@ def persist_result(
     error_class: str = "unavailable",
     reason_category: str = "unavailable",
 ) -> bytes:
-    """Publish the exact bounded receipt that the runner writes to stdout."""
+    """Publish exactly one schema-controlled JSON receipt."""
 
     if isinstance(status, bool) or not isinstance(status, int) or not 0 <= status <= 255:
         raise ResultPersistenceError("exit_code_invalid")
     evidence_payload = _read_schema_controlled_evidence(evidence, required=status == 0)
-    failure_payload = (
+    if status != 0:
         _bounded_failure_line(
             phase=phase,
             error_class=error_class,
             exit_code=status,
             reason_category=reason_category,
         )
-        if status != 0
-        else b""
-    )
-    payload = failure_payload + evidence_payload
+    if evidence_payload:
+        payload = evidence_payload
+    elif status != 0:
+        payload = _runner_failure_receipt(
+            phase=phase,
+            error_class=error_class,
+            exit_code=status,
+            reason_category=reason_category,
+        )
+    else:
+        raise ResultPersistenceError("evidence_unavailable")
     if not payload or len(payload) > MAX_RESULT_BYTES:
         raise ResultPersistenceError("result_size_invalid")
     parent = _validate_destination_parent(destination)
@@ -287,6 +315,15 @@ def main(argv: list[str] | None = None) -> int:
     except ResultPersistenceError as exc:
         print(f"event=agent.g4.live-runner.result status=failed reason={exc.reason}", file=sys.stderr)
         return 2
+    if args.status != 0:
+        sys.stderr.buffer.write(
+            _bounded_failure_line(
+                phase=args.phase,
+                error_class=args.error_class,
+                exit_code=args.status,
+                reason_category=args.reason_category,
+            )
+        )
     sys.stdout.buffer.write(payload)
     return 0
 

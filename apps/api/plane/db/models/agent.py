@@ -945,6 +945,9 @@ class RuntimeProviderAttempt(AgentScopedModel):
     upstream_initiated = models.BooleanField(default=False, editable=False)
     status_class = models.CharField(max_length=16, blank=True, default="", editable=False)
     error_code = models.CharField(max_length=64, blank=True, default="", editable=False)
+    reason_phase = models.CharField(max_length=32, blank=True, default="", editable=False)
+    reason_subreason = models.CharField(max_length=64, blank=True, default="", editable=False)
+    event_ref = models.CharField(max_length=128, blank=True, default="", editable=False)
     terminal_at = models.DateTimeField(null=True, blank=True, editable=False)
     fingerprint = models.CharField(max_length=72, editable=False)
 
@@ -965,7 +968,16 @@ class RuntimeProviderAttempt(AgentScopedModel):
         "fingerprint",
         "deleted_at",
     )
-    LIFECYCLE_FIELDS = ("phase", "upstream_initiated", "status_class", "error_code", "terminal_at")
+    LIFECYCLE_FIELDS = (
+        "phase",
+        "upstream_initiated",
+        "status_class",
+        "error_code",
+        "reason_phase",
+        "reason_subreason",
+        "event_ref",
+        "terminal_at",
+    )
 
     class Meta:
         db_table = "agent_runtime_provider_attempts"

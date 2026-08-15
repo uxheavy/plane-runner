@@ -313,6 +313,12 @@ class RuntimeDispatchExecutor:
             def provider_audit(audit: ProviderRelayAudit) -> None:
                 if host_client is None:
                     raise RuntimeConfigurationError("provider attempt evidence requires the Plane host callback")
+                event_ref = audit.event_ref or (
+                    "provider-event:"
+                    + hashlib.sha256(
+                        f"{audit.run_id}\n{audit.invocation_id}\n{audit.request_id}".encode("utf-8")
+                    ).hexdigest()
+                )
                 result = host_client.invoke(
                     PlaneHostCall(
                         run_id=audit.run_id,
@@ -336,6 +342,9 @@ class RuntimeDispatchExecutor:
                             "upstreamInitiated": audit.upstream_called,
                             "statusClass": audit.status_class,
                             "errorCode": audit.error_code,
+                            "reasonPhase": audit.reason_phase,
+                            "reasonSubreason": audit.reason_subreason,
+                            "eventRef": event_ref,
                         },
                         source="runtime",
                     )

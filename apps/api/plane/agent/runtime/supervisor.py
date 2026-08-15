@@ -269,6 +269,28 @@ def _serialized_failure(reason: dict[str, str]) -> str:
     return json.dumps(reason, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+def _provider_unknown_failure(invocation: RuntimeInvocation) -> dict[str, str] | None:
+    """Return the last bounded provider diagnostic for an initiated unknown request."""
+
+    attempt = (
+        RuntimeProviderAttempt.objects.filter(invocation=invocation, upstream_initiated=True)
+        .order_by("-sequence")
+        .first()
+    )
+    if attempt is None:
+        return None
+    failure = {
+        "failureCode": "outcome_unknown",
+        "failurePhase": attempt.reason_phase or "provider_relay",
+        "failureDetail": "upstream_result_unavailable",
+        "failureSubreason": attempt.reason_subreason or "reconciliation_required",
+    }
+    failure["providerAttemptRef"] = f"provider-attempt:{attempt.id}"
+    if attempt.event_ref:
+        failure["providerEventRef"] = attempt.event_ref
+    return failure
+
+
 def _runtime_exit_failure_classification(failure: object) -> dict[str, str] | None:
     """Return a bounded live envelope for a finite child terminal failure."""
 
@@ -297,13 +319,22 @@ def _terminalize_dispatch_failure(
         upstream_initiated=True,
     ).exists()
     bounded_failure = known_dispatch_failure and not upstream_attempt_exists
+    if upstream_attempt_exists:
+        reason = _provider_unknown_failure(invocation) or {
+            "failureCode": "outcome_unknown",
+            "failurePhase": "provider_relay",
+            "failureDetail": "upstream_result_unavailable",
+            "failureSubreason": "reconciliation_required",
+        }
+    else:
+        reason = dict(reason)
     return _terminalize(
         invocation.pk,
         kind="run_blocker",
         reason=_serialized_failure(reason),
         code=reason["failureCode"] if bounded_failure else "outcome_unknown",
         outcome_unknown=not bounded_failure,
-        failure=dict(reason) if bounded_failure else None,
+        failure=dict(reason),
     )
 
 
@@ -450,12 +481,16 @@ def _finish_exit(invocation: RuntimeInvocation, accepted_frames: int) -> Supervi
     if open_attempts:
         reconciled = reconcile_provider_attempts(invocation)
         if any(attempt.upstream_initiated for attempt in reconciled):
+            failure = _provider_unknown_failure(invocation)
             return _terminalize(
                 invocation.pk,
                 kind="run_blocker",
-                reason="Provider request outcome is unknown; explicit reconciliation is required.",
+                reason=_serialized_failure(failure)
+                if failure is not None
+                else "Provider request outcome is unknown; explicit reconciliation is required.",
                 code="outcome_unknown",
                 outcome_unknown=True,
+                failure=failure,
             )
         if not provider_attempts_reconciled(invocation):
             return _terminalize(
@@ -468,12 +503,16 @@ def _finish_exit(invocation: RuntimeInvocation, accepted_frames: int) -> Supervi
         invocation=invocation,
         phase=RuntimeProviderAttemptPhase.OUTCOME_UNKNOWN,
     ).exists():
+        failure = _provider_unknown_failure(invocation)
         return _terminalize(
             invocation.pk,
             kind="run_blocker",
-            reason="Provider request outcome is unknown; explicit reconciliation is required.",
+            reason=_serialized_failure(failure)
+            if failure is not None
+            else "Provider request outcome is unknown; explicit reconciliation is required.",
             code="outcome_unknown",
             outcome_unknown=True,
+            failure=failure,
         )
     exit_evidence = RuntimeExitEvidence.objects.get(invocation=invocation)
     if exit_evidence.kind == "completed":
@@ -644,6 +683,7 @@ __all__ = [
     "RuntimeLeaseBusy",
     "RuntimeSupervisorError",
     "SupervisorResult",
+    "_provider_unknown_failure",
     "request_runtime_cancellation",
     "run_runtime_invocation",
     "terminalize_pre_dispatch_failure",

@@ -1508,13 +1508,22 @@ def test_identifiers_are_strict_and_target_references_are_lossless(assignment, p
     assert namespaced_ref("target", "literal-69737375653a313233") == run.snapshot["assignment"]["targetRef"]
 
 
-def _provider_attempt_notice(invocation, *, phase, upstream_initiated, sequence=1, status_class=None, error_code=None):
+def _provider_attempt_notice(
+    invocation,
+    *,
+    phase,
+    upstream_initiated,
+    sequence=1,
+    status_class=None,
+    error_code=None,
+    diagnostics=False,
+):
     terminal = phase in {
         RuntimeProviderAttemptPhase.COMPLETED,
         RuntimeProviderAttemptPhase.FAILED,
         RuntimeProviderAttemptPhase.OUTCOME_UNKNOWN,
     }
-    return {
+    notice = {
         "phase": phase,
         "runId": str(invocation.run_id),
         "invocationId": invocation.invocation_id,
@@ -1530,6 +1539,15 @@ def _provider_attempt_notice(invocation, *, phase, upstream_initiated, sequence=
         "statusClass": status_class if status_class is not None else ("unknown" if terminal else ""),
         "errorCode": error_code if error_code is not None else ("outcome_unknown" if terminal else ""),
     }
+    if diagnostics:
+        notice.update(
+            {
+                "reasonPhase": "provider_relay" if terminal else "",
+                "reasonSubreason": "upstream_exception" if terminal else "",
+                "eventRef": "provider-event:" + "a" * 64,
+            }
+        )
+    return notice
 
 
 @pytest.mark.django_db(transaction=True)
@@ -1555,6 +1573,35 @@ def test_provider_attempt_reconciles_process_loss_after_external_send(assignment
     assert attempt.error_code == "outcome_unknown"
     assert attempt.terminal_at is not None
     assert provider_attempts_reconciled(invocation) is True
+
+
+@pytest.mark.django_db(transaction=True)
+def test_provider_attempt_diagnostics_are_bounded_and_idempotent(assignment, profile):
+    run = create_run(assignment, profile)
+    invocation = record_invocation(run, idempotency_key="idempotency:provider-attempt-diagnostics")
+    notice = _provider_attempt_notice(
+        invocation,
+        phase=RuntimeProviderAttemptPhase.INTENT,
+        upstream_initiated=False,
+        diagnostics=True,
+    )
+    first = record_provider_attempt_notice(invocation, notice)
+    started = dict(notice, phase=RuntimeProviderAttemptPhase.STARTED, upstreamInitiated=True)
+    record_provider_attempt_notice(invocation, started)
+    terminal = dict(
+        started,
+        phase=RuntimeProviderAttemptPhase.OUTCOME_UNKNOWN,
+        statusClass="unknown",
+        errorCode="outcome_unknown",
+        reasonSubreason="upstream_timeout",
+    )
+    second = record_provider_attempt_notice(invocation, terminal)
+    replay = record_provider_attempt_notice(invocation, terminal)
+
+    assert first.id == second.id == replay.id
+    assert second.reason_phase == "provider_relay"
+    assert second.reason_subreason == "upstream_timeout"
+    assert second.event_ref == "provider-event:" + "a" * 64
 
 
 @pytest.mark.django_db(transaction=True)

@@ -84,7 +84,7 @@ executor = MigrationExecutor(connection)
 leaves = set(executor.loader.graph.leaf_nodes("db"))
 applied = set(executor.recorder.applied_migrations())
 missing = leaves - applied
-expected = {("db", "0142_runtime_provider_attempts")}
+expected = {("db", "0144_provider_attempt_diagnostics")}
 if leaves != expected or missing:
     raise SystemExit(f"db migration leaf state is invalid: leaves={sorted(leaves)} missing={sorted(missing)}")
 print(f"db_migration_leaf={sorted(leaves)[0]}")
@@ -191,9 +191,9 @@ CURRENT_STEP="reverse-to-0138"
 run_api python manage.py migrate db 0138_agentactor_chief_of_staff_for_and_more --noinput --verbosity 1
 assert_migration_leaf "0138_agentactor_chief_of_staff_for_and_more"
 
-CURRENT_STEP="reapply-0142"
-run_api python manage.py migrate db 0142_runtime_provider_attempts --noinput --verbosity 1
-assert_migration_leaf "0142_runtime_provider_attempts"
+CURRENT_STEP="reapply-0144"
+run_api python manage.py migrate db 0144_provider_attempt_diagnostics --noinput --verbosity 1
+assert_migration_leaf "0144_provider_attempt_diagnostics"
 
 CURRENT_STEP="bootstrap-before-reverse"
 run_api python manage.py bootstrap_operation_gateway_audit --phase=before-reverse

@@ -226,13 +226,47 @@ def test_provider_attempt_intent_precedes_upstream_and_upstream_failure_is_unkno
         "error": "outcome_unknown",
         "retryable": False,
         "upstreamInitiated": True,
+        "reasonCode": "outcome_unknown",
+        "reasonPhase": "provider_relay",
+        "reasonSubreason": "upstream_exception",
     }
-    assert [audit.phase for audit in audits] == ["intent", "started", "outcome_unknown"]
+    assert [audit.phase for audit in audits] == ["intent", "started", "outcome_unknown", "terminal"]
     assert audits[0].upstream_called is False
     assert audits[1].upstream_called is True
     assert audits[-1].error_code == "outcome_unknown"
     assert audits[-1].status_class == "unknown"
+    assert audits[-1].reason_phase == "provider_relay"
+    assert audits[-1].reason_subreason == "upstream_exception"
+    assert "fixture upstream failed" not in repr(audits)
     assert len(upstream.calls) == 1
+
+
+def test_provider_timeout_is_bounded_and_repeated_request_is_not_replayed(tmp_path):
+    upstream = _FixtureUpstream(
+        ProviderResponse(status_code=200, headers={}, body_chunks=(b"never",)),
+        [],
+    )
+
+    def interrupted_upstream(request, credentials, is_cancelled):
+        upstream.calls.append((request, credentials))
+        raise TimeoutError("fixture upstream timeout with response body")
+
+    audits: list[ProviderRelayAudit] = []
+    server = _server(tmp_path, upstream=interrupted_upstream, audit=audits.append)
+    try:
+        server.start()
+        first = _round_trip(server, request_id="request:interrupted")
+        second = _round_trip(server, request_id="request:interrupted")
+    finally:
+        server.close()
+
+    assert first[0] == 403
+    assert json.loads(first[2])["reasonSubreason"] == "upstream_timeout"
+    assert second[0] == 403
+    assert json.loads(second[2]) == {"error": "replay"}
+    assert len(upstream.calls) == 1
+    assert [audit.phase for audit in audits] == ["intent", "started", "outcome_unknown"]
+    assert audits[-1].reason_subreason == "upstream_timeout"
 
 
 def test_provider_attempt_evidence_failure_blocks_pre_send_upstream(tmp_path):
