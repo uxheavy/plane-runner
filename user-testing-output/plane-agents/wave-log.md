@@ -1948,7 +1948,7 @@ records this diagnosis without changing the retained receipts.
   No image was rebuilt and no provider attempt was spent after this finding;
   a fresh primary and eligible replay wait for that exact Hermes commit.
 
-## Wave 0BC — Hermes conflict owner integrated; final three-commission preflight
+## Wave 0BC — exact 579d5f04 / Hermes cc3e444e bounded Worker attempt
 
 - The authoritative clean Hermes checkout is now
   `cc3e444ee25e6c19fee77b6e1fbe3d95aef1a3ea` (parent `bc7f13d2...`). Its owner
@@ -1956,13 +1956,32 @@ records this diagnosis without changing the retained receipts.
   host-port suites. The focused Plane owner suite passed 58 tests, including
   the wire-valid exact-replay/conflict contract and the unknown-state mutation
   guard.
-- The active Plane source remains the guarded callback-binding candidate
-  `8722376f8862b5c22fa10ce4c507e0045412599a`; the final documentation
-  checkpoint will be refrozen before provider use. No provider attempt was
-  spent during this preflight. W01/W02 remain dirty and the retained f63,
-  ca42, and de9189 receipts remain dirty evidence; none will be replayed.
-- Next bounded run shape is exactly three fresh commissions on one durable
-  Maya Agent/profile: (A) W01-W02, (B) W03-W04 plus W07-W08, and (C) W05-W06.
-  Each commission must independently submit, publish, read back, and perform
-  an eligible provider-disabled replay. No route will be marked clean from
-  provider-free tests alone.
+- Final artifacts were built from Plane `579d5f045d0419ce3444cd9288acb63a20f93611`:
+  API `plane-agent-api:g4-v6-579d5f04`, digest
+  `sha256:458fbd165c59704a9853fa4001463dbf8ef3ada2ffcde8e85f42c9f4bd4650a3`;
+  runtime `plane-agent-runtime:hermes-cc3e444e-g4-v6-579d5f04`, digest
+  `sha256:35c329ca3272ca14b5b5f360fb614615134b7e9db76016a25d539edac6832cb9`;
+  manifest `tmp/plane-agent-g4-disposable-579d5f04.json`. MCP and SDK were
+  `c04974ed6624f17b41e63ef8182661929e77e0d3` and
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The launch helper and
+  config-only/descriptor preflights passed.
+- One fresh Maya Agent/profile run was launched with exactly the three
+  commission descriptor, GPT-5.6 Luna xhigh, fallback disabled, and the
+  existing authorized subscription. Commission A reached the provider and
+  persisted 11 completed upstream `2xx` attempts. Its Plane lifecycle was
+  durable-successful: run `338cbce5-3b9d-43f3-96a2-5e95b6dcbb46`, invocation
+  `invocation:33784bd9-74ae-45cf-a462-f1a0f89c05db`, RuntimeExit completed at
+  sequence 21, one exact `NOT_AUTHORIZED` evaluator denial, one submit, one
+  applied publication, one visible terminal, and the terminal/run/invocation
+  bindings matched. Commission A then failed locally before route evidence
+  and replay when the W08 readback probe requested limit 8 and exceeded
+  Plane's established 8-KiB bounded readback projection. Commissions B/C
+  did not start; replay was not eligible and was not attempted.
+- Owner-only result: `tmp/persona-wave-v6/worker-live-579d5f04/result.json`,
+  mode `0600`, SHA-256
+  `ad476f7bd45ea25e34c77e0b33d375a94288c82cdaaa8ee96a29dc3200a08c2d`.
+  Canonical validation passed. The retained f63, ca42, de9189, and 579d5f04
+  receipts are dirty evidence; none was replayed or continued. The reusable
+  readback helper is fixed to request limit 1 and the focused provider-free
+  tool suite passed `136/136`; a new exact-image build and fresh three-
+  commission primary are required.

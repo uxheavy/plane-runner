@@ -377,6 +377,15 @@ def test_runner_readback_uses_actual_plane_state_and_finite_product_kinds() -> N
     assert '"count": 1' not in readback
 
 
+def test_worker_route_readback_uses_smallest_bounded_owner_projection() -> None:
+    source = (TOOLS / "agent_g4_worker_route.py").read_text()
+
+    assert "build_run_readback(run, limit=1)" in source
+    assert "build_correlation_readback(workspace, run_id=str(run.id), limit=1)" in source
+    assert "build_run_readback(run, limit=8)" not in source
+    assert "build_correlation_readback(workspace, run_id=str(run.id), limit=8)" not in source
+
+
 @pytest.mark.parametrize(
     ("mutator", "reason"),
     [

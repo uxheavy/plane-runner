@@ -328,8 +328,12 @@ def govern_worker_skill(*, actor, gardener, initial_skill, run, user, workspace,
 def worker_readback_facts(*, run, workspace, user, suffix):
     """Use the existing bounded API/CLI-equivalent readback owners."""
 
-    run_readback = build_run_readback(run, limit=8)
-    correlation_readback = build_correlation_readback(workspace, run_id=str(run.id), limit=8)
+    # W08 needs presence/consistency facts only.  Keep both projections at
+    # the smallest owner-supported bound so a provider-heavy run cannot make
+    # the established 8-KiB readback ceiling fail before route evidence is
+    # assembled.
+    run_readback = build_run_readback(run, limit=1)
+    correlation_readback = build_correlation_readback(workspace, run_id=str(run.id), limit=1)
     other_workspace = Workspace.objects.create(
         name=f"G4 Readback Isolation {suffix}", owner=user, slug=f"g4-readback-{suffix}"
     )
