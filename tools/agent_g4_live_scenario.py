@@ -25,6 +25,7 @@ MAX_ACCEPTANCE_ITEMS = 8
 MAX_ACCEPTANCE_BYTES = 512
 MAX_CONTEXT_REFS = 16
 MAX_CONTEXT_REF_BYTES = 256
+MAX_EAGER_OPERATIONS = 16
 MAX_EXPECTED_OPERATIONS = 16
 MAX_EXPECTED_EVIDENCE = 16
 MAX_EXPECTED_RECORDS = 8
@@ -151,6 +152,7 @@ class ProfileSpec:
     name: str
     instructions: str
     model_policy: ModelPolicy
+    tool_presentation: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -247,6 +249,16 @@ def _optional_string_list(value: Any, name: str, maximum_items: int, maximum_byt
     if not isinstance(value, list) or len(value) > maximum_items:
         raise ScenarioError(f"scenario_{name}_invalid_list")
     return tuple(_ref(item, f"{name}_{index}", maximum_bytes) for index, item in enumerate(value))
+
+
+def _tool_presentation(value: Any) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    presentation = _object(value, "profile_tool_presentation")
+    _keys(presentation, {"eagerOperations"}, "profile_tool_presentation")
+    return _optional_string_list(
+        presentation["eagerOperations"], "profile_eager_operations", MAX_EAGER_OPERATIONS, 128
+    )
 
 
 _PRECONDITIONS = {"isolated_workspace", "assigned_work_item", "fresh_assignment", "live_authorization", "separate_runtime_service"}
@@ -465,7 +477,8 @@ def parse_descriptor_bytes(raw: bytes, expected_digest: str) -> ScenarioDescript
         raise ScenarioError("scenario_actor_role_mismatch")
 
     profile = _object(descriptor["profile"], "profile")
-    _keys(profile, {"name", "instructions", "modelPolicy"}, "profile")
+    if set(profile).difference({"name", "instructions", "modelPolicy", "toolPresentation"}):
+        raise ScenarioError("scenario_profile_fields_mismatch")
     name = profile["name"]
     if not isinstance(name, str) or not SAFE_NAME_RE.fullmatch(name) or len(name.encode("utf-8")) > MAX_PROFILE_NAME_BYTES:
         raise ScenarioError("scenario_profile_name_invalid")
@@ -480,6 +493,7 @@ def parse_descriptor_bytes(raw: bytes, expected_digest: str) -> ScenarioDescript
     }:
         raise ScenarioError("scenario_model_policy_invalid")
     model_policy = ModelPolicy("openai-codex", "gpt-5.6-luna", "xhigh", False)
+    tool_presentation = _tool_presentation(profile.get("toolPresentation"))
 
     assignment = _object(descriptor["assignment"], "assignment")
     _keys(assignment, {"targetRef", "objective", "acceptanceCriteria", "contextRefs"}, "assignment")
@@ -507,7 +521,7 @@ def parse_descriptor_bytes(raw: bytes, expected_digest: str) -> ScenarioDescript
     return ScenarioDescriptor(
         scenario_id=scenario_id,
         actor_role=actor_role,
-        profile=ProfileSpec(name, instructions, model_policy),
+        profile=ProfileSpec(name, instructions, model_policy, tool_presentation),
         assignment=assignment_spec,
         prompt=prompt,
         expected=_expected(descriptor.get("expected")),

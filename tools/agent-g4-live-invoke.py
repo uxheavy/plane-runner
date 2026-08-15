@@ -1396,6 +1396,11 @@ def main() -> int:
             display_name=profile_display_name,
             persona=profile_persona,
             model_defaults=profile_model_defaults,
+            tool_presentation=(
+                {"eager_operations": list(scenario.profile.tool_presentation)}
+                if scenario is not None and scenario.profile.tool_presentation
+                else None
+            ),
             runtime_defaults={
                 "provider": provider["name"],
                 "model": (

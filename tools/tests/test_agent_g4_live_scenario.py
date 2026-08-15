@@ -72,6 +72,16 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert parsed.scenario_id == "worker"
     assert parsed.expected["routeChecks"] == [f"W{index:02d}" for index in range(1, 9)]
     assert '"subject_user_ref":"{{subjectUserRef}}"' in parsed.profile.instructions
+    assert parsed.profile.tool_presentation == (
+        "catalog.search",
+        "catalog.describe",
+        "agent.context.read",
+        "work_item.read",
+        "work_item.rename",
+        "agent.outcome.evaluate",
+        "agent.outcome.submit",
+        "agent.outcome.publish",
+    )
     assert 'catalog.search once with {"query":"agent.context.read","limit":5}' in parsed.profile.instructions
     assert 'catalog.describe once with exactly {"operation_id":"agent.context.read"}' in parsed.profile.instructions
     assert "no operation: prefix, operationRef field" in parsed.profile.instructions
@@ -327,6 +337,10 @@ def test_runner_readback_uses_actual_plane_state_and_finite_product_kinds() -> N
             lambda value: value["profile"].update({"instructions": "contains an api key"}),
             "scenario_profile_instructions_contains_forbidden_value",
         ),
+        (
+            lambda value: value["profile"].update({"toolPresentation": {"unexpected": []}}),
+            "scenario_profile_tool_presentation_fields_mismatch",
+        ),
     ],
 )
 def test_descriptor_validation_fails_closed(mutator, reason: str) -> None:
@@ -401,6 +415,7 @@ def test_s00_remains_the_no_descriptor_default_and_runner_propagates_mount_contr
     assert "G4_SCENARIO_DESCRIPTOR=/run/plane-scenario/descriptor.json" in runner
     assert "G4_SCENARIO_SHA256=" in runner
     assert "dst=/run/plane-scenario,readonly,volume-nocopy" in runner
+    assert '"eager_operations": list(scenario.profile.tool_presentation)' in invoke
 
 
 def test_identity_profile_assignment_and_evidence_are_separate() -> None:

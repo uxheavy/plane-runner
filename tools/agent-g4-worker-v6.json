@@ -10,6 +10,18 @@
       "model": "gpt-5.6-luna",
       "reasoning": "xhigh",
       "fallbackAllowed": false
+    },
+    "toolPresentation": {
+      "eagerOperations": [
+        "catalog.search",
+        "catalog.describe",
+        "agent.context.read",
+        "work_item.read",
+        "work_item.rename",
+        "agent.outcome.evaluate",
+        "agent.outcome.submit",
+        "agent.outcome.publish"
+      ]
     }
   },
   "assignment": {
