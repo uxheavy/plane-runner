@@ -14,7 +14,6 @@ from django.utils import timezone
 from plane.agent.memory.projections import parse_memory_markdown
 from plane.agent.memory.services import AgentMemoryError, create_memory, create_user_preference, delete_memory
 from plane.agent.operations_readback import build_correlation_readback
-from plane.agent.readback import build_run_readback
 from plane.agent.skills.projections import parse_skill_package
 from plane.agent.skills.services import (
     capture_skill_candidate,
@@ -328,19 +327,19 @@ def govern_worker_skill(*, actor, gardener, initial_skill, run, user, workspace,
 def worker_readback_facts(*, run, workspace, user, suffix):
     """Use the existing bounded API/CLI-equivalent readback owners."""
 
-    # W08 needs presence/consistency facts only.  Keep both projections at
-    # the smallest owner-supported bound so a provider-heavy run cannot make
-    # the established 8-KiB readback ceiling fail before route evidence is
-    # assembled.
-    run_readback = build_run_readback(run, limit=1)
+    # W08 needs presence/consistency facts only.  The established correlation
+    # readback is the bounded API/CLI-equivalent owner for those facts; avoid
+    # duplicating the full admin projection, whose outcome payload can exceed
+    # the shared 8-KiB ceiling on a provider-heavy run.
     correlation_readback = build_correlation_readback(workspace, run_id=str(run.id), limit=1)
     other_workspace = Workspace.objects.create(
         name=f"G4 Readback Isolation {suffix}", owner=user, slug=f"g4-readback-{suffix}"
     )
     cross_workspace_readback = build_correlation_readback(other_workspace, run_id=str(run.id), limit=8)
-    readback_json = json.dumps(run_readback, sort_keys=True, default=str)
+    readback_json = json.dumps(correlation_readback, sort_keys=True, default=str)
     return {
-        "runReadbackPassed": bool(run_readback.get("run")) and "plane-credential" not in readback_json,
+        "runReadbackPassed": bool(correlation_readback.get("linkage", {}).get("found", {}).get("run"))
+        and "plane-credential" not in readback_json,
         "apiCliConsistent": bool(correlation_readback.get("linkage", {}).get("found", {}).get("run"))
         and bool(correlation_readback.get("links", {}).get("runs")),
         "crossWorkspaceDenied": not any(cross_workspace_readback.get("linkage", {}).get("found", {}).values()),

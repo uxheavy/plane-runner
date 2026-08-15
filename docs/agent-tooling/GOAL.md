@@ -19,10 +19,12 @@ attempts reached the provider with completed attempts but were later
 misclassified as provider reconciliation failures by the invoker; an
 independent relay shutdown/audit race was also fixed at the runtime owner.
 W01/W02 remain dirty pending one fresh post-fix provider-backed cell and
-eligible replay; W03–W08 remain unreached. Wave 0BC reached the provider and
-completed the first identity commission's lifecycle, but its reusable W08
-readback probe exceeded the established 8-KiB projection ceiling at limit 8;
-the provider receipt remains dirty and the helper is now bounded at limit 1.
+eligible replay; W03–W08 remain unreached. Wave 0BC and the subsequent fresh
+82b468de identity commission reached the provider and completed their
+lifecycles, but the reusable W08 readback probe exceeded the established
+8-KiB projection ceiling even at limit 1 because it duplicated the full admin
+projection; both provider receipts remain dirty and the helper is now narrowed
+to the bounded correlation projection.
 The final candidate image,
 exact-image red team, G4 verifier, and consolidated Sol review remain pending.
 G5 remains a separate rollout goal.

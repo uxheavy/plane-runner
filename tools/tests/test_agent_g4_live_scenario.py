@@ -380,10 +380,24 @@ def test_runner_readback_uses_actual_plane_state_and_finite_product_kinds() -> N
 def test_worker_route_readback_uses_smallest_bounded_owner_projection() -> None:
     source = (TOOLS / "agent_g4_worker_route.py").read_text()
 
-    assert "build_run_readback(run, limit=1)" in source
     assert "build_correlation_readback(workspace, run_id=str(run.id), limit=1)" in source
-    assert "build_run_readback(run, limit=8)" not in source
+    assert "build_run_readback" not in source
     assert "build_correlation_readback(workspace, run_id=str(run.id), limit=8)" not in source
+
+
+def test_worker_readback_is_scoped_to_commissions_that_own_w08() -> None:
+    raw = (TOOLS / "agent-g4-worker-v6.json").read_bytes()
+    parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
+    checks = [commission.expected["routeChecks"] for commission in parsed.commissions]
+
+    assert "W08" not in checks[0]
+    assert "W08" in checks[1]
+    assert "W08" in checks[2]
+
+    source = (TOOLS / "agent-g4-live-invoke.py").read_text()
+    guarded = source.split('context_facts["codeModeControlsPassed"]', 1)[1].split("context_replay_before", 1)[0]
+    assert 'if "W08" in route_checks:' in guarded
+    assert "worker_readback_facts" in guarded
 
 
 @pytest.mark.parametrize(

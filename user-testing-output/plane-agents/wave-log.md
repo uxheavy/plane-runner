@@ -1977,11 +1977,23 @@ records this diagnosis without changing the retained receipts.
   and replay when the W08 readback probe requested limit 8 and exceeded
   Plane's established 8-KiB bounded readback projection. Commissions B/C
   did not start; replay was not eligible and was not attempted.
+- The first helper correction to request limit 1 was insufficient because the
+  content-bearing full admin projection still exceeded the 8-KiB ceiling. The
+  reusable helper is now narrowed to the established limit-1 correlation
+  readback owner, and `_run_single` invokes it only for commissions owning
+  W08; focused regressions cover both boundaries. The focused provider-free
+  tool suite previously passed `136/136`, and a new exact-image build plus
+  fresh three-commission primary are required.
 - Owner-only result: `tmp/persona-wave-v6/worker-live-579d5f04/result.json`,
   mode `0600`, SHA-256
   `ad476f7bd45ea25e34c77e0b33d375a94288c82cdaaa8ee96a29dc3200a08c2d`.
   Canonical validation passed. The retained f63, ca42, de9189, and 579d5f04
-  receipts are dirty evidence; none was replayed or continued. The reusable
-  readback helper is fixed to request limit 1 and the focused provider-free
-  tool suite passed `136/136`; a new exact-image build and fresh three-
-  commission primary are required.
+  receipts are dirty evidence; none was replayed or continued.
+- The second fresh owner-only result is
+  `tmp/persona-wave-v6/worker-live-82b468de/result.json`, mode `0600`, SHA-256
+  `b472d81bc7c5b9b1a17f7cfd8cfa26462e7cc7608f72cfe8cb9751f7244712e7`.
+  It persisted run `09fc4b0c-3d42-4677-8843-53a4a50c08eb`, invocation
+  `invocation:2e709c9c-f0d8-4cd3-b202-8286faeeecd2`, RuntimeExit completed at
+  sequence 16, 7 completed upstream `2xx` attempts, the same exact denial,
+  submit, publication, and terminal binding, then failed at the same local
+  readback boundary. No replay or B/C commission ran.

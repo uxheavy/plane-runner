@@ -1706,7 +1706,8 @@ def _run_single(scenario) -> tuple[int, dict]:
                     suffix=suffix,
                 )
             context_facts["codeModeControlsPassed"] = worker_code_mode_controls(run)
-            context_facts.update(worker_readback_facts(run=run, workspace=workspace, user=user, suffix=suffix))
+            if "W08" in route_checks:
+                context_facts.update(worker_readback_facts(run=run, workspace=workspace, user=user, suffix=suffix))
             context_replay_before = context_state_counts(actor, run)
         if legacy_s00:
             if (
