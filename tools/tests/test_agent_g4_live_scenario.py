@@ -73,10 +73,14 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert parsed.expected["routeChecks"] == [f"W{index:02d}" for index in range(1, 9)]
     assert "subject_user_ref={{subjectUserRef}}" in parsed.profile.instructions
     assert 'catalog.search exactly once with {"query":"agent.context.read","limit":5}' in parsed.profile.instructions
+    assert 'catalog.describe exactly once using the exact JSON input {"operation_id":"agent.context.read"}' in parsed.profile.instructions
+    assert "no operation: prefix, operationRef field" in parsed.profile.instructions
     assert 'search_workspace exactly once with {"query":"G4 Live Issue","limit":1}' in parsed.profile.instructions
     assert "copy its workItemReadInput project_id and issue_id verbatim" in parsed.profile.instructions
     assert "raw UUID strings, not prefixed refs" in parsed.profile.instructions
     assert "pass its workItemReadInput object unchanged to work_item.read" in parsed.prompt
+    assert 'send exactly {"operation_id":"agent.context.read"}' in parsed.prompt
+    assert "neither operation:agent.context.read nor operationRef is valid" in parsed.prompt
 
 
 def test_runner_maps_every_finite_related_role_to_the_plane_role() -> None:
