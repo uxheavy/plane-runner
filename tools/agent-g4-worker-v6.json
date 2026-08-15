@@ -4,7 +4,7 @@
   "actor": { "role": "worker" },
   "profile": {
     "name": "Maya Worker",
-    "instructions": "Complete the current assignment's bounded route exactly. Invoke only the operations named by the commission, in order, and do not repeat successful operations. Do not stop at ordinary text: submit exactly one bounded outcome and publish it exactly once when the commission reaches its terminal step.",
+    "instructions": "Complete the current assignment's bounded route exactly. Invoke only the operations named by the commission, in order, and do not repeat successful operations. When the commission requires Code Mode, use Hermes execute_code with only the host-bound hermes_tools.plane_operation('code', 'operation:<id>', input) callback; never use a direct network, auth value, filesystem, process, or actor-substitution path. Do not submit or publish until every earlier route step and any required Code Mode callback is complete. Do not stop at ordinary text: submit exactly one bounded outcome and publish it exactly once when the commission reaches its terminal step.",
     "modelPolicy": {
       "provider": "openai-codex",
       "model": "gpt-5.6-luna",
@@ -34,22 +34,58 @@
   "prompt": "You are Maya, the assigned Worker. Follow the current assignment commission literally. Keep all reads bounded to the assigned workspace and subject, use only returned Plane references, and keep ordinary final text brief. The commission's acceptance criteria are the route contract; complete every listed operation before reporting completion.",
   "commissions": [
     {
-      "id": "worker-core",
+      "id": "identity-discovery",
       "assignment": {
         "targetRef": "fixture:assigned-work-item",
-        "objective": "Core Worker commission: discover the typed catalog with catalog.search using {\"query\":\"work_item.rename\",\"limit\":5}, then catalog.describe using the returned row's exact operationId for work_item.rename. Use search_workspace with {\"query\":\"G4 Live Issue\",\"limit\":1}, pass its workItemReadInput unchanged to work_item.read, then use one restricted TypeScript Code Mode host.call_plane_operation callback to invoke work_item.rename with the returned raw UUIDs. Attempt agent.outcome.evaluate as this Worker and require NOT_AUTHORIZED, then submit exactly one outcome with one artifact and one evidence item and publish it exactly once.",
+        "objective": "Identity and discovery Worker commission: work only as Maya's assigned durable actor and immutable profile version. Discover the typed catalog with catalog.search using {\"query\":\"work_item.read\",\"limit\":5}, then catalog.describe using the returned row's exact operationId for work_item.read. Use search_workspace with {\"query\":\"G4 Live Issue\",\"limit\":1}, copy its workItemReadInput unchanged to one bounded work_item.read, and do not disclose or read hidden, private, cross-project, or cross-workspace objects. Attempt agent.outcome.evaluate as this Worker and require exact NOT_AUTHORIZED. Submit exactly one bounded outcome with one artifact and one evidence item, then publish it exactly once.",
         "acceptanceCriteria": [
-          "The catalog.search result is followed by catalog.describe with the exact operationId, never operationRef.",
-          "search_workspace and work_item.read are bounded to the assigned workspace and returned raw UUID inputs.",
-          "Code Mode makes exactly one typed host callback through Plane's gateway for work_item.rename.",
+          "The durable actor, immutable profile version, assignment, run snapshot, and invocation remain bound to Maya; do not substitute another Agent.",
+          "catalog.search precedes catalog.describe with the exact operationId, never operationRef or an operation: prefix.",
+          "search_workspace and work_item.read are each called once, bounded to the assigned workspace and returned raw UUID inputs; hidden or private objects are not disclosed.",
           "agent.outcome.evaluate is denied with exact NOT_AUTHORIZED, followed by one submitted and one published outcome."
         ],
-        "contextRefs": ["context:worker-core"]
+        "contextRefs": ["context:worker-identity-discovery"]
       },
       "expected": {
         "operationOutcomes": [
           { "operationId": "catalog.search", "outcome": "success", "count": 1 },
           { "operationId": "catalog.describe", "outcome": "success", "count": 1 },
+          { "operationId": "search_workspace", "outcome": "success", "count": 1 },
+          { "operationId": "work_item.read", "outcome": "success", "count": 1 },
+          { "operationId": "agent.outcome.evaluate", "outcome": "denied", "count": 1 },
+          { "operationId": "agent.outcome.submit", "outcome": "success", "count": 1 },
+          { "operationId": "agent.outcome.publish", "outcome": "success", "count": 1 }
+        ],
+        "evidenceKinds": ["assignment", "run", "invocation", "audit", "publication", "terminal_event"],
+        "durableRecords": [
+          { "kind": "assignment", "count": 1 },
+          { "kind": "run", "count": 1 },
+          { "kind": "invocation", "count": 1 },
+          { "kind": "publication", "count": 1 },
+          { "kind": "terminal_event", "count": 1 }
+        ],
+        "productEvents": [
+          { "kind": "publication", "count": 1 },
+          { "kind": "outcome_submission", "count": 1 }
+        ],
+        "routeChecks": ["W01", "W02"]
+      }
+    },
+    {
+      "id": "mutation-composition-publication",
+      "assignment": {
+        "targetRef": "fixture:assigned-work-item",
+        "objective": "Mutation, composition, and publication Worker commission: first call search_workspace with {\"query\":\"G4 Live Issue\",\"limit\":1} and pass its workItemReadInput unchanged to one bounded work_item.read. As soon as that read returns the raw project and issue UUIDs, the next tool call must be one restricted Code Mode composition: call Hermes execute_code with a short host-only script importing hermes_tools.plane_operation and invoke exactly plane_operation('code', 'operation:work_item.rename', {\"project_id\": <raw project UUID>, \"issue_id\": <raw issue UUID>, \"name\": <bounded new name>}). This is the typed host callback through the same Plane gateway; do not call work_item.rename directly, and do not use imports, filesystem, network, process, auth values, or actor substitution. Attempt agent.outcome.evaluate as this Worker and require exact NOT_AUTHORIZED. Submit exactly one outcome with exactly one artifact and at least one evidence item, then publish it exactly once.",
+        "acceptanceCriteria": [
+          "The next model tool call after the assigned issue's raw UUIDs are available is execute_code, not submit or publish.",
+          "The execute_code script uses only hermes_tools.plane_operation with action code and operation:work_item.rename; its successful typed callback changes the assigned issue semantically through the live gateway.",
+          "The positive callback and deterministic import, filesystem, network, process, actor-substitution, cancellation, and budget fail-closed controls are evidenced by the existing Plane Code Mode host and bounded usage readback.",
+          "agent.outcome.evaluate is denied with exact NOT_AUTHORIZED, followed by one outcome, one artifact, one evidence item, and one explicit publication."
+        ],
+        "contextRefs": ["context:worker-mutation-composition-publication"]
+      },
+      "expected": {
+        "operationOutcomes": [
           { "operationId": "search_workspace", "outcome": "success", "count": 1 },
           { "operationId": "work_item.read", "outcome": "success", "count": 1 },
           { "operationId": "work_item.rename", "outcome": "success", "count": 1 },
@@ -69,19 +105,19 @@
           { "kind": "publication", "count": 1 },
           { "kind": "outcome_submission", "count": 1 }
         ],
-        "routeChecks": ["W01", "W02", "W03", "W04", "W07", "W08"]
+        "routeChecks": ["W03", "W04", "W07", "W08"]
       }
     },
     {
       "id": "context-governance",
       "assignment": {
         "targetRef": "fixture:assigned-work-item",
-        "objective": "Context and governance Worker commission: discover agent.context.read with catalog.search using {\"query\":\"agent.context.read\",\"limit\":5}, then catalog.describe with exactly {\"operation_id\":\"agent.context.read\"}. Read exactly one subject-bound context projection with {\"subject_user_ref\":\"{{subjectUserRef}}\"}; use Maya's private memory, subject preference, and private skill projection to compose a brief bounded outcome. Submit exactly one outcome with one evidence item and publish it exactly once. Do not read another user or Agent's context and do not expose projection contents in ordinary text.",
+        "objective": "Context and governance Worker commission: discover agent.context.read with catalog.search using {\"query\":\"agent.context.read\",\"limit\":5}, then catalog.describe with exactly {\"operation_id\":\"agent.context.read\"}. Read exactly one subject-bound context projection with {\"subject_user_ref\":\"{{subjectUserRef}}\"}; use Maya's separate private memory, subject-bound user preference, and private skill projection to compose a brief bounded outcome. Exercise the existing governed skill candidate, human approval, private promotion, and rollback owners, with no unreviewed workspace or organization promotion. Submit exactly one outcome with exactly one evidence item and publish it exactly once. Do not read another user or Agent's context and do not expose projection contents in ordinary text.",
         "acceptanceCriteria": [
           "catalog.search precedes catalog.describe and the exact catalog operationId is used.",
-          "agent.context.read is called once with the substituted subject_user_ref and its separate memory, preference, and skill projections are used.",
-          "Only Maya's private skill is used; the resulting improvement remains a candidate until governed human promotion and rollback.",
-          "The commission submits exactly one bounded outcome and publishes it exactly once."
+          "agent.context.read is called once with the substituted subject_user_ref and its separate memory, preference, and skill projections are used without cross-user, cross-Agent, deleted, or stale leakage.",
+          "Only Maya's private skill is used; the improvement remains a candidate until governed human promotion, remains private, and rolls back losslessly; unreviewed organization or workspace promotion is denied or remains unpromoted.",
+          "The commission submits exactly one bounded outcome with one evidence item and publishes it exactly once."
         ],
         "contextRefs": ["context:worker-context-governance"]
       },

@@ -70,7 +70,11 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
 
     assert parsed.scenario_id == "worker"
-    assert [commission.commission_id for commission in parsed.commissions] == ["worker-core", "context-governance"]
+    assert [commission.commission_id for commission in parsed.commissions] == [
+        "identity-discovery",
+        "mutation-composition-publication",
+        "context-governance",
+    ]
     assert parsed.expected is None
     assert parsed.profile.tool_presentation == (
         "catalog.search",
@@ -83,11 +87,15 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
         "agent.outcome.submit",
         "agent.outcome.publish",
     )
-    core = parsed.commissions[0]
-    context = parsed.commissions[1]
-    assert core.expected["routeChecks"] == ["W01", "W02", "W03", "W04", "W07", "W08"]
+    identity = parsed.commissions[0]
+    mutation = parsed.commissions[1]
+    context = parsed.commissions[2]
+    assert identity.expected["routeChecks"] == ["W01", "W02"]
+    assert mutation.expected["routeChecks"] == ["W03", "W04", "W07", "W08"]
     assert context.expected["routeChecks"] == ["W05", "W06", "W07", "W08"]
-    assert "workItemReadInput unchanged" in core.assignment.objective
+    assert "workItemReadInput unchanged" in identity.assignment.objective
+    assert "execute_code" in mutation.assignment.objective
+    assert "plane_operation('code', 'operation:work_item.rename'" in mutation.assignment.objective
     assert '"subject_user_ref":"{{subjectUserRef}}"' in context.assignment.objective
     assert "private memory" in context.assignment.objective
 
@@ -96,12 +104,14 @@ def test_commission_descriptor_keeps_shared_profile_and_binds_each_assignment() 
     raw = (TOOLS / "agent-g4-worker-v6.json").read_bytes()
     parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
 
-    core = scenario.commission_descriptor(parsed, parsed.commissions[0])
-    context = scenario.commission_descriptor(parsed, parsed.commissions[1])
-    assert core.profile == context.profile == parsed.profile
-    assert core.assignment.target_ref == context.assignment.target_ref == scenario.ASSIGNED_WORK_ITEM_ALIAS
-    assert core.expected["routeChecks"] != context.expected["routeChecks"]
-    assert core.commissions == context.commissions == ()
+    identity = scenario.commission_descriptor(parsed, parsed.commissions[0])
+    mutation = scenario.commission_descriptor(parsed, parsed.commissions[1])
+    context = scenario.commission_descriptor(parsed, parsed.commissions[2])
+    assert identity.profile == mutation.profile == context.profile == parsed.profile
+    assert identity.assignment.target_ref == mutation.assignment.target_ref == context.assignment.target_ref == scenario.ASSIGNED_WORK_ITEM_ALIAS
+    assert identity.expected["routeChecks"] != mutation.expected["routeChecks"]
+    assert mutation.expected["routeChecks"] != context.expected["routeChecks"]
+    assert identity.commissions == mutation.commissions == context.commissions == ()
 
 
 def test_runner_maps_every_finite_related_role_to_the_plane_role() -> None:
