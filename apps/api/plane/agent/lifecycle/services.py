@@ -1167,7 +1167,7 @@ def create_assignment(
             child_budget=budget_value,
             depth=delegation_depth,
         )
-    return AssignmentContract.objects.create(
+    assignment = AssignmentContract(
         workspace=assignee.workspace,
         project=project,
         assignee=assignee,
@@ -1187,6 +1187,8 @@ def create_assignment(
         state=AssignmentState.READY,
         created_by=created_by,
     )
+    assignment.save(force_insert=True, disable_auto_set_user=True)
+    return assignment
 
 
 @transaction.atomic

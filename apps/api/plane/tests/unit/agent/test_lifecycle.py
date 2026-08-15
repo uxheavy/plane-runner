@@ -169,6 +169,11 @@ def test_five_plane_records_bind_to_one_actor_and_an_exact_l1_snapshot(assignmen
     validate_run_snapshot(run.snapshot)
 
 
+@pytest.mark.django_db
+def test_assignment_creator_is_persisted_by_lifecycle(create_user, assignment):
+    assert assignment.created_by_id == create_user.id
+
+
 @pytest.mark.django_db(transaction=True)
 def test_profile_defaults_resolve_into_an_immutable_snapshot_and_exact_envelope_dispatch(assignment, profile):
     profile = create_profile(
