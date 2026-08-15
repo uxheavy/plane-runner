@@ -64,16 +64,232 @@ def test_supported_persona_descriptors_are_typed_and_bound(scenario_id: str) -> 
     assert parsed.evidence()["descriptorDigest"] == digest
 
 
+def test_runner_maps_every_finite_related_role_to_the_plane_role() -> None:
+    source = (TOOLS / "agent-g4-live-invoke.py").read_text()
+    expected = {
+        "worker": "WORKER",
+        "delegator": "DELEGATOR",
+        "gardener": "GARDENER",
+        "chief_of_staff": "CHIEF_OF_STAFF",
+        "hr": "HR",
+        "evaluator": "EVALUATOR",
+        "custom": "CUSTOM",
+    }
+    assert set(expected) == scenario._RELATED_ROLES
+    for role, plane_role in expected.items():
+        assert f'"{role}": AgentRole.{plane_role}' in source
+
+
 def test_expected_predicates_are_bounded_and_retained_in_evidence() -> None:
     value = descriptor_for()
     value["expected"] = {
         "operationOutcomes": [{"operationId": "work_item.read", "outcome": "success"}],
-        "evidenceKinds": ["operation-audit", "publication"],
+        "evidenceKinds": ["audit", "publication"],
     }
     raw, digest = descriptor_bytes(value)
     parsed = scenario.parse_descriptor_bytes(raw, digest)
 
     assert parsed.evidence()["expected"] == value["expected"]
+
+
+def test_manager_setup_controls_and_durable_expectations_are_typed() -> None:
+    value = descriptor_for("manager")
+    value["setup"] = {
+        "preconditions": ["isolated_workspace", "fresh_assignment", "separate_runtime_service"],
+        "actors": [{"ref": "actor:operator", "role": "worker", "displayName": "Operator"}],
+        "lineage": {"parentActorRef": "actor:primary", "childActorRef": "actor:operator", "scopeRefs": ["scope:issue"], "budget": 2},
+        "schedule": {"actorRef": "actor:operator", "cron": "* * * * *", "timezone": "UTC", "startsAt": "2026-08-15T00:00:00Z", "fireAt": None},
+    }
+    value["controls"] = {
+        "continuation": {"trigger": "human_input", "input": "Continue the bounded run.", "checkpointRef": "checkpoint:one"},
+        "cancellation": {"timing": "after_publication", "reason": "Stop after publication."},
+        "fault": {"selection": "none"},
+    }
+    value["expected"] = {
+        "operationOutcomes": [{"operationId": "agent.outcome.publish", "outcome": "success", "count": 1}],
+        "evidenceKinds": ["audit", "publication"],
+        "durableRecords": [{"kind": "lineage_assignment", "count": 1}],
+        "productEvents": [{"kind": "publication", "count": 1}],
+    }
+    raw, digest = descriptor_bytes(value)
+    parsed = scenario.parse_descriptor_bytes(raw, digest)
+    assert parsed.actor_role == "delegator"
+    assert parsed.setup.lineage is not None and parsed.setup.lineage.child_ref == "actor:operator"
+    assert parsed.setup.schedule is not None and parsed.setup.schedule.timezone == "UTC"
+    assert parsed.controls.continuation is not None
+    assert parsed.evidence()["controls"]["continuation"]["inputDigest"]
+    validator._validate_scenario_projection(parsed.evidence())
+
+
+def test_operator_setup_binds_related_actor_without_delegator_lineage() -> None:
+    value = descriptor_for("operator")
+    value["setup"] = {
+        "preconditions": ["assigned_work_item", "fresh_assignment"],
+        "actors": [{"ref": "actor:evaluator", "role": "evaluator", "displayName": "Evaluator"}],
+    }
+    parsed = scenario.parse_descriptor_bytes(*descriptor_bytes(value))
+    assert parsed.actor_role == "worker"
+    assert parsed.setup.actors[0].role == "evaluator"
+
+
+@pytest.mark.parametrize(
+    ("mutator", "reason"),
+    [
+        (lambda value: value["setup"].update({"unknown": True}), "scenario_setup_fields_mismatch"),
+        (lambda value: value["controls"].update({"unknown": True}), "scenario_controls_fields_mismatch"),
+        (lambda value: value["controls"]["fault"].update({"selection": "arbitrary"}), "scenario_controls_fault_invalid"),
+    ],
+)
+def test_setup_and_control_unknown_fields_fail_closed(mutator, reason: str) -> None:
+    value = descriptor_for("operator")
+    value["setup"] = {"actors": [], "preconditions": []}
+    value["controls"] = {"fault": {"selection": "none"}}
+    mutator(value)
+    raw, digest = descriptor_bytes(value)
+    with pytest.raises(scenario.ScenarioError, match=reason):
+        scenario.parse_descriptor_bytes(raw, digest)
+
+
+def test_expectations_enforce_actual_audit_receipt_and_product_observations() -> None:
+    value = descriptor_for("operator")
+    value["expected"] = {
+        "operationOutcomes": [{"operationId": "agent.outcome.publish", "outcome": "success"}],
+        "evidenceKinds": ["audit"],
+        "durableRecords": [{"kind": "publication", "count": 1}],
+        "productEvents": [{"kind": "publication", "count": 1}],
+    }
+    parsed = scenario.parse_descriptor_bytes(*descriptor_bytes(value))
+    assert scenario.evaluate_expectations(
+        parsed.expected,
+        operations=[{"operationId": "agent.outcome.publish", "outcome": "success", "count": 1}],
+        records=[{"kind": "publication", "count": 1}],
+        product_events=[{"kind": "publication", "count": 1}],
+        evidence_kinds=["audit"],
+    )["passed"]
+    failed = scenario.evaluate_expectations(parsed.expected, operations=[], records=[], product_events=[], evidence_kinds=[])
+    assert failed["passed"] is False
+    assert "operation:agent.outcome.publish" in failed["failures"]
+
+
+def test_requested_but_missing_actual_records_and_events_fail_expectations() -> None:
+    value = descriptor_for("manager")
+    value["expected"] = {
+        "operationOutcomes": [],
+        "evidenceKinds": ["lineage_assignment", "schedule", "input_event"],
+        "durableRecords": [
+            {"kind": "lineage_assignment", "count": 1},
+            {"kind": "schedule", "count": 1},
+            {"kind": "schedule_fire", "count": 1},
+            {"kind": "input_event", "count": 1},
+        ],
+        "productEvents": [{"kind": "input_event", "count": 1}],
+    }
+    parsed = scenario.parse_descriptor_bytes(*descriptor_bytes(value))
+    failed = scenario.evaluate_expectations(
+        parsed.expected,
+        operations=[],
+        records=[
+            {"kind": "lineage_assignment", "count": 0},
+            {"kind": "schedule", "count": 0},
+            {"kind": "schedule_fire", "count": 0},
+            {"kind": "input_event", "count": 0},
+        ],
+        product_events=[{"kind": "input_event", "count": 0}],
+        evidence_kinds=[],
+    )
+    assert failed["passed"] is False
+    assert {
+        "durableRecords:lineage_assignment",
+        "durableRecords:schedule",
+        "durableRecords:schedule_fire",
+        "durableRecords:input_event",
+        "productEvents:input_event",
+        "evidence:lineage_assignment",
+        "evidence:schedule",
+        "evidence:input_event",
+    } <= set(failed["failures"])
+
+
+def test_terminal_product_event_vocabulary_is_finite_and_matches_plane() -> None:
+    assert {
+        "outcome_submission",
+        "run_failure",
+        "run_blocker",
+        "run_cancellation",
+    } <= scenario._PRODUCT_KINDS
+    assert "input_request" not in scenario._PRODUCT_KINDS
+
+
+def test_validator_accepts_actual_scenario_gate_and_rejects_failed_gate() -> None:
+    value = descriptor_for("operator")
+    value["expected"] = {"operationOutcomes": [], "evidenceKinds": [], "durableRecords": [], "productEvents": []}
+    parsed = scenario.parse_descriptor_bytes(*descriptor_bytes(value))
+    projection = parsed.evidence()
+    projection["actual"] = {"operations": [], "records": [], "productEvents": [], "evidenceKinds": []}
+    gate = {"passed": True, "failures": [], "operations": [], "durableRecords": [], "productEvents": [], "evidenceKinds": []}
+    validator._validate_scenario_projection(projection)
+    validator._validate_scenario_gate(gate)
+    gate["passed"] = False
+    with pytest.raises(validator.ContractError, match="evidence_scenario_gate_predicate_mismatch"):
+        validator._validate_scenario_gate(gate)
+
+
+def test_revision_binding_is_exclusive_and_fault_selection_is_finite() -> None:
+    value = descriptor_for("operator")
+    value["controls"] = {
+        "continuation": {"trigger": "continuation", "input": "continue"},
+        "revision": {"input": "revise", "decisionNote": "operator revision"},
+        "fault": {"selection": "runtime_unavailable"},
+    }
+    with pytest.raises(scenario.ScenarioError, match="scenario_controls_continuation_revision_conflict"):
+        scenario.parse_descriptor_bytes(*descriptor_bytes(value))
+    value["controls"].pop("revision")
+    parsed = scenario.parse_descriptor_bytes(*descriptor_bytes(value))
+    assert parsed.controls.fault == "runtime_unavailable"
+    value["controls"]["fault"]["selection"] = "provider_outcome_unknown"
+    with pytest.raises(scenario.ScenarioError, match="scenario_controls_fault_invalid"):
+        scenario.parse_descriptor_bytes(*descriptor_bytes(value))
+
+
+def test_accepted_setup_and_control_fields_reach_existing_runner_owners() -> None:
+    source = (TOOLS / "agent-g4-live-invoke.py").read_text()
+    for marker in (
+        "scenario.setup.actors",
+        "scenario.setup.preconditions",
+        "scenario.setup.lineage",
+        "scenario.setup.schedule",
+        "scenario.controls.continuation",
+        "scenario.controls.revision",
+        "scenario.controls.cancellation",
+        "scenario.controls.fault",
+        "create_actor(",
+        "create_profile(",
+        "delegate_assignment(",
+        "create_schedule(",
+        "fire_schedule(",
+        "record_input_event(",
+        "request_runtime_cancellation(",
+        "_scenario_readback(",
+        "RunInputEvent.objects.filter(run=run)",
+        "OperationGatewayPublication.objects.filter(",
+        "RunTerminalEvent.objects.filter(run=run, visible=True)",
+    ):
+        assert marker in source
+
+
+def test_runner_readback_uses_actual_plane_state_and_finite_product_kinds() -> None:
+    source = (TOOLS / "agent-g4-live-invoke.py").read_text()
+    readback = source.split("def _scenario_readback", 1)[1].split("def _run_continuation_supervisor", 1)[0]
+    for marker in (
+        "run.invocations.count()",
+        "RunInputEvent.objects.filter(run=run)",
+        "OperationGatewayPublication.objects.filter(",
+        "RunTerminalEvent.objects.filter(run=run, visible=True)",
+        "schedule_fire.state == AgentScheduleFireState.CREATED",
+    ):
+        assert marker in readback
+    assert "input_request" not in readback
+    assert '"count": 1' not in readback
 
 
 @pytest.mark.parametrize(

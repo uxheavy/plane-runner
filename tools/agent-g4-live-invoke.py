@@ -13,6 +13,7 @@ import secrets
 import sys
 import time
 import uuid
+from datetime import datetime
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "plane.settings.test")
 sys.path.insert(0, "/workspace/apps/api")
@@ -26,22 +27,29 @@ from django.test import override_settings
 from plane.agent.lifecycle import (
     create_actor,
     create_assignment,
+    delegate_assignment,
     create_profile,
     create_run,
     finalize_invocation,
+    record_input_event,
     record_invocation,
     reconcile_provider_attempts,
 )
 from plane.agent.runtime.supervisor import _provider_unknown_failure
+from plane.agent.runtime.supervisor import request_runtime_cancellation
+from plane.agent.schedules.services import create_schedule, fire_schedule
 from plane.db.models import (
     AgentRole,
+    AgentScheduleFireState,
     Issue,
     IssueAssignee,
     IssueLabel,
+    InputEventKind,
     InvocationState,
     OutcomeSubmission,
     Project,
     ProjectMember,
+    RunInputEvent,
     RunTerminalEvent,
     RuntimeInvocationControl,
     RuntimeProviderAttempt,
@@ -389,6 +397,92 @@ def _scenario_descriptor():
         return load_descriptor(path, digest)
     except ScenarioError as exc:
         raise RuntimeError(f"live invocation scenario descriptor rejected: {exc}") from exc
+
+
+def _scenario_legacy_s00(scenario):
+    return scenario is None or (
+        scenario.scenario_id == "worker"
+        and scenario.expected is None
+        and not scenario.setup.actors
+        and scenario.setup.lineage is None
+        and scenario.setup.schedule is None
+        and not scenario.setup.preconditions
+        and scenario.controls.continuation is None
+        and scenario.controls.revision is None
+        and scenario.controls.cancellation is None
+        and scenario.controls.fault == "none"
+    )
+
+
+def _scenario_readback(scenario, audit_rows, run, assignment, *, lineage_assignment=None, schedule=None, schedule_fire=None):
+    if scenario is None or scenario.expected is None:
+        return None, None
+    operations = {}
+    for row in audit_rows:
+        if row.get("phase") != "outcome":
+            continue
+        operation_id = row.get("operation_id")
+        if not isinstance(operation_id, str):
+            continue
+        item = operations.setdefault(operation_id, {"operationId": operation_id, "count": 0, "outcome": "not_observed"})
+        item["count"] += 1
+        item["outcome"] = "success" if row.get("outcome") in {"success", "replay"} else "denied" if row.get("outcome") == "denied" else "not_observed"
+    assignment_count = int(getattr(assignment, "pk", None) is not None)
+    run_count = int(getattr(run, "pk", None) is not None)
+    invocation_count = run.invocations.count() if run_count else 0
+    audit_count = len(audit_rows)
+    input_event_count = RunInputEvent.objects.filter(run=run).count() if run_count else 0
+    publication_count = (
+        OperationGatewayPublication.objects.filter(
+            idempotency__correlation_id=f"correlation:{run.id}"
+        ).count()
+        if run_count
+        else 0
+    )
+    terminal_kinds = ("outcome_submission", "run_failure", "run_blocker", "run_cancellation")
+    terminal_rows = (
+        list(RunTerminalEvent.objects.filter(run=run, visible=True).values_list("kind", flat=True))
+        if run_count
+        else []
+    )
+    records = [
+        {"kind": "assignment", "count": assignment_count},
+        {"kind": "run", "count": run_count},
+        {"kind": "invocation", "count": invocation_count},
+        {"kind": "input_event", "count": input_event_count},
+        {"kind": "audit", "count": audit_count},
+        {"kind": "publication", "count": publication_count},
+        {"kind": "terminal_event", "count": len(terminal_rows)},
+        {"kind": "lineage_assignment", "count": int(getattr(lineage_assignment, "pk", None) is not None)},
+        {"kind": "schedule", "count": int(getattr(schedule, "pk", None) is not None)},
+        {
+            "kind": "schedule_fire",
+            "count": int(
+                getattr(schedule_fire, "pk", None) is not None
+                and schedule_fire.state == AgentScheduleFireState.CREATED
+            ),
+        },
+    ]
+    products = [{"kind": "publication", "count": publication_count}, {"kind": "input_event", "count": input_event_count}]
+    products.extend({"kind": kind, "count": terminal_rows.count(kind)} for kind in terminal_kinds)
+    evidence_kinds = [row["kind"] for row in records if row["count"]]
+    from agent_g4_live_scenario import evaluate_expectations
+    actual = {"operations": list(operations.values()), "records": records, "productEvents": products, "evidenceKinds": evidence_kinds}
+    return actual, evaluate_expectations(scenario.expected, **{"operations": actual["operations"], "records": records, "product_events": products, "evidence_kinds": evidence_kinds})
+
+
+def _run_continuation_supervisor(invocation, stdout, stderr):
+    call_command(
+        "agent_supervisor", invocation_ref=invocation.invocation_id, worker_id="g4-live-configured-worker",
+        lease_seconds=300, model_call_allowance=16, stdout=stdout, stderr=stderr,
+    )
+
+
+def _record_continuation_invocation(run, event, suffix, user, trigger):
+    return record_invocation(
+        run, idempotency_key=f"idempotency:g4-live-continuation-{suffix}",
+        trigger={"kind": trigger}, input_event=event, created_by=user,
+    )
 
 
 def build_failure_evidence(
@@ -1007,6 +1101,7 @@ def _supervisor_failure_reason(output):
 
 def main() -> int:
     scenario = _scenario_descriptor()
+    legacy_s00 = _scenario_legacy_s00(scenario)
     started = time.monotonic()
     provider = _provider_descriptor()
     provider_relay = _provider_relay_descriptor()
@@ -1030,6 +1125,13 @@ def main() -> int:
     explicit_publication = {"count": 0, "refs": [], "bindings": []}
     s00_gate = None
     replay_evidence = None
+    scenario_actual = None
+    scenario_gate = None
+    related_actors = {}
+    lineage_assignment = None
+    schedule = None
+    schedule_fire = None
+    input_event = None
 
     def readback():
         invocation.refresh_from_db()
@@ -1229,10 +1331,16 @@ def main() -> int:
         if scenario is not None:
             from agent_g4_live_scenario import ASSIGNED_WORK_ITEM_ALIAS
 
-            actor_role = {
+            scenario_agent_roles = {
                 "worker": AgentRole.WORKER,
                 "delegator": AgentRole.DELEGATOR,
-            }[scenario.actor_role]
+                "gardener": AgentRole.GARDENER,
+                "chief_of_staff": AgentRole.CHIEF_OF_STAFF,
+                "hr": AgentRole.HR,
+                "evaluator": AgentRole.EVALUATOR,
+                "custom": AgentRole.CUSTOM,
+            }
+            actor_role = scenario_agent_roles[scenario.actor_role]
             profile_instructions = scenario.profile.instructions
             profile_persona = scenario.prompt
             profile_model_defaults = {
@@ -1268,6 +1376,23 @@ def main() -> int:
             expected_outcomes=profile_expected_outcomes,
             created_by=user,
         )
+        if scenario is not None:
+            for setup_actor in scenario.setup.actors:
+                related = create_actor(
+                    workspace=workspace,
+                    project=project,
+                    display_name=setup_actor.display_name,
+                    created_by=user,
+                )
+                related_actors[setup_actor.ref] = related
+                create_profile(
+                    related,
+                    role=scenario_agent_roles[setup_actor.role],
+                    instructions=f"Operate as bounded scenario actor {setup_actor.ref}.",
+                    display_name=setup_actor.display_name,
+                    runtime_defaults={"provider": provider["name"], "model": scenario.profile.model_policy.model, "adapter": "hermes"},
+                    created_by=user,
+                )
         assignment = create_assignment(
             actor,
             project=project,
@@ -1277,19 +1402,76 @@ def main() -> int:
             context_refs=assignment_context_refs,
             created_by=user,
         )
+        if scenario is not None:
+            preconditions = set(scenario.setup.preconditions)
+            checks = {
+                "isolated_workspace": workspace.owner_id == user.id and workspace.slug == f"g4-live-{suffix}",
+                "assigned_work_item": bool(assignment.pk and assignment.target_ref),
+                "fresh_assignment": assignment.created_by_id == user.id and assignment.revision == 1,
+                "live_authorization": actor.workspace_id == workspace.id and actor.project_id == project.id,
+                "separate_runtime_service": (
+                    provider_relay.get("hostGatewaySeparate") is True
+                    and provider_relay.get("externalEgressOwner") == "agent-runtime"
+                ),
+            }
+            missing_preconditions = [name for name in preconditions if not checks[name]]
+            if missing_preconditions:
+                raise RuntimeError("scenario preconditions failed: " + ",".join(sorted(missing_preconditions)))
+        if scenario is not None and scenario.setup.lineage is not None:
+            lineage = scenario.setup.lineage
+            parent = actor if lineage.parent_ref == "actor:primary" else related_actors[lineage.parent_ref]
+            child = actor if lineage.child_ref == "actor:primary" else related_actors[lineage.child_ref]
+            parent_assignment = assignment if parent is actor else create_assignment(
+                parent, project=project, target_ref=assignment_target_ref, objective=assignment_objective,
+                acceptance_criteria=assignment_acceptance_criteria, context_refs=assignment_context_refs, created_by=user,
+            )
+            if child is actor:
+                lineage_assignment = delegate_assignment(
+                    parent_assignment, child, target_ref=assignment_target_ref, objective=assignment_objective,
+                    acceptance_criteria=assignment_acceptance_criteria, plan_rationale="typed scenario lineage",
+                    context_refs=list(lineage.scope_refs), scope={"refs": list(lineage.scope_refs)},
+                    budget={"modelCalls": lineage.budget}, idempotency_key=f"idempotency:g4-live-lineage-{suffix}", created_by=user,
+                )
+            elif child is not actor:
+                lineage_assignment = delegate_assignment(
+                    parent_assignment, child, target_ref=assignment_target_ref, objective=assignment_objective,
+                    acceptance_criteria=assignment_acceptance_criteria, plan_rationale="typed scenario lineage",
+                    context_refs=list(lineage.scope_refs), scope={"refs": list(lineage.scope_refs)},
+                    budget={"modelCalls": lineage.budget}, idempotency_key=f"idempotency:g4-live-lineage-{suffix}", created_by=user,
+                )
+        if scenario is not None and scenario.setup.schedule is not None:
+            schedule_spec = scenario.setup.schedule
+            schedule_actor = actor if schedule_spec.actor_ref == "actor:primary" else related_actors[schedule_spec.actor_ref]
+            schedule = create_schedule(
+                schedule_actor, name=f"g4-{suffix}", cron_expression=schedule_spec.cron,
+                timezone_name=schedule_spec.timezone, target_ref=assignment_target_ref,
+                objective=assignment_objective, acceptance_criteria=assignment_acceptance_criteria,
+                context_refs=assignment_context_refs, starts_at=datetime.fromisoformat(schedule_spec.starts_at.replace("Z", "+00:00")),
+            )
+            if schedule_spec.fire_at is not None:
+                schedule_fire = fire_schedule(
+                    schedule,
+                    scheduled_for=datetime.fromisoformat(schedule_spec.fire_at.replace("Z", "+00:00")),
+                    created_by=user,
+                )
         run = create_run(assignment, profile, idempotency_key=f"idempotency:g4-live-run-{suffix}", created_by=user)
         invocation = record_invocation(run, idempotency_key=f"idempotency:g4-live-invocation-{suffix}", trigger="initial")
+        if scenario is not None and scenario.controls.cancellation is not None and scenario.controls.cancellation["timing"] == "before_dispatch":
+            request_runtime_cancellation(invocation, reason=scenario.controls.cancellation["reason"], idempotency_key=f"idempotency:g4-live-cancel-{suffix}")
         stdout = io.StringIO()
         stderr = io.StringIO()
-        call_command(
-            "agent_supervisor",
-            invocation_ref=invocation.invocation_id,
-            worker_id="g4-live-configured-worker",
-            lease_seconds=300,
-            model_call_allowance=16,
-            stdout=stdout,
-            stderr=stderr,
-        )
+        runtime_settings = override_settings(
+            PLANE_AGENT_RUNTIME_URL="",
+            PLANE_AGENT_RUNTIME_SHARED_SECRET="",
+            PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER={},
+            PLANE_AGENT_RUNTIME_ENVIRONMENT={},
+        ) if scenario is not None and scenario.controls.fault == "runtime_unavailable" else override_settings()
+        with runtime_settings:
+            call_command(
+                "agent_supervisor", invocation_ref=invocation.invocation_id, worker_id="g4-live-configured-worker",
+                lease_seconds=300, model_call_allowance=0 if scenario is not None and scenario.controls.fault == "budget_exhausted" else 16,
+                stdout=stdout, stderr=stderr,
+            )
         supervisor_failure_reason = _supervisor_failure_reason(stdout.getvalue())
         (
             provider_attempts,
@@ -1302,11 +1484,44 @@ def main() -> int:
             transcript_evidence,
             explicit_publication,
         ) = readback()
-        if any(
+        unknown_attempt = any(
             attempt.phase == "outcome_unknown" or attempt.error_code == "outcome_unknown"
             for attempt in provider_attempts
-        ):
+        )
+        if unknown_attempt:
             raise RuntimeError("provider request outcome was unknown; pass/replay is not permitted")
+        if scenario is not None and scenario.controls.cancellation is not None and scenario.controls.cancellation["timing"] in {"after_provider_request", "after_publication"}:
+            if scenario.controls.cancellation["timing"] == "after_provider_request" and any(attempt.upstream_initiated for attempt in provider_attempts):
+                request_runtime_cancellation(invocation, reason=scenario.controls.cancellation["reason"], idempotency_key=f"idempotency:g4-live-cancel-{suffix}")
+            if scenario.controls.cancellation["timing"] == "after_publication" and explicit_publication["count"]:
+                request_runtime_cancellation(invocation, reason=scenario.controls.cancellation["reason"], idempotency_key=f"idempotency:g4-live-cancel-{suffix}")
+        input_control = scenario.controls.continuation or scenario.controls.revision if scenario is not None else None
+        if input_control is not None:
+            run.refresh_from_db()
+            if run.state != "waiting_for_input" or not run.pending_input_ref:
+                raise RuntimeError("typed continuation/revision requires Plane waiting-for-input state")
+            input_payload = {"input": input_control["input"]}
+            if scenario.controls.continuation is not None and input_control.get("checkpointRef") is not None:
+                input_payload["checkpointRef"] = input_control["checkpointRef"]
+            if scenario.controls.revision is not None:
+                input_payload["decisionNote"] = input_control["decisionNote"]
+            input_event = record_input_event(
+                run, payload=input_payload,
+                kind=InputEventKind.HUMAN_INPUT,
+                pending_input_ref=run.pending_input_ref,
+                idempotency_key=f"idempotency:g4-live-input-{suffix}", created_by=user,
+            )
+            invocation = _record_continuation_invocation(
+                run,
+                input_event,
+                suffix,
+                user,
+                input_control.get("trigger", "human_input"),
+            )
+            continuation_stdout, continuation_stderr = io.StringIO(), io.StringIO()
+            _run_continuation_supervisor(invocation, continuation_stdout, continuation_stderr)
+            supervisor_failure_reason = _supervisor_failure_reason(continuation_stdout.getvalue()) or supervisor_failure_reason
+            (provider_attempts, terminal, control, exit_evidence, runtime_event_kind_counts, plane_host_operation_receipts, plane_operation_audit, transcript_evidence, explicit_publication) = readback()
         correlation_id = f"correlation:{run.id}"
         audits = OperationGatewayAudit.objects.filter(correlation_id=correlation_id)
         permitted = any(
@@ -1356,16 +1571,28 @@ def main() -> int:
             runtime_exit_kind=exit_evidence.kind if exit_evidence is not None else None,
             runtime_exit_failure=runtime_exit_failure,
         )
-        if (
-            not s00_gate["passed"]
-            or not provider_success
-            or not permitted
-            or not denied
-            or not submitted
-            or usage is None
-            or exit_evidence is None
-        ):
-            raise RuntimeError("live product lifecycle or canary evidence was incomplete")
+        if legacy_s00:
+            if (
+                not s00_gate["passed"] or not provider_success or not permitted or not denied
+                or not submitted or usage is None or exit_evidence is None
+            ):
+                raise RuntimeError("live product lifecycle or canary evidence was incomplete")
+        else:
+            if scenario is None or scenario.expected is None:
+                raise RuntimeError("non-S00 persona scenarios require typed expectations")
+            if "live_authorization" in scenario.setup.preconditions and not plane_operation_audit:
+                raise RuntimeError("scenario precondition failed: live_authorization")
+            scenario_actual, scenario_gate = _scenario_readback(
+                scenario,
+                plane_operation_audit,
+                run,
+                assignment,
+                lineage_assignment=lineage_assignment,
+                schedule=schedule,
+                schedule_fire=schedule_fire,
+            )
+            if not scenario_gate["passed"]:
+                raise RuntimeError("scenario expectations failed: " + ",".join(scenario_gate["failures"]))
 
         before_replay = replay_snapshot()
         primary_invocation_key = invocation.idempotency_key
@@ -1389,7 +1616,7 @@ def main() -> int:
         replay_output = replay_stdout.getvalue()
         if (
             f"invocation={invocation.invocation_id}" not in replay_output
-            or "state=succeeded" not in replay_output
+            or (legacy_s00 and "state=succeeded" not in replay_output)
             or "frames=0" not in replay_output
         ):
             raise RuntimeError("successful primary replay did not return the terminal invocation without dispatch")
@@ -1542,6 +1769,10 @@ def main() -> int:
         })
         if scenario is not None:
             evidence["scenario"] = scenario.evidence()
+            if scenario_actual is not None:
+                evidence["scenario"]["actual"] = scenario_actual
+                evidence["scenarioGate"] = scenario_gate
+            evidence["semanticDigest"] = _receipt_semantic_digest(evidence)
     except BaseException as exc:
         failure = exc
         return_code = 1

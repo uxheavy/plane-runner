@@ -894,6 +894,7 @@ _LIVE_TOP_LEVEL_FIELDS = {
     "planeHostOperationReceipts",
     "planeOperationAudit",
     "scenario",
+    "scenarioGate",
 }
 _LIVE_AUDIT_FIELDS = {"passed", "eventCount", "permittedOutcome", "deniedOutcome", "submitOutcome", "publishOutcome"}
 _LIVE_VERSION_FIELDS = {"passed", "binding", "source"}
@@ -1033,12 +1034,19 @@ _SCENARIO_ACTOR_ROLES = {
     "operator": "worker",
 }
 _SCENARIO_OUTCOMES = {"success", "denied", "not_observed"}
+_SCENARIO_RECORD_KINDS = {
+    "assignment", "run", "invocation", "input_event", "audit", "publication", "terminal_event",
+    "schedule", "schedule_fire", "lineage_assignment",
+}
+_SCENARIO_PRODUCT_KINDS = {
+    "publication", "outcome_submission", "run_failure", "run_blocker", "run_cancellation", "input_event",
+}
 
 
 def _validate_scenario_projection(value: Any) -> None:
     scenario = _object(value, "evidence_scenario")
     required = {"id", "descriptorDigest", "schemaVersion", "actorRole", "profileName"}
-    if set(scenario).difference(required | {"expected"}) or not required.issubset(scenario):
+    if set(scenario).difference(required | {"expected", "setup", "controls", "actual"}) or not required.issubset(scenario):
         raise ContractError("evidence_scenario_fields_invalid")
     scenario_id = scenario["id"]
     if scenario_id not in _SCENARIO_ACTOR_ROLES or scenario["actorRole"] != _SCENARIO_ACTOR_ROLES[scenario_id]:
@@ -1052,28 +1060,91 @@ def _validate_scenario_projection(value: Any) -> None:
         or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._ -]{0,95}", scenario["profileName"])
     ):
         raise ContractError("evidence_scenario_profile_invalid")
-    if "expected" not in scenario:
-        return
-    expected = _object(scenario["expected"], "evidence_scenario_expected")
-    if set(expected) != {"operationOutcomes", "evidenceKinds"}:
-        raise ContractError("evidence_scenario_expected_fields_invalid")
-    operations = expected["operationOutcomes"]
+    expected = scenario.get("expected")
+    if expected is not None:
+        expected = _object(expected, "evidence_scenario_expected")
+        if set(expected).difference({"operationOutcomes", "evidenceKinds", "durableRecords", "productEvents"}) or not {"operationOutcomes", "evidenceKinds"}.issubset(expected):
+            raise ContractError("evidence_scenario_expected_fields_invalid")
+        operations = expected["operationOutcomes"]
+    else:
+        operations = []
     if not isinstance(operations, list) or len(operations) > 16:
         raise ContractError("evidence_scenario_expected_operations_invalid")
     for operation in operations:
         row = _object(operation, "evidence_scenario_expected_operation")
-        if set(row) != {"operationId", "outcome"}:
+        if set(row).difference({"operationId", "outcome", "count"}) or not {"operationId", "outcome"}.issubset(row):
             raise ContractError("evidence_scenario_expected_operation_fields_invalid")
         _safe_ref(row["operationId"], "evidence_scenario_expected_operation_id")
         if row["outcome"] not in _SCENARIO_OUTCOMES:
             raise ContractError("evidence_scenario_expected_operation_outcome_invalid")
-    evidence_kinds = expected["evidenceKinds"]
+        if "count" in row and (type(row["count"]) is not int or not 0 <= row["count"] <= 256):
+            raise ContractError("evidence_scenario_expected_operation_count_invalid")
+    evidence_kinds = expected["evidenceKinds"] if expected is not None else []
     if (
         not isinstance(evidence_kinds, list)
         or len(evidence_kinds) > 16
-        or any(not isinstance(kind, str) or not _S00_SAFE_REF_RE.fullmatch(kind) for kind in evidence_kinds)
+        or any(not isinstance(kind, str) or kind not in _SCENARIO_RECORD_KINDS for kind in evidence_kinds)
     ):
         raise ContractError("evidence_scenario_expected_evidence_invalid")
+    for field, allowed_kinds in (("durableRecords", _SCENARIO_RECORD_KINDS), ("productEvents", _SCENARIO_PRODUCT_KINDS)):
+        if expected is None or field not in expected:
+            continue
+        rows = expected[field]
+        if not isinstance(rows, list) or len(rows) > 8:
+            raise ContractError("evidence_scenario_expected_records_invalid")
+        for row in rows:
+            item = _object(row, "evidence_scenario_expected_record")
+            if set(item) != {"kind", "count"} or item["kind"] not in allowed_kinds or type(item["count"]) is not int or not 0 <= item["count"] <= 256:
+                raise ContractError("evidence_scenario_expected_record_invalid")
+    setup = scenario.get("setup", {"preconditions": [], "actors": []})
+    if not isinstance(setup, dict) or set(setup).difference({"preconditions", "actors", "lineage", "schedule"}):
+        raise ContractError("evidence_scenario_setup_invalid")
+    controls = scenario.get("controls", {"fault": {"selection": "none"}})
+    if not isinstance(controls, dict) or set(controls).difference({"continuation", "revision", "cancellation", "fault"}):
+        raise ContractError("evidence_scenario_controls_invalid")
+    if "fault" not in controls or not isinstance(controls["fault"], dict) or controls["fault"].get("selection") not in {"none", "budget_exhausted", "runtime_unavailable"}:
+        raise ContractError("evidence_scenario_fault_invalid")
+    if "actual" in scenario:
+        actual = _object(scenario["actual"], "evidence_scenario_actual")
+        if set(actual) != {"operations", "records", "productEvents", "evidenceKinds"}:
+            raise ContractError("evidence_scenario_actual_invalid")
+        for key in ("operations", "evidenceKinds"):
+            if not isinstance(actual[key], list) or len(actual[key]) > 16:
+                raise ContractError("evidence_scenario_actual_list_invalid")
+        if any(kind not in _SCENARIO_RECORD_KINDS for kind in actual["evidenceKinds"]):
+            raise ContractError("evidence_scenario_actual_evidence_invalid")
+        for key, allowed_kinds in (("records", _SCENARIO_RECORD_KINDS), ("productEvents", _SCENARIO_PRODUCT_KINDS)):
+            rows = actual[key]
+            if not isinstance(rows, list) or len(rows) > 16:
+                raise ContractError("evidence_scenario_actual_list_invalid")
+            for row in rows:
+                if not isinstance(row, dict) or set(row) != {"kind", "count"} or row["kind"] not in allowed_kinds or type(row["count"]) is not int or not 0 <= row["count"] <= 256:
+                    raise ContractError("evidence_scenario_actual_record_invalid")
+
+
+def _validate_scenario_gate(value: Any) -> None:
+    gate = _object(value, "evidence_scenario_gate")
+    required = {"passed", "failures", "operations", "durableRecords", "productEvents", "evidenceKinds"}
+    if set(gate) != required or type(gate["passed"]) is not bool or not isinstance(gate["failures"], list):
+        raise ContractError("evidence_scenario_gate_invalid")
+    for row in gate["operations"]:
+        item = _object(row, "evidence_scenario_gate_operation")
+        if set(item) != {"operationId", "expected", "actual", "expectedCount", "actualCount", "passed"} or item["expected"] not in _SCENARIO_OUTCOMES or item["actual"] not in _SCENARIO_OUTCOMES:
+            raise ContractError("evidence_scenario_gate_operation_invalid")
+        _safe_ref(item["operationId"], "evidence_scenario_gate_operation_id")
+    for key, allowed_kinds in (("durableRecords", _SCENARIO_RECORD_KINDS), ("productEvents", _SCENARIO_PRODUCT_KINDS)):
+        if not isinstance(gate[key], list) or len(gate[key]) > 8:
+            raise ContractError("evidence_scenario_gate_records_invalid")
+        for row in gate[key]:
+            item = _object(row, "evidence_scenario_gate_record")
+            if set(item) != {"kind", "expectedCount", "actualCount", "passed"}:
+                raise ContractError("evidence_scenario_gate_record_invalid")
+            if item["kind"] not in allowed_kinds or type(item["expectedCount"]) is not int or not 0 <= item["expectedCount"] <= 256 or type(item["actualCount"]) is not int or not 0 <= item["actualCount"] <= 256:
+                raise ContractError("evidence_scenario_gate_record_invalid")
+    if not isinstance(gate["evidenceKinds"], list) or any(not isinstance(row, dict) or set(row) != {"kind", "passed"} for row in gate["evidenceKinds"]):
+        raise ContractError("evidence_scenario_gate_evidence_invalid")
+    if gate["passed"] != (not gate["failures"] and all(row["passed"] for row in gate["operations"] + gate["durableRecords"] + gate["productEvents"] + gate["evidenceKinds"])):
+        raise ContractError("evidence_scenario_gate_predicate_mismatch")
 
 
 def _validate_semantic_digest(evidence: dict[str, Any]) -> None:
@@ -1092,10 +1163,17 @@ def _validate_receipt_common(
     _exact(_required(evidence, "authorityId", "evidence"), authority_info["authorityId"], "evidence_authority")
     if "scenario" in evidence:
         _validate_scenario_projection(evidence["scenario"])
-    gate = _required(evidence, "s00Gate", "evidence")
-    _validate_s00_gate(gate)
-    if status == "passed" and (gate["status"] != "passed" or gate["firstFailedPredicate"] is not None):
-        raise ContractError("evidence_s00Gate_success_failed")
+    generic = "scenario" in evidence and isinstance(evidence["scenario"], dict) and "actual" in evidence["scenario"]
+    if generic:
+        gate = _required(evidence, "scenarioGate", "evidence")
+        _validate_scenario_gate(gate)
+        if status == "passed" and not gate["passed"]:
+            raise ContractError("evidence_scenario_gate_success_failed")
+    else:
+        gate = _required(evidence, "s00Gate", "evidence")
+        _validate_s00_gate(gate)
+        if status == "passed" and (gate["status"] != "passed" or gate["firstFailedPredicate"] is not None):
+            raise ContractError("evidence_s00Gate_success_failed")
     canaries = _object(_required(evidence, "canaries", "evidence"), "evidence_canaries")
     if list(canaries) != ["permitted", "denied"]:
         raise ContractError("evidence_canaries_fields_invalid")
@@ -1293,6 +1371,47 @@ def _validate_live_readback(evidence: dict[str, Any]) -> None:
         or any(type(value) is not int or value != 0 for value in new.values())
     ):
         raise ContractError("evidence_replay_new_effect_invalid")
+
+
+def _validate_scenario_readback(evidence: dict[str, Any]) -> None:
+    if set(evidence) != _LIVE_READBACK_FIELDS:
+        raise ContractError("evidence_readback_fields_invalid")
+    attempts = evidence["providerAttempts"]
+    if not isinstance(attempts, list) or len(attempts) > 32:
+        raise ContractError("evidence_provider_attempts_invalid")
+    previous = 0
+    for row in attempts:
+        if not isinstance(row, dict) or set(row) != {"sequence", "phase", "upstreamInitiated", "statusClass", "errorCode"}:
+            raise ContractError("evidence_provider_attempt_invalid")
+        if type(row["sequence"]) is not int or row["sequence"] <= previous or row["phase"] not in _LIVE_ATTEMPT_PHASES:
+            raise ContractError("evidence_provider_attempt_invalid")
+        previous = row["sequence"]
+    runtime_exit = _object(evidence["runtimeExit"], "evidence_runtime_exit")
+    if set(runtime_exit) != {"present", "kind", "finalSequence", "failure"} or runtime_exit["kind"] not in {"completed", "waiting_for_input", "failed", "blocked", "cancelled", "unknown"}:
+        raise ContractError("evidence_runtime_exit_invalid")
+    if not isinstance(evidence["runtimeEventIngress"], dict) or set(evidence["runtimeEventIngress"]) != {"kindCounts"}:
+        raise ContractError("evidence_runtime_ingress_invalid")
+    audit = evidence["planeOperationAudit"]
+    if not isinstance(audit, list) or len(audit) != len(_LIVE_OPERATION_IDS):
+        raise ContractError("evidence_operation_audit_count_invalid")
+    for row in audit:
+        if not isinstance(row, dict) or set(row) != {"operationId", "status", "errorCode", "count"} or row["status"] not in _LIVE_OPERATION_STATUSES or type(row["count"]) is not int or not 0 <= row["count"] <= 8:
+            raise ContractError("evidence_operation_audit_invalid")
+    publication = evidence["explicitPublication"]
+    if not isinstance(publication, dict) or set(publication) != {"count", "refs"} or type(publication["count"]) is not int or not 0 <= publication["count"] <= 8 or not isinstance(publication["refs"], list) or len(publication["refs"]) != publication["count"]:
+        raise ContractError("evidence_publication_invalid")
+    replay = evidence["replay"]
+    if not isinstance(replay, dict) or set(replay) != {"status", "providerAccess", "sameInvocation", "sameIdempotencyKey", "new"} or replay["providerAccess"] != "disabled":
+        raise ContractError("evidence_replay_invalid")
+    if replay["status"] not in {"passed", "not_eligible"}:
+        raise ContractError("evidence_replay_status_invalid")
+    if replay["status"] == "passed" and (replay["sameInvocation"] is not True or replay["sameIdempotencyKey"] is not True):
+        raise ContractError("evidence_replay_binding_invalid")
+    if replay["status"] == "not_eligible" and (replay["sameInvocation"] is not False or replay["sameIdempotencyKey"] is not False):
+        raise ContractError("evidence_replay_binding_invalid")
+    new = replay["new"]
+    if not isinstance(new, dict) or any(type(value) is not int or value != 0 for value in new.values()):
+        raise ContractError("evidence_replay_effect_invalid")
 
 
 _FAILURE_TOP_LEVEL_FIELDS = {
@@ -1616,7 +1735,11 @@ def validate_evidence(
     _exact(status, "passed", "evidence_status")
     _validate_receipt_common(evidence, authority_info, expected, status="passed")
     readback = _object(_required(evidence, "readback", "evidence"), "evidence_readback")
-    _validate_live_readback(readback)
+    generic = "scenario" in evidence and isinstance(evidence["scenario"], dict) and "actual" in evidence["scenario"]
+    if generic:
+        _validate_scenario_readback(readback)
+    else:
+        _validate_live_readback(readback)
     if authority_info["providerRelay"] is None:
         raise ContractError("evidence_provider_relay_missing_authority")
     if "providerRelay" not in evidence:
@@ -1635,9 +1758,9 @@ def validate_evidence(
     latency = _number(observed, "latencyP95Ms", "evidence_observed_thresholds")
     error_rate = _number(observed, "errorRate", "evidence_observed_thresholds")
     approved = authority_info["thresholds"]
-    if permitted_rate < approved["permittedSuccessRateMin"] or denied_rate < approved["deniedRejectionRateMin"]:
+    if not generic and (permitted_rate < approved["permittedSuccessRateMin"] or denied_rate < approved["deniedRejectionRateMin"]):
         raise ContractError("evidence_threshold_rate_failed")
-    if latency > approved["maxLatencyP95Ms"] or error_rate > approved["maxErrorRate"]:
+    if not generic and (latency > approved["maxLatencyP95Ms"] or error_rate > approved["maxErrorRate"]):
         raise ContractError("evidence_threshold_latency_or_error_failed")
     readback = _object(_required(evidence, "readback", "evidence"), "evidence_readback")
     audit = _object(_required(readback, "audit", "evidence_readback"), "evidence_audit_readback")

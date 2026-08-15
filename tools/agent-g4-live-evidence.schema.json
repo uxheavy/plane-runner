@@ -24,6 +24,7 @@
     "semanticDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "scenario": { "$ref": "#/$defs/scenario" },
     "s00Gate": { "$ref": "#/$defs/s00Gate" },
+    "scenarioGate": { "$ref": "#/$defs/scenarioGate" },
     "providerRelay": { "$ref": "#/$defs/providerRelay" },
     "binding": {
       "type": "object",
@@ -137,19 +138,39 @@
                 "required": ["operationId", "outcome"],
                 "properties": {
                   "operationId": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_.:/-]{0,127}$" },
-                  "outcome": { "enum": ["success", "denied", "not_observed"] }
+                  "outcome": { "enum": ["success", "denied", "not_observed"] },
+                  "count": { "type": "integer", "minimum": 0, "maximum": 256 }
                 }
               }
             },
             "evidenceKinds": {
               "type": "array",
               "maxItems": 16,
-              "items": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_.:/-]{0,127}$" }
-            }
+              "items": { "enum": ["assignment", "run", "invocation", "input_event", "audit", "publication", "terminal_event", "schedule", "schedule_fire", "lineage_assignment"] }
+            },
+            "durableRecords": { "$ref": "#/$defs/durableCountRows" },
+            "productEvents": { "$ref": "#/$defs/productCountRows" }
           }
-        }
+        },
+        "setup": { "$ref": "#/$defs/setup" },
+        "controls": { "$ref": "#/$defs/controls" },
+        "actual": { "$ref": "#/$defs/scenarioActual" }
       }
     },
+    "setup": {
+      "type": "object", "additionalProperties": false, "required": ["preconditions", "actors"],
+      "properties": {
+        "preconditions": { "type": "array", "maxItems": 8, "items": { "type": "string" } },
+        "actors": { "type": "array", "maxItems": 4, "items": { "type": "object", "additionalProperties": false, "required": ["ref", "role", "displayName"], "properties": { "ref": { "type": "string" }, "role": { "type": "string" }, "displayName": { "type": "string" } } } },
+        "lineage": { "type": "object", "additionalProperties": false, "required": ["parentActorRef", "childActorRef", "scopeRefs", "budget"], "properties": { "parentActorRef": { "type": "string" }, "childActorRef": { "type": "string" }, "scopeRefs": { "type": "array" }, "budget": { "type": "integer", "minimum": 0 } } },
+        "schedule": { "type": "object", "additionalProperties": false, "required": ["actorRef", "cron", "timezone", "startsAt", "fireAt"], "properties": { "actorRef": { "type": "string" }, "cron": { "type": "string" }, "timezone": { "type": "string" }, "startsAt": { "type": "string" }, "fireAt": { "type": ["string", "null"] } } }
+      }
+    },
+    "controls": { "type": "object", "additionalProperties": false, "required": ["fault"], "properties": { "fault": { "type": "object", "additionalProperties": false, "required": ["selection"], "properties": { "selection": { "enum": ["none", "budget_exhausted", "runtime_unavailable"] } } }, "continuation": { "type": "object" }, "revision": { "type": "object" }, "cancellation": { "type": "object" } } },
+    "durableCountRows": { "type": "array", "maxItems": 8, "items": { "type": "object", "additionalProperties": false, "required": ["kind", "count"], "properties": { "kind": { "enum": ["assignment", "run", "invocation", "input_event", "audit", "publication", "terminal_event", "schedule", "schedule_fire", "lineage_assignment"] }, "count": { "type": "integer", "minimum": 0, "maximum": 256 } } } },
+    "productCountRows": { "type": "array", "maxItems": 8, "items": { "type": "object", "additionalProperties": false, "required": ["kind", "count"], "properties": { "kind": { "enum": ["publication", "outcome_submission", "run_failure", "run_blocker", "run_cancellation", "input_event"] }, "count": { "type": "integer", "minimum": 0, "maximum": 256 } } } },
+    "scenarioGate": { "type": "object", "additionalProperties": false, "required": ["passed", "failures", "operations", "durableRecords", "productEvents", "evidenceKinds"], "properties": { "passed": { "type": "boolean" }, "failures": { "type": "array" }, "operations": { "type": "array" }, "durableRecords": { "type": "array" }, "productEvents": { "type": "array" }, "evidenceKinds": { "type": "array" } } },
+    "scenarioActual": { "type": "object", "additionalProperties": false, "required": ["operations", "records", "productEvents", "evidenceKinds"], "properties": { "operations": { "type": "array" }, "records": { "type": "array" }, "productEvents": { "type": "array" }, "evidenceKinds": { "type": "array" } } },
     "providerRelay": {
       "type": "object",
       "additionalProperties": false,

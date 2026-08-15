@@ -244,6 +244,14 @@ The versioned `plane.agent-scenario/v1` descriptor supports `worker`, `manager`,
 and `operator` identities. It contains only the Plane actor role, immutable
 profile instructions/model policy, assignment target/objective/acceptance and
 context references, a bounded prompt, and optional bounded evidence predicates.
+The optional typed `setup` block adds finite preconditions, related actor
+descriptors, one parent/child lineage binding, and one cron/timezone schedule;
+`controls` adds one continuation or revision input, cancellation timing, and a
+finite fault selection. These fields are setup/readback inputs, not a workflow
+definition or permission grant. `expected` may additionally name bounded
+durable-record and product-event counts. The runner compares these predicates
+with its existing Plane operation-audit, terminal-event, and publication
+readback before publishing scenario evidence.
 The reserved target `fixture:assigned-work-item` resolves to the real issue
 created by the existing live invocation; other target references remain exact.
 The runner validates the owner-only non-symlink path, digest, schema, fields,
@@ -255,6 +263,20 @@ Scenario/profile data changes behavior and tool presentation only; the live
 Plane actor and its permissions remain separately provisioned authority. The
 descriptor has no credentials, executable hooks, imports/shell, workflow DSL,
 bootstrap operations, or alternate permission allowlist.
+
+The identity/expectation projection in a descriptor looks like this (the
+required profile, assignment, and prompt fields remain unchanged):
+
+```json
+{"scenarioId":"worker","actor":{"role":"worker"},"expected":{"operationOutcomes":[{"operationId":"work_item.read","outcome":"success"}],"evidenceKinds":["audit"]}}
+```
+
+Manager descriptors use `actor.role: "delegator"` and may bind
+`setup.lineage.parentActorRef` to `actor:primary`; Operator descriptors use
+`actor.role: "worker"` and may bind a related worker as the child. The
+descriptor parser rejects unknown fields, forbidden values, invalid role
+bindings, and continuation/revision conflicts. A descriptor cannot change
+Plane authorization; live authorization and the existing S00 gate remain final.
 
 The authority and config carry the same canonical `providerRelay` projection.
 The runner's config-only preflight requires that projection and exact equality
