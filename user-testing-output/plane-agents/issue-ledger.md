@@ -180,6 +180,8 @@ after validation and hashing. Because the primary gate failed, replay deltas
 are not applicable; UT-019 remains open and no retry or second primary/replay
 was made.
 
+| UT-016 | blocker | Maya / S00 | `user-testing-output/plane-agents/wave-log.md` Wave 0AR addendum | The prior task used the saved-project repository instead of the authoritative exact local clone, so the required Plane input `codex/agent-functional-dogfood` at `10eb8033ff9a01d67f5a4cf85772c2f5b464903f` was absent there and the branch resolved to `fdb2fd516dfa9b01e89d70cab0d5eb81f741af62`. | External task input/repository selection; no product-source fix authorized or attempted | Preserved by hash and reapplied onto the exact 10eb base before Wave 0AS | open |
+
 UT-018 / Wave 0AQ addendum: the exact Plane
 `131c3f73cc894ff429c45f837eb20a236e1c69de` checkout with exact Hermes
 `326bc3deb5c1a15468a3104343e97e0b539dec76` ran exactly one fresh primary

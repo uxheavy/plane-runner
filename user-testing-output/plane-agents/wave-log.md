@@ -875,6 +875,18 @@ unrelated suite ran.
   `SupervisorResult`, durable terminal state, and the bounded receipt.
 - Decision: S00 is `FAIL` and does not unlock W/M/O.
 
+## Wave 0AR — exact-input preflight stop
+
+- Status: `FAIL` at setup. The prior task stopped before provider access because its saved-project Plane repository did not contain the required exact input.
+- Required Plane input: branch `codex/agent-functional-dogfood` at `10eb8033ff9a01d67f5a4cf85772c2f5b464903f`. The object was absent there and that branch resolved to `fdb2fd516dfa9b01e89d70cab0d5eb81f741af62`. The original 0AR evidence commit is `3ed36e4383598cb8f367d21b0ac5efcd3c557bb1`; it is preserved by hash and was reapplied onto exact base `10eb8033ff9a01d67f5a4cf85772c2f5b464903f`.
+- Required Hermes input: clean `main` at `4d9d4b2c76014bd74c69c79d419356f69667986d`.
+- Provider/model: ChatGPT subscription route `openai-codex/gpt-5.6-luna`, fallback disabled by authorization, but provider access was not reached. Provider attempts `0`; status `not-started`.
+- Durable counts for 0AR: operations `0`; audits `0`; workspaces/issues/actors/profiles/assignments/runs/invocations `0`; runtime events/exits `0`; outcomes/publications/terminal product events `0`.
+- Terminal/exit/gate truth: no terminal event, no `RuntimeExit`, no invocation exit, no receipt, no semantic digest, and no replay. S00 gate `FAIL` at the exact Plane input check. Replay was ineligible and not run.
+- Receipt and digest truth: none exist for 0AR. No provider content or credential value entered evidence.
+- Cleanup: no 0AR stack, runtime, database, container, network, volume, image, result destination, or auth staging was created. No cleanup deletion was needed.
+- Stop decision: no retry, replay, or provider attempt was made. Wave 0AS proceeds only from the imported exact local Plane base and exact clean Hermes main.
+
 ## Wave 0AP — exact 891a1aed / Hermes 1d9818 single fresh S00
 
 - Overall decision: `FAIL`. Exactly one fresh primary ran; there was no retry,

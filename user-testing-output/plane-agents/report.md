@@ -66,3 +66,23 @@ host_operation_failure` prevented `RuntimeExit.completed`. The providerRelay
 handoff and failure receipt passed standalone validation. The failed primary
 means replay-equivalence deltas are not applicable; UT-018 and UT-019 remain
 open.
+
+## Wave 0AR preflight result
+
+0AR is `FAIL`, not a provider or product result. The prior task used the saved-
+project Plane repository, where the requested branch input
+`codex/agent-functional-dogfood` at
+`10eb8033ff9a01d67f5a4cf85772c2f5b464903f` was absent and resolved instead to
+`fdb2fd516dfa9b01e89d70cab0d5eb81f741af62`. The original 0AR evidence commit is
+`3ed36e4383598cb8f367d21b0ac5efcd3c557bb1`. It was preserved by hash and
+reapplied onto exact base `10eb8033ff9a01d67f5a4cf85772c2f5b464903f`.
+
+The requested Hermes `main` input was clean at
+`4d9d4b2c76014bd74c69c79d419356f69667986d`. The stop occurred before the
+disposable stack, owner-only credential access, or provider relay. Provider
+attempts were `0` with status `not-started`. Durable operations and audits were
+`0`; no run, invocation, runtime event/exit, gateway receipt, outcome,
+publication, terminal event, semantic digest, or replay existed for 0AR.
+
+This preflight mismatch is historical evidence only. S00 remains dirty from
+Wave 0AQ. Wave 0AS is the next fresh primary on the exact imported base.
