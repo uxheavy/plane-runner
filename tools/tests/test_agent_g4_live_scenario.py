@@ -84,6 +84,7 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     )
     assert 'catalog.search once with {"query":"agent.context.read","limit":5}' in parsed.profile.instructions
     assert 'catalog.describe once with exactly {"operation_id":"agent.context.read"}' in parsed.profile.instructions
+    assert "copy the catalog row's operationId value, not its operationRef value" in parsed.profile.instructions
     assert "no operation: prefix, operationRef field" in parsed.profile.instructions
     assert 'agent.context.read once with exactly {"subject_user_ref":"{{subjectUserRef}}"}' in parsed.profile.instructions
     assert 'search_workspace once with {"query":"G4 Live Issue","limit":1}' in parsed.profile.instructions
@@ -91,6 +92,7 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert "raw UUID strings, not prefixed refs" in parsed.profile.instructions
     assert "pass its workItemReadInput object unchanged to work_item.read" in parsed.prompt
     assert 'send exactly {"operation_id":"agent.context.read"}' in parsed.prompt
+    assert "copy its operationId value, not its operationRef value" in parsed.prompt
     assert "neither operation:agent.context.read nor operationRef is valid" in parsed.prompt
     assert 'send exactly {"subject_user_ref":"{{subjectUserRef}}"} to agent.context.read' in parsed.prompt
 
@@ -127,6 +129,7 @@ def test_expected_operations_render_as_ordered_model_route_outcomes() -> None:
     expected = {
         "operationOutcomes": [
             {"operationId": "catalog.search", "outcome": "success", "count": 1},
+            {"operationId": "catalog.describe", "outcome": "success", "count": 1},
             {"operationId": "agent.context.read", "outcome": "success", "count": 1},
             {"operationId": "agent.outcome.evaluate", "outcome": "denied", "count": 1},
         ]
@@ -134,8 +137,9 @@ def test_expected_operations_render_as_ordered_model_route_outcomes() -> None:
 
     assert scenario.model_route_expectations(expected) == (
         "Route step 1: invoke catalog.search exactly 1 time(s) and expect success.",
-        "Route step 2: invoke agent.context.read exactly 1 time(s) and expect success.",
-        "Route step 3: invoke agent.outcome.evaluate exactly 1 time(s) and expect denied.",
+        "Route step 2: invoke catalog.describe exactly 1 time(s) and expect success. Use the next route operation's exact operationId as input.operation_id; never use operationRef or an operation: prefix.",
+        "Route step 3: invoke agent.context.read exactly 1 time(s) and expect success.",
+        "Route step 4: invoke agent.outcome.evaluate exactly 1 time(s) and expect denied.",
     )
 
 

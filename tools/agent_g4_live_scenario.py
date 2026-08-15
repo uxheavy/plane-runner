@@ -196,10 +196,20 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
     if expected is None:
         return ()
     outcomes = expected.get("operationOutcomes", [])
-    return tuple(
-        f"Route step {index}: invoke {item['operationId']} exactly {item.get('count', 1)} time(s) and expect {item['outcome']}."
-        for index, item in enumerate(outcomes, start=1)
-    )
+    rendered: list[str] = []
+    for index, item in enumerate(outcomes, start=1):
+        operation_id = item["operationId"]
+        guidance = ""
+        if operation_id == "catalog.describe" and index < len(outcomes):
+            guidance = (
+                " Use the next route operation's exact operationId as input.operation_id; never use operationRef "
+                "or an operation: prefix."
+            )
+        rendered.append(
+            f"Route step {index}: invoke {operation_id} exactly {item.get('count', 1)} time(s) and expect "
+            f"{item['outcome']}.{guidance}"
+        )
+    return tuple(rendered)
 
 
 def _pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
