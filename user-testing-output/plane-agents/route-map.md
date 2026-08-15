@@ -1,7 +1,7 @@
 # Plane Agent functional coverage map
 
-Target: exact current Plane source candidate `4cba0fd647`; documentation is
-committed in the adjacent root-fix checkpoint.
+Target: exact current Plane source candidate `8681f2e7db`; documentation is
+committed in the adjacent callback-binding checkpoint.
 with Hermes `bc7f13d2ab392752f2667b176c646339c49405f9`. No chat UI is in scope.
 Use existing Plane object/settings pages only where they already exist; the
 authoritative evidence is Plane product-state and gateway/audit readback.
@@ -29,22 +29,29 @@ that the accepted runner exposes only the fixed S00 commission; the runner is
 gaining one typed persona-scenario input before those routes resume. No W/M/O
 result is inferred.
 
-Latest Maya Worker campaign: Wave 0BA used the exact candidate above and the
-three bounded commissions. Two independent fresh identity commissions reached
-the real `openai-codex/gpt-5.6-luna` route with fallback disabled and persisted
-nine completed upstream `2xx` attempts each. A later local scenario-gate
-failure was misclassified by the invoker as provider reconciliation failure
-because it treated any upstream-started attempt as unknown; no external
-provider prerequisite is proven. Independent runtime diagnosis also found a
-relay shutdown/audit race between daemon handler completion and Plane host
-closure. W01-W08 remain `dirty`; the two old owner-only receipts are preserved
-as dirty evidence and are not retroactively clean.
+Latest Maya Worker campaign: Wave 0BA used the preceding exact candidate and
+the three bounded commissions. Two independent fresh identity commissions
+reached the real `openai-codex/gpt-5.6-luna` route with fallback disabled and
+persisted nine completed upstream `2xx` attempts each; their later local
+scenario-gate failure was misclassified by the invoker and remains dirty
+evidence. The first fresh post-relay-fix W01/W02 commission on `f63f2c2e` also
+reached the provider (12 completed upstream `2xx` attempts), but its local
+runtime failed when the old adapter treated a model-supplied redundant
+`input.run_ref` as a binding error. Plane checkpoint `8681f2e7db` now binds
+run identity from the trusted callback envelope, normalizes payload `run_ref`,
+preflights before terminal observations, returns truthful terminal conflicts,
+and blocks later same-batch mutations. The pinned Hermes owner at
+`bc7f13d2ab392752f2667b176c646339c49405f9` still treats `conflict` /
+`PLANE_CONFLICT` as invocation-poisoning, so its matching nonfatal expected
+conflict disposition is a genuine external prerequisite before another
+provider attempt. W01-W08 remain `dirty`; no old receipt is retroactively
+clean.
 
 | ID  | Persona | Real journey and entry surface                                                                                                      | Required capabilities and visible outcome                                                                                                                                                   | Boundary/replay proof                                                                                                                                   | Status                                                                                                                                                                                                                                                                                                                                                                                                   |
 | --- | ------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | S00 | All     | Start the local API, worker, database, runtime image, and real Hermes service; dispatch one fresh issue assignment through API/CLI. | GPT-5.6 Luna performs a permitted read, receives a denied evaluator operation, explicitly submits one outcome, and publishes one visible terminal event.                                    | No fallback; one fresh invocation with bounded ordered provider-exchange audit; replay creates no child or semantic duplicate; task resources clean up. | clean — Wave 0AT at Plane `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` and Hermes `bc7f13d2ab392752f2667b176c646339c49405f9` passed ten ordered upstream `2xx` attempts, `search_workspace=3`, `work_item.read=2`, one exact `NOT_AUTHORIZED` denial, one submit, one applied publication, one matching terminal, `RuntimeExit.completed`, zero replay semantic deltas, standalone validation, and cleanup |
-| W01 | Maya    | Create or select a worker Agent, immutable profile version, and issue assignment.                                                   | Actor identity/permissions remain separate from profile/tool presentation; run snapshots the resolved profile and assignment.                                                               | Unauthorized actor/profile substitution is denied without side effects.                                                                                 | dirty — Wave 0BA later local scenario gate failed; old unknown-labeled receipts are not clean and a fresh post-fix primary plus eligible replay is required |
-| W02 | Maya    | Ask the Agent to discover and understand its assigned work across Plane objects.                                                    | Progressive catalog discovery plus bounded `search_workspace` and native reads find only authorized objects.                                                                                | Cross-project/private-page search does not leak; disclosure is not a second permission system.                                                          | dirty — Wave 0BA later local scenario gate failed; old unknown-labeled receipts are not clean and a fresh post-fix primary plus eligible replay is required |
+| W01 | Maya    | Create or select a worker Agent, immutable profile version, and issue assignment.                                                   | Actor identity/permissions remain separate from profile/tool presentation; run snapshots the resolved profile and assignment.                                                               | Unauthorized actor/profile substitution is denied without side effects.                                                                                 | dirty — Wave 0BA and the f63 identity commission are not retroactively clean; fresh post-8681 primary plus eligible replay waits for Hermes conflict handling |
+| W02 | Maya    | Ask the Agent to discover and understand its assigned work across Plane objects.                                                    | Progressive catalog discovery plus bounded `search_workspace` and native reads find only authorized objects.                                                                                | Cross-project/private-page search does not leak; disclosure is not a second permission system.                                                          | dirty — Wave 0BA and the f63 identity commission are not retroactively clean; fresh post-8681 primary plus eligible replay waits for Hermes conflict handling |
 | W03 | Maya    | Complete the issue with one explicit Plane mutation.                                                                                | Native semantic mutation crosses the Operation Gateway with live authorization, idempotency, bounded result, and audit.                                                                     | Exact replay returns the stable receipt and creates no duplicate mutation.                                                                              | dirty — Wave 0BA stopped before the mutation commission; not reached |
 | W04 | Maya    | Compose several reads and a mutation using restricted TypeScript Code Mode.                                                         | Credential-free generated TypeScript reaches Plane only through typed host callbacks and the same gateway.                                                                                  | Import, filesystem, network, process, actor-substitution, cancellation, and budget escape attempts fail closed.                                         | dirty — Wave 0BA stopped before the mutation/Code Mode commission; not reached |
 | W05 | Maya    | Use relevant prior context while respecting the current human subject.                                                              | Agent-private memory and subject-bound user preferences project separately into deterministic files; no cross-user or cross-Agent leakage.                                                  | Deleted/unauthorized/stale memory is excluded; projection and parse round-trip losslessly.                                                              | dirty — Wave 0BA stopped before the context/governance commission; not reached |

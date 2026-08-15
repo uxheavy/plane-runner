@@ -5,7 +5,14 @@ import socket
 
 import pytest
 
-from plane.agent.lifecycle import create_actor, create_assignment, create_profile, create_run, record_invocation
+from plane.agent.lifecycle import (
+    create_actor,
+    create_assignment,
+    create_profile,
+    create_run,
+    record_invocation,
+    transition_run,
+)
 from plane.agent.runtime.host_rpc import (
     PlaneHostCall,
     PlaneHostResult,
@@ -19,6 +26,7 @@ from plane.db.models import (
     OutcomeSubmission,
     Project,
     ProjectMember,
+    RunState,
     RunTerminalEvent,
     State,
 )
@@ -286,6 +294,38 @@ def test_invocation_scoped_socket_routes_gateway_and_explicit_outcome(
         assert late_mutation.status == "conflict"
         assert late_mutation.error_code == "PLANE_CONFLICT"
         assert late_mutation.replayed is False
+        gateway_issue.refresh_from_db()
+        assert gateway_issue.name == "G2 renamed"
+
+        unknown_run = create_run(
+            assignment,
+            profile,
+            idempotency_key="idempotency:g2-unknown-run",
+            created_by=create_user,
+        )
+        unknown_invocation = record_invocation(
+            unknown_run,
+            idempotency_key="idempotency:g2-unknown-invocation",
+            trigger="initial",
+        )
+        unknown_port = build_gateway_host_port(invocation=unknown_invocation, gateway=OperationGateway())
+        transition_run(unknown_run, RunState.OUTCOME_UNKNOWN)
+        unknown_mutation = unknown_port.invoke(
+            _call(
+                run_id=unknown_run.snapshot["runId"],
+                invocation_id=unknown_invocation.invocation_id,
+                action="mutate",
+                operation_ref="operation:work_item.rename",
+                input={
+                    "project_id": str(gateway_project.id),
+                    "issue_id": str(gateway_issue.id),
+                    "name": "G2 must not mutate after unknown outcome",
+                },
+            )
+        )
+        assert unknown_mutation.status == "conflict"
+        assert unknown_mutation.error_code == "PLANE_CONFLICT"
+        assert unknown_mutation.replayed is False
         gateway_issue.refresh_from_db()
         assert gateway_issue.name == "G2 renamed"
 

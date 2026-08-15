@@ -268,7 +268,12 @@ class CodeModeHostRPC:
             return None
         self.invocation.refresh_from_db(fields=["state"])
         self.run.refresh_from_db(fields=["state"])
-        if self.run.state not in {RunState.SUCCEEDED, RunState.FAILED, RunState.BLOCKED, RunState.CANCELLED}:
+        if self.run.state not in {
+            RunState.SUCCEEDED,
+            RunState.FAILED,
+            RunState.BLOCKED,
+            RunState.CANCELLED,
+        }:
             return None
         outcome = OutcomeSubmission.objects.filter(run_id=self.run.id).order_by("created_at", "id").first()
         if outcome is None:
@@ -322,7 +327,13 @@ class CodeModeHostRPC:
         if descriptor is None or descriptor.kind != "mutation":
             return None
         self.run.refresh_from_db(fields=["state"])
-        if self.run.state not in {RunState.SUCCEEDED, RunState.FAILED, RunState.BLOCKED, RunState.CANCELLED}:
+        if self.run.state not in {
+            RunState.SUCCEEDED,
+            RunState.FAILED,
+            RunState.BLOCKED,
+            RunState.CANCELLED,
+            RunState.OUTCOME_UNKNOWN,
+        }:
             return None
         response = {
             "ok": False,

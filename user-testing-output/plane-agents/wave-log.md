@@ -1918,3 +1918,32 @@ records this diagnosis without changing the retained receipts.
   unknown, performs a second forced-path drain, and preserves late audit
   failure across dispatch cleanup. Focused provider-free owner regressions
   must pass before a fresh provider commission.
+
+## Wave 0BB — exact f63f2c2e / Hermes bc7f13d2 callback-binding checkpoint
+
+- Status: `HOLD`; W01/W02 remain dirty. One fresh identity commission reached
+  the required `openai-codex/gpt-5.6-luna` route with fallback disabled and
+  persisted 12 completed upstream `2xx` attempts. Its run and invocation
+  succeeded and it retained one visible terminal plus one applied publication,
+  but the runtime later failed at `agent.outcome.submit` with
+  `CALLBACK_BINDING_INVALID` after the model supplied a conflicting redundant
+  payload `run_ref`. The owner-only result remains
+  `tmp/persona-wave-v6/worker-live-f63f2c2e/result.json`, mode `0600`, SHA-256
+  `ff7776421e278ee560c26d42b1c5a0e072e7bf6829399754085deaed8ccbc9d4`; it was
+  not replayed or continued.
+- Plane fix `8681f2e7dbb652bff27c4374c47638f5f65dc6df` keeps the callback
+  envelope's run/invocation identity fail-closed, normalizes redundant model
+  payload `run_ref` to the bound run, runs catalog/binding/budget/cancellation
+  preflight before terminal observations, returns exact duplicate submit as a
+  replay-only success, returns different terminal submits and late semantic
+  mutations as wire-valid `conflict / PLANE_CONFLICT`, and blocks mutations
+  after `OUTCOME_UNKNOWN`. The focused G2 wire contract passed `2/2`; the
+  provider-free live/tool contract suite passed `143/143` before this small
+  guard amendment, and the amended G2 contract passed `2/2`.
+- The exact pinned Hermes checkout remains clean at
+  `bc7f13d2ab392752f2667b176c646339c49405f9`. Its current
+  `HostCallResult` disposition table treats `conflict / PLANE_CONFLICT` as a
+  poison invocation; the matching Hermes owner change to treat this expected
+  terminal conflict as an ordinary nonfatal tool result is not integrated.
+  No image was rebuilt and no provider attempt was spent after this finding;
+  a fresh primary and eligible replay wait for that exact Hermes commit.
