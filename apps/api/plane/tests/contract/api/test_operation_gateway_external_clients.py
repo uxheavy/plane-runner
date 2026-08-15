@@ -11,12 +11,10 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
-import json
 import os
 import subprocess
 import sys
 import types
-from collections import Counter
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -39,13 +37,12 @@ from plane.db.models import (
 from plane.operation_gateway.contracts import MAX_RESULT_BYTES
 from plane.operation_gateway.publications import dispatch_publication_once
 
-EXPECTED_MCP_TIP = "2dc152e136d7ad952b901e5fe9364a37487297ba"
-EXPECTED_MCP_INVENTORY_SOURCE = "96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1"
+EXPECTED_MCP_TIP = "4b36e2664ba9a82fe2edebf89eaa76565b130398"
 EXPECTED_SDK_TIP = "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
 MCP_ROOT_ENV = "PLANE_MCP_EXTERNAL_ROOT"
 SDK_ROOT_ENV = "PLANE_SDK_EXTERNAL_ROOT"
-MCP_ROOT_DEFAULT = "/private/tmp/plane-mcp-g3-20260806"
-SDK_ROOT_DEFAULT = "/private/tmp/plane-sdk-g3-20260806"
+MCP_ROOT_DEFAULT = "/private/tmp/plane-mcp-pf1-current"
+SDK_ROOT_DEFAULT = "/private/tmp/plane-sdk-pf1-current"
 SDK_OAUTH_TOKEN = "external-sdk-oauth-token"
 
 
@@ -68,6 +65,15 @@ def _external_root(env_name: str, default: str, expected_tip: str) -> Path:
 
 def _load_mcp_gateway() -> tuple[Any, Path]:
     root = _external_root(MCP_ROOT_ENV, MCP_ROOT_DEFAULT, EXPECTED_MCP_TIP)
+    sdk_root = _external_root(SDK_ROOT_ENV, SDK_ROOT_DEFAULT, EXPECTED_SDK_TIP)
+    errors_package = types.ModuleType("plane.errors")
+    errors_package.__path__ = [str(sdk_root / "plane" / "errors")]
+    errors_package.__package__ = "plane.errors"
+    sys.modules["plane.errors"] = errors_package
+    plane_package = sys.modules.get("plane")
+    if plane_package is not None:
+        setattr(plane_package, "errors", errors_package)
+    _load_file("plane.errors.errors", sdk_root / "plane" / "errors" / "errors.py")
     for name in list(sys.modules):
         if name == "plane_mcp" or name.startswith("plane_mcp."):
             del sys.modules[name]
@@ -77,13 +83,8 @@ def _load_mcp_gateway() -> tuple[Any, Path]:
         module = importlib.import_module("plane_mcp.gateway")
     finally:
         sys.path.remove(str(root))
-    registry = json.loads((root / "plane_mcp" / "gateway_registry.json").read_text(encoding="utf-8"))
-    assert registry["source"]["commit"] == EXPECTED_MCP_INVENTORY_SOURCE
-    assert registry["manifest_digest"] == "1c9964ff9165b528601fb5cb5e98cb68ae70a88865cfefbbf40a7c25a310be06"
-    assert registry["tool_count"] == 177
-    assert Counter(action["registration"] for action in registry["actions"].values()) == Counter(
-        {"gateway": 86, "unsupported": 90, "local": 1}
-    )
+    assert len({route.operation_id for route in module.GATEWAY_ROUTES} | module.SPECIAL_OPERATION_IDS) == 64
+    assert all("*" not in route.template for route in module.GATEWAY_ROUTES)
     return module, root
 
 
@@ -223,15 +224,6 @@ def _drain_publications(record: OperationGatewayIdempotency) -> None:
         dispatch_publication_once(str(publication.id))
 
 
-def _assert_gateway_audit(receipt: Any, *, caller_id: str, correlation_id: str, operation_id: str) -> None:
-    assert receipt.caller_id == caller_id
-    assert receipt.correlation_id == correlation_id
-    audit = OperationGatewayAudit.objects.get(pk=receipt.audit_receipt)
-    assert str(audit.caller_id) == caller_id
-    assert audit.correlation_id == correlation_id
-    assert audit.operation_id == operation_id
-
-
 @pytest.mark.contract
 @pytest.mark.django_db(transaction=True)
 def test_external_mcp_client_crosses_plane_gateway_for_read_mutation_replay_archive_delete_and_search(
@@ -243,77 +235,89 @@ def test_external_mcp_client_crosses_plane_gateway_for_read_mutation_replay_arch
 ):
     mcp_gateway, _root = _load_mcp_gateway()
     transport = _DjangoMCPTransport(APIClient())
-    client = mcp_gateway.HttpOperationGateway(
+    read_client = mcp_gateway.PlaneGatewayTransport(
         base_url="http://testserver",
         workspace_slug=workspace.slug,
-        credential=api_token.token,
-        auth_method="api_key",
-        http_client=transport,
+        api_key=api_token.token,
+        session=transport,
+        call_id="mcp-read",
     )
     caller_id = str(create_user.id)
 
-    read = client.invoke(
-        "retrieve_work_item",
-        {"project_id": str(gateway_project.id), "work_item_id": str(gateway_issue.id)},
-        correlation_id="mcp-read-correlation",
+    read = read_client.request(
+        "GET",
+        f"/workspaces/{workspace.slug}/projects/{gateway_project.id}/work-items/{gateway_issue.id}",
     )
-    assert read.value["id"] == str(gateway_issue.id)
-    _assert_gateway_audit(
-        read,
+    assert read["id"] == str(gateway_issue.id)
+    assert OperationGatewayAudit.objects.filter(
         caller_id=caller_id,
-        correlation_id="mcp-read-correlation",
         operation_id="work_item.retrieve",
-    )
+        idempotency_key="mcp:mcp-read:1",
+    ).exists()
 
-    update_arguments = {
-        "project_id": str(gateway_project.id),
-        "work_item_id": str(gateway_issue.id),
-        "name": "MCP Gateway Renamed",
-    }
-    first = client.invoke(
-        "update_work_item", update_arguments, idempotency_key="mcp-replay-key", correlation_id="mcp-replay"
+    update_path = f"/workspaces/{workspace.slug}/projects/{gateway_project.id}/work-items/{gateway_issue.id}"
+    first_client = mcp_gateway.PlaneGatewayTransport(
+        base_url="http://testserver",
+        workspace_slug=workspace.slug,
+        api_key=api_token.token,
+        session=transport,
+        call_id="mcp-replay",
     )
-    record = OperationGatewayIdempotency.objects.get(idempotency_key="mcp-replay-key")
+    first = first_client.request(
+        "PATCH",
+        update_path,
+        data={"name": "MCP Gateway Renamed"},
+    )
+    record = OperationGatewayIdempotency.objects.get(idempotency_key="mcp:mcp-replay:1")
     _drain_publications(record)
-    replay = client.invoke(
-        "update_work_item", update_arguments, idempotency_key="mcp-replay-key", correlation_id="mcp-replay"
+    replay_client = mcp_gateway.PlaneGatewayTransport(
+        base_url="http://testserver",
+        workspace_slug=workspace.slug,
+        api_key=api_token.token,
+        session=transport,
+        call_id="mcp-replay",
     )
-    assert first.value == replay.value
-    assert first.replayed is False
-    assert replay.replayed is True
-    _assert_gateway_audit(
-        replay,
+    replay = replay_client.request(
+        "PATCH",
+        update_path,
+        data={"name": "MCP Gateway Renamed"},
+    )
+    assert first == replay
+    assert OperationGatewayAudit.objects.filter(
+        idempotency_key="mcp:mcp-replay:1",
+        outcome=OperationGatewayAudit.Outcome.REPLAY,
+    ).exists()
+    assert OperationGatewayAudit.objects.filter(
         caller_id=caller_id,
-        correlation_id="mcp-replay",
         operation_id="work_item.update",
-    )
+        idempotency_key="mcp:mcp-replay:1",
+    ).exists()
     gateway_issue.refresh_from_db()
     assert gateway_issue.name == "MCP Gateway Renamed"
     assert IssueActivity.objects.filter(issue_id=gateway_issue.id, field="name").count() == 1
 
-    archived = client.invoke(
-        "manage_work_item_archive",
-        {"project_id": str(gateway_project.id), "work_item_id": str(gateway_issue.id), "archive": True},
-        correlation_id="mcp-archive-correlation",
+    archived = first_client.request(
+        "POST",
+        f"{update_path}/archive",
+        data={"archive": True},
     )
-    assert archived.value is None
+    assert archived is None
     gateway_issue.refresh_from_db()
     assert gateway_issue.archived_at is not None
 
-    deleted = client.invoke(
-        "delete_work_item",
-        {"project_id": str(gateway_project.id), "work_item_id": str(gateway_issue.id)},
-        correlation_id="mcp-delete-correlation",
+    deleted = first_client.request(
+        "DELETE",
+        update_path,
     )
-    assert deleted.value is None
+    assert deleted is None
     assert not Issue.objects.filter(pk=gateway_issue.id).exists()
 
-    search = client.invoke(
-        "search_work_items",
-        {"project_id": str(gateway_project.id), "query": "Gateway"},
-        correlation_id="mcp-search-correlation",
+    search = first_client.request(
+        "GET",
+        f"/workspaces/{workspace.slug}/work-items/search",
+        params={"search": "Gateway"},
     )
-    assert isinstance(search.value, list)
+    assert isinstance(search, list)
     assert transport.calls
     assert all(call["headers"].get("x-api-key") == api_token.token for call in transport.calls)
     assert all("Authorization" not in call["headers"] for call in transport.calls)
@@ -332,34 +336,29 @@ def test_external_mcp_client_preserves_denial_and_unsupported_dispositions_witho
     denied_user = User.objects.create(email="external-mcp-denied@plane.so", username="external-mcp-denied")
     token = APIToken.objects.create(user=denied_user, label="External MCP denied test", token="external-mcp-denied")
     transport = _DjangoMCPTransport(APIClient())
-    client = mcp_gateway.HttpOperationGateway(
+    client = mcp_gateway.PlaneGatewayTransport(
         base_url="http://testserver",
         workspace_slug=workspace.slug,
-        credential=token.token,
-        auth_method="api_key",
-        http_client=transport,
+        api_key=token.token,
+        session=transport,
+        call_id="mcp-denied",
     )
 
-    with pytest.raises(mcp_gateway.GatewayCallError) as denied:
-        client.invoke(
-            "update_work_item",
-            {
-                "project_id": str(gateway_project.id),
-                "work_item_id": str(gateway_issue.id),
-                "name": "Must Not Change",
-            },
-            idempotency_key="mcp-denied-key",
-            correlation_id="mcp-denied-correlation",
+    with pytest.raises(mcp_gateway.HttpError) as denied:
+        client.request(
+            "PATCH",
+            f"/workspaces/{workspace.slug}/projects/{gateway_project.id}/work-items/{gateway_issue.id}",
+            data={"name": "Must Not Change"},
         )
-    assert denied.value.code == "NOT_AUTHORIZED"
+    assert denied.value.response["code"] == "NOT_AUTHORIZED"
     gateway_issue.refresh_from_db()
     assert gateway_issue.name == "Gateway Issue"
-    assert OperationGatewayIdempotency.objects.get(idempotency_key="mcp-denied-key").state == "denied"
-    assert OperationGatewayAudit.objects.filter(idempotency_key="mcp-denied-key", caller_id=denied_user.id).exists()
+    assert OperationGatewayIdempotency.objects.get(idempotency_key="mcp:mcp-denied:1").state == "denied"
+    assert OperationGatewayAudit.objects.filter(idempotency_key="mcp:mcp-denied:1", caller_id=denied_user.id).exists()
 
-    with pytest.raises(mcp_gateway.GatewayUnsupportedError) as unsupported:
-        client.invoke("list_customers", {})
-    assert unsupported.value.blocker_code
+    with pytest.raises(mcp_gateway.GatewayCompatibilityError) as unsupported:
+        client.request("GET", f"/workspaces/{workspace.slug}/customers")
+    assert unsupported.value.code == "MCP_ACTION_GATEWAY_MAPPING_UNAVAILABLE"
     assert len(transport.calls) == 1
     assert not AgentActor.objects.filter(workspace=workspace, principal=denied_user).exists()
     assert str(create_user.id) != str(denied_user.id)
