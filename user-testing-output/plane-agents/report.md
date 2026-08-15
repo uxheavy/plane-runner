@@ -136,3 +136,26 @@ Cleanup removed the task containers, networks, volumes, provider staging, run
 artifacts, result, descriptor files, and disposable API/runtime images. The
 owner credential source and authoritative clones were untouched. UT-020 is
 open; S00 remains dirty and W/M/O remain locked. No replay or retry occurred.
+
+## Wave 0AT final report
+
+0AT is `PASS` for the S00 non-UI functional user-testing wave. This record supersedes the historical stale S00 failure above; the prior failure was the now-corrected unconditional transcript assertion, not a live lifecycle or authorization failure.
+
+Primary and replay:
+
+- Exactly one fresh primary used the existing ChatGPT subscription with `openai-codex/gpt-5.6-luna`; fallback was disabled. Exactly one eligible same-invocation/same-idempotency-key replay used provider access disabled. No retry or second primary ran.
+- Exact clean Plane commit: `577ab42b2712b78d96a46ac224f72005115f94f7`. Exact clean Hermes main: `bc7f13d2ab392752f2667b176c646339c49405f9`.
+- Run `6a0d0f49-098f-403d-b91e-b934d7b3f049`; invocation `invocation:0a2717b1-9db8-4399-a29a-a6641f960dbf`; terminal `product-event:f12e8a0e-eb12-4f6d-bd63-8b07dd495d70`; outcome `outcome-submission:830be5e4-de4c-4948-a9d0-c37ab8fd3adb`.
+- Provider count/status: `10`, sequences `1..10`, all `completed`, upstream-initiated, `2xx`; fallback `0`; unknown `0`.
+- Operation/audit counts: `search_workspace=3` success, `work_item.read=2` success, `catalog.search=0`, `catalog.describe=0`, `agent.outcome.evaluate=1` denied `NOT_AUTHORIZED`, `agent.outcome.submit=1`, `agent.outcome.publish=1`, audit events `18`.
+- Gates: invocation `succeeded`; run `succeeded`; one visible outcome terminal; one applied publication; terminal binding passed; `RuntimeExit.completed`, final sequence `22`.
+- Transcript expectation/status: `requirement=not_required`, `status=not_observed`, `count=0`, `eventIds=[]`. No actual assistant text existed in evidence, and no synthetic or inferred text was used.
+- Replay status: `passed`; provider access `disabled`; all new deltas were zero for provider attempts, children, invocations, receipts, audits, usage, outcomes, publications, terminal events, and semantic side effects.
+
+Evidence and cleanup:
+
+- Owner-only result permissions were `0600`; size `8183` bytes; result SHA-256 `9dd5bdf263a01d06927e3a07961539f3c1dca51c4a05a713899c803c8c5fac8e`; semantic digest `c8aa562cff351c86863098df47ed145df829b8c486ec1a7b6eee9eeb033d0807`. Standalone validation passed.
+- Canonical relay was `plane.agent-runtime/provider-relay/v1` over `AF_UNIX`, with child network policy `none`, external egress owner `agent-runtime`, host gateway separate `true`, and Hermes hook `integrated`.
+- Cleanup passed for staged credentials, receipts, descriptors, result, run artifacts, containers, networks, volumes, and disposable images. Authoritative clones and owner credential were untouched. No source/config/test edits followed the live result.
+
+Final truth: `PASS`. S00 passed all required lifecycle, authorization-boundary, publication, terminal, transcript-truth, idempotency, evidence, and cleanup predicates. W/M/O are unlocked.

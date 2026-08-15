@@ -229,3 +229,11 @@ The runner nevertheless returned `RuntimeError` / `api-invocation` /
 `unavailable` because transcript evidence was absent. No replay or retry was
 run. The receipt and all disposable artifacts were deleted after validation
 and hashing; UT-020 remains open.
+
+## Wave 0AT addendum
+
+| Issue / retest | Status | Evidence | Disposition |
+|---|---|---|---|
+| UT-020 stale unconditional transcript assertion | resolved | 0AT primary passed with explicit `requirement=not_required`, `status=not_observed`, `count=0`, and `eventIds=[]` when no actual assistant text existed | Close; no synthetic transcript text or product authority was introduced |
+
+0AT is a fresh S00 `PASS`. It used one primary and one eligible provider-disabled replay. The primary had exactly 10 ordered completed `openai-codex/gpt-5.6-luna` attempts, one `NOT_AUTHORIZED` outcome-evaluate denial, one submit, one publish, one applied publication, one matching visible terminal, and `RuntimeExit.completed`. Replay deltas were zero for provider attempts, children, invocations, receipts, audits, usage, outcomes, publications, terminals, and semantic side effects. Cleanup and owner-only permissions passed. No new issue was opened.

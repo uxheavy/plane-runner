@@ -1811,3 +1811,16 @@ product source was changed.
   fresh manifest/authority/config were removed. The owner credential source
   was untouched, and Colima was left running.
 - Decision: S00 is `FAIL` and does not unlock W/M/O.
+
+## 0AT — S00 live functional user-testing addendum
+
+- Result: `PASS`. One fresh primary ran through the isolated runtime service and the real existing ChatGPT subscription using only `openai-codex/gpt-5.6-luna`; fallback was disabled. One exact same-invocation/same-idempotency-key replay ran only after the primary passed, with provider access disabled.
+- Preflight: Plane was exact clean `577ab42b2712b78d96a46ac224f72005115f94f7`; Hermes was exact clean `bc7f13d2ab392752f2667b176c646339c49405f9`. Authority was `s00-live-0at-20260815`; permitted and denied canaries were `s00-0at-permitted-20260815` and `s00-0at-denied-20260815`. Manifest, authority, and config hashes were `077f6fc3a3d2be06ebd8c86c46984c621860bd4cdbcb8aed9155d72311255fd1`, `1ee5c9fe895779f643ab7056cee6d6e7f09ea3f726cc420186ecfda81742f72f`, and `649757463d9a72f35655be8ba23b29ec16478e00e7f863c2dfa33ccae0936c7e`.
+- Lifecycle: one isolated workspace and one `G4 Live Issue`; run `6a0d0f49-098f-403d-b91e-b934d7b3f049`; invocation `invocation:0a2717b1-9db8-4399-a29a-a6641f960dbf`; outcome `outcome-submission:830be5e4-de4c-4948-a9d0-c37ab8fd3adb`; visible terminal `product-event:f12e8a0e-eb12-4f6d-bd63-8b07dd495d70`.
+- Provider: exactly 10 attempts, ordered sequences `1..10`, all `completed`, upstream-initiated, status class `2xx`; no fallback or unknown attempt. Relay was `plane.agent-runtime/provider-relay/v1` over `AF_UNIX`, child network policy `none`, external egress owner `agent-runtime`, host gateway separate `true`, Hermes hook `integrated`.
+- Operations: permitted Plane reads were `search_workspace` success `3` and `work_item.read` success `2`; `catalog.search` and `catalog.describe` were absent. Exactly one durable `agent.outcome.evaluate` denial occurred with `NOT_AUTHORIZED` and zero unauthorized side effect, followed by exactly one explicit `agent.outcome.submit` and one explicit `agent.outcome.publish`. There was one applied publication and one matching visible terminal. Audit event count was `18`.
+- Gates: invocation and run succeeded; one visible outcome terminal and one applied outcome publication passed; terminal binding passed; `RuntimeExit.completed` passed at final sequence `22`.
+- Transcript: actual assistant text was not observed. Evidence explicitly recorded `requirement=not_required`, `status=not_observed`, `count=0`, and `eventIds=[]`; no text was synthesized or inferred.
+- Replay: passed with provider access disabled and all required deltas zero: provider attempts, children, invocations, receipts, audits, usage, outcomes, publications, terminal events, and semantic side effects.
+- Evidence: result mode `0600`, size `8183`, SHA-256 `9dd5bdf263a01d06927e3a07961539f3c1dca51c4a05a713899c803c8c5fac8e`; semantic digest `c8aa562cff351c86863098df47ed145df829b8c486ec1a7b6eee9eeb033d0807`; standalone validation passed.
+- Cleanup: all disposable result, descriptor, credential-staging, run, image, container, network, and volume artifacts were removed. Owner credential and authoritative clones were untouched. No source/config/test changes were made after the result. S00 is clean; W/M/O are unlocked.
