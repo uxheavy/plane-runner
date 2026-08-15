@@ -64,6 +64,16 @@ def test_supported_persona_descriptors_are_typed_and_bound(scenario_id: str) -> 
     assert parsed.evidence()["descriptorDigest"] == digest
 
 
+def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names() -> None:
+    path = TOOLS / "agent-g4-worker-v6.json"
+    raw = path.read_bytes()
+    parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
+
+    assert parsed.scenario_id == "worker"
+    assert parsed.expected["routeChecks"] == [f"W{index:02d}" for index in range(1, 9)]
+    assert "subject_user_ref={{subjectUserRef}}" in parsed.profile.instructions
+
+
 def test_runner_maps_every_finite_related_role_to_the_plane_role() -> None:
     source = (TOOLS / "agent-g4-live-invoke.py").read_text()
     expected = {

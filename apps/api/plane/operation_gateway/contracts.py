@@ -210,6 +210,7 @@ class GatewayOperationInputSerializer(StrictSerializer):
     estimate_point_id = serializers.UUIDField(required=False)
     related_work_item_id = serializers.UUIDField(required=False)
     operation_id = serializers.CharField(max_length=128, allow_blank=False, required=False)
+    subject_user_ref = serializers.CharField(max_length=128, allow_blank=False, required=False)
     relation_definition_id = serializers.UUIDField(required=False, allow_null=True)
     owned_by = serializers.UUIDField(required=False, allow_null=True)
     project_lead = serializers.UUIDField(required=False, allow_null=True)

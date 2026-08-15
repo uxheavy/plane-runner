@@ -168,6 +168,27 @@ def test_context_projection_keeps_agent_memory_and_subject_user_preferences_sepa
 
 
 @pytest.mark.django_db
+def test_context_projection_excludes_expired_memory_and_skill_roots(actor, profile, create_user):
+    expired_memory = create_memory(
+        actor,
+        key="expired-projection-memory",
+        content="EXPIRED_PROJECTION_MEMORY",
+        retention_expires_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+    )
+    expired_skill = create_skill(
+        actor,
+        key="expired-projection-skill",
+        package_files={"SKILL.md": "EXPIRED_PROJECTION_SKILL"},
+        retention_expires_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+    )
+
+    projection = assemble_agent_context(actor, subject_user=create_user, authorization=AllowSubject())
+
+    assert expired_memory.key not in {entry.key for entry in parse_memory_markdown(projection.memory_markdown)}
+    assert expired_skill.key not in projection.skill_packages
+
+
+@pytest.mark.django_db
 def test_memory_projection_parser_is_fail_closed_and_unicode_lossless(actor, profile):
     content = 'café🙂\n<!-- plane-memory-entry:v1 {"nested":true} -->\n終\n'
     entry = create_memory(actor, key="unicode", content=content)

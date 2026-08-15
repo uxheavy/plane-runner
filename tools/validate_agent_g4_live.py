@@ -1063,7 +1063,7 @@ def _validate_scenario_projection(value: Any) -> None:
     expected = scenario.get("expected")
     if expected is not None:
         expected = _object(expected, "evidence_scenario_expected")
-        if set(expected).difference({"operationOutcomes", "evidenceKinds", "durableRecords", "productEvents"}) or not {"operationOutcomes", "evidenceKinds"}.issubset(expected):
+        if set(expected).difference({"operationOutcomes", "evidenceKinds", "durableRecords", "productEvents", "routeChecks"}) or not {"operationOutcomes", "evidenceKinds"}.issubset(expected):
             raise ContractError("evidence_scenario_expected_fields_invalid")
         operations = expected["operationOutcomes"]
     else:
@@ -1086,6 +1086,13 @@ def _validate_scenario_projection(value: Any) -> None:
         or any(not isinstance(kind, str) or kind not in _SCENARIO_RECORD_KINDS for kind in evidence_kinds)
     ):
         raise ContractError("evidence_scenario_expected_evidence_invalid")
+    if expected is not None and "routeChecks" in expected:
+        if (
+            not isinstance(expected["routeChecks"], list)
+            or len(expected["routeChecks"]) > 8
+            or any(check not in {f"W{index:02d}" for index in range(1, 9)} for check in expected["routeChecks"])
+        ):
+            raise ContractError("evidence_scenario_expected_route_checks_invalid")
     for field, allowed_kinds in (("durableRecords", _SCENARIO_RECORD_KINDS), ("productEvents", _SCENARIO_PRODUCT_KINDS)):
         if expected is None or field not in expected:
             continue
@@ -1106,7 +1113,8 @@ def _validate_scenario_projection(value: Any) -> None:
         raise ContractError("evidence_scenario_fault_invalid")
     if "actual" in scenario:
         actual = _object(scenario["actual"], "evidence_scenario_actual")
-        if set(actual) != {"operations", "records", "productEvents", "evidenceKinds"}:
+        allowed_actual = {"operations", "records", "productEvents", "evidenceKinds", "routeEvidence"}
+        if set(actual).difference(allowed_actual) or not {"operations", "records", "productEvents", "evidenceKinds"}.issubset(actual):
             raise ContractError("evidence_scenario_actual_invalid")
         for key in ("operations", "evidenceKinds"):
             if not isinstance(actual[key], list) or len(actual[key]) > 16:
@@ -1120,6 +1128,52 @@ def _validate_scenario_projection(value: Any) -> None:
             for row in rows:
                 if not isinstance(row, dict) or set(row) != {"kind", "count"} or row["kind"] not in allowed_kinds or type(row["count"]) is not int or not 0 <= row["count"] <= 256:
                     raise ContractError("evidence_scenario_actual_record_invalid")
+        if "routeEvidence" in actual:
+            _validate_worker_route_evidence(actual["routeEvidence"])
+
+
+def _validate_worker_route_evidence(value: Any) -> None:
+    payload = _object(value, "evidence_worker_route_evidence")
+    if set(payload) != {"routes", "readback"}:
+        raise ContractError("evidence_worker_route_evidence_fields_invalid")
+    routes = _object(payload["routes"], "evidence_worker_routes")
+    if set(routes) != {f"W{index:02d}" for index in range(1, 9)} | {"replay"}:
+        raise ContractError("evidence_worker_route_ids_invalid")
+    expected_boolean_fields = {
+        "W01": {"actorProfileAssignmentSeparate", "snapshotBound"},
+        "W02": {"catalogSearchBeforeDescribe", "boundedSearchAndRead", "hiddenObjectsAbsent"},
+        "W04": {"positiveTypedHostCallback", "sameGateway", "failClosedControls"},
+        "W05": {"contextReceipt", "privateMemoryPresent", "subjectPreferencesSeparate", "skillProjectionPresent", "excludedOtherUserAgentStale", "losslessRoundTrip"},
+        "W07": {"oneOutcome", "oneArtifact", "evidenceAttached", "onePublishedTerminal"},
+        "W08": {"runReadback", "apiCliConsistent", "crossWorkspaceDenied"},
+    }
+    for route_id, fields in expected_boolean_fields.items():
+        row = _object(routes[route_id], f"evidence_worker_{route_id}")
+        if set(row) != fields and not (route_id == "W01" and set(row) == fields | {"substitution"}):
+            raise ContractError("evidence_worker_route_fields_invalid")
+        for field in fields:
+            if row[field] is not True:
+                raise ContractError("evidence_worker_route_failed")
+    substitution = _object(routes["W01"]["substitution"], "evidence_worker_substitution")
+    if set(substitution) != {"status", "errorCode", "sideEffects"} or substitution != {
+        "status": "denied", "errorCode": "NOT_AUTHORIZED", "sideEffects": 0
+    }:
+        raise ContractError("evidence_worker_substitution_invalid")
+    rename = _object(routes["W03"], "evidence_worker_W03")
+    if set(rename) != {"status", "semanticDelta", "duplicateMutation", "httpStatus", "receiptRef", "auditReceiptRef"} or rename["status"] != "replayed" or rename["semanticDelta"] != 0 or rename["duplicateMutation"] != 0 or rename["httpStatus"] != 200:
+        raise ContractError("evidence_worker_rename_replay_invalid")
+    for field, prefix in (("receiptRef", "receipt:"), ("auditReceiptRef", "audit-receipt:")):
+        if not isinstance(rename[field], str) or not rename[field].startswith(prefix) or not re.fullmatch(r"[A-Za-z0-9_.:/-]+", rename[field]):
+            raise ContractError("evidence_worker_rename_receipt_invalid")
+    governance = _object(routes["W06"], "evidence_worker_W06")
+    if set(governance) != {"candidate", "humanApproved", "promoted", "privateAfterPromotion", "rollbackRevision", "proposalReplayStable", "unsupportedSharedDenied", "workspaceUnreviewedNotPromoted"} or any(value is not True for value in governance.values()):
+        raise ContractError("evidence_worker_governance_invalid")
+    replay = _object(routes["replay"], "evidence_worker_replay")
+    if set(replay) != {"context"} or not isinstance(replay["context"], dict) or set(replay["context"]) != {"memoryRevisions", "skillRevisions", "proposals", "contextReceipts"} or any(type(item) is not int or item != 0 for item in replay["context"].values()):
+        raise ContractError("evidence_worker_context_replay_invalid")
+    readback = _object(payload["readback"], "evidence_worker_readback")
+    if set(readback) != {"contextProjectionDigest"} or not isinstance(readback["contextProjectionDigest"], str) or not HASH_RE.fullmatch(readback["contextProjectionDigest"]):
+        raise ContractError("evidence_worker_readback_invalid")
 
 
 def _validate_scenario_gate(value: Any) -> None:

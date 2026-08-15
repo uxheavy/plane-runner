@@ -60,3 +60,20 @@ For the first vertical slice, resolve role instructions, authorized assignment c
 - File projections require deterministic round-trip, provenance, conflict, and reconciliation rules.
 - Automatic learning and gardener improvements remain recoverable, immutable, and agent-scoped.
 - Rollback and retention contracts must be tested before the non-UI breadth gate; no shared-memory promotion contract exists in this scope.
+
+### Runtime integration boundary
+
+The pinned Hermes adapter is intentionally not the authority for Plane context.
+At the current runtime seam it calls `AIAgent` with `skip_context_files=True`
+and `skip_memory=True`; its only `prefill_messages` input is a trusted,
+approved continuation checkpoint. `build_model_guidance` carries context
+references and assignment metadata, not materialized memory or skill contents,
+and the G1 snapshot validator rejects uncontracted snapshot fields. Therefore
+the first live context journey uses the existing shared Operation Gateway for a
+bounded `agent.context.read` projection. The operation is not a second
+authorization model: it binds actor, run, assignment context reference, and
+subject to the persisted snapshot, applies the existing memory/skill services
+and retention filters, records the normal gateway receipt/audit, and returns
+only the bounded deterministic projection. If Hermes later exposes a Plane-
+owned context-materialization adapter, this operation should be retired in
+favor of that seam.

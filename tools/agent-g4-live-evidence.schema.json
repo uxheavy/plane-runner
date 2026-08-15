@@ -149,7 +149,8 @@
               "items": { "enum": ["assignment", "run", "invocation", "input_event", "audit", "publication", "terminal_event", "schedule", "schedule_fire", "lineage_assignment"] }
             },
             "durableRecords": { "$ref": "#/$defs/durableCountRows" },
-            "productEvents": { "$ref": "#/$defs/productCountRows" }
+            "productEvents": { "$ref": "#/$defs/productCountRows" },
+            "routeChecks": { "type": "array", "maxItems": 8, "items": { "enum": ["W01", "W02", "W03", "W04", "W05", "W06", "W07", "W08"] } }
           }
         },
         "setup": { "$ref": "#/$defs/setup" },
@@ -170,7 +171,7 @@
     "durableCountRows": { "type": "array", "maxItems": 8, "items": { "type": "object", "additionalProperties": false, "required": ["kind", "count"], "properties": { "kind": { "enum": ["assignment", "run", "invocation", "input_event", "audit", "publication", "terminal_event", "schedule", "schedule_fire", "lineage_assignment"] }, "count": { "type": "integer", "minimum": 0, "maximum": 256 } } } },
     "productCountRows": { "type": "array", "maxItems": 8, "items": { "type": "object", "additionalProperties": false, "required": ["kind", "count"], "properties": { "kind": { "enum": ["publication", "outcome_submission", "run_failure", "run_blocker", "run_cancellation", "input_event"] }, "count": { "type": "integer", "minimum": 0, "maximum": 256 } } } },
     "scenarioGate": { "type": "object", "additionalProperties": false, "required": ["passed", "failures", "operations", "durableRecords", "productEvents", "evidenceKinds"], "properties": { "passed": { "type": "boolean" }, "failures": { "type": "array" }, "operations": { "type": "array" }, "durableRecords": { "type": "array" }, "productEvents": { "type": "array" }, "evidenceKinds": { "type": "array" } } },
-    "scenarioActual": { "type": "object", "additionalProperties": false, "required": ["operations", "records", "productEvents", "evidenceKinds"], "properties": { "operations": { "type": "array" }, "records": { "type": "array" }, "productEvents": { "type": "array" }, "evidenceKinds": { "type": "array" } } },
+    "scenarioActual": { "type": "object", "additionalProperties": false, "required": ["operations", "records", "productEvents", "evidenceKinds"], "properties": { "operations": { "type": "array" }, "records": { "type": "array" }, "productEvents": { "type": "array" }, "evidenceKinds": { "type": "array" }, "routeEvidence": { "type": "object" } } },
     "providerRelay": {
       "type": "object",
       "additionalProperties": false,

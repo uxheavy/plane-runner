@@ -454,7 +454,9 @@ def project_visible_skill_packages(
             shared_scope_id=actor.workspace_id,
         ),
         deleted_at__isnull=True,
-    ).order_by("key", "visibility", "id")
+    ).filter(Q(retention_expires_at__isnull=True) | Q(retention_expires_at__gt=timezone.now())).order_by(
+        "key", "visibility", "id"
+    )
     projected: dict[str, dict[str, str]] = {}
     for definition in definitions:
         visible = definition.visibility == AgentSkillVisibility.AGENT_PRIVATE

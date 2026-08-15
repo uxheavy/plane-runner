@@ -74,6 +74,7 @@ from plane.db.models import (
     Page,
     Project,
     ProjectMember,
+    RunAttempt,
     State,
     Workspace,
     WorkspaceMember,
@@ -370,6 +371,102 @@ def _non_issue_activity_publication_payload(
         },
         "webhook": {"skip": True},
     }
+
+
+class _LiveAgentContextAuthorization:
+    """Authorize subject and shared context reads from the live workspace."""
+
+    def __init__(self, workspace: Workspace):
+        self.workspace = workspace
+
+    def can_read_user_preferences(self, *, actor: AgentActor, subject_user_id: str) -> bool:
+        return WorkspaceMember.objects.filter(
+            workspace=self.workspace,
+            member_id=subject_user_id,
+            member__is_bot=False,
+            is_active=True,
+        ).exists()
+
+    def can_read_shared_skills(self, *, actor: AgentActor, visibility: str, scope_id: str) -> bool:
+        return str(self.workspace.id) == scope_id and WorkspaceMember.objects.filter(
+            workspace=self.workspace,
+            member_id=actor.principal_id,
+            is_active=True,
+        ).exists()
+
+
+class AgentContextOperation:
+    """Project Plane-owned memory and skills through the ordinary gateway."""
+
+    @staticmethod
+    def _binding(request: Any, workspace: Workspace, data: dict[str, Any]):
+        actor_ref = getattr(request, "agent_actor_ref", None)
+        run_ref = getattr(request, "agent_run_ref", None)
+        if not isinstance(actor_ref, str) or not isinstance(run_ref, str):
+            return None
+        try:
+            actor = AgentActor.objects.get(pk=_plane_ref(actor_ref, "actor", "actor_ref"))
+            run = RunAttempt.objects.get(pk=_plane_ref(run_ref, "run", "run_ref"))
+        except (AgentActor.DoesNotExist, RunAttempt.DoesNotExist, OperationAdapterFailure, ValueError):
+            return None
+        if (
+            actor.workspace_id != workspace.id
+            or actor.principal_id != getattr(request.user, "id", None)
+            or not actor.is_active
+            or run.workspace_id != workspace.id
+            or run.actor_id != actor.id
+        ):
+            return None
+        subject_ref = data.get("subject_user_ref")
+        if not isinstance(subject_ref, str) or not subject_ref.startswith("user:"):
+            return None
+        if f"context:user-{subject_ref.removeprefix('user:')}" not in {
+            item.get("contextRef") for item in run.snapshot.get("context", []) if isinstance(item, dict)
+        }:
+            return None
+        try:
+            subject = User.objects.get(pk=_plane_ref(subject_ref, "user", "subject_user_ref"))
+        except (User.DoesNotExist, OperationAdapterFailure, ValueError):
+            return None
+        if not WorkspaceMember.objects.filter(
+            workspace=workspace, member=subject, member__is_bot=False, is_active=True
+        ).exists():
+            return None
+        return actor, subject
+
+    def authorize(self, request: Any, workspace: Workspace, data: dict[str, Any]) -> bool:
+        return self._binding(request, workspace, data) is not None
+
+    def execute(self, request: Any, workspace: Workspace, data: dict[str, Any]):
+        binding = self._binding(request, workspace, data)
+        if binding is None:
+            raise OperationAdapterFailure("NOT_AUTHORIZED", 403)
+        actor, subject = binding
+        from plane.agent.memory.services import assemble_agent_context
+
+        projection = assemble_agent_context(
+            actor,
+            subject_user=subject,
+            authorization=_LiveAgentContextAuthorization(workspace),
+        )
+        context = {
+            "memoryMarkdown": projection.memory_markdown,
+            "userMarkdown": projection.user_markdown,
+            "skillPackages": projection.skill_packages,
+            "projectionDigest": hashlib.sha256(
+                json.dumps(
+                    {
+                        "memoryMarkdown": projection.memory_markdown,
+                        "userMarkdown": projection.user_markdown,
+                        "skillPackages": projection.skill_packages,
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                ).encode("utf-8")
+            ).hexdigest(),
+        }
+        return 200, {"context": context}, None
 
 
 @dataclass(frozen=True)
@@ -2363,6 +2460,7 @@ def _resource_handlers() -> dict[str, Any]:
         "agent.outcome.evaluate": AgentGovernanceOperation("agent.outcome.evaluate"),
         "agent.outcome.accept": AgentGovernanceOperation("agent.outcome.accept"),
         "agent.outcome.request_revision": AgentGovernanceOperation("agent.outcome.request_revision"),
+        "agent.context.read": AgentContextOperation(),
     }
     for spec in specs:
         for action in ("list", "create", "retrieve", "update", "delete"):

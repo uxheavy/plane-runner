@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "plane.agent-scenario/v1",
+  "scenarioId": "worker",
+  "actor": { "role": "worker" },
+  "profile": {
+    "name": "Maya Worker",
+    "instructions": "Complete one assigned work-item journey through Plane's typed operations. Discover the catalog first: call catalog.search once, then catalog.describe for agent.context.read. Read the assigned work item with search_workspace and work_item.read. Call agent.context.read once with subject_user_ref={{subjectUserRef}} and use the returned memory and skill projections in the journey. Use Code Mode exactly once to compose a TypeScript callback through host.call_plane_operation for work_item.rename; do not use ordinary model mutation for the rename. Then call agent.outcome.evaluate as this Worker; it must be rejected. Submit exactly one outcome with one artifact and one evidence item, publish it exactly once, and end with a short report. Keep each operation bounded and do not repeat successful calls.",
+    "modelPolicy": {
+      "provider": "openai-codex",
+      "model": "gpt-5.6-luna",
+      "reasoning": "xhigh",
+      "fallbackAllowed": false
+    }
+  },
+  "assignment": {
+    "targetRef": "fixture:assigned-work-item",
+    "objective": "Use Maya's private context and subject preferences to rename the assigned work item through one typed Code Mode callback, then submit and publish one bounded outcome.",
+    "acceptanceCriteria": [
+      "Catalog discovery precedes the bounded context read.",
+      "The assigned work item is read before the semantic rename.",
+      "The rename is made by one TypeScript host callback and has a replayable receipt.",
+      "The Worker evaluator attempt is rejected and one outcome is submitted and published."
+    ],
+    "contextRefs": ["context:worker-journey"]
+  },
+  "prompt": "You are Maya, the assigned Worker. Follow the instructions in order and use the returned context projections: private memory says to verify the rename receipt, the subject preference says to keep the final report brief, and the private skill package describes the rename callback. For Code Mode, generate restricted TypeScript with a typed host callback such as host.call_plane_operation('work_item.rename', { project_id: '<project id>', issue_id: '<issue id>', name: '<new name>' }, '<unique key>', '<run correlation>') and return its result. Use the exact assigned references discovered from Plane; do not invent references. After the callback, use the successful receipt to prepare one artifact object and one evidence object in agent.outcome.submit. The evaluator call must use this Worker actor and the submitted outcome reference, so Plane returns NOT_AUTHORIZED. Publish only the submitted outcome. Do not expose context entries that are not returned for Maya's subject.",
+  "expected": {
+    "operationOutcomes": [
+      { "operationId": "catalog.search", "outcome": "success", "count": 1 },
+      { "operationId": "catalog.describe", "outcome": "success", "count": 1 },
+      { "operationId": "agent.context.read", "outcome": "success", "count": 1 },
+      { "operationId": "search_workspace", "outcome": "success", "count": 1 },
+      { "operationId": "work_item.read", "outcome": "success", "count": 1 },
+      { "operationId": "work_item.rename", "outcome": "success", "count": 1 },
+      { "operationId": "agent.outcome.evaluate", "outcome": "denied", "count": 1 },
+      { "operationId": "agent.outcome.submit", "outcome": "success", "count": 1 },
+      { "operationId": "agent.outcome.publish", "outcome": "success", "count": 1 }
+    ],
+    "evidenceKinds": ["assignment", "run", "invocation", "audit", "publication", "terminal_event"],
+    "durableRecords": [
+      { "kind": "assignment", "count": 1 },
+      { "kind": "run", "count": 1 },
+      { "kind": "invocation", "count": 1 },
+      { "kind": "publication", "count": 1 },
+      { "kind": "terminal_event", "count": 1 }
+    ],
+    "productEvents": [
+      { "kind": "publication", "count": 1 },
+      { "kind": "outcome_submission", "count": 1 }
+    ],
+    "routeChecks": ["W01", "W02", "W03", "W04", "W05", "W06", "W07", "W08"]
+  },
+  "setup": {
+    "preconditions": ["isolated_workspace", "assigned_work_item", "fresh_assignment", "live_authorization", "separate_runtime_service"],
+    "actors": []
+  },
+  "controls": { "fault": { "selection": "none" } }
+}

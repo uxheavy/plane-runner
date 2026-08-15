@@ -423,6 +423,18 @@ _CATALOG_DESCRIBE_RESULT = {
     "required": ["operation"],
     "properties": {"operation": {"type": "object"}},
 }
+_AGENT_CONTEXT_READ_INPUT = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["subject_user_ref"],
+    "properties": {"subject_user_ref": {"type": "string", "pattern": "^user:", "maxLength": 128}},
+}
+_AGENT_CONTEXT_READ_RESULT = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["context"],
+    "properties": {"context": {"type": "object"}},
+}
 _CODE_MODE_SPILL_INPUT = {
     "type": "object",
     "additionalProperties": False,
@@ -616,6 +628,24 @@ OPERATION_CATALOG.update(
             input_schema=_CATALOG_DESCRIBE_INPUT,
             result_schema=_CATALOG_DESCRIBE_RESULT,
             tags=("catalog", "discovery", "read"),
+            authorization_scope="workspace",
+        ),
+        "agent.context.read": OperationDescriptor(
+            operation_id="agent.context.read",
+            schema_version=SCHEMA_VERSION,
+            kind="read",
+            family="agent_context",
+            summary="Read the bounded Agent-private and subject-bound context projection for this run.",
+            required_input=("subject_user_ref",),
+            input_fields=("subject_user_ref",),
+            max_result_bytes=MAX_RESULT_BYTES,
+            handler="agent_context_read",
+            result_key="context",
+            permission="workspace",
+            name="read_agent_context",
+            input_schema=_AGENT_CONTEXT_READ_INPUT,
+            result_schema=_AGENT_CONTEXT_READ_RESULT,
+            tags=("agent", "context", "memory", "skills", "read"),
             authorization_scope="workspace",
         ),
         "code_mode.spill": OperationDescriptor(

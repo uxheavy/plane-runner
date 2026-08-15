@@ -28,6 +28,7 @@ MAX_CONTEXT_REF_BYTES = 256
 MAX_EXPECTED_OPERATIONS = 16
 MAX_EXPECTED_EVIDENCE = 16
 MAX_EXPECTED_RECORDS = 8
+MAX_ROUTE_CHECKS = 8
 MAX_SETUP_ACTORS = 4
 MAX_SETUP_REFS = 8
 MAX_CONTROL_INPUT_BYTES = 8 * 1024
@@ -60,6 +61,7 @@ class ExpectedPredicates(TypedDict, total=False):
     evidenceKinds: list[str]
     durableRecords: list[dict[str, Any]]
     productEvents: list[dict[str, Any]]
+    routeChecks: list[str]
 
 
 @dataclass(frozen=True)
@@ -231,7 +233,7 @@ def _reject_forbidden_fields(value: Any) -> None:
     elif isinstance(value, list):
         for child in value:
             _reject_forbidden_fields(child)
-    elif isinstance(value, str) and FORBIDDEN_RE.search(value):
+    elif isinstance(value, str) and FORBIDDEN_RE.search(value) and value not in _PRECONDITIONS:
         raise ScenarioError("scenario_forbidden_value")
 
 
@@ -354,7 +356,7 @@ def _expected(value: Any) -> ExpectedPredicates | None:
     if value is None:
         return None
     expected = _object(value, "expected")
-    if set(expected).difference({"operationOutcomes", "evidenceKinds", "durableRecords", "productEvents"}) or not {"operationOutcomes", "evidenceKinds"}.issubset(expected):
+    if set(expected).difference({"operationOutcomes", "evidenceKinds", "durableRecords", "productEvents", "routeChecks"}) or not {"operationOutcomes", "evidenceKinds"}.issubset(expected):
         raise ScenarioError("scenario_expected_fields_mismatch")
     operations = expected["operationOutcomes"]
     if not isinstance(operations, list) or len(operations) > MAX_EXPECTED_OPERATIONS:
@@ -378,6 +380,11 @@ def _expected(value: Any) -> ExpectedPredicates | None:
     if any(kind not in _EVIDENCE_KINDS for kind in evidence):
         raise ScenarioError("scenario_expected_evidence_unsupported")
     result: ExpectedPredicates = {"operationOutcomes": parsed_operations, "evidenceKinds": list(evidence)}
+    if "routeChecks" in expected:
+        route_checks = _optional_string_list(expected["routeChecks"], "expected_route_checks", MAX_ROUTE_CHECKS, 8)
+        if any(check not in {f"W{index:02d}" for index in range(1, 9)} for check in route_checks):
+            raise ScenarioError("scenario_expected_route_check_unsupported")
+        result["routeChecks"] = list(route_checks)
     for field, kinds in (("durableRecords", _RECORD_KINDS), ("productEvents", _PRODUCT_KINDS)):
         if field not in expected:
             continue

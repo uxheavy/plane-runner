@@ -67,6 +67,18 @@ from plane.db.models.operation_gateway import (
     OperationGatewayPublication,
 )
 
+if os.environ.get("G4_SCENARIO_DESCRIPTOR"):
+    from plane.agent_g4_worker_route import (
+        attempt_actor_substitution,
+        build_worker_route_evidence,
+        context_state_counts,
+        govern_worker_skill,
+        replay_worker_rename,
+        seed_worker_context,
+        worker_code_mode_controls,
+        worker_readback_facts,
+    )
+
 _LIVE_USAGE_KEYS = ("inputTokens", "outputTokens", "durationMs")
 _S00_PUBLICATION_REF_FIELDS = (
     "productRef",
@@ -1132,6 +1144,12 @@ def main() -> int:
     schedule = None
     schedule_fire = None
     input_event = None
+    context_facts = {}
+    governance_evidence = {}
+    substitution_evidence = {"status": "not_evaluated", "errorCode": None, "sideEffects": None}
+    rename_replay_evidence = {"status": "not_evaluated", "semanticDelta": None, "duplicateMutation": None}
+    context_replay_delta = {}
+    context_replay_before = {}
 
     def readback():
         invocation.refresh_from_db()
@@ -1310,6 +1328,18 @@ def main() -> int:
             credential_ref="plane-credential:g4-live",
             created_by=user,
         )
+        if scenario is not None and scenario.scenario_id == "worker":
+            context_facts.update(
+                seed_worker_context(
+                    actor=actor,
+                    workspace=workspace,
+                    project=project,
+                    user=user,
+                    suffix=suffix,
+                    provider=provider["name"],
+                    model=scenario.profile.model_policy.model,
+                )
+            )
         actor_role = AgentRole.WORKER
         profile_instructions = (
             "Complete this one live G4 chain check through Plane tools. First discover and read the assigned issue "
@@ -1357,6 +1387,8 @@ def main() -> int:
             assignment_objective = scenario.assignment.objective
             assignment_acceptance_criteria = list(scenario.assignment.acceptance_criteria)
             assignment_context_refs = list(scenario.assignment.context_refs)
+            profile_instructions = profile_instructions.replace("{{subjectUserRef}}", f"user:{user.id}")
+            profile_persona = profile_persona.replace("{{subjectUserRef}}", f"user:{user.id}")
         profile = create_profile(
             actor,
             role=actor_role,
@@ -1374,6 +1406,7 @@ def main() -> int:
                 "adapter": "hermes",
             },
             expected_outcomes=profile_expected_outcomes,
+            context_refs=[*assignment_context_refs, f"context:user-{user.id}"],
             created_by=user,
         )
         if scenario is not None:
@@ -1456,6 +1489,15 @@ def main() -> int:
                 )
         run = create_run(assignment, profile, idempotency_key=f"idempotency:g4-live-run-{suffix}", created_by=user)
         invocation = record_invocation(run, idempotency_key=f"idempotency:g4-live-invocation-{suffix}", trigger="initial")
+        if scenario is not None and scenario.scenario_id == "worker":
+            substitution_evidence = attempt_actor_substitution(
+                actor=actor,
+                fake_actor=context_facts["gardener"],
+                workspace=workspace,
+                run=run,
+                user=user,
+                suffix=suffix,
+            )
         if scenario is not None and scenario.controls.cancellation is not None and scenario.controls.cancellation["timing"] == "before_dispatch":
             request_runtime_cancellation(invocation, reason=scenario.controls.cancellation["reason"], idempotency_key=f"idempotency:g4-live-cancel-{suffix}")
         stdout = io.StringIO()
@@ -1571,6 +1613,22 @@ def main() -> int:
             runtime_exit_kind=exit_evidence.kind if exit_evidence is not None else None,
             runtime_exit_failure=runtime_exit_failure,
         )
+        if scenario is not None and scenario.scenario_id == "worker":
+            rename_replay_evidence = replay_worker_rename(
+                actor=actor, workspace=workspace, run=run, issue=issue, correlation_id=correlation_id
+            )
+            governance_evidence = govern_worker_skill(
+                actor=actor,
+                gardener=context_facts["gardener"],
+                initial_skill=context_facts["initialSkill"],
+                run=run,
+                user=user,
+                workspace=workspace,
+                suffix=suffix,
+            )
+            context_facts["codeModeControlsPassed"] = worker_code_mode_controls(run)
+            context_facts.update(worker_readback_facts(run=run, workspace=workspace, user=user, suffix=suffix))
+            context_replay_before = context_state_counts(actor, run)
         if legacy_s00:
             if (
                 not s00_gate["passed"] or not provider_success or not permitted or not denied
@@ -1621,6 +1679,14 @@ def main() -> int:
         ):
             raise RuntimeError("successful primary replay did not return the terminal invocation without dispatch")
         after_replay = replay_snapshot()
+        if scenario is not None and scenario.scenario_id == "worker":
+            context_replay_after = context_state_counts(actor, run)
+            context_replay_delta = {
+                key: context_replay_after[key] - context_replay_before.get(key, context_replay_after[key])
+                for key in context_replay_after
+            }
+            if any(value != 0 for value in context_replay_delta.values()):
+                raise RuntimeError("provider-disabled replay changed Agent context or governance state")
         replay_counts = (
             "providerAttempts",
             "invocations",
@@ -1660,6 +1726,32 @@ def main() -> int:
             transcript_evidence,
             explicit_publication,
         ) = readback()
+        if scenario is not None and scenario.scenario_id == "worker":
+            route_evidence, route_failures = build_worker_route_evidence(
+                scenario=scenario,
+                run=run,
+                assignment=assignment,
+                actor=actor,
+                context_facts=context_facts,
+                governance=governance_evidence,
+                substitution=substitution_evidence,
+                rename_replay=rename_replay_evidence,
+                context_replay_delta=context_replay_delta,
+            )
+            scenario_actual["routeEvidence"] = route_evidence
+            scenario_gate["failures"].extend(route_failures)
+            scenario_gate["passed"] = not scenario_gate["failures"] and all(
+                row["passed"]
+                for rows in (
+                    scenario_gate["operations"],
+                    scenario_gate["durableRecords"],
+                    scenario_gate["productEvents"],
+                    scenario_gate["evidenceKinds"],
+                )
+                for row in rows
+            )
+            if not scenario_gate["passed"]:
+                raise RuntimeError("Worker route expectations failed: " + ",".join(scenario_gate["failures"]))
         duration_ms = round((time.monotonic() - started) * 1000, 3)
         binding = _binding()
         bounded_readback = build_failure_evidence(

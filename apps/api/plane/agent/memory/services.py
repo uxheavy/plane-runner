@@ -7,6 +7,7 @@ from typing import Any
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from plane.agent.lifecycle.runtime_contract import canonical_json, command_fingerprint, content_digest
@@ -465,13 +466,14 @@ def assemble_agent_context(
 
     actor = _scope_actor(actor)
     authorization = authorization or DenySubjectContext()
+    now = timezone.now()
     private_entries = list(
         AgentMemoryEntry.objects.filter(
             actor=actor,
             visibility=AgentMemoryVisibility.AGENT_PRIVATE,
             subject_user__isnull=True,
             deleted_at__isnull=True,
-        )
+        ).filter(Q(retention_expires_at__isnull=True) | Q(retention_expires_at__gt=now))
     )
     private_pairs = [
         (entry, revision) for entry in private_entries if (revision := _latest_entry_revision(entry)) is not None
@@ -486,7 +488,7 @@ def assemble_agent_context(
             subject_user=subject_user,
             kind=AgentMemoryKind.PREFERENCE,
             deleted_at__isnull=True,
-        )
+        ).filter(Q(retention_expires_at__isnull=True) | Q(retention_expires_at__gt=now))
         user_pairs = [
             (entry, revision) for entry in user_entries if (revision := _latest_entry_revision(entry)) is not None
         ]

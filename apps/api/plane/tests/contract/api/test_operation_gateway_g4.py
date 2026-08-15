@@ -4,6 +4,7 @@ import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -11,6 +12,9 @@ from django.core.cache import cache
 from django.db import close_old_connections, transaction
 from django.utils import timezone
 
+from plane.agent.lifecycle import create_actor, create_assignment, create_profile, create_run
+from plane.agent.memory import create_memory, create_user_preference
+from plane.db.models import AgentRole, User, WorkspaceMember
 from plane.db.models import OperationGatewayAudit, OperationGatewayIdempotency, OperationGatewayQuotaBucket
 from plane.operation_gateway.catalog import (
     MUTATION_RECONCILIATION_POLICIES,
@@ -67,6 +71,100 @@ def test_g4_reconciliation_matrix_is_exact_and_catalog_derived():
     assert operation_catalog_snapshot()["reconciliationMatrix"] == matrix
     assert matrix["policyVersion"] == RECONCILIATION_POLICY_VERSION
     assert set(MUTATION_RECONCILIATION_POLICIES) == set(mutations)
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_agent_context_read_binds_subject_actor_and_run_snapshot(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    actor = create_actor(
+        workspace=workspace,
+        project=gateway_project,
+        display_name="Context gateway worker",
+        created_by=create_user,
+    )
+    create_memory(actor, key="private-fact", content="Private worker fact.")
+    create_user_preference(actor, subject_user=create_user, key="user-style", content="Short report.")
+    profile = create_profile(
+        actor,
+        role=AgentRole.WORKER,
+        instructions="Read the bound context.",
+        context_refs=[f"context:user-{create_user.id}"],
+    )
+    assignment = create_assignment(
+        actor,
+        project=gateway_project,
+        target_ref=f"issue:{gateway_issue.id}",
+        objective="Read context through the gateway.",
+        acceptance_criteria=["The projection is bounded and subject-bound."],
+        created_by=create_user,
+    )
+    run = create_run(assignment, profile, idempotency_key="idempotency:g4-context-run", created_by=create_user)
+    request = SimpleNamespace(
+        user=actor.principal,
+        META={},
+        agent_actor_ref=run.snapshot["actorRef"],
+        agent_workspace_ref=run.snapshot["workspaceRef"],
+        agent_run_ref=run.snapshot["runId"],
+    )
+    raw = {
+        "schema_version": "plane.operation/v1",
+        "operation_id": "agent.context.read",
+        "workspace_slug": workspace.slug,
+        "idempotency_key": "idempotency:g4-context-read",
+        "correlation_id": "correlation:g4-context-read",
+        "input": {"subject_user_ref": f"user:{create_user.id}"},
+    }
+
+    response, response_status = OperationGateway().execute(request, raw)
+
+    assert response_status == 200, response
+    context = response["result"]["context"]
+    assert "private-fact" in context["memoryMarkdown"]
+    assert "user-style" in context["userMarkdown"]
+    assert len(context["projectionDigest"]) == 64
+    assert list(
+        OperationGatewayAudit.objects.filter(idempotency_key="idempotency:g4-context-read").values_list(
+            "phase", "outcome"
+        )
+    ) == [("intent", "intent"), ("outcome", "success")]
+
+    other_actor = create_actor(
+        workspace=workspace,
+        project=gateway_project,
+        display_name="Other context gateway worker",
+        created_by=create_user,
+    )
+    request.agent_actor_ref = f"actor:{other_actor.id}"
+    denied, denied_status = OperationGateway().execute(
+        request,
+        {
+            **raw,
+            "idempotency_key": "idempotency:g4-context-substitution",
+            "correlation_id": "correlation:g4-context-substitution",
+        },
+    )
+    assert denied_status == 403
+    assert denied["error"]["code"] == "NOT_AUTHORIZED"
+    assert OperationGatewayIdempotency.objects.get(
+        idempotency_key="idempotency:g4-context-substitution"
+    ).state == OperationGatewayIdempotency.State.DENIED
+
+    other_user = User.objects.create(username="context-other", email="context-other@plane.so")
+    WorkspaceMember.objects.create(workspace=workspace, member=other_user, role=15)
+    request.agent_actor_ref = run.snapshot["actorRef"]
+    denied_subject, denied_subject_status = OperationGateway().execute(
+        request,
+        {
+            **raw,
+            "idempotency_key": "idempotency:g4-context-subject",
+            "correlation_id": "correlation:g4-context-subject",
+            "input": {"subject_user_ref": f"user:{other_user.id}"},
+        },
+    )
+    assert denied_subject_status == 403
+    assert denied_subject["error"]["code"] == "NOT_AUTHORIZED"
 
 
 @pytest.mark.contract
