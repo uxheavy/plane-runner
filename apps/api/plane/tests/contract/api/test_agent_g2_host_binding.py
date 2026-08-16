@@ -412,7 +412,17 @@ def test_invocation_scoped_socket_executes_typescript_through_the_bound_host(
                 "schemaVersion": CODE_MODE_SCHEMA_VERSION,
                 "entrypoint": "default",
                 "source": """
-                    export default async function ({host, input}: {host: any; input: any}) {
+                    export default async function ({host, input}: {
+                        host: {
+                            call_plane_operation: (
+                                operationId: string,
+                                input: Record<string, unknown>,
+                                idempotencyKey: string,
+                                correlationId: string
+                            ) => Promise<Record<string, unknown>>;
+                        };
+                        input: Record<string, unknown>;
+                    }): Promise<Record<string, unknown>> {
                         return await host.call_plane_operation(
                             "work_item.rename", input,
                             "idempotency:g2-typescript-rename",

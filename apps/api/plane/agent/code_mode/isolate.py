@@ -19,6 +19,7 @@ from .contracts import MAX_CODE_MODE_INLINE_RESULT_BYTES, MAX_CODE_MODE_SOURCE_B
 
 MAX_PROTOCOL_LINE_BYTES = 1_048_576
 _RUNNER = Path(__file__).with_name("runner.mjs")
+_TYPESCRIPT_MODULE_DIR = "/usr/share/node_modules/typescript"
 
 
 class CodeModeIsolateError(RuntimeError):
@@ -104,6 +105,7 @@ class CodeModeIsolateRunner:
             "--experimental-vm-modules",
             "--disable-proto=throw",
             f"--allow-fs-read={self.runner_path}",
+            f"--allow-fs-read={_TYPESCRIPT_MODULE_DIR}",
             str(self.runner_path),
         ]
         completed = False

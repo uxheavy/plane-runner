@@ -587,10 +587,15 @@ def _tool_call(number, request_json):
         }}
     if number == 6:
         return "execute_code", {"code": (
-            "export default async function ({host}: {host: any}) {\\n"
-            "  return await host.call_plane_operation(\\"catalog.search\\", "
-            "{ query: \\"rename\\", limit: 5 }, "
-            "\\"idempotency:code-mode-catalog\\", \\\"correlation:code-mode-catalog\\\");\\n"
+            "export default async function ({host, input}: {host: {\\n"
+            "    call_plane_operation: (operationId: string, input: Record<string, unknown>, "
+            "idempotencyKey: string, correlationId: string) => Promise<Record<string, unknown>>\\n"
+            "  }; input: Record<string, unknown>}): Promise<Record<string, unknown>> {\\n"
+            "  const renameInput = { project_id: \\"" + _PROJECT_ID + "\\", "
+            "issue_id: \\"" + _ISSUE_ID + "\\", name: \\"G2 Hermes renamed\\" };\\n"
+            "  return await host.call_plane_operation(\\"work_item.rename\\", "
+            "renameInput, \\"idempotency:code-mode-hermes-rename\\", "
+            "\\"correlation:code-mode-hermes-rename\\");\\n"
             "}"
         )}
     if number == 7:
@@ -829,6 +834,15 @@ hermes_logging.setup_verbose_logging = lambda: None
         phase="outcome",
         outcome="success",
         correlation_id=correlation_id,
+    ).exists()
+    gateway_issue.refresh_from_db()
+    assert gateway_issue.name == "G2 Hermes renamed"
+    assert OperationGatewayAudit.objects.filter(
+        operation_id="work_item.rename",
+        phase="outcome",
+        outcome="success",
+        idempotency_key="idempotency:code-mode-hermes-rename",
+        correlation_id="correlation:code-mode-hermes-rename",
     ).exists()
 
 

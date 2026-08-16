@@ -2,6 +2,9 @@ import * as nodeModule from "node:module";
 import * as readline from "node:readline";
 import * as vm from "node:vm";
 
+const require = nodeModule.createRequire(import.meta.url);
+const TYPESCRIPT_MODULE = "/usr/share/node_modules/typescript/lib/typescript.js";
+
 const write = (frame) => {
   process.stdout.write(`${JSON.stringify(frame)}\n`);
 };
@@ -61,14 +64,13 @@ const stripTypes = (value) => {
   if (typeof nodeModule.stripTypeScriptTypes === "function") {
     return nodeModule.stripTypeScriptTypes(value, { mode: "strip" });
   }
-  // The review image ships Node 21 without the built-in eraser.  This
-  // deliberately supports only the generated callback form: primitive
-  // parameter/return annotations are removed, while object literal colons are
-  // untouched.  Unsupported TypeScript still fails closed at module parse.
-  return value
-    .replace(/}\s*:\s*\{[^{}]*\}/g, "}")
-    .replace(/(\b(?:host|input|operationId|idempotencyKey|correlationId|query|limit))\s*:\s*(?:any|unknown|string|number|boolean)(?=\s*[,)=;])/g, "$1")
-    .replace(/\)\s*:\s*(?:any|unknown|string|number|boolean)(?=\s*\{)/g, ")");
+  const typescript = require(TYPESCRIPT_MODULE);
+  return typescript.transpileModule(value, {
+    compilerOptions: {
+      target: typescript.ScriptTarget.ES2022,
+      module: typescript.ModuleKind.ESNext,
+    },
+  }).outputText;
 };
 
 try {
