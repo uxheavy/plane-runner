@@ -62,6 +62,22 @@ class RuntimeConfigurationError(ValueError):
     """A runtime configuration value is absent, invalid, or unsafe."""
 
 
+def runtime_transport_kind(runtime_url: object, shared_secret: object) -> str:
+    """Select the only transport allowed by the configured runtime boundary.
+
+    A configured remote endpoint without its authentication secret must never
+    silently downgrade to the host-bound subprocess transport. The same
+    invariant applies in the opposite direction: a secret without an
+    endpoint is not a usable remote configuration.
+    """
+
+    if not isinstance(runtime_url, str) or not isinstance(shared_secret, str):
+        raise RuntimeConfigurationError("runtime URL and shared secret must be strings")
+    if bool(runtime_url) != bool(shared_secret):
+        raise RuntimeConfigurationError("remote runtime URL and shared secret must be configured together")
+    return "remote" if runtime_url else "local"
+
+
 _APPROVED_PYTHON_EXECUTABLES = frozenset(
     {
         "python3",

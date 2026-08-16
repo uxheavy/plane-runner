@@ -26,6 +26,7 @@ from plane.agent.runtime import (
     RuntimeSupervisorError,
     build_gateway_host_port,
     run_runtime_invocation,
+    runtime_transport_kind,
     terminalize_pre_dispatch_failure,
     validate_runtime_command,
 )
@@ -161,11 +162,13 @@ class Command(BaseCommand):
         result = None
         host_operation_failure = None
         try:
+            with _supervisor_setup_stage("runtime_transport"):
+                transport_kind = runtime_transport_kind(runtime_url, shared_secret)
             with _supervisor_setup_stage("runtime_provenance"):
                 preflight_runtime_provenance(
                     str(checkout) if checkout else None,
                     str(expected_sha) if expected_sha else None,
-                    remote_runtime=bool(runtime_url and shared_secret),
+                    remote_runtime=transport_kind == "remote",
                 )
             with _supervisor_setup_stage("runtime_command"):
                 command = options.get("runtime_command") or getattr(settings, "PLANE_AGENT_RUNTIME_COMMAND", None)
@@ -248,7 +251,7 @@ class Command(BaseCommand):
                 monitor.start()
 
             with _supervisor_setup_stage("runtime_transport"):
-                if runtime_url and shared_secret:
+                if transport_kind == "remote":
                     host_url = getattr(settings, "PLANE_AGENT_RUNTIME_HOST_URL", "")
                     host_parsed = urlsplit(host_url)
                     if (
