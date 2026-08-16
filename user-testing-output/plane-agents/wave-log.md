@@ -2074,3 +2074,54 @@ records this diagnosis without changing the retained receipts.
   `58/58`; `bash -n tools/agent-g4-live.sh`, `git diff --check`, and the
   redacted `gitleaks` scan passed. Disposable Docker resources were cleaned
   and the focused compose project had no remaining containers.
+
+## Wave 0BF — exact 1d002581 / Hermes f8cda105 W01-W02 closure
+
+- Before this primary, the prior `worker-live-45e6f1f9` invocation was
+  reconciled from Plane-owned evidence: run
+  `ecb6689e-1890-4eac-bbc2-6ce0dfbcffb2` and invocation
+  `invocation:73472170-618f-426c-98ad-909b52be93cb` were terminal failed, with
+  one visible unavailable failure terminal, no runtime exit, no host receipts,
+  all seven gateway operation audits absent, zero outcome/publication/terminal
+  counts, and no artifact-bearing outcome. That unknown invocation was never
+  replayed. The focused relay/lifecycle owner suite passed `58/58` and its
+  disposable stack was removed.
+- One deliberate fresh AssignmentContract/RunAttempt then used the existing
+  API image `plane-agent-api:g4-v6-1d002581` digest
+  `sha256:ea08468fcef3f29c24500cc1141751e944a548fa5aef000db8776ed2a7cd400c`
+  and runtime image
+  `plane-agent-runtime:hermes-f8cda105-g4-v6-1d002581` digest
+  `sha256:1aeebc3ad85469ff495e8fc1a36495cbcac487ba8d213c2b57a535654e1c4472`,
+  without rebuilding or refreezing. Hermes was
+  `f8cda105e3e14ace7c12f4840ec86c036fade9ad`, MCP
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The manifest remained
+  `tmp/plane-agent-g4-disposable-1d002581.json`, mode `0600`, SHA-256
+  `731a29b69a9722ba184e9e58ac2c26a318742289776f29bc45f8742f48e9bc40`.
+- The owner-only result is
+  `tmp/persona-wave-v6/worker-live-45e6f1f9b/result.json`, run directory mode
+  `0700`, result mode `0600`, SHA-256
+  `4aab33d7e5c3eb577ccbd15d17a993132698a5dfc87016c85134b127c85cd53d`.
+  Descriptor SHA-256 is
+  `faa01a8eda57838e6d4af85f9a82ef0b818121c3e2b262a0d199468c2cbd35c8`.
+  Durable run/invocation refs are
+  `run:2798ed55-a557-411e-baf2-0d4d8c5b2ddf` /
+  `invocation:d9140ee4-8e74-4295-9231-805b5867573b`.
+- GPT-5.6 Luna xhigh ran with fallback disabled and produced 9 completed
+  upstream `2xx` attempts. `catalog.search`, `catalog.describe`,
+  `search_workspace`, `work_item.read`, `agent.outcome.submit`, and
+  `agent.outcome.publish` each succeeded exactly once; the one
+  `agent.outcome.evaluate` call was denied exactly as `NOT_AUTHORIZED`.
+  W01 substitution was denied with zero side effects; W02 ordering, bounded
+  read/search, and hidden-object exclusion passed. One applied publication and
+  one matching `outcome_submission` terminal were read back, with
+  `RuntimeExit.completed` and the bounded
+  `hermes.terminal-lifecycle/v1` observation (`terminal_armed=true`).
+- The eligible same-invocation provider-disabled replay passed with
+  `sameIdempotencyKey=true`; new children, provider attempts, invocations,
+  receipts, audits, usage, outcomes, publications, terminal events, and
+  semantic side effects were all `0`. Canonical validation passed after
+  `6087b791a4` recognized the established bounded observation-profile alias;
+  focused tools tests passed `149`. No fallback, additional primary, B/C
+  commission, or broad verifier ran. Docker cleanup and final worktree checks
+  passed.
