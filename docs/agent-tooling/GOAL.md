@@ -30,6 +30,12 @@ revealed that the harness counted delivery-intent rows instead of the explicit
 outcome publication; `adff362456` now reuses the validated explicit
 publication projection. The receipt remains dirty and no replay or later
 commission ran.
+The W05/W06 architecture check retains `agent.context.read`: the immutable
+run snapshot and Hermes adapter carry only context references/revisions/digests,
+not subject-bound projection contents. The established gateway operation is
+the existing narrow seam that binds actor/workspace/run/subject, invokes
+`assemble_agent_context`, and returns separate memory, preference, and skill
+projections under live authorization and audit.
 The final candidate image,
 exact-image red team, G4 verifier, and consolidated Sol review remain pending.
 G5 remains a separate rollout goal.
