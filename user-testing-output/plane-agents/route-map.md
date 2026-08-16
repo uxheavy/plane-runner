@@ -394,6 +394,28 @@ replay. W03-W08 remain dirty; UT-042 is open.
 - W05 and W06 remain dirty; this is provider-free boundary evidence, not route
   closure.
 
+## Wave 0BU — d748 W05/W06 boundary evidence
+
+- The one fresh `context-governance` journey used the exact d748 API/runtime
+  images, GPT-5.6 Luna xhigh, fallback disabled, and the host-wide capacity
+  lease. The exact API-container binding probe passed before dispatch:
+  `settingsSource=django`, `/run/plane-agent-runtime-secret`, owner-only
+  `0600` readable binding, `runtimeHost=agent-runtime`, `transportKind=remote`,
+  and `transportClass=RemoteRuntimeTransport`. Redacted probe evidence is
+  `user-testing-output/plane-agents/evidence/w05-w06-c-d748-runtime-binding-probe.json`,
+  SHA-256 `ad03cf8f22765516f4e246dcbb3cdbe4b3f78604b94096debf04782a0bdcc8eb`.
+- The API invocation then failed locally with exit `1` at
+  `api-invocation`; provider attempts/effects and runtime events were `0`.
+  W05/W06 context, preference, memory, skill, promotion, rollback, outcome,
+  publication, and replay route evidence were not observed. The owner-only
+  result is `tmp/persona-wave-v6/w05-w06-fresh-d748ecbc-r2/result.json`,
+  SHA-256 `c1c89a7363353931b74ce0475a22557adb18c3e5e58b603d928e7e057c0fe9b`;
+  durable redacted evidence is
+  `user-testing-output/plane-agents/evidence/w05-w06-c-d748-api-invocation-stop.json`,
+  SHA-256 `0eac3da74b4c5232954773c0d59b55c596bfd48cd316f45058121f1c70e7bdb0`.
+- No replay or retry was run. W05/W06 remain `dirty`; this evidence does not
+  close any route.
+
 ## Wave 0BS — exact integrated C API-invocation boundary stop
 
 - Commits `200d1fdb7d`, `488390ba21`, and `855f4e6686` were integrated in
