@@ -44,6 +44,10 @@ ROLLBACK_MIGRATION = "db.0142_runtime_provider_attempts"
 ROLLBACK_OPERATION_CONTRACT = "plane.operation/v1"
 ROLLBACK_RUNTIME_CONTRACT = "plane.agent-runtime/v1"
 PROVIDER_RELAY_PROTOCOL = "plane.agent-runtime/provider-relay/v1"
+_DISPOSABLE_RUNTIME_FILE_PREFIXES = (
+    "apps/api/plane/agent/runtime/",
+    "apps/api/plane/agent/code_mode/",
+)
 _CANONICAL_PROVIDER_RELAY = {
     "protocol": PROVIDER_RELAY_PROTOCOL,
     "transport": "AF_UNIX",
@@ -250,7 +254,7 @@ def validate_disposable_artifact_binding(manifest: dict[str, Any], candidate: st
     for relative, digest in files.items():
         if (
             not isinstance(relative, str)
-            or not relative.startswith("apps/api/plane/agent/runtime/")
+            or not any(relative.startswith(prefix) for prefix in _DISPOSABLE_RUNTIME_FILE_PREFIXES)
             or relative.endswith((".pyc", ".pyo"))
             or "/__pycache__/" in relative
         ):

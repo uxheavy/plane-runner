@@ -847,6 +847,21 @@ def test_worker_receipt_requires_bounded_terminal_lifecycle_observation() -> Non
     assert "def _validate_terminal_lifecycle" in validate
 
 
+def test_disposable_binding_accepts_staged_code_mode_contracts() -> None:
+    candidate = "1" * 40
+    manifest = _binding_manifest(candidate, "disposable-exact-candidate")
+    binding = manifest["disposableBinding"]
+    assert isinstance(binding, dict)
+    runtime_files = dict(binding["runtimeFiles"])
+    runtime_files["apps/api/plane/agent/code_mode/contracts.py"] = "e" * 64
+    binding["runtimeFiles"] = runtime_files
+    binding["runtimeSourceDigest"] = hashlib.sha256(
+        json.dumps(runtime_files, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+    validator.validate_candidate_binding(manifest, candidate, Path.cwd())
+
+
 def _binding_manifest(candidate: str, mode: str, disposable: dict[str, object] | None = None) -> dict[str, object]:
     parent = "b" * 40
     hermes = "c" * 40
