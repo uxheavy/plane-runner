@@ -381,4 +381,5 @@ lifecycle.
 
 The fresh candidate remains unlaunched: no full Compose/live phase, provider
 attempt, or replay occurred. Durable checkpoint:
-`user-testing-output/plane-agents/evidence/manager-m01-m08-transport-ready-20260817-03.json`.
+`user-testing-output/plane-agents/evidence/manager-m01-m08-transport-ready-20260817-03.json`,
+SHA-256 `2ca8145210d924f1c28d4a94490dec28bda693086505fbf6b2c38723d8c41e92`.

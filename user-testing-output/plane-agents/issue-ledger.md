@@ -374,3 +374,4 @@ The full Compose stack was not entered because the existing RabbitMQ tmpfs
 guard stopped at `.erlang.cookie` permission setup; the isolated PostgreSQL
 provider-free lane passed. Durable owner-safe evidence:
 `user-testing-output/plane-agents/evidence/manager-m01-m08-transport-ready-20260817-03.json`.
+SHA-256 `2ca8145210d924f1c28d4a94490dec28bda693086505fbf6b2c38723d8c41e92`.
