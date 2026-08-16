@@ -514,7 +514,7 @@ def test_pinned_hermes_runs_through_http_service_launcher_and_bound_host_socket(
     dependency_path = os.environ.get("PLANE_G2_HERMES_DEPENDENCY_PATH") or os.path.join(
         checkout, "plane_runtime", "g1_runtime_image"
     )
-    expected_sha = "bc7f13d2ab392752f2667b176c646339c49405f9"
+    expected_sha = "292e866374ca9e9615473fc9bf5dda1913b672e1"
     assert os.path.isdir(checkout)
     assert (
         subprocess.run(
@@ -587,9 +587,11 @@ def _tool_call(number, request_json):
         }}
     if number == 6:
         return "execute_code", {"code": (
-            "from hermes_tools import plane_operation\\n"
-            "print(plane_operation(\\"code\\", \\"operation:catalog.search\\", "
-            "{\\"query\\": \\"rename\\", \\"limit\\": 5}))"
+            "export default async function ({host}: {host: any}) {\\n"
+            "  return await host.call_plane_operation(\\"catalog.search\\", "
+            "{ query: \\"rename\\", limit: 5 }, "
+            "\\"idempotency:code-mode-catalog\\", \\\"correlation:code-mode-catalog\\\");\\n"
+            "}"
         )}
     if number == 7:
         return "tool_call", {"name": "plane_operation", "arguments": {
@@ -809,9 +811,8 @@ hermes_logging.setup_verbose_logging = lambda: None
     assert json.loads(frames[-1])["kind"] == "completed"
     assert [call.operation_ref for call in host_calls] == [
         "plane.operations.discover@1",
-        "operation:work_item.read",
         "operation:agent.outcome.evaluate",
-        "operation:catalog.search",
+        "plane.code-mode.execute@1",
         "operation:agent.outcome.submit",
         "operation:agent.outcome.publish",
     ]
@@ -1667,7 +1668,7 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
     tmp_path, api_key_client, workspace, gateway_project, gateway_issue, create_user, capsys
 ):
     checkout = os.environ.get("PLANE_G2_HERMES_CHECKOUT", "/hermes")
-    expected_sha = "bc7f13d2ab392752f2667b176c646339c49405f9"
+    expected_sha = "292e866374ca9e9615473fc9bf5dda1913b672e1"
     assert os.path.isdir(checkout)
     actual_sha = subprocess.run(
         ["git", "-C", checkout, "rev-parse", "HEAD"], check=True, capture_output=True, text=True

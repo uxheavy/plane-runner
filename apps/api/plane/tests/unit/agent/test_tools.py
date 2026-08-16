@@ -266,6 +266,18 @@ def test_code_mode_child_isolate_routes_only_typed_host_callbacks():
     assert host.callbacks[0][0] == "work_item.read"
 
 
+def test_code_mode_child_resolves_node_before_restricting_child_path(tmp_path, monkeypatch):
+    node = tmp_path / "node"
+    node.write_text("#!/bin/sh\nprintf '%s\\n' --permission\n", encoding="utf-8")
+    node.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    runner = CodeModeIsolateRunner()
+
+    assert runner.node_path == str(node)
+    assert runner._permission_flag() == "--permission"
+
+
 def test_code_mode_child_denies_capability_escape_and_imports():
     host = FakeIsolateHost()
     result = CodeModeIsolateRunner().run(

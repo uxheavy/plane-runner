@@ -6,6 +6,7 @@ import json
 import os
 import resource
 import selectors
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -38,7 +39,10 @@ class CodeModeIsolateRunner:
     """
 
     def __init__(self, *, node_path: str | None = None, runner_path: Path = _RUNNER) -> None:
-        self.node_path = node_path or os.environ.get("PLANE_CODE_MODE_NODE", "node")
+        configured_node = node_path or os.environ.get("PLANE_CODE_MODE_NODE", "node")
+        self.node_path = (
+            shutil.which(configured_node, path=os.environ.get("PATH") or os.defpath) or configured_node
+        )
         self.runner_path = runner_path
         if not self.runner_path.is_file():
             raise CodeModeIsolateError("ISOLATE_UNAVAILABLE", "Code Mode child runner is unavailable")

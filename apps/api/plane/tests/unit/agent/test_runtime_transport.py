@@ -2,6 +2,7 @@ import json
 import re
 import sqlite3
 import sys
+import tempfile
 import textwrap
 import time
 from pathlib import Path
@@ -253,8 +254,11 @@ def test_subprocess_transport_commits_and_replays_exact_frames(tmp_path):
 
 def test_host_bound_transport_passes_socket_and_cleans_invocation_endpoint(tmp_path, monkeypatch):
     host_dir = tmp_path / "invocation-host"
+    real_mkdtemp = tempfile.mkdtemp
 
     def make_host_dir(*, prefix):
+        if prefix == "plane-agent-runtime-":
+            return real_mkdtemp(prefix=prefix)
         assert prefix == "plane-host-"
         host_dir.mkdir()
         return str(host_dir)
