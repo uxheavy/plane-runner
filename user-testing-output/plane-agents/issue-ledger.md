@@ -314,3 +314,20 @@ runtime debugger owns the source correction.
 | Issue | Severity | Persona/routes | Evidence | Root cause | Fix owner/commit | Retest | Status |
 | ----- | -------- | -------------- | -------- | ---------- | --------------- | ------ | ------ |
 | UT-042 | blocker | Maya / W03-W04/W07-W08 | `tmp/persona-wave-v6/worker-live-587f2272/result.json`, mode `0600`, SHA-256 `d74dfab1277780f750f3c9e0a5f68c8aa8c0d9cdfe5a24a39d8e4a5115b89b91`; manifest SHA-256 `def69f5b2e18ac3b77e66907f7fa316c220ff8dd7f455d5a704caebae884ae45` | Fresh B on exact candidate `587f2272cf` and Hermes `292e866374` recorded 7 completed upstream `2xx` attempts, successful search/read, exact evaluator denial, one submit, one applied publication, a completed runtime, and one terminal product event, but no `execute_code` or `work_item.rename`. The Worker scenario gate failed at the mutation commission; W05-W08 did not continue. | First causal boundary is the provider-facing Worker commission route terminating after outcome publication without the required typed Code Mode semantic mutation. Provider-free compiler/child/host tests passed; no compiler, isolate, or host-RPC failure is inferred from the receipt. | Commits `e6962c3923` and `587f2272cf` are integrated and the exact pair is retained. Canonical validator passed; no replay or further provider use is permitted for this receipt. | open |
+
+## Manager M01-M08 follow-up — 2026-08-16
+
+The provider-free Manager route was exercised through the existing Plane
+lifecycle/application services in a fresh synthetic workspace. All M01-M08
+route predicates passed, including dynamic planning without a saved workflow,
+bounded lineage and budget, cancellation propagation, non-UTC DST scheduling,
+evaluator-first human accept/revise with a fresh revision run, HR stale/self/
+replay denials, scoped chief-of-staff provisioning, terminal readback, and
+zero replay mutations. This remains supporting evidence, not provider-backed
+route closure.
+
+| Issue | Severity | Persona / routes | Durable evidence | Root cause / bounded disposition | Fix owner / status |
+| ----- | -------- | ---------------- | ----------------- | ------------------------------- | ----------------- |
+| UT-043 | blocker | Elena Manager / M01-M08 | `user-testing-output/plane-agents/evidence/manager-m01-m08-fresh-live-failure.json`, SHA-256 `9a7d23e77ffaacff4a67e0693c28e66b757e805ebdad5bfe289c4f69f558cd16`; raw owner-only result SHA-256 `1fb874d4f9265486c727bd96a1cc3f2277f3b875caa4b0ad36013d960490c4d2` | One fresh post-`e312633e08856123f5b64cd9ed6b3dddabb501ca` runner attempt stopped at `api-invocation` with `errorClass=unspecified`, exit `1`, no Plane run/invocation, zero recorded provider attempts, and zero route mutations. No replay was attempted. | Shared launcher/runtime configuration boundary owns the next diagnosis; no lane patch or provider retry. Open. |
+
+Durable provider-free route receipt: `user-testing-output/plane-agents/evidence/manager-m01-m08-provider-free-receipt.json`, SHA-256 `14f9041b863ea0b745964e6ed03471fe85559707880bac4bb6bc9e9673aac6d1`. Verification was `16/16` migration-backed focused tests and `64/64` offline live-scenario/result tests. Exact integrated artifacts and pins are bound in both receipts. Cleanup proof: the unique Compose project, named diagnostic container, live-run containers, networks, and volumes were absent after teardown. The credential source was used only through `PLANE_G4_PROVIDER_SECRET_SOURCE`; raw contents were not read, copied, or tracked.

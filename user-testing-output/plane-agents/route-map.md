@@ -133,6 +133,32 @@ Latest sequential Worker attempt (Wave 0BL, 2026-08-16): Plane `8d94fcc16e5ff161
 | O09 | Omar    | Run bounded concurrent gateway workload and inspect health/readback.                                                                | Error/latency/saturation thresholds, append-only audit, health, version, and rollback pins are observable.                                                                                  | Quota cleanup and safety controls preserve authority and do not delete audit history.                                                                   | untested                                                                                                                                                                                                                                                                                                                                                                                                 |
 | O10 | Omar    | Roll back runtime/API artifacts and reconcile in-flight work.                                                                       | Independent last-known-good control/artifact revisions restore service without changing durable Plane ownership.                                                                            | Incompatible/cross-mixed provenance is rejected and no run depends on one container lifetime.                                                           | untested                                                                                                                                                                                                                                                                                                                                                                                                 |
 
+## Manager M01-M08 addendum — 2026-08-16
+
+The durable provider-free receipt
+`user-testing-output/plane-agents/evidence/manager-m01-m08-provider-free-receipt.json`
+(SHA-256 `14f9041b863ea0b745964e6ed03471fe85559707880bac4bb6bc9e9673aac6d1`)
+proves all eight Manager route predicates through the existing Plane
+lifecycle/application contracts in a fresh synthetic workspace. It records
+eight assignments, three child assignments, two outcomes, two artifact-backed
+outcomes, three terminal events, the governance readback digest, and zero
+replay state mutations. M01-M08 remain `dirty`/not provider-backed because the
+one fresh post-fix live attempt stopped before Plane run/invocation creation;
+the redacted failure receipt is
+`user-testing-output/plane-agents/evidence/manager-m01-m08-fresh-live-failure.json`
+(SHA-256 `9a7d23e77ffaacff4a67e0693c28e66b757e805ebdad5bfe289c4f69f558cd16`).
+
+| Route | Current disposition |
+| ----- | ------------------- |
+| M01–M08 | Provider-free supporting evidence passed; provider-backed closure not established. |
+
+The live attempt used the exact candidate-bound API/runtime pair, Hermes
+`292e866374ca9e9615473fc9bf5dda1913b672e1`, MCP
+`c04974ed6624f17b41e63ef8182661929e77e0d3`, SDK
+`7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`, Luna xhigh, and fallback disabled.
+It was not replayed. The shared launcher/runtime owner retains the next
+diagnosis; this lane made no shared patch.
+
 ## PF1 supporting-evidence addendum
 
 PF1 is provider-free supporting evidence for the pending provider-backed W/M/O

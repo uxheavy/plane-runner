@@ -2413,3 +2413,48 @@ records this diagnosis without changing the retained receipts.
   canonical validator passed with `evidence_sha256` equal to that hash. No
   separate launcher log file was persisted. W03-W08 remain dirty and UT-042
   is open; no provider use continues after this bounded stop.
+
+## Manager M01-M08 — exact 2da0509b / Hermes 292e866374 single fresh attempt
+
+This lane integrated the shared production-API migration-environment fix
+`e312633e08856123f5b64cd9ed6b3dddabb501ca` on top of the Manager governance
+source `424479fad17cc2fdd0b58ef27c51bee56b8f7d91`, preserving the
+migration-backed Compose/fixture correction in `424479...`. Focused contracts
+passed: the two production API invocation contract tests and `64` live
+scenario/result tests. Exact artifacts were refrozen once for candidate
+`2da0509bf5c3ddc293035c5189711967d361f858`:
+
+- API `plane-agent-api:g4-v6-2da0509b`, digest
+  `sha256:08fa5e8f69e078f40cf235aca4b642ab96bf6d29b159fb2c9827bac8fca58824`.
+- Runtime `plane-agent-runtime:hermes-292e8663-g4-v6-2da0509b`, digest
+  `sha256:b2a3fef48b31e37aa212599907204415fe443dda6b20bf0e5a6e935f386a8913`.
+- Hermes `292e866374ca9e9615473fc9bf5dda1913b672e1`, MCP
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`, SDK
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`.
+
+Provider-free first: the existing Manager route produced the durable redacted
+receipt `user-testing-output/plane-agents/evidence/manager-m01-m08-provider-free-receipt.json`,
+SHA-256 `14f9041b863ea0b745964e6ed03471fe85559707880bac4bb6bc9e9673aac6d1`.
+M01-M08 all passed with assignment count `8`, child assignment count `3`,
+outcome count `2`, artifact-backed outcome count `2`, terminal event count `3`,
+governance digest `5f60f0eca3eeced2931ac3d18d7f133163a83856cb8a3c8be42dc8f8bb7f1133`,
+and replay state mutations `0`. This is supporting evidence only.
+
+Exactly one fresh live runner attempt followed with fresh authority/canary
+IDs and the required `openai-codex/gpt-5.6-luna` xhigh policy, fallback
+disabled, through `PLANE_G4_PROVIDER_SECRET_SOURCE`. It stopped at
+`api-invocation` with `errorClass=unspecified`, exit code `1`, reason
+`unavailable`; no Plane run or invocation was created, provider attempt
+records were `0`, route mutations were `0`, and no replay was attempted. The
+owner-only raw result was mode `0600`, SHA-256
+`1fb874d4f9265486c727bd96a1cc3f2277f3b875caa4b0ad36013d960490c4d2`; its
+redacted durable extract is
+`user-testing-output/plane-agents/evidence/manager-m01-m08-fresh-live-failure.json`,
+SHA-256 `9a7d23e77ffaacff4a67e0693c28e66b757e805ebdad5bfe289c4f69f558cd16`.
+The shared launcher/runtime configuration boundary owns diagnosis. No lane
+patch, provider retry, or blind `outcome_unknown` replay occurred.
+
+Cleanup proof passed: no containers, networks, or volumes remained with the
+`plane-manager-m01-m08-019fc7db` or `plane-agent-g4-live` prefixes, and the
+named provider-free diagnostic container was removed. Raw credential contents
+were never read, copied, or tracked.
