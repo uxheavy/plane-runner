@@ -47,6 +47,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "RUNTIME_PROTOCOL": ("config", "RUNTIME_PROTOCOL"),
     "validate_runtime_host_url": ("config", "validate_runtime_host_url"),
     "validate_runtime_command": ("config", "validate_runtime_command"),
+    "runtime_transport_kind": ("config", "runtime_transport_kind"),
     "CredentialLease": ("credentials", "CredentialLease"),
     "RuntimeCredentialBroker": ("credentials", "RuntimeCredentialBroker"),
     "RuntimeCredentialError": ("credentials", "RuntimeCredentialError"),

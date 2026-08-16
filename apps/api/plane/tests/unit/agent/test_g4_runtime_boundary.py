@@ -22,8 +22,10 @@ from plane.agent.runtime import (
     RuntimeProcessPolicy,
     RuntimeSafetyController,
     RuntimeSafetyStopError,
+    runtime_transport_kind,
     validate_credential_lease_metadata,
 )
+from plane.agent.runtime.config import runtime_settings_from_environment
 from plane.agent.runtime import credentials as runtime_credentials
 from plane.agent.runtime.provider_egress import ProviderRelayError
 from plane.agent.runtime.service import RuntimeDispatchExecutor, _RuntimeHTTPServer
@@ -285,6 +287,27 @@ def test_g4_runtime_configuration_reads_a_single_line_secret_file_without_accept
                 "PLANE_AGENT_RUNTIME_SECRET_FILE": str(secret_path),
             }
         )
+
+
+def test_g4_remote_runtime_secret_file_selects_remote_and_missing_secret_cannot_downgrade(tmp_path):
+    secret_path = tmp_path / "runtime-secret"
+    secret_path.write_text("f" * 40, encoding="utf-8")
+    environment = _runtime_environment(
+        PLANE_AGENT_RUNTIME_SECRET="",
+        PLANE_AGENT_RUNTIME_SECRET_FILE=str(secret_path),
+    )
+
+    settings = runtime_settings_from_environment(environment)
+
+    assert settings["PLANE_AGENT_RUNTIME_SHARED_SECRET"] == "f" * 40
+    assert runtime_transport_kind(
+        settings["PLANE_AGENT_RUNTIME_URL"],
+        settings["PLANE_AGENT_RUNTIME_SHARED_SECRET"],
+    ) == "remote"
+    with pytest.raises(RuntimeConfigurationError, match="configured together"):
+        runtime_transport_kind("http://agent-runtime:8080", "")
+    with pytest.raises(RuntimeConfigurationError, match="configured together"):
+        runtime_transport_kind("", "f" * 40)
 
 
 def test_g4_runtime_safety_controller_has_stable_readback_and_one_way_stop(tmp_path):
