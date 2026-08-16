@@ -84,6 +84,13 @@ class DeterministicRuntimeAdapter:
         return tuple(json.dumps(frame, separators=(",", ":")) for frame in self.frames)
 
 
+@pytest.fixture(scope="session")
+def django_db_use_migrations():
+    """Exercise the migration-owned runtime evidence guards in this contract lane."""
+
+    return True
+
+
 @pytest.mark.contract
 @pytest.mark.django_db(transaction=True)
 def test_code_mode_uses_persisted_binding_child_isolate_and_exact_replay(
