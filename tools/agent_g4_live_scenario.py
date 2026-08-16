@@ -234,19 +234,24 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
     rendered: list[str] = []
     for index, item in enumerate(outcomes, start=1):
         operation_id = item["operationId"]
-        guidance = ""
+        guidance = (
+            " After this route call returns, advance immediately to the next route step; do not invoke this "
+            "operation again for confirmation, inspection, refresh, or retry."
+        )
         if operation_id == "catalog.describe" and index < len(outcomes):
-            guidance = (
+            guidance += (
                 " Use the next route operation's exact operationId as input.operation_id; never use operationRef "
                 "or an operation: prefix."
             )
         if operation_id == "work_item.rename" and "W04" in route_checks:
-            guidance = (
-                " This semantic mutation must be performed by the restricted Code Mode composition, not by a "
-                "native model mutation: the next model tool call after the bounded work_item.read is execute_code, "
-                "and the script must use only hermes_tools.plane_operation('code', 'operation:work_item.rename', "
+            guidance += (
+                " This semantic mutation must be performed by the restricted Code Mode composition, not by a " 
+                "native model mutation: the next model tool call after the bounded work_item.read is execute_code, " 
+                "and the script must use only hermes_tools.plane_operation('code', 'operation:work_item.rename', " 
                 "input)."
             )
+        if operation_id == "agent.context.read":
+            guidance += " This one response is the complete subject-bound projection; do not request it again."
         rendered.append(
             f"Route step {index}: invoke {operation_id} exactly {item.get('count', 1)} time(s) and expect "
             f"{item['outcome']}.{guidance}"

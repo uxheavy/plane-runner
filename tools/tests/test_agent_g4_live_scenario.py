@@ -113,6 +113,7 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert "exact current invocation run_ref" in parsed.profile.instructions
     assert "never invent, copy, or substitute another run reference" in parsed.profile.instructions
     assert "after a terminal or rejected outcome callback, do not retry either terminal operation" in parsed.profile.instructions
+    assert "agent.context.read returns the complete subject-bound projection in one response" in parsed.profile.instructions
 
 
 def test_commission_descriptor_keeps_shared_profile_and_binds_each_assignment() -> None:
@@ -182,10 +183,10 @@ def test_expected_operations_render_as_ordered_model_route_outcomes() -> None:
     }
 
     assert scenario.model_route_expectations(expected) == (
-        "Route step 1: invoke catalog.search exactly 1 time(s) and expect success.",
-        "Route step 2: invoke catalog.describe exactly 1 time(s) and expect success. Use the next route operation's exact operationId as input.operation_id; never use operationRef or an operation: prefix.",
-        "Route step 3: invoke agent.context.read exactly 1 time(s) and expect success.",
-        "Route step 4: invoke agent.outcome.evaluate exactly 1 time(s) and expect denied.",
+        "Route step 1: invoke catalog.search exactly 1 time(s) and expect success. After this route call returns, advance immediately to the next route step; do not invoke this operation again for confirmation, inspection, refresh, or retry.",
+        "Route step 2: invoke catalog.describe exactly 1 time(s) and expect success. After this route call returns, advance immediately to the next route step; do not invoke this operation again for confirmation, inspection, refresh, or retry. Use the next route operation's exact operationId as input.operation_id; never use operationRef or an operation: prefix.",
+        "Route step 3: invoke agent.context.read exactly 1 time(s) and expect success. After this route call returns, advance immediately to the next route step; do not invoke this operation again for confirmation, inspection, refresh, or retry. This one response is the complete subject-bound projection; do not request it again.",
+        "Route step 4: invoke agent.outcome.evaluate exactly 1 time(s) and expect denied. After this route call returns, advance immediately to the next route step; do not invoke this operation again for confirmation, inspection, refresh, or retry.",
     )
 
 
