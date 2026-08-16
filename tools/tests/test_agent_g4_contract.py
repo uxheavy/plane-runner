@@ -797,6 +797,15 @@ class G4ContractTests(unittest.TestCase):
         self.assertEqual(runner.count('--manifest "${MANIFEST}"'), 1)
         self.assertNotIn('MANIFEST="${ROOT_DIR}/tools/agent-g4-manifest.json"', runner)
 
+    def test_live_runner_stages_worker_route_observation_dependency_before_invocation(self):
+        runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+
+        observation_source = '"${ROOT_DIR}/tools/agent_g4_worker_route_observations.py"'
+        observation_destination = 'agent_g4_worker_route_observations.py'
+        self.assertIn(observation_source, runner)
+        self.assertIn(observation_destination, runner)
+        self.assertLess(runner.index(observation_source), runner.index("LIVE_PHASE=api-invocation"))
+
     def test_live_runner_uses_default_and_disposable_manifest_paths_before_offline_preflight(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
