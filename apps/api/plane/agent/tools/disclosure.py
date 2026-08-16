@@ -134,6 +134,14 @@ def compose_tool_catalog(profile: Any, assignment: Any) -> dict[str, Any]:
                 raise ValueError(f"eager operation presentation exceeds {MAX_EAGER_OPERATIONS} operations")
             selected.append(operation_id)
 
+    # An explicit presentation is a route-level ordering contract, not an
+    # authorization policy.  Keep the universal work core above, but do not
+    # let assignment-token matching silently re-add a competing eager
+    # mutation/read schema.  The complete catalog remains progressively
+    # discoverable and gateway authorization is unchanged.
+    if explicit_ids:
+        return _bounded_eager_catalog(selected)
+
     tokens = _objective_tokens(assignment)
     for operation_id, descriptor in OPERATION_CATALOG.items():
         if len(selected) >= MAX_EAGER_OPERATIONS:
@@ -143,6 +151,10 @@ def compose_tool_catalog(profile: Any, assignment: Any) -> dict[str, Any]:
         if _matches_assignment(descriptor, tokens):
             selected.append(operation_id)
 
+    return _bounded_eager_catalog(selected)
+
+
+def _bounded_eager_catalog(selected: list[str]) -> dict[str, Any]:
     catalog = {
         "catalogDigest": CATALOG_DIGEST,
         "eagerOperations": [_entry(OPERATION_CATALOG[operation_id]) for operation_id in selected],

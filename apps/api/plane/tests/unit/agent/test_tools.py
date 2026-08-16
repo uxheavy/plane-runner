@@ -118,6 +118,17 @@ def test_explicit_eager_operations_precede_universal_work_core():
     ]
 
 
+def test_explicit_eager_route_does_not_readd_assignment_matching_operations():
+    catalog = compose_tool_catalog(
+        _profile(eager=["search_workspace", "work_item.read"]),
+        _assignment("Use the assigned issue for a typed Code Mode mutation"),
+    )
+    eager_refs = [entry["operationRef"] for entry in catalog["eagerOperations"]]
+
+    assert eager_refs == ["operation:search_workspace", "operation:work_item.read"]
+    assert "work_item.rename" in progressive_operation_ids(catalog)
+
+
 def test_progressive_disclosure_excludes_eager_prefixed_operation_refs():
     progressive = progressive_operation_ids({"eagerOperations": [{"operationRef": "operation:work_item.rename"}]})
 
