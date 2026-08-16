@@ -560,9 +560,11 @@ class G4ContractTests(unittest.TestCase):
             text=True,
         ).stdout.strip()
         actual = _BUILDER.runtime_file_hashes(candidate)
+        expected_paths = list((ROOT / "apps/api/plane/agent/runtime").rglob("*"))
+        expected_paths.extend(ROOT / relative for relative in _BUILDER.PLANE_CODE_MODE_CONTRACT_FILES)
         expected = {
             path.relative_to(ROOT).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in sorted((ROOT / "apps/api/plane/agent/runtime").rglob("*"))
+            for path in sorted(expected_paths)
             if path.is_file() and path.suffix not in {".pyc", ".pyo"} and "__pycache__" not in path.parts
         }
         self.assertEqual(actual, expected)
@@ -577,6 +579,52 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn("apps/api/plane/agent/runtime/remote.py", actual)
         self.assertIn("apps/api/plane/agent/runtime/service.py", actual)
         self.assertIn("apps/api/plane/agent/runtime/contracts.py", actual)
+        self.assertIn("apps/api/plane/agent/code_mode/__init__.py", actual)
+        self.assertIn("apps/api/plane/agent/code_mode/contracts.py", actual)
+
+    def test_runtime_stage_projects_only_the_code_mode_wire_contract(self):
+        dockerfile = (ROOT / "deployments/cli/community/agent-runtime/Dockerfile").read_text(encoding="utf-8")
+        builder = (TOOLS / "build-agent-runtime-image.py").read_text(encoding="utf-8")
+        self.assertIn("PLANE_CODE_MODE_CONTRACT_FILES", builder)
+        self.assertIn("plane_code_mode_contracts", builder)
+        self.assertIn("COPY plane_code_mode_contracts/ /opt/plane/agent/code_mode/", dockerfile)
+        self.assertNotIn("COPY apps/api/plane/agent/code_mode/", dockerfile)
+
+    def test_runtime_stage_carries_only_the_code_mode_wire_contract(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for relative, payload in {
+                "apps/api/plane/agent/runtime/service.py": "runtime-service\n",
+                "apps/api/plane/agent/code_mode/__init__.py": "code-mode-package\n",
+                "apps/api/plane/agent/code_mode/contracts.py": "code-mode-contracts\n",
+                "apps/api/plane/agent/code_mode/host.py": "host-must-not-be-staged\n",
+            }.items():
+                path = root / relative
+                path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                path.write_text(payload, encoding="utf-8")
+            subprocess.run(["git", "-C", str(root), "init", "--quiet"], check=True)
+            subprocess.run(["git", "-C", str(root), "config", "user.email", "test@example.invalid"], check=True)
+            subprocess.run(["git", "-C", str(root), "config", "user.name", "test"], check=True)
+            subprocess.run(["git", "-C", str(root), "add", "."], check=True)
+            subprocess.run(["git", "-C", str(root), "commit", "--quiet", "-m", "fixture"], check=True)
+            revision = subprocess.run(
+                ["git", "-C", str(root), "rev-parse", "HEAD"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            destination = root / "staged"
+            destination.mkdir(mode=0o700)
+            original_root = _BUILDER.ROOT
+            _BUILDER.ROOT = root
+            try:
+                _BUILDER.stage_plane_runtime(destination, revision)
+            finally:
+                _BUILDER.ROOT = original_root
+            self.assertTrue((destination / "plane_runtime_service/service.py").is_file())
+            self.assertTrue((destination / "plane_code_mode_contracts/__init__.py").is_file())
+            self.assertTrue((destination / "plane_code_mode_contracts/contracts.py").is_file())
+            self.assertFalse((destination / "plane_code_mode_contracts/host.py").exists())
 
     def test_disposable_manifest_binds_api_runtime_and_hermes_to_one_candidate(self):
         candidate = "a" * 40

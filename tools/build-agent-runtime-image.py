@@ -31,6 +31,11 @@ HERMES_REQUIRED_FILES = (
 DOCKERFILE = Path(__file__).resolve().parents[1] / "deployments/cli/community/agent-runtime/Dockerfile"
 ROOT = DOCKERFILE.parents[4]
 DURABLE_MANIFEST = ROOT / "tools/agent-g4-manifest.json"
+PLANE_RUNTIME_SOURCE_DIR = "apps/api/plane/agent/runtime"
+PLANE_CODE_MODE_CONTRACT_FILES = (
+    "apps/api/plane/agent/code_mode/__init__.py",
+    "apps/api/plane/agent/code_mode/contracts.py",
+)
 
 
 def run(*args: str, cwd: Path | None = None, capture: bool = True) -> str:
@@ -337,7 +342,8 @@ def runtime_file_hashes(revision: str) -> dict[str, str]:
         "-r",
         "--name-only",
         revision,
-        "apps/api/plane/agent/runtime",
+        PLANE_RUNTIME_SOURCE_DIR,
+        *PLANE_CODE_MODE_CONTRACT_FILES,
         cwd=ROOT,
     ).splitlines()
     if not paths:
@@ -365,7 +371,8 @@ def stage_plane_runtime(destination: Path, plane_revision: str) -> None:
                 "archive",
                 "--format=tar",
                 plane_revision,
-                "apps/api/plane/agent/runtime",
+                PLANE_RUNTIME_SOURCE_DIR,
+                *PLANE_CODE_MODE_CONTRACT_FILES,
             ],
             stdout=archive,
             stderr=subprocess.PIPE,
@@ -376,9 +383,14 @@ def stage_plane_runtime(destination: Path, plane_revision: str) -> None:
     run("tar", "-xf", str(plane_archive), "-C", str(extracted))
     plane_archive.unlink()
     shutil.move(
-        str(extracted / "apps/api/plane/agent/runtime"),
+        str(extracted / PLANE_RUNTIME_SOURCE_DIR),
         str(destination / "plane_runtime_service"),
     )
+    code_mode_destination = destination / "plane_code_mode_contracts"
+    code_mode_destination.mkdir(mode=0o700)
+    code_mode_source = extracted / "apps/api/plane/agent/code_mode"
+    for relative in ("__init__.py", "contracts.py"):
+        shutil.move(str(code_mode_source / relative), str(code_mode_destination / relative))
 
 
 def stage_git_hermes(checkout: Path, destination: Path, revision: str) -> dict[str, str]:
@@ -525,7 +537,9 @@ def verify_runtime_image(
         "def digest(files):\n"
         "  return hashlib.sha256(json.dumps(files,sort_keys=True,separators=(',',':')).encode()).hexdigest()\n"
         "hermes=inventory(pathlib.Path('/opt/hermes'),'')\n"
-        "plane=inventory(pathlib.Path('/opt/plane/agent/runtime'),'apps/api/plane/agent/runtime/',True)\n"
+        "plane={}\n"
+        "plane.update(inventory(pathlib.Path('/opt/plane/agent/runtime'),'apps/api/plane/agent/runtime/',True))\n"
+        "plane.update(inventory(pathlib.Path('/opt/plane/agent/code_mode'),'apps/api/plane/agent/code_mode/',True))\n"
         "print(json.dumps({'hermesTreeDigest':digest(hermes),'planeTreeDigest':digest(plane),'hermesFileCount':len(hermes),'planeFileCount':len(plane)},sort_keys=True,separators=(',',':')))"
     )
     actual_raw = run(

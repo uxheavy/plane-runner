@@ -34,6 +34,7 @@ ENV PYTHONPATH=/opt/plane/agent/dependencies:/opt:/opt/hermes
 # checkout, host credentials, or source bind mount at execution time.
 COPY hermes/ /opt/hermes/
 COPY plane_runtime_service/ /opt/plane/agent/runtime/
+COPY plane_code_mode_contracts/ /opt/plane/agent/code_mode/
 COPY plane_runtime_service/sitecustomize.py /opt/sitecustomize.py
 # The pinned Hermes G1 image intentionally uses this canonical no-op module
 # instead of python-dotenv so the real run_agent source remains importable

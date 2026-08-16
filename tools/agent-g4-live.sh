@@ -706,6 +706,30 @@ docker volume create \
     "${CREDENTIAL_STATE_VOLUME}" >/dev/null
 CREDENTIAL_STATE_VOLUME_CREATED=1
 
+# The runtime image is a separate process boundary. Prove its service and the
+# narrow Plane-owned Code Mode wire contract import before paying the startup
+# wait; classify only the finite import error class so an image omission cannot
+# become an opaque generic runtime-health failure.
+LIVE_PHASE=runtime-start
+if ! docker run --rm --network none --read-only --user 65532:65532 --entrypoint python3 "${RUNTIME_IMAGE}" \
+    -c 'import plane.agent.runtime.service; import plane.agent.code_mode.contracts; import plane_runtime.g1_runtime_image.bootstrap' \
+    2>&1 | python3 -c '
+import sys
+
+payload = sys.stdin.buffer.read(8193)
+if len(payload) > 8192:
+    payload = payload[:8192]
+if b"ModuleNotFoundError" in payload or b"No module named" in payload:
+    sys.stdout.write("ModuleNotFoundError\\n")
+elif b"ImportError" in payload:
+    sys.stdout.write("ImportError\\n")
+else:
+    sys.stdout.write("RuntimeError\\n")
+' >"${ERROR_FILE}"; then
+    printf '%s\n' 'event=agent.g4.live-runner status=failed phase=runtime-start expected=runtime-image-service-imports actual=runtime-image-import-unavailable suggestion=refreeze-runtime-with-the-plane-code-mode-contracts' >&2
+    exit 1
+fi
+
 docker network create --driver bridge --label com.uxheavy.plane.agent-g4-runtime=true "${EGRESS}" >/dev/null
 
 LIVE_PHASE=runtime-start
