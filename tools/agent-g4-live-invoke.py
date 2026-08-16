@@ -724,7 +724,7 @@ def build_failure_evidence(
         "outcome_unknown",
     }
     attempt_phases = {"intent", "started", "completed", "failed", "outcome_unknown"}
-    status_classes = {"", "not_sent", "unknown", "2xx", "4xx", "5xx"}
+    status_classes = {"", "not_sent", "unknown", "error", "2xx", "4xx", "5xx"}
     error_codes = {"", "pre_send_failure", "outcome_unknown", "provider_error", "runtime_error", "upstream_error"}
     terminal_kinds = {"none", "outcome_submission", "run_failure", "run_blocker", "run_cancellation"}
     failure_codes = {
@@ -968,7 +968,9 @@ def build_failure_evidence(
             continue
         phase = row.get("phase") if row.get("phase") in attempt_phases else "unknown"
         status_class = row.get("statusClass") if row.get("statusClass") in status_classes else "unknown"
-        error_code = row.get("errorCode") if row.get("errorCode") in error_codes else "unspecified"
+        error_code = row.get("errorCode") if row.get("errorCode") in error_codes else (
+            "provider_error" if status_class == "error" else "unspecified"
+        )
         sequence = row.get("sequence")
         if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 1 or sequence > 256:
             sequence = 0

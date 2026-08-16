@@ -1946,6 +1946,22 @@ class G4ContractTests(unittest.TestCase):
         self.assertEqual(list(receipt["s00Gate"]), ["status", "firstFailedPredicate", "predicates"])
         self.assertIn("semanticDigest", receipt)
 
+    def test_failure_receipt_accepts_bounded_provider_relay_error_status(self):
+        manifest, authority, config, receipt = failure_fixture()
+        receipt["providerAttempts"] = [
+            {
+                "sequence": 1,
+                "phase": "failed",
+                "upstreamInitiated": True,
+                "statusClass": "error",
+                "errorCode": "provider_error",
+            }
+        ]
+        receipt["semanticDigest"] = _semantic_digest(receipt)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt, separators=(",", ":")))
+        self.addCleanup(temp.cleanup)
+        self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
+
     def test_failure_receipt_validates_bounded_host_operation_context(self):
         manifest, authority, config, receipt = failure_fixture()
         receipt["failure"]["hostOperationFailure"] = {
@@ -2216,6 +2232,45 @@ class G4ContractTests(unittest.TestCase):
         self.assertEqual(evidence["failure"]["reasonCode"], "runtime_error")
         self.assertEqual(evidence["failure"]["reasonSubreason"], "runtime_execution_failed")
         self.assertNotIn("reconciliation_required", json.dumps(evidence))
+
+    def test_failure_evidence_preserves_bounded_provider_relay_error_status(self):
+        evidence = invoke_helper_namespace()["build_failure_evidence"](
+            binding={},
+            failure_phase="api-invocation",
+            error_class="RuntimeError",
+            exit_code=1,
+            run_id="run:relay-error",
+            run_state="failed",
+            invocation_id="invocation:relay-error",
+            invocation_state="failed",
+            provider_attempts=[
+                {
+                    "sequence": 1,
+                    "phase": "failed",
+                    "upstreamInitiated": True,
+                    "statusClass": "error",
+                    "errorCode": "upstream_status",
+                }
+            ],
+            terminal_kind="run_failure",
+            failure_code="runtime_error",
+            failure_reason=(
+                '{"failureCode":"runtime_error","failurePhase":"runtime_process",'
+                '"failureDetail":"process_exit","failureSubreason":"runtime_execution_failed"}'
+            ),
+        )
+        self.assertEqual(
+            evidence["providerAttempts"],
+            [
+                {
+                    "sequence": 1,
+                    "phase": "failed",
+                    "upstreamInitiated": True,
+                    "statusClass": "error",
+                    "errorCode": "provider_error",
+                }
+            ],
+        )
 
     def test_failure_evidence_is_bounded_structural_and_excludes_sensitive_runtime_data(self):
         source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
