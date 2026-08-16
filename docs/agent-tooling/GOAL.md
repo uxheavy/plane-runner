@@ -10,7 +10,7 @@ Functional completion and controlled rollout are separate outcomes. This goal en
 
 The older G4 artifact bindings and Wave 0X evidence below are historical, not
 the active delivery state. The current exact Plane source candidate is the
-callback-binding checkpoint `8722376f88`, with Hermes
+explicit-publication readback checkpoint `adff362456`, with Hermes
 `cc3e444ee25e6c19fee77b6e1fbe3d95aef1a3ea`. S00 Wave 0AT passed at Plane
 `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with one fresh Luna primary and one
 eligible provider-disabled replay. Provider-free PF1 evidence is complete for
@@ -22,9 +22,14 @@ W01/W02 remain dirty pending one fresh post-fix provider-backed cell and
 eligible replay; W03–W08 remain unreached. Wave 0BC and the subsequent fresh
 82b468de identity commission reached the provider and completed their
 lifecycles, but the reusable W08 readback probe exceeded the established
-8-KiB projection ceiling even at limit 1 because it duplicated the full admin
-projection; both provider receipts remain dirty and the helper is now narrowed
-to the bounded correlation projection.
+8-KiB projection ceiling; the helper is now narrowed to the bounded
+correlation projection. The fresh `1d4bf351` identity primary then reached
+publication with 13 completed upstream `2xx` attempts, but Hermes exhausted
+the bounded model-call budget after publication. Its scenario gate also
+revealed that the harness counted delivery-intent rows instead of the explicit
+outcome publication; `adff362456` now reuses the validated explicit
+publication projection. The receipt remains dirty and no replay or later
+commission ran.
 The final candidate image,
 exact-image red team, G4 verifier, and consolidated Sol review remain pending.
 G5 remains a separate rollout goal.
@@ -33,10 +38,10 @@ G5 remains a separate rollout goal.
 
 | Active item        | Current truth                                                                                                                                                                                                                                                                                                                                                                      |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Delivery candidate | Exact Plane source `8722376f8862b5c22fa10ce4c507e0045412599a`; exact Hermes `cc3e444ee25e6c19fee77b6e1fbe3d95aef1a3ea`; the adjacent documentation checkpoint records the retained dirty receipts, callback-binding fix, and integrated Hermes conflict disposition.                                            |
+| Delivery candidate | Exact Plane source `adff362456`; exact Hermes `cc3e444ee25e6c19fee77b6e1fbe3d95aef1a3ea`; the adjacent documentation checkpoint records the retained dirty receipts, callback-binding fix, explicit-publication readback fix, and integrated Hermes conflict disposition.                                            |
 | Functional gate    | S00 Wave 0AT is clean at Plane `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with Hermes `bc7f13d2ab392752f2667b176c646339c49405f9`: ten ordered upstream `2xx` attempts, three searches, two reads, one exact `NOT_AUTHORIZED` denial, one submit, one applied publication, one matching terminal, and `RuntimeExit.completed`; replay semantic deltas were zero and cleanup passed. |
 | Provider-free PF1  | Worker W01–W08 passed 35 real Django/API/DB/CLI/socket/isolation tests unchanged. Manager M01–M08 passed 33 tests after `f621fdd89797db2d1b74205c6ce6d5b0bd4725d1` and `2105fb9e21687103939a77b7e26a0959f1d50f51`. Operator O01 and O03–O09 passed targeted real service/API/database/CLI contracts; the final exact-image red team remains pending.                               |
-| Live W/M/O wave    | Wave 0BA reached two fresh Maya identity commissions with completed provider attempts, but the invoker mislabeled later local scenario-gate failure as reconciliation uncertainty. The first f63 post-fix identity commission then exposed redundant model `run_ref` poisoning; Plane fix `8722376f88` includes the payload normalization, trusted envelope binding, preflight ordering, truthful terminal conflicts/no-mutation observations, and the `OUTCOME_UNKNOWN` mutation guard. Hermes `cc3e444...` now integrates the expected nonfatal `PLANE_CONFLICT` disposition. Wave 0BC reached the provider with the new pair, completed 11 upstream `2xx` attempts and the first identity lifecycle, then hit the established 8-KiB W08 readback ceiling before route evidence; the receipt remains dirty and no replay or later commission ran. W01/W02 remain dirty; W03–W08 are unreached. O02 remains separately clean from its real external-client closure.         |
+| Live W/M/O wave    | Wave 0BA reached two fresh Maya identity commissions with completed provider attempts, but the invoker mislabeled later local scenario-gate failure as reconciliation uncertainty. The first f63 post-fix identity commission then exposed redundant model `run_ref` poisoning; Plane fix `8722376f88` includes the payload normalization, trusted envelope binding, preflight ordering, truthful terminal conflicts/no-mutation observations, and the `OUTCOME_UNKNOWN` mutation guard. Hermes `cc3e444...` now integrates the expected nonfatal `PLANE_CONFLICT` disposition. Wave 0BC reached the provider with the new pair, completed lifecycle/publication evidence, then hit the W08 readback ceiling; the fresh `1d4bf351` primary reached publication with 13 completed `2xx` attempts but ended `budget_exhausted` after publication. Plane fix `adff362456` corrects explicit-publication scenario/replay readback; the Hermes terminal-action/budget owner fix is still pending. W01/W02 remain dirty; W03–W08 are unreached. O02 remains separately clean from its real external-client closure.         |
 | Final verification | Pending clean provider-backed W/M/O routes, the final candidate image, exact-image red team, one full G4 verifier, and one consolidated Sol Medium review.                                                                                                                                                                                                                         |
 | G5                 | Out of scope. Rollout starts only under a separate authorized goal after G4 functional completion.                                                                                                                                                                                                                                                                                 |
 

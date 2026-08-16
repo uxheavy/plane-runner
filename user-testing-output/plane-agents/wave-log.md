@@ -1997,3 +1997,40 @@ records this diagnosis without changing the retained receipts.
   sequence 16, 7 completed upstream `2xx` attempts, the same exact denial,
   submit, publication, and terminal binding, then failed at the same local
   readback boundary. No replay or B/C commission ran.
+
+## Wave 0BD — exact 1d4bf351 / Hermes cc3e444e bounded Worker attempt
+
+- The fresh primary used Plane source `1d4bf3510120fe44634f84341efc342f5bb7f865`,
+  exact Hermes `cc3e444ee25e6c19fee77b6e1fbe3d95aef1a3ea`, MCP
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. API image
+  `plane-agent-api:g4-v6-1d4bf351` had digest
+  `sha256:19da3c9df6beba6f63cdaccfadd2933fb14ef2a6801cd43c6e6f6328ad236bfd`;
+  runtime image `plane-agent-runtime:hermes-cc3e444e-g4-v6-1d4bf351` had
+  digest `sha256:2fd954fa8b7e19faa7b76ea30f7ba72716bb02e8de4ff0898a9c278490825488`.
+  The disposable manifest was
+  `tmp/plane-agent-g4-disposable-1d4bf351.json`, SHA-256
+  `0b5b7931bea773e8855f326c6395e04680be8e09fc306bd9b6ac01c1c7ac138a`,
+  mode `0600`; the owner-only run directory was mode `0700` and its result
+  mode `0600`.
+- One fresh three-commission Maya descriptor was launched through the
+  canonical derived-path helper with `openai-codex/gpt-5.6-luna`, xhigh
+  reasoning, fallback disabled, and the 16-call bound. Commission A reached
+  13 completed upstream `2xx` attempts with no fallback or unknown attempt.
+  Run `88412be2-9b33-4f28-b1e4-1ffe59cc0911` and invocation
+  `invocation:5db7def4-df61-4768-9426-e8a5c3d78206` reached the explicit
+  submit/publication lifecycle and one exact `NOT_AUTHORIZED` evaluator
+  denial. RuntimeExit failed at final sequence 23 with bounded
+  `budget_exhausted` / `model_call_budget_exhausted` after publication.
+- The pre-fix scenario projection queried `OperationGatewayPublication`,
+  which is the delivery-intent table for activity/notification/webhook work,
+  and therefore reported publication `0` despite the validated explicit
+  outcome publication receipt/audit/product-event binding. Plane fix
+  `adff362456` now reuses that existing explicit-publication projection for
+  scenario and replay readback. This receipt remains dirty; the provider-
+  disabled replay was not attempted, and commissions B/C did not start.
+- Owner-only result: `tmp/persona-wave-v6/worker-live-1d4bf351/result.json`,
+  SHA-256 `f810b3c05a155ea6344ee97f377ddd57a23805d0d65f0ce8d92c7f91313e8ea3`.
+  Canonical validation passed. Cleanup passed, and no provider retry was
+  spent after the receipt. The separate Hermes terminal-action/budget owner
+  fix is required before a fresh primary.
