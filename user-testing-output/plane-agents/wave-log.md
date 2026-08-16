@@ -2379,3 +2379,37 @@ records this diagnosis without changing the retained receipts.
   printed, copied, or recorded. W01/W02 remain clean; W03-W08 remain dirty;
   UT-041 remains open for the dedicated runtime debugger. No replay or
   further provider use occurred after the bounded failure.
+
+## Wave 0BN — exact 587f2272cf / compiler-backed Code Mode retest
+
+- Validated commits `c21fa19c0590ec1d9471b62be72e83c4b0dc619b` and
+  `da2bae9b9c43d47e52444b2bb1c5bdaf9514f840` were cherry-picked in order as
+  `e6962c3923` and `587f2272cf`. Source builder checks passed `6/6`; exact
+  Hermes provider-free gateway/real-child/sequential/Node checks passed `4/4`.
+- The retained prepared base `plane-g3-external-client-api-tests:prepared-codemode-fb78`
+  passed the canonical compiler/pytest/ruff/source guards. Exact artifacts:
+  API `plane-agent-api:g4-v6-587f2272`, digest
+  `sha256:58068e1a811239ccb44cae0b24fdec9ab47d09003f76316051df90ae31ee6d14`;
+  runtime `plane-agent-runtime:hermes-292e8663-g4-v6-587f2272`, digest
+  `sha256:e28c51e321bfcfc5631ead6cf9c1b58dcd4922f66f9f35564a0f622fada5d593`;
+  Hermes `292e866374ca9e9615473fc9bf5dda1913b672e1`.
+- One fresh synthetic B/C descriptor used GPT-5.6 Luna xhigh, fallback
+  disabled, max 16, and the existing host-only relay. W01/W02 were not rerun.
+  B reached `search_workspace=1`, `work_item.read=1`, exact
+  `agent.outcome.evaluate=denied/NOT_AUTHORIZED`, one submit, and one applied
+  publish/terminal event, but no typed `execute_code` or `work_item.rename`.
+  RuntimeExit completed at sequence 16 and S00 publication/terminal gates
+  passed; the Worker scenario gate failed at the mutation commission, so C did
+  not start. This is the first causal boundary; no compiler, isolate, or
+  host-RPC crash is inferred.
+- Provider attempts: 7, all completed/upstream-initiated/`2xx`; no fallback and
+  no replay. Run `518bd156-9c8a-43cf-ba81-7f6c3a033fa6`, invocation
+  `invocation:ab6f5bf3-91d9-4c8f-9037-3823d329cfde`, outcome
+  `outcome-submission:63678b35-d993-4f69-a758-231756d020b9`, and product event
+  `product-event:215713e2-e7d6-442d-a031-287e1f688016` are retained.
+- Owner-only result:
+  `tmp/persona-wave-v6/worker-live-587f2272/result.json`, mode `0600`, SHA-256
+  `d74dfab1277780f750f3c9e0a5f68c8aa8c0d9cdfe5a24a39d8e4a5115b89b91`;
+  canonical validator passed with `evidence_sha256` equal to that hash. No
+  separate launcher log file was persisted. W03-W08 remain dirty and UT-042
+  is open; no provider use continues after this bounded stop.

@@ -308,3 +308,9 @@ The failed run is `9c2eb4cf-9bb8-49a2-a9c6-7863a0187aab` and invocation is
 `invocation:72aae4f2-a351-432b-9a07-10767632778e`. The canonical validator
 passed; no blind replay or further provider use occurred. The dedicated
 runtime debugger owns the source correction.
+
+## Wave 0BN follow-up
+
+| Issue | Severity | Persona/routes | Evidence | Root cause | Fix owner/commit | Retest | Status |
+| ----- | -------- | -------------- | -------- | ---------- | --------------- | ------ | ------ |
+| UT-042 | blocker | Maya / W03-W04/W07-W08 | `tmp/persona-wave-v6/worker-live-587f2272/result.json`, mode `0600`, SHA-256 `d74dfab1277780f750f3c9e0a5f68c8aa8c0d9cdfe5a24a39d8e4a5115b89b91`; manifest SHA-256 `def69f5b2e18ac3b77e66907f7fa316c220ff8dd7f455d5a704caebae884ae45` | Fresh B on exact candidate `587f2272cf` and Hermes `292e866374` recorded 7 completed upstream `2xx` attempts, successful search/read, exact evaluator denial, one submit, one applied publication, a completed runtime, and one terminal product event, but no `execute_code` or `work_item.rename`. The Worker scenario gate failed at the mutation commission; W05-W08 did not continue. | First causal boundary is the provider-facing Worker commission route terminating after outcome publication without the required typed Code Mode semantic mutation. Provider-free compiler/child/host tests passed; no compiler, isolate, or host-RPC failure is inferred from the receipt. | Commits `e6962c3923` and `587f2272cf` are integrated and the exact pair is retained. Canonical validator passed; no replay or further provider use is permitted for this receipt. | open |

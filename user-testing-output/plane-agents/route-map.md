@@ -262,3 +262,40 @@ process_exit / runtime_execution_failed`, two progress events, zero provider
 attempt rows, and no semantic side effect. The canonical failure receipt
 passed validation. W01/W02 remain clean; W03-W08 remain dirty and
 UT-041 remains open for the dedicated runtime debugger's root correction.
+
+## Wave 0BN — exact 587f2272cf / compiler-backed Code Mode retest
+
+Validated source commits `c21fa19c05` and `da2bae9b9c` were cherry-picked as
+Plane `e6962c3923` and `587f2272cf`. The typed TypeScript child/compiler path
+passed the focused source checks (`6/6`) and the exact-Hermes provider-free
+gateway, real-child, sequential-isolation, and Node-resolution checks (`4/4`).
+The final API artifact is `plane-agent-api:g4-v6-587f2272`, digest
+`sha256:58068e1a811239ccb44cae0b24fdec9ab47d09003f76316051df90ae31ee6d14`,
+with compiler label `5.4.5`; the runtime is
+`plane-agent-runtime:hermes-292e8663-g4-v6-587f2272`, digest
+`sha256:e28c51e321bfcfc5631ead6cf9c1b58dcd4922f66f9f35564a0f622fada5d593`,
+bound to Hermes `292e866374ca9e9615473fc9bf5dda1913b672e1`. The retained
+prepared base `plane-g3-external-client-api-tests:prepared-codemode-fb78`
+passed the canonical compiler/pytest/ruff/source guards.
+
+One fresh synthetic Worker journey used GPT-5.6 Luna xhigh, fallback disabled,
+max 16, and the host-only relay. W01/W02 were not rerun. The mutation
+commission reached `search_workspace` once, `work_item.read` once, the exact
+`agent.outcome.evaluate` denial (`NOT_AUTHORIZED`), one submit, and one
+applied publish/terminal event, but never produced the required typed
+`execute_code` callback or `work_item.rename`. The runtime completed at
+sequence 16 and the S00 lifecycle/publication gates passed, while the Worker
+scenario gate failed at the mutation commission. W05/W06/W07/W08 did not run
+as a clean continuation. The first causal boundary is the provider-facing
+commission route ending in publication before the required mutation route;
+the evidence does not establish a compiler, child-isolate, or host-RPC crash.
+
+The owner-only receipt is
+`tmp/persona-wave-v6/worker-live-587f2272/result.json`, mode `0600`, SHA-256
+`d74dfab1277780f750f3c9e0a5f68c8aa8c0d9cdfe5a24a39d8e4a5115b89b91`;
+canonical validation passed. Run `518bd156-9c8a-43cf-ba81-7f6c3a033fa6`,
+invocation `invocation:ab6f5bf3-91d9-4c8f-9037-3823d329cfde`, publication
+`outcome-submission:63678b35-d993-4f69-a758-231756d020b9`, and terminal event
+`product-event:215713e2-e7d6-442d-a031-287e1f688016` are retained. There were
+7 completed upstream `2xx` provider attempts, no fallback, and no eligible
+replay. W03-W08 remain dirty; UT-042 is open.
