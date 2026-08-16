@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import re
 import stat
@@ -20,6 +21,7 @@ VALIDATOR = ROOT / "tools" / "validate_agent_g4_live.py"
 SCENARIO_VALIDATOR = ROOT / "tools" / "agent_g4_live_scenario.py"
 RUNNER_COMMAND = "bash tools/agent-g4-live.sh"
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 def derive_run_paths(run_dir: Path) -> dict[str, Path]:
@@ -50,6 +52,53 @@ def _owner_only_file(path: Path, reason: str) -> None:
         raise ValueError(reason) from exc
     if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) != 0o600:
         raise ValueError(reason)
+
+
+def load_manifest_provenance(manifest: Path) -> dict[str, object]:
+    """Read the exact API/runtime/Hermes pins from one disposable manifest."""
+
+    _owner_only_file(manifest, "launch_manifest_not_owner_only_regular_file")
+    try:
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError("launch_manifest_invalid_json") from exc
+    pins = payload.get("pins") if isinstance(payload, dict) else None
+    api = pins.get("apiArtifact") if isinstance(pins, dict) else None
+    if not isinstance(pins, dict) or not isinstance(api, dict):
+        raise ValueError("launch_manifest_provenance_missing")
+    candidate = api.get("sourceRevision")
+    runtime_revision = pins.get("runtimeImageRevision")
+    hermes_commit = pins.get("hermesCommit")
+    api_digest = api.get("imageDigest")
+    api_tag = api.get("imageTag")
+    runtime_digest = pins.get("runtimeImageDigest")
+    runtime_tag = pins.get("runtimeImageTag")
+    if (
+        not isinstance(candidate, str)
+        or not SHA_RE.fullmatch(candidate)
+        or runtime_revision != candidate
+        or not isinstance(hermes_commit, str)
+        or not SHA_RE.fullmatch(hermes_commit)
+        or not isinstance(api_digest, str)
+        or not DIGEST_RE.fullmatch(api_digest)
+        or not isinstance(runtime_digest, str)
+        or not DIGEST_RE.fullmatch(runtime_digest)
+        or not isinstance(api_tag, str)
+        or not api_tag
+        or not isinstance(runtime_tag, str)
+        or not runtime_tag
+    ):
+        raise ValueError("launch_manifest_provenance_mismatch")
+    return {
+        "candidate": candidate,
+        "hermesCommit": hermes_commit,
+        "apiArtifact": dict(api),
+        "runtimeImage": {
+            "imageDigest": runtime_digest,
+            "imageTag": runtime_tag,
+            "sourceRevision": runtime_revision,
+        },
+    }
 
 
 def validate_run_inputs(run_dir: Path, manifest: Path) -> dict[str, Path]:

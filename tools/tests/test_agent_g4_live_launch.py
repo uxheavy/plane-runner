@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -76,3 +77,65 @@ def test_validate_run_inputs_rejects_existing_result_under_owned_scope() -> None
         for child in run_dir.iterdir():
             child.unlink()
         run_dir.rmdir()
+
+
+def test_manifest_provenance_derives_current_api_runtime_and_hermes_pins(tmp_path: Path) -> None:
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "pins": {
+                    "apiArtifact": {
+                        "imageDigest": "sha256:" + "a" * 64,
+                        "imageTag": "plane-agent-api:test",
+                        "sourceRevision": "b" * 40,
+                    },
+                    "hermesCommit": "c" * 40,
+                    "runtimeImageDigest": "sha256:" + "d" * 64,
+                    "runtimeImageRevision": "b" * 40,
+                    "runtimeImageTag": "plane-agent-runtime:test",
+                }
+            }
+        )
+    )
+    manifest.chmod(0o600)
+
+    assert launch.load_manifest_provenance(manifest) == {
+        "candidate": "b" * 40,
+        "hermesCommit": "c" * 40,
+        "apiArtifact": {
+            "imageDigest": "sha256:" + "a" * 64,
+            "imageTag": "plane-agent-api:test",
+            "sourceRevision": "b" * 40,
+        },
+        "runtimeImage": {
+            "imageDigest": "sha256:" + "d" * 64,
+            "imageTag": "plane-agent-runtime:test",
+            "sourceRevision": "b" * 40,
+        },
+    }
+
+
+def test_manifest_provenance_rejects_mixed_source_revisions(tmp_path: Path) -> None:
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "pins": {
+                    "apiArtifact": {
+                        "imageDigest": "sha256:" + "a" * 64,
+                        "imageTag": "plane-agent-api:test",
+                        "sourceRevision": "b" * 40,
+                    },
+                    "hermesCommit": "c" * 40,
+                    "runtimeImageDigest": "sha256:" + "d" * 64,
+                    "runtimeImageRevision": "e" * 40,
+                    "runtimeImageTag": "plane-agent-runtime:test",
+                }
+            }
+        )
+    )
+    manifest.chmod(0o600)
+
+    with pytest.raises(ValueError, match="launch_manifest_provenance_mismatch"):
+        launch.load_manifest_provenance(manifest)
