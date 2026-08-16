@@ -10,8 +10,9 @@ Functional completion and controlled rollout are separate outcomes. This goal en
 
 The older G4 artifact bindings and Wave 0X evidence below are historical, not
 the active delivery state. The current host-side harness checkpoint is
-`aef02407a4`, while the exact functional API/runtime artifacts are bound to
-the preceding source candidate `c561bdfe89fb7413877b910900b5675b9f4b779d` and Hermes
+`8d94fcc16e5ff161b1e128fd3fd22f6a4f851071`, including the aggregate failure
+envelope fix `aef02407a4`. The exact functional API/runtime artifacts are bound
+to this source candidate and Hermes
 `292e866374ca9e9615473fc9bf5dda1913b672e1`. S00 Wave 0AT passed at Plane
 `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with one fresh Luna primary and one
 eligible provider-disabled replay. Provider-free PF1 evidence is complete for
@@ -114,6 +115,42 @@ the failed commission and retains both commission rows; the behavior-level
 canonical-validator regression is included in the `149/149` harness pass. No
 provider retry, replay, image rebuild, or new disposable resource occurred.
 
+### Wave 0BL current disposition
+
+The exact functional candidate is Plane
+`8d94fcc16e5ff161b1e128fd3fd22f6a4f851071`, API
+`plane-agent-api:g4-v6-8d94fcc1` / digest
+`sha256:428bdbab5945250fcd5ae3056f0a519cac8b0a0ecc8d03b948ecf26842abf752`,
+and runtime
+`plane-agent-runtime:hermes-292e8663-g4-v6-8d94fcc1` / digest
+`sha256:6feabe70129e61d9de9c11045180bd839ea709f9a3d2b390f417fc3de71988ed`,
+bound to Hermes `292e866374ca9e9615473fc9bf5dda1913b672e1`. Host checks passed
+`180/180`; the migration-backed provider-free clump passed `297` tests, with
+13 known environment-bound failures (container repo-root/fixture mounts,
+runtime checkout mount, host CPU threshold, and Docker CLI availability inside
+the API test container). Runtime imports and the network-disabled real
+bootstrap passed.
+
+One fresh full three-commission Worker descriptor used GPT-5.6 Luna xhigh,
+fallback disabled, max 16, and the host-only relay. The first identity
+commission passed W01/W02; its eligible provider-disabled same-invocation
+replay reported zero children, attempts, invocations, receipts, audits, usage,
+outcomes, publications, terminal events, and semantic side effects. The next
+mutation commission reached a terminally failed run/invocation and stopped at
+bounded `runtime_error / runtime_process / process_exit /
+runtime_execution_failed` after two progress events. All seven expected
+gateway-operation counts were zero, provider attempts were zero for that
+failed commission, and no outcome/publication/artifact/semantic mutation was
+recorded. The canonical validator passed the aggregate receipt, which is
+retained at `tmp/persona-wave-v6/worker-live-8d94fcc1-complete/result.json`,
+mode `0600`, SHA-256
+`c0f869c8ceae591ce46cf5b6be4661a729f912ecb2caf842a849f76bf8fbdcbf`.
+Manifest SHA-256 is
+`d8d0ee728974ca6847adb840240e59e44d0478735c25a97e5320b674a09748f5`.
+The bounded envelope exposes no narrower cause, so this is a real local
+runtime failure rather than an external-provider prerequisite. The failed
+commission was not replayed and all W03-W08 remain dirty.
+
 ### Wave 0BJ current disposition
 
 The integrated Plane/Hermes TypeScript bridge was exercised by one fresh
@@ -129,7 +166,7 @@ provider use is authorized pending root-fix review.
 
 | Active item        | Current truth                                                                                                                                                                                                                                                                                                                                                                      |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Delivery candidate | Exact Plane source `c561bdfe89fb7413877b910900b5675b9f4b779d`; API `plane-agent-api:g4-v6-c561bdfe` / `sha256:f16287cc30c1f873a85dc497a7e48964e8c2b062d0298c112e871d29768be2d8`; runtime `plane-agent-runtime:hermes-292e8663-g4-v6-c561bdfe` / `sha256:8da3bd7003995e30af1ae435901ed4a80a88af3772954640e9c9eb0c9dd6a321`; Hermes `292e866374ca9e9615473fc9bf5dda1913b672e1`. The typed Code Mode fix passed provider-free checks, but the fresh launch stopped at the B commission-selection boundary after a separate identity commission; no B provider result is claimed and no further provider use is authorized. |
+| Delivery candidate | Exact Plane source `8d94fcc16e5ff161b1e128fd3fd22f6a4f851071`; API `plane-agent-api:g4-v6-8d94fcc1` / `sha256:428bdbab5945250fcd5ae3056f0a519cac8b0a0ecc8d03b948ecf26842abf752`; runtime `plane-agent-runtime:hermes-292e8663-g4-v6-8d94fcc1` / `sha256:6feabe70129e61d9de9c11045180bd839ea709f9a3d2b390f417fc3de71988ed`; Hermes `292e866374ca9e9615473fc9bf5dda1913b672e1`. Host root fix `7029b52ca1` is integrated. The fresh full descriptor passed identity/W01-W02 and zero-delta replay, then stopped at a terminal local runtime failure before mutation provider execution; the retained UT-041 receipt is canonical-valid and no further provider use is authorized. |
 | Functional gate    | S00 Wave 0AT is clean at Plane `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with Hermes `bc7f13d2ab392752f2667b176c646339c49405f9`: ten ordered upstream `2xx` attempts, three searches, two reads, one exact `NOT_AUTHORIZED` denial, one submit, one applied publication, one matching terminal, and `RuntimeExit.completed`; replay semantic deltas were zero and cleanup passed. |
 | Provider-free PF1  | Worker W01–W08 passed 35 real Django/API/DB/CLI/socket/isolation tests unchanged. Manager M01–M08 passed 33 tests after `f621fdd89797db2d1b74205c6ce6d5b0bd4725d1` and `2105fb9e21687103939a77b7e26a0959f1d50f51`. Operator O01 and O03–O09 passed targeted real service/API/database/CLI contracts; the final exact-image red team remains pending.                               |
 | Live W/M/O wave    | Wave 0BA reached two fresh Maya identity commissions with completed provider attempts, but the invoker mislabeled later local scenario-gate failure as reconciliation uncertainty; the independent relay shutdown/audit race was fixed at its owner. The f63 callback-binding issue, W08 projection ceiling, and explicit-publication readback issue were fixed in their established owners. Hermes `f8cda105...` provides the bounded terminal-lifecycle observation. Wave 0BE recorded the commission-scoped wrapper failure and one isolated upstream channel loss; reconciliation showed no semantic side effects. Wave 0BF then completed W01/W02 with 9 completed upstream `2xx` attempts, exact denial, one applied publication/terminal, route evidence, and a zero-delta provider-disabled replay. Wave 0BG stopped the standalone synthetic-only B commission after 16 completed upstream `2xx` attempts and a non-retryable model-call budget exhaustion before publication; the pinned Hermes runtime lacks the required Plane TypeScript Code Mode bridge. The delegated C addendum also attempted W05-W08 twice, fixing once-only context and artifact-contract defects provider-free, but neither primary passed the full route plus replay gate. W03-W04 remain dirty/blocked as mapped, W05-W08 remain dirty, and no further B/provider work is authorized pending the integrated Plane/Hermes TypeScript bridge. O02 remains separately clean from its real external-client closure. |

@@ -2291,3 +2291,45 @@ records this diagnosis without changing the retained receipts.
   `149/149`.
 - No provider retry, replay, image rebuild, or new disposable resource was
   created. W03/W04/W07/W08 remain dirty; UT-039 remains open.
+
+## Wave 0BL — exact 8d94fcc1 / sequential Worker runtime failure
+
+- Provider-free preparation integrated sequential-commission root fix
+  `7029b52ca13e26bbd3d95d94bf382b39cf8f1d40` as Plane
+  `8d94fcc16e5ff161b1e128fd3fd22f6a4f851071`. Host checks passed `180/180`.
+  The migration-backed API clump passed `297` tests; 13 failures were retained
+  as known environment-bound setup/test prerequisites (container repo-root or
+  fixture mounts, runtime checkout mount, host CPU threshold, and Docker CLI
+  unavailable inside the API test container), with no production source change
+  made for them.
+- Exact refreeze used API
+  `plane-agent-api:g4-v6-8d94fcc1`, digest
+  `sha256:428bdbab5945250fcd5ae3056f0a519cac8b0a0ecc8d03b948ecf26842abf752`,
+  and runtime
+  `plane-agent-runtime:hermes-292e8663-g4-v6-8d94fcc1`, digest
+  `sha256:6feabe70129e61d9de9c11045180bd839ea709f9a3d2b390f417fc3de71988ed`,
+  bound to Hermes `292e866374ca9e9615473fc9bf5dda1913b672e1`. Imports and the
+  network-disabled real bootstrap passed. Manifest mode was `0600`, SHA-256
+  `d8d0ee728974ca6847adb840240e59e44d0478735c25a97e5320b674a09748f5`.
+- One fresh full descriptor journey used GPT-5.6 Luna xhigh, fallback disabled,
+  max 16 per commission, and the host-only relay. The identity commission
+  passed W01/W02 and its eligible provider-disabled same-invocation replay
+  recorded zero children, provider attempts, invocations, receipts, audits,
+  usage, outcomes, publications, terminal events, and semantic side effects.
+- The next mutation commission created a terminally failed run and invocation,
+  then stopped at `runtime_error / runtime_process / process_exit /
+  runtime_execution_failed` after two progress events. Its seven expected
+  gateway operations were absent with count zero; provider attempts were zero
+  for that failed commission; no outcome, publication, artifact, terminal
+  success event, or semantic mutation was recorded. No replay was eligible or
+  run. The bounded receipt exposes no narrower runtime cause, so this remains a
+  real local failure rather than an external-provider prerequisite.
+- Owner-only receipt:
+  `tmp/persona-wave-v6/worker-live-8d94fcc1-complete/result.json`, mode `0600`,
+  SHA-256 `c0f869c8ceae591ce46cf5b6be4661a729f912ecb2caf842a849f76bf8fbdcbf`.
+  First commission run/invocation refs were
+  `69069a56-4d9f-4ec1-b4fd-c74a3959b3e3` /
+  `invocation:1e77f8ed-1b1f-444a-bcbe-1ef440d81715`; failed commission
+  refs were retained as `66eb272a-f95b-4071-8f72-c85da959bf68` /
+  `invocation:cf7f9151-a0e6-4f69-8514-1be7e8d8824a`. W03-W08 remain dirty;
+  further provider use is stopped.

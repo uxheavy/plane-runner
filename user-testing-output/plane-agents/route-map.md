@@ -1,8 +1,8 @@
 # Plane Agent functional coverage map
 
-Target: functional image candidate `c561bdfe89fb7413877b910900b5675b9f4b779d`; the current host-side
-aggregate-reconciliation tip is `aef02407a4`; documentation is committed in
-the adjacent Worker B commission-shape checkpoint, with Hermes
+Target: functional image candidate `8d94fcc16e5ff161b1e128fd3fd22f6a4f851071`; the current host-side
+aggregate-reconciliation tip is `aef02407a4`; the current Wave 0BL evidence is
+recorded below, with Hermes
 `292e866374ca9e9615473fc9bf5dda1913b672e1`. No chat UI is in scope.
 Use existing Plane object/settings pages only where they already exist; the
 authoritative evidence is Plane product-state and gateway/audit readback.
@@ -97,6 +97,11 @@ existing gateway operation binds actor/workspace/run/subject, calls
 `assemble_agent_context`, and returns separate private-memory, user-preference,
 and skill projections with live authorization and audit. Its existing contract
 test covers the positive binding and actor substitution denial.
+
+Latest sequential Worker attempt (Wave 0BL, 2026-08-16): Plane `8d94fcc16e5ff161b1e128fd3fd22f6a4f851071`, API
+`plane-agent-api:g4-v6-8d94fcc1` / `sha256:428bdbab5945250fcd5ae3056f0a519cac8b0a0ecc8d03b948ecf26842abf752`, runtime
+`plane-agent-runtime:hermes-292e8663-g4-v6-8d94fcc1` / `sha256:6feabe70129e61d9de9c11045180bd839ea709f9a3d2b390f417fc3de71988ed`, and Hermes
+`292e866374ca9e9615473fc9bf5dda1913b672e1`. The fresh full descriptor used GPT-5.6 Luna xhigh, fallback disabled, max 16 per commission, and the host-only relay. Identity/discovery W01/W02 passed in the first commission and its provider-disabled same-invocation replay had zero deltas. The second mutation commission then reached a terminal `runtime_error / runtime_process / process_exit / runtime_execution_failed` with only two progress events, zero provider attempts, zero gateway-operation counts, and no outcome/publication/semantic side effect; its run and invocation were terminally failed. The owner-only aggregate receipt is `tmp/persona-wave-v6/worker-live-8d94fcc1-complete/result.json`, mode `0600`, SHA-256 `c0f869c8ceae591ce46cf5b6be4661a729f912ecb2caf842a849f76bf8fbdcbf`; manifest SHA-256 `d8d0ee728974ca6847adb840240e59e44d0478735c25a97e5320b674a09748f5`. The bounded receipt does not expose a narrower runtime cause, so this is retained as a real local failure, not an external-provider prerequisite; no retry or replay is eligible and W03-W08 remain dirty.
 
 | ID  | Persona | Real journey and entry surface                                                                                                      | Required capabilities and visible outcome                                                                                                                                                   | Boundary/replay proof                                                                                                                                   | Status                                                                                                                                                                                                                                                                                                                                                                                                   |
 | --- | ------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
