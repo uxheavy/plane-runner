@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+"""Create owner-only live inputs from one exact disposable manifest."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import shutil
+import sys
+from pathlib import Path
+
+
+def _owner_only(path: Path, payload: bytes) -> None:
+    path.write_bytes(payload)
+    path.chmod(0o600)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--root", type=Path, required=True)
+    parser.add_argument("--manifest", type=Path, required=True)
+    parser.add_argument("--descriptor", type=Path, required=True)
+    parser.add_argument("--run-dir", type=Path, required=True)
+    parser.add_argument("--candidate", required=True)
+    args = parser.parse_args()
+    root = args.root.resolve()
+    sys.path.insert(0, str(root / "tools"))
+    from validate_agent_g4_live import EXPECTED_PROVIDER_DESCRIPTOR, exact_binding, provider_relay_descriptor
+
+    manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+    descriptor = args.descriptor.read_bytes()
+    binding = exact_binding(manifest, args.candidate)
+    binding.update(
+        {
+            "commandSha256": hashlib.sha256(b"bash tools/agent-g4-live.sh").hexdigest(),
+            "provider": dict(EXPECTED_PROVIDER_DESCRIPTOR),
+            "thresholdProfile": "g4-live-approved-v1",
+            "thresholds": {
+                "permittedSuccessRateMin": 1.0,
+                "deniedRejectionRateMin": 1.0,
+                "maxLatencyP95Ms": 500,
+                "maxErrorRate": 0.0,
+            },
+            "canaries": {
+                "permitted": {"id": "w05-w06-permitted", "expectedStatus": "allowed"},
+                "denied": {"id": "w05-w06-denied", "expectedStatus": "denied"},
+            },
+        }
+    )
+    authority = {
+        "schemaVersion": "plane-agent-g4/live-authority/v1",
+        "authorityId": "authority-w05-w06-c-20260816",
+        "purpose": "g4-live-evaluation",
+        "issuedAt": "2026-08-16T00:00:00Z",
+        "expiresAt": "2026-08-17T00:00:00Z",
+        "expectedCandidate": args.candidate,
+        "fallbackAllowed": False,
+        "binding": binding,
+        "providerRelay": provider_relay_descriptor(),
+    }
+    config = {
+        "schemaVersion": "plane-agent-g4/live-config/v1",
+        "authorityId": authority["authorityId"],
+        "mode": "live",
+        "offline": False,
+        "fallbackAllowed": False,
+        "expectedCandidate": args.candidate,
+        "binding": binding,
+        "provider": {**EXPECTED_PROVIDER_DESCRIPTOR, "fallbackUsed": False},
+        "providerRelay": provider_relay_descriptor(),
+        "thresholdProfile": binding["thresholdProfile"],
+        "thresholds": binding["thresholds"],
+        "canaries": {key: value["id"] for key, value in binding["canaries"].items()},
+        "requiredReadbacks": ["audit", "version"],
+    }
+    args.run_dir.mkdir(mode=0o700, parents=True, exist_ok=False)
+    _owner_only(args.run_dir / "authority.json", json.dumps(authority, indent=2, sort_keys=True).encode() + b"\n")
+    _owner_only(args.run_dir / "config.json", json.dumps(config, indent=2, sort_keys=True).encode() + b"\n")
+    shutil.copyfile(args.descriptor, args.run_dir / "descriptor.json")
+    (args.run_dir / "descriptor.json").chmod(0o600)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

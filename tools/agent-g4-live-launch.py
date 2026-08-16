@@ -240,7 +240,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--commission-id")
     args = parser.parse_args(argv)
     try:
-        return launch(args.run_dir, args.manifest, args.candidate, args.commission_id)
+        return launch(args.run_dir.resolve(), args.manifest.resolve(), args.candidate, args.commission_id)
     except ValueError as exc:
         print(f"event=agent.g4.live-launch status=failed reason={exc}")
         return 2
