@@ -1950,7 +1950,7 @@ def validate_evidence(
     if not isinstance(evidence, dict):
         raise ContractError("evidence_must_be_one_json_object")
     if evidence.get("schemaVersion") == "plane-agent-g4/live-runner-failure/v1":
-        required = {"schemaVersion", "status", "phase", "errorClass", "exitCode", "reasonCategory"}
+        required = {"schemaVersion", "status", "phase", "errorClass", "exitCode", "reasonCategory", "stderrSha256"}
         if set(evidence) != required:
             raise ContractError("runner_failure_receipt_fields_invalid")
         _exact(evidence["status"], "failed", "runner_failure_receipt_status")
@@ -1965,6 +1965,7 @@ def validate_evidence(
             "runtime-start",
             "runtime-health",
             "api-invocation",
+            "capacity-lease",
         }:
             raise ContractError("runner_failure_receipt_phase_invalid")
         if evidence["errorClass"] not in {
@@ -1995,6 +1996,8 @@ def validate_evidence(
             "docker_precontainer_failure",
         }:
             raise ContractError("runner_failure_receipt_reason_category_invalid")
+        if not isinstance(evidence["stderrSha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", evidence["stderrSha256"]):
+            raise ContractError("runner_failure_receipt_stderr_sha256_invalid")
         return {
             "evidenceSha256": hashlib.sha256(evidence_text.encode("utf-8")).hexdigest(),
             "collected": 0,
