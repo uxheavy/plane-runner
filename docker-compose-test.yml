@@ -65,7 +65,7 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-plane}
       RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-plane}
     tmpfs:
-      - /var/lib/rabbitmq
+      - /var/lib/rabbitmq:rw,uid=100,gid=100,mode=755
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
