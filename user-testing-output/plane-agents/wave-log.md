@@ -2458,3 +2458,32 @@ Cleanup proof passed: no containers, networks, or volumes remained with the
 `plane-manager-m01-m08-019fc7db` or `plane-agent-g4-live` prefixes, and the
 named provider-free diagnostic container was removed. Raw credential contents
 were never read, copied, or tracked.
+
+## Manager M01-M08 — exact 07706d8c / Hermes 292e866374 second fresh attempt
+
+The second shared fix `3c4209340c7f219be76258083a595b8fba14c05c` was
+integrated after the first post-e312 stop. Focused regressions passed (`3`
+contract tests for API invocation/migration-mode scoping and `64` offline
+scenario/result tests). The exact refrozen artifacts were API
+`plane-agent-api:g4-v6-07706d8c`, digest
+`sha256:01a61cef1604593b49dd088df57df40f3a755e07b216477e4ccc8c05a7f12359`,
+and runtime `plane-agent-runtime:hermes-292e8663-g4-v6-07706d8c`, digest
+`sha256:9d7f875fb8a971c6998d2325d40a75bba04094fed63e8821899ee4da400f344b`.
+Hermes/MCP/SDK remained pinned to
+`292e866374ca9e9615473fc9bf5dda1913b672e1` /
+`c04974ed6624f17b41e63ef8182661929e77e0d3` /
+`7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`.
+
+Exactly one new fresh Manager runner attempt used fresh authority/canary IDs,
+`openai-codex/gpt-5.6-luna` xhigh, fallback disabled, and the
+`PLANE_G4_PROVIDER_SECRET_SOURCE` contract. It stopped during `migrate` with
+the bounded envelope `errorClass=unavailable`, exit `1`, reason
+`unavailable`. No Plane run/invocation was created, provider attempt records
+were `0`, route mutations were `0`, and no replay was attempted. The raw
+owner-only result was mode `0600`, SHA-256
+`ebe435782d41445482b35bab585bfd6cd9ebfdc09b153cddbf70d17f97a8ac2a`; the
+durable redacted extract is
+`user-testing-output/plane-agents/evidence/manager-m01-m08-fresh-live-failure-02.json`,
+SHA-256 `abf5f255059be973f70e1863d1d085cb19a2d5db4963227a6898e0fac329ef10`.
+This is a shared migration-process configuration stop. No lane patch, provider
+retry, or blind `outcome_unknown` replay followed.

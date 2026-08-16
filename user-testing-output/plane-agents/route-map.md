@@ -159,6 +159,20 @@ The live attempt used the exact candidate-bound API/runtime pair, Hermes
 It was not replayed. The shared launcher/runtime owner retains the next
 diagnosis; this lane made no shared patch.
 
+## Manager M01-M08 second shared-fix attempt — 2026-08-16
+
+The second fresh, non-replayed attempt used candidate
+`07706d8cbf3c46cda50e25e7658d70ce970524b8` after integrating shared fix
+`3c4209340c7f219be76258083a595b8fba14c05c`. It stopped in the established
+runner's `migrate` phase with `errorClass=unavailable`, exit `1`, before any
+Plane run/invocation or provider attempt. The durable redacted result is
+`user-testing-output/plane-agents/evidence/manager-m01-m08-fresh-live-failure-02.json`
+(SHA-256 `abf5f255059be973f70e1863d1d085cb19a2d5db4963227a6898e0fac329ef10`);
+the owner-only raw result SHA-256 is
+`ebe435782d41445482b35bab585bfd6cd9ebfdc09b153cddbf70d17f97a8ac2a`.
+M01-M08 therefore remain provider-free-supporting / not provider-backed
+closed. No replay, blind `outcome_unknown` handling, or lane patch followed.
+
 ## PF1 supporting-evidence addendum
 
 PF1 is provider-free supporting evidence for the pending provider-backed W/M/O
