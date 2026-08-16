@@ -104,6 +104,23 @@ def _validate_config(paths: dict[str, Path], candidate: str) -> None:
         raise ValueError("launch_config_preflight_failed")
 
 
+def _host_revision() -> str:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ValueError("launch_host_revision_unavailable") from exc
+    host_revision = result.stdout.strip()
+    if not SHA_RE.fullmatch(host_revision):
+        raise ValueError("launch_host_revision_invalid")
+    return host_revision
+
+
 def _validate_descriptor(paths: dict[str, Path]) -> str:
     digest = hashlib.sha256(paths["descriptor"].read_bytes()).hexdigest()
     result = subprocess.run(
@@ -118,18 +135,14 @@ def _validate_descriptor(paths: dict[str, Path]) -> str:
     return digest
 
 
-def launch(run_dir: Path, manifest: Path, candidate: str) -> int:
-    if not SHA_RE.fullmatch(candidate):
-        raise ValueError("launch_candidate_must_be_full_sha")
-    paths = validate_run_inputs(run_dir, manifest)
-    _validate_config(paths, candidate)
-    descriptor_digest = _validate_descriptor(paths)
-    if not os.environ.get("PLANE_G4_PROVIDER_SECRET_SOURCE"):
-        raise ValueError("launch_provider_source_env_missing")
+def build_launch_environment(
+    paths: dict[str, Path], *, artifact_revision: str, host_revision: str, descriptor_digest: str
+) -> dict[str, str]:
     environment = os.environ.copy()
     environment.update(
         {
-            "PLANE_G4_EXPECTED_CANDIDATE": candidate,
+            "PLANE_G4_EXPECTED_CANDIDATE": host_revision,
+            "PLANE_G4_ARTIFACT_CANDIDATE": artifact_revision,
             "PLANE_G4_LIVE_AUTHORITY": str(paths["authority"]),
             "PLANE_G4_LIVE_CONFIG": str(paths["config"]),
             "PLANE_G4_LIVE_MANIFEST": str(paths["manifest"]),
@@ -138,6 +151,24 @@ def launch(run_dir: Path, manifest: Path, candidate: str) -> int:
             "PLANE_G4_LIVE_RESULT_PATH": str(paths["result"]),
             "PLANE_G4_LIVE_COMMAND": RUNNER_COMMAND,
         }
+    )
+    return environment
+
+
+def launch(run_dir: Path, manifest: Path, candidate: str) -> int:
+    if not SHA_RE.fullmatch(candidate):
+        raise ValueError("launch_candidate_must_be_full_sha")
+    paths = validate_run_inputs(run_dir, manifest)
+    _validate_config(paths, candidate)
+    descriptor_digest = _validate_descriptor(paths)
+    if not os.environ.get("PLANE_G4_PROVIDER_SECRET_SOURCE"):
+        raise ValueError("launch_provider_source_env_missing")
+    host_revision = _host_revision()
+    environment = build_launch_environment(
+        paths,
+        artifact_revision=candidate,
+        host_revision=host_revision,
+        descriptor_digest=descriptor_digest,
     )
     completed = subprocess.run(["bash", str(RUNNER)], cwd=ROOT, env=environment, check=False)
     print(f"event=agent.g4.live-launch status=exited code={completed.returncode} result={paths['result']}")

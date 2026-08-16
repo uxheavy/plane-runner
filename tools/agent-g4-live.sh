@@ -37,13 +37,15 @@ LIVE_AUTHORITY="${PLANE_G4_LIVE_AUTHORITY:?validated live authority path is requ
 LIVE_CONFIG="${PLANE_G4_LIVE_CONFIG:?validated live config path is required}"
 LIVE_COMMAND="${PLANE_G4_LIVE_COMMAND:?validated live command is required}"
 RUNTIME_CHILD_ENVIRONMENT_JSON='{"HOME":"/tmp","HERMES_HOME":"/tmp/hermes-home","LANG":"C.UTF-8","LC_ALL":"C.UTF-8","PATH":"/usr/local/bin:/usr/bin:/bin","PYTHONPATH":"/tmp:/opt/plane/agent/dependencies:/opt:/opt/hermes","PYTHONSAFEPATH":"1","PYTHONUNBUFFERED":"1"}'
-G4_CANDIDATE="$(git -C "${ROOT_DIR}" rev-parse HEAD)"
-G4_EXPECTED_CANDIDATE="${PLANE_G4_EXPECTED_CANDIDATE:?operator-supplied exact wrapper SHA is required}"
-[[ "${G4_EXPECTED_CANDIDATE}" =~ ^[0-9a-f]{40}$ ]] || {
+G4_HOST_CANDIDATE="$(git -C "${ROOT_DIR}" rev-parse HEAD)"
+G4_EXPECTED_HOST_CANDIDATE="${PLANE_G4_EXPECTED_CANDIDATE:?operator-supplied exact wrapper SHA is required}"
+G4_CANDIDATE="${PLANE_G4_ARTIFACT_CANDIDATE:-${G4_EXPECTED_HOST_CANDIDATE}}"
+G4_EXPECTED_CANDIDATE="${G4_CANDIDATE}"
+[[ "${G4_EXPECTED_HOST_CANDIDATE}" =~ ^[0-9a-f]{40}$ && "${G4_CANDIDATE}" =~ ^[0-9a-f]{40}$ ]] || {
     printf 'event=agent.g4.live-runner status=failed expected=full_external_expected_candidate_sha actual=invalid suggestion=set_Plane_G4_EXPECTED_CANDIDATE\n' >&2
     exit 2
 }
-[[ "${G4_CANDIDATE}" == "${G4_EXPECTED_CANDIDATE}" ]] || {
+[[ "${G4_HOST_CANDIDATE}" == "${G4_EXPECTED_HOST_CANDIDATE}" ]] || {
     printf 'event=agent.g4.live-runner status=failed expected=HEAD=external_expected_candidate actual=head_mismatch suggestion=use_the_exact_authorized_wrapper\n' >&2
     exit 2
 }
