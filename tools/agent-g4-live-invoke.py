@@ -1377,14 +1377,7 @@ def _prepare_shared_worker_setup(scenario, provider, provider_relay, suffix, *, 
             "reasoning_effort": scenario.profile.model_policy.reasoning,
         }
         profile_display_name = scenario.profile.name
-        if os.environ.get("G4_MULTI_COMMISSION") == "1":
-            profile_expected_outcomes = [
-                "Follow the current assignment commission's ordered route exactly; do not execute unlisted operations."
-            ]
-        else:
-            from agent_g4_live_scenario import model_route_expectations
-
-            profile_expected_outcomes = list(model_route_expectations(scenario.expected))
+        profile_expected_outcomes = _profile_expected_outcomes(scenario)
         profile_instructions = profile_instructions.replace("{{subjectUserRef}}", f"user:{user.id}")
         profile_persona = profile_persona.replace("{{subjectUserRef}}", f"user:{user.id}")
     profile = create_profile(
@@ -1465,6 +1458,14 @@ def _commission_precondition_checks(shared, assignment, provider_relay):
             and provider_relay.get("externalEgressOwner") == "agent-runtime"
         ),
     }
+
+
+def _profile_expected_outcomes(scenario):
+    """Keep each commission's typed route contract in its immutable profile."""
+
+    from agent_g4_live_scenario import model_route_expectations
+
+    return list(model_route_expectations(scenario.expected))
 
 
 def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
@@ -2451,7 +2452,6 @@ def main() -> int:
         return code
 
     results = []
-    os.environ["G4_MULTI_COMMISSION"] = "1"
     setup_cache = {}
     for commission in scenario.commissions:
         from agent_g4_live_scenario import commission_descriptor

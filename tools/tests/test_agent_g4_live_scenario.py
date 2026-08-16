@@ -282,6 +282,43 @@ def test_commission_descriptor_keeps_shared_profile_and_binds_each_assignment() 
     assert identity.commissions == mutation.commissions == context.commissions == ()
 
 
+def test_multi_commission_prompt_preserves_the_typed_mutation_route() -> None:
+    source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    helper = next(
+        (node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_profile_expected_outcomes"),
+        None,
+    )
+    assert helper is not None, (
+        "event=worker.assignment.route_prompt actor=worker operation=compose_profile_prompt "
+        "risk=required_semantic_mutation_can_be_skipped_before_publication "
+        "expected=multi_commission_prompt_preserves_typed_route_guidance "
+        "actual=prompt_composition_owner_missing "
+        "suggestion=restore_commission_specific_expected_outcomes"
+    )
+    namespace: dict[str, object] = {}
+    exec(
+        compile(
+            ast.Module(body=[helper], type_ignores=[]),
+            str(TOOLS / "agent-g4-live-invoke.py"),
+            "exec",
+        ),
+        namespace,
+    )
+
+    raw = (TOOLS / "agent-g4-worker-v6.json").read_bytes()
+    parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
+    mutation = scenario.commission_descriptor(parsed, parsed.commissions[1])
+    expected = namespace["_profile_expected_outcomes"](mutation)
+
+    assert expected == list(scenario.model_route_expectations(mutation.expected))
+    assert "execute_code" in expected[2]
+    assert 'host.call_plane_operation("work_item.rename"' in expected[2]
+    assert expected[3].startswith("Route step 4: invoke agent.outcome.evaluate")
+    assert expected[-2].startswith("Route step 5: invoke agent.outcome.submit")
+    assert expected[-1].startswith("Route step 6: invoke agent.outcome.publish")
+
+
 def test_sequential_commissions_reuse_fixture_preconditions_before_new_run() -> None:
     source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
