@@ -168,6 +168,33 @@ def test_context_projection_keeps_agent_memory_and_subject_user_preferences_sepa
 
 
 @pytest.mark.django_db
+def test_context_projection_keeps_agent_private_skill_when_shared_key_collides(actor, profile, gardener, create_user):
+    private_skill = create_skill(
+        actor,
+        key="scope-collision",
+        package_files={"SKILL.md": "# Agent private\n"},
+    )
+    other_actor = create_actor(workspace=actor.workspace, project=actor.project, display_name="Shared skill owner")
+    shared_proposal = propose_skill_change(
+        other_actor,
+        key="scope-collision",
+        package_files={"SKILL.md": "# Workspace shared\n"},
+        gardener=gardener,
+        rationale="Share the reviewed skill without overriding an Agent-private package.",
+        requested_visibility=AgentSkillVisibility.WORKSPACE,
+        requested_scope_id=actor.workspace_id,
+    )
+    review_proposal(shared_proposal, reviewer=create_user, approve=True)
+    promote_proposal(shared_proposal)
+
+    projection = assemble_agent_context(actor, authorization=AllowSubject())
+
+    assert projection.skill_packages["scope-collision"] == project_skill_package(
+        private_skill.revisions.get(state=AgentRevisionState.ACTIVE)
+    )
+
+
+@pytest.mark.django_db
 def test_context_projection_excludes_expired_memory_and_skill_roots(actor, profile, create_user):
     expired_memory = create_memory(
         actor,

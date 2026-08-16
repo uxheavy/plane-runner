@@ -30,6 +30,11 @@ from .projections import normalize_skill_files, project_skill_package, skill_pac
 
 
 _UNSUPPORTED_SHARED_VISIBILITIES = frozenset({AgentSkillVisibility.TEMPLATE, AgentSkillVisibility.ORGANIZATION})
+_SKILL_VISIBILITY_PRECEDENCE = {
+    AgentSkillVisibility.AGENT_PRIVATE: 0,
+    AgentSkillVisibility.SUBJECT_USER: 1,
+    AgentSkillVisibility.WORKSPACE: 2,
+}
 
 
 def _skill_key(value: Any) -> str:
@@ -457,7 +462,7 @@ def project_visible_skill_packages(
     ).filter(Q(retention_expires_at__isnull=True) | Q(retention_expires_at__gt=timezone.now())).order_by(
         "key", "visibility", "id"
     )
-    projected: dict[str, dict[str, str]] = {}
+    projected: dict[str, tuple[int, dict[str, str]]] = {}
     for definition in definitions:
         visible = definition.visibility == AgentSkillVisibility.AGENT_PRIVATE
         if (
@@ -480,5 +485,8 @@ def project_visible_skill_packages(
             continue
         revision = _latest_revision(definition)
         if revision is not None:
-            projected[definition.key] = project_skill_package(revision)
-    return {key: projected[key] for key in sorted(projected)}
+            priority = _SKILL_VISIBILITY_PRECEDENCE[definition.visibility]
+            existing = projected.get(definition.key)
+            if existing is None or priority < existing[0]:
+                projected[definition.key] = (priority, project_skill_package(revision))
+    return {key: projected[key][1] for key in sorted(projected)}
