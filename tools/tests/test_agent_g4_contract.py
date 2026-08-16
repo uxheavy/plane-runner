@@ -1361,6 +1361,27 @@ class G4ContractTests(unittest.TestCase):
         ):
             self.assertNotIn(f"--env {migration_environment_name}=", api)
 
+    def test_live_runner_scopes_database_migration_mode_to_migrate_phase(self):
+        runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+        compose_start = runner.index("LIVE_PHASE=compose")
+        migrate_start = runner.index("LIVE_PHASE=migrate")
+        audit_bootstrap_start = runner.index("LIVE_PHASE=audit-bootstrap", migrate_start)
+        runtime_start = runner.index("LIVE_PHASE=runtime-start")
+        api_invocation_start = runner.index("LIVE_PHASE=api-invocation")
+
+        compose = runner[compose_start:migrate_start]
+        migrate = runner[migrate_start:audit_bootstrap_start]
+        audit_bootstrap = runner[audit_bootstrap_start:runtime_start]
+        runtime = runner[runtime_start:api_invocation_start]
+        api = runner[api_invocation_start:]
+        marker = "--env PLANE_DB_MIGRATION_MODE=1"
+
+        self.assertEqual(migrate.count(marker), 1)
+        self.assertNotIn(marker, compose)
+        self.assertNotIn(marker, audit_bootstrap)
+        self.assertNotIn(marker, runtime)
+        self.assertNotIn(marker, api)
+
     def test_live_runner_classifies_bounded_docker_mount_failures_without_raw_diagnostics(self):
         runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
         function = runner[runner.index("safe_docker_failure_reason()") : runner.index("\ncleanup()")]

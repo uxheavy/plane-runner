@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "plane.agent-g4/ut-042-post-e312-evidence/v1",
+  "status": "failed_before_provider_dispatch",
+  "candidate": "36da695265eb6e33b83368390eab44b652484931",
+  "sourceResult": {
+    "path": "tmp/persona-wave-v6/worker-revision-36da6952-b2/result.json",
+    "sha256": "ebe435782d41445482b35bab585bfd6cd9ebfdc09b153cddbf70d17f97a8ac2a"
+  },
+  "run": {
+    "runRef": null,
+    "invocationRef": null,
+    "providerAttempts": 0,
+    "effects": 0
+  },
+  "failure": {
+    "phase": "migrate",
+    "errorClass": "unavailable",
+    "exitCode": 1,
+    "reasonCategory": "unavailable"
+  },
+  "migrationProcess": {
+    "settingsModule": "plane.settings.test",
+    "command": "python manage.py migrate --noinput",
+    "presentEnvironment": [
+      "POSTGRES_HOST",
+      "DATABASE_URL",
+      "DATABASE_RUNTIME_URL",
+      "DATABASE_MIGRATION_URL"
+    ],
+    "missingPhaseMarker": "PLANE_DB_MIGRATION_MODE=1"
+  },
+  "owner": "tools/agent-g4-live.sh:LIVE_PHASE=migrate",
+  "disposition": "add_the_explicit_migration_mode_marker_only_to_the_migrate_container"
+}
