@@ -101,6 +101,13 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert "workItemReadInput unchanged" in identity.assignment.objective
     assert "execute_code" in mutation.assignment.objective
     assert "plane_operation('code', 'operation:work_item.rename'" in mutation.assignment.objective
+    mutation_route_guidance = scenario.model_route_expectations(mutation.expected)
+    rename_guidance = next(
+        item for item in mutation_route_guidance if "invoke work_item.rename" in item
+    )
+    assert "restricted Code Mode composition" in rename_guidance
+    assert "not by a native model mutation" in rename_guidance
+    assert "execute_code" in rename_guidance
     assert '"subject_user_ref":"{{subjectUserRef}}"' in context.assignment.objective
     assert "private memory" in context.assignment.objective
     assert "exact current invocation run_ref" in parsed.profile.instructions
@@ -536,6 +543,35 @@ def test_worker_route_validator_keeps_special_mutation_and_governance_routes_val
     validator._validate_worker_route_evidence(
         context_route,
         route_checks={"W05", "W06", "W07", "W08"},
+    )
+
+
+def test_code_mode_callback_observation_requires_code_source_and_action() -> None:
+    from agent_g4_worker_route import _has_code_mode_callback
+
+    assert _has_code_mode_callback(
+        [
+            {
+                "body": {
+                    "payload": {
+                        "text": "Plane host code code operation:work_item.rename -> ok"
+                    }
+                }
+            }
+        ],
+        "work_item.rename",
+    )
+    assert not _has_code_mode_callback(
+        [
+            {
+                "body": {
+                    "payload": {
+                        "text": "Plane host model mutate operation:work_item.rename -> ok"
+                    }
+                }
+            }
+        ],
+        "work_item.rename",
     )
 
 

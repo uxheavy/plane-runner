@@ -37,6 +37,7 @@ from plane.db.models import (
     Project,
     ProjectMember,
     RunTerminalEvent,
+    RuntimeEventIngress,
     State,
     User,
     Workspace,
@@ -356,6 +357,30 @@ def worker_code_mode_controls(run):
     )
 
 
+def _has_code_mode_callback(observations, operation_id):
+    """Recognize the bounded runtime observation for one successful code callback."""
+
+    marker = f"Plane host code code operation:{operation_id} -> ok"
+    for raw_payload in observations:
+        if not isinstance(raw_payload, dict):
+            continue
+        body = raw_payload.get("body")
+        payload = body.get("payload") if isinstance(body, dict) else None
+        text = payload.get("text") if isinstance(payload, dict) else None
+        if text == marker:
+            return True
+    return False
+
+
+def worker_code_mode_operation_observed(run, operation_id):
+    """Require the runtime's source/action observation for one Code Mode callback."""
+
+    observations = RuntimeEventIngress.objects.filter(
+        run=run, kind="progress_observed"
+    ).values_list("raw_payload", flat=True)
+    return _has_code_mode_callback(observations, operation_id)
+
+
 def build_worker_route_evidence(
     *, scenario, run, assignment, actor, context_facts, governance, substitution, rename_replay, context_replay_delta
 ):
@@ -480,7 +505,10 @@ def build_worker_route_evidence(
         }
     if "W04" in route_checks:
         route["W04"] = {
-            "positiveTypedHostCallback": int((run.cumulative_usage or {}).get("codeModeCalls", 0)) > 0,
+            "positiveTypedHostCallback": (
+                int((run.cumulative_usage or {}).get("codeModeCalls", 0)) > 0
+                and worker_code_mode_operation_observed(run, "work_item.rename")
+            ),
             "sameGateway": OperationGatewayIdempotency.objects.filter(
                 correlation_id=correlation_id,
                 operation_id__in=("work_item.read", "work_item.rename", "agent.context.read"),

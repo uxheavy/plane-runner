@@ -230,6 +230,7 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
     if expected is None:
         return ()
     outcomes = expected.get("operationOutcomes", [])
+    route_checks = set(expected.get("routeChecks", ()))
     rendered: list[str] = []
     for index, item in enumerate(outcomes, start=1):
         operation_id = item["operationId"]
@@ -238,6 +239,13 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
             guidance = (
                 " Use the next route operation's exact operationId as input.operation_id; never use operationRef "
                 "or an operation: prefix."
+            )
+        if operation_id == "work_item.rename" and "W04" in route_checks:
+            guidance = (
+                " This semantic mutation must be performed by the restricted Code Mode composition, not by a "
+                "native model mutation: the next model tool call after the bounded work_item.read is execute_code, "
+                "and the script must use only hermes_tools.plane_operation('code', 'operation:work_item.rename', "
+                "input)."
             )
         rendered.append(
             f"Route step {index}: invoke {operation_id} exactly {item.get('count', 1)} time(s) and expect "
