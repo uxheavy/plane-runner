@@ -2232,3 +2232,26 @@ records this diagnosis without changing the retained receipts.
 - Both isolated Compose runs cleaned their containers, networks, volumes,
   provider staging, and runtime resources. W05-W08 remain dirty because no
   primary passed the full route plus replay gate; W03-W04 were not run.
+
+## Wave 0BJ — exact 7a6983ed68 / Hermes 292e866374 fresh B failure
+
+- Manager root fix `e3628d6f457fdb4ac5ee0e649d88f4d566bdbb72` integrated; the
+  container-safe focused regression landed as `7a6983ed68`. Combined host
+  checks passed `163/163`; the migration-backed Manager regression passed
+  `1/1` using the read-only mounted route fixture.
+- Final exact artifacts: API `plane-agent-api:g4-v6-7a6983ed` digest
+  `sha256:c6ead3bfbbe96cfbabe3288e1f8605f55884a050da6f81cbac0b937be87d129b`;
+  runtime `plane-agent-runtime:hermes-292e8663-g4-v6-7a6983ed` digest
+  `sha256:10835bb00225e4869a857c67535e27f6df4e555819831a7df56f703cf2ccd3a9`;
+  Hermes `292e866374ca9e9615473fc9bf5dda1913b672e1`.
+- One fresh synthetic-only B primary ran with GPT-5.6 Luna xhigh, fallback
+  disabled, max 16. It recorded 9 completed upstream `2xx` attempts, then
+  failed at `CODE_MODE_FAILED` / `host_callback`; RuntimeExit was failed and
+  non-retryable at sequence 17. Run `fd9e4584-a2f8-4614-8598-9a2a31cc8bb3`
+  and invocation `invocation:ad9df00e-97db-41ae-aa48-22b70d4abb32` are
+  retained in the owner-only receipt
+  `tmp/persona-wave-v6/worker-live-7a6983ed-b3/result.json` (mode `0600`,
+  SHA-256 `4eb7b8c7ed5fec3e542e4d573afc2d22567f380a7af0d947ad8988696e732345`).
+- No `work_item.rename`, applied publication, complete W08 readback, or
+  replay was proven. All labeled disposable resources were cleaned. UT-038
+  is open; W03/W04/W07/W08 remain dirty and further provider use is stopped.
