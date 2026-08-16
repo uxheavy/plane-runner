@@ -2177,3 +2177,58 @@ records this diagnosis without changing the retained receipts.
   created. Further B/provider work is held for the integrated Plane/Hermes
   TypeScript bridge commits and `b533c10fc7`; no route was retroactively made
   clean.
+## Wave 0BH — exact 713fb8c685 synthetic W05-W08 primary
+
+- One fresh synthetic-only C context-governance commission used Plane
+  `713fb8c685c7298cbb7fdd2b3fe965c60ba413e9`, exact Hermes
+  `f8cda105e3e14ace7c12f4840ec86c036fade9ad`, GPT-5.6 Luna xhigh, fallback
+  disabled, max 16, and the host-only provider relay. It created only a new
+  disposable synthetic workspace, users/Agents, issue, memory, preference,
+  skill, and exclusion canaries.
+- The retained owner-only result is
+  `tmp/persona-wave-v6/context-governance-primary-receipt/result.json`, mode
+  `0600`, SHA-256
+  `2bfa9d0f9518226dcd248d9b14e24bed178e458f46862c7aa24d40e6c889aade`.
+  Run `160011e2-f0af-4758-8199-88650d20b2d2`, invocation
+  `invocation:542c9b59-dd06-4a2e-909a-fb2b8729bf40`, outcome
+  `outcome-submission:6659a17e-d2fb-4970-a001-6d8db0329545`, and terminal
+  `product-event:f927cf01-156d-4781-9454-9467a21ff35c` were retained. There
+  were 9 completed upstream `2xx` attempts, no fallback, no unknown attempt,
+  a passed lifecycle gate, one applied publication, and completed runtime
+  exit. The scenario gate failed only `operation:agent.context.read`: actual
+  success count was 2 instead of 1. No replay ran.
+- Provider-free root correction `c7e41e85df` strengthened ordered route
+  guidance and explicitly made one context response complete; the focused
+  tools tests passed `57/57`.
+
+## Wave 0BI — exact c7e41e85df post-fix W05-W08 primary
+
+- The single deliberate fresh post-fix C reused the synthetic-only scope and
+  ran on rebuilt API `plane-agent-api:g4-v6-c7e41e85`, digest
+  `sha256:f6afa1836f41ce912ae57df27744253f43e778ef0920789abde38800e0b31132`,
+  and runtime `plane-agent-runtime:hermes-f8cda105-g4-v6-c7e41e85`, digest
+  `sha256:fbef6225ef6297f60c018355ea5ad83cacda4418c4120755bc285a771907a662`.
+- The retained owner-only result is
+  `tmp/persona-wave-v6/context-governance-rerun/result.json`, mode `0600`,
+  SHA-256
+  `f380048cdb0be65806fd557b828851daa36ed2fe10eb10479ca743bbac7a1196`.
+  Run `197624b5-e1f7-4087-a789-f858f5e85739`, invocation
+  `invocation:d435fa62-e476-48d0-a129-df2a00864a76`, outcome
+  `outcome-submission:15b0b98b-0bf2-4407-9902-a19a13cacf28`, and terminal
+  `product-event:2256a307-1732-45c1-ba4e-037e01847553` were retained. There
+  were 7 completed upstream `2xx` attempts, no fallback, no unknown attempt,
+  exactly one `agent.context.read`, exact catalog/context/submit/publish
+  counts, one applied publication, one visible terminal, and
+  `RuntimeExit.completed`. The local route gate failed only `route:W07`:
+  the outcome did not carry the required artifact. No replay ran.
+- Provider-free root correction `62fd6193a0` now requires exactly one
+  artifact and exactly one evidence item in the canonical commission and
+  regression. Focused tools tests remained `57/57`. Final exact attestations
+  were built without another live run: API
+  `plane-agent-api:g4-v6-62fd6193`, digest
+  `sha256:89a6b406a12965958e550d6520a97a21935fe8d86b8c058cf372c3586f73d575`,
+  and runtime `plane-agent-runtime:hermes-f8cda105-g4-v6-62fd6193`, digest
+  `sha256:b050fbf8343f2945a2a4991ff8971e9653a0e0b141d5d623c8a7533120d77620`.
+- Both isolated Compose runs cleaned their containers, networks, volumes,
+  provider staging, and runtime resources. W05-W08 remain dirty because no
+  primary passed the full route plus replay gate; W03-W04 were not run.

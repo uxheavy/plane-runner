@@ -22,8 +22,9 @@ independent relay shutdown/audit race was also fixed at the runtime owner.
 W01/W02 are clean in Wave 0BF: after reconciliation of the prior failed
 `outcome_unknown/upstream_channel_closed` run, one deliberate fresh identity
 AssignmentContract/RunAttempt completed route evidence and an eligible
-provider-disabled same-invocation replay with zero deltas. W03–W08 remain
-unreached. Wave 0BC and the subsequent fresh
+provider-disabled same-invocation replay with zero deltas. W03–W04 remain
+unreached; W05–W08 were attempted in the current delegated C addendum below
+and remain dirty. Wave 0BC and the subsequent fresh
 82b468de identity commission reached the provider and completed their
 lifecycles, but the reusable W08 readback probe exceeded the established
 8-KiB projection ceiling; the helper is now narrowed to the bounded
@@ -38,8 +39,10 @@ commission ran. The standalone synthetic-only B commission in Wave 0BG reached
 allowance before publication. Its bounded runtime evidence proves that the
 pinned Hermes path exposes Python `execute_code`, not the Plane restricted
 TypeScript Code Mode bridge required by W04. No prompt-only retry, provider
-replay, C commission, or route closure is permitted until the integrated
-Plane/Hermes TypeScript bridge commits and `b533c10fc7` are proven.
+replay, or route closure is permitted until the integrated Plane/Hermes
+TypeScript bridge commits and `b533c10fc7` are proven. The separate synthetic
+C addendum was already attempted twice; its retained receipts and provider-free
+contract fixes are recorded below, and W05-W08 remain dirty.
 The W05/W06 architecture check retains `agent.context.read`: the immutable
 run snapshot and Hermes adapter carry only context references/revisions/digests,
 not subject-bound projection contents. The established gateway operation is
@@ -50,6 +53,31 @@ The final candidate image,
 exact-image red team, G4 verifier, and consolidated Sol review remain pending.
 G5 remains a separate rollout goal.
 
+### Current delegated live disposition (2026-08-16)
+
+The synthetic-only Maya C context-governance commission was attempted once on
+the exact `713fb8c685c7298cbb7fdd2b3fe965c60ba413e9` artifacts and once as the
+single deliberate post-fix fresh C on `c7e41e85dfd50398338fecbfce28b9350b229f60`.
+Both used `openai-codex/gpt-5.6-luna`, xhigh reasoning, fallback disabled, and
+the 16-call bound through the host-only provider relay. The first owner-only
+receipt, `tmp/persona-wave-v6/context-governance-primary-receipt/result.json`,
+validates with SHA-256
+`2bfa9d0f9518226dcd248d9b14e24bed178e458f46862c7aa24d40e6c889aade` and
+failed its local gate only because `agent.context.read` succeeded twice
+instead of once. The provider-free route guidance fix is `c7e41e85df`.
+
+The post-fix owner-only receipt,
+`tmp/persona-wave-v6/context-governance-rerun/result.json`, validates with
+SHA-256 `f380048cdb0be65806fd557b828851daa36ed2fe10eb10479ca743bbac7a1196`.
+It recorded exactly one context read, all expected operation and durable
+terminal counts, and `RuntimeExit.completed`, but failed only W07 because the
+provider submitted no artifact. The provider-free commission correction
+`62fd6193a0` now requires exactly one artifact and exactly one evidence item.
+No replay was run for either failed primary, and no further live run is
+authorized in this task. W05-W08 therefore remain dirty; W03-W04 remain
+unreached. Final exact API/runtime attestations for `62fd6193a0` were built
+without another provider run.
+
 ## Status and authorization
 
 | Active item        | Current truth                                                                                                                                                                                                                                                                                                                                                                      |
@@ -57,7 +85,7 @@ G5 remains a separate rollout goal.
 | Delivery candidate | Exact Plane source `8dae97f4abc060b8a4023afea79ec768f4350ba0`; API `plane-agent-api:g4-v6-8dae97f4` / `sha256:e74be5de63d87d9ab84ac115598a82b81e94a01b27a0502eaebf547754ade412`; runtime `plane-agent-runtime:hermes-f8cda105-g4-v6-8dae97f4` / `sha256:c369d04714c2dc6d81a79db76c0e1409c16b8060ad245a71c963a3e0b7c89fb8`; Hermes `f8cda105e3e14ace7c12f4840ec86c036fade9ad`. The current candidate carries the disclosure root fix and the retained dirty B receipt; W04 is held for the integrated TypeScript bridge. |
 | Functional gate    | S00 Wave 0AT is clean at Plane `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with Hermes `bc7f13d2ab392752f2667b176c646339c49405f9`: ten ordered upstream `2xx` attempts, three searches, two reads, one exact `NOT_AUTHORIZED` denial, one submit, one applied publication, one matching terminal, and `RuntimeExit.completed`; replay semantic deltas were zero and cleanup passed. |
 | Provider-free PF1  | Worker W01–W08 passed 35 real Django/API/DB/CLI/socket/isolation tests unchanged. Manager M01–M08 passed 33 tests after `f621fdd89797db2d1b74205c6ce6d5b0bd4725d1` and `2105fb9e21687103939a77b7e26a0959f1d50f51`. Operator O01 and O03–O09 passed targeted real service/API/database/CLI contracts; the final exact-image red team remains pending.                               |
-| Live W/M/O wave    | Wave 0BA reached two fresh Maya identity commissions with completed provider attempts, but the invoker mislabeled later local scenario-gate failure as reconciliation uncertainty; the independent relay shutdown/audit race was fixed at its owner. The f63 callback-binding issue, W08 projection ceiling, and explicit-publication readback issue were fixed in their established owners. Hermes `f8cda105...` provides the bounded terminal-lifecycle observation. Wave 0BE recorded the commission-scoped wrapper failure and one isolated upstream channel loss; reconciliation showed no semantic side effects. Wave 0BF then completed W01/W02 with 9 completed upstream `2xx` attempts, exact denial, one applied publication/terminal, route evidence, and a zero-delta provider-disabled replay. Wave 0BG stopped the standalone synthetic-only B commission after 16 completed upstream `2xx` attempts and a non-retryable model-call budget exhaustion before publication; the pinned Hermes runtime lacks the required Plane TypeScript Code Mode bridge. W03–W08 remain dirty/blocked as mapped, no C commission ran, and O02 remains separately clean from its real external-client closure. |
+| Live W/M/O wave    | Wave 0BA reached two fresh Maya identity commissions with completed provider attempts, but the invoker mislabeled later local scenario-gate failure as reconciliation uncertainty; the independent relay shutdown/audit race was fixed at its owner. The f63 callback-binding issue, W08 projection ceiling, and explicit-publication readback issue were fixed in their established owners. Hermes `f8cda105...` provides the bounded terminal-lifecycle observation. Wave 0BE recorded the commission-scoped wrapper failure and one isolated upstream channel loss; reconciliation showed no semantic side effects. Wave 0BF then completed W01/W02 with 9 completed upstream `2xx` attempts, exact denial, one applied publication/terminal, route evidence, and a zero-delta provider-disabled replay. Wave 0BG stopped the standalone synthetic-only B commission after 16 completed upstream `2xx` attempts and a non-retryable model-call budget exhaustion before publication; the pinned Hermes runtime lacks the required Plane TypeScript Code Mode bridge. The delegated C addendum also attempted W05-W08 twice, fixing once-only context and artifact-contract defects provider-free, but neither primary passed the full route plus replay gate. W03-W04 remain dirty/blocked as mapped, W05-W08 remain dirty, and no further B/provider work is authorized pending the integrated Plane/Hermes TypeScript bridge. O02 remains separately clean from its real external-client closure. |
 | Final verification | Pending clean provider-backed W/M/O routes, the final candidate image, exact-image red team, one full G4 verifier, and one consolidated Sol Medium review.                                                                                                                                                                                                                         |
 | G5                 | Out of scope. Rollout starts only under a separate authorized goal after G4 functional completion.                                                                                                                                                                                                                                                                                 |
 

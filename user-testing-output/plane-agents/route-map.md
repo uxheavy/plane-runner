@@ -42,9 +42,10 @@ run identity from the trusted callback envelope, normalizes payload `run_ref`,
 preflights before terminal observations, returns truthful terminal conflicts,
 and blocks later same-batch mutations. Hermes owner
 `cc3e444ee25e6c19fee77b6e1fbe3d95aef1a3ea` now treats the expected terminal
-`conflict` / `PLANE_CONFLICT` disposition as a nonfatal tool result. W01-W08
-remain `dirty` pending the fresh three-commission primary and eligible
-replays; no old receipt is retroactively clean. Wave 0BC's identity
+`conflict` / `PLANE_CONFLICT` disposition as a nonfatal tool result. W03-W04
+remain `dirty` and unreached; W05-W08 were attempted in the current delegated
+C addendum below and remain `dirty` pending a full route-plus-replay proof; no
+old receipt is retroactively clean. Wave 0BC's identity
 commissions completed their durable lifecycle but exposed local bounded
 readback failures. The fresh `1d4bf351` identity primary reached one applied
 explicit publication after 13 completed upstream `2xx` attempts, then ended
@@ -55,9 +56,36 @@ Wave 0BG then used only synthetic fixture data and reached 16 completed
 upstream `2xx` attempts, but terminated at the finite model-call budget before
 publication. Its retained evidence proves a runtime capability gap for W04:
 the pinned Hermes path exposes Python `execute_code`, not the required Plane
-TypeScript Code Mode bridge. B remains dirty, no replay or C commission ran,
-and further provider work is held for the integrated Plane/Hermes TypeScript
-bridge.
+TypeScript Code Mode bridge. B remains dirty and had no eligible replay; the
+separate C addendum below also remains dirty after two failed primaries. Further
+provider work is held for the integrated Plane/Hermes TypeScript bridge.
+
+Current delegated C addendum (2026-08-16): the exact synthetic-only
+context-governance commission was attempted once on candidate
+`713fb8c685c7298cbb7fdd2b3fe965c60ba413e9` and once as the single deliberate
+post-fix fresh C on candidate `c7e41e85dfd50398338fecbfce28b9350b229f60`,
+both with GPT-5.6 Luna xhigh, fallback disabled, max 16, and the host-only
+provider relay. The first receipt is
+`tmp/persona-wave-v6/context-governance-primary-receipt/result.json`, mode
+`0600`, SHA-256 `2bfa9d0f9518226dcd248d9b14e24bed178e458f46862c7aa24d40e6c889aade`;
+it had 9 completed upstream `2xx` attempts and a coherent terminal
+publication, but the scenario gate found two successful `agent.context.read`
+calls instead of one. The provider-free route-contract fix is `c7e41e85df`.
+The post-fix receipt is
+`tmp/persona-wave-v6/context-governance-rerun/result.json`, mode `0600`,
+SHA-256 `f380048cdb0be65806fd557b828851daa36ed2fe10eb10479ca743bbac7a1196`;
+it had 7 completed upstream `2xx` attempts, exactly one context read, exact
+operation/durable terminal counts, and `RuntimeExit.completed`, but failed
+only `route:W07` because the model submitted no artifact required by the
+owner-side W07 gate. Neither receipt was replayed, and neither marks W05-W08
+clean. The provider-free contract correction is `62fd6193a0`; final exact
+attestations were built without another live run: API
+`plane-agent-api:g4-v6-62fd6193`, digest
+`sha256:89a6b406a12965958e550d6520a97a21935fe8d86b8c058cf372c3586f73d575`,
+and runtime `plane-agent-runtime:hermes-f8cda105-g4-v6-62fd6193`, digest
+`sha256:b050fbf8343f2945a2a4991ff8971e9653a0e0b141d5d623c8a7533120d77620`.
+W05, W06, W07, and W08 remain dirty pending a separately authorized fresh
+proof; W03 and W04 remain unreached.
 
 Architecture checkpoint for W05/W06: `agent.context.read` remains the narrowest
 existing owner seam. Plane's immutable run snapshot carries context references,
@@ -73,10 +101,10 @@ test covers the positive binding and actor substitution denial.
 | S00 | All     | Start the local API, worker, database, runtime image, and real Hermes service; dispatch one fresh issue assignment through API/CLI. | GPT-5.6 Luna performs a permitted read, receives a denied evaluator operation, explicitly submits one outcome, and publishes one visible terminal event.                                    | No fallback; one fresh invocation with bounded ordered provider-exchange audit; replay creates no child or semantic duplicate; task resources clean up. | clean — Wave 0AT at Plane `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` and Hermes `bc7f13d2ab392752f2667b176c646339c49405f9` passed ten ordered upstream `2xx` attempts, `search_workspace=3`, `work_item.read=2`, one exact `NOT_AUTHORIZED` denial, one submit, one applied publication, one matching terminal, `RuntimeExit.completed`, zero replay semantic deltas, standalone validation, and cleanup |
 | W01 | Maya    | Create or select a worker Agent, immutable profile version, and issue assignment.                                                   | Actor identity/permissions remain separate from profile/tool presentation; run snapshots the resolved profile and assignment.                                                               | Unauthorized actor/profile substitution is denied without side effects.                                                                                 | clean — Wave 0BF fresh AssignmentContract/RunAttempt `run:2798ed55-a557-411e-baf2-0d4d8c5b2ddf` / `invocation:d9140ee4-8e74-4295-9231-805b5867573b` retained exact actor/profile/assignment separation and snapshot binding; substitution was `NOT_AUTHORIZED` with zero side effects; provider-disabled same-invocation replay had zero deltas |
 | W02 | Maya    | Ask the Agent to discover and understand its assigned work across Plane objects.                                                    | Progressive catalog discovery plus bounded `search_workspace` and native reads find only authorized objects.                                                                                | Cross-project/private-page search does not leak; disclosure is not a second permission system.                                                          | clean — the same Wave 0BF primary performed `catalog.search` before `catalog.describe`, bounded `search_workspace`/`work_item.read`, and retained `hiddenObjectsAbsent=true`; all seven expected operations passed exactly once and replay had zero deltas |
-| W03 | Maya    | Complete the issue with one explicit Plane mutation.                                                                                | Native semantic mutation crosses the Operation Gateway with live authorization, idempotency, bounded result, and audit.                                                                     | Exact replay returns the stable receipt and creates no duplicate mutation.                                                                              | dirty — Wave 0BG B primary reached the mutation path but ended before route evidence/replay; no clean claim |
+| W03 | Maya    | Complete the issue with one explicit Plane mutation.                                                                                | Native semantic mutation crosses the Operation Gateway with live authorization, idempotency, bounded result, and audit.                                                                     | Exact replay returns the stable receipt and creates no duplicate mutation.                                                                              | dirty — Wave 0BG B primary ended before mutation/readback evidence and replay; no clean claim |
 | W04 | Maya    | Compose several reads and a mutation using restricted TypeScript Code Mode.                                                         | Credential-free generated TypeScript reaches Plane only through typed host callbacks and the same gateway.                                                                                  | Import, filesystem, network, process, actor-substitution, cancellation, and budget escape attempts fail closed.                                         | blocked — Wave 0BG proves the pinned Hermes runtime exposes Python `execute_code`, not the required Plane TypeScript Code Mode bridge; hold for integrated owner commits |
-| W05 | Maya    | Use relevant prior context while respecting the current human subject.                                                              | Agent-private memory and subject-bound user preferences project separately into deterministic files; no cross-user or cross-Agent leakage.                                                  | Deleted/unauthorized/stale memory is excluded; projection and parse round-trip losslessly.                                                              | dirty — Wave 0BA stopped before the context/governance commission; not reached |
-| W06 | Maya    | Use a private skill, propose an improvement, and restore a prior revision.                                                          | Plane owns skill definition/revisions; Hermes receives a projection; gardener proposal, human promotion, and rollback are visible.                                                          | Unreviewed candidate cannot enter workspace/org scope; concurrent replay is idempotent.                                                                 | dirty — Wave 0BA stopped before the context/governance commission; not reached |
+| W05 | Maya    | Use relevant prior context while respecting the current human subject.                                                              | Agent-private memory and subject-bound user preferences project separately into deterministic files; no cross-user or cross-Agent leakage.                                                  | Deleted/unauthorized/stale memory is excluded; projection and parse round-trip losslessly.                                                              | dirty — C addendum reached the context projection across two synthetic primaries, but neither primary passed the full route plus replay gate |
+| W06 | Maya    | Use a private skill, propose an improvement, and restore a prior revision.                                                          | Plane owns skill definition/revisions; Hermes receives a projection; gardener proposal, human promotion, and rollback are visible.                                                          | Unreviewed candidate cannot enter workspace/org scope; concurrent replay is idempotent.                                                                 | dirty — C addendum retained synthetic governance evidence, but neither primary passed the full route plus replay gate |
 | W07 | Maya    | Produce an artifact and finish the commissioned work.                                                                               | Artifact/evidence attaches to exactly one `OutcomeSubmission`; explicit publication creates one human-visible terminal product event while ordinary final text remains transcript evidence. | Missing publication is a lifecycle failure; replay creates no second outcome/message/event.                                                             | dirty — Wave 0BG B primary reached one submit but no applied publication; no replay was eligible |
 | W08 | Maya    | Inspect the result using API, CLI, issue page, and any reused settings/admin surface.                                               | The same actor/profile/assignment/run/invocation/outcome/artifact/event/audit state is visible and redacted appropriately.                                                                  | Cross-workspace and unprivileged readback fail closed.                                                                                                  | dirty — Wave 0BG terminated before publication/readback; no route evidence was retained |
 | M01 | Elena   | Give a planner Agent a multi-part objective and acceptance criteria.                                                                | Agent creates an explicit dynamic plan without introducing a saved workflow-definition product.                                                                                             | Stale or unauthorized plan updates are rejected.                                                                                                        | untested                                                                                                                                                                                                                                                                                                                                                                                                 |

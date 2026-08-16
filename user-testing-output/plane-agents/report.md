@@ -14,11 +14,11 @@
 | Metric            | Count |
 | ----------------- | ----: |
 | Routes discovered |    27 |
-| Clean             |     2 |
-| Dirty             |     0 |
-| Blocked           |     0 |
-| Untested          |    25 |
-| Blocker issues    |     0 |
+| Clean             |     4 |
+| Dirty             |     5 |
+| Blocked           |     1 |
+| Untested          |    17 |
+| Blocker issues    |     1 |
 | Friction issues   |     0 |
 | Annoyances        |     0 |
 
@@ -30,7 +30,30 @@ with Hermes `bc7f13d2ab392752f2667b176c646339c49405f9`.
 - S00 is clean: Wave 0AT passed at Plane `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` and Hermes `bc7f13d2ab392752f2667b176c646339c49405f9` with ten ordered upstream `2xx` attempts, `search_workspace=3`, `work_item.read=2`, exact `NOT_AUTHORIZED` denial, one submit, one applied publication, one matching terminal, `RuntimeExit.completed`, zero replay semantic deltas, and cleanup passed.
 - Provider-free PF1 is complete: W01–W08 passed 35 real Django/API/DB/CLI/socket/isolation tests; M01–M08 passed 33 tests after the dynamic-plan and schedule-control fixes; O01 and O03–O09 passed targeted real contracts. These are supporting evidence, not provider-backed W/M route closures.
 - O02 is clean from the real external-client product journey at Plane `dfcd3ea543e58109b0d314e3bdfd6375c65b35ff`, MCP `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`: read/update/replay/archive/unarchive/search/delete, denial, durable audit/idempotency, unsupported-before-HTTP, stable bindings, SDK bearer identity, result bounds, and cleanup passed.
-- Initial provider-backed W/M/O tasks stopped without route claims because the accepted runner hardcodes the S00 Worker and prompt. One typed scenario input is being added to that existing runner before the live routes resume. The final exact-image red team, final candidate image, G4, and Sol remain pending. G5 is out of scope.
+- Initial provider-backed W/M/O tasks stopped without route claims because the accepted runner hardcoded the S00 Worker and prompt. The typed scenario input is now committed and the current delegated C addendum below records the first W05-W08 attempts; the final exact-image red team, G4, and Sol remain pending. G5 is out of scope.
+- The later standalone synthetic-only B primary on exact 8dae97f4/f8cda105 recorded 16 completed upstream `2xx` attempts and a non-retryable model-call budget exhaustion before publication. Its bounded runtime evidence proves the pinned Hermes `execute_code` path is Python PTC, not the required Plane restricted TypeScript Code Mode bridge. The owner-only receipt is `tmp/persona-wave-v6/worker-live-8dae97f4-b7/result.json`, mode `0600`, SHA-256 `fa7b274b0540cf1570d4b272ee8f2be0fdca6ffe7e08e4ac0e7496ab471eb3f5`; no replay was eligible and no further B/provider work is authorized pending the integrated bridge owners.
+
+## Current delegated Maya C addendum (2026-08-16)
+
+The synthetic-only W05-W08 commission was attempted once on exact candidate
+`713fb8c685c7298cbb7fdd2b3fe965c60ba413e9` and once as the single deliberate
+post-fix fresh C on `c7e41e85dfd50398338fecbfce28b9350b229f60`, using GPT-5.6
+Luna xhigh, fallback disabled, max 16, and the host-only provider relay.
+
+- The first retained receipt is mode `0600`, SHA-256
+  `2bfa9d0f9518226dcd248d9b14e24bed178e458f46862c7aa24d40e6c889aade`; it
+  had 9 completed upstream `2xx` attempts, a coherent terminal publication,
+  and failed only because `agent.context.read` occurred twice instead of once.
+- The post-fix receipt is mode `0600`, SHA-256
+  `f380048cdb0be65806fd557b828851daa36ed2fe10eb10479ca743bbac7a1196`; it
+  had 7 completed upstream `2xx` attempts, exactly one context read, all
+  expected operation/durable terminal counts, and `RuntimeExit.completed`,
+  but failed only W07 because the outcome lacked the required artifact.
+- No provider-disabled replay ran for either failed primary. The route contract
+  corrections are `c7e41e85df` (once-only context guidance) and `62fd6193a0`
+  (one artifact plus one evidence item). W05-W08 remain dirty; W03-W04 were
+  not run. Final exact API/runtime attestations were built for `62fd6193a0`
+  without another live run.
 
 ## Historical completion evidence (Wave 0AQ)
 
