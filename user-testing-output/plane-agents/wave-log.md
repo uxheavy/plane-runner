@@ -2445,3 +2445,35 @@ records this diagnosis without changing the retained receipts.
   networks remained for the observed disposable Compose identifiers. No
   credential contents were read, printed, sourced, copied into tracked output,
   or recorded.
+
+## Wave 0BP — exact corrected C commission boundary stop
+
+- Shared fix `e312633e08856123f5b64cd9ed6b3dddabb501ca` was integrated as
+  `6636f3dd11f23be2a0da302f31b611a4756dca61`. The exact live candidate was
+  `383c8cb15b5236ffca9ec72795b6fea0db332a1d`; contract regressions passed
+  `160/160` and the provider-free Django memory/skill regression passed
+  `14/14`.
+- The API image was `plane-agent-api:g4-v6-383c8cb`, digest
+  `sha256:96464ed75a750df729634f235db5c7ca5e5f8f62e43813d272a98f7b1bd13926`;
+  the runtime image was
+  `plane-agent-runtime:hermes-292e8663-g4-v6-383c8cb`, digest
+  `sha256:e93b6d3e77d43a918072ca3c7c1db284a1eac62ab0f8b9c99541947ec06204d8`.
+  Hermes `292e866374ca9e9615473fc9bf5dda1913b672e1`, MCP
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889` were exact.
+- The one fresh `context-governance` commission used GPT-5.6 Luna xhigh,
+  fallback disabled, and stopped at `api-invocation` with
+  `unspecified` / `unavailable`, exit `1`. Raw result SHA-256:
+  `4f485a0a582f963b9632fabcaf6db45723fe1428fc471e769b6d47351f516b90`;
+  durable redacted evidence:
+  `user-testing-output/plane-agents/evidence/w05-w06-c-corrected-stop.json`,
+  SHA-256 `e2e648bc5e2fcb1ea5d2e3290a0abe46aa8e968a4e6b8a825126956cf478da89`.
+  Provider attempts were `0`; no W05/W06 receipts, audit, publication, or
+  replay were observed. Run `4b851f81-b555-4f65-9875-eabfdc432065` and
+  invocation `invocation:8c5c87f7-4d7d-4ed3-adad-8881dd0b863b` are retained in
+  the redacted extract.
+- The provider-disabled same-invocation replay was ineligible because the
+  primary stopped before a commission result. No replay, retry, or
+  `outcome_unknown` replay was made. Cleanup was verified at zero disposable
+  containers, volumes, and networks. W05/W06 remain dirty, and the reopened
+  shared debugger owns the next correction.

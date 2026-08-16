@@ -1,0 +1,111 @@
+{
+  "schemaVersion": "plane-agent-w05-w06/evidence/v2",
+  "worker": "W05-W06",
+  "commissionId": "context-governance",
+  "status": "failed-before-commission-result",
+  "provider": {
+    "name": "openai-codex",
+    "model": "gpt-5.6-luna",
+    "reasoning": "xhigh",
+    "fallbackAllowed": false,
+    "attemptCount": 0,
+    "useStopped": true
+  },
+  "failureReceipt": {
+    "schemaVersion": "plane-agent-g4/live-failure/v1",
+    "phase": "api-invocation",
+    "errorClass": "unspecified",
+    "exitCode": 1,
+    "reasonCode": "unspecified",
+    "reasonCategory": "unavailable",
+    "reasonPhase": "unavailable",
+    "reasonDetail": "unavailable",
+    "reasonSubreason": "unavailable"
+  },
+  "rawSource": {
+    "bytes": 5029,
+    "mode": "0600",
+    "sha256": "4f485a0a582f963b9632fabcaf6db45723fe1428fc471e769b6d47351f516b90"
+  },
+  "binding": {
+    "candidateCommit": "383c8cb15b5236ffca9ec72795b6fea0db332a1d",
+    "g3Baseline": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
+    "hermesCommit": "292e866374ca9e9615473fc9bf5dda1913b672e1",
+    "mcpGitlink": "c04974ed6624f17b41e63ef8182661929e77e0d3",
+    "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889",
+    "runtimeContract": "plane.agent-runtime/v1",
+    "runtimeSourceDigest": "d6401292378fceba81048f6bbae6a784f20931811fa8ffd549f2afd78ac90168",
+    "hermesTreeDigest": "4c5a94590a020bcf74640241a484c087940d55e2d10baac15d24c250b5a7e3b7",
+    "manifestSha256": "9080ebc7116cc9f0d341f46e1a0a4b24447944e8817bf25e1706b8ee71ab3760",
+    "authoritySha256": "684eeced64bac151e98d6759c7d9e31ee13ba22e142c69de2d0e44b6f175d2f7",
+    "configSha256": "67a3b92cd54a28dad41264bcf45cee7506cc9ea4c82718aeefefb3ad0b385ecb",
+    "descriptorSha256": "bb94cf164497f9b86be3bd2a5c9e607dc563f371418a6ac4e038fb9ba698ea3",
+    "apiImage": {
+      "tag": "plane-agent-api:g4-v6-383c8cb",
+      "digest": "sha256:96464ed75a750df729634f235db5c7ca5e5f8f62e43813d272a98f7b1bd13926",
+      "sourceRevision": "383c8cb15b5236ffca9ec72795b6fea0db332a1d"
+    },
+    "runtimeImage": {
+      "tag": "plane-agent-runtime:hermes-292e8663-g4-v6-383c8cb",
+      "digest": "sha256:e93b6d3e77d43a918072ca3c7c1db284a1eac62ab0f8b9c99541947ec06204d8",
+      "sourceRevision": "383c8cb15b5236ffca9ec72795b6fea0db332a1d"
+    }
+  },
+  "authority": {
+    "authorityId": "authority-w05-w06-c-20260816",
+    "runId": "4b851f81-b555-4f65-9875-eabfdc432065",
+    "invocationId": "invocation:8c5c87f7-4d7d-4ed3-adad-8881dd0b863b",
+    "runState": "failed",
+    "invocationState": "failed"
+  },
+  "receipts": {
+    "assignment": 0,
+    "run": 1,
+    "invocation": 1,
+    "audit": 0,
+    "publication": 0,
+    "terminal": 1,
+    "planeHostOperationReceipts": false
+  },
+  "operationAudit": [
+    {"operationId": "search_workspace", "status": "absent", "count": 0},
+    {"operationId": "work_item.read", "status": "absent", "count": 0},
+    {"operationId": "catalog.search", "status": "absent", "count": 0},
+    {"operationId": "catalog.describe", "status": "absent", "count": 0},
+    {"operationId": "agent.outcome.evaluate", "status": "absent", "count": 0},
+    {"operationId": "agent.outcome.submit", "status": "absent", "count": 0},
+    {"operationId": "agent.outcome.publish", "status": "absent", "count": 0}
+  ],
+  "routes": {
+    "W05": "not-observed",
+    "W06": "not-observed",
+    "privateMemory": "not-observed",
+    "subjectPreferences": "not-observed",
+    "privateSkillPromotion": "not-observed",
+    "rollback": "not-observed"
+  },
+  "replay": {
+    "eligible": false,
+    "sameInvocation": false,
+    "providerAccess": "not-run",
+    "zeroDeltaResult": "not-applicable",
+    "reason": "primary stopped before a commission result"
+  },
+  "providerFreeChecks": {
+    "hostFocusedTests": "160 passed",
+    "djangoMemorySkillTests": "14 passed",
+    "cleanup": {
+      "status": "verified",
+      "postExitContainerCount": 0,
+      "postExitVolumeCount": 0,
+      "postExitNetworkCount": 0,
+      "observedProjectIdentifiers": [
+        "plane-agent-g4-live-24359-13893",
+        "plane-agent-g4-live-24648-13178",
+        "plane-agent-g4-live-24800-26691",
+        "plane-agent-g4-live-25879-4750"
+      ]
+    }
+  },
+  "nextAction": "shared-debugger-only; no provider retry or outcome_unknown replay"
+}

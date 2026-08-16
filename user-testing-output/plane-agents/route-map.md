@@ -325,3 +325,42 @@ invocation `invocation:ab6f5bf3-91d9-4c8f-9037-3823d329cfde`, publication
 `product-event:215713e2-e7d6-442d-a031-287e1f688016` are retained. There were
 7 completed upstream `2xx` provider attempts, no fallback, and no eligible
 replay. W03-W08 remain dirty; UT-042 is open.
+
+## Wave 0BP — exact corrected 383c8cb15b / C commission boundary stop
+
+- Shared configuration fix `e312633e08856123f5b64cd9ed6b3dddabb501ca` was
+  integrated as Plane `6636f3dd11f23be2a0da302f31b611a4756dca61`; the exact
+  candidate also refreshed the current runtime evidence pin and contract
+  assertion as `383c8cb15b5236ffca9ec72795b6fea0db332a1d`. Focused host
+  checks passed `160/160`, and the provider-free W05/W06 Django regression
+  passed `14/14`.
+- One fresh single-commission `context-governance` journey used the existing
+  Plane/Hermes runner with `openai-codex/gpt-5.6-luna` xhigh and fallback
+  disabled. The exact API artifact was
+  `plane-agent-api:g4-v6-383c8cb`, digest
+  `sha256:96464ed75a750df729634f235db5c7ca5e5f8f62e43813d272a98f7b1bd13926`;
+  runtime was `plane-agent-runtime:hermes-292e8663-g4-v6-383c8cb`, digest
+  `sha256:e93b6d3e77d43a918072ca3c7c1db284a1eac62ab0f8b9c99541947ec06204d8`.
+  Hermes, MCP, and SDK remained pinned to
+  `292e866374ca9e9615473fc9bf5dda1913b672e1`,
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`, and
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`.
+- The corrected run stopped at `api-invocation` with the bounded
+  `unspecified` / exit `1` / `unavailable` receipt before a commission result.
+  Provider attempts were `0`; no W05/W06 receipt, audit, publication, memory
+  projection, preference projection, skill promotion, or rollback was
+  observed. Run `4b851f81-b555-4f65-9875-eabfdc432065` and invocation
+  `invocation:8c5c87f7-4d7d-4ed3-adad-8881dd0b863b` are bound in the durable
+  redacted extract
+  `user-testing-output/plane-agents/evidence/w05-w06-c-corrected-stop.json`,
+  SHA-256 `e2e648bc5e2fcb1ea5d2e3290a0abe46aa8e968a4e6b8a825126956cf478da89`;
+  the owner-only raw result SHA-256 is
+  `4f485a0a582f963b9632fabcaf6db45723fe1428fc471e769b6d47351f516b90`.
+- The provider-disabled same-invocation replay was not eligible because the
+  primary stopped before a commission result. It was not run, and no
+  `outcome_unknown` receipt was replayed. Per the reopened shared-debugger
+  boundary, this lane makes no launcher/runtime/config patch and no further
+  provider attempt. Cleanup was verified at zero containers, volumes, and
+  networks for all observed disposable project identifiers.
+- W05 and W06 remain dirty; this is provider-free boundary evidence, not route
+  closure.
