@@ -51,6 +51,13 @@ from plane.operation_gateway.gateway import OperationGateway
 from plane.operation_gateway.operations import AgentGovernanceOperation, OperationAdapterFailure
 
 
+@pytest.fixture(scope="session")
+def django_db_use_migrations():
+    """Exercise the migration-owned governance scope guards in this lane."""
+
+    return True
+
+
 def _actor(workspace, *, name, role, project=None, created_by=None):
     actor = create_actor(workspace=workspace, project=project, display_name=name, created_by=created_by)
     create_profile(actor, role=role, instructions=f"Operate as {role}.", created_by=created_by)
