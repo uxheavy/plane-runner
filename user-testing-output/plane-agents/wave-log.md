@@ -2509,3 +2509,29 @@ records this diagnosis without changing the retained receipts.
   `outcome_unknown` replay was made. Cleanup was verified at zero disposable
   containers, volumes, and networks. W05/W06 remain dirty; the shared
   debugger owns the next correction.
+
+## Wave 0BR — capacity-gated exact C compose boundary stop
+
+- Capacity-gate commit `be3eecea9c335b05f2ae1389d036e281b6475f8f` was
+  integrated at Plane `2e7ce806b60d74045073544660c36feb2cf56c0c`. Provider-free
+  checks passed: `178` focused host tests and `14` Django memory/projection
+  tests. Config-only live contract preflight and absolute descriptor
+  validation passed. No setup script was run; the copied env metadata matched
+  source/target mode `0644`, size `1466` without exposing values.
+- Exact API/runtime images were bound to the candidate: API
+  `sha256:5cc4090672c2adb53b7be9c54707f60007d377d8a929ad78c578d5fa65e5fe63`,
+  runtime
+  `sha256:23b68142e410ea6c2d409dba1c8afe6d97361ba12d44522a49a4181fba4cf61d`;
+  manifest SHA-256
+  `ce92f3190e946985c8c909c2f5f1052983a56b58d29cddc9be39448ece87a073`.
+- One fresh C journey used GPT-5.6 Luna xhigh with fallback disabled and
+  stopped at `compose` with `unspecified` / `unavailable`, exit `1`. Provider
+  attempts/effects were `0`; no replay occurred. Raw result SHA-256:
+  `8f1f533251657b60b87549f9c5d8e5fad82d013d8af748520a2f2787b032227a`;
+  durable redacted extract:
+  `user-testing-output/plane-agents/evidence/w05-w06-c-capacity-compose-stop.json`,
+  SHA-256 `f9ab6c461cb03e055c0219a92f8153757b897d24802e1d602ecd9c54c705a8e6`.
+- W05/W06 feature receipts were not observed because the compose boundary
+  failed. Capacity lease release and Docker cleanup were verified at zero
+  remaining containers, volumes, networks, and lease. No provider retry or
+  replay was made.

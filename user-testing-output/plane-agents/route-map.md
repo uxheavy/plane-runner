@@ -365,6 +365,36 @@ replay. W03-W08 remain dirty; UT-042 is open.
 - W05 and W06 remain dirty; this is provider-free boundary evidence, not route
   closure.
 
+## Wave 0BR — capacity-gated exact C compose boundary stop
+
+- Capacity-gate commit `be3eecea9c335b05f2ae1389d036e281b6475f8f` was
+  integrated at Plane `2e7ce806b60d74045073544660c36feb2cf56c0c`. The clean
+  ready state passed the focused provider-free checks (`178` host tests and
+  `14` Django memory/projection tests), config-only contract preflight, and
+  descriptor validation. The copied `apps/api/.env` source and target both
+  remained mode `0644`, size `1466`; values were not read or sourced.
+- One fresh single-commission `context-governance` journey used the exact
+  candidate-bound API/runtime images with GPT-5.6 Luna xhigh and fallback
+  disabled. API digest:
+  `sha256:5cc4090672c2adb53b7be9c54707f60007d377d8a929ad78c578d5fa65e5fe63`;
+  runtime digest:
+  `sha256:23b68142e410ea6c2d409dba1c8afe6d97361ba12d44522a49a4181fba4cf61d`;
+  manifest SHA-256
+  `ce92f3190e946985c8c909c2f5f1052983a56b58d29cddc9be39448ece87a073`.
+- The journey stopped before provider invocation at `compose` with bounded
+  `unspecified` / exit `1` / `unavailable`. Provider attempts and provider
+  effects were `0`; no replay was run. Durable redacted evidence is
+  `user-testing-output/plane-agents/evidence/w05-w06-c-capacity-compose-stop.json`,
+  SHA-256 `f9ab6c461cb03e055c0219a92f8153757b897d24802e1d602ecd9c54c705a8e6`;
+  raw owner-only result SHA-256 is
+  `8f1f533251657b60b87549f9c5d8e5fad82d013d8af748520a2f2787b032227a`.
+- Subject-bound preferences, Plane-owned memory/skill projections,
+  agent-scoped candidate learning, deterministic context assembly, outcome,
+  and publication were not observed because the compose boundary failed.
+  Cleanup and capacity-lease release were verified at zero containers,
+  volumes, networks, and no remaining lease. W05/W06 remain dirty; no replay
+  or provider retry was made.
+
 ## Wave 0BQ — exact second-fix b002211f0d / C commission boundary stop
 
 - The second shared fix `3c4209340c7f219be76258083a595b8fba14c05c` was
