@@ -2849,7 +2849,9 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn("stat.S_IMODE(installed_resolver_stat.st_mode) != 0o755", dockerfile)
         self.assertIn("installed_resolver_stat.st_uid != 0 or installed_resolver_stat.st_gid != 0", dockerfile)
         self.assertIn("installed_sha256 != source_sha256", dockerfile)
-        self.assertLess(dockerfile.index(copy), dockerfile.index("RUN PLANE_API_SOURCE_REVISION="))
+        source_revision_binding = 'PLANE_API_SOURCE_REVISION="${PLANE_API_SOURCE_REVISION}"'
+        self.assertIn(source_revision_binding, dockerfile)
+        self.assertLess(dockerfile.index(copy), dockerfile.index(source_revision_binding))
 
     def test_manifest_api_artifact_passes_actual_gitleaks_and_exact_sha_validation(self):
         manifest_path = TOOLS / "agent-g4-manifest.json"

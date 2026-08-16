@@ -180,7 +180,7 @@
     },
     "runtimeService": {
       "path": "apps/api/plane/tests/unit/agent/test_runtime_supervisor.py",
-      "sha256": "4a5be5871338f06eb9e92c66ebea973ac7b536be9566171dee4924e8c2360037",
+      "sha256": "1608d3bfee4257fcd333354a435953049a6386059953a127327c3352642929ef",
       "testPath": "plane/tests/unit/agent/test_runtime_supervisor.py",
       "testName": "test_pinned_hermes_runs_through_http_service_launcher_and_bound_host_socket",
       "requiredMarkers": [
