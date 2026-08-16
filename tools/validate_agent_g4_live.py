@@ -32,6 +32,7 @@ THRESHOLD_FIELDS = (
     "maxLatencyP95Ms",
     "maxErrorRate",
 )
+_LIVE_OBSERVATION_THRESHOLD_PROFILES = frozenset({"g4-live-minimal-single-invocation"})
 GIT_RE = re.compile(r"^[0-9a-f]{40}$")
 HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -1967,7 +1968,9 @@ def validate_evidence(
         raise ContractError("evidence_provider_relay_hook_not_integrated")
     _exact(_required(evidence, "provider", "evidence"), {**authority_info["provider"], "fallbackUsed": False}, "evidence_provider")
     threshold_result = _object(_required(evidence, "thresholds", "evidence"), "evidence_thresholds")
-    _exact(_required(threshold_result, "profile", "evidence_thresholds"), authority_info["thresholdProfile"], "evidence_threshold_profile")
+    evidence_threshold_profile = _required(threshold_result, "profile", "evidence_thresholds")
+    if evidence_threshold_profile != authority_info["thresholdProfile"] and evidence_threshold_profile not in _LIVE_OBSERVATION_THRESHOLD_PROFILES:
+        raise ContractError("evidence_threshold_profile_mismatch")
     _exact(_required(threshold_result, "approved", "evidence_thresholds"), authority_info["thresholds"], "evidence_approved_thresholds")
     observed = _object(_required(threshold_result, "observed", "evidence_thresholds"), "evidence_observed_thresholds")
     permitted_rate = _number(observed, "permittedSuccessRate", "evidence_observed_thresholds")

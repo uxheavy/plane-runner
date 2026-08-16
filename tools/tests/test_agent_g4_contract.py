@@ -1649,6 +1649,22 @@ class G4ContractTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 2)
 
+    def test_live_validator_accepts_the_bounded_observation_threshold_profile_alias(self):
+        manifest, authority, config, evidence_text = fixture()
+        evidence = json.loads(evidence_text)
+        evidence["thresholds"]["profile"] = "g4-live-minimal-single-invocation"
+        evidence["semanticDigest"] = _semantic_digest(evidence)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(evidence))
+        self.addCleanup(temp.cleanup)
+        self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 2)
+
+        evidence["thresholds"]["profile"] = "unapproved-observation-profile"
+        evidence["semanticDigest"] = _semantic_digest(evidence)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(evidence))
+        self.addCleanup(temp.cleanup)
+        with self.assertRaisesRegex(ContractError, "evidence_threshold_profile_mismatch"):
+            validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
+
     def test_live_validator_accepts_terminal_publication_without_transcript_observation(self):
         manifest, authority, config, evidence_text = fixture()
         evidence = json.loads(evidence_text)
