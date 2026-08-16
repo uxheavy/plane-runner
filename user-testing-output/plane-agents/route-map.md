@@ -240,3 +240,25 @@ Plane semantic side effect. Provider-free root fix `aef02407a4` now promotes
 the failed commission's `live-failure/v1` envelope and retains both commission
 rows; the canonical validator regression passed. No provider retry, replay, or
 image rebuild occurred. W03/W04/W07/W08 remain dirty and UT-039 remains open.
+
+## Wave 0BM — exact 94ed3da998 / runtime-isolation retest
+
+Provider-free runtime isolation fix `15ab1c7f45` was integrated as Plane
+`69601e97fb`; the manifest evidence pin was refreshed in `94ed3da998`. Host
+checks passed `165/165`, the sequential real-Hermes-child regression passed
+`1/1`, cross-process isolation passed `24/24`, and the fresh canonical
+migration checks passed `3/3`. The network-disabled runtime import gate also
+passed. Exact API/runtime image bindings and owner-only input hashes are
+retained in `tmp/persona-wave-v6/worker-live-94ed3da9/`.
+
+One fresh synthetic-only three-commission Worker journey used GPT-5.6 Luna
+xhigh through the authorized host-only relay, fallback disabled, and max 16
+per commission. Identity/discovery passed W01/W02; its eligible
+same-invocation provider-disabled replay had zero children, attempts,
+invocations, receipts, audits, usage, outcomes, publications, terminal events,
+and semantic side effects. The next mutation commission failed before any
+W03/W04/W07/W08 operation with `runtime_error / runtime_process /
+process_exit / runtime_execution_failed`, two progress events, zero provider
+attempt rows, and no semantic side effect. The canonical failure receipt
+passed validation. W01/W02 remain clean; W03-W08 remain dirty and
+UT-041 remains open for the dedicated runtime debugger's root correction.

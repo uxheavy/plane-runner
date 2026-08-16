@@ -292,3 +292,19 @@ provider-backed route closure.
 | Issue | Severity | Persona / routes | Evidence | Root cause / bounded disposition | Fix / retest | Status |
 | ----- | -------- | ---------------- | -------- | ------------------------------- | ----------- | ------ |
 | UT-041 | blocker | Maya / W03-W04/W07-W08 | `tmp/persona-wave-v6/worker-live-8d94fcc1-complete/result.json`, mode `0600`, SHA-256 `c0f869c8ceae591ce46cf5b6be4661a729f912ecb2caf842a849f76bf8fbdcbf`; manifest SHA-256 `d8d0ee728974ca6847adb840240e59e44d0478735c25a97e5320b674a09748f5` | The first identity commission passed W01/W02 and its eligible provider-disabled replay reported zero deltas. The next fresh commission created a terminally failed run/invocation, then stopped with `runtime_error / runtime_process / process_exit / runtime_execution_failed` after only two progress events. Its seven expected gateway operations all had count zero, provider attempts were zero, and no outcome, publication, artifact, terminal-success event, or semantic mutation was recorded. The retained bounded envelope exposes no narrower runtime cause; no external/provider prerequisite is inferred. | Exact functional source was `8d94fcc16e5ff161b1e128fd3fd22f6a4f851071`, API digest `sha256:428bdbab5945250fcd5ae3056f0a519cac8b0a0ecc8d03b948ecf26842abf752`, runtime digest `sha256:6feabe70129e61d9de9c11045180bd839ea709f9a3d2b390f417fc3de71988ed`, Hermes `292e866374ca9e9615473fc9bf5dda1913b672e1`. Canonical validator passed; the failed commission was not replayed and further provider use stopped. | open |
+
+## Wave 0BM retest — runtime-isolation candidate
+
+UT-041 remains the same bounded blocker after provider-free integration of
+`15ab1c7f45` as `69601e97fb` and manifest-pin correction `94ed3da998`; no new
+issue is opened. The fresh owner-only receipt is
+`tmp/persona-wave-v6/worker-live-94ed3da9/result.json`, mode `0600`, SHA-256
+`fac0e62ee92e42d0bba32698ec91f5661405ad8b9edbbcbe82483aa0b13c1a44`. It
+records identity W01/W02 success plus a zero-delta provider-disabled replay,
+then a mutation commission failure before W03/W04/W07/W08 execution with
+`runtime_error / runtime_process / process_exit / runtime_execution_failed`,
+two progress events, zero provider attempts, and no semantic side effect.
+The failed run is `9c2eb4cf-9bb8-49a2-a9c6-7863a0187aab` and invocation is
+`invocation:72aae4f2-a351-432b-9a07-10767632778e`. The canonical validator
+passed; no blind replay or further provider use occurred. The dedicated
+runtime debugger owns the source correction.

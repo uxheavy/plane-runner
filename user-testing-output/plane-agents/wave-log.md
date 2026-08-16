@@ -2333,3 +2333,49 @@ records this diagnosis without changing the retained receipts.
   refs were retained as `66eb272a-f95b-4071-8f72-c85da959bf68` /
   `invocation:cf7f9151-a0e6-4f69-8514-1be7e8d8824a`. W03-W08 remain dirty;
   further provider use is stopped.
+
+## Wave 0BM — exact 94ed3da998 / runtime-isolation retest
+
+- Provider-free runtime isolation fix `15ab1c7f45` was integrated as Plane
+  `69601e97fb`; the runtime evidence pin was refreshed in `94ed3da998`. Host
+  checks passed `165/165`, the sequential real-Hermes-child regression passed
+  `1/1`, cross-process isolation passed `24/24`, and the canonical migration
+  checks passed `3/3`. The network-disabled runtime import gate passed. No
+  source correction was made after the live result.
+- Exact refrozen artifacts: API
+  `plane-agent-api:g4-v6-94ed3da9`, digest
+  `sha256:e056369b525483e1111b3c8e878143d550626be041744dd73d654f7fcec78f21`;
+  runtime `plane-agent-runtime:hermes-292e8663-g4-v6-94ed3da9`, digest
+  `sha256:ccd2114f411b152495413079557c6eae1128a23af872417524e924c2670cff07`;
+  Hermes `292e866374ca9e9615473fc9bf5dda1913b672e1`; MCP
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`; SDK
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The owner-only manifest is
+  mode `0600`, SHA-256
+  `81445b1808f586be212e2a9d0154c26c045f702a123fa84e78fa284aa05a87ba`.
+- One fresh synthetic-only three-commission Worker journey used
+  `openai-codex/gpt-5.6-luna` xhigh, fallback disabled, max 16, and the
+  authorized host-only relay. Identity/discovery passed W01/W02. Its
+  same-invocation provider-disabled replay was eligible and recorded zero
+  children, provider attempts, invocations, receipts, audits, usage,
+  outcomes, publications, terminal events, and semantic side effects.
+- The mutation-composition commission then created a failed run and
+  invocation and stopped before W03/W04/W07/W08 execution at
+  `runtime_error / runtime_process / process_exit /
+  runtime_execution_failed`; runtime ingress recorded two progress events,
+  the seven expected gateway-operation counts were zero, provider attempts
+  were zero, and no outcome, publication, artifact, terminal-success event, or
+  semantic mutation was recorded. Failed run:
+  `9c2eb4cf-9bb8-49a2-a9c6-7863a0187aab`; failed invocation:
+  `invocation:72aae4f2-a351-432b-9a07-10767632778e`.
+- Canonical owner-only receipt:
+  `tmp/persona-wave-v6/worker-live-94ed3da9/result.json`, mode `0600`,
+  SHA-256 `fac0e62ee92e42d0bba32698ec91f5661405ad8b9edbbcbe82483aa0b13c1a44`;
+  standalone live validator passed. The receipt is the only retained
+  result/log artifact: the runner's internal `sanitized-error.log` and
+  transient run directory are removed by the owner-only cleanup trap, so no
+  separate log file exists to hash. Task-owned containers, volumes, and
+  networks were absent after cleanup; the disposable Hermes clone and the
+  incidental core dump were removed. No credential contents were read,
+  printed, copied, or recorded. W01/W02 remain clean; W03-W08 remain dirty;
+  UT-041 remains open for the dedicated runtime debugger. No replay or
+  further provider use occurred after the bounded failure.
