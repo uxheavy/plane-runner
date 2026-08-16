@@ -100,6 +100,7 @@ def test_g4_packaged_credential_resolver_loads_parser_without_plane_bootstrap(tm
         "spec = importlib.util.spec_from_loader('resolver', loader)\n"
         "resolver = importlib.util.module_from_spec(spec)\n"
         "spec.loader.exec_module(resolver)\n"
+        "resolver.__file__ = '/usr/local/bin/plane-agent-runtime-credential-resolver'\n"
         "parser = resolver._load_credentials_module()\n"
         "parser.DEPLOYMENT_CREDENTIAL_SOURCE_PATH = sys.argv[2]\n"
         "print(json.dumps(parser.resolve_deployment_credential('runtime'), sort_keys=True))\n"
@@ -107,6 +108,7 @@ def test_g4_packaged_credential_resolver_loads_parser_without_plane_bootstrap(tm
     result = subprocess.run(
         [sys.executable, "-c", probe, str(resolver), str(source)],
         env={"PATH": "/usr/bin:/bin"},
+        cwd=tmp_path,
         capture_output=True,
         text=True,
         check=False,
