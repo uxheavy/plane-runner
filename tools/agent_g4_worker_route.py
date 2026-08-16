@@ -363,47 +363,83 @@ def build_worker_route_evidence(
 
     if scenario is None or not scenario.expected or not scenario.expected.get("routeChecks"):
         return {}, []
+    route_checks = set(scenario.expected["routeChecks"])
     correlation_id = f"correlation:{run.id}"
-    context_records = list(
+    context_records = []
+    context = {}
+    parsed_memory = ()
+    parsed_user = ()
+    parsed_skills = {}
+    hidden_markers = tuple(context_facts.get("hiddenMarkers", ()))
+    context_json = "{}"
+    memory_keys = set()
+    user_keys = set()
+    skill_keys = set()
+    if "W05" in route_checks:
+        context_records = list(
+            OperationGatewayIdempotency.objects.filter(
+                correlation_id=correlation_id,
+                operation_id="agent.context.read",
+                state=OperationGatewayIdempotency.State.SUCCEEDED,
+            ).order_by("created_at", "id")
+        )
+        payloads = [
+            (record.result or {}).get("context", {})
+            for record in context_records
+            if isinstance(record.result, dict) and isinstance((record.result or {}).get("context"), dict)
+        ]
+        context = payloads[0] if len(payloads) == 1 else {}
+        memory_markdown = context.get("memoryMarkdown", "")
+        user_markdown = context.get("userMarkdown", "")
+        skill_packages = context.get("skillPackages", {})
+        parsed_memory = parse_memory_markdown(memory_markdown) if isinstance(memory_markdown, str) else ()
+        parsed_user = parse_memory_markdown(user_markdown) if isinstance(user_markdown, str) else ()
+        parsed_skills = {
+            key: parse_skill_package(files)
+            for key, files in skill_packages.items()
+            if isinstance(key, str) and isinstance(files, dict)
+        }
+        context_json = json.dumps(context, sort_keys=True, ensure_ascii=False)
+        memory_keys = {item.key for item in parsed_memory}
+        user_keys = {item.key for item in parsed_user}
+        skill_keys = set(parsed_skills)
+    catalog_search = (
         OperationGatewayIdempotency.objects.filter(
             correlation_id=correlation_id,
-            operation_id="agent.context.read",
+            operation_id="catalog.search",
             state=OperationGatewayIdempotency.State.SUCCEEDED,
-        ).order_by("created_at", "id")
+        )
+        .order_by("created_at", "id")
+        .first()
+        if "W02" in route_checks
+        else None
     )
-    payloads = [
-        (record.result or {}).get("context", {})
-        for record in context_records
-        if isinstance(record.result, dict) and isinstance((record.result or {}).get("context"), dict)
-    ]
-    context = payloads[0] if len(payloads) == 1 else {}
-    memory_markdown = context.get("memoryMarkdown", "")
-    user_markdown = context.get("userMarkdown", "")
-    skill_packages = context.get("skillPackages", {})
-    parsed_memory = parse_memory_markdown(memory_markdown) if isinstance(memory_markdown, str) else ()
-    parsed_user = parse_memory_markdown(user_markdown) if isinstance(user_markdown, str) else ()
-    parsed_skills = {
-        key: parse_skill_package(files)
-        for key, files in skill_packages.items()
-        if isinstance(key, str) and isinstance(files, dict)
-    }
-    hidden_markers = tuple(context_facts.get("hiddenMarkers", ()))
-    context_json = json.dumps(context, sort_keys=True, ensure_ascii=False)
-    memory_keys = {item.key for item in parsed_memory}
-    user_keys = {item.key for item in parsed_user}
-    skill_keys = set(parsed_skills)
-    catalog_search = OperationGatewayIdempotency.objects.filter(
-        correlation_id=correlation_id, operation_id="catalog.search", state=OperationGatewayIdempotency.State.SUCCEEDED
-    ).order_by("created_at", "id").first()
-    catalog_describe = OperationGatewayIdempotency.objects.filter(
-        correlation_id=correlation_id, operation_id="catalog.describe", state=OperationGatewayIdempotency.State.SUCCEEDED
-    ).order_by("created_at", "id").first()
-    rename_record = OperationGatewayIdempotency.objects.filter(
-        correlation_id=correlation_id, operation_id="work_item.rename", state=OperationGatewayIdempotency.State.SUCCEEDED
-    ).order_by("created_at", "id").first()
-    outcome = OutcomeSubmission.objects.filter(run=run).first()
-    route = {
-        "W01": {
+    catalog_describe = (
+        OperationGatewayIdempotency.objects.filter(
+            correlation_id=correlation_id,
+            operation_id="catalog.describe",
+            state=OperationGatewayIdempotency.State.SUCCEEDED,
+        )
+        .order_by("created_at", "id")
+        .first()
+        if "W02" in route_checks
+        else None
+    )
+    rename_record = (
+        OperationGatewayIdempotency.objects.filter(
+            correlation_id=correlation_id,
+            operation_id="work_item.rename",
+            state=OperationGatewayIdempotency.State.SUCCEEDED,
+        )
+        .order_by("created_at", "id")
+        .first()
+        if "W03" in route_checks
+        else None
+    )
+    outcome = OutcomeSubmission.objects.filter(run=run).first() if "W07" in route_checks else None
+    route = {}
+    if "W01" in route_checks:
+        route["W01"] = {
             "actorProfileAssignmentSeparate": (
                 run.actor_id == actor.id and run.assignment_id == assignment.id
                 and str(run.profile_version_id) == run.snapshot["profile"]["profileRef"].removeprefix("profile-version:")
@@ -411,8 +447,9 @@ def build_worker_route_evidence(
             ),
             "snapshotBound": run.snapshot.get("assignment", {}).get("assignmentRef") == f"assignment:{assignment.id}",
             "substitution": substitution,
-        },
-        "W02": {
+        }
+    if "W02" in route_checks:
+        route["W02"] = {
             "catalogSearchBeforeDescribe": bool(
                 catalog_search and catalog_describe
                 and (catalog_search.created_at, str(catalog_search.id)) < (catalog_describe.created_at, str(catalog_describe.id))
@@ -429,18 +466,20 @@ def build_worker_route_evidence(
                     [record.result for record in OperationGatewayIdempotency.objects.filter(
                         correlation_id=correlation_id, operation_id="search_workspace",
                         state=OperationGatewayIdempotency.State.SUCCEEDED,
-                    )], sort_keys=True,
-                ) for marker in hidden_markers
+                )], sort_keys=True,
+            ) for marker in hidden_markers
             ),
-        },
-        "W03": {
+        }
+    if "W03" in route_checks:
+        route["W03"] = {
             **rename_replay,
             "receiptRef": f"receipt:{rename_record.request_id}" if rename_record else None,
             "auditReceiptRef": (
                 f"audit-receipt:{rename_record.audit_receipt}" if rename_record and rename_record.audit_receipt else None
             ),
-        },
-        "W04": {
+        }
+    if "W04" in route_checks:
+        route["W04"] = {
             "positiveTypedHostCallback": int((run.cumulative_usage or {}).get("codeModeCalls", 0)) > 0,
             "sameGateway": OperationGatewayIdempotency.objects.filter(
                 correlation_id=correlation_id,
@@ -448,8 +487,9 @@ def build_worker_route_evidence(
                 state=OperationGatewayIdempotency.State.SUCCEEDED,
             ).exists(),
             "failClosedControls": context_facts.get("codeModeControlsPassed") is True,
-        },
-        "W05": {
+        }
+    if "W05" in route_checks:
+        route["W05"] = {
             "contextReceipt": len(context_records) == 1,
             "privateMemoryPresent": context_facts["privateMemoryKey"] in memory_keys,
             "subjectPreferencesSeparate": context_facts["subjectPreferenceKey"] in user_keys
@@ -460,23 +500,25 @@ def build_worker_route_evidence(
                 isinstance(memory_markdown, str) and isinstance(user_markdown, str)
                 and parsed_memory is not None and parsed_user is not None
             ),
-        },
-        "W06": governance,
-        "W07": {
+        }
+    if "W06" in route_checks:
+        route["W06"] = governance
+    if "W07" in route_checks:
+        route["W07"] = {
             "oneOutcome": OutcomeSubmission.objects.filter(run=run).count() == 1,
             "oneArtifact": bool(outcome and isinstance(outcome.artifacts, list) and len(outcome.artifacts) == 1),
             "evidenceAttached": bool(outcome and isinstance(outcome.evidence, list) and len(outcome.evidence) > 0),
             "onePublishedTerminal": RunTerminalEvent.objects.filter(
                 run=run, visible=True, kind="outcome_submission"
             ).count() == 1,
-        },
-        "W08": {
+        }
+    if "W08" in route_checks:
+        route["W08"] = {
             "runReadback": context_facts.get("runReadbackPassed") is True,
             "apiCliConsistent": context_facts.get("apiCliConsistent") is True,
             "crossWorkspaceDenied": context_facts.get("crossWorkspaceDenied") is True,
-        },
-        "replay": {"context": context_replay_delta},
-    }
+        }
+    route["replay"] = {"context": context_replay_delta}
     failures = []
     for route_id in scenario.expected["routeChecks"]:
         value = route.get(route_id, {})
@@ -487,4 +529,7 @@ def build_worker_route_evidence(
         )
         if not isinstance(value, dict) or not all(item is True for item in boolean_values):
             failures.append(f"route:{route_id}")
-    return {"routes": route, "readback": {"contextProjectionDigest": context.get("projectionDigest")}}, failures
+    return {
+        "routes": route,
+        "readback": {"contextProjectionDigest": context.get("projectionDigest", "0" * 64)},
+    }, failures

@@ -1060,6 +1060,22 @@ _SCENARIO_RECORD_KINDS = {
 _SCENARIO_PRODUCT_KINDS = {
     "publication", "outcome_submission", "run_failure", "run_blocker", "run_cancellation", "input_event",
 }
+_WORKER_ROUTE_BOOLEAN_FIELDS = {
+    "W01": {"actorProfileAssignmentSeparate", "snapshotBound"},
+    "W02": {"catalogSearchBeforeDescribe", "boundedSearchAndRead", "hiddenObjectsAbsent"},
+    "W04": {"positiveTypedHostCallback", "sameGateway", "failClosedControls"},
+    "W05": {
+        "contextReceipt",
+        "privateMemoryPresent",
+        "subjectPreferencesSeparate",
+        "skillProjectionPresent",
+        "excludedOtherUserAgentStale",
+        "losslessRoundTrip",
+    },
+    "W07": {"oneOutcome", "oneArtifact", "evidenceAttached", "onePublishedTerminal"},
+    "W08": {"runReadback", "apiCliConsistent", "crossWorkspaceDenied"},
+}
+_WORKER_ROUTE_IDS = {f"W{index:02d}" for index in range(1, 9)}
 
 
 def _validate_scenario_projection(value: Any) -> None:
@@ -1148,45 +1164,43 @@ def _validate_scenario_projection(value: Any) -> None:
                 if not isinstance(row, dict) or set(row) != {"kind", "count"} or row["kind"] not in allowed_kinds or type(row["count"]) is not int or not 0 <= row["count"] <= 256:
                     raise ContractError("evidence_scenario_actual_record_invalid")
         if "routeEvidence" in actual:
-            _validate_worker_route_evidence(actual["routeEvidence"])
+            route_checks = expected.get("routeChecks", []) if expected is not None else []
+            _validate_worker_route_evidence(actual["routeEvidence"], route_checks=set(route_checks))
 
 
-def _validate_worker_route_evidence(value: Any) -> None:
+def _validate_worker_route_evidence(value: Any, *, route_checks: set[str] | None = None) -> None:
     payload = _object(value, "evidence_worker_route_evidence")
     if set(payload) != {"routes", "readback"}:
         raise ContractError("evidence_worker_route_evidence_fields_invalid")
     routes = _object(payload["routes"], "evidence_worker_routes")
-    if set(routes) != {f"W{index:02d}" for index in range(1, 9)} | {"replay"}:
+    expected_route_ids = set(route_checks) if route_checks is not None else set(_WORKER_ROUTE_IDS)
+    if not expected_route_ids <= _WORKER_ROUTE_IDS or set(routes) != expected_route_ids | {"replay"}:
         raise ContractError("evidence_worker_route_ids_invalid")
-    expected_boolean_fields = {
-        "W01": {"actorProfileAssignmentSeparate", "snapshotBound"},
-        "W02": {"catalogSearchBeforeDescribe", "boundedSearchAndRead", "hiddenObjectsAbsent"},
-        "W04": {"positiveTypedHostCallback", "sameGateway", "failClosedControls"},
-        "W05": {"contextReceipt", "privateMemoryPresent", "subjectPreferencesSeparate", "skillProjectionPresent", "excludedOtherUserAgentStale", "losslessRoundTrip"},
-        "W07": {"oneOutcome", "oneArtifact", "evidenceAttached", "onePublishedTerminal"},
-        "W08": {"runReadback", "apiCliConsistent", "crossWorkspaceDenied"},
-    }
-    for route_id, fields in expected_boolean_fields.items():
+    for route_id in expected_route_ids & set(_WORKER_ROUTE_BOOLEAN_FIELDS):
+        fields = _WORKER_ROUTE_BOOLEAN_FIELDS[route_id]
         row = _object(routes[route_id], f"evidence_worker_{route_id}")
         if set(row) != fields and not (route_id == "W01" and set(row) == fields | {"substitution"}):
             raise ContractError("evidence_worker_route_fields_invalid")
         for field in fields:
             if row[field] is not True:
                 raise ContractError("evidence_worker_route_failed")
-    substitution = _object(routes["W01"]["substitution"], "evidence_worker_substitution")
-    if set(substitution) != {"status", "errorCode", "sideEffects"} or substitution != {
-        "status": "denied", "errorCode": "NOT_AUTHORIZED", "sideEffects": 0
-    }:
-        raise ContractError("evidence_worker_substitution_invalid")
-    rename = _object(routes["W03"], "evidence_worker_W03")
-    if set(rename) != {"status", "semanticDelta", "duplicateMutation", "httpStatus", "receiptRef", "auditReceiptRef"} or rename["status"] != "replayed" or rename["semanticDelta"] != 0 or rename["duplicateMutation"] != 0 or rename["httpStatus"] != 200:
-        raise ContractError("evidence_worker_rename_replay_invalid")
-    for field, prefix in (("receiptRef", "receipt:"), ("auditReceiptRef", "audit-receipt:")):
-        if not isinstance(rename[field], str) or not rename[field].startswith(prefix) or not re.fullmatch(r"[A-Za-z0-9_.:/-]+", rename[field]):
-            raise ContractError("evidence_worker_rename_receipt_invalid")
-    governance = _object(routes["W06"], "evidence_worker_W06")
-    if set(governance) != {"candidate", "humanApproved", "promoted", "privateAfterPromotion", "rollbackRevision", "proposalReplayStable", "unsupportedSharedDenied", "workspaceUnreviewedNotPromoted"} or any(value is not True for value in governance.values()):
-        raise ContractError("evidence_worker_governance_invalid")
+    if "W01" in expected_route_ids:
+        substitution = _object(routes["W01"]["substitution"], "evidence_worker_substitution")
+        if set(substitution) != {"status", "errorCode", "sideEffects"} or substitution != {
+            "status": "denied", "errorCode": "NOT_AUTHORIZED", "sideEffects": 0
+        }:
+            raise ContractError("evidence_worker_substitution_invalid")
+    if "W03" in expected_route_ids:
+        rename = _object(routes["W03"], "evidence_worker_W03")
+        if set(rename) != {"status", "semanticDelta", "duplicateMutation", "httpStatus", "receiptRef", "auditReceiptRef"} or rename["status"] != "replayed" or rename["semanticDelta"] != 0 or rename["duplicateMutation"] != 0 or rename["httpStatus"] != 200:
+            raise ContractError("evidence_worker_rename_replay_invalid")
+        for field, prefix in (("receiptRef", "receipt:"), ("auditReceiptRef", "audit-receipt:")):
+            if not isinstance(rename[field], str) or not rename[field].startswith(prefix) or not re.fullmatch(r"[A-Za-z0-9_.:/-]+", rename[field]):
+                raise ContractError("evidence_worker_rename_receipt_invalid")
+    if "W06" in expected_route_ids:
+        governance = _object(routes["W06"], "evidence_worker_W06")
+        if set(governance) != {"candidate", "humanApproved", "promoted", "privateAfterPromotion", "rollbackRevision", "proposalReplayStable", "unsupportedSharedDenied", "workspaceUnreviewedNotPromoted"} or any(value is not True for value in governance.values()):
+            raise ContractError("evidence_worker_governance_invalid")
     replay = _object(routes["replay"], "evidence_worker_replay")
     if set(replay) != {"context"} or not isinstance(replay["context"], dict) or set(replay["context"]) != {"memoryRevisions", "skillRevisions", "proposals", "contextReceipts"} or any(type(item) is not int or item != 0 for item in replay["context"].values()):
         raise ContractError("evidence_worker_context_replay_invalid")

@@ -90,9 +90,14 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     identity = parsed.commissions[0]
     mutation = parsed.commissions[1]
     context = parsed.commissions[2]
-    assert identity.expected["routeChecks"] == ["W01", "W02"]
-    assert mutation.expected["routeChecks"] == ["W03", "W04", "W07", "W08"]
-    assert context.expected["routeChecks"] == ["W05", "W06", "W07", "W08"]
+    assert {
+        commission.commission_id: commission.expected["routeChecks"]
+        for commission in parsed.commissions
+    } == {
+        "identity-discovery": ["W01", "W02"],
+        "mutation-composition-publication": ["W03", "W04", "W07", "W08"],
+        "context-governance": ["W05", "W06", "W07", "W08"],
+    }
     assert "workItemReadInput unchanged" in identity.assignment.objective
     assert "execute_code" in mutation.assignment.objective
     assert "plane_operation('code', 'operation:work_item.rename'" in mutation.assignment.objective
@@ -446,6 +451,92 @@ def test_worker_readback_is_scoped_to_commissions_that_own_w08() -> None:
     guarded = source.split('context_facts["codeModeControlsPassed"]', 1)[1].split("context_replay_before", 1)[0]
     assert 'if "W08" in route_checks:' in guarded
     assert "worker_readback_facts" in guarded
+
+
+def test_worker_route_validator_accepts_identity_only_route_evidence() -> None:
+    identity_route = {
+        "routes": {
+            "W01": {
+                "actorProfileAssignmentSeparate": True,
+                "snapshotBound": True,
+                "substitution": {"status": "denied", "errorCode": "NOT_AUTHORIZED", "sideEffects": 0},
+            },
+            "W02": {
+                "catalogSearchBeforeDescribe": True,
+                "boundedSearchAndRead": True,
+                "hiddenObjectsAbsent": True,
+            },
+            "replay": {"context": {"memoryRevisions": 0, "skillRevisions": 0, "proposals": 0, "contextReceipts": 0}},
+        },
+        "readback": {"contextProjectionDigest": "0" * 64},
+    }
+
+    validator._validate_worker_route_evidence(identity_route, route_checks={"W01", "W02"})
+
+
+def test_worker_route_validator_keeps_special_mutation_and_governance_routes_valid() -> None:
+    common = {
+        "W07": {
+            "oneOutcome": True,
+            "oneArtifact": True,
+            "evidenceAttached": True,
+            "onePublishedTerminal": True,
+        },
+        "W08": {"runReadback": True, "apiCliConsistent": True, "crossWorkspaceDenied": True},
+        "replay": {"context": {"memoryRevisions": 0, "skillRevisions": 0, "proposals": 0, "contextReceipts": 0}},
+    }
+    mutation_route = {
+        "routes": {
+            "W03": {
+                "status": "replayed",
+                "semanticDelta": 0,
+                "duplicateMutation": 0,
+                "httpStatus": 200,
+                "receiptRef": "receipt:rename",
+                "auditReceiptRef": "audit-receipt:rename",
+            },
+            "W04": {
+                "positiveTypedHostCallback": True,
+                "sameGateway": True,
+                "failClosedControls": True,
+            },
+            **common,
+        },
+        "readback": {"contextProjectionDigest": "0" * 64},
+    }
+    context_route = {
+        "routes": {
+            "W05": {
+                "contextReceipt": True,
+                "privateMemoryPresent": True,
+                "subjectPreferencesSeparate": True,
+                "skillProjectionPresent": True,
+                "excludedOtherUserAgentStale": True,
+                "losslessRoundTrip": True,
+            },
+            "W06": {
+                "candidate": True,
+                "humanApproved": True,
+                "promoted": True,
+                "privateAfterPromotion": True,
+                "rollbackRevision": True,
+                "proposalReplayStable": True,
+                "unsupportedSharedDenied": True,
+                "workspaceUnreviewedNotPromoted": True,
+            },
+            **common,
+        },
+        "readback": {"contextProjectionDigest": "1" * 64},
+    }
+
+    validator._validate_worker_route_evidence(
+        mutation_route,
+        route_checks={"W03", "W04", "W07", "W08"},
+    )
+    validator._validate_worker_route_evidence(
+        context_route,
+        route_checks={"W05", "W06", "W07", "W08"},
+    )
 
 
 @pytest.mark.parametrize(
