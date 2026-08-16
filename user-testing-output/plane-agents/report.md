@@ -212,3 +212,21 @@ O02 is clean from the real MCP/API/database journey at Plane
 unarchive, search, delete, denial, durable audit/idempotency,
 unsupported-before-HTTP, stable bindings, SDK bearer identity, 8192 accepted /
 8193 rejected result bounds, and cleanup passed.
+
+## Wave 0BT replacement disposition
+
+One fresh W05/W06 `context-governance` journey ran on clean Plane source
+`a50834fa0427600d236e9c7eafee151c1184c0a6` with exact refrozen API/runtime
+images, Hermes `292e866374ca9e9615473fc9bf5dda1913b672e1`, MCP
+`c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
+`7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. It used GPT-5.6 Luna xhigh with
+fallback disabled under the host-wide capacity gate and stopped at
+`api-invocation` with bounded `unspecified` / `unavailable`, exit `1`.
+
+Run `5c154173-ad50-44b7-abe1-7207033644ed` and invocation
+`invocation:33559520-3592-4650-93d8-d5a9809d5f61` failed before any provider
+attempt. Outcome and publication receipts were absent. W05 and W06 feature
+results remain `not_observed`; replay was ineligible and not run. Cleanup
+verified zero containers, volumes, networks, and capacity leases. The
+canonical redacted extract is
+`user-testing-output/plane-agents/evidence/w05-w06-c-a50834fa-api-invocation-stop.json`.

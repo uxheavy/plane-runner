@@ -2573,3 +2573,37 @@ records this diagnosis without changing the retained receipts.
   redacted extract. The provider-disabled replay was ineligible and was not
   run; no `outcome_unknown` replay occurred. Cleanup verified zero
   containers, volumes, networks, and capacity leases. W05/W06 remain open.
+
+## Wave 0BT — exact a50834fa replacement C API-invocation boundary stop
+
+- The replacement executor started exactly from clean Plane source
+  `a50834fa0427600d236e9c7eafee151c1184c0a6`. It copied the existing
+  credential-bearing `.env` files byte-for-byte without reading, printing, or
+  sourcing values, and did not run `setup.sh`. The six tracked `.env.example`
+  files copied from the machine checkout were restored to the exact candidate
+  commit before image refreeze so the source binding remained truthful.
+- Exact refreeze used API
+  `plane-agent-api:g4-v6-a50834fa` / digest
+  `sha256:0f29e02417505b3b761cad6b4af753c697e6f0d09660b8ec34933ad755456d3a`
+  and runtime
+  `plane-agent-runtime:hermes-292e8663-g4-v6-a50834fa` / digest
+  `sha256:68835901f97cc9671f8de722b6214ab2ef6e7a2177a164dbee969840f9563c4d`.
+  Hermes `292e866374ca9e9615473fc9bf5dda1913b672e1`, MCP
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889` were exact. Manifest SHA-256 is
+  `4bd47b4ef864c70ff6a5456c40fce100eb8050b6c338d0576d74704ec5e375f0`.
+- Exactly one fresh single-commission `context-governance` journey used
+  `openai-codex/gpt-5.6-luna` xhigh with fallback disabled under the
+  host-wide capacity gate. It reached healthy runtime dependencies, then
+  stopped at `api-invocation` with bounded `unspecified` / `unavailable`, exit
+  `1`, before the commission result. Run
+  `5c154173-ad50-44b7-abe1-7207033644ed` and invocation
+  `invocation:33559520-3592-4650-93d8-d5a9809d5f61` are retained in the
+  redacted extract. Provider attempts and effects were `0`, runtime events
+  were `0`, and no W05/W06 context, memory, preference, skill, outcome, or
+  publication receipt was observed.
+- The provider-disabled replay was ineligible because the primary failed
+  before a commission result. No retry or `outcome_unknown` replay occurred.
+  Cleanup verified zero task containers, volumes, networks, and no remaining
+  capacity lease. W05 and W06 remain dirty; this is a local API-invocation
+  boundary stop, not provider-backed route closure.

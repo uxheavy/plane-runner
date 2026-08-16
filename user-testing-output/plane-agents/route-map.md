@@ -115,6 +115,35 @@ Latest sequential Worker attempt (Wave 0BL, 2026-08-16): Plane `8d94fcc16e5ff161
 | W07 | Maya    | Produce an artifact and finish the commissioned work.                                                                               | Artifact/evidence attaches to exactly one `OutcomeSubmission`; explicit publication creates one human-visible terminal product event while ordinary final text remains transcript evidence. | Missing publication is a lifecycle failure; replay creates no second outcome/message/event.                                                             | dirty — Wave 0BJ recorded submit/publish audit observations but zero applied publication and no eligible replay |
 | W08 | Maya    | Inspect the result using API, CLI, issue page, and any reused settings/admin surface.                                               | The same actor/profile/assignment/run/invocation/outcome/artifact/event/audit state is visible and redacted appropriately.                                                                  | Cross-workspace and unprivileged readback fail closed.                                                                                                  | dirty — Wave 0BJ terminated at Code Mode host failure before complete publication/readback correlation |
 
+## Wave 0BT — exact a50834fa replacement C stop
+
+The single fresh `context-governance` journey used the clean corrected Plane
+source `a50834fa0427600d236e9c7eafee151c1184c0a6`, API
+`plane-agent-api:g4-v6-a50834fa` with digest
+`sha256:0f29e02417505b3b761cad6b4af753c697e6f0d09660b8ec34933ad755456d3a`,
+and runtime `plane-agent-runtime:hermes-292e8663-g4-v6-a50834fa` with digest
+`sha256:68835901f97cc9671f8de722b6214ab2ef6e7a2177a164dbee969840f9563c4d`.
+The runtime was bound to Hermes `292e866374ca9e9615473fc9bf5dda1913b672e1`,
+MCP `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
+`7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. Manifest SHA-256 is
+`4bd47b4ef864c70ff6a5456c40fce100eb8050b6c338d0576d74704ec5e375f`.
+
+Exactly one fresh provider-capable journey ran under the host-wide capacity
+gate with `openai-codex/gpt-5.6-luna` xhigh and fallback disabled. It reached
+`api-invocation` and stopped with bounded `unspecified` / `unavailable`, exit
+`1`, before the commission result. Run
+`5c154173-ad50-44b7-abe1-7207033644ed` and invocation
+`invocation:33559520-3592-4650-93d8-d5a9809d5f61` are retained in the
+redacted extract
+`user-testing-output/plane-agents/evidence/w05-w06-c-a50834fa-api-invocation-stop.json`.
+Provider attempts and effects were `0`; outcome and publication receipts were
+absent; W05 and W06 feature results are `not_observed`.
+
+The provider-disabled replay was ineligible because the primary failed before
+a commission result. No retry or `outcome_unknown` replay occurred. Cleanup
+verified zero containers, volumes, networks, and no remaining capacity lease.
+W05 and W06 remain dirty.
+
 ## Wave 0BO — fresh C boundary stop and provider-free W05/W06 proof
 
 The one fresh single-commission `context-governance` journey was bound to
