@@ -10,8 +10,8 @@ Functional completion and controlled rollout are separate outcomes. This goal en
 
 The older G4 artifact bindings and Wave 0X evidence below are historical, not
 the active delivery state. The current host-side harness checkpoint is
-`6087b791a4`, while the exact API/runtime artifacts remain bound to the
-`1d0025816b` source candidate and Hermes
+`8dae97f4abc060b8a4023afea79ec768f4350ba0`, while the exact API/runtime
+artifacts are bound to that source candidate and Hermes
 `f8cda105e3e14ace7c12f4840ec86c036fade9ad`. S00 Wave 0AT passed at Plane
 `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with one fresh Luna primary and one
 eligible provider-disabled replay. Provider-free PF1 evidence is complete for
@@ -33,7 +33,13 @@ the bounded model-call budget after publication. Its scenario gate also
 revealed that the harness counted delivery-intent rows instead of the explicit
 outcome publication; `adff362456` now reuses the validated explicit
 publication projection. The receipt remains dirty and no replay or later
-commission ran.
+commission ran. The standalone synthetic-only B commission in Wave 0BG reached
+16 completed upstream `2xx` attempts but exhausted the finite model-call
+allowance before publication. Its bounded runtime evidence proves that the
+pinned Hermes path exposes Python `execute_code`, not the Plane restricted
+TypeScript Code Mode bridge required by W04. No prompt-only retry, provider
+replay, C commission, or route closure is permitted until the integrated
+Plane/Hermes TypeScript bridge commits and `b533c10fc7` are proven.
 The W05/W06 architecture check retains `agent.context.read`: the immutable
 run snapshot and Hermes adapter carry only context references/revisions/digests,
 not subject-bound projection contents. The established gateway operation is
@@ -48,10 +54,10 @@ G5 remains a separate rollout goal.
 
 | Active item        | Current truth                                                                                                                                                                                                                                                                                                                                                                      |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Delivery candidate | Exact Plane source `adff362456`; exact Hermes `cc3e444ee25e6c19fee77b6e1fbe3d95aef1a3ea`; the adjacent documentation checkpoint records the retained dirty receipts, callback-binding fix, explicit-publication readback fix, and integrated Hermes conflict disposition.                                            |
+| Delivery candidate | Exact Plane source `8dae97f4abc060b8a4023afea79ec768f4350ba0`; API `plane-agent-api:g4-v6-8dae97f4` / `sha256:e74be5de63d87d9ab84ac115598a82b81e94a01b27a0502eaebf547754ade412`; runtime `plane-agent-runtime:hermes-f8cda105-g4-v6-8dae97f4` / `sha256:c369d04714c2dc6d81a79db76c0e1409c16b8060ad245a71c963a3e0b7c89fb8`; Hermes `f8cda105e3e14ace7c12f4840ec86c036fade9ad`. The current candidate carries the disclosure root fix and the retained dirty B receipt; W04 is held for the integrated TypeScript bridge. |
 | Functional gate    | S00 Wave 0AT is clean at Plane `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with Hermes `bc7f13d2ab392752f2667b176c646339c49405f9`: ten ordered upstream `2xx` attempts, three searches, two reads, one exact `NOT_AUTHORIZED` denial, one submit, one applied publication, one matching terminal, and `RuntimeExit.completed`; replay semantic deltas were zero and cleanup passed. |
 | Provider-free PF1  | Worker W01–W08 passed 35 real Django/API/DB/CLI/socket/isolation tests unchanged. Manager M01–M08 passed 33 tests after `f621fdd89797db2d1b74205c6ce6d5b0bd4725d1` and `2105fb9e21687103939a77b7e26a0959f1d50f51`. Operator O01 and O03–O09 passed targeted real service/API/database/CLI contracts; the final exact-image red team remains pending.                               |
-| Live W/M/O wave    | Wave 0BA reached two fresh Maya identity commissions with completed provider attempts, but the invoker mislabeled later local scenario-gate failure as reconciliation uncertainty; the independent relay shutdown/audit race was fixed at its owner. The f63 callback-binding issue, W08 projection ceiling, and explicit-publication readback issue were fixed in their established owners. Hermes `f8cda105...` now provides the bounded terminal-lifecycle observation. Wave 0BE recorded the commission-scoped wrapper failure and one isolated upstream channel loss; reconciliation showed no semantic side effects. Wave 0BF then completed W01/W02 with 9 completed upstream `2xx` attempts, exact denial, one applied publication/terminal, route evidence, and a zero-delta provider-disabled replay. Validator fix `6087b791a4` accepts the established bounded observation profile while retaining exact numeric threshold binding. W03–W08 remain unreached. O02 remains separately clean from its real external-client closure. |
+| Live W/M/O wave    | Wave 0BA reached two fresh Maya identity commissions with completed provider attempts, but the invoker mislabeled later local scenario-gate failure as reconciliation uncertainty; the independent relay shutdown/audit race was fixed at its owner. The f63 callback-binding issue, W08 projection ceiling, and explicit-publication readback issue were fixed in their established owners. Hermes `f8cda105...` provides the bounded terminal-lifecycle observation. Wave 0BE recorded the commission-scoped wrapper failure and one isolated upstream channel loss; reconciliation showed no semantic side effects. Wave 0BF then completed W01/W02 with 9 completed upstream `2xx` attempts, exact denial, one applied publication/terminal, route evidence, and a zero-delta provider-disabled replay. Wave 0BG stopped the standalone synthetic-only B commission after 16 completed upstream `2xx` attempts and a non-retryable model-call budget exhaustion before publication; the pinned Hermes runtime lacks the required Plane TypeScript Code Mode bridge. W03–W08 remain dirty/blocked as mapped, no C commission ran, and O02 remains separately clean from its real external-client closure. |
 | Final verification | Pending clean provider-backed W/M/O routes, the final candidate image, exact-image red team, one full G4 verifier, and one consolidated Sol Medium review.                                                                                                                                                                                                                         |
 | G5                 | Out of scope. Rollout starts only under a separate authorized goal after G4 functional completion.                                                                                                                                                                                                                                                                                 |
 

@@ -2125,3 +2125,55 @@ records this diagnosis without changing the retained receipts.
   focused tools tests passed `149`. No fallback, additional primary, B/C
   commission, or broad verifier ran. Docker cleanup and final worktree checks
   passed.
+
+## Wave 0BG — exact 8dae97f4 / Hermes f8cda105 standalone B stop
+
+- The provider-free catalog owner fix was committed as
+  `8dae97f4abc060b8a4023afea79ec768f4350ba0`. The exact candidate API image
+  was `plane-agent-api:g4-v6-8dae97f4`, digest
+  `sha256:e74be5de63d87d9ab84ac115598a82b81e94a01b27a0502eaebf547754ade412`;
+  the exact runtime image was
+  `plane-agent-runtime:hermes-f8cda105-g4-v6-8dae97f4`, digest
+  `sha256:c369d04714c2dc6d81a79db76c0e1409c16b8060ad245a71c963a3e0b7c89fb8`.
+  Hermes was `f8cda105e3e14ace7c12f4840ec86c036fade9ad`, MCP was
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK was
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The disposable manifest was
+  `tmp/plane-agent-g4-disposable-8dae97f4.json`, mode `0600`, SHA-256
+  `66a2dcd896051e1a0f9c1f9087a6012e4b1bf1463097568e04b7067a2a37db44`.
+- One fresh standalone B run directory was derived by the owner-only launch
+  helper with mode `0700`; its descriptor was mode `0600`, SHA-256
+  `8978a65e75377dae67824c35de2d200cfdaecd6afba20ab1785a2277eb6b94bd`.
+  It used only a fresh synthetic Plane fixture and bounded public operation
+  schemas; no existing object, user text, memory, skill package, environment,
+  auth material, or secret was hydrated into provider input. A relative-path
+  launcher preflight was rejected before execution; the corrected
+  absolute-path launch created the one authorized provider primary. No
+  fallback was used.
+- The primary persisted run `5751be56-00ef-46b8-8728-11f3af2fc264` and
+  invocation `invocation:31ae2052-556c-416f-b94a-b3f818678d5b`. It recorded
+  exactly 16 completed, upstream-initiated provider attempts, all `2xx`, with
+  no fallback or unknown attempt. The run and invocation rows were
+  `succeeded`, but RuntimeExit was `failed` at final sequence `29` with
+  non-retryable `budget_exhausted` / `model_call_budget_exhausted` after the
+  finite 16-call allowance. The bounded lifecycle observation retained
+  `hook_installed=true`, no terminal action observed, API/provider counts
+  `16/16`, max/used/remaining budget `16/13/3`, and exit mapping
+  `unknown -> max_iterations_reached`.
+- Redacted operation readback observed one `search_workspace`, one
+  `work_item.read`, two `catalog.search`, four `catalog.describe`, one exact
+  evaluator `NOT_AUTHORIZED` denial, and one successful
+  `agent.outcome.submit`; `agent.outcome.publish` was absent. There was one
+  visible outcome terminal but zero applied publication/product-publication
+  records, so W03/W04/W07/W08 did not pass and no provider-disabled replay
+  was eligible. Owner-only result:
+  `tmp/persona-wave-v6/worker-live-8dae97f4-b7/result.json`, mode `0600`,
+  SHA-256 `fa7b274b0540cf1570d4b272ee8f2be0fdca6ffe7e08e4ac0e7496ab471eb3f5`.
+- This is a functional runtime capability finding, not a prompt-only retry
+  and not an external provider prerequisite. The pinned Hermes runtime's
+  established `execute_code` path is Python PTC; it is not the required Plane
+  restricted TypeScript Code Mode bridge. W04 therefore remains blocked, and
+  W03/W07/W08 remain dirty because no complete route evidence, publication, or
+  replay was proven. No C descriptor was launched and no C provider input was
+  created. Further B/provider work is held for the integrated Plane/Hermes
+  TypeScript bridge commits and `b533c10fc7`; no route was retroactively made
+  clean.
