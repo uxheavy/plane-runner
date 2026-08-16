@@ -4,7 +4,8 @@
   "integration": {
     "requestedCommit": "be3eecea9c335b05f2ae1389d036e281b6475f8f",
     "integratedCommit": "a10cb025c916799e38e82bc42dee3558df80d964",
-    "parentCommit": "e332cb9253fb37157dcc93b4cab347ece818ded5"
+    "parentCommit": "e332cb9253fb37157dcc93b4cab347ece818ded5",
+    "finalReadinessCandidate": "519adb182d60ccfd68e4390979cd21d3badc109f"
   },
   "pins": {
     "hermes": "292e866374ca9e9615473fc9bf5dda1913b672e1",
@@ -13,12 +14,12 @@
   },
   "artifacts": {
     "api": {
-      "tag": "plane-agent-api:g4-v6-a10cb025",
-      "digest": "sha256:3fbe2f3c2a7104dc2a9600907e0763ea52a4c60f86d8fdedaff262a7409192b3"
+      "tag": "plane-agent-api:g4-v6-519adb18",
+      "digest": "sha256:5a00197ec8695bad4fa3c705dbba6155759d5ca83aae7b85f31fd5af31ac7f19"
     },
     "runtime": {
-      "tag": "plane-agent-runtime:hermes-292e8663-g4-v6-a10cb025",
-      "digest": "sha256:d0eb3a0a3424aa500d1e038c8a71d426c7accd77ce3526c08a63650a73074b96"
+      "tag": "plane-agent-runtime:hermes-292e8663-g4-v6-519adb18",
+      "digest": "sha256:6827653e155d768b4116208f2845b22338fdb72db4fe36a8401ac3dd8b72cc01"
     }
   },
   "descriptor": {
@@ -53,9 +54,9 @@
     {"command": "capacity/config contract selection", "passed": 4}
   ],
   "disposableBinding": {
-    "manifestSha256": "4b204f7b1af1cb64ac138c000d803fd6e52fa1e67da05ae8ef191fd9d0732dc2",
-    "authoritySha256": "53b693ab41dff5d6d25b4789391bc5e657f59d4edb711eac2a1c9a4ab032f4e0",
-    "configSha256": "67936c6754c3cf6ffddddd3e306634f559171da26ec04f40756c6f212c39ae2e",
+    "manifestSha256": "80f86060fbec7f7920e46616effa05a6c5220ea3b129df9bb40da94f8bc76f44",
+    "authoritySha256": "449d584d4329950838a44341feec0c281449ac1ce1305ee2b2002468f2dc62b9",
+    "configSha256": "d2065cfdb4adbaf66f00599013a03eaba25b168185486230a7e458c5641e7000",
     "runDirectory": "tmp/persona-wave-v6/manager-m01-m08-ready-20260817-01"
   },
   "envCopy": {

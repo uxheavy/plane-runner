@@ -343,7 +343,8 @@ replay. W03-W08 remain dirty; UT-042 is open.
 ## Manager M01-M08 capacity-gate readiness — 2026-08-17
 
 Capacity-gate commit `be3eecea9c335b05f2ae1389d036e281b6475f8f` is integrated
-as candidate `a10cb025c916799e38e82bc42dee3558df80d964`. The one-shot Elena
+as candidate `a10cb025c916799e38e82bc42dee3558df80d964`; the final readiness
+freeze is candidate `519adb182d60ccfd68e4390979cd21d3badc109f`. The one-shot Elena
 Manager descriptor is bound to M01-M08, the explicit Actor/Profile/Assignment/
 Run/Invocation/Outcome/Publication lifecycle, and the existing Plane gateway
 route. Candidate-bound API/runtime images were built provider-free with Hermes
@@ -355,4 +356,4 @@ Descriptor and authority/config preflight passed. The Compose/live phase was
 not entered, provider attempts are `0`, and no replay occurred. The durable
 redacted readiness extract is
 `user-testing-output/plane-agents/evidence/manager-m01-m08-capacity-ready-20260817-01.json`,
-SHA-256 `7f608c967e6b8c3d72bbc8dae78fef7c84f8c33fe2e6016e9f1fd541158d85fa`.
+SHA-256 `2d9cd6be63ff5c5c88a739e1297514499a14668f4f15a396c4b0251a227f1a98`.

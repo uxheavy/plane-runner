@@ -347,7 +347,7 @@ does not open a new UT issue. The requested capacity-gate commit
 passed `16/16`; Manager descriptor/setup checks passed `7/7`; the candidate
 authority/config preflight passed. The durable redacted canonical extract is
 `user-testing-output/plane-agents/evidence/manager-m01-m08-capacity-ready-20260817-01.json`,
-SHA-256 `7f608c967e6b8c3d72bbc8dae78fef7c84f8c33fe2e6016e9f1fd541158d85fa`.
+SHA-256 `2d9cd6be63ff5c5c88a739e1297514499a14668f4f15a396c4b0251a227f1a98`.
 It records the exact candidate-bound artifact/pin bindings, fresh canary IDs,
 the nine-file byte-for-byte env-copy verification, `providerAttempts=0`, and
 `heavyLivePhaseEntered=false`; no raw env values or credentials are tracked.
