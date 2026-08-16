@@ -1162,6 +1162,8 @@ def create_assignment(
         _assert_idempotency_key_is_unclaimed(delegation_key, current_model=AssignmentContract)
         if lineage_parent.state == AssignmentState.CANCELLED:
             raise InvalidTransitionError("Cancelled assignments cannot receive delegated work")
+        if lineage_parent.state == AssignmentState.COMPLETED:
+            raise InvalidTransitionError("Completed assignments cannot receive delegated work")
         _ensure_delegation_bounds(
             lineage_parent,
             child_scope=scope_value,
@@ -1502,7 +1504,14 @@ def decide_hr_proposal(proposal, *, human_reviewer, approved, decision_note="", 
     elif proposal.kind == HRProposalKind.REASSIGN:
         if current_assignment is None or proposal.requested_assignee_id is None:
             raise AgentDomainError("Reassignment proposal is incomplete")
-        current_assignment.assignee_id = proposal.requested_assignee_id
+        requested_assignee = AgentActor.objects.select_for_update().get(pk=proposal.requested_assignee_id)
+        _ensure_actor_active(requested_assignee)
+        _ensure_actor_scope(
+            requested_assignee,
+            proposal.workspace,
+            current_assignment.project if current_assignment.project_id else None,
+        )
+        current_assignment.assignee_id = requested_assignee.id
         current_assignment.save(_allow_reassignment=True, created_by_id=proposal.created_by_id)
 
     if proposal.kind in {HRProposalKind.HIRE, HRProposalKind.CHIEF_OF_STAFF, HRProposalKind.ROLE_CHANGE}:
@@ -3121,11 +3130,6 @@ def review_outcome(
     feedback = _ensure_bounded_text(feedback, "evaluator_feedback")
     _assignment, _run, _invocation, locked = _lock_outcome_path(outcome.pk)
     verdict = _state(verdict, EvaluatorVerdict, "evaluator verdict")
-    if locked.state != OutcomeState.PROPOSED:
-        existing_review = EvaluatorReview.objects.filter(outcome=locked).first()
-        if existing_review is not None and existing_review.verdict == verdict:
-            return locked
-        raise InvalidTransitionError(f"Outcome cannot be evaluated from {locked.state}")
     evaluator = AgentActor.objects.select_related("active_profile").get(pk=evaluator.pk)
     _ensure_actor_active(evaluator)
     if evaluator.active_profile_id is None or evaluator.active_profile.role != AgentRole.EVALUATOR:
@@ -3179,6 +3183,8 @@ def review_outcome(
         if existing.command_fingerprint != review_fingerprint:
             raise IdempotencyConflictError("Outcome already has a different evaluator recommendation")
         return locked
+    if locked.state != OutcomeState.PROPOSED:
+        raise InvalidTransitionError(f"Outcome cannot be evaluated from {locked.state}")
     EvaluatorReview.objects.create(
         workspace=locked.workspace,
         project=locked.project,

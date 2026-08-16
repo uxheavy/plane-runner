@@ -173,6 +173,52 @@ def test_delegation_is_replay_safe_bounded_and_lineage_immutable(workspace, proj
 
 
 @pytest.mark.django_db
+def test_completed_assignment_cannot_receive_runtime_delegation(workspace, project, create_user):
+    delegator = _actor(workspace, name="Completed delegator", role=AgentRole.DELEGATOR, project=project)
+    worker = _actor(workspace, name="Completed worker", role=AgentRole.WORKER, project=project)
+    evaluator = _actor(workspace, name="Completed evaluator", role=AgentRole.EVALUATOR)
+    parent = create_assignment(
+        delegator,
+        project=project,
+        target_ref="issue:completed-parent",
+        objective="Complete the parent before attempting a child.",
+        acceptance_criteria=["The parent has a terminal accepted outcome."],
+        budget={"maxDepth": 1},
+        created_by=create_user,
+    )
+    run = create_run(parent, delegator.active_profile, created_by=create_user)
+    record_invocation(run, idempotency_key="idempotency:completed-parent-invocation", created_by=create_user)
+    outcome = propose_outcome(
+        run,
+        summary="The parent is complete.",
+        idempotency_key="idempotency:completed-parent-outcome",
+        created_by=create_user,
+    )
+    review_outcome(
+        outcome,
+        evaluator=evaluator,
+        idempotency_key="idempotency:completed-parent-review",
+    )
+    accept_outcome(outcome, human_reviewer=create_user, decision_note="Parent accepted.")
+    parent.refresh_from_db()
+    assert parent.state == AssignmentState.COMPLETED
+
+    with pytest.raises(InvalidTransitionError, match="Completed assignments"):
+        delegate_assignment(
+            parent,
+            worker,
+            target_ref="issue:completed-child",
+            objective="This child must not be created after completion.",
+            plan_rationale="The completed parent has no remaining runtime delegation authority.",
+            acceptance_criteria=["Rejected."],
+            idempotency_key="idempotency:completed-child",
+            delegated_by=delegator,
+            created_by=create_user,
+        )
+    assert AssignmentContract.objects.filter(lineage_of=parent).count() == 0
+
+
+@pytest.mark.django_db
 def test_dynamic_plan_rationale_is_durable_and_readable(workspace, project, create_user):
     delegator = _actor(workspace, name="Rationale delegator", role=AgentRole.DELEGATOR, project=project)
     worker = _actor(workspace, name="Rationale worker", role=AgentRole.DELEGATOR, project=project)
@@ -581,6 +627,44 @@ def test_hr_proposal_requires_human_approval_and_fails_closed_on_stale_state(wor
 
 
 @pytest.mark.django_db
+def test_hr_reassignment_rechecks_requested_assignee_is_active(workspace, create_user):
+    hr = _actor(workspace, name="Reassignment HR", role=AgentRole.HR, created_by=create_user)
+    current_assignee = _actor(workspace, name="Current assignee", role=AgentRole.WORKER, created_by=create_user)
+    requested_assignee = _actor(workspace, name="Requested assignee", role=AgentRole.WORKER, created_by=create_user)
+    assignment = create_assignment(
+        current_assignee,
+        target_ref="issue:hr-reassignment",
+        objective="Keep the current assignee until HR approval is safe.",
+        acceptance_criteria=["The assignment remains bound to an active Agent."],
+        created_by=create_user,
+    )
+    proposal = propose_hr_change(
+        workspace=workspace,
+        proposed_by=hr,
+        kind=HRProposalKind.REASSIGN,
+        target_assignment=assignment,
+        requested_assignee=requested_assignee,
+        rationale="Move the assignment to the requested worker after approval.",
+        idempotency_key="idempotency:hr-reassignment",
+        created_by=create_user,
+    )
+    requested_assignee.is_active = False
+    requested_assignee.save(update_fields=["is_active", "updated_at"])
+
+    with pytest.raises(AgentDomainError, match="Inactive Agent"):
+        decide_hr_proposal(
+            proposal,
+            human_reviewer=create_user,
+            approved=True,
+            idempotency_key="idempotency:hr-reassignment-decision",
+        )
+    assignment.refresh_from_db()
+    proposal.refresh_from_db()
+    assert assignment.assignee_id == current_assignee.id
+    assert proposal.state == HRProposalState.PROPOSED
+
+
+@pytest.mark.django_db
 def test_governance_terminal_replays_recheck_live_role20_and_preserve_attribution(workspace, project, create_user):
     hr = _actor(workspace, name="Replay HR", role=AgentRole.HR, created_by=create_user)
     subject = _actor(workspace, name="Replay subject", role=AgentRole.WORKER, created_by=create_user)
@@ -750,6 +834,43 @@ def test_evaluator_review_precedes_human_acceptance_and_revision(workspace, proj
     assignment.refresh_from_db()
     assert assignment.state == AssignmentState.REVISION
     assert invocation.terminal_event.kind
+
+
+@pytest.mark.django_db
+def test_evaluator_review_replay_rejects_different_reviewer_command(workspace, project, create_user):
+    producer = _actor(workspace, name="Replay producer", role=AgentRole.WORKER, project=project, created_by=create_user)
+    evaluator_one = _actor(workspace, name="Replay evaluator one", role=AgentRole.EVALUATOR, created_by=create_user)
+    evaluator_two = _actor(workspace, name="Replay evaluator two", role=AgentRole.EVALUATOR, created_by=create_user)
+    assignment = create_assignment(
+        producer,
+        project=project,
+        target_ref="issue:evaluator-replay",
+        objective="Produce one outcome with one immutable evaluator review.",
+        acceptance_criteria=["The evaluator command is replay-safe."],
+        created_by=create_user,
+    )
+    run = create_run(assignment, producer.active_profile, created_by=create_user)
+    record_invocation(run, idempotency_key="idempotency:evaluator-replay-invocation")
+    outcome = propose_outcome(
+        run,
+        summary="The evaluator replay outcome.",
+        idempotency_key="idempotency:evaluator-replay-outcome",
+        created_by=create_user,
+    )
+    review_args = {
+        "criteria": [{"criterion": "evidence", "result": "present"}],
+        "verdict": EvaluatorVerdict.ACCEPT,
+        "provenance": {"source": "replay-test"},
+        "idempotency_key": "idempotency:evaluator-replay-review",
+    }
+    first = review_outcome(outcome, evaluator=evaluator_one, **review_args)
+    replay = review_outcome(outcome, evaluator=evaluator_one, **review_args)
+    assert replay.id == first.id
+
+    with pytest.raises(IdempotencyConflictError, match="another Plane command"):
+        review_outcome(outcome, evaluator=evaluator_two, **review_args)
+    durable_review = EvaluatorReview.objects.get(outcome=outcome)
+    assert durable_review.evaluator_id == evaluator_one.id
 
 
 @pytest.mark.django_db
