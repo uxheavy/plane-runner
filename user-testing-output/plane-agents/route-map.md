@@ -221,7 +221,7 @@ mutation-composition B commission then stopped before run/invocation creation
 with `runRef=unavailable` and zero B provider attempts. This is a workflow
 commission-selection failure, not evidence for or against the typed Code Mode
 bridge. No second primary, replay, or further provider use occurred. W03/W04/
-W07/W08 remain dirty; UT-038 remains open pending a future B-only launch shape
+W07/W08 remain dirty; UT-039 remains open pending a future B-only launch shape
 and fresh authorized proof.
 
 ## Wave 0BK follow-up — aggregate failure envelope reconciliation
