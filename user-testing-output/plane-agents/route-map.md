@@ -1,7 +1,8 @@
 # Plane Agent functional coverage map
 
-Target: exact current Plane source candidate `c561bdfe89fb7413877b910900b5675b9f4b779d`; documentation is
-committed in the adjacent Worker B commission-shape checkpoint, with Hermes
+Target: functional image candidate `c561bdfe89fb7413877b910900b5675b9f4b779d`; the current host-side
+aggregate-reconciliation tip is `aef02407a4`; documentation is committed in
+the adjacent Worker B commission-shape checkpoint, with Hermes
 `292e866374ca9e9615473fc9bf5dda1913b672e1`. No chat UI is in scope.
 Use existing Plane object/settings pages only where they already exist; the
 authoritative evidence is Plane product-state and gateway/audit readback.
@@ -222,3 +223,15 @@ commission-selection failure, not evidence for or against the typed Code Mode
 bridge. No second primary, replay, or further provider use occurred. W03/W04/
 W07/W08 remain dirty; UT-038 remains open pending a future B-only launch shape
 and fresh authorized proof.
+
+## Wave 0BK follow-up — aggregate failure envelope reconciliation
+
+The retained raw receipt above is unchanged and remains owner-only evidence.
+Its aggregate wrapper was invalid because the pre-fix launcher copied the
+identity commission's successful envelope, changed only the top-level status,
+and omitted the failed commission's bounded failure fields. The failed
+mutation commission itself created no run, invocation, provider attempt, or
+Plane semantic side effect. Provider-free root fix `aef02407a4` now promotes
+the failed commission's `live-failure/v1` envelope and retains both commission
+rows; the canonical validator regression passed. No provider retry, replay, or
+image rebuild occurred. W03/W04/W07/W08 remain dirty and UT-039 remains open.

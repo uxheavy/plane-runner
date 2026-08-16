@@ -10,8 +10,8 @@ Functional completion and controlled rollout are separate outcomes. This goal en
 
 The older G4 artifact bindings and Wave 0X evidence below are historical, not
 the active delivery state. The current host-side harness checkpoint is
-`c561bdfe89fb7413877b910900b5675b9f4b779d`, while the exact API/runtime
-artifacts are bound to that source candidate and Hermes
+`aef02407a4`, while the exact functional API/runtime artifacts are bound to
+the preceding source candidate `c561bdfe89fb7413877b910900b5675b9f4b779d` and Hermes
 `292e866374ca9e9615473fc9bf5dda1913b672e1`. S00 Wave 0AT passed at Plane
 `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with one fresh Luna primary and one
 eligible provider-disabled replay. Provider-free PF1 evidence is complete for
@@ -105,6 +105,14 @@ Receipt `tmp/persona-wave-v6/worker-live-c561bdfe-b4/result.json` is mode
 `f0a9b26e18b8ab9034558638f4e67c24cc5bfd84d928ba1e5914c32e1c16ec33`.
 No second primary or further provider use occurred; W03/W04/W07/W08 remain
 dirty and UT-039 is open.
+
+The retained raw aggregate receipt is unchanged. Its pre-fix wrapper omitted
+the failed commission's bounded failure envelope, even though that commission
+created no run, invocation, provider attempt, or Plane semantic side effect.
+Provider-free host fix `aef02407a4` now emits a `live-failure/v1` aggregate from
+the failed commission and retains both commission rows; the behavior-level
+canonical-validator regression is included in the `149/149` harness pass. No
+provider retry, replay, image rebuild, or new disposable resource occurred.
 
 ### Wave 0BJ current disposition
 

@@ -2276,3 +2276,18 @@ records this diagnosis without changing the retained receipts.
   not live evidence of typed Code Mode behavior. No second primary, replay, or
   further provider use occurred; UT-039 is open and W03/W04/W07/W08 remain
   dirty.
+
+## Wave 0BK follow-up — aggregate failure envelope reconciliation
+
+- The retained raw receipt remains owner-only and unchanged. Its pre-fix
+  aggregate wrapper copied the successful identity envelope, set aggregate
+  status to `failed`, and omitted the failed commission's bounded failure
+  fields; the B commission itself had no run/invocation/provider attempt or
+  Plane semantic side effect.
+- Provider-free fix `aef02407a4` now uses the failed commission's
+  `plane-agent-g4/live-failure/v1` envelope for a failed aggregate, retaining
+  both commission rows. The focused behavior regression constructs the
+  aggregate and runs the canonical validator. The combined harness passed
+  `149/149`.
+- No provider retry, replay, image rebuild, or new disposable resource was
+  created. W03/W04/W07/W08 remain dirty; UT-039 remains open.
