@@ -1,7 +1,13 @@
 """Plane-owned Agent memory and context projections."""
 
 from .contracts import AgentContextProjection, ContextAuthorizationPort, DenySubjectContext, MemoryProjectionPort
-from .projections import ProjectedMemory, parse_memory_markdown, project_memory_markdown, project_user_markdown
+from .projections import (
+    ProjectedMemory,
+    parse_memory_markdown,
+    project_memory_markdown,
+    project_user_markdown,
+    reproject_memory_markdown,
+)
 from .services import (
     AgentMemoryError,
     apply_memory_retention,
@@ -32,6 +38,7 @@ __all__ = [
     "parse_memory_markdown",
     "project_memory_markdown",
     "project_user_markdown",
+    "reproject_memory_markdown",
     "propose_memory_change",
     "promote_proposal",
     "review_proposal",

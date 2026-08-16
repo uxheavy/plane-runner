@@ -544,11 +544,13 @@ def _scenario_descriptor():
     if not path or not digest:
         raise RuntimeError("live invocation scenario descriptor inputs are incomplete")
     try:
-        from agent_g4_live_scenario import ScenarioError, load_descriptor
+        from agent_g4_live_scenario import ScenarioError, load_descriptor, select_commission
     except ImportError as exc:
         raise RuntimeError("live invocation scenario parser is unavailable") from exc
     try:
-        return load_descriptor(path, digest)
+        descriptor = load_descriptor(path, digest)
+        commission_id = os.environ.get("G4_SCENARIO_COMMISSION_ID", "")
+        return select_commission(descriptor, commission_id) if commission_id else descriptor
     except ScenarioError as exc:
         raise RuntimeError(f"live invocation scenario descriptor rejected: {exc}") from exc
 
@@ -1999,6 +2001,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                 run=run,
                 assignment=assignment,
                 actor=actor,
+                subject_user=user,
                 context_facts=context_facts,
                 governance=governance_evidence,
                 substitution=substitution_evidence,

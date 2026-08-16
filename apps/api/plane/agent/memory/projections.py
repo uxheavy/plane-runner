@@ -6,7 +6,7 @@ import json
 import re
 import uuid
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, Literal
 
 from plane.agent.lifecycle.runtime_contract import canonical_json, content_digest
 from plane.db.models import AgentMemoryEntry, AgentMemoryRevision, AgentMemoryVisibility
@@ -195,6 +195,50 @@ def parse_memory_markdown(markdown: str) -> tuple[ProjectedMemory, ...]:
         previous_key = key_from_header
         cursor = after_terminator + 2
     return tuple(parsed)
+
+
+def reproject_memory_markdown(entries: Iterable[ProjectedMemory], filename: Literal["MEMORY.md", "USER.md"]) -> str:
+    """Serialize parsed runtime entries back to the exact canonical bytes."""
+
+    if filename not in {"MEMORY.md", "USER.md"}:
+        raise ValueError("unsupported Plane memory projection filename")
+    parsed = tuple(entries)
+    keys: set[str] = set()
+    subject_refs: set[str] = set()
+    result = f"# {filename}\n\n<!-- plane-agent-memory:v1 -->\n\n"
+    previous_key: str | None = None
+    for entry in parsed:
+        if entry.key in keys or (previous_key is not None and entry.key <= previous_key):
+            raise ValueError("Project parsed memory entries must be unique and ordered")
+        if filename == "MEMORY.md" and entry.visibility != "agent_private":
+            raise ValueError("MEMORY.md may contain only Agent-private entries")
+        if filename == "USER.md" and entry.visibility != "subject_user":
+            raise ValueError("USER.md may contain only subject-user entries")
+        if entry.subject_user_ref is not None:
+            subject_refs.add(entry.subject_user_ref)
+        if filename == "USER.md" and len(subject_refs) > 1:
+            raise ValueError("USER.md may contain one subject user")
+        content = entry.content
+        metadata = canonical_json(
+            {
+                "contentBytes": len(content.encode("utf-8")),
+                "contentChars": len(content),
+                "contentDigest": entry.content_digest,
+                "entryRef": entry.entry_ref,
+                "key": entry.key,
+                "revision": entry.revision,
+                "separatorAdded": not content.endswith("\n"),
+                "subjectUserRef": entry.subject_user_ref,
+                "visibility": entry.visibility,
+            }
+        )
+        result += f"## {entry.key}\n<!-- plane-memory-entry:v1 {metadata} -->{content}"
+        if not content.endswith("\n"):
+            result += "\n"
+        result += "<!-- plane-memory-entry-end -->\n\n"
+        keys.add(entry.key)
+        previous_key = entry.key
+    return result
 
 
 def _reject_duplicate_metadata_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:

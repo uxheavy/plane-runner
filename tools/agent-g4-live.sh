@@ -22,6 +22,7 @@ RUNTIME_SECRET_FILE="${RUN_DIR}/runtime-secret"
 PROVIDER_SECRET_FILE="${RUN_DIR}/provider-credentials"
 SCENARIO_DESCRIPTOR_PATH_INPUT="${PLANE_G4_SCENARIO_DESCRIPTOR:-}"
 SCENARIO_DESCRIPTOR_SHA256="${PLANE_G4_SCENARIO_SHA256:-}"
+SCENARIO_COMMISSION_ID="${PLANE_G4_SCENARIO_COMMISSION_ID:-}"
 SCENARIO_ENABLED=0
 SCENARIO_VOLUME_CREATED=0
 SCENARIO_MOUNT_ARGS=()
@@ -561,6 +562,9 @@ if not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o600
         --env
         "PYTHONPATH=/run/plane-scenario:/workspace/apps/api"
     )
+    if [[ -n "${SCENARIO_COMMISSION_ID}" ]]; then
+        SCENARIO_ENV_ARGS+=(--env "G4_SCENARIO_COMMISSION_ID=${SCENARIO_COMMISSION_ID}")
+    fi
 fi
 LIVE_PHASE=credential-staging
 PROVIDER_SECRET_SOURCE="${PLANE_G4_PROVIDER_SECRET_SOURCE:?configured provider source is required}"

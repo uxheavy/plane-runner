@@ -24,6 +24,7 @@ from plane.agent.memory import (
     create_user_preference,
     delete_memory,
     parse_memory_markdown,
+    reproject_memory_markdown,
     promote_proposal,
     propose_memory_change,
     project_user_markdown,
@@ -144,6 +145,8 @@ def test_context_projection_keeps_agent_memory_and_subject_user_preferences_sepa
     allowed = assemble_agent_context(actor, subject_user=user, authorization=AllowSubject())
     assert parse_memory_markdown(allowed.memory_markdown)[0].entry_ref == f"memory-entry:{memory.id}"
     assert parse_memory_markdown(allowed.user_markdown)[0].entry_ref == f"memory-entry:{preference.id}"
+    assert reproject_memory_markdown(parse_memory_markdown(allowed.memory_markdown), "MEMORY.md") == allowed.memory_markdown
+    assert reproject_memory_markdown(parse_memory_markdown(allowed.user_markdown), "USER.md") == allowed.user_markdown
     assert "Use direct language." not in allowed.memory_markdown
     assert (
         project_skill_package(skill.revisions.get(state=AgentRevisionState.ACTIVE))
@@ -158,12 +161,14 @@ def test_context_projection_keeps_agent_memory_and_subject_user_preferences_sepa
 
     other_subject = assemble_agent_context(actor, subject_user=other_user, authorization=AllowSubject())
     assert "user-release-check" not in other_subject.skill_packages
+    assert "tone" not in {entry.key for entry in parse_memory_markdown(other_subject.user_markdown)}
 
     other_actor = create_actor(workspace=actor.workspace, project=actor.project, display_name="Other context worker")
     create_memory(other_actor, key="other-agent-fact", content="Only the other Agent may see this.")
     other_context = assemble_agent_context(other_actor, authorization=AllowSubject())
     assert "Only the other Agent may see this." in other_context.memory_markdown
     assert memory_content not in other_context.memory_markdown
+    assert "working-style" not in {entry.key for entry in parse_memory_markdown(other_context.memory_markdown)}
     assert other_context.skill_packages["shared-release-check"] == allowed.skill_packages["shared-release-check"]
 
 
@@ -221,7 +226,9 @@ def test_memory_projection_parser_is_fail_closed_and_unicode_lossless(actor, pro
     entry = create_memory(actor, key="unicode", content=content)
     revision = entry.revisions.get(revision=1)
     projection = project_memory_markdown([(entry, revision)])
-    assert parse_memory_markdown(projection)[0].content == content
+    parsed = parse_memory_markdown(projection)
+    assert parsed[0].content == content
+    assert reproject_memory_markdown(parsed, "MEMORY.md") == projection
 
     header = projection.split("## unicode", 1)[0]
 

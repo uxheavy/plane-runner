@@ -183,6 +183,7 @@ class ScenarioDescriptor:
     controls: ControlsSpec
     descriptor_digest: str
     commissions: tuple[CommissionSpec, ...] = ()
+    selected_commission_id: str | None = None
 
     def evidence(self) -> dict[str, Any]:
         result: dict[str, Any] = {
@@ -210,6 +211,8 @@ class ScenarioDescriptor:
                 }
                 for commission in self.commissions
             ]
+        if self.selected_commission_id is not None:
+            result["commissionId"] = self.selected_commission_id
         return result
 
 
@@ -221,7 +224,19 @@ def commission_descriptor(descriptor: ScenarioDescriptor, commission: Commission
         assignment=commission.assignment,
         expected=commission.expected,
         commissions=(),
+        selected_commission_id=commission.commission_id,
     )
+
+
+def select_commission(descriptor: ScenarioDescriptor, commission_id: str) -> ScenarioDescriptor:
+    """Select one validated commission without changing the source descriptor digest."""
+
+    if not isinstance(commission_id, str) or not commission_id:
+        raise ScenarioError("scenario_commission_id_invalid")
+    for commission in descriptor.commissions:
+        if commission.commission_id == commission_id:
+            return commission_descriptor(descriptor, commission)
+    raise ScenarioError("scenario_commission_not_found")
 
 
 def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, ...]:

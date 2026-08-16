@@ -8,11 +8,18 @@ and readback owners instead of turning the invoker into a persona verifier.
 from __future__ import annotations
 
 import json
+import hashlib
 from datetime import timedelta
 
 from django.utils import timezone
-from plane.agent.memory.projections import parse_memory_markdown
-from plane.agent.memory.services import AgentMemoryError, create_memory, create_user_preference, delete_memory
+from plane.agent.memory.projections import parse_memory_markdown, reproject_memory_markdown
+from plane.agent.memory.services import (
+    AgentMemoryError,
+    assemble_agent_context,
+    create_memory,
+    create_user_preference,
+    delete_memory,
+)
 from plane.agent.operations_readback import build_correlation_readback
 from plane.agent.skills.projections import parse_skill_package
 from plane.agent.skills.services import (
@@ -48,6 +55,7 @@ from plane.db.models.operation_gateway import OperationGatewayAudit, OperationGa
 from plane.operation_gateway.gateway import OperationGateway
 from plane.agent.lifecycle import create_actor, create_profile
 from plane.agent.memory.services import review_proposal
+from plane.operation_gateway.operations import _LiveAgentContextAuthorization
 
 
 def context_state_counts(actor, run):
@@ -163,6 +171,8 @@ def seed_worker_context(*, actor, workspace, project, user, suffix, provider, mo
         ),
         "hiddenIssueId": str(hidden_issue.id),
         "gardener": gardener,
+        "otherUser": other_user,
+        "otherActor": other_actor,
         "initialSkill": skill,
         "staleMemory": stale_memory,
         "staleSkill": stale_skill,
@@ -278,9 +288,16 @@ def govern_worker_skill(*, actor, gardener, initial_skill, run, user, workspace,
         requested_visibility=AgentSkillVisibility.AGENT_PRIVATE,
         idempotency_key=f"idempotency:g4-live-skill-proposal-{suffix}", source_run=run, created_by=user,
     )
+    before_review = assemble_agent_context(
+        actor,
+        subject_user=user,
+        authorization=_LiveAgentContextAuthorization(workspace),
+    )
+    candidate_not_projected = before_review.skill_packages.get(initial_skill.key) != files
     reviewed = review_proposal(proposal, reviewer=user, approve=True, note="Reviewed by Maya's human owner.")
     promoted = promote_skill_proposal(reviewed, reviewer=user)
     definition = AgentSkillDefinition.objects.get(pk=initial_skill.id)
+    promoted_private = definition.visibility == AgentSkillVisibility.AGENT_PRIVATE
     initial_revision = AgentSkillRevision.objects.filter(
         definition=initial_skill, state=AgentRevisionState.ACTIVE
     ).order_by("revision").first()
@@ -289,6 +306,12 @@ def govern_worker_skill(*, actor, gardener, initial_skill, run, user, workspace,
     rolled_back = rollback_skill(
         definition, to_revision=initial_revision, reviewer=user,
         rationale="Restore the original private skill revision after the governed trial.",
+    )
+    definition.refresh_from_db()
+    rollback_restores_prior = (
+        rolled_back.state == AgentRevisionState.ACTIVE
+        and rolled_back.package_digest == initial_revision.package_digest
+        and definition.visibility == AgentSkillVisibility.AGENT_PRIVATE
     )
     try:
         propose_skill_change(
@@ -310,10 +333,11 @@ def govern_worker_skill(*, actor, gardener, initial_skill, run, user, workspace,
     definition.refresh_from_db()
     evidence = {
         "candidate": candidate.state == AgentRevisionState.CANDIDATE,
+        "candidateNotProjected": candidate_not_projected,
         "humanApproved": reviewed.state == AgentProposalState.APPROVED,
         "promoted": promoted.state == AgentRevisionState.ACTIVE,
-        "privateAfterPromotion": definition.visibility == AgentSkillVisibility.AGENT_PRIVATE,
-        "rollbackRevision": rolled_back.state == AgentRevisionState.ACTIVE,
+        "privateAfterPromotion": promoted_private,
+        "rollbackRevision": rollback_restores_prior,
         "proposalReplayStable": proposal_replay.id == proposal.id,
         "unsupportedSharedDenied": unsupported_shared,
         "workspaceUnreviewedNotPromoted": (
@@ -368,7 +392,8 @@ def worker_code_mode_operation_observed(run, operation_id):
 
 
 def build_worker_route_evidence(
-    *, scenario, run, assignment, actor, context_facts, governance, substitution, rename_replay, context_replay_delta
+    *, scenario, run, assignment, actor, subject_user, context_facts, governance, substitution, rename_replay,
+    context_replay_delta
 ):
     """Build route evidence from durable records and typed projections."""
 
@@ -414,6 +439,49 @@ def build_worker_route_evidence(
         memory_keys = {item.key for item in parsed_memory}
         user_keys = {item.key for item in parsed_user}
         skill_keys = set(parsed_skills)
+        authorization = _LiveAgentContextAuthorization(actor.workspace)
+        expected_projection = assemble_agent_context(
+            actor,
+            subject_user=subject_user,
+            authorization=authorization,
+        )
+        expected_payload = {
+            "memoryMarkdown": expected_projection.memory_markdown,
+            "userMarkdown": expected_projection.user_markdown,
+            "skillPackages": expected_projection.skill_packages,
+        }
+        expected_context = {
+            **expected_payload,
+            "projectionDigest": hashlib.sha256(
+                json.dumps(expected_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+            ).hexdigest(),
+        }
+        other_subject_projection = assemble_agent_context(
+            actor,
+            subject_user=context_facts["otherUser"],
+            authorization=authorization,
+        )
+        other_actor_projection = assemble_agent_context(
+            context_facts["otherActor"],
+            subject_user=subject_user,
+            authorization=authorization,
+        )
+        other_subject_user_keys = {item.key for item in parse_memory_markdown(other_subject_projection.user_markdown)}
+        other_actor_memory_keys = {item.key for item in parse_memory_markdown(other_actor_projection.memory_markdown)}
+        context_projection_stable = context == expected_context
+        deterministic_round_trip = (
+            reproject_memory_markdown(parsed_memory, "MEMORY.md") == memory_markdown
+            and reproject_memory_markdown(parsed_user, "USER.md") == user_markdown
+            and all(parse_skill_package(files) == files for files in skill_packages.values())
+        )
+        subject_isolated = (
+            context_facts["subjectPreferenceKey"] not in other_subject_user_keys
+            and "other-subject-only" in other_subject_user_keys
+        )
+        agent_isolated = (
+            context_facts["privateMemoryKey"] not in other_actor_memory_keys
+            and "other-agent-memory" in other_actor_memory_keys
+        )
     catalog_search = (
         OperationGatewayIdempotency.objects.filter(
             correlation_id=correlation_id,
@@ -510,10 +578,10 @@ def build_worker_route_evidence(
             and context_facts["privateMemoryKey"] not in user_keys,
             "skillProjectionPresent": context_facts["skillKey"] in skill_keys,
             "excludedOtherUserAgentStale": not any(marker in context_json for marker in hidden_markers),
-            "losslessRoundTrip": bool(
-                isinstance(memory_markdown, str) and isinstance(user_markdown, str)
-                and parsed_memory is not None and parsed_user is not None
-            ),
+            "correctContextProjection": context_projection_stable,
+            "otherSubjectIsolated": subject_isolated,
+            "otherAgentIsolated": agent_isolated,
+            "losslessRoundTrip": deterministic_round_trip,
         }
     if "W06" in route_checks:
         route["W06"] = governance

@@ -128,6 +128,47 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert "exactly one artifact and exactly one evidence item" in context.assignment.acceptance_criteria[-1]
 
 
+def test_select_commission_keeps_source_digest_and_removes_other_commissions() -> None:
+    raw, digest = descriptor_bytes(
+        {
+            **descriptor_for("worker"),
+            "commissions": [
+                {
+                    "id": "first",
+                    "assignment": {
+                        "targetRef": scenario.ASSIGNED_WORK_ITEM_ALIAS,
+                        "objective": "first",
+                        "acceptanceCriteria": ["first"],
+                        "contextRefs": [],
+                    },
+                    "expected": {"operationOutcomes": [], "evidenceKinds": [], "routeChecks": ["W01"]},
+                },
+                {
+                    "id": "context-governance",
+                    "assignment": {
+                        "targetRef": scenario.ASSIGNED_WORK_ITEM_ALIAS,
+                        "objective": "context",
+                        "acceptanceCriteria": ["context"],
+                        "contextRefs": [],
+                    },
+                    "expected": {"operationOutcomes": [], "evidenceKinds": [], "routeChecks": ["W05", "W06"]},
+                },
+            ],
+        }
+    )
+    parsed = scenario.parse_descriptor_bytes(raw, digest)
+    selected = scenario.select_commission(parsed, "context-governance")
+
+    assert selected.selected_commission_id == "context-governance"
+    assert selected.commissions == ()
+    assert selected.descriptor_digest == digest
+    assert selected.expected["routeChecks"] == ["W05", "W06"]
+    assert selected.evidence()["commissionId"] == "context-governance"
+
+    with pytest.raises(scenario.ScenarioError, match="scenario_commission_not_found"):
+        scenario.select_commission(parsed, "missing")
+
+
 def test_operator_live_descriptor_covers_exact_synthetic_omar_routes() -> None:
     path = TOOLS / "agent-g4-operator-v6.json"
     raw = path.read_bytes()
@@ -762,12 +803,16 @@ def test_worker_route_validator_keeps_special_mutation_and_governance_routes_val
                 "contextReceipt": True,
                 "privateMemoryPresent": True,
                 "subjectPreferencesSeparate": True,
-                "skillProjectionPresent": True,
-                "excludedOtherUserAgentStale": True,
-                "losslessRoundTrip": True,
-            },
-            "W06": {
-                "candidate": True,
+                    "skillProjectionPresent": True,
+                    "excludedOtherUserAgentStale": True,
+                    "correctContextProjection": True,
+                    "otherSubjectIsolated": True,
+                    "otherAgentIsolated": True,
+                    "losslessRoundTrip": True,
+                },
+                "W06": {
+                    "candidate": True,
+                    "candidateNotProjected": True,
                 "humanApproved": True,
                 "promoted": True,
                 "privateAfterPromotion": True,

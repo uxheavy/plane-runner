@@ -144,6 +144,7 @@
         "schemaVersion": { "const": "plane.agent-scenario/v1" },
         "actorRole": { "enum": ["worker", "delegator"] },
         "profileName": { "type": "string", "minLength": 1, "maxLength": 96 },
+        "commissionId": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_.:/-]{0,63}$" },
         "expected": {
           "type": "object",
           "additionalProperties": false,

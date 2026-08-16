@@ -1075,6 +1075,9 @@ _WORKER_ROUTE_BOOLEAN_FIELDS = {
         "subjectPreferencesSeparate",
         "skillProjectionPresent",
         "excludedOtherUserAgentStale",
+        "correctContextProjection",
+        "otherSubjectIsolated",
+        "otherAgentIsolated",
         "losslessRoundTrip",
     },
     "W07": {"oneOutcome", "oneArtifact", "evidenceAttached", "onePublishedTerminal"},
@@ -1099,13 +1102,18 @@ _SCENARIO_ROUTE_IDS = _WORKER_ROUTE_IDS | _OPERATOR_ROUTE_IDS | _MANAGER_ROUTE_I
 def _validate_scenario_projection(value: Any) -> None:
     scenario = _object(value, "evidence_scenario")
     required = {"id", "descriptorDigest", "schemaVersion", "actorRole", "profileName"}
-    if set(scenario).difference(required | {"expected", "setup", "controls", "actual"}) or not required.issubset(scenario):
+    if set(scenario).difference(required | {"commissionId", "expected", "setup", "controls", "actual"}) or not required.issubset(scenario):
         raise ContractError("evidence_scenario_fields_invalid")
     scenario_id = scenario["id"]
     if scenario_id not in _SCENARIO_ACTOR_ROLES or scenario["actorRole"] != _SCENARIO_ACTOR_ROLES[scenario_id]:
         raise ContractError("evidence_scenario_identity_invalid")
     if not isinstance(scenario["descriptorDigest"], str) or not HASH_RE.fullmatch(scenario["descriptorDigest"]):
         raise ContractError("evidence_scenario_digest_invalid")
+    if "commissionId" in scenario and (
+        not isinstance(scenario["commissionId"], str)
+        or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_.:/-]{0,63}", scenario["commissionId"])
+    ):
+        raise ContractError("evidence_scenario_commission_invalid")
     _exact(scenario["schemaVersion"], "plane.agent-scenario/v1", "evidence_scenario_schema")
     if (
         not isinstance(scenario["profileName"], str)
@@ -1224,7 +1232,7 @@ def _validate_worker_route_evidence(value: Any, *, route_checks: set[str] | None
                 raise ContractError("evidence_worker_rename_receipt_invalid")
     if "W06" in expected_route_ids:
         governance = _object(routes["W06"], "evidence_worker_W06")
-        if set(governance) != {"candidate", "humanApproved", "promoted", "privateAfterPromotion", "rollbackRevision", "proposalReplayStable", "unsupportedSharedDenied", "workspaceUnreviewedNotPromoted"} or any(value is not True for value in governance.values()):
+        if set(governance) != {"candidate", "candidateNotProjected", "humanApproved", "promoted", "privateAfterPromotion", "rollbackRevision", "proposalReplayStable", "unsupportedSharedDenied", "workspaceUnreviewedNotPromoted"} or any(value is not True for value in governance.values()):
             raise ContractError("evidence_worker_governance_invalid")
     replay = _object(routes["replay"], "evidence_worker_replay")
     if set(replay) != {"context"} or not isinstance(replay["context"], dict) or set(replay["context"]) != {"memoryRevisions", "skillRevisions", "proposals", "contextReceipts"} or any(type(item) is not int or item != 0 for item in replay["context"].values()):

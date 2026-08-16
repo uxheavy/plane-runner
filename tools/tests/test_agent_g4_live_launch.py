@@ -41,6 +41,30 @@ def test_launch_binds_host_wrapper_and_artifact_revisions_separately() -> None:
     assert environment["PLANE_G4_ARTIFACT_CANDIDATE"] == "a" * 40
 
 
+def test_launch_binds_one_validated_commission() -> None:
+    paths = launch.derive_run_paths(Path("/tmp/persona-wave-v6/worker"))
+    paths["manifest"] = Path("/tmp/persona-wave-v6/manifest.json")
+
+    environment = launch.build_launch_environment(
+        paths,
+        artifact_revision="a" * 40,
+        host_revision="b" * 40,
+        descriptor_digest="c" * 64,
+        commission_id="context-governance",
+    )
+
+    assert environment["PLANE_G4_SCENARIO_COMMISSION_ID"] == "context-governance"
+
+    with pytest.raises(ValueError, match="launch_commission_id_invalid"):
+        launch.build_launch_environment(
+            paths,
+            artifact_revision="a" * 40,
+            host_revision="b" * 40,
+            descriptor_digest="c" * 64,
+            commission_id="../other-commission",
+        )
+
+
 def test_validate_run_inputs_rejects_non_owner_only_inputs(tmp_path: Path) -> None:
     run_dir = tmp_path / "run"
     run_dir.mkdir(mode=0o700)

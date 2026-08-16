@@ -22,6 +22,7 @@ SCENARIO_VALIDATOR = ROOT / "tools" / "agent_g4_live_scenario.py"
 RUNNER_COMMAND = "bash tools/agent-g4-live.sh"
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+COMMISSION_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.:/-]{0,63}$")
 
 
 def derive_run_paths(run_dir: Path) -> dict[str, Path]:
@@ -185,7 +186,8 @@ def _validate_descriptor(paths: dict[str, Path]) -> str:
 
 
 def build_launch_environment(
-    paths: dict[str, Path], *, artifact_revision: str, host_revision: str, descriptor_digest: str
+    paths: dict[str, Path], *, artifact_revision: str, host_revision: str, descriptor_digest: str,
+    commission_id: str | None = None,
 ) -> dict[str, str]:
     environment = os.environ.copy()
     environment.update(
@@ -201,10 +203,15 @@ def build_launch_environment(
             "PLANE_G4_LIVE_COMMAND": RUNNER_COMMAND,
         }
     )
+    environment.pop("PLANE_G4_SCENARIO_COMMISSION_ID", None)
+    if commission_id is not None:
+        if not COMMISSION_ID_RE.fullmatch(commission_id):
+            raise ValueError("launch_commission_id_invalid")
+        environment["PLANE_G4_SCENARIO_COMMISSION_ID"] = commission_id
     return environment
 
 
-def launch(run_dir: Path, manifest: Path, candidate: str) -> int:
+def launch(run_dir: Path, manifest: Path, candidate: str, commission_id: str | None = None) -> int:
     if not SHA_RE.fullmatch(candidate):
         raise ValueError("launch_candidate_must_be_full_sha")
     paths = validate_run_inputs(run_dir, manifest)
@@ -218,6 +225,7 @@ def launch(run_dir: Path, manifest: Path, candidate: str) -> int:
         artifact_revision=candidate,
         host_revision=host_revision,
         descriptor_digest=descriptor_digest,
+        commission_id=commission_id,
     )
     completed = subprocess.run(["bash", str(RUNNER)], cwd=ROOT, env=environment, check=False)
     print(f"event=agent.g4.live-launch status=exited code={completed.returncode} result={paths['result']}")
@@ -229,9 +237,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--run-dir", required=True, type=Path)
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--candidate", required=True)
+    parser.add_argument("--commission-id")
     args = parser.parse_args(argv)
     try:
-        return launch(args.run_dir, args.manifest, args.candidate)
+        return launch(args.run_dir, args.manifest, args.candidate, args.commission_id)
     except ValueError as exc:
         print(f"event=agent.g4.live-launch status=failed reason={exc}")
         return 2
