@@ -114,6 +114,32 @@ Latest sequential Worker attempt (Wave 0BL, 2026-08-16): Plane `8d94fcc16e5ff161
 | W06 | Maya    | Use a private skill, propose an improvement, and restore a prior revision.                                                          | Plane owns skill definition/revisions; Hermes receives a projection; gardener proposal, human promotion, and rollback are visible.                                                          | Unreviewed candidate cannot enter workspace/org scope; concurrent replay is idempotent.                                                                 | dirty — C addendum retained synthetic governance evidence, but neither primary passed the full route plus replay gate |
 | W07 | Maya    | Produce an artifact and finish the commissioned work.                                                                               | Artifact/evidence attaches to exactly one `OutcomeSubmission`; explicit publication creates one human-visible terminal product event while ordinary final text remains transcript evidence. | Missing publication is a lifecycle failure; replay creates no second outcome/message/event.                                                             | dirty — Wave 0BJ recorded submit/publish audit observations but zero applied publication and no eligible replay |
 | W08 | Maya    | Inspect the result using API, CLI, issue page, and any reused settings/admin surface.                                               | The same actor/profile/assignment/run/invocation/outcome/artifact/event/audit state is visible and redacted appropriately.                                                                  | Cross-workspace and unprivileged readback fail closed.                                                                                                  | dirty — Wave 0BJ terminated at Code Mode host failure before complete publication/readback correlation |
+
+## Wave 0BO — fresh C boundary stop and provider-free W05/W06 proof
+
+The one fresh single-commission `context-governance` journey was bound to
+artifact source `0d6a239a49064bba3e903d7bc41fa5e78467cbc7`, host wrapper
+`3d0fd4b91fc956d8ddd75d269b3ff5d1d633f408`, Hermes
+`292e866374ca9e9615473fc9bf5dda1913b672e1`, MCP
+`c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
+`7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The exact API/runtime image
+digests and disposable manifest are recorded in the durable redacted evidence
+at `user-testing-output/plane-agents/evidence/w05-w06-c-provider-stop.json`,
+SHA-256 `f757ea66823b01d7828f2248adc4e8c3406f336ba393af212340eb4c8008ff33`.
+
+The authorized provider-capable run stopped at the shared API-invocation
+boundary with `ImproperlyConfigured`, exit `1`, reason `unavailable`; the
+bounded owner-only receipt is hashed there as
+`13d2394b78f3e5306ca2ac4d0f5e8c1b747a131abc579a5ae3f524829cc94dd3`.
+Provider attempt count was `0`, fallback was disabled, and no replay was run.
+The shared debugger/fixer owns this boundary; W05 and W06 remain `dirty` and
+no route result is inferred from this failed setup.
+
+Provider-free lane checks passed after the reserializer newline correction:
+14/14 Django memory/skill tests and 63/63 focused scenario/launch tests. The
+serializer correction is committed in `601749ee8f`; the durable extract also
+records post-exit zero container, volume, and network counts for the observed
+disposable Compose identifiers.
 | M01 | Elena   | Give a planner Agent a multi-part objective and acceptance criteria.                                                                | Agent creates an explicit dynamic plan without introducing a saved workflow-definition product.                                                                                             | Stale or unauthorized plan updates are rejected.                                                                                                        | untested                                                                                                                                                                                                                                                                                                                                                                                                 |
 | M02 | Elena   | Delegate bounded sub-work to another Agent.                                                                                         | Delegation records responsibility, lineage, scope, budget, assignee, and child assignment/run independently.                                                                                | Cross-scope lineage, recursive excess, and replay are denied or stable.                                                                                 | untested                                                                                                                                                                                                                                                                                                                                                                                                 |
 | M03 | Elena   | Cancel the parent while child work is queued and active.                                                                            | Cancellation reconciles queued descendants and signals active runtime controls without losing terminal visibility.                                                                          | A late child callback cannot revive or duplicate cancelled work.                                                                                        | untested                                                                                                                                                                                                                                                                                                                                                                                                 |

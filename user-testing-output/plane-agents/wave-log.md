@@ -2413,3 +2413,35 @@ records this diagnosis without changing the retained receipts.
   canonical validator passed with `evidence_sha256` equal to that hash. No
   separate launcher log file was persisted. W03-W08 remain dirty and UT-042
   is open; no provider use continues after this bounded stop.
+
+## Wave 0BO — exact C commission boundary stop
+
+- The one fresh single-commission `context-governance` journey used the
+  existing Plane/Hermes runner with GPT-5.6 Luna xhigh, fallback disabled, and
+  no chat UI. Artifact source was
+  `0d6a239a49064bba3e903d7bc41fa5e78467cbc7`; the host wrapper was
+  `3d0fd4b91fc956d8ddd75d269b3ff5d1d633f408`; Hermes was
+  `292e866374ca9e9615473fc9bf5dda1913b672e1`; MCP was
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`; SDK was
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`.
+- The exact API/runtime tags, image digests, runtime/Hermes source digests,
+  manifest hash, raw bounded receipt hash, and provider-attempt count are
+  retained in the tracked redacted extract
+  `user-testing-output/plane-agents/evidence/w05-w06-c-provider-stop.json`,
+  SHA-256 `f757ea66823b01d7828f2248adc4e8c3406f336ba393af212340eb4c8008ff33`.
+  The raw owner-only failure receipt is SHA-256
+  `13d2394b78f3e5306ca2ac4d0f5e8c1b747a131abc579a5ae3f524829cc94dd3`.
+- The authorized run stopped at `api-invocation` with the bounded
+  `ImproperlyConfigured` / exit `1` / `unavailable` receipt. Provider attempt
+  count was zero. Per the shared-owner protocol, no launcher/config patch was
+  made in this lane after the stop, no `outcome_unknown` was replayed, and no
+  further provider use occurred.
+- A provider-free reserializer check initially found and fixed an omitted
+  metadata/content newline; commit `601749ee8f` now has 14/14 Django
+  W05/W06 memory/skill tests and 63/63 focused scenario/launch tests passing.
+  W05 and W06 remain dirty pending the shared boundary fix and one fresh
+  corrected C journey.
+- Cleanup was verified after the failed run: zero containers, volumes, and
+  networks remained for the observed disposable Compose identifiers. No
+  credential contents were read, printed, sourced, copied into tracked output,
+  or recorded.
