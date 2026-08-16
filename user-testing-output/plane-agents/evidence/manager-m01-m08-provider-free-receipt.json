@@ -61,6 +61,7 @@
   "secrets": {
     "providerCredential": "not present",
     "credentialSourceContract": "PLANE_G4_PROVIDER_SECRET_SOURCE",
+    "credentialSourceMetadata": { "exists": true, "mode": "0600", "contentsRead": false },
     "rawSourceRead": false,
     "rawSourceCopied": false
   }

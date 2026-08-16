@@ -137,7 +137,7 @@ Latest sequential Worker attempt (Wave 0BL, 2026-08-16): Plane `8d94fcc16e5ff161
 
 The durable provider-free receipt
 `user-testing-output/plane-agents/evidence/manager-m01-m08-provider-free-receipt.json`
-(SHA-256 `14f9041b863ea0b745964e6ed03471fe85559707880bac4bb6bc9e9673aac6d1`)
+(SHA-256 `f1708324491a15274062c3a2632622598c68b766ffde2796e2df9576225cd9e5`)
 proves all eight Manager route predicates through the existing Plane
 lifecycle/application contracts in a fresh synthetic workspace. It records
 eight assignments, three child assignments, two outcomes, two artifact-backed
@@ -146,7 +146,7 @@ replay state mutations. M01-M08 remain `dirty`/not provider-backed because the
 one fresh post-fix live attempt stopped before Plane run/invocation creation;
 the redacted failure receipt is
 `user-testing-output/plane-agents/evidence/manager-m01-m08-fresh-live-failure.json`
-(SHA-256 `9a7d23e77ffaacff4a67e0693c28e66b757e805ebdad5bfe289c4f69f558cd16`).
+(SHA-256 `f393de463dbe7d7f0987a56168bdc2a719c8b40770c4079665970cd14c838037`).
 
 | Route | Current disposition |
 | ----- | ------------------- |
@@ -167,7 +167,7 @@ The second fresh, non-replayed attempt used candidate
 runner's `migrate` phase with `errorClass=unavailable`, exit `1`, before any
 Plane run/invocation or provider attempt. The durable redacted result is
 `user-testing-output/plane-agents/evidence/manager-m01-m08-fresh-live-failure-02.json`
-(SHA-256 `abf5f255059be973f70e1863d1d085cb19a2d5db4963227a6898e0fac329ef10`);
+(SHA-256 `425af754560420a924a7f5de8d6100bf8653c3dfece73ccd5185d02003cb4014`);
 the owner-only raw result SHA-256 is
 `ebe435782d41445482b35bab585bfd6cd9ebfdc09b153cddbf70d17f97a8ac2a`.
 M01-M08 therefore remain provider-free-supporting / not provider-backed

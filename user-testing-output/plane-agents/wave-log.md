@@ -2434,7 +2434,7 @@ scenario/result tests. Exact artifacts were refrozen once for candidate
 
 Provider-free first: the existing Manager route produced the durable redacted
 receipt `user-testing-output/plane-agents/evidence/manager-m01-m08-provider-free-receipt.json`,
-SHA-256 `14f9041b863ea0b745964e6ed03471fe85559707880bac4bb6bc9e9673aac6d1`.
+SHA-256 `f1708324491a15274062c3a2632622598c68b766ffde2796e2df9576225cd9e5`.
 M01-M08 all passed with assignment count `8`, child assignment count `3`,
 outcome count `2`, artifact-backed outcome count `2`, terminal event count `3`,
 governance digest `5f60f0eca3eeced2931ac3d18d7f133163a83856cb8a3c8be42dc8f8bb7f1133`,
@@ -2450,7 +2450,7 @@ owner-only raw result was mode `0600`, SHA-256
 `1fb874d4f9265486c727bd96a1cc3f2277f3b875caa4b0ad36013d960490c4d2`; its
 redacted durable extract is
 `user-testing-output/plane-agents/evidence/manager-m01-m08-fresh-live-failure.json`,
-SHA-256 `9a7d23e77ffaacff4a67e0693c28e66b757e805ebdad5bfe289c4f69f558cd16`.
+SHA-256 `f393de463dbe7d7f0987a56168bdc2a719c8b40770c4079665970cd14c838037`.
 The shared launcher/runtime configuration boundary owns diagnosis. No lane
 patch, provider retry, or blind `outcome_unknown` replay occurred.
 
@@ -2484,6 +2484,6 @@ owner-only result was mode `0600`, SHA-256
 `ebe435782d41445482b35bab585bfd6cd9ebfdc09b153cddbf70d17f97a8ac2a`; the
 durable redacted extract is
 `user-testing-output/plane-agents/evidence/manager-m01-m08-fresh-live-failure-02.json`,
-SHA-256 `abf5f255059be973f70e1863d1d085cb19a2d5db4963227a6898e0fac329ef10`.
+SHA-256 `425af754560420a924a7f5de8d6100bf8653c3dfece73ccd5185d02003cb4014`.
 This is a shared migration-process configuration stop. No lane patch, provider
 retry, or blind `outcome_unknown` replay followed.
