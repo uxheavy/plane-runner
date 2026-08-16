@@ -893,6 +893,15 @@ class G4ContractTests(unittest.TestCase):
         cleanup = runner[runner.index("cleanup()") : runner.index("trap cleanup EXIT INT TERM")]
         self.assertIn("live_capacity_lease_release", cleanup)
 
+    def test_compose_test_rabbitmq_tmpfs_matches_pinned_image_runtime_user(self):
+        compose = (ROOT / "docker-compose-test.yml").read_text(encoding="utf-8")
+        service = compose.split("  test-mq:\n", 1)[1].split("\n  test-minio:", 1)[0]
+
+        self.assertIn(
+            "      - /var/lib/rabbitmq:rw,uid=100,gid=100,mode=755\n",
+            service,
+        )
+
     def test_live_runner_stages_worker_route_observation_dependency_before_invocation(self):
         runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
 
