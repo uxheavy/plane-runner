@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "plane-agent-g4/manager-ready/v1",
+  "status": "ready_to_run",
+  "integration": {
+    "requestedCommit": "be3eecea9c335b05f2ae1389d036e281b6475f8f",
+    "integratedCommit": "a10cb025c916799e38e82bc42dee3558df80d964",
+    "parentCommit": "e332cb9253fb37157dcc93b4cab347ece818ded5"
+  },
+  "pins": {
+    "hermes": "292e866374ca9e9615473fc9bf5dda1913b672e1",
+    "mcp": "c04974ed6624f17b41e63ef8182661929e77e0d3",
+    "sdk": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
+  },
+  "artifacts": {
+    "api": {
+      "tag": "plane-agent-api:g4-v6-a10cb025",
+      "digest": "sha256:3fbe2f3c2a7104dc2a9600907e0763ea52a4c60f86d8fdedaff262a7409192b3"
+    },
+    "runtime": {
+      "tag": "plane-agent-runtime:hermes-292e8663-g4-v6-a10cb025",
+      "digest": "sha256:d0eb3a0a3424aa500d1e038c8a71d426c7accd77ce3526c08a63650a73074b96"
+    }
+  },
+  "descriptor": {
+    "persona": "manager",
+    "profile": "Elena Manager",
+    "model": "openai-codex/gpt-5.6-luna",
+    "reasoning": "xhigh",
+    "fallbackAllowed": false,
+    "routeChecks": ["M01", "M02", "M03", "M04", "M05", "M06", "M07", "M08"],
+    "descriptorSha256": "aab70fc0194294d09e2071790f7017fb29e5c4d07411fe9f06e362e15fe0d7e1"
+  },
+  "lifecycleBoundaries": [
+    "Actor",
+    "Profile",
+    "Assignment",
+    "Run",
+    "Invocation",
+    "Outcome",
+    "Publication"
+  ],
+  "preflight": {
+    "descriptor": "passed",
+    "authorityAndConfig": "passed",
+    "compose": "not_run",
+    "liveRunner": "not_run",
+    "provider": "not_entered",
+    "providerAttempts": 0
+  },
+  "focusedChecks": [
+    {"command": "test_agent_g4_live_support.py test_agent_g4_live_result.py", "passed": 16},
+    {"command": "Manager descriptor and route setup checks", "passed": 7},
+    {"command": "capacity/config contract selection", "passed": 4}
+  ],
+  "disposableBinding": {
+    "manifestSha256": "4b204f7b1af1cb64ac138c000d803fd6e52fa1e67da05ae8ef191fd9d0732dc2",
+    "authoritySha256": "53b693ab41dff5d6d25b4789391bc5e657f59d4edb711eac2a1c9a4ab032f4e0",
+    "configSha256": "67936c6754c3cf6ffddddd3e306634f559171da26ec04f40756c6f212c39ae2e",
+    "runDirectory": "tmp/persona-wave-v6/manager-m01-m08-ready-20260817-01"
+  },
+  "envCopy": {
+    "files": 9,
+    "byteForByteComparison": "passed",
+    "valuesReadPrintedOrSourced": false,
+    "paths": [
+      ".env",
+      "apps/admin/.env",
+      "apps/api/.env",
+      "apps/live/.env",
+      "apps/space/.env",
+      "apps/web/.env",
+      "deployments/aio/community/variables.env",
+      "deployments/cli/community/variables.env",
+      "external/plane-mcp-server/.env.test"
+    ]
+  },
+  "safety": {
+    "setupScriptRun": false,
+    "heavyLivePhaseEntered": false,
+    "credentialSourceRead": false,
+    "rawSecretsTracked": false,
+    "replayPerformed": false
+  }
+}

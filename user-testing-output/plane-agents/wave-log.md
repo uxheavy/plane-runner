@@ -2487,3 +2487,18 @@ durable redacted extract is
 SHA-256 `425af754560420a924a7f5de8d6100bf8653c3dfece73ccd5185d02003cb4014`.
 This is a shared migration-process configuration stop. No lane patch, provider
 retry, or blind `outcome_unknown` replay followed.
+
+## Manager capacity-gate readiness — 2026-08-17
+
+Integrated capacity-gate `be3eecea9c335b05f2ae1389d036e281b6475f8f` as
+`a10cb025c916799e38e82bc42dee3558df80d964` on the clean Manager branch.
+Focused provider-free checks passed: capacity support/result `16/16`, Manager
+descriptor/setup `7/7`, and candidate authority/config preflight. Exact
+candidate-bound API/runtime artifacts were built with the required Hermes/MCP/
+SDK pins. The one-shot Manager bundle is ready at
+`tmp/persona-wave-v6/manager-m01-m08-ready-20260817-01/`; Compose and the
+heavy live phase were not entered, and provider attempts remain `0`.
+
+Durable redacted readiness extract:
+`user-testing-output/plane-agents/evidence/manager-m01-m08-capacity-ready-20260817-01.json`,
+SHA-256 `7f608c967e6b8c3d72bbc8dae78fef7c84f8c33fe2e6016e9f1fd541158d85fa`.

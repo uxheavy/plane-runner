@@ -337,3 +337,17 @@ The second shared-fix attempt is retained separately and does not replace UT-043
 | Issue | Severity | Persona / routes | Durable evidence | Root cause / bounded disposition | Fix owner / status |
 | ----- | -------- | ---------------- | ----------------- | ------------------------------- | ----------------- |
 | UT-044 | blocker | Elena Manager / M01-M08 | `user-testing-output/plane-agents/evidence/manager-m01-m08-fresh-live-failure-02.json`, SHA-256 `425af754560420a924a7f5de8d6100bf8653c3dfece73ccd5185d02003cb4014`; raw owner-only result SHA-256 `ebe435782d41445482b35bab585bfd6cd9ebfdc09b153cddbf70d17f97a8ac2a` | One fresh attempt on candidate `07706d8cbf3c46cda50e25e7658d70ce970524b8` stopped at `migrate` with `errorClass=unavailable`, exit `1`, no Plane run/invocation, zero provider attempts, and zero route mutations. No replay was attempted. | Shared migration-process configuration boundary owns diagnosis; second shared fix was integrated and verified, with no lane patch or provider retry. Open. |
+
+## Manager capacity-gate readiness — 2026-08-17
+
+This is provider-free readiness evidence, not provider-backed route closure and
+does not open a new UT issue. The requested capacity-gate commit
+`be3eecea9c335b05f2ae1389d036e281b6475f8f` is integrated as
+`a10cb025c916799e38e82bc42dee3558df80d964`. Focused capacity/result checks
+passed `16/16`; Manager descriptor/setup checks passed `7/7`; the candidate
+authority/config preflight passed. The durable redacted canonical extract is
+`user-testing-output/plane-agents/evidence/manager-m01-m08-capacity-ready-20260817-01.json`,
+SHA-256 `7f608c967e6b8c3d72bbc8dae78fef7c84f8c33fe2e6016e9f1fd541158d85fa`.
+It records the exact candidate-bound artifact/pin bindings, fresh canary IDs,
+the nine-file byte-for-byte env-copy verification, `providerAttempts=0`, and
+`heavyLivePhaseEntered=false`; no raw env values or credentials are tracked.
