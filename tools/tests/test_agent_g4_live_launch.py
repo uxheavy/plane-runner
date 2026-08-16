@@ -56,6 +56,7 @@ def test_validate_run_inputs_rejects_non_owner_only_inputs(tmp_path: Path) -> No
 
 
 def test_validate_run_inputs_rejects_existing_result_under_owned_scope() -> None:
+    launch.RUN_ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
     run_dir = launch.RUN_ROOT / "test-launch-regression"
     run_dir.mkdir(mode=0o700, exist_ok=True)
     try:
