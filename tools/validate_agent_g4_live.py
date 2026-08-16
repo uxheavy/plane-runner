@@ -1077,6 +1077,8 @@ _WORKER_ROUTE_BOOLEAN_FIELDS = {
     "W08": {"runReadback", "apiCliConsistent", "crossWorkspaceDenied"},
 }
 _WORKER_ROUTE_IDS = {f"W{index:02d}" for index in range(1, 9)}
+_OPERATOR_ROUTE_IDS = {"O01"} | {f"O{index:02d}" for index in range(3, 11)}
+_SCENARIO_ROUTE_IDS = _WORKER_ROUTE_IDS | _OPERATOR_ROUTE_IDS
 
 
 def _validate_scenario_projection(value: Any) -> None:
@@ -1125,8 +1127,9 @@ def _validate_scenario_projection(value: Any) -> None:
     if expected is not None and "routeChecks" in expected:
         if (
             not isinstance(expected["routeChecks"], list)
-            or len(expected["routeChecks"]) > 8
-            or any(check not in {f"W{index:02d}" for index in range(1, 9)} for check in expected["routeChecks"])
+            or len(expected["routeChecks"]) > 9
+            or len(set(expected["routeChecks"])) != len(expected["routeChecks"])
+            or any(check not in _SCENARIO_ROUTE_IDS for check in expected["routeChecks"])
         ):
             raise ContractError("evidence_scenario_expected_route_checks_invalid")
     for field, allowed_kinds in (("durableRecords", _SCENARIO_RECORD_KINDS), ("productEvents", _SCENARIO_PRODUCT_KINDS)):
@@ -1165,6 +1168,8 @@ def _validate_scenario_projection(value: Any) -> None:
                 if not isinstance(row, dict) or set(row) != {"kind", "count"} or row["kind"] not in allowed_kinds or type(row["count"]) is not int or not 0 <= row["count"] <= 256:
                     raise ContractError("evidence_scenario_actual_record_invalid")
         if "routeEvidence" in actual:
+            if scenario["id"] != "worker":
+                raise ContractError("evidence_non_worker_route_evidence_unsupported")
             route_checks = expected.get("routeChecks", []) if expected is not None else []
             _validate_worker_route_evidence(actual["routeEvidence"], route_checks=set(route_checks))
 

@@ -29,7 +29,7 @@ MAX_EAGER_OPERATIONS = 16
 MAX_EXPECTED_OPERATIONS = 16
 MAX_EXPECTED_EVIDENCE = 16
 MAX_EXPECTED_RECORDS = 8
-MAX_ROUTE_CHECKS = 8
+MAX_ROUTE_CHECKS = 9
 MAX_SETUP_ACTORS = 4
 MAX_SETUP_REFS = 8
 MAX_COMMISSIONS = 4
@@ -338,6 +338,9 @@ _CANCELLATION_TIMINGS = {"before_dispatch", "after_provider_request", "after_pub
 _RECORD_KINDS = {"assignment", "run", "invocation", "input_event", "audit", "publication", "terminal_event", "schedule", "schedule_fire", "lineage_assignment"}
 _PRODUCT_KINDS = {"publication", "outcome_submission", "run_failure", "run_blocker", "run_cancellation", "input_event"}
 _EVIDENCE_KINDS = _RECORD_KINDS
+_ROUTE_CHECKS = {f"W{index:02d}" for index in range(1, 9)} | {"O01"} | {
+    f"O{index:02d}" for index in range(3, 11)
+}
 
 
 def _setup(value: Any) -> SetupSpec:
@@ -463,7 +466,9 @@ def _expected(value: Any) -> ExpectedPredicates | None:
     result: ExpectedPredicates = {"operationOutcomes": parsed_operations, "evidenceKinds": list(evidence)}
     if "routeChecks" in expected:
         route_checks = _optional_string_list(expected["routeChecks"], "expected_route_checks", MAX_ROUTE_CHECKS, 8)
-        if any(check not in {f"W{index:02d}" for index in range(1, 9)} for check in route_checks):
+        if len(set(route_checks)) != len(route_checks):
+            raise ScenarioError("scenario_expected_route_check_duplicate")
+        if any(check not in _ROUTE_CHECKS for check in route_checks):
             raise ScenarioError("scenario_expected_route_check_unsupported")
         result["routeChecks"] = list(route_checks)
     for field, kinds in (("durableRecords", _RECORD_KINDS), ("productEvents", _PRODUCT_KINDS)):

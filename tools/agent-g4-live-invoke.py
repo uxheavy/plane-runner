@@ -2274,7 +2274,9 @@ def _aggregate_commission_evidence(root_scenario, results):
             },
             "providerAttempts": evidence.get("providerAttempts", []),
             "scenarioGate": evidence.get("scenarioGate"),
-            "routeEvidence": evidence.get("scenario", {}).get("actual", {}).get("routeEvidence"),
+            "routeEvidence": evidence.get("scenario", {}).get("actual", {}).get("routeEvidence")
+            if isinstance(evidence.get("scenario", {}).get("actual", {}).get("routeEvidence"), dict)
+            else {} if root_scenario.scenario_id == "operator" else None,
             "replay": evidence.get("readback", {}).get("replay"),
         }
         for commission_id, _, evidence in results
@@ -2325,8 +2327,9 @@ def _aggregate_commission_evidence(root_scenario, results):
         "records": [],
         "productEvents": [],
         "evidenceKinds": ["assignment", "run", "invocation", "audit", "publication", "terminal_event"],
-        "routeEvidence": merged_route_evidence,
     }
+    if root_scenario.scenario_id == "worker":
+        scenario_projection["actual"]["routeEvidence"] = merged_route_evidence
     # The per-commission gates are the authoritative route gates. The aggregate
     # keeps them bounded and makes the shared actor/profile linkage explicit.
     aggregate = dict(first)

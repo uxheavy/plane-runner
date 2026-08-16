@@ -1,0 +1,422 @@
+{
+  "schemaVersion": "plane.agent-scenario/v1",
+  "scenarioId": "operator",
+  "actor": {
+    "role": "worker"
+  },
+  "profile": {
+    "name": "Omar Operator",
+    "instructions": "Complete the current synthetic operator commission exactly. Use only the ordered Plane operations named by the commission and do not repeat a successful operation unless the commission explicitly says replay. Keep all model-facing results bounded and keep the Plane actor, workspace, run, and invocation references returned by the host. Tool presentation is descriptive only; live Plane permission is final. Do not stop at ordinary text: submit one bounded outcome and publish it once when the commission reaches its terminal step.",
+    "modelPolicy": {
+      "provider": "openai-codex",
+      "model": "gpt-5.6-luna",
+      "reasoning": "xhigh",
+      "fallbackAllowed": false
+    },
+    "toolPresentation": {
+      "eagerOperations": [
+        "catalog.search",
+        "catalog.describe",
+        "search_workspace",
+        "work_item.read",
+        "work_item.rename",
+        "agent.outcome.evaluate",
+        "agent.outcome.submit",
+        "agent.outcome.publish"
+      ]
+    }
+  },
+  "assignment": {
+    "targetRef": "fixture:assigned-work-item",
+    "objective": "Complete Omar's bounded synthetic operator readiness commission.",
+    "acceptanceCriteria": [
+      "Use synthetic Plane data only and preserve the existing actor and run bindings."
+    ],
+    "contextRefs": [
+      "context:operator-readiness"
+    ]
+  },
+  "prompt": "You are Omar, a skeptical Plane operator and integrator. Follow the current commission literally and keep the ordinary outcome brief. Treat the route labels as proof obligations for the existing Plane and runtime owners; never invent a second permission source, bypass the Operation Gateway, expose host-only values to generated code, or replay an outcome_unknown result.",
+  "commissions": [
+    {
+      "id": "presentation-and-sdk-identity",
+      "assignment": {
+        "targetRef": "fixture:assigned-work-item",
+        "objective": "Compare tool presentation with live permission and verify the SDK caller identity boundary.",
+        "acceptanceCriteria": [
+          "A non-eager catalog operation remains discoverable while an actor without live permission is denied without a side effect.",
+          "The SDK uses its authenticated caller identity and rejects invalid, expired, wrong-workspace, and substituted caller bindings without leaking a Plane Agent identity."
+        ],
+        "contextRefs": [
+          "context:operator-presentation-sdk"
+        ]
+      },
+      "expected": {
+        "operationOutcomes": [
+          {
+            "operationId": "catalog.search",
+            "outcome": "success",
+            "count": 1
+          },
+          {
+            "operationId": "catalog.describe",
+            "outcome": "success",
+            "count": 1
+          },
+          {
+            "operationId": "search_workspace",
+            "outcome": "success",
+            "count": 1
+          },
+          {
+            "operationId": "work_item.read",
+            "outcome": "success",
+            "count": 1
+          },
+          {
+            "operationId": "agent.outcome.evaluate",
+            "outcome": "denied",
+            "count": 1
+          },
+          {
+            "operationId": "agent.outcome.submit",
+            "outcome": "success",
+            "count": 1
+          },
+          {
+            "operationId": "agent.outcome.publish",
+            "outcome": "success",
+            "count": 1
+          }
+        ],
+        "evidenceKinds": [
+          "assignment",
+          "run",
+          "invocation",
+          "audit",
+          "publication",
+          "terminal_event"
+        ],
+        "durableRecords": [
+          {
+            "kind": "assignment",
+            "count": 1
+          },
+          {
+            "kind": "run",
+            "count": 1
+          },
+          {
+            "kind": "invocation",
+            "count": 1
+          },
+          {
+            "kind": "publication",
+            "count": 1
+          },
+          {
+            "kind": "terminal_event",
+            "count": 1
+          }
+        ],
+        "productEvents": [
+          {
+            "kind": "publication",
+            "count": 1
+          },
+          {
+            "kind": "outcome_submission",
+            "count": 1
+          }
+        ],
+        "routeChecks": [
+          "O01",
+          "O03"
+        ]
+      }
+    },
+    {
+      "id": "lease-and-replay-boundaries",
+      "assignment": {
+        "targetRef": "fixture:assigned-work-item",
+        "objective": "Exercise invocation lease changes and exact replay across the existing dispatch and Plane mutation owners.",
+        "acceptanceCriteria": [
+          "Rotate, revoke, and expire a host-only runtime lease while work is queued or active; dispatch and callback deny after invalidation and generated code receives only public lease metadata.",
+          "Repeat dispatch, callback, gateway mutation, submission, and publication with stable idempotency; a changed payload or actor binding is rejected without a duplicate semantic effect."
+        ],
+        "contextRefs": [
+          "context:operator-lease-replay"
+        ]
+      },
+      "expected": {
+        "operationOutcomes": [
+          {
+            "operationId": "search_workspace",
+            "outcome": "success",
+            "count": 1
+          },
+          {
+            "operationId": "work_item.read",
+            "outcome": "success",
+            "count": 1
+          },
+          {
+            "operationId": "work_item.rename",
+            "outcome": "success",
+            "count": 1
+          },
+          {
+            "operationId": "agent.outcome.evaluate",
+            "outcome": "denied",
+            "count": 1
+          },
+          {
+            "operationId": "agent.outcome.submit",
+            "outcome": "success",
+            "count": 1
+          },
+          {
+            "operationId": "agent.outcome.publish",
+            "outcome": "success",
+            "count": 1
+          }
+        ],
+        "evidenceKinds": [
+          "assignment",
+          "run",
+          "invocation",
+          "audit",
+          "publication",
+          "terminal_event"
+        ],
+        "durableRecords": [
+          {
+            "kind": "assignment",
+            "count": 1
+          },
+          {
+            "kind": "run",
+            "count": 1
+          },
+          {
+            "kind": "invocation",
+            "count": 1
+          },
+          {
+            "kind": "publication",
+            "count": 1
+          },
+          {
+            "kind": "terminal_event",
+            "count": 1
+          }
+        ],
+        "productEvents": [
+          {
+            "kind": "publication",
+            "count": 1
+          },
+          {
+            "kind": "outcome_submission",
+            "count": 1
+          }
+        ],
+        "routeChecks": [
+          "O04",
+          "O05"
+        ]
+      }
+    },
+    {
+      "id": "failure-and-budget-reconciliation",
+      "assignment": {
+        "targetRef": "fixture:assigned-work-item",
+        "objective": "Distinguish safe pre-send resume from post-send unknown outcome and prove cumulative budgets across invocations.",
+        "acceptanceCriteria": [
+          "A pre-send runtime failure can resume in the same run, while a post-send ambiguity becomes outcome_unknown and never receives a blind replay.",
+          "Model, tool, Code Mode, and total run budgets remain cumulative across invocations and a new container cannot reset the remaining allowance; exactly one visible terminal is retained."
+        ],
+        "contextRefs": [
+          "context:operator-failure-budgets"
+        ]
+      },
+      "expected": {
+        "operationOutcomes": [
+          {
+            "operationId": "search_workspace",
+            "outcome": "success",
+            "count": 1
+          },
+          {
+            "operationId": "work_item.read",
+            "outcome": "success",
+            "count": 1
+          },
+          {
+            "operationId": "agent.outcome.evaluate",
+            "outcome": "denied",
+            "count": 1
+          },
+          {
+            "operationId": "agent.outcome.submit",
+            "outcome": "success",
+            "count": 1
+          },
+          {
+            "operationId": "agent.outcome.publish",
+            "outcome": "success",
+            "count": 1
+          }
+        ],
+        "evidenceKinds": [
+          "assignment",
+          "run",
+          "invocation",
+          "audit",
+          "publication",
+          "terminal_event"
+        ],
+        "durableRecords": [
+          {
+            "kind": "assignment",
+            "count": 1
+          },
+          {
+            "kind": "run",
+            "count": 1
+          },
+          {
+            "kind": "invocation",
+            "count": 1
+          },
+          {
+            "kind": "publication",
+            "count": 1
+          },
+          {
+            "kind": "terminal_event",
+            "count": 1
+          }
+        ],
+        "productEvents": [
+          {
+            "kind": "publication",
+            "count": 1
+          },
+          {
+            "kind": "outcome_submission",
+            "count": 1
+          }
+        ],
+        "routeChecks": [
+          "O06",
+          "O07"
+        ]
+      }
+    },
+    {
+      "id": "ingress-health-and-rollback",
+      "assignment": {
+        "targetRef": "fixture:assigned-work-item",
+        "objective": "Probe hostile runtime frames, bounded gateway health, and coordinated artifact rollback.",
+        "acceptanceCriteria": [
+          "Malformed, oversized, duplicate, out-of-order, and cross-bound runtime events are rejected by Plane ingress without changing durable evidence or product state.",
+          "A bounded concurrent gateway workload exposes health, audit, quota, version, and safety-stop readback; cleanup cannot erase audit history.",
+          "API and runtime rollback reconcile in-flight work forward-only and reject incompatible or cross-mixed provenance before dispatch."
+        ],
+        "contextRefs": [
+          "context:operator-ingress-rollback"
+        ]
+      },
+      "expected": {
+        "operationOutcomes": [
+          {
+            "operationId": "search_workspace",
+            "outcome": "success",
+            "count": 1
+          },
+          {
+            "operationId": "work_item.read",
+            "outcome": "success",
+            "count": 1
+          },
+          {
+            "operationId": "agent.outcome.evaluate",
+            "outcome": "denied",
+            "count": 1
+          },
+          {
+            "operationId": "agent.outcome.submit",
+            "outcome": "success",
+            "count": 1
+          },
+          {
+            "operationId": "agent.outcome.publish",
+            "outcome": "success",
+            "count": 1
+          }
+        ],
+        "evidenceKinds": [
+          "assignment",
+          "run",
+          "invocation",
+          "audit",
+          "publication",
+          "terminal_event"
+        ],
+        "durableRecords": [
+          {
+            "kind": "assignment",
+            "count": 1
+          },
+          {
+            "kind": "run",
+            "count": 1
+          },
+          {
+            "kind": "invocation",
+            "count": 1
+          },
+          {
+            "kind": "publication",
+            "count": 1
+          },
+          {
+            "kind": "terminal_event",
+            "count": 1
+          }
+        ],
+        "productEvents": [
+          {
+            "kind": "publication",
+            "count": 1
+          },
+          {
+            "kind": "outcome_submission",
+            "count": 1
+          }
+        ],
+        "routeChecks": [
+          "O08",
+          "O09",
+          "O10"
+        ]
+      }
+    }
+  ],
+  "setup": {
+    "preconditions": [
+      "isolated_workspace",
+      "assigned_work_item",
+      "fresh_assignment",
+      "live_authorization",
+      "separate_runtime_service"
+    ],
+    "actors": []
+  },
+  "controls": {
+    "fault": {
+      "selection": "none"
+    }
+  }
+}

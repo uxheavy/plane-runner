@@ -118,6 +118,70 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert "exactly one artifact and exactly one evidence item" in context.assignment.acceptance_criteria[-1]
 
 
+def test_operator_live_descriptor_covers_exact_synthetic_omar_routes() -> None:
+    path = TOOLS / "agent-g4-operator-v6.json"
+    raw = path.read_bytes()
+    parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
+
+    assert parsed.scenario_id == "operator"
+    assert [commission.commission_id for commission in parsed.commissions] == [
+        "presentation-and-sdk-identity",
+        "lease-and-replay-boundaries",
+        "failure-and-budget-reconciliation",
+        "ingress-health-and-rollback",
+    ]
+    assert parsed.assignment.target_ref == scenario.ASSIGNED_WORK_ITEM_ALIAS
+    assert parsed.profile.model_policy == scenario.ModelPolicy("openai-codex", "gpt-5.6-luna", "xhigh", False)
+    assert parsed.profile.tool_presentation == (
+        "catalog.search",
+        "catalog.describe",
+        "search_workspace",
+        "work_item.read",
+        "work_item.rename",
+        "agent.outcome.evaluate",
+        "agent.outcome.submit",
+        "agent.outcome.publish",
+    )
+
+    route_checks = {
+        check
+        for commission in parsed.commissions
+        for check in commission.expected["routeChecks"]
+    }
+    assert route_checks == {"O01", "O03", "O04", "O05", "O06", "O07", "O08", "O09", "O10"}
+    assert "O02" not in route_checks
+    assert all(
+        commission.assignment.target_ref == scenario.ASSIGNED_WORK_ITEM_ALIAS
+        and commission.expected["productEvents"] == [
+            {"kind": "publication", "count": 1},
+            {"kind": "outcome_submission", "count": 1},
+        ]
+        for commission in parsed.commissions
+    )
+    for commission in parsed.commissions:
+        validator._validate_scenario_projection(scenario.commission_descriptor(parsed, commission).evidence())
+    assert "Tool presentation is descriptive only" in parsed.profile.instructions
+    assert "outcome_unknown" in parsed.prompt
+
+
+def test_operator_route_checks_reject_duplicates() -> None:
+    value = descriptor_for("operator")
+    value["expected"] = {
+        "operationOutcomes": [],
+        "evidenceKinds": [],
+        "routeChecks": ["O01", "O01"],
+    }
+    raw, digest = descriptor_bytes(value)
+
+    with pytest.raises(scenario.ScenarioError, match="scenario_expected_route_check_duplicate"):
+        scenario.parse_descriptor_bytes(raw, digest)
+
+    value["expected"]["routeChecks"] = ["O02"]
+    raw, digest = descriptor_bytes(value)
+    with pytest.raises(scenario.ScenarioError, match="scenario_expected_route_check_unsupported"):
+        scenario.parse_descriptor_bytes(raw, digest)
+
+
 def test_commission_descriptor_keeps_shared_profile_and_binds_each_assignment() -> None:
     raw = (TOOLS / "agent-g4-worker-v6.json").read_bytes()
     parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())

@@ -26,6 +26,29 @@ has a clean `RuntimeExit.completed`. Invocation state is not enough. The
 finite budget remains a safety policy; the numeric model-call allowance is
 configuration.
 
+## Omar synthetic operator route
+
+The provider-free handoff descriptor is
+`tools/agent-g4-operator-v6.json`. It uses only the existing
+`fixture:assigned-work-item` setup and four bounded commissions:
+
+- O01/O03: presentation-only disclosure and SDK bearer-identity failures,
+  including invalid, expired, wrong-workspace, and substituted callers;
+- O04/O05: runtime-credential rotation, revocation, and expiry across queued
+  and active work, plus host-only replay/mismatch boundaries;
+- O06/O07: pre-send resume, post-send `outcome_unknown`, one terminal, and
+  cumulative budgets;
+- O08/O09/O10: hostile runtime ingress, concurrent gateway health/quota, and
+  rollback/provenance.
+
+O02 is intentionally absent because its external-client journey is already
+closed. The descriptor is validated by the existing scenario parser and live
+receipt validator; it does not add an authorization source, runtime authority,
+or second verifier. After the coordinator supplies final exact image pins, copy
+the descriptor to a fresh owner-only path and pass its SHA-256 with the existing
+`PLANE_G4_SCENARIO_DESCRIPTOR` / `PLANE_G4_SCENARIO_SHA256` inputs. No provider
+or external workspace is used to stage or validate the descriptor.
+
 The typed JSON ambiguity marker is available only before the relay response
 starts. Once a Plane-relay `200` stream has started, downstream body-read
 ambiguity is fail-stop at Hermes and the same logical request is not retried.

@@ -170,7 +170,7 @@
             },
             "durableRecords": { "$ref": "#/$defs/durableCountRows" },
             "productEvents": { "$ref": "#/$defs/productCountRows" },
-            "routeChecks": { "type": "array", "maxItems": 8, "items": { "enum": ["W01", "W02", "W03", "W04", "W05", "W06", "W07", "W08"] } }
+            "routeChecks": { "type": "array", "uniqueItems": true, "maxItems": 9, "items": { "enum": ["W01", "W02", "W03", "W04", "W05", "W06", "W07", "W08", "O01", "O03", "O04", "O05", "O06", "O07", "O08", "O09", "O10"] } }
           }
         },
         "setup": { "$ref": "#/$defs/setup" },
