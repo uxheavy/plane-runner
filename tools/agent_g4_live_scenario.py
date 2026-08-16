@@ -245,10 +245,10 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
             )
         if operation_id == "work_item.rename" and "W04" in route_checks:
             guidance += (
-                " This semantic mutation must be performed by the restricted Code Mode composition, not by a " 
-                "native model mutation: the next model tool call after the bounded work_item.read is execute_code, " 
-                "and the script must use only hermes_tools.plane_operation('code', 'operation:work_item.rename', " 
-                "input)."
+                " This semantic mutation must be performed by the restricted Code Mode composition, not by a "
+                "native model mutation: the next model tool call after the bounded work_item.read is execute_code, "
+                "and the module must export a default function that uses only "
+                "host.call_plane_operation(\"work_item.rename\", input, idempotencyKey, correlationId)."
             )
         if operation_id == "agent.context.read":
             guidance += " This one response is the complete subject-bound projection; do not request it again."

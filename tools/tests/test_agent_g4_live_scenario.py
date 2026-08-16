@@ -100,7 +100,9 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     }
     assert "workItemReadInput unchanged" in identity.assignment.objective
     assert "execute_code" in mutation.assignment.objective
-    assert "plane_operation('code', 'operation:work_item.rename'" in mutation.assignment.objective
+    assert "export default async function" in mutation.assignment.objective
+    assert 'host.call_plane_operation("work_item.rename"' in mutation.assignment.objective
+    assert "hermes_tools.plane_operation" not in mutation.assignment.objective
     mutation_route_guidance = scenario.model_route_expectations(mutation.expected)
     rename_guidance = next(
         item for item in mutation_route_guidance if "invoke work_item.rename" in item
@@ -108,12 +110,18 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert "restricted Code Mode composition" in rename_guidance
     assert "not by a native model mutation" in rename_guidance
     assert "execute_code" in rename_guidance
+    assert "export a default function" in rename_guidance
+    assert 'host.call_plane_operation("work_item.rename"' in rename_guidance
+    assert "hermes_tools.plane_operation" not in rename_guidance
     assert '"subject_user_ref":"{{subjectUserRef}}"' in context.assignment.objective
     assert "private memory" in context.assignment.objective
     assert "exact current invocation run_ref" in parsed.profile.instructions
     assert "never invent, copy, or substitute another run reference" in parsed.profile.instructions
     assert "after a terminal or rejected outcome callback, do not retry either terminal operation" in parsed.profile.instructions
     assert "agent.context.read returns the complete subject-bound projection in one response" in parsed.profile.instructions
+    assert "bounded TypeScript module exporting a default function" in parsed.profile.instructions
+    assert "host.call_plane_operation(operationId, input, idempotencyKey, correlationId)" in parsed.profile.instructions
+    assert "hermes_tools.plane_operation" not in parsed.profile.instructions
     assert "exactly one artifact and exactly one evidence item" in context.assignment.objective
     assert "exactly one artifact and exactly one evidence item" in context.assignment.acceptance_criteria[-1]
 
