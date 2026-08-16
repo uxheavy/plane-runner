@@ -30,6 +30,7 @@ _RED_TEAM = importlib.util.module_from_spec(_RED_TEAM_SPEC)
 sys.modules[_RED_TEAM_SPEC.name] = _RED_TEAM
 _RED_TEAM_SPEC.loader.exec_module(_RED_TEAM)
 
+import agent_g4_live_scenario as live_scenario  # noqa: E402
 from validate_agent_g4_live import (  # noqa: E402
     ContractError,
     MAX_EVIDENCE_BYTES,
@@ -405,6 +406,56 @@ def terminal_lifecycle_fixture(*, observed: bool = True) -> dict[str, object]:
 
 
 class G4ContractTests(unittest.TestCase):
+    def test_failed_multi_commission_aggregate_retains_bounded_failure_envelope(self):
+        manifest, authority, config, success_text = fixture()
+        namespace = invoke_helper_namespace()
+        builder = namespace["build_failure_evidence"]
+        failed = builder(
+            binding=exact_binding(manifest, CANDIDATE),
+            authority_id=authority["authorityId"],
+            canary_ids={key: row["id"] for key, row in authority["binding"]["canaries"].items()},
+            failure_phase="api-invocation",
+            error_class="RuntimeError",
+            exit_code=1,
+            run_id=None,
+            run_state=None,
+            invocation_id=None,
+            invocation_state=None,
+            provider_attempts=[],
+            terminal_kind="none",
+            provider_relay=provider_relay_descriptor(),
+        )
+        descriptor_path = TOOLS / "agent-g4-worker-v6.json"
+        descriptor_bytes_value = descriptor_path.read_bytes()
+        root_scenario = live_scenario.parse_descriptor_bytes(
+            descriptor_bytes_value,
+            hashlib.sha256(descriptor_bytes_value).hexdigest(),
+        )
+        success = json.loads(success_text)
+        success["scenario"] = live_scenario.commission_descriptor(
+            root_scenario,
+            root_scenario.commissions[0],
+        ).evidence()
+        aggregate = namespace["_aggregate_commission_evidence"](
+            root_scenario,
+            [
+                ("identity-discovery", 0, success),
+                ("mutation-composition-publication", 1, failed),
+            ],
+        )
+
+        self.assertEqual(aggregate["schemaVersion"], "plane-agent-g4/live-failure/v1")
+        self.assertEqual(aggregate["status"], "failed")
+        self.assertIn("failure", aggregate)
+        self.assertNotIn("provider", aggregate)
+        self.assertEqual(
+            [row["status"] for row in aggregate["commissionEvidence"]],
+            ["passed", "failed"],
+        )
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(aggregate))
+        self.addCleanup(temp.cleanup)
+        self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
+
     def test_terminal_lifecycle_observation_is_strictly_bounded_and_retained(self):
         namespace = invoke_helper_namespace()
         parser = namespace["_bounded_terminal_lifecycle_observation"]

@@ -2293,6 +2293,14 @@ def _aggregate_commission_evidence(root_scenario, results):
 
     first = results[0][2]
     passed = all(code == 0 and evidence.get("status") == "passed" for _, code, evidence in results)
+    failed_result = next(
+        (
+            (commission_id, code, evidence)
+            for commission_id, code, evidence in results
+            if code != 0 or evidence.get("status") != "passed"
+        ),
+        None,
+    )
     commission_rows = [
         {
             "id": commission_id,
@@ -2363,8 +2371,52 @@ def _aggregate_commission_evidence(root_scenario, results):
         scenario_projection["actual"]["routeEvidence"] = merged_route_evidence
     # The per-commission gates are the authoritative route gates. The aggregate
     # keeps them bounded and makes the shared actor/profile linkage explicit.
-    aggregate = dict(first)
-    aggregate["status"] = "passed" if passed else "failed"
+    # A failed aggregate must retain the failed commission's bounded failure
+    # envelope; copying the first successful envelope and changing only status
+    # would erase the failure contract and misrepresent the aggregate lifecycle.
+    if passed:
+        aggregate = dict(first)
+        aggregate["status"] = "passed"
+    else:
+        if failed_result is None:
+            raise RuntimeError("failed commission aggregate has no failed result")
+        _, _, failed_evidence = failed_result
+        if failed_evidence.get("schemaVersion") == "plane-agent-g4/live-failure/v1":
+            aggregate = dict(failed_evidence)
+        else:
+            # Keep the aggregate fail-closed if a commission owner returned an
+            # incomplete failure object. This path still emits only bounded
+            # lifecycle fields and never promotes a successful first cell.
+            canaries = {
+                key: ((failed_evidence.get("canaries") or {}).get(key) or {}).get("id")
+                for key in ("permitted", "denied")
+            }
+            aggregate = build_failure_evidence(
+                binding=failed_evidence.get("binding") or first.get("binding") or {},
+                failure_phase="api-invocation",
+                error_class="RuntimeError",
+                exit_code=1,
+                run_id=None,
+                run_state=None,
+                invocation_id=None,
+                invocation_state=None,
+                provider_attempts=failed_evidence.get("providerAttempts", []),
+                terminal_kind="none",
+                failure_code="runtime_error",
+                failure_reason=json.dumps(
+                    {
+                        "failureCode": "runtime_error",
+                        "failurePhase": "launcher",
+                        "failureDetail": "unclassified_exception",
+                    },
+                    separators=(",", ":"),
+                ),
+                authority_id=failed_evidence.get("authorityId") or first.get("authorityId"),
+                canary_ids=canaries,
+                provider_relay=failed_evidence.get("providerRelay") or first.get("providerRelay"),
+                plane_operation_audit=failed_evidence.get("planeOperationAudit", []),
+            )
+        aggregate["status"] = "failed"
     aggregate["scenario"] = scenario_projection
     aggregate["scenarioGate"] = {
         "passed": passed,
