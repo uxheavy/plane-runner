@@ -710,6 +710,7 @@ docker run --rm --network "${NETWORK}" \
 LIVE_PHASE=migrate
 docker run --rm --network "${NETWORK}" \
     --env DJANGO_SETTINGS_MODULE=plane.settings.test \
+    --env PLANE_DB_MIGRATION_MODE=1 \
     --env POSTGRES_HOST=test-db \
     --env DATABASE_URL=postgresql://plane:plane@test-db:5432/plane \
     --env DATABASE_RUNTIME_URL=postgresql://plane:plane@test-db:5432/plane \
