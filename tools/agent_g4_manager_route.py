@@ -35,6 +35,7 @@ from plane.agent.lifecycle import (
 )
 from plane.agent.schedules.services import create_schedule, fire_schedule, next_schedule_fire
 from plane.db.models import (
+    AgentActor,
     AgentHRProposal,
     AgentRole,
     AgentScheduleFireState,
@@ -95,6 +96,12 @@ def _exercise_manager_journey(
     suffix: str,
 ) -> dict[str, object]:
     """Create one disposable, provider-free M01-M08 evidence graph."""
+
+    # Shared scenario setup creates profiles through the lifecycle service and
+    # then passes the original actor instance here.  Refresh the relation at
+    # the route boundary so every child/revision run binds the persisted
+    # active profile rather than a stale in-memory relation cache.
+    worker = AgentActor.objects.select_related("active_profile").get(pk=worker.pk)
 
     # M01: Elena records a bounded, dynamic plan directly on a normal
     # assignment.  There is deliberately no workflow-definition product.
