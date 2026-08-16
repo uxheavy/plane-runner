@@ -9,9 +9,11 @@ from typing import Any
 
 
 _EXPORTS: dict[str, tuple[str, str]] = {
+    "CODE_MODE_EXECUTION_OPERATION": ("contracts", "CODE_MODE_EXECUTION_OPERATION"),
     "CODE_MODE_SCHEMA_VERSION": ("contracts", "CODE_MODE_SCHEMA_VERSION"),
     "CodeModeBindingError": ("host", "CodeModeBindingError"),
     "CodeModeBudget": ("contracts", "CodeModeBudget"),
+    "CodeModeExecutionRequest": ("contracts", "CodeModeExecutionRequest"),
     "CodeModeHostRPC": ("host", "CodeModeHostRPC"),
     "CodeModeIsolateError": ("isolate", "CodeModeIsolateError"),
     "CodeModeIsolateRunner": ("isolate", "CodeModeIsolateRunner"),
@@ -35,9 +37,11 @@ def __dir__() -> list[str]:
 
 
 __all__ = [
+    "CODE_MODE_EXECUTION_OPERATION",
     "CODE_MODE_SCHEMA_VERSION",
     "CodeModeBindingError",
     "CodeModeBudget",
+    "CodeModeExecutionRequest",
     "CodeModeHostRPC",
     "CodeModeIsolateError",
     "CodeModeIsolateRunner",

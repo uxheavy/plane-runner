@@ -212,6 +212,7 @@ class FakeIsolateHost:
         )
         self.cancelled = False
         self.callbacks = []
+        self.max_inline_result_bytes = 4096
 
     @staticmethod
     def callback_surface():
@@ -239,10 +240,10 @@ class FakeIsolateHost:
         self.budget.output_bytes -= size
         return True
 
-    def record_execution_usage(self, *, input_tokens, output_tokens, duration_ms):
+    def record_execution_usage(self, *, input_bytes, input_tokens, output_tokens, duration_ms):
         assert duration_ms > 0
 
-    def reserve_execution_budget(self, *, input_tokens, output_tokens):
+    def reserve_execution_budget(self, *, input_bytes, input_tokens, output_tokens):
         return None
 
     def release_execution_budget(self):
@@ -302,6 +303,45 @@ def test_code_mode_child_denies_capability_escape_and_imports():
 def test_code_mode_child_denies_zero_duration_before_spawn():
     with pytest.raises(CodeModeIsolateError, match="duration"):
         CodeModeIsolateRunner().run(FakeIsolateHost(duration_ms=0), "export default () => 1", {})
+
+
+def test_code_mode_child_spills_results_above_the_inline_ceiling():
+    host = FakeIsolateHost()
+    host.max_inline_result_bytes = 16
+
+    result = CodeModeIsolateRunner().run(
+        host,
+        'export default () => "x".repeat(100)',
+        {},
+    )
+
+    assert result == {"spilled": {"ok": True, "bytes": 102}}, result
+
+
+def test_code_mode_child_preserves_bounded_callback_error_codes():
+    host = FakeIsolateHost()
+
+    class ObservationLimitError(RuntimeError):
+        code = "OBSERVATION_LIMIT"
+
+    def fail_callback(*args, **kwargs):
+        raise ObservationLimitError("too many observations")
+
+    host.call_operation = fail_callback
+    with pytest.raises(CodeModeIsolateError) as raised:
+        CodeModeIsolateRunner().run(
+            host,
+            """
+                export default async function ({host}: {host: any}) {
+                    return await host.call_plane_operation(
+                        "work_item.read", {}, "idempotency:observation-limit", "correlation:observation-limit"
+                    );
+                }
+            """,
+            {},
+        )
+
+    assert raised.value.code == "OBSERVATION_LIMIT"
 
 
 def test_code_mode_child_stops_on_cancellation():

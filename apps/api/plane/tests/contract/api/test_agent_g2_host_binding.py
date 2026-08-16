@@ -1,10 +1,13 @@
 """Plane-side host socket proof for the Hermes production callback seam."""
 
+from datetime import timedelta
 import json
 import socket
 
+from django.utils import timezone
 import pytest
 
+from plane.agent.code_mode.contracts import CODE_MODE_EXECUTION_OPERATION, CODE_MODE_SCHEMA_VERSION
 from plane.agent.lifecycle import (
     create_actor,
     create_assignment,
@@ -23,11 +26,13 @@ from plane.db.models import (
     AgentRole,
     Issue,
     OperationGatewayAudit,
+    OperationGatewayIdempotency,
     OutcomeSubmission,
     Project,
     ProjectMember,
     RunState,
     RunTerminalEvent,
+    RuntimeInvocationControl,
     State,
 )
 from plane.operation_gateway.gateway import OperationGateway
@@ -59,6 +64,22 @@ def _round_trip(path, call):
                 break
             data.extend(chunk)
     return PlaneHostResult.from_wire(bytes(data[:-1]))
+
+
+def _code_call(*, run_id, invocation_id, source, input_data=None):
+    return _call(
+        run_id=run_id,
+        invocation_id=invocation_id,
+        action="code",
+        operation_ref=CODE_MODE_EXECUTION_OPERATION,
+        source="code",
+        input={
+            "schemaVersion": CODE_MODE_SCHEMA_VERSION,
+            "entrypoint": "default",
+            "source": source,
+            "input": input_data or {},
+        },
+    )
 
 
 @pytest.fixture
@@ -346,6 +367,330 @@ def test_invocation_scoped_socket_routes_gateway_and_explicit_outcome(
     assert OperationGatewayAudit.objects.filter(operation_id="agent.outcome.submit").count() >= 2
     assert OperationGatewayAudit.objects.filter(operation_id="agent.outcome.publish").count() >= 2
     assert not server.socket_path.exists()
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_invocation_scoped_socket_executes_typescript_through_the_bound_host(
+    tmp_path, workspace, gateway_project, gateway_issue, create_user
+):
+    actor = create_actor(
+        workspace=workspace,
+        project=gateway_project,
+        display_name="G2 TypeScript worker",
+        credential_ref="plane-credential:g2-typescript",
+        created_by=create_user,
+    )
+    profile = create_profile(
+        actor,
+        role=AgentRole.WORKER,
+        instructions="Use the typed TypeScript host.",
+        runtime_defaults={"maxCodeModeCalls": 1},
+        created_by=create_user,
+    )
+    assignment = create_assignment(
+        actor,
+        project=gateway_project,
+        target_ref=f"issue:{gateway_issue.id}",
+        objective="Exercise the live TypeScript Code Mode bridge.",
+        acceptance_criteria=["One code callback renames the assigned work item."],
+        created_by=create_user,
+    )
+    run = create_run(assignment, profile, idempotency_key="idempotency:g2-typescript-run", created_by=create_user)
+    invocation = record_invocation(run, idempotency_key="idempotency:g2-typescript-invocation", trigger="initial")
+    port = build_gateway_host_port(invocation=invocation, gateway=OperationGateway())
+    server = PlaneHostServer(socket_path=tmp_path / "g2-typescript-host.sock", invoke=port.invoke)
+    server.start()
+    try:
+        code_call = _call(
+            run_id=run.snapshot["runId"],
+            invocation_id=invocation.invocation_id,
+            action="code",
+            operation_ref=CODE_MODE_EXECUTION_OPERATION,
+            source="code",
+            input={
+                "schemaVersion": CODE_MODE_SCHEMA_VERSION,
+                "entrypoint": "default",
+                "source": """
+                    export default async function ({host, input}: {host: any; input: any}) {
+                        return await host.call_plane_operation(
+                            "work_item.rename", input,
+                            "idempotency:g2-typescript-rename",
+                            "correlation:g2-typescript-rename"
+                        );
+                    }
+                """,
+                "input": {
+                    "project_id": str(gateway_project.id),
+                    "issue_id": str(gateway_issue.id),
+                    "name": "G2 TypeScript renamed",
+                },
+            },
+        )
+        result = _round_trip(server.socket_path, code_call)
+        assert result.status == "ok", result
+        assert result.output["schemaVersion"] == CODE_MODE_SCHEMA_VERSION
+        assert result.output["result"]["ok"] is True
+        assert result.output["observations"] == [
+            {
+                "source": "code",
+                "action": "code",
+                "operationRef": "operation:work_item.rename",
+                "status": "ok",
+                "requestId": result.output["observations"][0]["requestId"],
+                "gatewayReceipt": result.output["observations"][0]["gatewayReceipt"],
+                "auditReceipt": result.output["observations"][0]["auditReceipt"],
+            }
+        ]
+        gateway_issue.refresh_from_db()
+        assert gateway_issue.name == "G2 TypeScript renamed"
+        assert OperationGatewayIdempotency.objects.filter(idempotency_key="idempotency:g2-typescript-rename").count() == 1
+        assert OperationGatewayAudit.objects.filter(operation_id="work_item.rename").count() == 2
+
+        budget_exhausted = _round_trip(
+            server.socket_path,
+            _code_call(
+                **{"run_id": run.snapshot["runId"], "invocation_id": invocation.invocation_id},
+                source="""
+                    export default async function ({host}: {host: any}) {
+                        return await host.call_plane_operation(
+                            "work_item.read", {},
+                            "idempotency:g2-typescript-budget",
+                            "correlation:g2-typescript-budget"
+                        );
+                    }
+                """,
+            ),
+        )
+        assert budget_exhausted.status == "denied"
+        assert budget_exhausted.error_code == "BUDGET_EXCEEDED"
+
+        replay = _round_trip(server.socket_path, code_call)
+        assert replay.status == "replayed"
+        assert replay.replayed is True
+        assert replay.output == result.output
+        assert OperationGatewayIdempotency.objects.filter(idempotency_key="idempotency:g2-typescript-rename").count() == 1
+        assert OperationGatewayAudit.objects.filter(operation_id="work_item.rename").count() == 2
+    finally:
+        server.close()
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_invocation_scoped_socket_rejects_unversioned_typescript_capsule(
+    tmp_path, workspace, gateway_project, gateway_issue, create_user
+):
+    """The execution capsule is versioned and does not accept the legacy unversioned shape."""
+    actor = create_actor(
+        workspace=workspace,
+        project=gateway_project,
+        display_name="G2 TypeScript validation worker",
+        credential_ref="plane-credential:g2-typescript-validation",
+        created_by=create_user,
+    )
+    profile = create_profile(actor, role=AgentRole.WORKER, instructions="Use the typed TypeScript host.", created_by=create_user)
+    assignment = create_assignment(
+        actor,
+        project=gateway_project,
+        target_ref=f"issue:{gateway_issue.id}",
+        objective="Reject an unversioned Code Mode capsule.",
+        acceptance_criteria=["No child process or mutation is started."],
+        created_by=create_user,
+    )
+    run = create_run(assignment, profile, idempotency_key="idempotency:g2-typescript-validation-run", created_by=create_user)
+    invocation = record_invocation(run, idempotency_key="idempotency:g2-typescript-validation-invocation", trigger="initial")
+    port = build_gateway_host_port(invocation=invocation, gateway=OperationGateway())
+    server = PlaneHostServer(socket_path=tmp_path / "g2-typescript-validation.sock", invoke=port.invoke)
+    server.start()
+    try:
+        result = _round_trip(
+            server.socket_path,
+            _call(
+                run_id=run.snapshot["runId"],
+                invocation_id=invocation.invocation_id,
+                action="code",
+                operation_ref=CODE_MODE_EXECUTION_OPERATION,
+                source="code",
+                input={"source": "export default () => null", "input": {}},
+            ),
+        )
+        assert result.status == "invalid"
+        assert result.error_code == "VALIDATION_ERROR"
+        assert OperationGatewayAudit.objects.filter(operation_id="work_item.rename").count() == 0
+    finally:
+        server.close()
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_typescript_host_rejects_substitution_expiry_and_capability_escapes(
+    tmp_path, workspace, gateway_project, gateway_issue, create_user
+):
+    actor = create_actor(
+        workspace=workspace,
+        project=gateway_project,
+        display_name="G2 TypeScript boundary worker",
+        credential_ref="plane-credential:g2-typescript-boundary",
+        created_by=create_user,
+    )
+    profile = create_profile(
+        actor,
+        role=AgentRole.WORKER,
+        instructions="Use the invocation-bound TypeScript host.",
+        runtime_defaults={"maxCodeModeCalls": 4},
+        created_by=create_user,
+    )
+    assignment = create_assignment(
+        actor,
+        project=gateway_project,
+        target_ref=f"issue:{gateway_issue.id}",
+        objective="Reject Code Mode boundary violations.",
+        acceptance_criteria=["No unbound or privileged callback can mutate the issue."],
+        created_by=create_user,
+    )
+    run = create_run(assignment, profile, idempotency_key="idempotency:g2-typescript-boundary-run", created_by=create_user)
+    invocation = record_invocation(
+        run,
+        idempotency_key="idempotency:g2-typescript-boundary-invocation",
+        trigger="initial",
+    )
+    port = build_gateway_host_port(invocation=invocation, gateway=OperationGateway())
+    server = PlaneHostServer(socket_path=tmp_path / "g2-typescript-boundary.sock", invoke=port.invoke)
+    server.start()
+    common = {"run_id": run.snapshot["runId"], "invocation_id": invocation.invocation_id}
+    mutation_source = """
+        export default async function ({host, input}: {host: any; input: any}) {
+            return await host.call_plane_operation(
+                "work_item.rename", input,
+                "idempotency:g2-typescript-boundary-rename",
+                "correlation:g2-typescript-boundary-rename"
+            );
+        }
+    """
+    try:
+        wrong_run = _round_trip(
+            server.socket_path,
+            _code_call(
+                run_id="run:substitution",
+                invocation_id=common["invocation_id"],
+                source=mutation_source,
+                input_data={
+                    "project_id": str(gateway_project.id),
+                    "issue_id": str(gateway_issue.id),
+                    "name": "must not apply",
+                },
+            ),
+        )
+        assert wrong_run.status == "denied"
+        assert wrong_run.error_code == "CALLBACK_BINDING_INVALID"
+
+        wrong_invocation = _round_trip(
+            server.socket_path,
+            _code_call(
+                run_id=common["run_id"],
+                invocation_id="invocation:substitution",
+                source=mutation_source,
+                input_data={
+                    "project_id": str(gateway_project.id),
+                    "issue_id": str(gateway_issue.id),
+                    "name": "must not apply",
+                },
+            ),
+        )
+        assert wrong_invocation.status == "denied"
+        assert wrong_invocation.error_code == "CALLBACK_BINDING_INVALID"
+
+        trusted_actor_ref = port._host.request.agent_actor_ref
+        port._host.request.agent_actor_ref = "actor:substitution"
+        substituted_actor = _round_trip(
+            server.socket_path,
+            _code_call(
+                **common,
+                source=mutation_source,
+                input_data={
+                    "project_id": str(gateway_project.id),
+                    "issue_id": str(gateway_issue.id),
+                    "name": "must not apply",
+                },
+            ),
+        )
+        port._host.request.agent_actor_ref = trusted_actor_ref
+        assert substituted_actor.status == "ok"
+        assert substituted_actor.output["result"]["ok"] is False
+        assert substituted_actor.output["result"]["error"]["code"] == "CALLBACK_BINDING_INVALID"
+        assert substituted_actor.output["observations"][0]["errorCode"] == "CALLBACK_BINDING_INVALID"
+
+        oversized = _round_trip(
+            server.socket_path,
+            _code_call(
+                **common,
+                source="export default () => 1\n" + ("x" * 4096),
+            ),
+        )
+        assert oversized.status == "invalid"
+        assert oversized.error_code == "SOURCE_TOO_LARGE"
+
+        malformed = _round_trip(
+            server.socket_path,
+            _code_call(**common, source="export default function ("),
+        )
+        assert malformed.status == "unavailable"
+        assert malformed.error_code == "CODE_MODE_FAILED"
+
+        sandbox = _round_trip(
+            server.socket_path,
+            _code_call(
+                **common,
+                source="""
+                    export default async function () {
+                        let dynamicImport = "denied";
+                        try { await import("node:fs"); dynamicImport = "allowed"; } catch {}
+                        let escape = "denied";
+                        try { Function("return process")(); escape = "allowed"; } catch {}
+                        return {
+                            process: typeof process,
+                            filesystem: typeof globalThis.require,
+                            network: typeof fetch,
+                            dynamicImport,
+                            escape,
+                        };
+                    }
+                """,
+            ),
+        )
+        assert sandbox.status == "ok", sandbox
+        assert sandbox.output["result"] == {
+            "process": "undefined",
+            "filesystem": "undefined",
+            "network": "undefined",
+            "dynamicImport": "denied",
+            "escape": "denied",
+        }
+
+        control = RuntimeInvocationControl.objects.get(invocation=invocation)
+        control.cancellation_requested_at = timezone.now()
+        control.save(_allow_lifecycle=True, update_fields=["cancellation_requested_at", "updated_at"])
+        cancelled = _round_trip(
+            server.socket_path,
+            _code_call(**common, source="export default () => 1"),
+        )
+        assert cancelled.status == "denied"
+        assert cancelled.error_code == "CANCELLED"
+
+        control.cancellation_requested_at = None
+        control.lease_expires_at = timezone.now() - timedelta(seconds=1)
+        control.save(_allow_lifecycle=True, update_fields=["cancellation_requested_at", "lease_expires_at", "updated_at"])
+        expired = _round_trip(
+            server.socket_path,
+            _code_call(**common, source="export default () => 1"),
+        )
+        assert expired.status == "denied"
+        assert expired.error_code == "CANCELLED"
+    finally:
+        server.close()
+    gateway_issue.refresh_from_db()
+    assert gateway_issue.name == "G2 Gateway Issue"
+    assert not OperationGatewayIdempotency.objects.filter(idempotency_key="idempotency:g2-typescript-boundary-rename").exists()
 
 
 @pytest.mark.contract

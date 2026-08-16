@@ -24,6 +24,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable, Mapping
 
+from plane.agent.code_mode.contracts import (
+    CODE_MODE_EXECUTION_OPERATION,
+    CodeModeExecutionError,
+    CodeModeExecutionRequest,
+)
+
 HOST_PROTOCOL = "plane.agent-runtime/v1"
 PLANE_DISCOVERY_OPERATION = "plane.operations.discover@1"
 MAX_HOST_REQUEST_BYTES = 16 * 1024
@@ -1029,6 +1035,43 @@ class PlaneGatewayHostPort:
                 replayed=False,
                 output=dict(output),
             )
+        if call.action == "code":
+            if call.operation_ref != CODE_MODE_EXECUTION_OPERATION:
+                return self._error(call, "VALIDATION_ERROR", "Code Mode execution operation is invalid")
+            try:
+                request = CodeModeExecutionRequest.from_wire(call.input)
+                output = self._host.execute_typescript(request)
+            except CodeModeExecutionError as exc:
+                message = {
+                    "SOURCE_TOO_LARGE": "Code Mode source exceeds its size bound.",
+                    "VALIDATION_ERROR": "Code Mode execution input is invalid.",
+                }.get(exc.code, "Code Mode execution input is invalid.")
+                return self._error(call, exc.code, message)
+            except ValueError:
+                return self._error(call, "VALIDATION_ERROR", "Code Mode execution input is invalid")
+            except Exception as exc:
+                code = getattr(exc, "code", "CODE_MODE_FAILED")
+                message = {
+                    "CANCELLED": "Code Mode was cancelled.",
+                    "BUDGET_EXCEEDED": "Code Mode budget is exhausted.",
+                    "SOURCE_TOO_LARGE": "Code Mode source exceeds its size bound.",
+                    "VALIDATION_ERROR": "Code Mode source is invalid.",
+                    "PROTOCOL_ERROR": "Code Mode host protocol failed closed.",
+                    "ISOLATE_UNAVAILABLE": "Code Mode isolate is unavailable.",
+                    "SPILL_EXCEEDED": "Code Mode result spill exceeded its bound.",
+                    "CALLBACK_FAILED": "Code Mode callback failed closed.",
+                    "OBSERVATION_LIMIT": "Code Mode observation budget is exhausted.",
+                    "CODE_MODE_FAILED": "Code Mode execution failed in the restricted isolate.",
+                }.get(code, "Code Mode execution failed in the restricted isolate.")
+                return self._error(call, str(code), message)
+            return PlaneHostResult(
+                request_ref=call.request_ref,
+                correlation_id=call.correlation_id,
+                idempotency_key=call.idempotency_key,
+                status="ok",
+                replayed=False,
+                output=output,
+            )
         if call.action == "discover":
             if call.operation_ref != PLANE_DISCOVERY_OPERATION:
                 return self._error(call, "VALIDATION_ERROR", "Unsupported Plane discovery operation")
@@ -1172,7 +1215,9 @@ class PlaneGatewayHostPort:
             idempotency_key=call.idempotency_key,
             status=(
                 "invalid"
-                if code == "VALIDATION_ERROR"
+                if code in {"VALIDATION_ERROR", "SOURCE_TOO_LARGE", "PROTOCOL_ERROR"}
+                else "denied"
+                if code in {"BUDGET_EXCEEDED", "CANCELLED", "NOT_AUTHORIZED"}
                 else "denied"
                 if code == "CALLBACK_BINDING_INVALID"
                 else "unavailable"

@@ -13,6 +13,8 @@ from typing import Any
 
 from plane.agent.lifecycle.runtime_contract import canonical_json
 
+from .contracts import MAX_CODE_MODE_INLINE_RESULT_BYTES, MAX_CODE_MODE_SOURCE_BYTES
+
 
 MAX_PROTOCOL_LINE_BYTES = 1_048_576
 _RUNNER = Path(__file__).with_name("runner.mjs")
@@ -52,6 +54,8 @@ class CodeModeIsolateRunner:
     ) -> Any:
         if not isinstance(source, str) or not source.strip():
             raise CodeModeIsolateError("VALIDATION_ERROR", "Code Mode source must be non-empty TypeScript")
+        if len(source.encode("utf-8")) > MAX_CODE_MODE_SOURCE_BYTES:
+            raise CodeModeIsolateError("SOURCE_TOO_LARGE", "Code Mode source exceeds its size bound")
         if not isinstance(input_data, dict):
             raise CodeModeIsolateError("VALIDATION_ERROR", "Code Mode input must be an object")
         if any(
@@ -67,10 +71,17 @@ class CodeModeIsolateRunner:
             )
         ):
             raise CodeModeIsolateError("BUDGET_EXCEEDED", "Code Mode duration or cumulative budget is exhausted")
+        if host.is_cancelled():
+            raise CodeModeIsolateError("CANCELLED", "Code Mode was cancelled")
+        input_bytes = len(canonical_json({"source": source, "input": input_data}).encode("utf-8"))
         try:
             reserve_execution_budget = getattr(host, "reserve_execution_budget", None)
             if reserve_execution_budget is not None:
-                reserve_execution_budget(input_tokens=input_tokens, output_tokens=output_tokens)
+                reserve_execution_budget(
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    input_bytes=input_bytes,
+                )
         except Exception as exc:
             raise CodeModeIsolateError("BUDGET_EXCEEDED", "Code Mode execution budget is exhausted") from exc
         start = time.monotonic()
@@ -122,14 +133,24 @@ class CodeModeIsolateRunner:
             )
             result = self._read_protocol(process, selector, host, start)
             result_size = len(canonical_json(result).encode("utf-8"))
-            if result_size > host.budget.output_bytes:
+            inline_limit = min(
+                host.budget.output_bytes,
+                getattr(host, "max_inline_result_bytes", MAX_CODE_MODE_INLINE_RESULT_BYTES),
+            )
+            if result_size > inline_limit:
                 spilled = host.spill_result(canonical_json(result))
                 if not spilled.get("ok"):
-                    raise CodeModeIsolateError("SPILL_EXCEEDED", "Code Mode result spill exceeded its bound")
+                    error = spilled.get("error") if isinstance(spilled, dict) else None
+                    code = error.get("code") if isinstance(error, dict) else None
+                    raise CodeModeIsolateError(
+                        str(code or "SPILL_EXCEEDED"),
+                        "Code Mode result spill exceeded its bound",
+                    )
                 result = {"spilled": spilled}
             if not host._record_output(len(canonical_json(result).encode("utf-8"))):
                 raise CodeModeIsolateError("BUDGET_EXCEEDED", "Code Mode output budget is exhausted")
             host.record_execution_usage(
+                input_bytes=input_bytes,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 duration_ms=max(1, int((time.monotonic() - start) * 1000)),
@@ -220,6 +241,11 @@ class CodeModeIsolateRunner:
                 return host.spill_result(args[0])
         except (TypeError, ValueError, AgentProtocolError) as exc:
             raise CodeModeIsolateError("CALLBACK_FAILED", "Code Mode callback failed closed") from exc
+        except Exception as exc:
+            code = getattr(exc, "code", None)
+            if isinstance(code, str) and code:
+                raise CodeModeIsolateError(code, "Code Mode callback failed closed") from exc
+            raise
         raise CodeModeIsolateError("PROTOCOL_ERROR", "Code Mode callback arguments are invalid")
 
     @staticmethod

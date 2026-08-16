@@ -37,11 +37,27 @@ from plane.db.models import (
 from plane.operation_gateway.catalog import CATALOG_DIGEST, code_mode_callback_names, get_operation
 from plane.operation_gateway.gateway import OperationGateway
 
-from .contracts import CODE_MODE_SCHEMA_VERSION, CodeModeBudget, HostBinding, SandboxPolicy
+from .contracts import (
+    CODE_MODE_SCHEMA_VERSION,
+    MAX_CODE_MODE_INLINE_RESULT_BYTES,
+    MAX_CODE_MODE_OBSERVATIONS,
+    MAX_CODE_MODE_OBSERVATIONS_BYTES,
+    MAX_CODE_MODE_OBSERVATION_BYTES,
+    CodeModeBudget,
+    CodeModeExecutionRequest,
+    HostBinding,
+    SandboxPolicy,
+)
 
 
 class CodeModeBindingError(ValueError):
     """The callback was not bound to the immutable Plane runtime records."""
+
+
+class CodeModeObservationError(AgentDomainError):
+    """The bounded callback observation receipt cannot be extended safely."""
+
+    code = "OBSERVATION_LIMIT"
 
 
 class CodeModeHostRPC:
@@ -82,6 +98,9 @@ class CodeModeHostRPC:
         }
         self._execution_reservation = None
         self._started_at = time.monotonic()
+        self._code_mode_observations: list[dict[str, Any]] = []
+        self._code_mode_active = False
+        self.max_inline_result_bytes = MAX_CODE_MODE_INLINE_RESULT_BYTES
 
     @classmethod
     def from_invocation(
@@ -162,6 +181,25 @@ class CodeModeHostRPC:
         )
 
     def call_operation(
+        self,
+        operation_id: str,
+        input_data: Mapping[str, Any],
+        *,
+        idempotency_key: str,
+        correlation_id: str,
+        workspace_slug: str | None = None,
+    ) -> dict[str, Any]:
+        receipt = self._call_operation(
+            operation_id,
+            input_data,
+            idempotency_key=idempotency_key,
+            correlation_id=correlation_id,
+            workspace_slug=workspace_slug,
+        )
+        self._record_code_mode_observation(operation_id, receipt)
+        return receipt
+
+    def _call_operation(
         self,
         operation_id: str,
         input_data: Mapping[str, Any],
@@ -363,6 +401,58 @@ class CodeModeHostRPC:
             return self._receipt_error(raw, response, "RESULT_TOO_LARGE", 409)
         return receipt
 
+    def execute_typescript(self, request: CodeModeExecutionRequest) -> dict[str, Any]:
+        """Run one bounded generated module in the existing child isolate."""
+
+        from .isolate import CodeModeIsolateRunner
+
+        self._code_mode_observations = []
+        self._code_mode_active = True
+        try:
+            result = CodeModeIsolateRunner().run(
+                self,
+                request.source,
+                request.input_data,
+            )
+        finally:
+            self._code_mode_active = False
+        return {
+            "schemaVersion": CODE_MODE_SCHEMA_VERSION,
+            "actorRef": self.binding.actor_ref,
+            "principalRef": self.binding.principal_ref,
+            "workspaceRef": f"workspace:{self.run.workspace_id}",
+            "runRef": self.binding.run_ref,
+            "invocationRef": self.binding.invocation_ref,
+            "result": result,
+            "observations": list(self._code_mode_observations),
+        }
+
+    def _record_code_mode_observation(self, operation_id: str, receipt: Mapping[str, Any]) -> None:
+        if not self._code_mode_active:
+            return
+        if len(self._code_mode_observations) >= MAX_CODE_MODE_OBSERVATIONS:
+            raise CodeModeObservationError("Code Mode observation budget is exhausted")
+        error = receipt.get("error")
+        observation: dict[str, Any] = {
+            "source": "code",
+            "action": "code",
+            "operationRef": f"operation:{operation_id}",
+            "status": "replayed" if receipt.get("replayed") else ("ok" if receipt.get("ok") else "denied"),
+            "requestId": receipt.get("requestId"),
+            "gatewayReceipt": receipt.get("gatewayReceipt"),
+            "auditReceipt": receipt.get("auditReceipt"),
+        }
+        if isinstance(error, Mapping) and isinstance(error.get("code"), str):
+            observation["errorCode"] = error["code"]
+        if len(canonical_json(observation).encode("utf-8")) > MAX_CODE_MODE_OBSERVATION_BYTES:
+            raise CodeModeObservationError("Code Mode observation exceeds its size bound")
+        if (
+            len(canonical_json(self._code_mode_observations + [observation]).encode("utf-8"))
+            > MAX_CODE_MODE_OBSERVATIONS_BYTES
+        ):
+            raise CodeModeObservationError("Code Mode observations exceed their size bound")
+        self._code_mode_observations.append(observation)
+
     def spill_result(self, payload: str | bytes) -> dict[str, Any]:
         """Route oversized bytes as bounded metadata through the audited gateway."""
 
@@ -420,7 +510,14 @@ class CodeModeHostRPC:
             if not reconciled:
                 self._release(reservation)
 
-    def record_execution_usage(self, *, input_tokens=0, output_tokens=0, duration_ms: int | None = None) -> None:
+    def record_execution_usage(
+        self,
+        *,
+        input_bytes=0,
+        input_tokens=0,
+        output_tokens=0,
+        duration_ms: int | None = None,
+    ) -> None:
         """Persist model usage reported by the trusted runner boundary."""
 
         elapsed = max(1, int((time.monotonic() - self._started_at) * 1000))
@@ -430,19 +527,21 @@ class CodeModeHostRPC:
         reservation = self._execution_reservation
         if reservation is None:
             reservation = self._reserve(
+                input_bytes=input_bytes,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 duration_ms=effective_duration,
             )
         self._reconcile(
             reservation,
+            input_bytes=input_bytes,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             duration_ms=effective_duration,
         )
         self._execution_reservation = None
 
-    def reserve_execution_budget(self, *, input_tokens=0, output_tokens=0) -> None:
+    def reserve_execution_budget(self, *, input_bytes=0, input_tokens=0, output_tokens=0) -> None:
         """Reserve trusted runner usage before generated code can invoke Plane."""
 
         if self._execution_reservation is not None:
@@ -450,6 +549,7 @@ class CodeModeHostRPC:
         if self.budget.input_tokens <= 0 or self.budget.output_tokens <= 0 or self.budget.duration_ms <= 0:
             raise AgentDomainError("Code Mode execution budget is exhausted")
         self._execution_reservation = self._reserve(
+            input_bytes=input_bytes,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             duration_ms=self.budget.duration_ms,
@@ -689,6 +789,11 @@ class CodeModeHostRPC:
         self._reconcile(reservation)
 
     def _preflight(self, raw: dict[str, Any]) -> dict[str, Any] | None:
+        if self._code_mode_active:
+            try:
+                self._load_trusted_binding(self.run, self.invocation)
+            except CodeModeBindingError:
+                return self._reject(raw, "CALLBACK_BINDING_INVALID", 403)
         if self.binding.catalog_digest != CATALOG_DIGEST:
             return self._reject(raw, "CATALOG_MISMATCH", 409)
         if raw["workspace_slug"] != self.binding.workspace_slug:

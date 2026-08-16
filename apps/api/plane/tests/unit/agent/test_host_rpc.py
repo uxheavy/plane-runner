@@ -2,6 +2,7 @@ import http.client
 import json
 import socket
 import threading
+from types import SimpleNamespace
 
 import pytest
 
@@ -13,7 +14,9 @@ from plane.agent.runtime.host_rpc import (
     PlaneHostRPCError,
     PlaneHostResult,
     PlaneHostServer,
+    PlaneGatewayHostPort,
 )
+from plane.agent.code_mode.contracts import CODE_MODE_EXECUTION_OPERATION, CODE_MODE_SCHEMA_VERSION
 from plane.operation_gateway.contracts import MAX_RESULT_BYTES
 
 
@@ -228,3 +231,35 @@ def test_http_client_reads_one_byte_past_the_response_limit(monkeypatch):
     with pytest.raises(PlaneHostRPCError, match="rejected"):
         host_rpc.PlaneHostHTTPClient(url="http://host.test", auth_token="token").invoke(call)
     assert reads == [limit + 1]
+
+
+def test_code_mode_observation_limit_is_a_bounded_host_error():
+    class ObservationLimitError(RuntimeError):
+        code = "OBSERVATION_LIMIT"
+
+    class FakeHost:
+        binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
+
+        def call_operation(self, *args, **kwargs):
+            return {}
+
+        def execute_typescript(self, request):
+            raise ObservationLimitError("too many observations")
+
+    call = _call(
+        action="code",
+        operationRef=CODE_MODE_EXECUTION_OPERATION,
+        source="code",
+        input={
+            "schemaVersion": CODE_MODE_SCHEMA_VERSION,
+            "entrypoint": "default",
+            "source": "export default () => 1",
+            "input": {},
+        },
+    )
+
+    result = PlaneGatewayHostPort(FakeHost()).invoke(call)
+
+    assert result.status == "unavailable", result
+    assert result.error_code == "OBSERVATION_LIMIT"
+    assert result.error_message == "Code Mode observation budget is exhausted."

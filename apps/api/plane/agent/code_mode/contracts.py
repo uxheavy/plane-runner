@@ -2,11 +2,79 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from typing import Any
 from typing import Literal
 
 
 CODE_MODE_SCHEMA_VERSION = "plane.code-mode/v1"
+CODE_MODE_EXECUTION_OPERATION = "plane.code-mode.execute@1"
+MAX_CODE_MODE_SOURCE_BYTES = 4 * 1024
+MAX_CODE_MODE_INLINE_RESULT_BYTES = 2 * 1024
+MAX_CODE_MODE_OBSERVATIONS = 32
+MAX_CODE_MODE_OBSERVATION_BYTES = 512
+MAX_CODE_MODE_OBSERVATIONS_BYTES = 4 * 1024
+
+
+class CodeModeExecutionError(ValueError):
+    """A bounded, public validation error for the execution capsule."""
+
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+
+
+@dataclass(frozen=True)
+class CodeModeExecutionRequest:
+    """The versioned capsule accepted by the trusted Plane host callback."""
+
+    source: str
+    input_data: dict[str, Any]
+    schema_version: str = CODE_MODE_SCHEMA_VERSION
+    entrypoint: str = "default"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.source, str) or not self.source.strip():
+            raise CodeModeExecutionError("VALIDATION_ERROR", "Code Mode source must be non-empty TypeScript")
+        if len(self.source.encode("utf-8")) > MAX_CODE_MODE_SOURCE_BYTES:
+            raise CodeModeExecutionError("SOURCE_TOO_LARGE", "Code Mode source exceeds its size bound")
+        if self.schema_version != CODE_MODE_SCHEMA_VERSION:
+            raise CodeModeExecutionError("VALIDATION_ERROR", "Code Mode schema version is unsupported")
+        if self.entrypoint != "default":
+            raise CodeModeExecutionError("VALIDATION_ERROR", "Code Mode entrypoint is unsupported")
+        if not isinstance(self.input_data, dict) or any(not isinstance(key, str) for key in self.input_data):
+            raise CodeModeExecutionError("VALIDATION_ERROR", "Code Mode input must be an object")
+        try:
+            encoded_input = json.dumps(
+                self.input_data,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        except (TypeError, ValueError) as exc:
+            raise CodeModeExecutionError("VALIDATION_ERROR", "Code Mode input must be JSON-compatible") from exc
+        if len(encoded_input) > MAX_CODE_MODE_SOURCE_BYTES:
+            raise CodeModeExecutionError("VALIDATION_ERROR", "Code Mode input exceeds its size bound")
+
+    @classmethod
+    def from_wire(cls, value: Any) -> "CodeModeExecutionRequest":
+        if not isinstance(value, dict) or any(not isinstance(key, str) for key in value):
+            raise CodeModeExecutionError("VALIDATION_ERROR", "Code Mode execution capsule must be an object")
+        allowed = {"schemaVersion", "entrypoint", "source", "input"}
+        unknown = sorted(set(value).difference(allowed))
+        if unknown:
+            raise CodeModeExecutionError("VALIDATION_ERROR", "Code Mode execution capsule has unknown fields")
+        required = {"schemaVersion", "entrypoint", "source", "input"}
+        if not required.issubset(value):
+            raise CodeModeExecutionError("VALIDATION_ERROR", "Code Mode execution capsule is missing required fields")
+        return cls(
+            source=value["source"],
+            input_data=value["input"],
+            schema_version=value["schemaVersion"],
+            entrypoint=value["entrypoint"],
+        )
 
 
 @dataclass(frozen=True)
