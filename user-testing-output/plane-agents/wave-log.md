@@ -2535,3 +2535,41 @@ records this diagnosis without changing the retained receipts.
   failed. Capacity lease release and Docker cleanup were verified at zero
   remaining containers, volumes, networks, and lease. No provider retry or
   replay was made.
+
+## Wave 0BS — exact integrated C API-invocation boundary stop
+
+- Integrated commits in the required order: `200d1fdb7d`, `488390ba21`, and
+  `855f4e6686`. Clean candidate:
+  `b2a2b50c8c904adda2c287b3780e514c46d90ca8`. Hermes, MCP, and SDK pins:
+  `292e866374ca9e9615473fc9bf5dda1913b672e1`,
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`, and
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`.
+- Focused provider-free checks passed: RabbitMQ tmpfs `1/1`, capacity
+  support/result `16/16`, W05/W06 route/descriptor `6/6`, config-only
+  preflight, descriptor validation, and live-receipt validation. The broader
+  fake-Docker contract run had `179` passes and two fixture timeouts; root
+  dispositioned them as non-blocking test-harness debt, and this lane did not
+  patch them.
+- Exact API/runtime artifacts were
+  `plane-agent-api:g4-v6-b2a2b50c` (`sha256:b5a33a42a569f83e4a067f58fa3a8427986084d1b35e57b53aa5e8e953b5a521`) and
+  `plane-agent-runtime:hermes-292e8663-g4-v6-b2a2b50c` (`sha256:cc8fb6743077327c7b45ff13f48e36d264c243fddc7da6a38a537e81ec9aa074`);
+  manifest SHA-256:
+  `17c7e667df484302677159fb1bcb556a18b7788a947a6c7ce9f6b76398889585`.
+- Exactly one fresh single-commission `context-governance` journey used
+  `openai-codex/gpt-5.6-luna` xhigh with fallback disabled. It reached healthy
+  dependencies, then stopped at `api-invocation` with bounded `unspecified` /
+  exit `1` / `unavailable` before a commission result. Provider attempts and
+  effects were `0`; no W05/W06 context/memory/skill receipts, audit,
+  publication, or replay were produced. Raw owner-only result:
+  `tmp/persona-wave-v6/w05-w06-c-final-b2a2b50c/result.json`, mode `0600`,
+  5031 bytes, SHA-256
+  `a5e78e674787ecad5dc623bf693331c03c9c5aedbb0de3a0b858acd98c3330b1`.
+- Durable redacted evidence:
+  `user-testing-output/plane-agents/evidence/w05-w06-c-api-invocation-stop.json`,
+  SHA-256
+  `988404c2029b6e301e9fa5caf4b79a8dc4ff9bab91adb0e970d74f691444fbe1`.
+  Run `de7c79bb-2387-4b8a-8af8-0e03e381b9e5` and invocation
+  `invocation:3cbbf662-2291-4e13-ac06-214f7ad1eaea` are retained in the
+  redacted extract. The provider-disabled replay was ineligible and was not
+  run; no `outcome_unknown` replay occurred. Cleanup verified zero
+  containers, volumes, networks, and capacity leases. W05/W06 remain open.
