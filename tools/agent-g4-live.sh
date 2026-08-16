@@ -509,6 +509,26 @@ metadata = os.stat(destination, follow_symlinks=False)
 if not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o600:
     raise SystemExit(1)
 ' <"${ROOT_DIR}/tools/agent_g4_worker_route.py" >/dev/null 2>&1
+    docker run --rm -i --network none \
+        --mount type=volume,src="${SCENARIO_VOLUME}",dst=/run/plane-scenario,volume-nocopy \
+        --entrypoint python3 "${API_IMAGE}" -c '
+import os
+import shutil
+import stat
+
+destination = "/run/plane-scenario/agent_g4_manager_route.py"
+fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
+try:
+    os.fchmod(fd, 0o600)
+    with os.fdopen(fd, "wb", closefd=False) as output:
+        shutil.copyfileobj(os.fdopen(0, "rb", closefd=False), output, 65536)
+    os.fsync(fd)
+finally:
+    os.close(fd)
+metadata = os.stat(destination, follow_symlinks=False)
+if not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o600:
+    raise SystemExit(1)
+' <"${ROOT_DIR}/tools/agent_g4_manager_route.py" >/dev/null 2>&1
     SCENARIO_MOUNT_ARGS=(
         --mount
         "type=volume,src=${SCENARIO_VOLUME},dst=/run/plane-scenario,readonly,volume-nocopy"

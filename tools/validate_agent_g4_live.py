@@ -1078,7 +1078,18 @@ _WORKER_ROUTE_BOOLEAN_FIELDS = {
 }
 _WORKER_ROUTE_IDS = {f"W{index:02d}" for index in range(1, 9)}
 _OPERATOR_ROUTE_IDS = {"O01"} | {f"O{index:02d}" for index in range(3, 11)}
-_SCENARIO_ROUTE_IDS = _WORKER_ROUTE_IDS | _OPERATOR_ROUTE_IDS
+_MANAGER_ROUTE_BOOLEAN_FIELDS = {
+    "M01": {"dynamicPlan", "noSavedWorkflowProduct"},
+    "M02": {"boundedDelegation", "lineagePersisted", "independentChildRun"},
+    "M03": {"queuedDescendantCancelled", "activeDescendantCancelled", "terminalVisible", "lateCallbackDenied"},
+    "M04": {"nonUtcTimezone", "springForwardSkipped", "fireIdempotent", "normalAssignmentCreated"},
+    "M05": {"evaluatorFirst", "humanDecisionAfterEvaluator", "revisionFreshRun", "priorSnapshotImmutable", "finalAccepted"},
+    "M06": {"proposalRecorded", "humanApprovalApplied", "selfApprovalDenied", "staleApprovalDenied"},
+    "M07": {"humanApprovalRequired", "chiefProvisioned", "currentMembershipCopied", "noStaleMembershipCopy", "noCrossWorkspaceMembership"},
+    "M08": {"parentChildLineage", "outcomeAndArtifact", "terminalEventsAgree", "evaluatorAndHumanReadback", "immutablePriorSnapshot"},
+}
+_MANAGER_ROUTE_IDS = set(_MANAGER_ROUTE_BOOLEAN_FIELDS)
+_SCENARIO_ROUTE_IDS = _WORKER_ROUTE_IDS | _OPERATOR_ROUTE_IDS | _MANAGER_ROUTE_IDS
 
 
 def _validate_scenario_projection(value: Any) -> None:
@@ -1168,10 +1179,14 @@ def _validate_scenario_projection(value: Any) -> None:
                 if not isinstance(row, dict) or set(row) != {"kind", "count"} or row["kind"] not in allowed_kinds or type(row["count"]) is not int or not 0 <= row["count"] <= 256:
                     raise ContractError("evidence_scenario_actual_record_invalid")
         if "routeEvidence" in actual:
-            if scenario["id"] != "worker":
-                raise ContractError("evidence_non_worker_route_evidence_unsupported")
             route_checks = expected.get("routeChecks", []) if expected is not None else []
-            _validate_worker_route_evidence(actual["routeEvidence"], route_checks=set(route_checks))
+            route_check_set = set(route_checks)
+            if scenario_id == "manager":
+                _validate_manager_route_evidence(actual["routeEvidence"], route_checks=route_check_set)
+            elif scenario_id == "worker":
+                _validate_worker_route_evidence(actual["routeEvidence"], route_checks=route_check_set)
+            else:
+                raise ContractError("evidence_non_worker_route_evidence_unsupported")
 
 
 def _validate_worker_route_evidence(value: Any, *, route_checks: set[str] | None = None) -> None:
@@ -1213,6 +1228,41 @@ def _validate_worker_route_evidence(value: Any, *, route_checks: set[str] | None
     readback = _object(payload["readback"], "evidence_worker_readback")
     if set(readback) != {"contextProjectionDigest"} or not isinstance(readback["contextProjectionDigest"], str) or not HASH_RE.fullmatch(readback["contextProjectionDigest"]):
         raise ContractError("evidence_worker_readback_invalid")
+
+
+def _validate_manager_route_evidence(value: Any, *, route_checks: set[str] | None = None) -> None:
+    payload = _object(value, "evidence_manager_route_evidence")
+    if set(payload) != {"routes", "readback"}:
+        raise ContractError("evidence_manager_route_evidence_fields_invalid")
+    routes = _object(payload["routes"], "evidence_manager_routes")
+    expected_route_ids = set(route_checks) if route_checks is not None else set(_MANAGER_ROUTE_IDS)
+    if not expected_route_ids <= _MANAGER_ROUTE_IDS or set(routes) != expected_route_ids | {"replay"}:
+        raise ContractError("evidence_manager_route_ids_invalid")
+    for route_id in expected_route_ids:
+        row = _object(routes[route_id], f"evidence_manager_{route_id}")
+        if set(row) != _MANAGER_ROUTE_BOOLEAN_FIELDS[route_id] or any(item is not True for item in row.values()):
+            raise ContractError("evidence_manager_route_failed")
+    replay = _object(routes["replay"], "evidence_manager_replay")
+    if set(replay) != {"stateMutations"} or replay["stateMutations"] != 0:
+        raise ContractError("evidence_manager_replay_invalid")
+    readback = _object(payload["readback"], "evidence_manager_readback")
+    expected_fields = {
+        "assignmentCount",
+        "childAssignmentCount",
+        "outcomeCount",
+        "artifactOutcomeCount",
+        "terminalEventCount",
+        "governanceReadbackDigest",
+    }
+    if set(readback) != expected_fields:
+        raise ContractError("evidence_manager_readback_fields_invalid")
+    for field in expected_fields - {"governanceReadbackDigest"}:
+        if type(readback[field]) is not int or not 0 <= readback[field] <= 256:
+            raise ContractError("evidence_manager_readback_count_invalid")
+    if not isinstance(readback["governanceReadbackDigest"], str) or not HASH_RE.fullmatch(
+        readback["governanceReadbackDigest"]
+    ):
+        raise ContractError("evidence_manager_readback_digest_invalid")
 
 
 def _validate_scenario_gate(value: Any) -> None:

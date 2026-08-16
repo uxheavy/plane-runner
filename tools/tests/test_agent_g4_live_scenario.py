@@ -180,6 +180,82 @@ def test_operator_route_checks_reject_duplicates() -> None:
     raw, digest = descriptor_bytes(value)
     with pytest.raises(scenario.ScenarioError, match="scenario_expected_route_check_unsupported"):
         scenario.parse_descriptor_bytes(raw, digest)
+def test_manager_live_descriptor_covers_elena_routes_and_fixed_model_policy() -> None:
+    path = TOOLS / "agent-g4-manager-v1.json"
+    raw = path.read_bytes()
+    parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
+
+    assert parsed.scenario_id == "manager"
+    assert parsed.actor_role == "delegator"
+    assert parsed.profile.name == "Elena Manager"
+    assert parsed.profile.model_policy.provider == "openai-codex"
+    assert parsed.profile.model_policy.model == "gpt-5.6-luna"
+    assert parsed.profile.model_policy.reasoning == "xhigh"
+    assert parsed.profile.model_policy.fallback_allowed is False
+    assert parsed.expected["routeChecks"] == [f"M{index:02d}" for index in range(1, 9)]
+    assert parsed.setup.lineage.parent_ref == "actor:primary"
+    assert parsed.setup.schedule.timezone == "America/Los_Angeles"
+    assert "workflow product" in parsed.prompt
+    validator._validate_scenario_projection(parsed.evidence())
+
+
+def test_manager_route_validator_requires_all_bounded_routes() -> None:
+    value = descriptor_for("manager")
+    value["expected"] = {
+        "operationOutcomes": [],
+        "evidenceKinds": [],
+        "routeChecks": [f"M{index:02d}" for index in range(1, 9)],
+    }
+    parsed = scenario.parse_descriptor_bytes(*descriptor_bytes(value))
+    projection = parsed.evidence()
+    route_fields = validator._MANAGER_ROUTE_BOOLEAN_FIELDS
+    projection["actual"] = {
+        "operations": [],
+        "records": [],
+        "productEvents": [],
+        "evidenceKinds": [],
+        "routeEvidence": {
+            "routes": {
+                **{route_id: {field: True for field in fields} for route_id, fields in route_fields.items()},
+                "replay": {"stateMutations": 0},
+            },
+            "readback": {
+                "assignmentCount": 1,
+                "childAssignmentCount": 1,
+                "outcomeCount": 2,
+                "artifactOutcomeCount": 2,
+                "terminalEventCount": 4,
+                "governanceReadbackDigest": "0" * 64,
+            },
+        },
+    }
+    validator._validate_scenario_projection(projection)
+
+
+def test_manager_synthetic_fixture_stays_outside_the_production_agent_package() -> None:
+    fixture = TOOLS / "agent_g4_manager_route.py"
+    production = TOOLS.parent / "apps" / "api" / "plane" / "agent" / "manager_route.py"
+
+    assert fixture.is_file()
+    assert not production.exists()
+    source = fixture.read_text(encoding="utf-8")
+    assert "from plane.agent.lifecycle import" in source
+    assert "M01" in source and "M08" in source
+
+
+def test_manager_hr_setup_is_workspace_scoped_for_chief_of_staff_governance() -> None:
+    source = (TOOLS / "agent-g4-live-invoke.py").read_text()
+
+    assert 'scenario.scenario_id == "manager" and setup_actor.role == "hr"' in source
+    assert "related_project =" in source
+    assert "project=related_project" in source
+
+
+def test_manager_fixture_is_staged_into_the_owner_only_scenario_volume() -> None:
+    source = (TOOLS / "agent-g4-live.sh").read_text()
+
+    assert 'destination = "/run/plane-scenario/agent_g4_manager_route.py"' in source
+    assert '<"${ROOT_DIR}/tools/agent_g4_manager_route.py"' in source
 
 
 def test_commission_descriptor_keeps_shared_profile_and_binds_each_assignment() -> None:

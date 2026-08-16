@@ -67,6 +67,7 @@ from plane.db.models.operation_gateway import (
 )
 
 if os.environ.get("G4_SCENARIO_DESCRIPTOR"):
+    from agent_g4_manager_route import build_manager_route_evidence
     from agent_g4_worker_route import (
         attempt_actor_substitution,
         build_worker_route_evidence,
@@ -1414,9 +1415,14 @@ def _prepare_shared_worker_setup(scenario, provider, provider_relay, suffix):
     related_actors = {}
     if scenario is not None:
         for setup_actor in scenario.setup.actors:
+            related_project = (
+                None
+                if scenario.scenario_id == "manager" and setup_actor.role == "hr"
+                else project
+            )
             related = create_actor(
                 workspace=workspace,
-                project=project,
+                project=related_project,
                 display_name=setup_actor.display_name,
                 created_by=user,
             )
@@ -2000,6 +2006,31 @@ def _run_single(scenario) -> tuple[int, dict]:
             )
             if not scenario_gate["passed"]:
                 raise RuntimeError("Worker route expectations failed: " + ",".join(scenario_gate["failures"]))
+        if scenario is not None and scenario.scenario_id == "manager":
+            manager_route_evidence, manager_route_failures = build_manager_route_evidence(
+                workspace=workspace,
+                project=project,
+                manager=actor,
+                worker=related_actors["actor:worker"],
+                evaluator=related_actors["actor:evaluator"],
+                hr=related_actors["actor:hr"],
+                human_admin=user,
+                suffix=suffix,
+            )
+            scenario_actual["routeEvidence"] = manager_route_evidence
+            scenario_gate["failures"].extend(manager_route_failures)
+            scenario_gate["passed"] = not scenario_gate["failures"] and all(
+                row["passed"]
+                for rows in (
+                    scenario_gate["operations"],
+                    scenario_gate["durableRecords"],
+                    scenario_gate["productEvents"],
+                    scenario_gate["evidenceKinds"],
+                )
+                for row in rows
+            )
+            if not scenario_gate["passed"]:
+                raise RuntimeError("Manager route expectations failed: " + ",".join(scenario_gate["failures"]))
         duration_ms = round((time.monotonic() - started) * 1000, 3)
         binding = _binding()
         bounded_readback = build_failure_evidence(

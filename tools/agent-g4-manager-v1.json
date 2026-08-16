@@ -1,0 +1,160 @@
+{
+  "schemaVersion": "plane.agent-scenario/v1",
+  "scenarioId": "manager",
+  "actor": {
+    "role": "delegator"
+  },
+  "profile": {
+    "name": "Elena Manager",
+    "instructions": "Lead the bounded synthetic Elena journey through Plane's existing Operation Gateway. Create a dynamic plan on the assigned work item without saving a workflow definition. Use only exact Plane references returned by the gateway, keep delegated scope and budget within the parent, and advance through the ordered route without repeating completed or denied operations. Submit and publish one explicit result for the assigned work item. Do not use external tools or real user content.",
+    "modelPolicy": {
+      "provider": "openai-codex",
+      "model": "gpt-5.6-luna",
+      "reasoning": "xhigh",
+      "fallbackAllowed": false
+    },
+    "toolPresentation": {
+      "eagerOperations": [
+        "catalog.search",
+        "catalog.describe",
+        "agent.assignment.delegate",
+        "agent.assignment.cancel",
+        "agent.outcome.evaluate",
+        "agent.outcome.submit",
+        "agent.outcome.publish",
+        "agent.outcome.accept",
+        "agent.outcome.request_revision",
+        "agent.hr.propose",
+        "agent.governance.readback"
+      ]
+    }
+  },
+  "assignment": {
+    "targetRef": "fixture:assigned-work-item",
+    "objective": "Coordinate a multi-part synthetic Manager objective and return one reviewable published result.",
+    "acceptanceCriteria": [
+      "The dynamic plan and bounded child responsibility are represented by Plane records.",
+      "The submitted result is published exactly once through Plane governance."
+    ],
+    "contextRefs": [
+      "context:manager-journey",
+      "scope:manager-journey"
+    ]
+  },
+  "prompt": "Elena, coordinate this synthetic-only Manager journey. Start with the catalog and the assigned Plane work item, create a dynamic plan without introducing a saved workflow product, and use the exact returned Plane refs for one bounded child responsibility. Complete the assigned result through the existing evaluator and human governance path, then publish it once. The route evidence covers cancellation of queued and active descendants, a non-UTC DST schedule, HR approval and chief-of-staff provisioning, complete readback, and immutable prior revision history. Use no external tools, no real user content, and no retries after a terminal or denied operation.",
+  "setup": {
+    "preconditions": [
+      "isolated_workspace",
+      "assigned_work_item",
+      "fresh_assignment",
+      "live_authorization",
+      "separate_runtime_service"
+    ],
+    "actors": [
+      {
+        "ref": "actor:worker",
+        "role": "worker",
+        "displayName": "Nia Worker"
+      },
+      {
+        "ref": "actor:evaluator",
+        "role": "evaluator",
+        "displayName": "Evan Evaluator"
+      },
+      {
+        "ref": "actor:hr",
+        "role": "hr",
+        "displayName": "Rhea HR"
+      },
+      {
+        "ref": "actor:subject",
+        "role": "worker",
+        "displayName": "Synthetic Subject"
+      }
+    ],
+    "lineage": {
+      "parentActorRef": "actor:primary",
+      "childActorRef": "actor:worker",
+      "scopeRefs": [
+        "scope:manager-journey"
+      ],
+      "budget": 1
+    },
+    "schedule": {
+      "actorRef": "actor:primary",
+      "cron": "30 2 * * *",
+      "timezone": "America/Los_Angeles",
+      "startsAt": "2026-03-08T08:00:00Z",
+      "fireAt": "2026-03-09T09:30:00Z"
+    }
+  },
+  "controls": {
+    "fault": {
+      "selection": "none"
+    }
+  },
+  "expected": {
+    "operationOutcomes": [],
+    "evidenceKinds": [
+      "assignment",
+      "run",
+      "invocation",
+      "audit",
+      "publication",
+      "terminal_event",
+      "lineage_assignment",
+      "schedule",
+      "schedule_fire"
+    ],
+    "durableRecords": [
+      {
+        "kind": "assignment",
+        "count": 1
+      },
+      {
+        "kind": "run",
+        "count": 1
+      },
+      {
+        "kind": "invocation",
+        "count": 1
+      },
+      {
+        "kind": "lineage_assignment",
+        "count": 1
+      },
+      {
+        "kind": "schedule",
+        "count": 1
+      },
+      {
+        "kind": "schedule_fire",
+        "count": 1
+      },
+      {
+        "kind": "terminal_event",
+        "count": 1
+      },
+      {
+        "kind": "publication",
+        "count": 1
+      }
+    ],
+    "productEvents": [
+      {
+        "kind": "publication",
+        "count": 1
+      }
+    ],
+    "routeChecks": [
+      "M01",
+      "M02",
+      "M03",
+      "M04",
+      "M05",
+      "M06",
+      "M07",
+      "M08"
+    ]
+  }
+}

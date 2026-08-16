@@ -338,9 +338,12 @@ _CANCELLATION_TIMINGS = {"before_dispatch", "after_provider_request", "after_pub
 _RECORD_KINDS = {"assignment", "run", "invocation", "input_event", "audit", "publication", "terminal_event", "schedule", "schedule_fire", "lineage_assignment"}
 _PRODUCT_KINDS = {"publication", "outcome_submission", "run_failure", "run_blocker", "run_cancellation", "input_event"}
 _EVIDENCE_KINDS = _RECORD_KINDS
-_ROUTE_CHECKS = {f"W{index:02d}" for index in range(1, 9)} | {"O01"} | {
-    f"O{index:02d}" for index in range(3, 11)
-}
+_ROUTE_CHECKS = (
+    {f"W{index:02d}" for index in range(1, 9)}
+    | {f"M{index:02d}" for index in range(1, 9)}
+    | {"O01"}
+    | {f"O{index:02d}" for index in range(3, 11)}
+)
 
 
 def _setup(value: Any) -> SetupSpec:
