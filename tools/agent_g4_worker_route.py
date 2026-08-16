@@ -23,6 +23,7 @@ from plane.agent.skills.services import (
     propose_skill_change,
     rollback_skill,
 )
+from agent_g4_worker_route_observations import has_code_mode_callback
 from plane.db.models import (
     AgentChangeProposal,
     AgentMemoryRevision,
@@ -357,28 +358,13 @@ def worker_code_mode_controls(run):
     )
 
 
-def _has_code_mode_callback(observations, operation_id):
-    """Recognize the bounded runtime observation for one successful code callback."""
-
-    marker = f"Plane host code code operation:{operation_id} -> ok"
-    for raw_payload in observations:
-        if not isinstance(raw_payload, dict):
-            continue
-        body = raw_payload.get("body")
-        payload = body.get("payload") if isinstance(body, dict) else None
-        text = payload.get("text") if isinstance(payload, dict) else None
-        if text == marker:
-            return True
-    return False
-
-
 def worker_code_mode_operation_observed(run, operation_id):
     """Require the runtime's source/action observation for one Code Mode callback."""
 
     observations = RuntimeEventIngress.objects.filter(
         run=run, kind="progress_observed"
     ).values_list("raw_payload", flat=True)
-    return _has_code_mode_callback(observations, operation_id)
+    return has_code_mode_callback(observations, operation_id)
 
 
 def build_worker_route_evidence(

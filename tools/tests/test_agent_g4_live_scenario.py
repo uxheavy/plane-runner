@@ -550,9 +550,9 @@ def test_worker_route_validator_keeps_special_mutation_and_governance_routes_val
 
 
 def test_code_mode_callback_observation_requires_code_source_and_action() -> None:
-    from agent_g4_worker_route import _has_code_mode_callback
+    from agent_g4_worker_route_observations import has_code_mode_callback
 
-    assert _has_code_mode_callback(
+    assert has_code_mode_callback(
         [
             {
                 "body": {
@@ -564,7 +564,7 @@ def test_code_mode_callback_observation_requires_code_source_and_action() -> Non
         ],
         "work_item.rename",
     )
-    assert not _has_code_mode_callback(
+    assert not has_code_mode_callback(
         [
             {
                 "body": {
