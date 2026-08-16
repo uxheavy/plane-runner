@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -278,6 +280,61 @@ def test_commission_descriptor_keeps_shared_profile_and_binds_each_assignment() 
     assert identity.expected["routeChecks"] != mutation.expected["routeChecks"]
     assert mutation.expected["routeChecks"] != context.expected["routeChecks"]
     assert identity.commissions == mutation.commissions == context.commissions == ()
+
+
+def test_sequential_commissions_reuse_fixture_preconditions_before_new_run() -> None:
+    source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    helper = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_commission_precondition_checks"
+    )
+    namespace: dict[str, object] = {}
+    exec(
+        compile(
+            ast.Module(body=[helper], type_ignores=[]),
+            str(TOOLS / "agent-g4-live-invoke.py"),
+            "exec",
+        ),
+        namespace,
+    )
+
+    first_setup = SimpleNamespace(id="setup-owner")
+    shared = {
+        "user": first_setup,
+        "workspace": SimpleNamespace(owner_id="setup-owner", id="workspace:first", slug="g4-live-first"),
+        "project": SimpleNamespace(id="project:first"),
+        "actor": SimpleNamespace(workspace_id="workspace:first", project_id="project:first"),
+        "setup_suffix": "first",
+    }
+    first_assignment = SimpleNamespace(
+        pk="assignment:first",
+        target_ref="issue:first",
+        created_by_id="setup-owner",
+        revision=1,
+    )
+    second_assignment = SimpleNamespace(
+        pk="assignment:second",
+        target_ref="issue:second",
+        created_by_id="setup-owner",
+        revision=1,
+    )
+    relay = {"hostGatewaySeparate": True, "externalEgressOwner": "agent-runtime"}
+
+    first_checks = namespace["_commission_precondition_checks"](shared, first_assignment, relay)
+    second_checks = namespace["_commission_precondition_checks"](shared, second_assignment, relay)
+
+    assert first_checks == second_checks == {
+        "isolated_workspace": True,
+        "assigned_work_item": True,
+        "fresh_assignment": True,
+        "live_authorization": True,
+        "separate_runtime_service": True,
+    }
+    assert '"setup_suffix": suffix' in source
+    assert "setup_cache=setup_cache" in source
+    assert "_SHARED_WORKER_SETUP" not in source
 
 
 def test_failure_commission_aggregate_gate_is_bounded_and_validated() -> None:

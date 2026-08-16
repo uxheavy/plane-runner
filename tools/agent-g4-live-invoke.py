@@ -1300,15 +1300,11 @@ def _provider_unknown_failure_reason(invocation, provider_attempts, control=None
     )
 
 
-_SHARED_WORKER_SETUP = None
-
-
-def _prepare_shared_worker_setup(scenario, provider, provider_relay, suffix):
+def _prepare_shared_worker_setup(scenario, provider, provider_relay, suffix, *, cache):
     """Create Maya once; bounded commissions then receive separate run snapshots."""
 
-    global _SHARED_WORKER_SETUP
-    if _SHARED_WORKER_SETUP is not None:
-        return _SHARED_WORKER_SETUP
+    if cache.get("setup") is not None:
+        return cache["setup"]
 
     email = f"g4-live-{suffix}@plane.test"
     user = User.objects.create(email=email, username=email, first_name="G4", last_name="Live")
@@ -1435,7 +1431,7 @@ def _prepare_shared_worker_setup(scenario, provider, provider_relay, suffix):
                 runtime_defaults={"provider": provider["name"], "model": scenario.profile.model_policy.model, "adapter": "hermes"},
                 created_by=user,
             )
-    _SHARED_WORKER_SETUP = {
+    setup = {
         "user": user,
         "workspace": workspace,
         "project": project,
@@ -1445,11 +1441,33 @@ def _prepare_shared_worker_setup(scenario, provider, provider_relay, suffix):
         "context_facts": context_facts,
         "related_actors": related_actors,
         "actor_role": actor_role,
+        "setup_suffix": suffix,
     }
-    return _SHARED_WORKER_SETUP
+    cache["setup"] = setup
+    return setup
 
 
-def _run_single(scenario) -> tuple[int, dict]:
+def _commission_precondition_checks(shared, assignment, provider_relay):
+    """Validate shared fixture identity while each commission stays lifecycle-fresh."""
+
+    user = shared["user"]
+    workspace = shared["workspace"]
+    project = shared["project"]
+    actor = shared["actor"]
+    setup_suffix = shared["setup_suffix"]
+    return {
+        "isolated_workspace": workspace.owner_id == user.id and workspace.slug == f"g4-live-{setup_suffix}",
+        "assigned_work_item": bool(assignment.pk and assignment.target_ref),
+        "fresh_assignment": assignment.created_by_id == user.id and assignment.revision == 1,
+        "live_authorization": actor.workspace_id == workspace.id and actor.project_id == project.id,
+        "separate_runtime_service": (
+            provider_relay.get("hostGatewaySeparate") is True
+            and provider_relay.get("externalEgressOwner") == "agent-runtime"
+        ),
+    }
+
+
+def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
     legacy_s00 = _scenario_legacy_s00(scenario)
     started = time.monotonic()
     provider = _provider_descriptor()
@@ -1488,6 +1506,7 @@ def _run_single(scenario) -> tuple[int, dict]:
     rename_replay_evidence = {"status": "not_evaluated", "semanticDelta": None, "duplicateMutation": None}
     context_replay_delta = {}
     context_replay_before = {}
+    setup_cache = setup_cache if setup_cache is not None else {}
 
     def readback():
         nonlocal terminal_lifecycle
@@ -1649,7 +1668,9 @@ def _run_single(scenario) -> tuple[int, dict]:
         }
 
     try:
-        shared = _prepare_shared_worker_setup(scenario, provider, provider_relay, suffix)
+        shared = _prepare_shared_worker_setup(
+            scenario, provider, provider_relay, suffix, cache=setup_cache
+        )
         user = shared["user"]
         workspace = shared["workspace"]
         project = shared["project"]
@@ -1687,16 +1708,7 @@ def _run_single(scenario) -> tuple[int, dict]:
         )
         if scenario is not None:
             preconditions = set(scenario.setup.preconditions)
-            checks = {
-                "isolated_workspace": workspace.owner_id == user.id and workspace.slug == f"g4-live-{suffix}",
-                "assigned_work_item": bool(assignment.pk and assignment.target_ref),
-                "fresh_assignment": assignment.created_by_id == user.id and assignment.revision == 1,
-                "live_authorization": actor.workspace_id == workspace.id and actor.project_id == project.id,
-                "separate_runtime_service": (
-                    provider_relay.get("hostGatewaySeparate") is True
-                    and provider_relay.get("externalEgressOwner") == "agent-runtime"
-                ),
-            }
+            checks = _commission_precondition_checks(shared, assignment, provider_relay)
             missing_preconditions = [name for name in preconditions if not checks[name]]
             if missing_preconditions:
                 raise RuntimeError("scenario preconditions failed: " + ",".join(sorted(missing_preconditions)))
@@ -2440,11 +2452,12 @@ def main() -> int:
 
     results = []
     os.environ["G4_MULTI_COMMISSION"] = "1"
+    setup_cache = {}
     for commission in scenario.commissions:
         from agent_g4_live_scenario import commission_descriptor
 
         cell = commission_descriptor(scenario, commission)
-        code, evidence = _run_single(cell)
+        code, evidence = _run_single(cell, setup_cache=setup_cache)
         results.append((commission.commission_id, code, evidence))
         if code != 0:
             break
