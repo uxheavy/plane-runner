@@ -364,3 +364,37 @@ replay. W03-W08 remain dirty; UT-042 is open.
   networks for all observed disposable project identifiers.
 - W05 and W06 remain dirty; this is provider-free boundary evidence, not route
   closure.
+
+## Wave 0BQ — exact second-fix b002211f0d / C commission boundary stop
+
+- The second shared fix `3c4209340c7f219be76258083a595b8fba14c05c` was
+  integrated on top of the e312 chain as Plane `b002211f0db8d04fe13c639a026502f0a0ea2618`.
+  Focused host checks passed `161/161`; the provider-free W05/W06 Django
+  regression passed `14/14`.
+- One fresh single-commission `context-governance` journey used the existing
+  Plane/Hermes runner with `openai-codex/gpt-5.6-luna` xhigh and fallback
+  disabled. The exact API artifact was
+  `plane-agent-api:g4-v6-b002211`, digest
+  `sha256:12888071f9606b84135c20682a4e1479753091870f3a0853a4b4cec2c0184ffd`;
+  runtime was `plane-agent-runtime:hermes-292e8663-g4-v6-b002211`, digest
+  `sha256:5735f8a6a13260843e3d95f783696ca15b5eab2633baf19da59e80ff72a4e9f9`.
+  The disposable manifest SHA-256 was
+  `c3bdf383cc6fb0a6c264d84f54c6bc71283b093474975dca00f5dfe634f2cf7b`.
+- The fresh C run stopped at `api-invocation` with bounded `unspecified` /
+  exit `1` / `unavailable` before a commission result. Provider attempts were
+  `0`; no W05/W06 receipt, audit, publication, memory projection, preference
+  projection, skill promotion, or rollback was observed. Run
+  `b5f5b8e2-def6-4066-bb00-ebe0a7cc96db` and invocation
+  `invocation:b66f5437-9931-47ce-90b6-4aca07d02e9f` are bound in the durable
+  redacted extract
+  `user-testing-output/plane-agents/evidence/w05-w06-c-second-fix-stop.json`,
+  SHA-256 `27721c95b2c17d352f38fa0e8ed798babda6d9a5e9341b4b8af3fdd92fc2c3fe`;
+  the owner-only raw result SHA-256 is
+  `bd65e1fd64fbb5ba77a68bc7aa3b577a49acf48bedf488d7c1e57c76e5ad517d`.
+- The provider-disabled same-invocation replay was ineligible because the
+  primary stopped before a commission result. It was not run, and no
+  `outcome_unknown` receipt was replayed. No shared launcher/runtime/config
+  patch was made in this lane. Cleanup was verified at zero containers,
+  volumes, and networks for all observed disposable project identifiers.
+- W05 and W06 remain dirty; this is provider-free boundary evidence, not route
+  closure.

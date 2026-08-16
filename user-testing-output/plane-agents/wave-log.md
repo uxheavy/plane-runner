@@ -2477,3 +2477,35 @@ records this diagnosis without changing the retained receipts.
   `outcome_unknown` replay was made. Cleanup was verified at zero disposable
   containers, volumes, and networks. W05/W06 remain dirty, and the reopened
   shared debugger owns the next correction.
+
+## Wave 0BQ — exact second-fix C commission boundary stop
+
+- The second shared fix `3c4209340c7f219be76258083a595b8fba14c05c` was
+  integrated on top of the existing e312 integration as Plane
+  `b002211f0db8d04fe13c639a026502f0a0ea2618`. Host contracts passed `161/161`
+  and the provider-free Django memory/skill regression passed `14/14`.
+- Exact artifacts: API `plane-agent-api:g4-v6-b002211`, digest
+  `sha256:12888071f9606b84135c20682a4e1479753091870f3a0853a4b4cec2c0184ffd`;
+  runtime `plane-agent-runtime:hermes-292e8663-g4-v6-b002211`, digest
+  `sha256:5735f8a6a13260843e3d95f783696ca15b5eab2633baf19da59e80ff72a4e9f9`;
+  manifest SHA-256
+  `c3bdf383cc6fb0a6c264d84f54c6bc71283b093474975dca00f5dfe634f2cf7b`.
+  Hermes `292e866374ca9e9615473fc9bf5dda1913b672e1`, MCP
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889` were exact.
+- The one fresh `context-governance` commission used GPT-5.6 Luna xhigh,
+  fallback disabled, and stopped at `api-invocation` with
+  `unspecified` / `unavailable`, exit `1`. Raw result SHA-256:
+  `bd65e1fd64fbb5ba77a68bc7aa3b577a49acf48bedf488d7c1e57c76e5ad517d`;
+  durable redacted evidence:
+  `user-testing-output/plane-agents/evidence/w05-w06-c-second-fix-stop.json`,
+  SHA-256 `27721c95b2c17d352f38fa0e8ed798babda6d9a5e9341b4b8af3fdd92fc2c3fe`.
+  Provider attempts were `0`; no W05/W06 receipts, audit, publication, or
+  replay were observed. Run `b5f5b8e2-def6-4066-bb00-ebe0a7cc96db` and
+  invocation `invocation:b66f5437-9931-47ce-90b6-4aca07d02e9f` are retained
+  in the redacted extract.
+- The provider-disabled same-invocation replay was ineligible because the
+  primary stopped before a commission result. No replay, retry, or
+  `outcome_unknown` replay was made. Cleanup was verified at zero disposable
+  containers, volumes, and networks. W05/W06 remain dirty; the shared
+  debugger owns the next correction.
