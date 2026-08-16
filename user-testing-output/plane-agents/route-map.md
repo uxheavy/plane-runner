@@ -1,7 +1,7 @@
 # Plane Agent functional coverage map
 
-Target: exact current Plane source candidate `7a6983ed68519e8a267748998b4e8189f0fdae78`; documentation is
-committed in the adjacent Worker B failure checkpoint, with Hermes
+Target: exact current Plane source candidate `c561bdfe89fb7413877b910900b5675b9f4b779d`; documentation is
+committed in the adjacent Worker B commission-shape checkpoint, with Hermes
 `292e866374ca9e9615473fc9bf5dda1913b672e1`. No chat UI is in scope.
 Use existing Plane object/settings pages only where they already exist; the
 authoritative evidence is Plane product-state and gateway/audit readback.
@@ -201,3 +201,24 @@ bounded `CODE_MODE_FAILED` / `host_callback` failure. No `work_item.rename`,
 complete Code Mode receipt, applied publication, or complete W08 readback was
 proven. No replay was eligible or run. The failed B receipt remains dirty
 evidence; further provider use is stopped pending root-fix review.
+
+## Wave 0BK — exact c561bdfe89 / typed Code Mode candidate commission-shape stop
+
+Provider-free verification passed 53 descriptor tests, 24 Plane cross-process
+tests, 8 Hermes bridge/host-port tests, and 1 migration-backed Manager
+regression. Exact API/runtime images bound Plane `c561bdfe89` and Hermes
+`292e866374`; imports and real bootstrap readiness passed.
+
+The one fresh owner-only launch used GPT-5.6 Luna xhigh, fallback disabled, and
+max 16. Receipt:
+`tmp/persona-wave-v6/worker-live-c561bdfe-b4/result.json`, mode `0600`,
+SHA-256 `f0a9b26e18b8ab9034558638f4e67c24cc5bfd84d928ba1e5914c32e1c16ec33`.
+The descriptor still contains the three bounded Worker commissions, so the
+launcher ran identity first: W01/W02 passed with 11 completed upstream `2xx`
+attempts and an eligible provider-disabled zero-delta replay. The requested
+mutation-composition B commission then stopped before run/invocation creation
+with `runRef=unavailable` and zero B provider attempts. This is a workflow
+commission-selection failure, not evidence for or against the typed Code Mode
+bridge. No second primary, replay, or further provider use occurred. W03/W04/
+W07/W08 remain dirty; UT-038 remains open pending a future B-only launch shape
+and fresh authorized proof.

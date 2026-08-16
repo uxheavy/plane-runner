@@ -2255,3 +2255,24 @@ records this diagnosis without changing the retained receipts.
 - No `work_item.rename`, applied publication, complete W08 readback, or
   replay was proven. All labeled disposable resources were cleaned. UT-038
   is open; W03/W04/W07/W08 remain dirty and further provider use is stopped.
+
+## Wave 0BK — exact c561bdfe89 / fresh launch commission-shape stop
+
+- Integrated provider-free root fix `76ecdd120748c66e08cf07708e237291aace3e19`
+  as Plane `c561bdfe89fb7413877b910900b5675b9f4b779d`. Focused verification
+  passed: descriptor `53/53`, Plane cross-process `24/24`, Hermes bridge and
+  host-port `8/8`, and migration-backed Manager `1/1`. Exact API/runtime
+  refreeze used Hermes `292e866374ca9e9615473fc9bf5dda1913b672e1`; image
+  labels, imports, and real bootstrap readiness passed.
+- One fresh owner-only GPT-5.6 Luna xhigh launch ran with fallback disabled
+  and max 16. Receipt:
+  `tmp/persona-wave-v6/worker-live-c561bdfe-b4/result.json`, mode `0600`,
+  SHA-256 `f0a9b26e18b8ab9034558638f4e67c24cc5bfd84d928ba1e5914c32e1c16ec33`.
+  The current descriptor contains all three bounded Worker commissions, so
+  identity ran first and passed with 11 completed upstream `2xx` attempts plus
+  an eligible provider-disabled zero-delta replay. The mutation B commission
+  then stopped before run/invocation creation with `runRef=unavailable` and
+  zero B provider attempts. This is a commission-selection workflow failure,
+  not live evidence of typed Code Mode behavior. No second primary, replay, or
+  further provider use occurred; UT-039 is open and W03/W04/W07/W08 remain
+  dirty.

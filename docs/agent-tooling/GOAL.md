@@ -10,7 +10,7 @@ Functional completion and controlled rollout are separate outcomes. This goal en
 
 The older G4 artifact bindings and Wave 0X evidence below are historical, not
 the active delivery state. The current host-side harness checkpoint is
-`7a6983ed68519e8a267748998b4e8189f0fdae78`, while the exact API/runtime
+`c561bdfe89fb7413877b910900b5675b9f4b779d`, while the exact API/runtime
 artifacts are bound to that source candidate and Hermes
 `292e866374ca9e9615473fc9bf5dda1913b672e1`. S00 Wave 0AT passed at Plane
 `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with one fresh Luna primary and one
@@ -89,6 +89,23 @@ It reached nine completed upstream `2xx` attempts, failed at the real Code
 Mode host callback, and had no eligible replay; further provider use is
 stopped pending root-fix review.
 
+### Wave 0BK current disposition
+
+The typed Code Mode root fix `76ecdd120748c66e08cf07708e237291aace3e19` is
+integrated as Plane `c561bdfe89fb7413877b910900b5675b9f4b779d`. Provider-free
+verification passed descriptor `53/53`, Plane cross-process `24/24`, Hermes
+bridge/host-port `8/8`, and migration-backed Manager `1/1`; exact image labels,
+imports, and real bootstrap readiness passed. One fresh launch then ran the
+identity commission first and passed with 11 completed upstream `2xx` attempts
+plus a zero-delta provider-disabled replay, but stopped before creating the B
+mutation run/invocation with `runRef=unavailable` and zero B provider attempts.
+This is workflow commission-selection evidence, not a typed Code Mode result.
+Receipt `tmp/persona-wave-v6/worker-live-c561bdfe-b4/result.json` is mode
+`0600`, SHA-256
+`f0a9b26e18b8ab9034558638f4e67c24cc5bfd84d928ba1e5914c32e1c16ec33`.
+No second primary or further provider use occurred; W03/W04/W07/W08 remain
+dirty and UT-039 is open.
+
 ### Wave 0BJ current disposition
 
 The integrated Plane/Hermes TypeScript bridge was exercised by one fresh
@@ -104,7 +121,7 @@ provider use is authorized pending root-fix review.
 
 | Active item        | Current truth                                                                                                                                                                                                                                                                                                                                                                      |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Delivery candidate | Exact Plane source `7a6983ed68519e8a267748998b4e8189f0fdae78`; API `plane-agent-api:g4-v6-7a6983ed` / `sha256:c6ead3bfbbe96cfbabe3288e1f8605f55884a050da6f81cbac0b937be87d129b`; runtime `plane-agent-runtime:hermes-292e8663-g4-v6-7a6983ed` / `sha256:10835bb00225e4869a857c67535e27f6df4e555819831a7df56f703cf2ccd3a9`; Hermes `292e866374ca9e9615473fc9bf5dda1913b672e1`. The fresh B receipt is dirty evidence: nine completed upstream `2xx` attempts ended at `CODE_MODE_FAILED` / `host_callback` before mutation/publication/readback; no replay or further provider use is authorized. |
+| Delivery candidate | Exact Plane source `c561bdfe89fb7413877b910900b5675b9f4b779d`; API `plane-agent-api:g4-v6-c561bdfe` / `sha256:f16287cc30c1f873a85dc497a7e48964e8c2b062d0298c112e871d29768be2d8`; runtime `plane-agent-runtime:hermes-292e8663-g4-v6-c561bdfe` / `sha256:8da3bd7003995e30af1ae435901ed4a80a88af3772954640e9c9eb0c9dd6a321`; Hermes `292e866374ca9e9615473fc9bf5dda1913b672e1`. The typed Code Mode fix passed provider-free checks, but the fresh launch stopped at the B commission-selection boundary after a separate identity commission; no B provider result is claimed and no further provider use is authorized. |
 | Functional gate    | S00 Wave 0AT is clean at Plane `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with Hermes `bc7f13d2ab392752f2667b176c646339c49405f9`: ten ordered upstream `2xx` attempts, three searches, two reads, one exact `NOT_AUTHORIZED` denial, one submit, one applied publication, one matching terminal, and `RuntimeExit.completed`; replay semantic deltas were zero and cleanup passed. |
 | Provider-free PF1  | Worker W01–W08 passed 35 real Django/API/DB/CLI/socket/isolation tests unchanged. Manager M01–M08 passed 33 tests after `f621fdd89797db2d1b74205c6ce6d5b0bd4725d1` and `2105fb9e21687103939a77b7e26a0959f1d50f51`. Operator O01 and O03–O09 passed targeted real service/API/database/CLI contracts; the final exact-image red team remains pending.                               |
 | Live W/M/O wave    | Wave 0BA reached two fresh Maya identity commissions with completed provider attempts, but the invoker mislabeled later local scenario-gate failure as reconciliation uncertainty; the independent relay shutdown/audit race was fixed at its owner. The f63 callback-binding issue, W08 projection ceiling, and explicit-publication readback issue were fixed in their established owners. Hermes `f8cda105...` provides the bounded terminal-lifecycle observation. Wave 0BE recorded the commission-scoped wrapper failure and one isolated upstream channel loss; reconciliation showed no semantic side effects. Wave 0BF then completed W01/W02 with 9 completed upstream `2xx` attempts, exact denial, one applied publication/terminal, route evidence, and a zero-delta provider-disabled replay. Wave 0BG stopped the standalone synthetic-only B commission after 16 completed upstream `2xx` attempts and a non-retryable model-call budget exhaustion before publication; the pinned Hermes runtime lacks the required Plane TypeScript Code Mode bridge. The delegated C addendum also attempted W05-W08 twice, fixing once-only context and artifact-contract defects provider-free, but neither primary passed the full route plus replay gate. W03-W04 remain dirty/blocked as mapped, W05-W08 remain dirty, and no further B/provider work is authorized pending the integrated Plane/Hermes TypeScript bridge. O02 remains separately clean from its real external-client closure. |
