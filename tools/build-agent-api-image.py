@@ -17,6 +17,7 @@ DOCKERFILE = ROOT / "apps/api/Dockerfile.g4"
 DEFAULT_BASE_IMAGE = "plane-g3-external-client-api-tests:prepared"
 CONTRACT = "plane.operation/v1"
 ARTIFACT = "plane-agent-api-g4"
+TYPESCRIPT_VERSION = "5.4.5"
 SOURCE_FILES = {
     "PLANE_API_MANAGE_SHA256": "apps/api/manage.py",
     "PLANE_API_READBACK_SHA256": "apps/api/plane/agent/readback.py",
@@ -106,8 +107,10 @@ def verify_dockerfile_contract() -> None:
         "ARG PLANE_API_SOURCE_REVISION",
         "ARG PLANE_API_IMAGE_TAG",
         "ARG PLANE_API_CONTRACT=plane.operation/v1",
+        f"ARG PLANE_TYPESCRIPT_VERSION={TYPESCRIPT_VERSION}",
         *[f"ARG {name}" for name in SOURCE_FILES],
         'org.uxheavy.plane.api.artifact="plane-agent-api-g4"',
+        'org.uxheavy.plane.api.code-mode.typescript.version="${PLANE_TYPESCRIPT_VERSION}"',
     ]
     missing = [item for item in required if item not in text]
     if missing:
@@ -143,12 +146,40 @@ def docker_build_command(
         "--build-arg",
         f"BASE_API_IMAGE={base_image}",
         "--build-arg",
+        f"PLANE_TYPESCRIPT_VERSION={TYPESCRIPT_VERSION}",
+        "--build-arg",
         f"PLANE_API_SOURCE_REVISION={candidate}",
         "--build-arg",
         f"PLANE_API_IMAGE_TAG={selected_tag}",
         *sum((["--build-arg", f"{name}={hashes[name]}"] for name in SOURCE_FILES), []),
         str(DOCKERFILE.parent.relative_to(ROOT)),
     ]
+
+
+def verify_base_image(base_image: str) -> None:
+    """Reject a prepared base that does not carry the pinned Code Mode compiler."""
+
+    probe = (
+        "const actual = require('/usr/share/node_modules/typescript/lib/typescript.js').version; "
+        f"if (actual !== {TYPESCRIPT_VERSION!r}) process.exit(1)"
+    )
+    try:
+        _run(
+            "docker",
+            "run",
+            "--rm",
+            "--network",
+            "none",
+            "--entrypoint",
+            "node",
+            base_image,
+            "-e",
+            probe,
+        )
+    except RuntimeError as exc:
+        raise RuntimeError(
+            f"API base image does not contain TypeScript {TYPESCRIPT_VERSION}"
+        ) from exc
 
 
 def image_metadata(tag: str) -> dict[str, object]:
@@ -169,6 +200,7 @@ def build_api_image(
     verify_dockerfile_contract()
     resolved = verify_clean_candidate(candidate)
     hashes = source_hashes(resolved)
+    verify_base_image(base_image)
     selected_tag = tag or image_tag(resolved)
     _run(*docker_build_command(resolved, hashes, base_image=base_image, tag=selected_tag), capture=False)
     metadata = image_metadata(selected_tag)

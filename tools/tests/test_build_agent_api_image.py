@@ -48,8 +48,13 @@ def test_docker_command_uses_dockerfile_argument_contract() -> None:
     assert "apps/api/Dockerfile.g4" in command
     for name, digest in hashes.items():
         assert f"{name}={digest}" in command
+    assert f"PLANE_TYPESCRIPT_VERSION={builder.TYPESCRIPT_VERSION}" in command
     assert command[-1] == "apps/api"
 
 
 def test_dockerfile_contract_is_checked_without_docker() -> None:
     builder.verify_dockerfile_contract()
+
+
+def test_base_image_compiler_contract_is_pinned() -> None:
+    assert builder.TYPESCRIPT_VERSION == "5.4.5"

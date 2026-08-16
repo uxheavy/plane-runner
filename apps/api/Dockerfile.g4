@@ -14,6 +14,7 @@ ENV PYTHONPATH=/workspace/apps/api
 ARG PLANE_API_SOURCE_REVISION
 ARG PLANE_API_IMAGE_TAG
 ARG PLANE_API_CONTRACT=plane.operation/v1
+ARG PLANE_TYPESCRIPT_VERSION=5.4.5
 ARG PLANE_API_MANAGE_SHA256
 ARG PLANE_API_READBACK_SHA256
 ARG PLANE_API_ADMIN_SHA256
@@ -25,7 +26,9 @@ ARG PLANE_API_PROVIDER_CONFIG_SHA256
 # image's stale executable tree in place; reject that shape before exporting an
 # artifact. The source hashes are supplied by the same exact checkout used for
 # the build and become immutable labels for independent inspection.
-RUN PLANE_API_SOURCE_REVISION="${PLANE_API_SOURCE_REVISION}" \
+RUN DJANGO_SETTINGS_MODULE="plane.settings.test" \
+    REDIS_URL="redis://127.0.0.1:6379/" \
+    PLANE_API_SOURCE_REVISION="${PLANE_API_SOURCE_REVISION}" \
     PLANE_API_IMAGE_TAG="${PLANE_API_IMAGE_TAG}" \
     PLANE_API_CONTRACT="${PLANE_API_CONTRACT}" \
     PLANE_API_MANAGE_SHA256="${PLANE_API_MANAGE_SHA256}" \
@@ -107,6 +110,8 @@ if config_path != expected_config_path:
 if config_module.RUNTIME_PROTOCOL != "plane.agent-runtime/v1":
     raise SystemExit("runtime source sentinel is invalid")
 PY
+RUN PLANE_TYPESCRIPT_VERSION="${PLANE_TYPESCRIPT_VERSION}" \
+    node -e 'const expected = process.env.PLANE_TYPESCRIPT_VERSION; const actual = require("/usr/share/node_modules/typescript/lib/typescript.js").version; if (actual !== expected) { throw new Error(`TypeScript compiler ${actual} does not match ${expected}`); }'
 RUN command -v python >/dev/null \
     && command -v pytest >/dev/null \
     && command -v ruff >/dev/null \
@@ -115,6 +120,7 @@ RUN command -v python >/dev/null \
 
 LABEL org.uxheavy.plane.api.artifact="plane-agent-api-g4" \
       org.uxheavy.plane.api.contract="${PLANE_API_CONTRACT}" \
+      org.uxheavy.plane.api.code-mode.typescript.version="${PLANE_TYPESCRIPT_VERSION}" \
       org.uxheavy.plane.api.source.revision="${PLANE_API_SOURCE_REVISION}" \
       org.uxheavy.plane.api.image.tag="${PLANE_API_IMAGE_TAG}" \
       org.uxheavy.plane.api.source.manage.sha256="${PLANE_API_MANAGE_SHA256}" \
