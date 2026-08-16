@@ -35,6 +35,7 @@ def _runtime_environment(**overrides: str) -> dict[str, str]:
     environment = {
         "PLANE_AGENT_RUNTIME_URL": "http://agent-runtime:8080",
         "PLANE_AGENT_RUNTIME_SECRET": "r" * 40,
+        "PLANE_AGENT_RUNTIME_HOST_URL": "http://plane-api:8091",
     }
     environment.update(overrides)
     return environment

@@ -2513,3 +2513,17 @@ capacity gate. Focused provider-free checks passed `11/11`; the fresh Manager
 M01-M08 input remains provider-free and unlaunched. Final candidate-bound
 artifacts will be frozen after this checkpoint commit. Durable checkpoint:
 `user-testing-output/plane-agents/evidence/manager-m01-m08-capacity-ready-20260817-02.json`.
+
+## Manager transport readiness checkpoint — 2026-08-17
+
+Integrated transport fix `7a08dd2611f9b5a6c5d35ac3887573d649b7a4d4` as
+`898abe2e0715b25959dde277132bc9c7dda6e2d1` after the capacity gate and
+ordered shared fixes. The exact provider-free Manager/transport checks passed
+`2/2`; the bounded Manager/capacity contract subset passed `8/8`. URL plus
+secret-file selects `RemoteRuntimeTransport`, and missing URL/secret
+combinations fail closed.
+
+The full Compose/live phase was not entered because RabbitMQ stopped during
+tmpfs cookie permission setup. The isolated PostgreSQL test lane passed; no
+provider attempt or replay occurred. Durable checkpoint:
+`user-testing-output/plane-agents/evidence/manager-m01-m08-transport-ready-20260817-03.json`.

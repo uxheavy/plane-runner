@@ -359,3 +359,18 @@ No new UT issue is opened. Commits `200d1fdb7d`, `488390ba21`, and
 passed `11/11`; no live/provider attempt or replay was made. The durable
 owner-safe checkpoint is
 `user-testing-output/plane-agents/evidence/manager-m01-m08-capacity-ready-20260817-02.json`.
+
+## Manager transport readiness checkpoint — 2026-08-17
+
+No new UT issue is opened. Transport fix `7a08dd2611f9b5a6c5d35ac3887573d649b7a4d4`
+was integrated as `898abe2e0715b25959dde277132bc9c7dda6e2d1`; the exact
+provider-free regression proves that remote URL plus secret-file configuration
+selects `RemoteRuntimeTransport`, while either missing half raises
+`RuntimeConfigurationError` instead of downgrading to local transport. The
+combined Manager/transport test passed `2/2`, and the bounded Manager/capacity
+contract subset passed `8/8`.
+
+The full Compose stack was not entered because the existing RabbitMQ tmpfs
+guard stopped at `.erlang.cookie` permission setup; the isolated PostgreSQL
+provider-free lane passed. Durable owner-safe evidence:
+`user-testing-output/plane-agents/evidence/manager-m01-m08-transport-ready-20260817-03.json`.

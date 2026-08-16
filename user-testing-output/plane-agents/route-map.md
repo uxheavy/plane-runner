@@ -368,3 +368,17 @@ Publication lifecycle. No Compose/live phase or provider attempt occurred.
 
 Durable checkpoint:
 `user-testing-output/plane-agents/evidence/manager-m01-m08-capacity-ready-20260817-02.json`.
+
+## Manager M01-M08 transport readiness checkpoint — 2026-08-17
+
+Transport fix `7a08dd2611f9b5a6c5d35ac3887573d649b7a4d4` is integrated as
+`898abe2e0715b25959dde277132bc9c7dda6e2d1` after the capacity gate and shared
+fixes. The exact provider-free regression binds a remote URL plus secret-file
+to `RemoteRuntimeTransport` and rejects either missing half, preserving
+ADR-0010 fail-closed behavior. The Manager route remains bound to M01-M08 and
+the independent Actor/Profile/Assignment/Run/Invocation/Outcome/Publication
+lifecycle.
+
+The fresh candidate remains unlaunched: no full Compose/live phase, provider
+attempt, or replay occurred. Durable checkpoint:
+`user-testing-output/plane-agents/evidence/manager-m01-m08-transport-ready-20260817-03.json`.
