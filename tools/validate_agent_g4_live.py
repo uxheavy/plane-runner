@@ -896,6 +896,24 @@ _LIVE_TOP_LEVEL_FIELDS = {
     "scenario",
     "scenarioGate",
     "commissionEvidence",
+    "terminalLifecycle",
+}
+_TERMINAL_LIFECYCLE_PROTOCOL = "hermes.terminal-lifecycle/v1"
+_TERMINAL_LIFECYCLE_STATUSES = {"ok", "replayed", "denied", "conflict", "unavailable", "invalid"}
+_TERMINAL_LIFECYCLE_ACTIONS = {"none", "proposal", "applied"}
+_TERMINAL_LIFECYCLE_EXIT_CATEGORIES = {
+    "unknown",
+    "text_response",
+    "terminal_action",
+    "max_iterations_reached",
+    "budget_exhausted",
+    "interrupted_by_user",
+    "session_persistence_failed",
+    "guardrail_halt",
+    "local_processing_error",
+    "error_near_max_iterations",
+    "partial_stream_recovery",
+    "other",
 }
 _LIVE_AUDIT_FIELDS = {"passed", "eventCount", "permittedOutcome", "deniedOutcome", "submitOutcome", "publishOutcome"}
 _LIVE_VERSION_FIELDS = {"passed", "binding", "source"}
@@ -1205,6 +1223,91 @@ def _validate_scenario_gate(value: Any) -> None:
 def _validate_semantic_digest(evidence: dict[str, Any]) -> None:
     _hash(_required(evidence, "semanticDigest", "evidence"), "evidence_semantic_digest")
     _exact(evidence["semanticDigest"], _semantic_digest(evidence), "evidence_semantic_digest")
+
+
+def _validate_terminal_lifecycle(value: Any) -> None:
+    lifecycle = _object(value, "evidence_terminal_lifecycle")
+    expected = {
+        "protocol",
+        "category",
+        "hook_installed",
+        "terminal_action_observed",
+        "terminal_reason",
+        "terminal_action",
+        "outcome_publication",
+        "finalization",
+    }
+    if set(lifecycle) != expected:
+        raise ContractError("evidence_terminal_lifecycle_fields_invalid")
+    _exact(lifecycle["protocol"], _TERMINAL_LIFECYCLE_PROTOCOL, "evidence_terminal_lifecycle_protocol")
+    _exact(lifecycle["category"], "terminal_lifecycle", "evidence_terminal_lifecycle_category")
+    if lifecycle["hook_installed"] is not True or type(lifecycle["terminal_action_observed"]) is not bool:
+        raise ContractError("evidence_terminal_lifecycle_hook_invalid")
+    if lifecycle["terminal_reason"] not in {"product_outcome_published", "none"}:
+        raise ContractError("evidence_terminal_lifecycle_reason_invalid")
+
+    def counter(value: Any, name: str) -> None:
+        if type(value) is not int or not 0 <= value <= 1_000_000:
+            raise ContractError(f"evidence_terminal_lifecycle_{name}_invalid")
+
+    action = lifecycle["terminal_action"]
+    if action is not None:
+        action = _object(action, "evidence_terminal_lifecycle_action")
+        action_fields = {
+            "reason",
+            "observed_at",
+            "api_call_count",
+            "provider_responses",
+            "iteration_budget_used",
+            "iteration_budget_remaining",
+        }
+        if set(action) != action_fields:
+            raise ContractError("evidence_terminal_lifecycle_action_fields_invalid")
+        if action["reason"] not in {"product_outcome_published", "terminal_action_observed"}:
+            raise ContractError("evidence_terminal_lifecycle_action_reason_invalid")
+        _exact(action["observed_at"], "post_tool_batch", "evidence_terminal_lifecycle_action_timing")
+        for field in action_fields - {"reason", "observed_at"}:
+            counter(action[field], field)
+
+    publication = lifecycle["outcome_publication"]
+    if publication is not None:
+        publication = _object(publication, "evidence_terminal_lifecycle_publication")
+        publication_fields = {
+            "status",
+            "replayed",
+            "publication_action",
+            "operation_ref",
+            "terminal_armed",
+        }
+        if set(publication) != publication_fields:
+            raise ContractError("evidence_terminal_lifecycle_publication_fields_invalid")
+        if (
+            publication["status"] not in _TERMINAL_LIFECYCLE_STATUSES
+            or type(publication["replayed"]) is not bool
+            or publication["publication_action"] not in _TERMINAL_LIFECYCLE_ACTIONS
+            or publication["operation_ref"] not in {"none", "operation:agent.outcome.publish"}
+            or type(publication["terminal_armed"]) is not bool
+        ):
+            raise ContractError("evidence_terminal_lifecycle_publication_invalid")
+
+    finalization = _object(lifecycle["finalization"], "evidence_terminal_lifecycle_finalization")
+    finalization_fields = {
+        "api_call_count",
+        "provider_responses",
+        "max_iterations",
+        "iteration_budget_max_total",
+        "iteration_budget_used",
+        "iteration_budget_remaining",
+        "exit_reason_before_mapping",
+        "exit_reason_after_mapping",
+    }
+    if set(finalization) != finalization_fields:
+        raise ContractError("evidence_terminal_lifecycle_finalization_fields_invalid")
+    for field in finalization_fields - {"exit_reason_before_mapping", "exit_reason_after_mapping"}:
+        counter(finalization[field], field)
+    for field in ("exit_reason_before_mapping", "exit_reason_after_mapping"):
+        if finalization[field] not in _TERMINAL_LIFECYCLE_EXIT_CATEGORIES:
+            raise ContractError(f"evidence_terminal_lifecycle_{field}_invalid")
 
 
 def _validate_receipt_common(
@@ -1522,9 +1625,10 @@ _FAILURE_TOP_LEVEL_FIELDS = {
     "scenario",
     "scenarioGate",
     "commissionEvidence",
+    "terminalLifecycle",
 }
 _FAILURE_REQUIRED_TOP_LEVEL_FIELDS = _FAILURE_TOP_LEVEL_FIELDS - {
-    "providerRelay", "scenario", "scenarioGate", "commissionEvidence"
+    "providerRelay", "scenario", "scenarioGate", "commissionEvidence", "terminalLifecycle"
 }
 _FAILURE_STAGES = {
     "initialization",
@@ -1579,6 +1683,8 @@ def _validate_failure_receipt(
     _exact(evidence["schemaVersion"], "plane-agent-g4/live-failure/v1", "evidence_schema")
     _exact(evidence["status"], "failed", "evidence_status")
     _validate_receipt_common(evidence, authority_info, expected_binding, status="failed")
+    if "terminalLifecycle" in evidence:
+        _validate_terminal_lifecycle(evidence["terminalLifecycle"])
 
     failure = _object(evidence["failure"], "evidence_failure")
     required_failure_fields = {
@@ -1827,6 +1933,8 @@ def validate_evidence(
     _exact(schema, "plane-agent-g4/live-evidence/v1", "evidence_schema")
     _exact(status, "passed", "evidence_status")
     _validate_receipt_common(evidence, authority_info, expected, status="passed")
+    if "terminalLifecycle" in evidence:
+        _validate_terminal_lifecycle(evidence["terminalLifecycle"])
     if "commissionEvidence" in evidence:
         _validate_commission_evidence(evidence["commissionEvidence"], status="passed")
     readback = _object(_required(evidence, "readback", "evidence"), "evidence_readback")

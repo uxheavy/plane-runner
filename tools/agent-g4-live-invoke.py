@@ -79,6 +79,27 @@ if os.environ.get("G4_SCENARIO_DESCRIPTOR"):
     )
 
 _LIVE_USAGE_KEYS = ("inputTokens", "outputTokens", "durationMs")
+_TERMINAL_LIFECYCLE_PROTOCOL = "hermes.terminal-lifecycle/v1"
+_TERMINAL_LIFECYCLE_STATUSES = frozenset(
+    {"ok", "replayed", "denied", "conflict", "unavailable", "invalid"}
+)
+_TERMINAL_LIFECYCLE_ACTIONS = frozenset({"none", "proposal", "applied"})
+_TERMINAL_LIFECYCLE_EXIT_CATEGORIES = frozenset(
+    {
+        "unknown",
+        "text_response",
+        "terminal_action",
+        "max_iterations_reached",
+        "budget_exhausted",
+        "interrupted_by_user",
+        "session_persistence_failed",
+        "guardrail_halt",
+        "local_processing_error",
+        "error_near_max_iterations",
+        "partial_stream_recovery",
+        "other",
+    }
+)
 _S00_PUBLICATION_REF_FIELDS = (
     "productRef",
     "operationAttemptRef",
@@ -279,6 +300,127 @@ def _s00_publication_evidence(value):
             for row in value.get("refs", [])
             if isinstance(row, dict) and all(field in row for field in _S00_PUBLICATION_REF_FIELDS)
         ],
+    }
+
+
+def _bounded_terminal_lifecycle_observation(value):
+    """Validate and retain Hermes' bounded terminal-lifecycle observation."""
+
+    if not isinstance(value, str):
+        return None
+    try:
+        observation = json.loads(value)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(observation, dict) or observation.get("protocol") != _TERMINAL_LIFECYCLE_PROTOCOL:
+        return None
+    expected = {
+        "protocol",
+        "category",
+        "hook_installed",
+        "terminal_action_observed",
+        "terminal_reason",
+        "terminal_action",
+        "outcome_publication",
+        "finalization",
+    }
+    if set(observation) != expected or observation["category"] != "terminal_lifecycle":
+        raise RuntimeError("terminal lifecycle observation schema invalid")
+    if observation["hook_installed"] is not True or type(observation["terminal_action_observed"]) is not bool:
+        raise RuntimeError("terminal lifecycle hook state invalid")
+    if observation["terminal_reason"] not in {"product_outcome_published", "none"}:
+        raise RuntimeError("terminal lifecycle reason invalid")
+
+    def counter(value):
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 1_000_000:
+            raise RuntimeError("terminal lifecycle counter invalid")
+        return value
+
+    def snapshot(value, fields):
+        if not isinstance(value, dict) or not set(fields).issubset(value):
+            raise RuntimeError("terminal lifecycle snapshot invalid")
+        return {field: counter(value[field]) for field in fields}
+
+    terminal_action = observation["terminal_action"]
+    if terminal_action is not None:
+        if not isinstance(terminal_action, dict) or set(terminal_action) != {
+            "reason",
+            "observed_at",
+            "api_call_count",
+            "provider_responses",
+            "iteration_budget_used",
+            "iteration_budget_remaining",
+        }:
+            raise RuntimeError("terminal lifecycle action invalid")
+        terminal_action = {
+            "reason": terminal_action["reason"],
+            "observed_at": terminal_action["observed_at"],
+            **snapshot(
+                terminal_action,
+                (
+                    "api_call_count",
+                    "provider_responses",
+                    "iteration_budget_used",
+                    "iteration_budget_remaining",
+                ),
+            ),
+        }
+        if terminal_action["reason"] not in {"product_outcome_published", "terminal_action_observed"}:
+            raise RuntimeError("terminal lifecycle action reason invalid")
+        if terminal_action["observed_at"] != "post_tool_batch":
+            raise RuntimeError("terminal lifecycle action timing invalid")
+
+    outcome_publication = observation["outcome_publication"]
+    if outcome_publication is not None:
+        if not isinstance(outcome_publication, dict) or set(outcome_publication) != {
+            "status",
+            "replayed",
+            "publication_action",
+            "operation_ref",
+            "terminal_armed",
+        }:
+            raise RuntimeError("terminal lifecycle publication invalid")
+        if (
+            outcome_publication["status"] not in _TERMINAL_LIFECYCLE_STATUSES
+            or type(outcome_publication["replayed"]) is not bool
+            or outcome_publication["publication_action"] not in _TERMINAL_LIFECYCLE_ACTIONS
+            or outcome_publication["operation_ref"] not in {"none", "operation:agent.outcome.publish"}
+            or type(outcome_publication["terminal_armed"]) is not bool
+        ):
+            raise RuntimeError("terminal lifecycle publication values invalid")
+        outcome_publication = dict(outcome_publication)
+
+    finalization_value = observation["finalization"]
+    finalization_fields = (
+        "api_call_count",
+        "provider_responses",
+        "max_iterations",
+        "iteration_budget_max_total",
+        "iteration_budget_used",
+        "iteration_budget_remaining",
+    )
+    if not isinstance(finalization_value, dict) or set(finalization_value) != set(
+        finalization_fields
+    ) | {"exit_reason_before_mapping", "exit_reason_after_mapping"}:
+        raise RuntimeError("terminal lifecycle finalization invalid")
+    finalization = {
+        field: counter(finalization_value[field])
+        for field in finalization_fields
+    }
+    for field in ("exit_reason_before_mapping", "exit_reason_after_mapping"):
+        value = finalization_value.get(field)
+        if value not in _TERMINAL_LIFECYCLE_EXIT_CATEGORIES:
+            raise RuntimeError("terminal lifecycle exit category invalid")
+        finalization[field] = value
+    return {
+        "protocol": _TERMINAL_LIFECYCLE_PROTOCOL,
+        "category": "terminal_lifecycle",
+        "hook_installed": True,
+        "terminal_action_observed": observation["terminal_action_observed"],
+        "terminal_reason": observation["terminal_reason"],
+        "terminal_action": terminal_action,
+        "outcome_publication": outcome_publication,
+        "finalization": finalization,
     }
 
 
@@ -532,6 +674,7 @@ def build_failure_evidence(
     scenario_gate=None,
     plane_host_operation_receipts=False,
     plane_operation_audit=None,
+    terminal_lifecycle=None,
 ):
     """Return one bounded failure object without copying runtime observations."""
 
@@ -1012,6 +1155,8 @@ def build_failure_evidence(
         receipt["scenario"] = scenario
     if scenario_gate is not None:
         receipt["scenarioGate"] = scenario_gate
+    if terminal_lifecycle is not None:
+        receipt["terminalLifecycle"] = terminal_lifecycle
     return _attach_receipt_semantic_digest(receipt)
 
 
@@ -1316,6 +1461,7 @@ def _run_single(scenario) -> tuple[int, dict]:
     control = None
     exit_evidence = None
     runtime_event_kind_counts = {}
+    terminal_lifecycle = None
     plane_host_operation_receipts = False
     plane_operation_audit = []
     supervisor_failure_reason = None
@@ -1338,6 +1484,7 @@ def _run_single(scenario) -> tuple[int, dict]:
     context_replay_before = {}
 
     def readback():
+        nonlocal terminal_lifecycle
         invocation.refresh_from_db()
         run.refresh_from_db()
         attempts = list(RuntimeProviderAttempt.objects.filter(invocation=invocation).order_by("sequence")[:32])
@@ -1374,8 +1521,16 @@ def _run_single(scenario) -> tuple[int, dict]:
         for event in RuntimeEventIngress.objects.filter(invocation=invocation).order_by("sequence").values(
             "event_id", "kind", "raw_payload"
         )[:256]:
+            raw_payload = event["raw_payload"] if isinstance(event["raw_payload"], dict) else {}
+            body = raw_payload.get("body") if isinstance(raw_payload, dict) else None
+            payload = body.get("payload") if isinstance(body, dict) else None
+            lifecycle_text = payload.get("text") if isinstance(payload, dict) else None
+            candidate_lifecycle = _bounded_terminal_lifecycle_observation(lifecycle_text)
+            if candidate_lifecycle is not None:
+                if terminal_lifecycle is not None and terminal_lifecycle != candidate_lifecycle:
+                    raise RuntimeError("multiple terminal lifecycle observations disagree")
+                terminal_lifecycle = candidate_lifecycle
             if event["kind"] == "transcript_evidence_observed":
-                body = event["raw_payload"].get("body") if isinstance(event["raw_payload"], dict) else None
                 if not isinstance(body, dict) or body.get("publication") != {"action": "observation_only"}:
                     raise RuntimeError("transcript evidence was not observation_only")
                 event_id = bounded_ref(event["event_id"], "event:")
@@ -1615,6 +1770,8 @@ def _run_single(scenario) -> tuple[int, dict]:
             transcript_evidence,
             explicit_publication,
         ) = readback()
+        if scenario is not None and scenario.scenario_id == "worker" and terminal_lifecycle is None:
+            raise RuntimeError("terminal lifecycle observation missing")
         unknown_attempt = _provider_attempts_have_unknown_evidence(provider_attempts, control)
         if unknown_attempt:
             raise RuntimeError("provider request outcome was unknown; pass/replay is not permitted")
@@ -1880,8 +2037,9 @@ def _run_single(scenario) -> tuple[int, dict]:
             scenario=scenario.evidence() if scenario is not None else None,
             plane_host_operation_receipts=plane_host_operation_receipts,
             plane_operation_audit=plane_operation_audit,
+            terminal_lifecycle=terminal_lifecycle,
         )
-        evidence = _attach_receipt_semantic_digest({
+        success_receipt = {
             "schemaVersion": "plane-agent-g4/live-evidence/v1",
             "status": "passed",
             "authorityId": os.environ["G4_AUTHORITY_ID"],
@@ -1949,7 +2107,10 @@ def _run_single(scenario) -> tuple[int, dict]:
                     },
                 },
             },
-        })
+        }
+        if terminal_lifecycle is not None:
+            success_receipt["terminalLifecycle"] = terminal_lifecycle
+        evidence = _attach_receipt_semantic_digest(success_receipt)
         if scenario is not None:
             evidence["scenario"] = scenario.evidence()
             if scenario_actual is not None:
@@ -2090,6 +2251,7 @@ def _run_single(scenario) -> tuple[int, dict]:
                 scenario_gate=scenario_gate,
                 plane_host_operation_receipts=plane_host_operation_receipts,
                 plane_operation_audit=plane_operation_audit,
+                terminal_lifecycle=terminal_lifecycle,
             )
 
     return return_code, evidence

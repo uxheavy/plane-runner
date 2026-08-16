@@ -566,6 +566,17 @@ def test_identity_profile_assignment_and_evidence_are_separate() -> None:
         validator._validate_scenario_projection(invalid_projection)
 
 
+def test_worker_receipt_requires_bounded_terminal_lifecycle_observation() -> None:
+    invoke = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+    validate = (TOOLS / "validate_agent_g4_live.py").read_text(encoding="utf-8")
+
+    assert "_bounded_terminal_lifecycle_observation" in invoke
+    assert '"terminalLifecycle"' in invoke
+    assert "terminal lifecycle observation missing" in invoke
+    assert "hermes.terminal-lifecycle/v1" in invoke
+    assert "def _validate_terminal_lifecycle" in validate
+
+
 def _binding_manifest(candidate: str, mode: str, disposable: dict[str, object] | None = None) -> dict[str, object]:
     parent = "b" * 40
     hermes = "c" * 40

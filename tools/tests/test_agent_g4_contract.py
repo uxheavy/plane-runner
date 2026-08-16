@@ -365,7 +365,90 @@ def failure_fixture() -> tuple[dict, dict, dict, dict]:
     return manifest, authority, config, receipt
 
 
+def terminal_lifecycle_fixture(*, observed: bool = True) -> dict[str, object]:
+    return {
+        "protocol": "hermes.terminal-lifecycle/v1",
+        "category": "terminal_lifecycle",
+        "hook_installed": True,
+        "terminal_action_observed": observed,
+        "terminal_reason": "product_outcome_published" if observed else "none",
+        "terminal_action": (
+            {
+                "reason": "product_outcome_published",
+                "observed_at": "post_tool_batch",
+                "api_call_count": 7,
+                "provider_responses": 7,
+                "iteration_budget_used": 7,
+                "iteration_budget_remaining": 9,
+            }
+            if observed
+            else None
+        ),
+        "outcome_publication": {
+            "status": "ok",
+            "replayed": False,
+            "publication_action": "applied",
+            "operation_ref": "operation:agent.outcome.publish",
+            "terminal_armed": observed,
+        },
+        "finalization": {
+            "api_call_count": 7,
+            "provider_responses": 7,
+            "max_iterations": 16,
+            "iteration_budget_max_total": 16,
+            "iteration_budget_used": 7,
+            "iteration_budget_remaining": 9,
+            "exit_reason_before_mapping": "terminal_action" if observed else "budget_exhausted",
+            "exit_reason_after_mapping": "terminal_action" if observed else "budget_exhausted",
+        },
+    }
+
+
 class G4ContractTests(unittest.TestCase):
+    def test_terminal_lifecycle_observation_is_strictly_bounded_and_retained(self):
+        namespace = invoke_helper_namespace()
+        parser = namespace["_bounded_terminal_lifecycle_observation"]
+        observation = terminal_lifecycle_fixture()
+        parsed = parser(json.dumps(observation, separators=(",", ":")))
+        self.assertEqual(parsed, observation)
+        with self.assertRaisesRegex(RuntimeError, "terminal lifecycle publication values invalid"):
+            parser(
+                json.dumps(
+                    {
+                        **observation,
+                        "outcome_publication": {
+                            **observation["outcome_publication"],
+                            "status": "provider-secret-leak",
+                        },
+                    },
+                    separators=(",", ":"),
+                )
+            )
+
+    def test_failure_receipt_validates_terminal_lifecycle_observation(self):
+        manifest, authority, config, _ = fixture()
+        builder = invoke_helper_namespace()["build_failure_evidence"]
+        receipt = builder(
+            binding=exact_binding(manifest, CANDIDATE),
+            authority_id=authority["authorityId"],
+            canary_ids={key: row["id"] for key, row in authority["binding"]["canaries"].items()},
+            failure_phase="api-invocation",
+            error_class="RuntimeError",
+            exit_code=1,
+            run_id="run:lifecycle",
+            run_state="failed",
+            invocation_id="invocation:lifecycle",
+            invocation_state="failed",
+            provider_attempts=[],
+            terminal_kind="run_failure",
+            provider_relay=provider_relay_descriptor(),
+            terminal_lifecycle=terminal_lifecycle_fixture(observed=False),
+        )
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt))
+        self.addCleanup(temp.cleanup)
+        self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
+        self.assertEqual(receipt["terminalLifecycle"]["protocol"], "hermes.terminal-lifecycle/v1")
+
     def _assert_live_fixture_rejected(self, mutate, reason):
         manifest, authority, config, evidence_text = fixture()
         evidence = json.loads(evidence_text)
