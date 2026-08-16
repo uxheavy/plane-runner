@@ -232,7 +232,7 @@ def reproject_memory_markdown(entries: Iterable[ProjectedMemory], filename: Lite
                 "visibility": entry.visibility,
             }
         )
-        result += f"## {entry.key}\n<!-- plane-memory-entry:v1 {metadata} -->{content}"
+        result += f"## {entry.key}\n<!-- plane-memory-entry:v1 {metadata} -->\n{content}"
         if not content.endswith("\n"):
             result += "\n"
         result += "<!-- plane-memory-entry-end -->\n\n"

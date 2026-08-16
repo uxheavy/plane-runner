@@ -1,0 +1,86 @@
+{
+  "schemaVersion": "plane-agent-w05-w06/evidence/v1",
+  "worker": "W05-W06",
+  "commissionId": "context-governance",
+  "status": "failed-before-commission-result",
+  "provider": {
+    "name": "openai-codex",
+    "model": "gpt-5.6-luna",
+    "reasoning": "xhigh",
+    "fallbackAllowed": false,
+    "attemptCount": 0,
+    "useStopped": true
+  },
+  "failureReceipt": {
+    "schemaVersion": "plane-agent-g4/live-runner-failure/v1",
+    "phase": "api-invocation",
+    "errorClass": "ImproperlyConfigured",
+    "exitCode": 1,
+    "reasonCategory": "unavailable",
+    "rawResultSha256": "13d2394b78f3e5306ca2ac4d0f5e8c1b747a131abc579a5ae3f524829cc94dd3",
+    "rawResultBytes": 180
+  },
+  "binding": {
+    "artifactSourceCommit": "0d6a239a49064bba3e903d7bc41fa5e78467cbc7",
+    "hostSourceCommit": "3d0fd4b91fc956d8ddd75d269b3ff5d1d633f408",
+    "g3Baseline": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
+    "hermesCommit": "292e866374ca9e9615473fc9bf5dda1913b672e1",
+    "mcpGitlink": "c04974ed6624f17b41e63ef8182661929e77e0d3",
+    "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889",
+    "apiImage": {
+      "tag": "plane-agent-api:g4-v6-0d6a239a",
+      "digest": "sha256:07bacb183677e17bde1507c8b95eea4b83aca9963ff76841b20e9d1426bd9a78"
+    },
+    "runtimeImage": {
+      "tag": "plane-agent-runtime:hermes-292e8663-g4-v6-0d6a239a",
+      "digest": "sha256:11b068de39857f359185867fe63c2db0f09c89b551635477c07a9682e8104659"
+    },
+    "runtimeSourceDigest": "d6401292378fceba81048f6bbae6a784f20931811fa8ffd549f2afd78ac90168",
+    "hermesTreeDigest": "4c5a94590a020bcf74640241a484c087940d55e2d10baac15d24c250b5a7e3b7",
+    "manifestSha256": "837c183050654e9ed77a73fe334f081fe3f6851daf15fd7c9bc732442d0d112d",
+    "commandSha256": "32756a110745e4b69a3c8627021527a073ac7c434b5cd6659483245674954060"
+  },
+  "providerFreeObservations": [
+    {
+      "check": "relative-launch-inputs",
+      "status": "blocked-before-provider",
+      "reason": "launch_paths_must_be_absolute",
+      "providerAttemptDelta": 0
+    },
+    {
+      "check": "authorized-provider-capable-run",
+      "status": "stopped-at-shared-boundary",
+      "reason": "ImproperlyConfigured",
+      "phase": "api-invocation",
+      "providerAttemptDelta": 0
+    },
+    {
+      "check": "bounded-receipt-shape",
+      "status": "confirmed",
+      "providerAttemptDelta": 0,
+      "topLevelKeys": [
+        "errorClass",
+        "exitCode",
+        "phase",
+        "reasonCategory",
+        "schemaVersion",
+        "status"
+      ]
+    }
+  ],
+  "cleanup": {
+    "status": "verified",
+    "observedComposeProjectIdentifiers": [
+      "plane-agent-g4-live-11622-17440",
+      "plane-agent-g4-live-11555-32519"
+    ],
+    "postExitContainerCount": 0,
+    "postExitVolumeCount": 0,
+    "postExitNetworkCount": 0
+  },
+  "laneResult": {
+    "W05": "not-observed",
+    "W06": "not-observed",
+    "nextAction": "await-shared-boundary-fix-then-one-fresh-c-journey"
+  }
+}
