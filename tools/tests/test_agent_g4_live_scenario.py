@@ -356,7 +356,7 @@ def test_accepted_setup_and_control_fields_reach_existing_runner_owners() -> Non
         "request_runtime_cancellation(",
         "_scenario_readback(",
         "RunInputEvent.objects.filter(run=run)",
-        "OperationGatewayPublication.objects.filter(",
+        "OperationGatewayIdempotency.objects.filter(",
         "RunTerminalEvent.objects.filter(run=run, visible=True)",
     ):
         assert marker in source
@@ -368,13 +368,61 @@ def test_runner_readback_uses_actual_plane_state_and_finite_product_kinds() -> N
     for marker in (
         "run.invocations.count()",
         "RunInputEvent.objects.filter(run=run)",
-        "OperationGatewayPublication.objects.filter(",
+        "explicit_publication",
         "RunTerminalEvent.objects.filter(run=run, visible=True)",
         "schedule_fire.state == AgentScheduleFireState.CREATED",
     ):
         assert marker in readback
     assert "input_request" not in readback
     assert '"count": 1' not in readback
+
+
+def test_worker_publication_readback_uses_explicit_product_projection_not_delivery_intents() -> None:
+    source = (TOOLS / "agent-g4-live-invoke.py").read_text()
+    readback = source.split("def _scenario_readback", 1)[1].split("def _run_continuation_supervisor", 1)[0]
+
+    assert "explicit_publication=None" in readback
+    assert "explicit_publication_expectations" in readback
+    assert "OperationGatewayPublication" not in readback
+
+
+def test_explicit_publication_projection_drives_all_publication_gates_without_delivery_rows() -> None:
+    expected = {
+        "operationOutcomes": [],
+        "evidenceKinds": ["publication"],
+        "durableRecords": [{"kind": "publication", "count": 1}],
+        "productEvents": [{"kind": "publication", "count": 1}],
+    }
+    records, product_events, evidence_kinds = scenario.explicit_publication_expectations(
+        {"count": 1, "bindings": [{"productKind": "outcome_submission"}]}
+    )
+    passed = scenario.evaluate_expectations(
+        expected,
+        operations=[],
+        records=records,
+        product_events=product_events,
+        evidence_kinds=evidence_kinds,
+    )
+    assert passed["passed"]
+    assert records == [{"kind": "publication", "count": 1}]
+    assert product_events == [{"kind": "publication", "count": 1}]
+
+    empty_records, empty_events, empty_evidence = scenario.explicit_publication_expectations(
+        {"count": 0, "bindings": []}
+    )
+    failed = scenario.evaluate_expectations(
+        expected,
+        operations=[],
+        records=empty_records,
+        product_events=empty_events,
+        evidence_kinds=empty_evidence,
+    )
+    assert failed["passed"] is False
+    assert {
+        "durableRecords:publication",
+        "productEvents:publication",
+        "evidence:publication",
+    } <= set(failed["failures"])
 
 
 def test_worker_route_readback_uses_smallest_bounded_owner_projection() -> None:

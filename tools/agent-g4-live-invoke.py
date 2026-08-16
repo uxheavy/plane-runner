@@ -64,7 +64,6 @@ from plane.db.models import (
 from plane.db.models.operation_gateway import (
     OperationGatewayAudit,
     OperationGatewayIdempotency,
-    OperationGatewayPublication,
 )
 
 if os.environ.get("G4_SCENARIO_DESCRIPTOR"):
@@ -426,7 +425,17 @@ def _scenario_legacy_s00(scenario):
     )
 
 
-def _scenario_readback(scenario, audit_rows, run, assignment, *, lineage_assignment=None, schedule=None, schedule_fire=None):
+def _scenario_readback(
+    scenario,
+    audit_rows,
+    run,
+    assignment,
+    *,
+    explicit_publication=None,
+    lineage_assignment=None,
+    schedule=None,
+    schedule_fire=None,
+):
     if scenario is None or scenario.expected is None:
         return None, None
     operations = {}
@@ -444,12 +453,10 @@ def _scenario_readback(scenario, audit_rows, run, assignment, *, lineage_assignm
     invocation_count = run.invocations.count() if run_count else 0
     audit_count = len(audit_rows)
     input_event_count = RunInputEvent.objects.filter(run=run).count() if run_count else 0
-    publication_count = (
-        OperationGatewayPublication.objects.filter(
-            idempotency__correlation_id=f"correlation:{run.id}"
-        ).count()
-        if run_count
-        else 0
+    from agent_g4_live_scenario import explicit_publication_expectations
+
+    publication_records, publication_events, publication_evidence = explicit_publication_expectations(
+        explicit_publication
     )
     terminal_kinds = ("outcome_submission", "run_failure", "run_blocker", "run_cancellation")
     terminal_rows = (
@@ -463,7 +470,7 @@ def _scenario_readback(scenario, audit_rows, run, assignment, *, lineage_assignm
         {"kind": "invocation", "count": invocation_count},
         {"kind": "input_event", "count": input_event_count},
         {"kind": "audit", "count": audit_count},
-        {"kind": "publication", "count": publication_count},
+        *publication_records,
         {"kind": "terminal_event", "count": len(terminal_rows)},
         {"kind": "lineage_assignment", "count": int(getattr(lineage_assignment, "pk", None) is not None)},
         {"kind": "schedule", "count": int(getattr(schedule, "pk", None) is not None)},
@@ -475,9 +482,11 @@ def _scenario_readback(scenario, audit_rows, run, assignment, *, lineage_assignm
             ),
         },
     ]
-    products = [{"kind": "publication", "count": publication_count}, {"kind": "input_event", "count": input_event_count}]
+    products = [*publication_events, {"kind": "input_event", "count": input_event_count}]
     products.extend({"kind": kind, "count": terminal_rows.count(kind)} for kind in terminal_kinds)
     evidence_kinds = [row["kind"] for row in records if row["count"]]
+    if "publication" in publication_evidence and "publication" not in evidence_kinds:
+        evidence_kinds.append("publication")
     from agent_g4_live_scenario import evaluate_expectations
     actual = {"operations": list(operations.values()), "records": records, "productEvents": products, "evidenceKinds": evidence_kinds}
     return actual, evaluate_expectations(scenario.expected, **{"operations": actual["operations"], "records": records, "product_events": products, "evidence_kinds": evidence_kinds})
@@ -1470,9 +1479,10 @@ def _run_single(scenario) -> tuple[int, dict]:
             "audits": OperationGatewayAudit.objects.filter(correlation_id=correlation_id).count(),
             "usage": RuntimeUsageObservation.objects.filter(invocation=invocation).count(),
             "outcomes": OutcomeSubmission.objects.filter(run=run).count(),
-            "publications": OperationGatewayPublication.objects.filter(
-                idempotency__correlation_id=correlation_id
-            ).count(),
+            # Explicit outcome publication is projected by the bounded
+            # lifecycle readback above. Delivery-intent rows belong to the
+            # separate activity/notification/webhook subsystem.
+            "publications": int(readback()[-1].get("count", 0)),
             "terminalEvents": RunTerminalEvent.objects.filter(run=run, visible=True).count(),
             "semanticState": _semantic_issue_digest(issue),
         }
@@ -1725,6 +1735,7 @@ def _run_single(scenario) -> tuple[int, dict]:
                 plane_operation_audit,
                 run,
                 assignment,
+                explicit_publication=explicit_publication,
                 lineage_assignment=lineage_assignment,
                 schedule=schedule,
                 schedule_fire=schedule_fire,

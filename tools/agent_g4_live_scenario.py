@@ -11,7 +11,7 @@ import re
 import stat
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, Mapping, TypedDict
 
 
 SCENARIO_SCHEMA = "plane.agent-scenario/v1"
@@ -540,6 +540,16 @@ def evaluate_expectations(expected: ExpectedPredicates | None, *, operations: li
     durable_results = compare("durableRecords", records)
     product_results = compare("productEvents", product_events)
     return {"passed": not failures, "failures": failures[:32], "operations": operation_results, "durableRecords": durable_results, "productEvents": product_results, "evidenceKinds": evidence_results}
+
+
+def explicit_publication_expectations(value: Mapping[str, Any] | None) -> tuple[list[dict[str, int]], list[dict[str, int]], list[str]]:
+    """Project the validated explicit outcome publication into scenario gates."""
+
+    count = value.get("count") if isinstance(value, Mapping) else 0
+    if isinstance(count, bool) or not isinstance(count, int) or not 0 <= count <= 32:
+        count = 0
+    row = {"kind": "publication", "count": count}
+    return [row.copy()], [row.copy()], ["publication"] if count else []
 
 
 def parse_descriptor_bytes(raw: bytes, expected_digest: str) -> ScenarioDescriptor:
