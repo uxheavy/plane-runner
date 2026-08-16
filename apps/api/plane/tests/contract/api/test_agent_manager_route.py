@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -10,7 +11,20 @@ from plane.agent.lifecycle import create_actor, create_profile
 from plane.db.models import AgentRole
 
 
-_ROUTE_PATH = Path(__file__).resolve().parents[6] / "tools" / "agent_g4_manager_route.py"
+def _manager_route_path() -> Path:
+    configured = os.environ.get("PLANE_AGENT_MANAGER_ROUTE_PATH")
+    if configured:
+        path = Path(configured)
+        if path.is_file():
+            return path
+    for parent in Path(__file__).resolve().parents:
+        path = parent / "tools" / "agent_g4_manager_route.py"
+        if path.is_file():
+            return path
+    raise RuntimeError("Manager route fixture is not mounted or available from the repository root")
+
+
+_ROUTE_PATH = _manager_route_path()
 _ROUTE_SPEC = importlib.util.spec_from_file_location("agent_g4_manager_route", _ROUTE_PATH)
 assert _ROUTE_SPEC is not None and _ROUTE_SPEC.loader is not None
 _ROUTE = importlib.util.module_from_spec(_ROUTE_SPEC)
