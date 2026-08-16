@@ -37,6 +37,7 @@ EVIDENCE_FILE="${RUN_DIR}/evidence.json"
 ERROR_FILE="${RUN_DIR}/sanitized-error.log"
 ERROR_DIGEST_FILE="${RUN_DIR}/stderr.sha256"
 RUNTIME_SECRET_FILE="${RUN_DIR}/runtime-secret"
+API_RUNTIME_SECRET_TARGET="/run/plane-agent-runtime-secret"
 PROVIDER_SECRET_FILE="${RUN_DIR}/provider-credentials"
 SCENARIO_DESCRIPTOR_PATH_INPUT="${PLANE_G4_SCENARIO_DESCRIPTOR:-}"
 SCENARIO_DESCRIPTOR_SHA256="${PLANE_G4_SCENARIO_SHA256:-}"
@@ -448,12 +449,12 @@ chmod 600 "${RUNTIME_SECRET_FILE}" || {
 }
 
 if ! docker run --rm --network none \
-    --mount type=bind,src="${RUNTIME_SECRET_FILE}",dst=/run/secrets/plane_agent_runtime,readonly \
+    --mount type=bind,src="${RUNTIME_SECRET_FILE}",dst="${API_RUNTIME_SECRET_TARGET}",readonly \
     --entrypoint python3 "${API_IMAGE}" -c '
 import os
 import stat
 
-metadata = os.stat("/run/secrets/plane_agent_runtime", follow_symlinks=False)
+metadata = os.stat("/run/plane-agent-runtime-secret", follow_symlinks=False)
 if not stat.S_ISREG(metadata.st_mode):
     raise SystemExit(1)
 if stat.S_IMODE(metadata.st_mode) != 0o600:
@@ -871,11 +872,37 @@ for _attempt in $(seq 1 90); do
 done
 test "${runtime_ready}" -eq 1
 
+LIVE_PHASE=api-runtime-binding
+live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" \
+    docker run --rm --network "${NETWORK}" --hostname api --network-alias api \
+    --mount type=bind,src="${RUNTIME_SECRET_FILE}",dst="${API_RUNTIME_SECRET_TARGET}",readonly \
+    --env DJANGO_SETTINGS_MODULE=plane.settings.production \
+    --env SECRET_KEY="${PLANE_TEST_SECRET}" \
+    --env APP_BASE_URL=http://api:8000 \
+    --env WEB_URL=http://api:8000 \
+    --env DATABASE_URL=postgresql://plane:plane@test-db:5432/plane \
+    --env DATABASE_RUNTIME_URL=postgresql://plane:plane@test-db:5432/plane \
+    --env REDIS_HOST=test-redis \
+    --env REDIS_URL=redis://test-redis:6379/ \
+    --env RABBITMQ_HOST=test-mq \
+    --env AMQP_URL=amqp://plane:plane@test-mq:5672/plane \
+    --env PLANE_AGENT_RUNTIME_URL=http://agent-runtime:8080 \
+    --env PLANE_AGENT_RUNTIME_HOST_URL=http://api:8091 \
+    --env PLANE_AGENT_RUNTIME_DISPATCH_PATH=/v1/runtime/dispatch \
+    --env PLANE_AGENT_RUNTIME_SECRET_FILE="${API_RUNTIME_SECRET_TARGET}" \
+    --env PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER=command:/usr/local/bin/plane-agent-runtime-credential-resolver \
+    --env PLANE_AGENT_RUNTIME_COMMAND='python3 -m plane_runtime.g1_runtime_image.bootstrap --once --g1-production' \
+    --env PLANE_AGENT_RUNTIME_NETWORK_POLICY=none \
+    --entrypoint python3 "${API_IMAGE}" - \
+    <"${ROOT_DIR}/tools/agent_g4_runtime_binding_probe.py" \
+    >"${RUN_DIR}/runtime-binding.json"
+cat "${RUN_DIR}/runtime-binding.json"
+
 LIVE_PHASE=api-invocation
 live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" \
     docker run --rm -i --network "${NETWORK}" --hostname api --network-alias api \
     "${SCENARIO_MOUNT_ARGS[@]}" \
-    --mount type=bind,src="${RUNTIME_SECRET_FILE}",dst=/run/plane-agent-runtime-secret,readonly \
+    --mount type=bind,src="${RUNTIME_SECRET_FILE}",dst="${API_RUNTIME_SECRET_TARGET}",readonly \
     --mount type=volume,src="${CREDENTIAL_STATE_VOLUME}",dst="${CREDENTIAL_STATE_TARGET}",volume-nocopy \
     --mount type=volume,src="${PROVIDER_SECRET_VOLUME}",dst=/run/secrets,readonly,volume-nocopy \
     --env DJANGO_SETTINGS_MODULE=plane.settings.production \
@@ -894,7 +921,7 @@ live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" \
     --env PLANE_AGENT_RUNTIME_HOST_BIND=0.0.0.0 \
     --env PLANE_AGENT_RUNTIME_HOST_PORT=8091 \
     --env PLANE_AGENT_RUNTIME_DISPATCH_PATH=/v1/runtime/dispatch \
-    --env PLANE_AGENT_RUNTIME_SECRET_FILE=/run/plane-agent-runtime-secret \
+    --env PLANE_AGENT_RUNTIME_SECRET_FILE="${API_RUNTIME_SECRET_TARGET}" \
     --env PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER=command:/usr/local/bin/plane-agent-runtime-credential-resolver \
     --env PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE="${CREDENTIAL_STATE_FILE}" \
     --env PLANE_AGENT_RUNTIME_COMMAND='python3 -m plane_runtime.g1_runtime_image.bootstrap --once --g1-production' \

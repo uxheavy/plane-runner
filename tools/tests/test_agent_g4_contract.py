@@ -971,7 +971,7 @@ class G4ContractTests(unittest.TestCase):
                 "if [ \"$1\" = volume ] && [ \"$2\" = inspect ]; then exit 1; fi\n"
                 "if [ \"$1\" = volume ] && [ \"$2\" = create ]; then exit 0; fi\n"
                 "if [ \"$1\" = volume ] && [ \"$2\" = rm ]; then exit 0; fi\n"
-                "case \" $* \" in *plane_agent_runtime*) exit 0 ;; *\" --network none \"*) exit 42 ;; esac\n"
+                "case \" $* \" in *plane-agent-runtime-secret*) exit 0 ;; *\" --network none \"*) exit 42 ;; esac\n"
                 "exit 0\n",
                 encoding="utf-8",
             )
@@ -1266,7 +1266,7 @@ class G4ContractTests(unittest.TestCase):
                 "if [ \"$1\" = volume ] && [ \"$2\" = create ]; then exit 0; fi\n"
                 "if [ \"$1\" = volume ] && [ \"$2\" = rm ]; then exit 0; fi\n"
                 "case \" $* \" in *provider-credentials*) exit 125 ;; esac\n"
-                "case \" $* \" in *plane_agent_runtime*) exit 0 ;; *\" --network none \"*) exit 42 ;; esac\n"
+                "case \" $* \" in *plane-agent-runtime-secret*) exit 0 ;; *\" --network none \"*) exit 42 ;; esac\n"
                 "exit 0\n",
                 encoding="utf-8",
             )
@@ -1358,9 +1358,10 @@ class G4ContractTests(unittest.TestCase):
         self.assertLess(checkout_start, credential_staging_start)
         self.assertLess(credential_staging_start, preflight_start)
         self.assertIn('RUNTIME_SECRET_FILE="${RUN_DIR}/runtime-secret"', runner)
+        self.assertIn('API_RUNTIME_SECRET_TARGET="/run/plane-agent-runtime-secret"', runner)
         self.assertIn('chmod 600 "${RUNTIME_SECRET_FILE}"', checkout)
         self.assertIn("docker run --rm --network none", checkout)
-        self.assertIn('dst=/run/secrets/plane_agent_runtime,readonly', checkout)
+        self.assertIn('dst="${API_RUNTIME_SECRET_TARGET}",readonly', checkout)
         self.assertIn("expected=checkout-root-docker-bind-visible", checkout)
         self.assertNotIn("PROVIDER_SECRET_SOURCE", checkout)
         self.assertNotIn("source_fd", checkout)
@@ -1384,7 +1385,7 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn('docker run --rm -i --network "${NETWORK}"', api)
         self.assertIn('"${API_IMAGE}" python - <"${LIVE_INVOKE_SOURCE}"', api)
         self.assertIn(
-            '--mount type=bind,src="${RUNTIME_SECRET_FILE}",dst=/run/plane-agent-runtime-secret,readonly',
+            '--mount type=bind,src="${RUNTIME_SECRET_FILE}",dst="${API_RUNTIME_SECRET_TARGET}",readonly',
             api,
         )
         self.assertIn(
@@ -1395,12 +1396,73 @@ class G4ContractTests(unittest.TestCase):
             '--mount type=volume,src="${CREDENTIAL_STATE_VOLUME}",dst="${CREDENTIAL_STATE_TARGET}",volume-nocopy',
             api,
         )
-        self.assertIn("--env PLANE_AGENT_RUNTIME_SECRET_FILE=/run/plane-agent-runtime-secret", api)
+        self.assertIn('--env PLANE_AGENT_RUNTIME_SECRET_FILE="${API_RUNTIME_SECRET_TARGET}"', api)
         self.assertNotIn('--mount type=bind,src="${RUNTIME_SECRET_FILE}",dst=/run/secrets/', api)
         self.assertNotIn('--mount type=bind,src="${LIVE_INVOKE_SOURCE}"', api)
         self.assertNotIn("/tmp/agent-g4-live-invoke.py", api)
         self.assertNotIn("PROVIDER_SECRET_FILE", api)
         self.assertNotIn("PLANE_G4_PROVIDER_SECRET_SOURCE", api)
+
+    def test_api_runtime_binding_probe_uses_the_exact_custom_target_and_precedes_invocation(self):
+        runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+        probe = (TOOLS / "agent_g4_runtime_binding_probe.py").read_text(encoding="utf-8")
+        probe_start = runner.index("LIVE_PHASE=api-runtime-binding")
+        invocation_start = runner.index("LIVE_PHASE=api-invocation")
+        binding = runner[probe_start:invocation_start]
+
+        self.assertLess(probe_start, invocation_start)
+        self.assertIn('docker run --rm --network "${NETWORK}" --hostname api --network-alias api', binding)
+        self.assertIn(
+            '--mount type=bind,src="${RUNTIME_SECRET_FILE}",dst="${API_RUNTIME_SECRET_TARGET}",readonly',
+            binding,
+        )
+        self.assertIn('--env DJANGO_SETTINGS_MODULE=plane.settings.production', binding)
+        self.assertIn('--env PLANE_AGENT_RUNTIME_URL=http://agent-runtime:8080', binding)
+        self.assertIn('--env PLANE_AGENT_RUNTIME_SECRET_FILE="${API_RUNTIME_SECRET_TARGET}"', binding)
+        self.assertIn('--env PLANE_AGENT_RUNTIME_NETWORK_POLICY=none', binding)
+        self.assertIn('"${API_IMAGE}" -', binding)
+        self.assertIn('"${ROOT_DIR}/tools/agent_g4_runtime_binding_probe.py"', binding)
+        self.assertIn('runtime_transport_kind(runtime_url, shared_secret)', probe)
+        self.assertIn('django.setup()', probe)
+        self.assertIn('django_settings.PLANE_AGENT_RUNTIME_SHARED_SECRET', probe)
+        self.assertIn('RemoteRuntimeTransport(', probe)
+        self.assertNotIn("PLANE_AGENT_RUNTIME_SECRET", probe.replace("PLANE_AGENT_RUNTIME_SECRET_FILE", ""))
+
+    def test_runtime_binding_probe_reads_custom_secret_and_selects_remote_transport_provider_free(self):
+        probe = TOOLS / "agent_g4_runtime_binding_probe.py"
+        with tempfile.TemporaryDirectory() as directory:
+            secret_path = Path(directory) / "runtime-secret"
+            sentinel = "runtime-binding-sentinel-" + ("s" * 40)
+            secret_path.write_text(sentinel, encoding="utf-8")
+            secret_path.chmod(0o600)
+            environment = {
+                "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+                "PLANE_AGENT_RUNTIME_URL": "http://127.0.0.1:18080",
+                "PLANE_AGENT_RUNTIME_HOST_URL": "http://api:8091",
+                "PLANE_AGENT_RUNTIME_SECRET_FILE": str(secret_path),
+                "PLANE_AGENT_RUNTIME_COMMAND": (
+                    "python3 -m plane_runtime.g1_runtime_image.bootstrap --once --g1-production"
+                ),
+                "PLANE_AGENT_RUNTIME_NETWORK_POLICY": "none",
+            }
+            result = subprocess.run(
+                [sys.executable, str(probe)],
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        assert result.returncode == 0, result.stderr
+        report = json.loads(result.stdout)
+        assert report["secretPath"] == str(secret_path)
+        assert report["secretMode"] == "0600"
+        assert report["secretBytes"] == len(sentinel.encode("utf-8"))
+        assert report["secretHashClass"] == "sha256-not-emitted"
+        assert report["transportKind"] == "remote"
+        assert report["transportClass"] == "RemoteRuntimeTransport"
+        assert report["runtimeHost"] == "127.0.0.1"
+        assert sentinel not in result.stdout + result.stderr
 
     def test_api_invocation_keeps_migration_environment_out_of_normal_production_and_preserves_secret_file_contract(
         self,
