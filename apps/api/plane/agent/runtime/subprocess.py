@@ -19,6 +19,7 @@ import json
 import os
 import platform
 import resource
+import shutil
 import signal
 import sqlite3
 import subprocess
@@ -26,7 +27,8 @@ import sys
 import tempfile
 import threading
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -849,6 +851,31 @@ class SubprocessRuntimeTransport(RuntimeTransport):
         ):
             raise ValueError("runtime child environment must be a NUL-free string mapping")
 
+    @contextmanager
+    def _invocation_environment(self) -> Iterator[dict[str, str]]:
+        """Give each child invocation an independent user and temp filesystem."""
+
+        root = tempfile.mkdtemp(prefix="plane-agent-runtime-")
+        environment = dict(self._environment)
+        home = os.path.join(root, "home")
+        hermes_home = os.path.join(root, "hermes")
+        temporary = os.path.join(root, "tmp")
+        for path in (home, hermes_home, temporary):
+            os.mkdir(path, 0o700)
+        environment.update(
+            {
+                "HOME": home,
+                "HERMES_HOME": hermes_home,
+                "TMPDIR": temporary,
+                "TMP": temporary,
+                "TEMP": temporary,
+            }
+        )
+        try:
+            yield environment
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
     @staticmethod
     def _terminate(process: subprocess.Popen[bytes]) -> None:
         if process.poll() is not None:
@@ -893,6 +920,7 @@ class SubprocessRuntimeTransport(RuntimeTransport):
         *,
         command: Sequence[str] | None = None,
         is_cancelled: Callable[[], bool] | None = None,
+        environment: Mapping[str, str] | None = None,
     ) -> tuple[str, ...]:
         process_command = tuple(command or self._command)
         cancellation_callback = self._is_cancelled if is_cancelled is None else is_cancelled
@@ -915,7 +943,7 @@ class SubprocessRuntimeTransport(RuntimeTransport):
             child_preexec = self._process_policy.preexec_fn()
         popen_options: dict[str, Any] = {
             "cwd": self._cwd,
-            "env": self._environment,
+            "env": dict(self._environment if environment is None else environment),
             "shell": False,
             "start_new_session": True,
             "close_fds": True,
@@ -1102,7 +1130,13 @@ class SubprocessRuntimeTransport(RuntimeTransport):
         if replay is not None:
             return replay
         try:
-            frames = self._run_process(payload, command=command, is_cancelled=cancellation_callback)
+            with self._invocation_environment() as child_environment:
+                frames = self._run_process(
+                    payload,
+                    command=command,
+                    is_cancelled=cancellation_callback,
+                    environment=child_environment,
+                )
         except Exception:
             try:
                 self._ledger.mark_unknown(invocation_id=invocation_id)
@@ -1218,7 +1252,8 @@ class HostBoundSubprocessRuntimeTransport(SubprocessRuntimeTransport):
             )
             server.start()
             command = (*self._command, "--plane-host-socket", str(socket_path))
-            frames = self._run_process(payload, command=command)
+            with self._invocation_environment() as child_environment:
+                frames = self._run_process(payload, command=command, environment=child_environment)
         except Exception:
             if ledger_claimed:
                 try:

@@ -831,6 +831,207 @@ hermes_logging.setup_verbose_logging = lambda: None
     ).exists()
 
 
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_same_runtime_service_sequential_hermes_invocations_get_fresh_child_state(
+    tmp_path, workspace, gateway_project, gateway_issue, create_user
+):
+    """The one-shot Hermes child must not inherit the prior invocation's home."""
+
+    checkout = os.environ.get("PLANE_G2_HERMES_CHECKOUT", "/workspace/hermes-agent")
+    dependency_path = os.environ.get("PLANE_G2_HERMES_DEPENDENCY_PATH") or os.path.join(
+        checkout, "plane_runtime", "g1_runtime_image"
+    )
+    expected_sha = "292e866374ca9e9615473fc9bf5dda1913b672e1"
+    assert os.path.isdir(checkout)
+    assert (
+        subprocess.run(
+            ["git", "-C", checkout, "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+        ).stdout.strip()
+        == expected_sha
+    )
+    assert os.path.isdir(dependency_path)
+
+    runtime_defaults = {
+        "provider": "openai",
+        "model": "deterministic-local",
+        "adapter": "hermes",
+        "maxCodeModeCalls": 1,
+        "maxCodeModeOutputBytes": 131_072,
+    }
+    first_run, first_invocation = _invocation(
+        workspace,
+        gateway_project,
+        gateway_issue,
+        create_user,
+        runtime_defaults=runtime_defaults,
+        suffix="sequential-first",
+    )
+    second_run, second_invocation = _invocation(
+        workspace,
+        gateway_project,
+        gateway_issue,
+        create_user,
+        runtime_defaults=runtime_defaults,
+        suffix="sequential-second",
+    )
+
+    marker = tmp_path / "child-hermes-homes.txt"
+    fake_runtime = tmp_path / "fake-runtime"
+    fake_runtime.mkdir()
+    (fake_runtime / "sitecustomize.py").write_text(
+        """
+import os
+from pathlib import Path
+
+_MARKER = %s
+
+
+class DeterministicAgent:
+    def __init__(self, **kwargs):
+        hermes_home = os.environ["HERMES_HOME"]
+        Path(hermes_home).mkdir(parents=True, exist_ok=True)
+        with Path(_MARKER).open("a", encoding="utf-8") as handle:
+            handle.write(hermes_home + "\\n")
+        self._step_callback = kwargs.get("step_callback")
+        self.session_input_tokens = 0
+        self.session_output_tokens = 0
+        self.session_api_calls = 0
+
+    def interrupt(self, _reason):
+        return None
+
+    def run_conversation(self, _objective, system_message=None):
+        del system_message
+        if self._step_callback is not None:
+            self._step_callback()
+        return {"final_response": "provider-free deterministic runtime"}
+
+
+import run_agent
+
+run_agent.AIAgent = DeterministicAgent
+"""
+        % json.dumps(str(marker)),
+        encoding="utf-8",
+    )
+    runtime_pythonpath = os.pathsep.join(
+        path for path in (str(fake_runtime), dependency_path, checkout) if path
+    )
+    shared_home = tmp_path / "shared-hermes-home"
+    environment = {
+        "PLANE_AGENT_RUNTIME_URL": "http://127.0.0.1:1",
+        "PLANE_AGENT_RUNTIME_SECRET": "s" * 40,
+        "PLANE_AGENT_RUNTIME_COMMAND": "python3 -m plane_runtime.g1_runtime_image.bootstrap --once --g1-production",
+        "PLANE_AGENT_RUNTIME_ENVIRONMENT_JSON": json.dumps(
+            {
+                "HOME": str(shared_home),
+                "HERMES_HOME": str(shared_home),
+                "LANG": "C.UTF-8",
+                "LC_ALL": "C.UTF-8",
+                "PATH": f"{os.path.dirname(sys.executable)}:/usr/bin:/bin",
+                "PLANE_TEST_CHILD_HOME_MARKER": str(marker),
+                "PYTHONPATH": runtime_pythonpath,
+                "PYTHONUNBUFFERED": "1",
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+        "PLANE_AGENT_RUNTIME_LEDGER_PATH": str(tmp_path / "sequential-ledger.sqlite"),
+        "PLANE_AGENT_RUNTIME_SAFETY_STOP_FILE": str(tmp_path / "sequential-safety-stop"),
+    }
+    configuration = AgentRuntimeConfiguration.from_environment(environment)
+    with socket.socket() as port_probe:
+        port_probe.bind(("127.0.0.1", 0))
+        runtime_port = port_probe.getsockname()[1]
+    service_environment = os.environ.copy()
+    service_environment.update(environment)
+    service_environment.update(
+        {
+            "PLANE_AGENT_RUNTIME_BIND": "127.0.0.1",
+            "PLANE_AGENT_RUNTIME_PORT": str(runtime_port),
+            "PYTHONPATH": os.pathsep.join(
+                path
+                for path in (
+                    os.getcwd(),
+                    dependency_path,
+                    checkout,
+                    service_environment.get("PYTHONPATH"),
+                )
+                if path
+            ),
+        }
+    )
+    service_process = subprocess.Popen(
+        [sys.executable, "-m", "plane.agent.runtime.service"],
+        cwd=os.getcwd(),
+        env=service_environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    runtime_url = f"http://127.0.0.1:{runtime_port}"
+    service_ready = False
+    for _ in range(100):
+        if service_process.poll() is not None:
+            break
+        try:
+            with urllib.request.urlopen(f"{runtime_url}/health/ready", timeout=0.2) as response:
+                if response.status == 200:
+                    service_ready = True
+                    break
+        except (OSError, urllib.error.HTTPError):
+            pass
+        time.sleep(0.05)
+    if not service_ready and service_process.poll() is None:
+        service_process.terminate()
+        service_process.wait(timeout=3)
+    assert service_ready
+
+    transport = RemoteRuntimeTransport(
+        runtime_url=runtime_url,
+        shared_secret=configuration.shared_secret,
+        credential_broker=RuntimeCredentialBroker(
+            {
+                "runtime": {
+                    "api_key": "provider-free-test-key",
+                    "base_url": "http://127.0.0.1:9/v1",
+                    "api_mode": "chat_completions",
+                }
+            }
+        ),
+        model_call_allowance=1,
+    )
+    try:
+        first_frames = transport.dispatch(
+            json.dumps(first_run.snapshot, sort_keys=True, separators=(",", ":")),
+            json.dumps(first_invocation.envelope, sort_keys=True, separators=(",", ":")),
+        )
+        second_frames = transport.dispatch(
+            json.dumps(second_run.snapshot, sort_keys=True, separators=(",", ":")),
+            json.dumps(second_invocation.envelope, sort_keys=True, separators=(",", ":")),
+        )
+    finally:
+        if service_process.poll() is None:
+            service_process.terminate()
+        try:
+            _, service_stderr = service_process.communicate(timeout=3)
+        except subprocess.TimeoutExpired:
+            service_process.kill()
+            _, service_stderr = service_process.communicate(timeout=3)
+        del service_stderr
+        assert service_process.returncode == 0
+
+    for frames in (first_frames, second_frames):
+        assert frames
+        assert json.loads(frames[-1])["kind"] == "completed"
+        assert any(json.loads(frame).get("body", {}).get("kind") == "progress_observed" for frame in frames)
+
+    child_homes = marker.read_text(encoding="utf-8").splitlines()
+    assert len(child_homes) == 2
+    assert len(set(child_homes)) == 2
+    assert all(not Path(child_home).exists() for child_home in child_homes)
+
+
 @pytest.mark.django_db(transaction=True)
 def test_supervisor_replays_terminal_invocation_without_a_new_child_or_terminal_event(
     workspace, gateway_project, gateway_issue, create_user
