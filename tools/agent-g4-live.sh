@@ -5,6 +5,23 @@ umask 077
 
 RUNNER_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 ROOT_DIR="$(cd -- "${RUNNER_DIR}/.." && pwd -P)"
+GIT_COMMON_DIR="$(git -C "${ROOT_DIR}" rev-parse --git-common-dir 2>/dev/null)" || {
+    printf '%s\n' 'event=agent.g4.live-runner status=failed expected=shared-repository-git-common-dir actual=unavailable suggestion=run-from-a-valid-Plane-worktree' >&2
+    exit 2
+}
+if [[ "${GIT_COMMON_DIR}" != /* ]]; then
+    GIT_COMMON_DIR="${ROOT_DIR}/${GIT_COMMON_DIR}"
+fi
+GIT_COMMON_DIR="$(cd -- "${GIT_COMMON_DIR}" 2>/dev/null && pwd -P)" || {
+    printf '%s\n' 'event=agent.g4.live-runner status=failed expected=shared-repository-git-common-dir actual=unresolvable suggestion=run-from-a-valid-Plane-worktree' >&2
+    exit 2
+}
+SHARED_REPOSITORY_ROOT="$(cd -- "${GIT_COMMON_DIR}/.." 2>/dev/null && pwd -P)" || {
+    printf '%s\n' 'event=agent.g4.live-runner status=failed expected=shared-repository-root actual=unresolvable suggestion=run-from-a-valid-Plane-worktree' >&2
+    exit 2
+}
+PLANE_G4_LIVE_CAPACITY_LEASE_PATH="${PLANE_G4_LIVE_CAPACITY_LEASE_PATH:-${SHARED_REPOSITORY_ROOT}/tmp/plane-agent-g4-live-capacity}"
+source "${RUNNER_DIR}/agent-g4-live-support.sh"
 PROJECT="plane-agent-g4-live-${PPID}-${RANDOM}"
 NETWORK="${PROJECT}_test_env"
 EGRESS="${PROJECT}_egress"
@@ -18,6 +35,7 @@ TMP_ROOT="${ROOT_DIR}/tmp"
 RUN_DIR="${TMP_ROOT}/${PROJECT}"
 EVIDENCE_FILE="${RUN_DIR}/evidence.json"
 ERROR_FILE="${RUN_DIR}/sanitized-error.log"
+ERROR_DIGEST_FILE="${RUN_DIR}/stderr.sha256"
 RUNTIME_SECRET_FILE="${RUN_DIR}/runtime-secret"
 PROVIDER_SECRET_FILE="${RUN_DIR}/provider-credentials"
 SCENARIO_DESCRIPTOR_PATH_INPUT="${PLANE_G4_SCENARIO_DESCRIPTOR:-}"
@@ -228,7 +246,7 @@ allowed = (
     "FileNotFoundError",
 )
 try:
-    text = Path(sys.argv[1]).read_text(errors="replace")
+    text = Path(sys.argv[1]).read_bytes()[:8192].decode("utf-8", errors="replace")
 except OSError:
     print("unavailable")
 else:
@@ -251,6 +269,22 @@ try:
 except OSError:
     print("unavailable")
     raise SystemExit(0)
+
+for line in text.splitlines():
+    if line.startswith("reason_category="):
+        category = line.split("=", 1)[1]
+        if category in {
+            "docker_mount_target_read_only",
+            "docker_mount_invalid",
+            "docker_mount_source_unavailable",
+            "docker_mount_permission_denied",
+            "docker_network_configuration_invalid",
+            "docker_image_unavailable",
+            "docker_container_start_failed",
+            "docker_precontainer_failure",
+        }:
+            print(category)
+            raise SystemExit(0)
 
 if "read-only file system" in text and ("mountpoint" in text or "mount" in text):
     print("docker_mount_target_read_only")
@@ -316,6 +350,8 @@ cleanup() {
     local cleanup_status=0
     local reason_category=unavailable
     local error_class=unavailable
+    local stderr_sha256
+    stderr_sha256="$(live_stderr_sha256 "${ERROR_DIGEST_FILE}")"
     if [[ "${status}" -ne 0 ]]; then
         if [[ "${status}" -eq 125 ]]; then
             reason_category="$(safe_docker_failure_reason)"
@@ -328,7 +364,8 @@ cleanup() {
         --status "${status}" \
         --phase "${LIVE_PHASE}" \
         --error-class "${error_class}" \
-        --reason-category "${reason_category}" >/dev/null; then
+        --reason-category "${reason_category}" \
+        --stderr-sha256 "${stderr_sha256}" >/dev/null; then
         printf '%s\n' 'event=agent.g4.live-runner status=failed phase=result-persistence expected=owner-only-atomic-result actual=persist-failed' >&2
         cleanup_status=1
     elif [[ -n "${RESULT_FILE}" ]]; then
@@ -359,9 +396,14 @@ cleanup() {
         fi
         SCENARIO_VOLUME_CREATED=0
     fi
+    if ! live_capacity_lease_release; then
+        printf '%s\n' 'event=agent.g4.live-runner status=failed phase=cleanup expected=capacity-lease-released actual=release-failed' >&2
+        cleanup_status=1
+    fi
     if [[ "${RUN_DIR_CREATED}" -eq 1 && -d "${RUN_DIR}" && ! -L "${RUN_DIR}" ]]; then
         rm -f -- "${RUNTIME_SECRET_FILE}" || true
         rm -f -- "${PROVIDER_SECRET_FILE}" || true
+        rm -f -- "${ERROR_DIGEST_FILE}" || true
         rm -rf -- "${RUN_DIR}"
     fi
     if [[ "${cleanup_status}" -ne 0 && "${status}" -eq 0 ]]; then
@@ -682,13 +724,18 @@ if metadata.st_size > 64 * 1024:
     raise SystemExit(1)
 ' <"${PROVIDER_SECRET_FILE}" >/dev/null 2>&1
 
+LIVE_PHASE=capacity-lease
+live_capacity_lease_acquire || exit $?
+
 LIVE_PHASE=compose
 
-PLANE_TEST_ENV_FILE="${ROOT_DIR}/apps/api/.env.example" \
+live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" \
+    env PLANE_TEST_ENV_FILE="${ROOT_DIR}/apps/api/.env.example" \
     docker compose -p "${PROJECT}" -f "${ROOT_DIR}/docker-compose-test.yml" \
-    up -d --wait test-db test-redis test-mq test-minio >/dev/null 2>&1
+    up -d --wait test-db test-redis test-mq test-minio >/dev/null
 
-docker run --rm --network "${NETWORK}" \
+live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" \
+    docker run --rm --network "${NETWORK}" \
     --env DJANGO_SETTINGS_MODULE=plane.settings.test \
     --env POSTGRES_HOST=test-db \
     --env DATABASE_URL=postgresql://plane:plane@test-db:5432/plane \
@@ -701,10 +748,11 @@ docker run --rm --network "${NETWORK}" \
     --env REDIS_URL=redis://test-redis:6379/ \
     --env RABBITMQ_HOST=test-mq \
     --env AMQP_URL=amqp://plane:plane@test-mq:5672/plane \
-    "${API_IMAGE}" python manage.py bootstrap_operation_gateway_audit --phase=before-migrate >/dev/null 2>&1
+    "${API_IMAGE}" python manage.py bootstrap_operation_gateway_audit --phase=before-migrate >/dev/null
 
 LIVE_PHASE=migrate
-docker run --rm --network "${NETWORK}" \
+live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" \
+    docker run --rm --network "${NETWORK}" \
     --env DJANGO_SETTINGS_MODULE=plane.settings.test \
     --env PLANE_DB_MIGRATION_MODE=1 \
     --env POSTGRES_HOST=test-db \
@@ -718,10 +766,11 @@ docker run --rm --network "${NETWORK}" \
     --env REDIS_URL=redis://test-redis:6379/ \
     --env RABBITMQ_HOST=test-mq \
     --env AMQP_URL=amqp://plane:plane@test-mq:5672/plane \
-    "${API_IMAGE}" python manage.py migrate --noinput >/dev/null 2>&1
+    "${API_IMAGE}" python manage.py migrate --noinput >/dev/null
 
 LIVE_PHASE=audit-bootstrap
-docker run --rm --network "${NETWORK}" \
+live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" \
+    docker run --rm --network "${NETWORK}" \
     --env DJANGO_SETTINGS_MODULE=plane.settings.test \
     --env POSTGRES_HOST=test-db \
     --env DATABASE_URL=postgresql://plane:plane@test-db:5432/plane \
@@ -734,14 +783,14 @@ docker run --rm --network "${NETWORK}" \
     --env REDIS_URL=redis://test-redis:6379/ \
     --env RABBITMQ_HOST=test-mq \
     --env AMQP_URL=amqp://plane:plane@test-mq:5672/plane \
-    "${API_IMAGE}" python manage.py bootstrap_operation_gateway_audit --phase=after-migrate >/dev/null 2>&1
+    "${API_IMAGE}" python manage.py bootstrap_operation_gateway_audit --phase=after-migrate >/dev/null
 
 LIVE_PHASE=credential-state-volume
-if docker volume inspect "${CREDENTIAL_STATE_VOLUME}" >/dev/null 2>&1; then
+if live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" docker volume inspect "${CREDENTIAL_STATE_VOLUME}" >/dev/null; then
     printf '%s\n' 'event=agent.g4.live-runner status=failed expected=new-task-owned-credential-state-volume actual=volume-name-already-exists suggestion=retry-with-a-fresh-live-run' >&2
     exit 2
 fi
-docker volume create \
+live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" docker volume create \
     --label com.uxheavy.plane.agent-g4-credential-state=true \
     --label "com.uxheavy.plane.agent-g4-project=${PROJECT}" \
     "${CREDENTIAL_STATE_VOLUME}" >/dev/null
@@ -752,29 +801,19 @@ CREDENTIAL_STATE_VOLUME_CREATED=1
 # wait; classify only the finite import error class so an image omission cannot
 # become an opaque generic runtime-health failure.
 LIVE_PHASE=runtime-start
-if ! docker run --rm --network none --read-only --user 65532:65532 --entrypoint python3 "${RUNTIME_IMAGE}" \
-    -c 'import plane.agent.runtime.service; import plane.agent.code_mode.contracts; import plane_runtime.g1_runtime_image.bootstrap' \
-    2>&1 | python3 -c '
-import sys
-
-payload = sys.stdin.buffer.read(8193)
-if len(payload) > 8192:
-    payload = payload[:8192]
-if b"ModuleNotFoundError" in payload or b"No module named" in payload:
-    sys.stdout.write("ModuleNotFoundError\\n")
-elif b"ImportError" in payload:
-    sys.stdout.write("ImportError\\n")
-else:
-    sys.stdout.write("RuntimeError\\n")
-' >"${ERROR_FILE}"; then
+if ! live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" \
+    docker run --rm --network none --read-only --user 65532:65532 --entrypoint python3 "${RUNTIME_IMAGE}" \
+    -c 'import plane.agent.runtime.service; import plane.agent.code_mode.contracts; import plane_runtime.g1_runtime_image.bootstrap' >/dev/null; then
     printf '%s\n' 'event=agent.g4.live-runner status=failed phase=runtime-start expected=runtime-image-service-imports actual=runtime-image-import-unavailable suggestion=refreeze-runtime-with-the-plane-code-mode-contracts' >&2
     exit 1
 fi
 
-docker network create --driver bridge --label com.uxheavy.plane.agent-g4-runtime=true "${EGRESS}" >/dev/null
+live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" \
+    docker network create --driver bridge --label com.uxheavy.plane.agent-g4-runtime=true "${EGRESS}" >/dev/null
 
 LIVE_PHASE=runtime-start
-docker run -d --name "${RUNTIME}" \
+live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" \
+    docker run -d --name "${RUNTIME}" \
     --label com.uxheavy.plane.agent-g4-runtime=true \
     --user 65532:65532 \
     --read-only \
@@ -812,14 +851,15 @@ docker run -d --name "${RUNTIME}" \
     --entrypoint python3 \
     "${RUNTIME_IMAGE}" -m plane.agent.runtime.service >/dev/null
 
-docker network connect "${EGRESS}" "${RUNTIME}"
+live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" docker network connect "${EGRESS}" "${RUNTIME}" >/dev/null
 
 runtime_ready=0
 LIVE_PHASE=runtime-health
 for _attempt in $(seq 1 90); do
-    if docker run --rm --network "${NETWORK}" --entrypoint python3 "${API_IMAGE}" \
+    if live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" \
+        docker run --rm --network "${NETWORK}" --entrypoint python3 "${API_IMAGE}" \
         -c 'import urllib.request; urllib.request.urlopen("http://agent-runtime:8080/health/ready", timeout=2)' \
-        >/dev/null 2>&1; then
+        >/dev/null; then
         runtime_ready=1
         break
     fi
@@ -828,7 +868,8 @@ done
 test "${runtime_ready}" -eq 1
 
 LIVE_PHASE=api-invocation
-docker run --rm -i --network "${NETWORK}" --hostname api --network-alias api \
+live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" \
+    docker run --rm -i --network "${NETWORK}" --hostname api --network-alias api \
     "${SCENARIO_MOUNT_ARGS[@]}" \
     --mount type=bind,src="${RUNTIME_SECRET_FILE}",dst=/run/plane-agent-runtime-secret,readonly \
     --mount type=volume,src="${CREDENTIAL_STATE_VOLUME}",dst="${CREDENTIAL_STATE_TARGET}",volume-nocopy \
@@ -881,6 +922,6 @@ docker run --rm -i --network "${NETWORK}" --hostname api --network-alias api \
     --env G4_PERMITTED_CANARY="${G4_PERMITTED_CANARY}" \
     --env G4_DENIED_CANARY="${G4_DENIED_CANARY}" \
     "${SCENARIO_ENV_ARGS[@]}" \
-    "${API_IMAGE}" python - <"${LIVE_INVOKE_SOURCE}" >"${EVIDENCE_FILE}" 2>"${ERROR_FILE}"
+    "${API_IMAGE}" python - <"${LIVE_INVOKE_SOURCE}" >"${EVIDENCE_FILE}"
 
 test -s "${EVIDENCE_FILE}"

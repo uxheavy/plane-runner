@@ -15,12 +15,14 @@ from pathlib import Path
 
 MAX_EVIDENCE_BYTES = 16 * 1024
 MAX_RESULT_BYTES = 20 * 1024
+EMPTY_STDERR_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 EVIDENCE_SCHEMAS = {
     "plane-agent-g4/live-evidence/v1",
     "plane-agent-g4/live-failure/v1",
 }
 RUNNER_FAILURE_SCHEMA = "plane-agent-g4/live-runner-failure/v1"
 FAILURE_PHASES = {
+    "capacity-lease",
     "initialization",
     "credential-staging",
     "credential-bind-preflight",
@@ -59,6 +61,7 @@ DOCKER_REASON_CATEGORIES = {
 SENSITIVE_FIELD_RE = re.compile(
     rb"(?i)(?:password|passwd|secret|token|api[_-]?key|authorization|credential)\s*[\"']?\s*[:=]"
 )
+STDERR_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 class ResultPersistenceError(ValueError):
@@ -113,7 +116,9 @@ def _read_schema_controlled_evidence(path: Path, *, required: bool) -> bytes:
     return payload
 
 
-def _bounded_failure_line(*, phase: str, error_class: str, exit_code: int, reason_category: str) -> bytes:
+def _bounded_failure_line(
+    *, phase: str, error_class: str, exit_code: int, reason_category: str, stderr_sha256: str = EMPTY_STDERR_SHA256
+) -> bytes:
     if phase not in FAILURE_PHASES:
         raise ResultPersistenceError("failure_phase_invalid")
     if error_class not in ERROR_CLASSES:
@@ -124,18 +129,23 @@ def _bounded_failure_line(*, phase: str, error_class: str, exit_code: int, reaso
         raise ResultPersistenceError("docker_reason_category_invalid")
     if exit_code != 125 and reason_category != "unavailable":
         raise ResultPersistenceError("reason_category_invalid")
+    if not isinstance(stderr_sha256, str) or not STDERR_SHA256_RE.fullmatch(stderr_sha256):
+        raise ResultPersistenceError("stderr_sha256_invalid")
     return (
         f"event=agent.g4.live-runner.failure phase={phase} error_class={error_class} "
-        f"exit_code={exit_code} reason_category={reason_category}\n"
+        f"exit_code={exit_code} reason_category={reason_category} stderr_sha256={stderr_sha256}\n"
     ).encode("ascii")
 
 
-def _runner_failure_receipt(*, phase: str, error_class: str, exit_code: int, reason_category: str) -> bytes:
+def _runner_failure_receipt(
+    *, phase: str, error_class: str, exit_code: int, reason_category: str, stderr_sha256: str = EMPTY_STDERR_SHA256
+) -> bytes:
     _bounded_failure_line(
         phase=phase,
         error_class=error_class,
         exit_code=exit_code,
         reason_category=reason_category,
+        stderr_sha256=stderr_sha256,
     )
     return json.dumps(
         {
@@ -145,6 +155,7 @@ def _runner_failure_receipt(*, phase: str, error_class: str, exit_code: int, rea
             "errorClass": error_class,
             "exitCode": exit_code,
             "reasonCategory": reason_category,
+            "stderrSha256": stderr_sha256,
         },
         separators=(",", ":"),
     ).encode("ascii")
@@ -257,6 +268,7 @@ def persist_result(
     phase: str = "api-invocation",
     error_class: str = "unavailable",
     reason_category: str = "unavailable",
+    stderr_sha256: str = EMPTY_STDERR_SHA256,
 ) -> bytes:
     """Publish exactly one schema-controlled JSON receipt."""
 
@@ -269,6 +281,7 @@ def persist_result(
             error_class=error_class,
             exit_code=status,
             reason_category=reason_category,
+            stderr_sha256=stderr_sha256,
         )
     if evidence_payload:
         payload = evidence_payload
@@ -278,6 +291,7 @@ def persist_result(
             error_class=error_class,
             exit_code=status,
             reason_category=reason_category,
+            stderr_sha256=stderr_sha256,
         )
     else:
         raise ResultPersistenceError("evidence_unavailable")
@@ -298,6 +312,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--phase", default="api-invocation")
     parser.add_argument("--error-class", default="unavailable")
     parser.add_argument("--reason-category", default="unavailable")
+    parser.add_argument("--stderr-sha256", default=EMPTY_STDERR_SHA256)
     return parser.parse_args(argv)
 
 
@@ -311,6 +326,7 @@ def main(argv: list[str] | None = None) -> int:
             phase=args.phase,
             error_class=args.error_class,
             reason_category=args.reason_category,
+            stderr_sha256=args.stderr_sha256,
         )
     except ResultPersistenceError as exc:
         print(f"event=agent.g4.live-runner.result status=failed reason={exc.reason}", file=sys.stderr)
@@ -322,6 +338,7 @@ def main(argv: list[str] | None = None) -> int:
                 error_class=args.error_class,
                 exit_code=args.status,
                 reason_category=args.reason_category,
+                stderr_sha256=args.stderr_sha256,
             )
         )
     sys.stdout.buffer.write(payload)

@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 import re
+import signal
 import subprocess
 import tarfile
 import sys
@@ -73,6 +74,33 @@ CANDIDATE = "a" * 40
 COMMAND = "python3 approved_live_probe.py --result-json"
 G3_BASELINE = "9b4bad0b0b54c90c8d25e9af5f086971e6b9c93a"
 HISTORICAL_FALSE_POSITIVE = "9ff8b952872e9201e2f0f2e8c6621c273d33f49b:tools/agent-g4-manifest.json:generic-api-key:47"
+
+
+def run_bounded_process(*args, timeout: float = 30, **kwargs) -> subprocess.CompletedProcess:
+    kwargs.pop("check", None)
+    if kwargs.pop("capture_output", False):
+        kwargs["stdout"] = subprocess.PIPE
+        kwargs["stderr"] = subprocess.PIPE
+    process = subprocess.Popen(*args, start_new_session=True, **kwargs)
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired as error:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            stdout, stderr = process.communicate(timeout=2)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            stdout, stderr = process.communicate(timeout=2)
+        raise AssertionError(f"bounded child process timed out after {timeout}s") from error
+    return subprocess.CompletedProcess(process.args, process.returncode, stdout, stderr)
+
+
 BINDING_KEYS = (
     "candidateCommit",
     "g3Baseline",
@@ -848,6 +876,23 @@ class G4ContractTests(unittest.TestCase):
         self.assertEqual(runner.count('--manifest "${MANIFEST}"'), 1)
         self.assertNotIn('MANIFEST="${ROOT_DIR}/tools/agent-g4-manifest.json"', runner)
 
+    def test_live_runner_uses_shared_repository_tmp_capacity_lease_for_heavy_phases(self):
+        runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+
+        self.assertIn('git -C "${ROOT_DIR}" rev-parse --git-common-dir', runner)
+        self.assertIn(
+            'PLANE_G4_LIVE_CAPACITY_LEASE_PATH="${PLANE_G4_LIVE_CAPACITY_LEASE_PATH:-${SHARED_REPOSITORY_ROOT}/tmp/plane-agent-g4-live-capacity}"',
+            runner,
+        )
+        self.assertLess(
+            runner.index("LIVE_PHASE=credential-bind-preflight"),
+            runner.index("LIVE_PHASE=capacity-lease"),
+        )
+        self.assertLess(runner.index("LIVE_PHASE=capacity-lease"), runner.index("LIVE_PHASE=compose"))
+        self.assertLess(runner.index("LIVE_PHASE=capacity-lease"), runner.index("LIVE_PHASE=api-invocation"))
+        cleanup = runner[runner.index("cleanup()") : runner.index("trap cleanup EXIT INT TERM")]
+        self.assertIn("live_capacity_lease_release", cleanup)
+
     def test_live_runner_stages_worker_route_observation_dependency_before_invocation(self):
         runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
 
@@ -860,10 +905,12 @@ class G4ContractTests(unittest.TestCase):
     def test_live_runner_uses_default_and_disposable_manifest_paths_before_offline_preflight(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            (root / ".git").mkdir(mode=0o700)
             clean_tools = root / "tools"
             clean_tools.mkdir(mode=0o700)
             for name in (
                 "agent-g4-live.sh",
+                "agent-g4-live-support.sh",
                 "agent-g4-live-result.py",
                 "agent-g4-manifest.json",
                 "validate_agent_g4_live.py",
@@ -932,7 +979,8 @@ class G4ContractTests(unittest.TestCase):
             disposable_path.write_text(json.dumps(disposable_manifest), encoding="utf-8")
             fake_git.write_text(
                 "#!/bin/sh\n"
-                f"if [ \"$1\" = -C ] && [ \"$3\" = rev-parse ] && [ \"$4\" = HEAD ]; then printf '%s\\n' '{candidate}'; "
+                f"if [ \"$1\" = -C ] && [ \"$3\" = rev-parse ] && [ \"$4\" = --git-common-dir ]; then printf '%s\\n' '{root / '.git'}'; "
+                f"elif [ \"$1\" = -C ] && [ \"$3\" = rev-parse ] && [ \"$4\" = HEAD ]; then printf '%s\\n' '{candidate}'; "
                 f"elif [ \"$1\" = rev-parse ] && [ \"$2\" = HEAD ]; then printf '%s\\n' '{candidate}'; "
                 f"elif [ \"$1\" = -C ] && [ \"$3\" = rev-list ]; then printf '%s %s\\n' '{candidate}' '{MANIFEST['candidateBinding']['parentCommit']}'; "
                 "else exit 1; fi\n",
@@ -980,7 +1028,7 @@ class G4ContractTests(unittest.TestCase):
                 }
                 if manifest_input is not None:
                     environment["PLANE_G4_LIVE_MANIFEST"] = manifest_input
-                result = subprocess.run(
+                result = run_bounded_process(
                     ["bash", str(clean_tools / "agent-g4-live.sh")],
                     cwd=root,
                     env=environment,
@@ -1001,10 +1049,14 @@ class G4ContractTests(unittest.TestCase):
     def test_live_runner_rejects_out_of_scope_manifest_before_docker(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            (root / ".git").mkdir(mode=0o700)
             clean_tools = root / "tools"
             clean_tools.mkdir(mode=0o700)
             runner = clean_tools / "agent-g4-live.sh"
             runner.write_bytes((TOOLS / "agent-g4-live.sh").read_bytes())
+            (clean_tools / "agent-g4-live-support.sh").write_bytes(
+                (TOOLS / "agent-g4-live-support.sh").read_bytes()
+            )
             runner.chmod(0o700)
             fake_bin = root / "bin"
             fake_bin.mkdir(mode=0o700)
@@ -1016,7 +1068,7 @@ class G4ContractTests(unittest.TestCase):
             candidate = "a" * 40
             fake_git.write_text(
                 "#!/bin/sh\n"
-                f"if [ \"$1\" = -C ] && [ \"$3\" = rev-parse ] && [ \"$4\" = HEAD ]; then printf '%s\\n' '{candidate}'; elif [ \"$1\" = rev-parse ] && [ \"$2\" = HEAD ]; then printf '%s\\n' '{candidate}'; else exit 1; fi\n",
+                f"if [ \"$1\" = -C ] && [ \"$3\" = rev-parse ] && [ \"$4\" = --git-common-dir ]; then printf '%s\\n' '{root / '.git'}'; elif [ \"$1\" = -C ] && [ \"$3\" = rev-parse ] && [ \"$4\" = HEAD ]; then printf '%s\\n' '{candidate}'; elif [ \"$1\" = rev-parse ] && [ \"$2\" = HEAD ]; then printf '%s\\n' '{candidate}'; else exit 1; fi\n",
                 encoding="utf-8",
             )
             fake_git.chmod(0o700)
@@ -1029,7 +1081,7 @@ class G4ContractTests(unittest.TestCase):
                 "PLANE_G4_LIVE_CONFIG": str(root / "config.json"),
                 "PLANE_G4_LIVE_COMMAND": COMMAND,
             }
-            result = subprocess.run(
+            result = run_bounded_process(
                 ["bash", str(runner)],
                 cwd=root,
                 env=environment,
@@ -1159,12 +1211,14 @@ class G4ContractTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            (root / ".git").mkdir(mode=0o700)
             outside = root / "outside"
             outside.mkdir(mode=0o700)
             clean_tools = root / "tools"
             clean_tools.mkdir(mode=0o700)
             for name in (
                 "agent-g4-live.sh",
+                "agent-g4-live-support.sh",
                 "agent-g4-live-result.py",
                 "agent-g4-manifest.json",
                 "validate_agent_g4_live.py",
@@ -1217,7 +1271,8 @@ class G4ContractTests(unittest.TestCase):
             ).stdout.strip()
             fake_git.write_text(
                 "#!/bin/sh\n"
-                f"if [ \"$1\" = -C ] && [ \"$3\" = rev-parse ] && [ \"$4\" = HEAD ]; then printf '%s\\n' '{candidate}'; "
+                f"if [ \"$1\" = -C ] && [ \"$3\" = rev-parse ] && [ \"$4\" = --git-common-dir ]; then printf '%s\\n' '{root / '.git'}'; "
+                f"elif [ \"$1\" = -C ] && [ \"$3\" = rev-parse ] && [ \"$4\" = HEAD ]; then printf '%s\\n' '{candidate}'; "
                 f"elif [ \"$1\" = rev-parse ] && [ \"$2\" = HEAD ]; then printf '%s\\n' '{candidate}'; "
                 f"elif [ \"$1\" = -C ] && [ \"$3\" = rev-list ]; then printf '%s %s\\n' '{candidate}' '{MANIFEST['candidateBinding']['parentCommit']}'; "
                 "else exit 1; fi\n",
@@ -1254,7 +1309,7 @@ class G4ContractTests(unittest.TestCase):
                 "PLANE_G4_LIVE_COMMAND": COMMAND,
                 "PLANE_G4_PROVIDER_SECRET_SOURCE": str(provider_source),
             }
-            result = subprocess.run(
+            result = run_bounded_process(
                 ["bash", str(clean_tools / "agent-g4-live.sh")],
                 cwd=outside,
                 env=environment,
@@ -1394,7 +1449,7 @@ class G4ContractTests(unittest.TestCase):
                 "error mounting %s: create mountpoint read-only file system %s\n" % (raw_path, raw_secret),
                 encoding="utf-8",
             )
-            result = subprocess.run(
+            result = run_bounded_process(
                 ["bash", "-c", function + '\nERROR_FILE="$1"\nsafe_docker_failure_reason', "classifier", str(error_file)],
                 check=False,
                 capture_output=True,

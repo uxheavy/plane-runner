@@ -104,9 +104,41 @@ class LiveResultPersistenceTests(unittest.TestCase):
                     "errorClass": "RuntimeError",
                     "exitCode": 42,
                     "reasonCategory": "unavailable",
+                    "stderrSha256": HELPER.EMPTY_STDERR_SHA256,
                 },
             )
             self.assertEqual(result.stdout, destination.read_bytes())
+
+    def test_runner_failure_receipt_keeps_phase_exit_class_and_stderr_digest_bounded(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            destination = root / "capacity.result"
+            digest = "a" * 64
+            result = self._run_helper(
+                destination,
+                root / "missing-evidence.json",
+                "--status",
+                "75",
+                "--phase",
+                "capacity-lease",
+                "--error-class",
+                "unavailable",
+                "--stderr-sha256",
+                digest,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                json.loads(result.stdout),
+                {
+                    "schemaVersion": "plane-agent-g4/live-runner-failure/v1",
+                    "status": "failed",
+                    "phase": "capacity-lease",
+                    "errorClass": "unavailable",
+                    "exitCode": 75,
+                    "reasonCategory": "unavailable",
+                    "stderrSha256": digest,
+                },
+            )
 
     def test_result_is_owner_only_and_survives_run_directory_deletion(self):
         with tempfile.TemporaryDirectory() as temporary:
