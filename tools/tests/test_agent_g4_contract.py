@@ -1338,6 +1338,29 @@ class G4ContractTests(unittest.TestCase):
         self.assertNotIn("PROVIDER_SECRET_FILE", api)
         self.assertNotIn("PLANE_G4_PROVIDER_SECRET_SOURCE", api)
 
+    def test_api_invocation_keeps_migration_environment_out_of_normal_production_and_preserves_secret_file_contract(
+        self,
+    ):
+        runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+        checkout = runner[
+            runner.index("python3 -c 'import secrets; print(secrets.token_urlsafe(48), end=\"\")'") :
+            runner.index("LIVE_PHASE=api-invocation")
+        ]
+        api = runner[runner.index("LIVE_PHASE=api-invocation") :]
+
+        self.assertIn("secrets.token_urlsafe(48), end=\"\"", checkout)
+        self.assertIn('chmod 600 "${RUNTIME_SECRET_FILE}"', checkout)
+        self.assertIn("--env DATABASE_URL=postgresql://plane:plane@test-db:5432/plane", api)
+        self.assertIn("--env DATABASE_RUNTIME_URL=postgresql://plane:plane@test-db:5432/plane", api)
+        for migration_environment_name in (
+            "POSTGRES_HOST",
+            "POSTGRES_USER",
+            "POSTGRES_PASSWORD",
+            "POSTGRES_DB",
+            "DATABASE_MIGRATION_URL",
+        ):
+            self.assertNotIn(f"--env {migration_environment_name}=", api)
+
     def test_live_runner_classifies_bounded_docker_mount_failures_without_raw_diagnostics(self):
         runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
         function = runner[runner.index("safe_docker_failure_reason()") : runner.index("\ncleanup()")]
