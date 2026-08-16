@@ -9,17 +9,20 @@ This goal covers the full Plane Agent control plane and the hidden execution ser
 Functional completion and controlled rollout are separate outcomes. This goal ends when the non-UI product passes the complete live dogfood matrix, the production-candidate checks, and integration into a named Plane branch. Development, allowlisted-workspace, expanded-cohort, and GA rollout are a successor goal requiring their own deployment authority; they are not evidence that the product implementation works and are not a completion condition here.
 
 The older G4 artifact bindings and Wave 0X evidence below are historical, not
-the active delivery state. The current exact Plane source candidate is the
-explicit-publication readback checkpoint `adff362456`, with Hermes
-`cc3e444ee25e6c19fee77b6e1fbe3d95aef1a3ea`. S00 Wave 0AT passed at Plane
+the active delivery state. The current host-side harness checkpoint is
+`b4c05d9b93`, while the exact API/runtime artifacts remain bound to the
+`1d0025816b` source candidate and Hermes
+`f8cda105e3e14ace7c12f4840ec86c036fade9ad`. S00 Wave 0AT passed at Plane
 `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with one fresh Luna primary and one
 eligible provider-disabled replay. Provider-free PF1 evidence is complete for
 W01–W08, M01–M08, and the tested Operator contracts. The first broader persona
 attempts reached the provider with completed attempts but were later
 misclassified as provider reconciliation failures by the invoker; an
 independent relay shutdown/audit race was also fixed at the runtime owner.
-W01/W02 remain dirty pending one fresh post-fix provider-backed cell and
-eligible replay; W03–W08 remain unreached. Wave 0BC and the subsequent fresh
+W01/W02 remain dirty: `1d0025816b` exposed and `45e6f1f9b4` fixed a local
+commission-scoped readback bug, but the next fresh identity cell ended at
+`outcome_unknown/upstream_channel_closed` before route evidence or replay;
+W03–W08 remain unreached. Wave 0BC and the subsequent fresh
 82b468de identity commission reached the provider and completed their
 lifecycles, but the reusable W08 readback probe exceeded the established
 8-KiB projection ceiling; the helper is now narrowed to the bounded
@@ -47,7 +50,7 @@ G5 remains a separate rollout goal.
 | Delivery candidate | Exact Plane source `adff362456`; exact Hermes `cc3e444ee25e6c19fee77b6e1fbe3d95aef1a3ea`; the adjacent documentation checkpoint records the retained dirty receipts, callback-binding fix, explicit-publication readback fix, and integrated Hermes conflict disposition.                                            |
 | Functional gate    | S00 Wave 0AT is clean at Plane `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with Hermes `bc7f13d2ab392752f2667b176c646339c49405f9`: ten ordered upstream `2xx` attempts, three searches, two reads, one exact `NOT_AUTHORIZED` denial, one submit, one applied publication, one matching terminal, and `RuntimeExit.completed`; replay semantic deltas were zero and cleanup passed. |
 | Provider-free PF1  | Worker W01–W08 passed 35 real Django/API/DB/CLI/socket/isolation tests unchanged. Manager M01–M08 passed 33 tests after `f621fdd89797db2d1b74205c6ce6d5b0bd4725d1` and `2105fb9e21687103939a77b7e26a0959f1d50f51`. Operator O01 and O03–O09 passed targeted real service/API/database/CLI contracts; the final exact-image red team remains pending.                               |
-| Live W/M/O wave    | Wave 0BA reached two fresh Maya identity commissions with completed provider attempts, but the invoker mislabeled later local scenario-gate failure as reconciliation uncertainty. The first f63 post-fix identity commission then exposed redundant model `run_ref` poisoning; Plane fix `8722376f88` includes the payload normalization, trusted envelope binding, preflight ordering, truthful terminal conflicts/no-mutation observations, and the `OUTCOME_UNKNOWN` mutation guard. Hermes `cc3e444...` now integrates the expected nonfatal `PLANE_CONFLICT` disposition. Wave 0BC reached the provider with the new pair, completed lifecycle/publication evidence, then hit the W08 readback ceiling; the fresh `1d4bf351` primary reached publication with 13 completed `2xx` attempts but ended `budget_exhausted` after publication. Plane fix `adff362456` corrects explicit-publication scenario/replay readback; the Hermes terminal-action/budget owner fix is still pending. W01/W02 remain dirty; W03–W08 are unreached. O02 remains separately clean from its real external-client closure.         |
+| Live W/M/O wave    | Wave 0BA reached two fresh Maya identity commissions with completed provider attempts, but the invoker mislabeled later local scenario-gate failure as reconciliation uncertainty; the independent relay shutdown/audit race was fixed at its owner. The f63 callback-binding issue, W08 projection ceiling, and explicit-publication readback issue were fixed in their established owners. Hermes `f8cda105...` now provides the bounded terminal-lifecycle observation. The `1d0025816b` primary then completed the provider/lifecycle segment but hit a local identity-only wrapper projection bug, fixed by `45e6f1f9b4`; the fresh corrected primary `worker-live-45e6f1f9` ended at `outcome_unknown/upstream_channel_closed` before route evidence or replay. W01/W02 remain dirty; W03–W08 are unreached. O02 remains separately clean from its real external-client closure. |
 | Final verification | Pending clean provider-backed W/M/O routes, the final candidate image, exact-image red team, one full G4 verifier, and one consolidated Sol Medium review.                                                                                                                                                                                                                         |
 | G5                 | Out of scope. Rollout starts only under a separate authorized goal after G4 functional completion.                                                                                                                                                                                                                                                                                 |
 

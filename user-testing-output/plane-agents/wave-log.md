@@ -2034,3 +2034,43 @@ records this diagnosis without changing the retained receipts.
   Canonical validation passed. Cleanup passed, and no provider retry was
   spent after the receipt. The separate Hermes terminal-action/budget owner
   fix is required before a fresh primary.
+
+## Wave 0BE — exact 1d002581 / Hermes f8cda105 identity verification
+
+- This checkpoint used Plane artifact source `1d0025816b`, host-side harness
+  commits `1d0025816b`, `45e6f1f9b4`, and `b4c05d9b93`, exact Hermes
+  `f8cda105e3e14ace7c12f4840ec86c036fade9ad`, MCP
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. Existing API image
+  `plane-agent-api:g4-v6-1d002581` digest
+  `sha256:ea08468fcef3f29c24500cc1141751e944a548fa5aef000db8776ed2a7cd400c`
+  and runtime image
+  `plane-agent-runtime:hermes-f8cda105-g4-v6-1d002581` digest
+  `sha256:1aeebc3ad85469ff495e8fc1a36495cbcac487ba8d213c2b57a535654e1c4472`
+  were reused without rebuilding. The disposable manifest is
+  `tmp/plane-agent-g4-disposable-1d002581.json`, mode `0600`, SHA-256
+  `731a29b69a9722ba184e9e58ac2c26a318742289776f29bc45f8742f48e9bc40`.
+- The earlier `worker-live-1d002581` receipt retained a coherent completed
+  provider/lifecycle segment: 9 upstream `2xx` attempts, all seven expected
+  operations exactly once, one exact `NOT_AUTHORIZED` denial, one applied
+  publication/terminal, `RuntimeExit.completed`, and the bounded Hermes
+  `hermes.terminal-lifecycle/v1` observation. The local wrapper failed while
+  parsing an unowned empty W05 projection, before identity substitution,
+  route readback, or eligible replay. `45e6f1f9b4` fixes that commission
+  scoping; the receipt remains dirty and was never replayed.
+- One fresh corrected identity primary then ran with
+  `openai-codex/gpt-5.6-luna`, xhigh reasoning, fallback disabled, and the
+  16-call bound. Its owner-only result is
+  `tmp/persona-wave-v6/worker-live-45e6f1f9/result.json`, mode `0600`,
+  SHA-256 `ee2981b521b95f2d4814d6bd2c361f7fa8b436e35c8fa0fb2769b9f20b46902`.
+  The first upstream-started attempt terminated as bounded
+  `outcome_unknown / provider_relay / upstream_result_unavailable /
+  upstream_channel_closed`; no terminal-lifecycle observation, route
+  evidence, or replay was retained. This is not the earlier completed-2xx
+  invoker misclassification, but it does not yet prove an external
+  prerequisite. No provider retry, fallback, replay, or B/C commission ran.
+- Canonical result validation passed for the retained receipts. Focused
+  provider-free tools tests passed `148`; the focused Plane owner suite passed
+  `58/58`; `bash -n tools/agent-g4-live.sh`, `git diff --check`, and the
+  redacted `gitleaks` scan passed. Disposable Docker resources were cleaned
+  and the focused compose project had no remaining containers.
