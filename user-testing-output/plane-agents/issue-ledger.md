@@ -351,3 +351,11 @@ SHA-256 `2d9cd6be63ff5c5c88a739e1297514499a14668f4f15a396c4b0251a227f1a98`.
 It records the exact candidate-bound artifact/pin bindings, fresh canary IDs,
 the nine-file byte-for-byte env-copy verification, `providerAttempts=0`, and
 `heavyLivePhaseEntered=false`; no raw env values or credentials are tracked.
+
+## Manager shared-fix readiness checkpoint — 2026-08-17
+
+No new UT issue is opened. Commits `200d1fdb7d`, `488390ba21`, and
+`855f4e6686` were applied in order. The focused provider-free regression set
+passed `11/11`; no live/provider attempt or replay was made. The durable
+owner-safe checkpoint is
+`user-testing-output/plane-agents/evidence/manager-m01-m08-capacity-ready-20260817-02.json`.

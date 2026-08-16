@@ -2505,3 +2505,11 @@ heavy live phase were not entered, and provider attempts remain `0`.
 Durable redacted readiness extract:
 `user-testing-output/plane-agents/evidence/manager-m01-m08-capacity-ready-20260817-01.json`,
 SHA-256 `2d9cd6be63ff5c5c88a739e1297514499a14668f4f15a396c4b0251a227f1a98`.
+
+## Manager shared-fix readiness checkpoint — 2026-08-17
+
+Integrated `200d1fdb7d`, `488390ba21`, and `855f4e6686` in order after the
+capacity gate. Focused provider-free checks passed `11/11`; the fresh Manager
+M01-M08 input remains provider-free and unlaunched. Final candidate-bound
+artifacts will be frozen after this checkpoint commit. Durable checkpoint:
+`user-testing-output/plane-agents/evidence/manager-m01-m08-capacity-ready-20260817-02.json`.

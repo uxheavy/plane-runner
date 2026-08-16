@@ -357,3 +357,14 @@ not entered, provider attempts are `0`, and no replay occurred. The durable
 redacted readiness extract is
 `user-testing-output/plane-agents/evidence/manager-m01-m08-capacity-ready-20260817-01.json`,
 SHA-256 `2d9cd6be63ff5c5c88a739e1297514499a14668f4f15a396c4b0251a227f1a98`.
+
+## Manager M01-M08 shared-fix readiness checkpoint — 2026-08-17
+
+Shared fixes `200d1fdb7d`, `488390ba21`, and diagnostic
+`855f4e6686` were integrated in order after the capacity gate. Focused
+provider-free checks passed; the fresh Manager descriptor remains bound to
+M01-M08 and the independent Actor/Profile/Assignment/Run/Invocation/Outcome/
+Publication lifecycle. No Compose/live phase or provider attempt occurred.
+
+Durable checkpoint:
+`user-testing-output/plane-agents/evidence/manager-m01-m08-capacity-ready-20260817-02.json`.
