@@ -132,8 +132,9 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert "workItemReadInput object verbatim" in read_guidance
     assert "do not reconstruct, translate, or infer" in read_guidance
     rename_guidance = next(
-        item for item in mutation_route_guidance if "invoke work_item.rename" in item
+        item for item in mutation_route_guidance if "invoke execute_code" in item
     )
+    assert rename_guidance.startswith("Route step 3: invoke execute_code exactly 1 time(s)")
     assert "restricted Code Mode composition" in rename_guidance
     assert "not by a native model mutation" in rename_guidance
     assert "execute_code" in rename_guidance

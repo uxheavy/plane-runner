@@ -260,6 +260,8 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
     rendered: list[str] = []
     for index, item in enumerate(outcomes, start=1):
         operation_id = item["operationId"]
+        model_action = operation_id
+        action_detail = ""
         guidance = (
             " After this route call returns, advance immediately to the next route step; do not invoke this "
             "operation again for confirmation, inspection, refresh, or retry."
@@ -280,16 +282,18 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
                 "ref, key, title, or workspaceRef."
             )
         if operation_id == "work_item.rename" and "W04" in route_checks:
+            model_action = "execute_code"
+            action_detail = " to perform work_item.rename"
             guidance += (
-                " This semantic mutation must be performed by the restricted Code Mode composition, not by a "
-                "native model mutation: the next model tool call after the bounded work_item.read is execute_code, "
+                " The route outcome is work_item.rename, but the direct model action is the restricted Code Mode "
+                "composition, not by a native model mutation: the next model tool call after the bounded work_item.read is execute_code, "
                 "and the module must export a default function that uses only "
                 "host.call_plane_operation(\"work_item.rename\", input, idempotencyKey, correlationId)."
             )
         if operation_id == "agent.context.read":
             guidance += " This one response is the complete subject-bound projection; do not request it again."
         rendered.append(
-            f"Route step {index}: invoke {operation_id} exactly {item.get('count', 1)} time(s) and expect "
+            f"Route step {index}: invoke {model_action} exactly {item.get('count', 1)} time(s){action_detail} and expect "
             f"{item['outcome']}.{guidance}"
         )
     return tuple(rendered)
