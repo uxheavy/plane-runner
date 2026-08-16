@@ -114,6 +114,8 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert "never invent, copy, or substitute another run reference" in parsed.profile.instructions
     assert "after a terminal or rejected outcome callback, do not retry either terminal operation" in parsed.profile.instructions
     assert "agent.context.read returns the complete subject-bound projection in one response" in parsed.profile.instructions
+    assert "exactly one artifact and exactly one evidence item" in context.assignment.objective
+    assert "exactly one artifact and exactly one evidence item" in context.assignment.acceptance_criteria[-1]
 
 
 def test_commission_descriptor_keeps_shared_profile_and_binds_each_assignment() -> None:

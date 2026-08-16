@@ -112,12 +112,12 @@
       "id": "context-governance",
       "assignment": {
         "targetRef": "fixture:assigned-work-item",
-        "objective": "Context and governance Worker commission: discover agent.context.read with catalog.search using {\"query\":\"agent.context.read\",\"limit\":5}, then catalog.describe with exactly {\"operation_id\":\"agent.context.read\"}. Read exactly one subject-bound context projection with {\"subject_user_ref\":\"{{subjectUserRef}}\"}; use Maya's separate private memory, subject-bound user preference, and private skill projection to compose a brief bounded outcome. Exercise the existing governed skill candidate, human approval, private promotion, and rollback owners, with no unreviewed workspace or organization promotion. Submit exactly one outcome with exactly one evidence item and publish it exactly once. Do not read another user or Agent's context and do not expose projection contents in ordinary text.",
+        "objective": "Context and governance Worker commission: discover agent.context.read with catalog.search using {\"query\":\"agent.context.read\",\"limit\":5}, then catalog.describe with exactly {\"operation_id\":\"agent.context.read\"}. Read exactly one subject-bound context projection with {\"subject_user_ref\":\"{{subjectUserRef}}\"}; use Maya's separate private memory, subject-bound user preference, and private skill projection to compose a brief bounded outcome. Exercise the existing governed skill candidate, human approval, private promotion, and rollback owners, with no unreviewed workspace or organization promotion. Submit exactly one outcome with exactly one artifact and exactly one evidence item, then publish it exactly once. Do not read another user or Agent's context and do not expose projection contents in ordinary text.",
         "acceptanceCriteria": [
           "catalog.search precedes catalog.describe and the exact catalog operationId is used.",
           "agent.context.read is called once with the substituted subject_user_ref and its separate memory, preference, and skill projections are used without cross-user, cross-Agent, deleted, or stale leakage.",
           "Only Maya's private skill is used; the improvement remains a candidate until governed human promotion, remains private, and rolls back losslessly; unreviewed organization or workspace promotion is denied or remains unpromoted.",
-          "The commission submits exactly one bounded outcome with one evidence item and publishes it exactly once."
+          "The commission submits exactly one bounded outcome with exactly one artifact and exactly one evidence item, then publishes it exactly once."
         ],
         "contextRefs": ["context:worker-context-governance"]
       },
