@@ -5,23 +5,25 @@ This directory contains the compact execution control surface for the non-UI Pla
 ## Current status
 
 G0 through G3 and the provider-free exact-image G4 checks are complete for the
-current shared integration source `fe72bcefe5ffc13c43212d48c2c47f4006d85ae5`. The
-API artifact is `plane-agent-api:g4-v19-fe72bce` at
-`sha256:59abfaec97cd82b74995b7cf7c64cb0bd37973bd8bf528ab07143dc4fd4472f7`;
+current shared integration source `278182149efa0cdddab88b05e27d6445162f0c9a`. The
+API artifact is `plane-agent-api:g4-v20-2781821` at
+`sha256:38c48791d38ab15f4201a24d272f9202367c1368e96ecd31bab5587f599db2ca`;
 the runtime artifact is
-`plane-agent-runtime:hermes-6c460f10-g4-v19-fe72bce` at
-`sha256:120e8f51a8193512c3be9d38e1a2b958eb9339178ce59c655e2b3f2bef03480e`.
+`plane-agent-runtime:hermes-6c460f10-g4-v20-2781821` at
+`sha256:7a541114d6f0fdbefad76fa4999e9fe977f02bf7979915f96c918338bc1a3ecc`.
 Both are bound to Hermes `6c460f10fe215718dce36dd73cda94155a9a34f8`, MCP
 `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The exact-image functional
 red-team and final bootstrap are green provider-free, including verbatim
 search-result-to-read handoff with target-digest correlation, versioned
 assigned-work-item binding with authorized success and out-of-scope denial;
-The durable metadata wrapper is the sole child of the approved source parent.
+The v20 source is ready for one final durable metadata wrapper.
 W05/W06 are live-clean from their immutable v15 receipt and provider-disabled
 zero-delta replay. Manager setup diagnostics and Compose env isolation are covered
-by bounded provider-free regressions. W03/W04 and W07/W08 remain dirty pending
-fresh serialized v19 runs.
+by bounded provider-free regressions. W03/W04 and W07/W08 remain dirty after
+their v19 `PREPARED_CALL_INVALID` stops; Manager remains dirty after its v19
+opaque `api-invocation` stop. Fresh serialized reruns remain separately
+authorized.
 
 S00 Wave 0AT passed at Plane
 `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with one fresh GPT-5.6 Luna
@@ -42,7 +44,7 @@ campaign ledgers are under `user-testing-output/plane-agents/`.
 
 The rollback fixture remains an offline binding for the active candidate. Its
 `current.planeCommit` is the approved source parent
-`fe72bcefe5ffc13c43212d48c2c47f4006d85ae5`; its final candidate wrapper is
+`278182149efa0cdddab88b05e27d6445162f0c9a`; its final candidate wrapper is
 that parent's sole child. The independent `previous` section retains the accepted G3
 service artifact digest
 `sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e`.

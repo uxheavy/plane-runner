@@ -11,12 +11,12 @@ Functional completion and controlled rollout are separate outcomes. This goal en
 ### Current provider-free integration refreeze (2026-08-18)
 
 The named integration branch currently carries source candidate
-`fe72bcefe5ffc13c43212d48c2c47f4006d85ae5`. Its exact API artifact is
-`plane-agent-api:g4-v19-fe72bce` at
-`sha256:59abfaec97cd82b74995b7cf7c64cb0bd37973bd8bf528ab07143dc4fd4472f7`;
+`278182149efa0cdddab88b05e27d6445162f0c9a`. Its exact API artifact is
+`plane-agent-api:g4-v20-2781821` at
+`sha256:38c48791d38ab15f4201a24d272f9202367c1368e96ecd31bab5587f599db2ca`;
 its exact runtime artifact is
-`plane-agent-runtime:hermes-6c460f10-g4-v19-fe72bce` at
-`sha256:120e8f51a8193512c3be9d38e1a2b958eb9339178ce59c655e2b3f2bef03480e`.
+`plane-agent-runtime:hermes-6c460f10-g4-v20-2781821` at
+`sha256:7a541114d6f0fdbefad76fa4999e9fe977f02bf7979915f96c918338bc1a3ecc`.
 The runtime is bound to Hermes `6c460f10fe215718dce36dd73cda94155a9a34f8`,
 MCP `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The exact-image red-team chain is
@@ -28,10 +28,11 @@ outcome submission, one applied publication, transcript-only ordinary text,
 idempotency replay, and late post-publication terminal completion. The source
 also binds model-facing search results to one ready-to-call typed
 `workItemReadCall` and forwards authority-approved thresholds into bounded live
-receipts. The final metadata wrapper is the sole child of the approved source
-parent. W05/W06 are live-clean from immutable v15 evidence; W03/W04 and
-W07/W08 remain dirty pending fresh serialized v19 runs. No provider call or
-live journey was made during this refreeze.
+receipts. The v20 source is ready for one final metadata wrapper. W05/W06 are
+live-clean from immutable v15 evidence; W03/W04 and W07/W08 remain dirty after
+their v19 `PREPARED_CALL_INVALID` stops, and Manager remains dirty after its
+v19 opaque `api-invocation` stop. The v20 fixes are provider-free; no provider
+call or live journey was made during this refreeze.
 
 The older G4 artifact bindings and Wave 0X evidence below are historical, not
 the active delivery state. The current host-side harness checkpoint is
@@ -188,7 +189,24 @@ mutation, applied publication, complete W08 readback, or eligible replay was
 proven. UT-038 remains open, W03/W04/W07/W08 remain dirty, and no further
 provider use is authorized pending root-fix review.
 
-## Status and authorization
+## Current v20 status and authorization
+
+The v20 source candidate is `278182149efa0cdddab88b05e27d6445162f0c9a`.
+Its provider-free exact API image is
+`plane-agent-api:g4-v20-2781821` at
+`sha256:38c48791d38ab15f4201a24d272f9202367c1368e96ecd31bab5587f599db2ca`;
+its exact runtime image is
+`plane-agent-runtime:hermes-6c460f10-g4-v20-2781821` at
+`sha256:7a541114d6f0fdbefad76fa4999e9fe977f02bf7979915f96c918338bc1a3ecc`.
+The final v20 wrapper is created only after the manifest-bound gates pass and
+will be the sole child of this source. Hermes remains
+`6c460f10fe215718dce36dd73cda94155a9a34f8`; MCP remains
+`c04974ed6624f17b41e63ef8182661929e77e0d3`; SDK remains
+`7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. W03/W04 and W07/W08 remain dirty
+after v19 `PREPARED_CALL_INVALID` stops, and Manager remains dirty after its
+v19 opaque `api-invocation` stop. Fresh serialized reruns are required.
+
+## Historical status and authorization
 
 | Active item        | Current truth                                                                                                                                                                                                                                                                                                                                                                      |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
