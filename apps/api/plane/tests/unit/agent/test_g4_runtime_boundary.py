@@ -34,6 +34,7 @@ from plane.agent.runtime.service import RuntimeDispatchExecutor, _RuntimeHTTPSer
 def _runtime_environment(**overrides: str) -> dict[str, str]:
     environment = {
         "PLANE_AGENT_RUNTIME_URL": "http://agent-runtime:8080",
+        "PLANE_AGENT_RUNTIME_HOST_URL": "http://plane-api:8000",
         "PLANE_AGENT_RUNTIME_SECRET": "r" * 40,
     }
     environment.update(overrides)
