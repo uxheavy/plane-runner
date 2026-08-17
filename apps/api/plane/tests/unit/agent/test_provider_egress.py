@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import ssl
 import sys
 import textwrap
 import threading
@@ -23,9 +24,11 @@ from plane.agent.runtime import (
     RuntimeSafetyController,
 )
 from plane.agent.runtime.provider_egress import (
+    PinnedProviderHTTPSClient,
     ProviderRelayAudit,
     ProviderRelayBinding,
     ProviderRelayError,
+    ProviderRelayOutcomeUnknownError,
     PROVIDER_RELAY_HOST,
     ProviderRelayPolicy,
     ProviderRelayServer,
@@ -127,6 +130,57 @@ class _FixtureUpstream:
         return self.response
 
 
+class _FixtureHTTPSResponse:
+    def __init__(self, status: int, body: bytes = b"") -> None:
+        self.status = status
+        self._body = body
+        self._read = False
+
+    def getheaders(self) -> list[tuple[str, str]]:
+        return [("content-type", "application/json"), ("x-provider-secret", "must not persist")]
+
+    def read(self, _size: int) -> bytes:
+        if self._read:
+            return b""
+        self._read = True
+        return self._body
+
+
+class _FixtureHTTPSConnection:
+    def __init__(self, response: _FixtureHTTPSResponse | None = None, failure: BaseException | None = None) -> None:
+        self.response = response
+        self.failure = failure
+        self.closed = False
+
+    def request(self, *_args: object, **_kwargs: object) -> None:
+        if self.failure is not None:
+            raise self.failure
+
+    def getresponse(self) -> _FixtureHTTPSResponse:
+        if self.failure is not None:
+            raise self.failure
+        assert self.response is not None
+        return self.response
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def _pinned_request() -> tuple[ProviderRelayPolicy, ProviderRequest]:
+    policy = ProviderRelayPolicy(provider=PROVIDER, host=HOST, path=PATH, models=(MODEL,))
+    return policy, ProviderRequest(
+        provider=PROVIDER,
+        model=MODEL,
+        method="POST",
+        host=HOST,
+        path=PATH,
+        headers={"accept": "application/json"},
+        body=_body(),
+        request_id="request:pinned",
+        sequence=1,
+    )
+
+
 def _server(tmp_path, *, upstream: _FixtureUpstream, **kwargs: object) -> ProviderRelayServer:
     max_calls = int(kwargs.pop("max_calls", 16))
     return ProviderRelayServer(
@@ -148,6 +202,89 @@ def _server(tmp_path, *, upstream: _FixtureUpstream, **kwargs: object) -> Provid
         upstream=upstream,
         **kwargs,
     )
+
+
+@pytest.mark.parametrize("status_code, status_class", ((400, "4xx"), (429, "4xx"), (500, "5xx")))
+def test_pinned_provider_http_error_preserves_only_bounded_status_family(
+    monkeypatch, status_code: int, status_class: str
+):
+    policy, request = _pinned_request()
+    connection = _FixtureHTTPSConnection(
+        response=_FixtureHTTPSResponse(status_code, body=b"provider body must not persist"),
+    )
+    monkeypatch.setattr(provider_egress.http.client, "HTTPSConnection", lambda *_args, **_kwargs: connection)
+
+    with pytest.raises(ProviderRelayError) as caught:
+        PinnedProviderHTTPSClient(policy)(request, {"api_key": "provider-secret"}, lambda: False)
+
+    error = caught.value
+    assert error.status_class == status_class
+    assert str(error) == "provider returned an unsuccessful status"
+    assert vars(error) == {"status_class": status_class}
+    assert str(status_code) not in repr(error)
+    assert "provider body must not persist" not in repr(error)
+    assert "provider-secret" not in repr(error)
+    assert connection.closed is True
+
+
+def test_provider_relay_error_rejects_unbounded_status_class():
+    error = ProviderRelayError("provider error", status_class="429")
+
+    assert error.status_class == ""
+    assert vars(error) == {"status_class": ""}
+
+
+def test_pinned_provider_transport_failure_remains_bounded_outcome_unknown(monkeypatch):
+    policy, request = _pinned_request()
+    connection = _FixtureHTTPSConnection(failure=ssl.SSLError("TLS/socket detail must not persist"))
+    monkeypatch.setattr(provider_egress.http.client, "HTTPSConnection", lambda *_args, **_kwargs: connection)
+
+    with pytest.raises(ProviderRelayOutcomeUnknownError) as caught:
+        PinnedProviderHTTPSClient(policy)(request, {"api_key": "provider-secret"}, lambda: False)
+
+    error = caught.value
+    assert error.status_class == "transport"
+    assert error.reason_subreason == "upstream_channel_closed"
+    assert str(error) == "provider request outcome is unknown"
+    assert "TLS/socket detail must not persist" not in repr(error)
+    assert "provider-secret" not in repr(error)
+    assert connection.closed is True
+
+
+def test_pinned_provider_successful_2xx_response_still_streams(monkeypatch):
+    policy, request = _pinned_request()
+    connection = _FixtureHTTPSConnection(response=_FixtureHTTPSResponse(200, body=b"data: ok\n\n"))
+    monkeypatch.setattr(provider_egress.http.client, "HTTPSConnection", lambda *_args, **_kwargs: connection)
+
+    response = PinnedProviderHTTPSClient(policy)(request, {"api_key": "provider-secret"}, lambda: False)
+
+    assert response.status_code == 200
+    assert tuple(response.body_chunks) == (b"data: ok\n\n",)
+    assert connection.closed is True
+
+
+def test_pinned_provider_http_error_reaches_bounded_relay_audit(monkeypatch, tmp_path):
+    policy, _request = _pinned_request()
+    connection = _FixtureHTTPSConnection(
+        response=_FixtureHTTPSResponse(429, body=b"provider body must not persist"),
+    )
+    monkeypatch.setattr(provider_egress.http.client, "HTTPSConnection", lambda *_args, **_kwargs: connection)
+    audits: list[ProviderRelayAudit] = []
+    server = _server(tmp_path, upstream=PinnedProviderHTTPSClient(policy), audit=audits.append)
+
+    try:
+        server.start()
+        response = _round_trip(server, request_id="request:pinned-relay-status")
+    finally:
+        server.close()
+
+    assert response[0] == 403
+    assert json.loads(response[2]) == {"error": "upstream_status"}
+    assert [audit.phase for audit in audits] == ["intent", "started", "failed"]
+    assert audits[-1].status_class == "4xx"
+    assert audits[-1].error_code == "upstream_status"
+    assert b"provider body must not persist" not in response[2]
+    assert "provider body must not persist" not in repr(audits)
 
 
 def test_permitted_provider_request_uses_invocation_af_unix_relay_and_streams_without_child_credential(tmp_path):

@@ -78,18 +78,26 @@ _SENSITIVE_NAMES = frozenset(
         "token",
     }
 )
+_PROVIDER_ERROR_STATUS_CLASSES = frozenset({"", "4xx", "5xx", "transport"})
 
 
 class ProviderRelayError(ValueError):
     """A provider relay request cannot be admitted or safely completed."""
+
+    status_class = ""
+
+    def __init__(self, message: str, *, status_class: str = "") -> None:
+        self.status_class = (
+            status_class if isinstance(status_class, str) and status_class in _PROVIDER_ERROR_STATUS_CLASSES else ""
+        )
+        super().__init__(message)
 
 
 class _ProviderRelayHTTPStatusError(ProviderRelayError):
     """A bounded upstream HTTP family is available without retaining response data."""
 
     def __init__(self, status_class: str) -> None:
-        self.status_class = status_class
-        super().__init__("provider returned an unsuccessful status")
+        super().__init__("provider returned an unsuccessful status", status_class=status_class)
 
 
 class ProviderRelayOutcomeUnknownError(ProviderRelayError):
@@ -109,7 +117,7 @@ class ProviderRelayOutcomeUnknownError(ProviderRelayError):
             reason_subreason = "upstream_exception"
         self.reason_phase = "provider_relay"
         self.reason_subreason = reason_subreason
-        super().__init__("provider request outcome is unknown")
+        super().__init__("provider request outcome is unknown", status_class="transport")
 
 
 @dataclass(frozen=True)
@@ -1076,7 +1084,10 @@ class PinnedProviderHTTPSClient:
                 connection.close()
                 raise ProviderRelayError("provider redirect is not permitted")
             if response.status != 200:
+                status_class = ProviderRelayServer._status_class(response.status)
                 connection.close()
+                if status_class in {"4xx", "5xx"}:
+                    raise _ProviderRelayHTTPStatusError(status_class)
                 raise ProviderRelayError("provider returned an unsuccessful status")
 
             def chunks() -> Iterable[bytes]:
