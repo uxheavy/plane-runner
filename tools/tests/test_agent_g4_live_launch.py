@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -9,6 +11,8 @@ import pytest
 import importlib.util
 
 TOOLS = Path(__file__).parents[1]
+V16_SOURCE = "4e2b85384b85ecff822cd1136a668258dc76a90a"
+V16_WRAPPER = "be7992f2e57a70779e3d3845a5462316c686d819"
 _SPEC = importlib.util.spec_from_file_location("agent_g4_live_launch", TOOLS / "agent-g4-live-launch.py")
 assert _SPEC is not None and _SPEC.loader is not None
 launch = importlib.util.module_from_spec(_SPEC)
@@ -39,6 +43,60 @@ def test_prepare_authority_window_requires_timezone() -> None:
         launch_inputs.authority_window(datetime(2026, 8, 18, 12, 0))
 
 
+def test_prepare_defaults_to_manifest_for_exact_checked_in_wrapper(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = TOOLS.parent
+    descriptor = tmp_path / "descriptor.json"
+    descriptor.write_text("{}", encoding="utf-8")
+    run_dir = tmp_path / "prepared"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "prepare-agent-g4-live-inputs.py",
+            "--root",
+            str(root),
+            "--descriptor",
+            str(descriptor),
+            "--run-dir",
+            str(run_dir),
+            "--candidate",
+            V16_WRAPPER,
+        ],
+    )
+
+    assert launch_inputs.main() == 0
+    authority = json.loads((run_dir / "authority.json").read_text(encoding="utf-8"))
+    assert authority["expectedCandidate"] == V16_WRAPPER
+
+
+def test_prepare_rejects_source_when_wrapper_is_required(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = TOOLS.parent
+    descriptor = tmp_path / "descriptor.json"
+    descriptor.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "prepare-agent-g4-live-inputs.py",
+            "--root",
+            str(root),
+            "--descriptor",
+            str(descriptor),
+            "--run-dir",
+            str(tmp_path / "rejected"),
+            "--candidate",
+            V16_SOURCE,
+        ],
+    )
+
+    with pytest.raises(ValueError, match="candidate_is_not_exact_single_child"):
+        launch_inputs.main()
+
+
 def test_run_paths_are_derived_from_one_directory() -> None:
     paths = launch.derive_run_paths(Path("/tmp/persona-wave-v6/worker"))
 
@@ -64,6 +122,121 @@ def test_launch_binds_host_wrapper_and_artifact_revisions_separately() -> None:
 
     assert environment["PLANE_G4_EXPECTED_CANDIDATE"] == "b" * 40
     assert environment["PLANE_G4_ARTIFACT_CANDIDATE"] == "a" * 40
+
+
+def test_launch_defaults_to_checked_in_wrapper_manifest() -> None:
+    assert launch.resolve_manifest(None) == launch.DEFAULT_MANIFEST
+    launch._checked_in_manifest(launch.DEFAULT_MANIFEST)
+    provenance = launch.load_manifest_provenance(launch.DEFAULT_MANIFEST)
+    assert provenance["candidate"] == V16_SOURCE
+
+
+def test_launch_rejects_similarly_named_manifest_outside_owned_tmp(tmp_path: Path) -> None:
+    stale = tmp_path / "agent-g4-manifest.json"
+    stale.write_text("{}", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="launch_manifest_out_of_scope"):
+        launch.resolve_manifest(stale)
+
+
+def test_config_preflight_uses_repository_python_and_one_wrapper_candidate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: list[str] = []
+
+    def fake_run(command, **_kwargs):
+        captured.extend(command)
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(launch.subprocess, "run", fake_run)
+    paths = {
+        "authority": Path("/tmp/authority.json"),
+        "config": Path("/tmp/config.json"),
+        "manifest": launch.DEFAULT_MANIFEST,
+    }
+
+    launch._validate_config(paths, "a" * 40)
+
+    assert captured[0] == sys.executable
+    assert captured.count("--candidate") == 1
+
+
+def test_launch_inputs_accept_checked_in_default_manifest() -> None:
+    launch.RUN_ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
+    run_dir = launch.RUN_ROOT / "test-launch-default-manifest-regression"
+    run_dir.mkdir(mode=0o700, exist_ok=False)
+    try:
+        for name in ("authority.json", "config.json", "descriptor.json"):
+            path = run_dir / name
+            path.write_text("{}", encoding="utf-8")
+            path.chmod(0o600)
+        paths = launch.validate_run_inputs(run_dir, launch.DEFAULT_MANIFEST)
+        assert paths["manifest"] == launch.DEFAULT_MANIFEST
+    finally:
+        for child in run_dir.iterdir():
+            child.unlink()
+        run_dir.rmdir()
+
+
+def test_provider_source_is_handed_off_without_reading_payload(tmp_path: Path) -> None:
+    provider_source = tmp_path / "provider-source"
+    provider_source.write_bytes(b"must-not-be-read")
+    provider_source.chmod(0o600)
+    paths = launch.derive_run_paths(Path("/tmp/persona-wave-v6/worker"))
+    paths["manifest"] = Path("/tmp/persona-wave-v6/manifest.json")
+
+    assert launch.validate_provider_source(provider_source) == provider_source
+    environment = launch.build_launch_environment(
+        paths,
+        artifact_revision="a" * 40,
+        host_revision="b" * 40,
+        descriptor_digest="c" * 64,
+        provider_source=provider_source,
+    )
+    assert environment["PLANE_G4_PROVIDER_SECRET_SOURCE"] == str(provider_source)
+
+
+def test_provider_source_rejects_non_owner_only_metadata(tmp_path: Path) -> None:
+    provider_source = tmp_path / "provider-source"
+    provider_source.write_bytes(b"opaque")
+    provider_source.chmod(0o644)
+
+    with pytest.raises(ValueError, match="launch_provider_source_not_owner_only_regular_file"):
+        launch.validate_provider_source(provider_source)
+
+
+def test_launch_uses_wrapper_for_host_and_manifest_source_for_artifact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    wrapper = "b" * 40
+    source = "a" * 40
+    provider_source = tmp_path / "provider-source"
+    provider_source.write_bytes(b"opaque")
+    provider_source.chmod(0o600)
+    paths = launch.derive_run_paths(tmp_path / "run")
+    paths["manifest"] = launch.DEFAULT_MANIFEST
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(launch, "resolve_manifest", lambda _manifest: launch.DEFAULT_MANIFEST)
+    monkeypatch.setattr(launch, "validate_run_inputs", lambda _run_dir, _manifest: paths)
+    monkeypatch.setattr(launch, "_validate_config", lambda _paths, _candidate: None)
+    monkeypatch.setattr(launch, "_validate_descriptor", lambda _paths: "c" * 64)
+    monkeypatch.setattr(launch, "_host_revision", lambda: wrapper)
+    monkeypatch.setattr(launch, "load_manifest_provenance", lambda _manifest: {"candidate": source})
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["environment"] = kwargs["env"]
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(launch.subprocess, "run", fake_run)
+
+    assert launch.launch(tmp_path / "run", None, wrapper, provider_source) == 0
+    environment = captured["environment"]
+    assert isinstance(environment, dict)
+    assert environment["PLANE_G4_EXPECTED_CANDIDATE"] == wrapper
+    assert environment["PLANE_G4_ARTIFACT_CANDIDATE"] == source
+    assert environment["PLANE_G4_PROVIDER_SECRET_SOURCE"] == str(provider_source)
 
 
 def test_launch_binds_one_validated_commission() -> None:

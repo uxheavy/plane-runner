@@ -16,6 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RUN_ROOT = ROOT / "tmp" / "persona-wave-v6"
+DEFAULT_MANIFEST = ROOT / "tools" / "agent-g4-manifest.json"
 RUNNER = ROOT / "tools" / "agent-g4-live.sh"
 VALIDATOR = ROOT / "tools" / "validate_agent_g4_live.py"
 SCENARIO_VALIDATOR = ROOT / "tools" / "agent_g4_live_scenario.py"
@@ -55,10 +56,22 @@ def _owner_only_file(path: Path, reason: str) -> None:
         raise ValueError(reason)
 
 
+def _checked_in_manifest(path: Path) -> None:
+    try:
+        metadata = path.lstat()
+    except OSError as exc:
+        raise ValueError("launch_manifest_missing") from exc
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o022:
+        raise ValueError("launch_checked_in_manifest_not_safe_regular_file")
+
+
 def load_manifest_provenance(manifest: Path) -> dict[str, object]:
     """Read the exact API/runtime/Hermes pins from one disposable manifest."""
 
-    _owner_only_file(manifest, "launch_manifest_not_owner_only_regular_file")
+    if manifest == DEFAULT_MANIFEST:
+        _checked_in_manifest(manifest)
+    else:
+        _owner_only_file(manifest, "launch_manifest_not_owner_only_regular_file")
     try:
         payload = json.loads(manifest.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -102,6 +115,42 @@ def load_manifest_provenance(manifest: Path) -> dict[str, object]:
     }
 
 
+def resolve_manifest(manifest: Path | None) -> Path:
+    """Select only the checked-in wrapper manifest unless a disposable path is explicit."""
+
+    selected = DEFAULT_MANIFEST if manifest is None else manifest
+    if not selected.is_absolute():
+        raise ValueError("launch_manifest_must_be_absolute")
+    try:
+        resolved = selected.resolve(strict=True)
+    except OSError as exc:
+        raise ValueError("launch_manifest_missing") from exc
+    if resolved != selected:
+        raise ValueError("launch_manifest_must_not_be_a_symlink")
+    if resolved != DEFAULT_MANIFEST and not resolved.is_relative_to(ROOT / "tmp"):
+        raise ValueError("launch_manifest_out_of_scope")
+    return resolved
+
+
+def validate_provider_source(path: Path) -> Path:
+    """Validate the trusted provider source without opening or reading it."""
+
+    if not path.is_absolute():
+        raise ValueError("launch_provider_source_must_be_absolute")
+    try:
+        metadata = path.lstat()
+    except OSError as exc:
+        raise ValueError("launch_provider_source_missing") from exc
+    if (
+        not stat.S_ISREG(metadata.st_mode)
+        or metadata.st_uid != os.getuid()
+        or stat.S_IMODE(metadata.st_mode) != 0o600
+        or metadata.st_size > 64 * 1024
+    ):
+        raise ValueError("launch_provider_source_not_owner_only_regular_file")
+    return path
+
+
 def validate_run_inputs(run_dir: Path, manifest: Path) -> dict[str, Path]:
     """Reject ambiguous, symlinked, or reusable live destinations before Docker/provider access."""
 
@@ -113,7 +162,7 @@ def validate_run_inputs(run_dir: Path, manifest: Path) -> dict[str, Path]:
     manifest = manifest.resolve(strict=True)
     if run_dir != original_run_dir or manifest != original_manifest or not run_dir.is_relative_to(RUN_ROOT):
         raise ValueError("launch_run_directory_out_of_scope")
-    if not manifest.is_relative_to(ROOT / "tmp"):
+    if manifest != DEFAULT_MANIFEST and not manifest.is_relative_to(ROOT / "tmp"):
         raise ValueError("launch_manifest_out_of_scope")
     _owner_only_directory(run_dir)
     paths = derive_run_paths(run_dir)
@@ -121,7 +170,10 @@ def validate_run_inputs(run_dir: Path, manifest: Path) -> dict[str, Path]:
         _owner_only_file(paths[name], f"launch_{name}_not_owner_only_regular_file")
     if paths["result"].exists() or paths["result"].is_symlink():
         raise ValueError("launch_result_must_be_absent")
-    _owner_only_file(manifest, "launch_manifest_not_owner_only_regular_file")
+    if manifest == DEFAULT_MANIFEST:
+        _checked_in_manifest(manifest)
+    else:
+        _owner_only_file(manifest, "launch_manifest_not_owner_only_regular_file")
     paths["manifest"] = manifest
     return paths
 
@@ -186,7 +238,12 @@ def _validate_descriptor(paths: dict[str, Path]) -> str:
 
 
 def build_launch_environment(
-    paths: dict[str, Path], *, artifact_revision: str, host_revision: str, descriptor_digest: str,
+    paths: dict[str, Path],
+    *,
+    artifact_revision: str,
+    host_revision: str,
+    descriptor_digest: str,
+    provider_source: Path | None = None,
     commission_id: str | None = None,
 ) -> dict[str, str]:
     environment = os.environ.copy()
@@ -203,6 +260,8 @@ def build_launch_environment(
             "PLANE_G4_LIVE_COMMAND": RUNNER_COMMAND,
         }
     )
+    if provider_source is not None:
+        environment["PLANE_G4_PROVIDER_SECRET_SOURCE"] = str(provider_source)
     environment.pop("PLANE_G4_SCENARIO_COMMISSION_ID", None)
     if commission_id is not None:
         if not COMMISSION_ID_RE.fullmatch(commission_id):
@@ -211,20 +270,32 @@ def build_launch_environment(
     return environment
 
 
-def launch(run_dir: Path, manifest: Path, candidate: str, commission_id: str | None = None) -> int:
+def launch(
+    run_dir: Path,
+    manifest: Path | None,
+    candidate: str,
+    provider_source: Path,
+    commission_id: str | None = None,
+) -> int:
     if not SHA_RE.fullmatch(candidate):
         raise ValueError("launch_candidate_must_be_full_sha")
+    manifest = resolve_manifest(manifest)
     paths = validate_run_inputs(run_dir, manifest)
     _validate_config(paths, candidate)
     descriptor_digest = _validate_descriptor(paths)
-    if not os.environ.get("PLANE_G4_PROVIDER_SECRET_SOURCE"):
-        raise ValueError("launch_provider_source_env_missing")
+    provider_source = validate_provider_source(provider_source)
     host_revision = _host_revision()
+    if host_revision != candidate:
+        raise ValueError("launch_candidate_is_not_checked_out_wrapper")
+    provenance = load_manifest_provenance(manifest)
+    artifact_revision = provenance["candidate"]
+    assert isinstance(artifact_revision, str)
     environment = build_launch_environment(
         paths,
-        artifact_revision=candidate,
+        artifact_revision=artifact_revision,
         host_revision=host_revision,
         descriptor_digest=descriptor_digest,
+        provider_source=provider_source,
         commission_id=commission_id,
     )
     completed = subprocess.run(["bash", str(RUNNER)], cwd=ROOT, env=environment, check=False)
@@ -235,12 +306,23 @@ def launch(run_dir: Path, manifest: Path, candidate: str, commission_id: str | N
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-dir", required=True, type=Path)
-    parser.add_argument("--manifest", required=True, type=Path)
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        help="Checked-in wrapper manifest by default; disposable manifests must be under tmp/",
+    )
     parser.add_argument("--candidate", required=True)
+    parser.add_argument("--provider-source", required=True, type=Path)
     parser.add_argument("--commission-id")
     args = parser.parse_args(argv)
     try:
-        return launch(args.run_dir.resolve(), args.manifest.resolve(), args.candidate, args.commission_id)
+        return launch(
+            args.run_dir,
+            args.manifest,
+            args.candidate,
+            args.provider_source,
+            args.commission_id,
+        )
     except ValueError as exc:
         print(f"event=agent.g4.live-launch status=failed reason={exc}")
         return 2

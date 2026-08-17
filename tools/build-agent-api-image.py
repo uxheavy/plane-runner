@@ -14,6 +14,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCKERFILE = ROOT / "apps/api/Dockerfile.g4"
+MANIFEST = ROOT / "tools/agent-g4-manifest.json"
+ROLLBACK_PINS = ROOT / "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json"
 DEFAULT_BASE_IMAGE = "plane-g3-external-client-api-tests:prepared"
 CONTRACT = "plane.operation/v1"
 ARTIFACT = "plane-agent-api-g4"
@@ -118,7 +120,28 @@ def verify_dockerfile_contract() -> None:
 
 
 def image_tag(candidate: str) -> str:
-    return f"plane-agent-api:g4-v6-{candidate[:8]}"
+    """Use the checked-in candidate tag, never a version-shaped stale default."""
+
+    _git_sha(candidate, "candidate")
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    artifact = manifest.get("pins", {}).get("apiArtifact", {})
+    if artifact.get("sourceRevision") != candidate or not artifact.get("imageTag"):
+        raise ValueError("--tag is required when candidate is not the manifest-pinned API source")
+    return str(artifact["imageTag"])
+
+
+def default_base_image_binding() -> tuple[str, str]:
+    """Read the immutable prepared-base tag and digest from rollback truth."""
+
+    fixture = json.loads(ROLLBACK_PINS.read_text(encoding="utf-8"))
+    artifact = fixture.get("previous", {}).get("apiArtifact", {})
+    tag = artifact.get("imageTag")
+    digest = artifact.get("imageDigest")
+    if tag != DEFAULT_BASE_IMAGE or not isinstance(digest, str) or not digest.startswith("sha256:"):
+        raise RuntimeError("prepared API base binding is missing or drifted")
+    if not HASH_RE.fullmatch(digest.removeprefix("sha256:")):
+        raise RuntimeError("prepared API base digest is invalid")
+    return tag, digest
 
 
 def docker_build_command(
@@ -156,9 +179,19 @@ def docker_build_command(
     ]
 
 
-def verify_base_image(base_image: str) -> None:
+def verify_base_image(base_image: str, expected_digest: str | None = None) -> None:
     """Reject a prepared base that does not carry the pinned Code Mode compiler."""
 
+    pinned_tag, pinned_digest = default_base_image_binding()
+    if expected_digest is None:
+        if base_image != pinned_tag:
+            raise ValueError("--base-image-digest is required for a non-default API base image")
+        expected_digest = pinned_digest
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", expected_digest):
+        raise ValueError("API base image digest must be an exact sha256 digest")
+    actual_digest = _run("docker", "image", "inspect", base_image, "--format", "{{.Id}}")
+    if actual_digest != expected_digest:
+        raise RuntimeError("API base image tag does not resolve to the expected prepared digest")
     probe = (
         "const actual = require('/usr/share/node_modules/typescript/lib/typescript.js').version; "
         f"if (actual !== {TYPESCRIPT_VERSION!r}) process.exit(1)"
@@ -195,12 +228,13 @@ def build_api_image(
     *,
     candidate: str | None = None,
     base_image: str = DEFAULT_BASE_IMAGE,
+    base_image_digest: str | None = None,
     tag: str | None = None,
 ) -> dict[str, str]:
     verify_dockerfile_contract()
     resolved = verify_clean_candidate(candidate)
     hashes = source_hashes(resolved)
-    verify_base_image(base_image)
+    verify_base_image(base_image, base_image_digest)
     selected_tag = tag or image_tag(resolved)
     _run(*docker_build_command(resolved, hashes, base_image=base_image, tag=selected_tag), capture=False)
     metadata = image_metadata(selected_tag)
@@ -227,9 +261,20 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--candidate")
     parser.add_argument("--base-image", default=DEFAULT_BASE_IMAGE)
+    parser.add_argument("--base-image-digest")
     parser.add_argument("--tag")
     args = parser.parse_args(argv)
-    print(json.dumps(build_api_image(candidate=args.candidate, base_image=args.base_image, tag=args.tag), sort_keys=True))
+    print(
+        json.dumps(
+            build_api_image(
+                candidate=args.candidate,
+                base_image=args.base_image,
+                base_image_digest=args.base_image_digest,
+                tag=args.tag,
+            ),
+            sort_keys=True,
+        )
+    )
     return 0
 
 

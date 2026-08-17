@@ -615,6 +615,63 @@ class G4ContractTests(unittest.TestCase):
                 ]
             )
 
+    def test_runtime_build_defaults_follow_selected_manifest_pins(self):
+        manifest = {
+            "pins": {
+                "hermesCommit": "a" * 40,
+                "runtimeImageRevision": "b" * 40,
+                "runtimeImageTag": "plane-agent-runtime:g4-v2099",
+            }
+        }
+        self.assertEqual(
+            _BUILDER.pinned_build_defaults(manifest, "b" * 40),
+            ("a" * 40, "plane-agent-runtime:g4-v2099"),
+        )
+        with self.assertRaisesRegex(RuntimeError, "--tag is required"):
+            _BUILDER.pinned_build_defaults(manifest, "c" * 40)
+
+    def test_disposable_hermes_origin_normalizes_supported_git_url_forms(self):
+        expected = "github.com/uxheavy/hermes-agent"
+        for origin in (
+            "https://github.com/uxheavy/hermes-agent.git",
+            "ssh://git@github.com/uxheavy/hermes-agent.git",
+            "git@github.com:uxheavy/hermes-agent.git",
+        ):
+            with self.subTest(origin=origin):
+                self.assertEqual(_BUILDER.canonical_hermes_remote(origin), expected)
+        with self.assertRaisesRegex(RuntimeError, "uxheavy fork"):
+            _BUILDER.canonical_hermes_remote("https://github.com/third-party/hermes-agent.git")
+
+    def test_repository_owned_disposable_hermes_origin_is_rewritten(self):
+        checkout = _BUILDER.ROOT / "tmp" / "disposable-hermes"
+        calls = []
+
+        def fake_run(*args, **_kwargs):
+            calls.append(args)
+            if args[-3:] == ("remote", "get-url", "origin"):
+                return _BUILDER.HERMES_ORIGIN
+            return ""
+
+        with mock.patch.object(Path, "resolve", return_value=checkout), mock.patch.object(
+            _BUILDER, "run", side_effect=fake_run
+        ):
+            self.assertEqual(
+                _BUILDER.normalize_disposable_hermes_origin(checkout, "/tmp/source-hermes"),
+                _BUILDER.HERMES_REMOTE,
+            )
+
+        self.assertIn(
+            ("git", "-C", str(checkout), "remote", "set-url", "origin", _BUILDER.HERMES_ORIGIN),
+            calls,
+        )
+
+    def test_non_disposable_hermes_origin_is_never_rewritten(self):
+        checkout = Path("/Users/example/hermes-agent")
+        with mock.patch.object(_BUILDER, "run") as run:
+            with self.assertRaisesRegex(RuntimeError, "uxheavy fork"):
+                _BUILDER.normalize_disposable_hermes_origin(checkout, "/tmp/source-hermes")
+        run.assert_not_called()
+
     def test_mixed_hermes_source_provenance_is_rejected(self):
         with self.assertRaisesRegex(RuntimeError, "mixed"):
             _BUILDER.validate_hermes_source_binding(

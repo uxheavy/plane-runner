@@ -17,8 +17,8 @@ from pathlib import Path
 from pathlib import PurePosixPath
 
 
-HERMES_COMMIT = "bc7f13d2ab392752f2667b176c646339c49405f9"
 HERMES_REMOTE = "github.com/uxheavy/hermes-agent"
+HERMES_ORIGIN = f"https://{HERMES_REMOTE}.git"
 RUNTIME_CONTRACT = "plane.agent-runtime/v1"
 HERMES_SOURCE_KIND_GIT = "git-checkout"
 HERMES_SOURCE_KIND_SEALED_IMAGE = "sealed-image"
@@ -31,6 +31,7 @@ HERMES_REQUIRED_FILES = (
 DOCKERFILE = Path(__file__).resolve().parents[1] / "deployments/cli/community/agent-runtime/Dockerfile"
 ROOT = DOCKERFILE.parents[4]
 DURABLE_MANIFEST = ROOT / "tools/agent-g4-manifest.json"
+HERMES_COMMIT = str(json.loads(DURABLE_MANIFEST.read_text(encoding="utf-8"))["pins"]["hermesCommit"])
 PLANE_RUNTIME_SOURCE_DIR = "apps/api/plane/agent/runtime"
 PLANE_CODE_MODE_CONTRACT_FILES = (
     "apps/api/plane/agent/code_mode/__init__.py",
@@ -52,6 +53,36 @@ def run(*args: str, cwd: Path | None = None, capture: bool = True) -> str:
     return result.stdout.strip() if capture else ""
 
 
+def canonical_hermes_remote(value: str) -> str:
+    """Normalize supported uxheavy GitHub URL forms to one provenance value."""
+
+    normalized = value.strip().removesuffix(".git")
+    accepted = {
+        f"https://{HERMES_REMOTE}",
+        f"ssh://git@{HERMES_REMOTE}",
+        "git@github.com:uxheavy/hermes-agent",
+    }
+    if normalized not in accepted:
+        raise RuntimeError("Hermes origin must point to the uxheavy fork")
+    return HERMES_REMOTE
+
+
+def normalize_disposable_hermes_origin(checkout: Path, origin: str) -> str:
+    """Normalize only repository-owned disposable clones; never mutate source checkouts."""
+
+    try:
+        return canonical_hermes_remote(origin)
+    except RuntimeError as exc:
+        try:
+            resolved = checkout.resolve(strict=True)
+        except OSError:
+            raise exc
+        if not resolved.is_relative_to(ROOT / "tmp"):
+            raise exc
+        run("git", "-C", str(resolved), "remote", "set-url", "origin", HERMES_ORIGIN)
+        return canonical_hermes_remote(run("git", "-C", str(resolved), "remote", "get-url", "origin"))
+
+
 def verify_hermes(checkout: Path, revision: str) -> None:
     actual = run("git", "-C", str(checkout), "rev-parse", "HEAD")
     if actual != revision:
@@ -59,9 +90,24 @@ def verify_hermes(checkout: Path, revision: str) -> None:
     dirty = run("git", "-C", str(checkout), "status", "--porcelain", "--untracked-files=all")
     if dirty:
         raise RuntimeError("Hermes checkout must be clean before an image is built")
-    remotes = run("git", "-C", str(checkout), "remote", "-v")
-    if HERMES_REMOTE not in remotes:
-        raise RuntimeError("Hermes checkout must have the uxheavy fork configured as a remote")
+    origin = run("git", "-C", str(checkout), "remote", "get-url", "origin")
+    normalize_disposable_hermes_origin(checkout, origin)
+
+
+def pinned_build_defaults(manifest: dict[str, object], plane_revision: str) -> tuple[str, str]:
+    """Derive exact Hermes and runtime-tag defaults from the selected manifest."""
+
+    pins = manifest.get("pins")
+    if not isinstance(pins, dict):
+        raise RuntimeError("durable manifest pins are missing")
+    hermes_revision = str(pins.get("hermesCommit", ""))
+    runtime_revision = str(pins.get("runtimeImageRevision", ""))
+    runtime_tag = str(pins.get("runtimeImageTag", ""))
+    if len(hermes_revision) != 40 or any(character not in "0123456789abcdef" for character in hermes_revision):
+        raise RuntimeError("durable Hermes commit is not a full lowercase Git SHA")
+    if runtime_revision != plane_revision or not runtime_tag:
+        raise RuntimeError("--tag is required when Plane revision is not the manifest-pinned runtime source")
+    return hermes_revision, runtime_tag
 
 
 def _hash(value: str, label: str) -> str:
@@ -171,8 +217,6 @@ def verify_donor_image(image: str, manifest: dict[str, object]) -> dict[str, str
     expected_commit = str(pins.get("hermesCommit", ""))
     if len(expected_commit) != 40 or any(character not in "0123456789abcdef" for character in expected_commit):
         raise RuntimeError("durable Hermes commit is not a Git SHA-shaped attestation")
-    if expected_commit != HERMES_COMMIT:
-        raise RuntimeError("durable Hermes commit does not match the selected exact Hermes attestation")
     expected_revision = str(pins.get("runtimeImageRevision", ""))
     if len(expected_revision) != 40 or any(character not in "0123456789abcdef" for character in expected_revision):
         raise RuntimeError("durable runtime revision is not a Git SHA-shaped attestation")
@@ -186,7 +230,7 @@ def verify_donor_image(image: str, manifest: dict[str, object]) -> dict[str, str
     actual_digest = str(metadata["imageDigest"])
     expected_labels = {
         "org.uxheavy.plane.hermes.commit": expected_commit,
-        "org.uxheavy.plane.hermes.remote": f"https://{HERMES_REMOTE}.git",
+        "org.uxheavy.plane.hermes.remote": HERMES_ORIGIN,
         "org.uxheavy.plane.runtime.revision": expected_revision,
         "org.uxheavy.plane.runtime.contract": expected_contract,
     }
@@ -655,12 +699,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--hermes-donor-image",
         help="Use the exact sealed Hermes filesystem from the manifest-bound runtime image",
     )
-    parser.add_argument("--tag", default="plane-agent-runtime:hermes-bc7f13d2-g4-v5")
+    parser.add_argument("--tag", help="Runtime image tag; defaults only for the exact manifest-pinned source")
     parser.add_argument("--plane-revision", help="Build an exact clean Git revision instead of HEAD")
     parser.add_argument(
         "--hermes-revision",
-        default=HERMES_COMMIT,
-        help="Exact clean Hermes Git revision to stage (defaults to the donor pin)",
+        help="Exact clean Hermes Git revision to stage (defaults to the selected manifest pin)",
     )
     parser.add_argument("--api-image", help="Current candidate API image required for disposable manifest output")
     parser.add_argument("--manifest-out", type=Path, help="Write a disposable manifest under repository tmp/")
@@ -677,14 +720,27 @@ def main() -> int:
     if args.manifest_out is not None:
         mcp_revision = _require_disposable_revision(args.mcp_revision, "--mcp-revision")
         sdk_revision = _require_disposable_revision(args.sdk_revision, "--sdk-revision")
-    if shutil.which("docker") is None:
-        raise SystemExit("Docker CLI is required")
-    hermes_revision = str(args.hermes_revision)
+    donor_manifest = load_manifest(args.manifest)
+    requested_plane_revision = run("git", "rev-parse", args.plane_revision or "HEAD", cwd=ROOT)
+    pins = donor_manifest.get("pins")
+    if not isinstance(pins, dict):
+        raise SystemExit("durable manifest pins are missing")
+    pinned_hermes_revision = str(pins.get("hermesCommit", ""))
+    if len(pinned_hermes_revision) != 40 or any(
+        character not in "0123456789abcdef" for character in pinned_hermes_revision
+    ):
+        raise SystemExit("durable Hermes commit is not a full lowercase Git SHA")
+    if args.tag is None:
+        _, selected_tag = pinned_build_defaults(donor_manifest, requested_plane_revision)
+    else:
+        selected_tag = str(args.tag)
+    hermes_revision = str(args.hermes_revision or pinned_hermes_revision)
     if len(hermes_revision) != 40 or any(character not in "0123456789abcdef" for character in hermes_revision):
         raise SystemExit("--hermes-revision must be a full lowercase Git SHA")
-    if args.hermes_donor_image and hermes_revision != HERMES_COMMIT:
+    if args.hermes_donor_image and hermes_revision != pinned_hermes_revision:
         raise SystemExit("--hermes-revision cannot override a sealed donor image")
-    donor_manifest = load_manifest(args.manifest) if args.hermes_donor_image else None
+    if shutil.which("docker") is None:
+        raise SystemExit("Docker CLI is required")
     if args.hermes_checkout is not None:
         verify_hermes(args.hermes_checkout, hermes_revision)
     plane_revision, plane_parent = verify_plane(args.plane_revision)
@@ -698,7 +754,6 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="plane-agent-runtime-build-") as temporary:
         context = Path(temporary)
         if args.hermes_donor_image:
-            assert donor_manifest is not None
             hermes_source = _stage_donor_source(
                 args.hermes_donor_image,
                 context,
@@ -736,7 +791,7 @@ def main() -> int:
             "--file",
             str(DOCKERFILE),
             "--tag",
-            args.tag,
+            selected_tag,
             "--build-arg",
             f"HERMES_COMMIT={hermes_commit}",
             "--build-arg",
@@ -755,7 +810,7 @@ def main() -> int:
             capture=False,
         )
     runtime = verify_runtime_image(
-        args.tag,
+        selected_tag,
         plane_revision,
         hermes_commit,
         hermes_remote,
@@ -786,7 +841,7 @@ def main() -> int:
     print(
         json.dumps(
             {
-                "image": args.tag,
+                "image": selected_tag,
                 "imageDigest": runtime["imageDigest"],
                 "hermesCommit": hermes_commit,
                 "hermesRemote": hermes_remote,

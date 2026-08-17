@@ -39,16 +39,31 @@ def _owner_only(path: Path, payload: bytes) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, required=True)
-    parser.add_argument("--manifest", type=Path, required=True)
+    parser.add_argument("--manifest", type=Path)
     parser.add_argument("--descriptor", type=Path, required=True)
     parser.add_argument("--run-dir", type=Path, required=True)
     parser.add_argument("--candidate", required=True)
     args = parser.parse_args()
     root = args.root.resolve()
+    selected_manifest = args.manifest or root / "tools" / "agent-g4-manifest.json"
+    if not selected_manifest.is_absolute():
+        raise SystemExit("manifest_must_be_absolute")
+    manifest_path = selected_manifest.resolve(strict=True)
+    if manifest_path != selected_manifest:
+        raise SystemExit("manifest_must_not_be_a_symlink")
+    durable_manifest = (root / "tools" / "agent-g4-manifest.json").resolve(strict=True)
+    if manifest_path != durable_manifest and not manifest_path.is_relative_to(root / "tmp"):
+        raise SystemExit("manifest_must_be_checked_in_wrapper_or_owned_disposable")
     sys.path.insert(0, str(root / "tools"))
-    from validate_agent_g4_live import EXPECTED_PROVIDER_DESCRIPTOR, exact_binding, provider_relay_descriptor
+    from validate_agent_g4_live import (
+        EXPECTED_PROVIDER_DESCRIPTOR,
+        exact_binding,
+        provider_relay_descriptor,
+        validate_candidate_binding,
+    )
 
-    manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    validate_candidate_binding(manifest, args.candidate, root)
     descriptor = args.descriptor.read_bytes()
     issued_at, expires_at = authority_window()
     binding = exact_binding(manifest, args.candidate)

@@ -178,6 +178,42 @@ def test_dead_pid_owner_is_recovered(tmp_path: Path) -> None:
     assert not lease.exists()
 
 
+def test_missing_ignored_capacity_parent_is_created(tmp_path: Path) -> None:
+    lease = tmp_path / "ignored-tmp" / "lease"
+
+    result = run_support(lease, "live_capacity_lease_acquire\nlive_capacity_lease_release")
+
+    assert result.returncode == 0, result.stderr
+    assert lease.parent.is_dir()
+    assert not lease.exists()
+
+
+def test_timeout_can_reenter_after_holder_releases(tmp_path: Path, spawned_processes) -> None:
+    lease = tmp_path / "lease"
+    holder = spawned_processes(
+        lease,
+        "trap 'live_capacity_lease_release' EXIT\nlive_capacity_lease_acquire\nsleep 0.25",
+    )
+    wait_for(lease / "owner")
+    result = run_support(
+        lease,
+        "live_capacity_lease_acquire || first=$?\n"
+        "[[ ${first:-0} -eq 75 ]] || exit 91\n"
+        "sleep 0.35\n"
+        "live_capacity_lease_acquire\n"
+        "live_capacity_lease_release",
+        overrides={
+            "PLANE_G4_LIVE_CAPACITY_LEASE_TIMEOUT_SECONDS": "0",
+            "PLANE_G4_LIVE_CAPACITY_LEASE_POLL_SECONDS": "0.01",
+        },
+    )
+    holder.communicate(timeout=3)
+
+    assert result.returncode == 0, result.stderr
+    assert "capacity_lease_timeout" in result.stderr
+    assert not lease.exists()
+
+
 def test_release_runs_on_failure_and_signal(tmp_path: Path, spawned_processes) -> None:
     failure_lease = tmp_path / "failure-lease"
     failed = run_support(

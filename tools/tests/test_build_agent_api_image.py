@@ -41,7 +41,7 @@ def test_candidate_must_equal_full_head(monkeypatch: pytest.MonkeyPatch) -> None
 def test_docker_command_uses_dockerfile_argument_contract() -> None:
     candidate = "a" * 40
     hashes = {name: hashlib.sha256(name.encode()).hexdigest() for name in builder.SOURCE_FILES}
-    command = builder.docker_build_command(candidate, hashes)
+    command = builder.docker_build_command(candidate, hashes, tag="plane-agent-api:g4-test")
 
     assert command[:4] == ["docker", "build", "--network", "none"]
     assert "-f" in command
@@ -58,3 +58,45 @@ def test_dockerfile_contract_is_checked_without_docker() -> None:
 
 def test_base_image_compiler_contract_is_pinned() -> None:
     assert builder.TYPESCRIPT_VERSION == "5.4.5"
+
+
+def test_prepared_base_binding_comes_from_rollback_truth() -> None:
+    tag, digest = builder.default_base_image_binding()
+
+    assert tag == builder.DEFAULT_BASE_IMAGE
+    assert digest == "sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e"
+
+
+def test_prepared_base_tag_drift_is_rejected_before_compiler_probe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = []
+
+    def fake_run(*args, **_kwargs):
+        calls.append(args)
+        return "sha256:" + "0" * 64
+
+    monkeypatch.setattr(builder, "_run", fake_run)
+
+    with pytest.raises(RuntimeError, match="tag does not resolve"):
+        builder.verify_base_image(builder.DEFAULT_BASE_IMAGE)
+    assert len(calls) == 1
+
+
+def test_custom_base_requires_an_explicit_digest(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(builder, "_run", lambda *_args, **_kwargs: pytest.fail("Docker probe reached"))
+
+    with pytest.raises(ValueError, match="--base-image-digest is required"):
+        builder.verify_base_image("plane-api:custom")
+
+
+def test_default_image_tag_comes_from_current_manifest() -> None:
+    manifest = __import__("json").loads(builder.MANIFEST.read_text(encoding="utf-8"))
+    artifact = manifest["pins"]["apiArtifact"]
+
+    assert builder.image_tag(artifact["sourceRevision"]) == artifact["imageTag"]
+
+
+def test_unpinned_candidate_requires_an_explicit_tag() -> None:
+    with pytest.raises(ValueError, match="--tag is required"):
+        builder.image_tag("a" * 40)

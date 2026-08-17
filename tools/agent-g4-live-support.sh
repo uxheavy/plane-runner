@@ -69,6 +69,9 @@ live_capacity_lease_acquire() {
     local deadline owner_metadata owner_start owner_file
     [[ -n "${parent_path}" ]] || parent_path=/
     [[ "${LIVE_CAPACITY_LEASE_PATH}" == /* && "${LIVE_CAPACITY_LEASE_PATH}" != / ]] || return 2
+    if [[ ! -e "${parent_path}" ]]; then
+        mkdir -m 700 -- "${parent_path}" 2>/dev/null || return 2
+    fi
     [[ -d "${parent_path}" && ! -L "${parent_path}" ]] || return 2
     [[ "${timeout_seconds}" =~ ^[0-9]+$ && "${timeout_seconds}" -le 900 ]] || return 2
     [[ "${poll_seconds}" =~ ^[0-9]+([.][0-9]+)?$ ]] || return 2
