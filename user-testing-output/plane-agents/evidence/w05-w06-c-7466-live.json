@@ -1,0 +1,144 @@
+{
+  "schemaVersion": "plane-agent-g4/durable-redacted-evidence/v1",
+  "wave": "0BX",
+  "issue": "UT-049",
+  "status": "route_result_passed_with_valid_pre_dispatch_proof",
+  "lane": "W05-W06",
+  "commissionId": "context-governance",
+  "worker": "Maya Worker",
+  "provider": {
+    "name": "openai-codex",
+    "model": "gpt-5.6-luna",
+    "reasoning": "xhigh",
+    "fallbackDisabled": true,
+    "destinationHost": "chatgpt.com",
+    "destinationPath": "/backend-api/codex/responses",
+    "attempts": 8,
+    "upstreamStatusClass": "2xx",
+    "effects": "not_separately_exposed",
+    "journeyExecuted": true,
+    "replayProviderAttempts": 0
+  },
+  "candidate": {
+    "planeCommit": "74668f6d855fbea63fd57265b66410373d679d8f",
+    "sourceCleanBeforeBuild": true,
+    "hermesCommit": "292e866374ca9e9615473fc9bf5dda1913b672e1",
+    "mcpCommit": "2dc152e136d7ad952b901e5fe9364a37487297ba",
+    "sdkCommit": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
+  },
+  "artifacts": {
+    "manifestSha256": "cc89e45b72fc60d86f62052558111ad465585804dba21600b6a233c0dfe408cc",
+    "api": {
+      "tag": "plane-agent-api:g4-v6-74668f6d",
+      "digest": "sha256:381fe4444f5b2c29b5b8d6793df15bcf090c957a54e7d47a4b713a2c31f965a7"
+    },
+    "runtime": {
+      "tag": "plane-agent-runtime:hermes-292e8663-g4-v6-74668f6d",
+      "digest": "sha256:2807188c1527b88a9fdaa0439ee61297e1f7c698a7a52d74c691114d4fbeb1a1"
+    },
+    "runtimeSourceDigest": "03af3715e580b3fd8e99000c8d98ef5a28fcccf1dcf1d82829b37a81fb9cac15",
+    "hermesTreeDigest": "4c5a94590a020bcf74640241a484c087940d55e2d10baac15d24c250b5a7e3b7"
+  },
+  "inputs": {
+    "descriptorSha256": "bb94cf164497f9b86be3bd2a5c9e607dc563f371418a6ac4e038fb9ba698ea3a",
+    "authoritySha256": "39ef675579ca8819a6cbfd0e8978ce010325273db08f5861b3fa4d0179530c7d",
+    "configSha256": "cd11f85299764a3425ad871a3285d1e18b10652052dc4b123b9992faba68abca",
+    "env": {
+      "requiredFilesCopiedByteIdentical": true,
+      "valuesReadOrPrinted": false,
+      "setupScriptRun": false
+    }
+  },
+  "runtimeBindingProbe": {
+    "path": "user-testing-output/plane-agents/evidence/w05-w06-c-7466-runtime-binding-probe.json",
+    "sha256": "34e8339eebc7b7e0c3281eb46645ba0926d6327fe49440648ddfdb4402f5ae4f",
+    "livePreDispatchProof": "passed",
+    "settingsSource": "django",
+    "secretPath": "/run/plane-agent-runtime-secret",
+    "secretMode": "0600",
+    "secretOwnerUid": 0,
+    "secretOwnerGid": 0,
+    "secretReadable": true,
+    "secretBytes": 64,
+    "secretHashClass": "sha256-not-emitted",
+    "runtimeHost": "agent-runtime",
+    "transportKind": "remote",
+    "transportClass": "RemoteRuntimeTransport",
+    "providerDispatchOccurred": false,
+    "stdinAttachedInSourceCandidate": true,
+    "probeScriptExecuted": true,
+    "observedExit": 0,
+    "outputBytes": 286,
+    "outputSha256": "b2e1b4d130bcf51568e147e1922d5a27f6cd479d4d06f3db336b4874e8ea0033"
+  },
+  "databaseTopology": {
+    "status": "passed_as_live_pre_dispatch_command_gate",
+    "migrationOwnerRole": "plane_migrator",
+    "apiRuntimeRole": "plane_runtime",
+    "governanceRole": "plane_audit_owner",
+    "bootstrapProvisionerRole": "plane",
+    "apiUsedPrivilegedBootstrapRole": false,
+    "roleSeparationEnforced": true,
+    "migrationLeaf": "db.0144_provider_attempt_diagnostics",
+    "phaseOrder": [
+      "before-migrate",
+      "migrate",
+      "after-migrate",
+      "runtime-start",
+      "api-runtime-binding",
+      "api-invocation"
+    ],
+    "rawPasswordsOrUrlsIncluded": false
+  },
+  "run": {
+    "runId": "25966a40-bbf5-4690-af74-61124e1e798f",
+    "invocationId": "invocation:ebaedd9e-48e8-447b-8afb-b746cb9f4384",
+    "state": "succeeded",
+    "invocationState": "succeeded",
+    "providerAttempts": 8,
+    "providerEffects": "not_separately_exposed",
+    "runtimeEvents": 18,
+    "outcomeCount": 1,
+    "publicationCount": 1,
+    "terminalKind": "outcome_submission",
+    "runtimeExit": {
+      "present": true,
+      "kind": "completed"
+    },
+    "replay": {
+      "status": "passed",
+      "providerDisabled": true,
+      "providerAttempts": 0,
+      "semanticSideEffects": 0
+    }
+  },
+  "featureOutcome": {
+    "W05": "observed_pass",
+    "W06": "observed_pass",
+    "W07": "route_check_passed_in_same_commission_no_separate_journey",
+    "W08": "route_check_passed_in_same_commission_no_separate_journey",
+    "routeClosure": "valid_pre_dispatch_proof_and_s00_passed"
+  },
+  "checks": {
+    "hostWideCapacityGate": "acquired_and_released",
+    "configOnlyPreflight": "passed",
+    "descriptorValidation": "passed",
+    "databaseTopologyGate": "passed",
+    "runtimeBindingProbeGate": "passed_non_vacuous_with_stdin",
+    "providerDisabledReplay": "passed_same_fresh_invocation_zero_delta",
+    "separateW07ManagerOperatorJourneys": "not_started"
+  },
+  "rawResult": {
+    "path": "tmp/persona-wave-v6/w05-w06-fresh-74668f6d-live/live-result.json",
+    "mode": "0600",
+    "bytes": 13387,
+    "sha256": "21f457e9cd9a20d897b0111ede0ac25614550283a451e3e877d0f3225b6d72fd",
+    "retainedOutsideTrackedEvidence": true
+  },
+  "redaction": {
+    "secretsIncluded": false,
+    "providerCredentialContentsIncluded": false,
+    "valuesReadOrPrinted": false,
+    "rawDiagnosticsPersisted": false
+  }
+}

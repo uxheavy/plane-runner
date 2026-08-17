@@ -365,3 +365,46 @@ fix; the focused G4 contract/live-result suites pass `115/115`. No second
 provider/live journey, retry, old invocation replay, or `outcome_unknown`
 replay was run. W05/W06 route closure remains withheld until a separately
 authorized fresh journey validates the corrected pre-dispatch proof.
+
+### UT-049 corrected 7466 replacement journey — 2026-08-17
+
+The one fresh capacity-gated `context-governance` journey started from clean
+Plane `74668f6d855fbea63fd57265b66410373d679d8f`, superseding the vacuous
+64d1 claim. Required machine env files were copied byte-for-byte without
+reading, printing, or sourcing values, and `setup.sh` was not run. Fresh exact
+artifacts were API `plane-agent-api:g4-v6-74668f6d` /
+`sha256:381fe4444f5b2c29b5b8d6793df15bcf090c957a54e7d47a4b713a2c31f965a7`
+and runtime `plane-agent-runtime:hermes-292e8663-g4-v6-74668f6d` /
+`sha256:2807188c1527b88a9fdaa0439ee61297e1f7c698a7a52d74c691114d4fbeb1a1`.
+The disposable manifest SHA-256 is
+`cc89e45b72fc60d86f62052558111ad465585804dba21600b6a233c0dfe408cc`.
+
+The exact pre-dispatch API-container probe executed non-vacuously with
+`settingsSource=django`, `/run/plane-agent-runtime-secret`, mode `0600`, root
+ownership/readability, `runtimeHost=agent-runtime`, `transportKind=remote`,
+and `transportClass=RemoteRuntimeTransport`. Durable bounded probe evidence
+is `user-testing-output/plane-agents/evidence/w05-w06-c-7466-runtime-binding-probe.json`,
+SHA-256 `34e8339eebc7b7e0c3281eb46645ba0926d6327fe49440648ddfdb4402f5ae4f`.
+The enforced DB gate used `plane_migrator` for migration ownership,
+`plane_runtime` for the production API, `plane_audit_owner` for governance,
+`plane` only for bootstrap provisioning, and role separation before dispatch;
+the migration leaf was `db.0144_provider_attempt_diagnostics`.
+
+The single fresh journey used `openai-codex` / `gpt-5.6-luna` xhigh with
+fallback disabled at the checked-in ChatGPT subscription destination. Run
+`25966a40-bbf5-4690-af74-61124e1e798f` and invocation
+`invocation:ebaedd9e-48e8-447b-8afb-b746cb9f4384` completed with 8 upstream
+`2xx` provider attempts, 18 runtime events, one outcome, one publication, and
+a completed runtime. The durable redacted extract is
+`user-testing-output/plane-agents/evidence/w05-w06-c-7466-live.json`; its
+SHA-256 is `44c0d8285e0170d61be574a3e0d5864fd8547557dba55354326952f17e649172`.
+The owner-only raw result is
+`tmp/persona-wave-v6/w05-w06-fresh-74668f6d-live/live-result.json`, mode
+`0600`, 13,387 bytes, SHA-256
+`21f457e9cd9a20d897b0111ede0ac25614550283a451e3e877d0f3225b6d72fd`.
+
+W05 and W06 route checks passed in the single commission. No separate W07,
+Manager, or Operator journey was started; the provider-disabled same-fresh
+replay had zero provider attempts and zero semantic deltas. Capacity release
+and exact-owned Docker cleanup passed. This supersedes the vacuous 64d1
+route claim; no additional journey or replay was run.

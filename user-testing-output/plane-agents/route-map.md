@@ -394,6 +394,32 @@ replay. W03-W08 remain dirty; UT-042 is open.
 - W05 and W06 remain dirty; this is provider-free boundary evidence, not route
   closure.
 
+## Wave 0BX — corrected 7466 W05/W06 replacement
+
+- The one fresh capacity-gated `context-governance` journey used clean Plane
+  `74668f6d855fbea63fd57265b66410373d679d8f`, exact API/runtime images,
+  `openai-codex/gpt-5.6-luna` xhigh, fallback disabled, and the checked-in
+  ChatGPT subscription destination. It supersedes the vacuous 64d1 route
+  claim; no old invocation was replayed.
+- The exact `api-runtime-binding` command attached stdin and executed the
+  bounded probe before API invocation. It passed with Django settings,
+  `/run/plane-agent-runtime-secret` mode `0600`, root ownership/readability,
+  `agent-runtime`, `remote`, and `RemoteRuntimeTransport`. The enforced DB
+  gate passed with migration owner `plane_migrator`, API runtime role
+  `plane_runtime`, governance role `plane_audit_owner`, bootstrap provisioner
+  `plane`, and role separation enabled. Bounded evidence is
+  `user-testing-output/plane-agents/evidence/w05-w06-c-7466-live.json` and
+  `user-testing-output/plane-agents/evidence/w05-w06-c-7466-runtime-binding-probe.json`.
+- Run `25966a40-bbf5-4690-af74-61124e1e798f` and invocation
+  `invocation:ebaedd9e-48e8-447b-8afb-b746cb9f4384` completed with 8 upstream
+  `2xx` provider attempts, 18 runtime events, one outcome, one publication,
+  and `RuntimeExit.completed`. W05/W06 route checks passed in the one
+  commission. No separate W07, Manager, or Operator journey was started.
+- The provider-disabled same-fresh replay recorded zero provider attempts and
+  zero semantic deltas. Capacity release and exact-owned Docker cleanup
+  passed. W05/W06 are validly closed for this replacement journey; the 64d1
+  vacuous proof remains historical and superseded.
+
 ## Wave 0BW — exact 64d1 W05/W06 result with binding-gate correction
 
 - One fresh capacity-gated `context-governance` journey started from clean

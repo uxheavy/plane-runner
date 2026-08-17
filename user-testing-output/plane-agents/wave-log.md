@@ -2690,3 +2690,36 @@ records this diagnosis without changing the retained receipts.
   no W07/Manager/Operator journey was started. W05/W06 remain dirty and
   route closure is withheld pending a separately authorized fresh run with
   the corrected pre-dispatch gate.
+
+## Wave 0BX — exact 7466 W05/W06 replacement with valid binding proof
+
+- Clean source was `74668f6d855fbea63fd57265b66410373d679d8f`; required machine
+  env files were copied byte-for-byte without reading, printing, or sourcing
+  values, and `setup.sh` was not run. Fresh exact artifacts were API
+  `plane-agent-api:g4-v6-74668f6d` /
+  `sha256:381fe4444f5b2c29b5b8d6793df15bcf090c957a54e7d47a4b713a2c31f965a7`
+  and runtime `plane-agent-runtime:hermes-292e8663-g4-v6-74668f6d` /
+  `sha256:2807188c1527b88a9fdaa0439ee61297e1f7c698a7a52d74c691114d4fbeb1a1`.
+  Manifest SHA-256:
+  `cc89e45b72fc60d86f62052558111ad465585804dba21600b6a233c0dfe408cc`.
+- Exactly one fresh capacity-gated `context-governance` journey used
+  `openai-codex/gpt-5.6-luna` xhigh with fallback disabled. The corrected
+  exact API-container probe executed before dispatch and passed with
+  `settingsSource=django`, `/run/plane-agent-runtime-secret`, mode `0600`,
+  root ownership/readability, `runtimeHost=agent-runtime`,
+  `transportKind=remote`, and `transportClass=RemoteRuntimeTransport`.
+  The enforced DB command gate used `plane_migrator` for migrations,
+  `plane_runtime` for production API connections, `plane_audit_owner` for
+  governance, `plane` only for bootstrap provisioning, and role separation.
+- Run `25966a40-bbf5-4690-af74-61124e1e798f` and invocation
+  `invocation:ebaedd9e-48e8-447b-8afb-b746cb9f4384` completed with 8 upstream
+  `2xx` attempts, 18 runtime events, one outcome, one publication, and a
+  completed runtime. Durable redacted evidence is
+  `user-testing-output/plane-agents/evidence/w05-w06-c-7466-live.json`; the
+  bounded probe is
+  `user-testing-output/plane-agents/evidence/w05-w06-c-7466-runtime-binding-probe.json`.
+- The provider-disabled same-fresh replay had zero provider attempts and zero
+  semantic deltas. No separate W07, Manager, or Operator journey was started.
+  Capacity release and exact-owned Docker cleanup passed. This valid 7466
+  replacement supersedes the vacuous 64d1 claim; W05/W06 route closure is
+  recorded for this journey.
