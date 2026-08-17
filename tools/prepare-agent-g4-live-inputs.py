@@ -8,7 +8,27 @@ import hashlib
 import json
 import shutil
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+
+AUTHORITY_TTL = timedelta(hours=24)
+AUTHORITY_BACKDATE = timedelta(minutes=1)
+
+
+def authority_window(now: datetime | None = None) -> tuple[str, str]:
+    """Return a bounded UTC authority window that remains valid at launch."""
+
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        raise ValueError("authority_window_requires_timezone")
+    current = current.astimezone(timezone.utc)
+    issued = current - AUTHORITY_BACKDATE
+    expires = current + AUTHORITY_TTL
+    return (
+        issued.isoformat().replace("+00:00", "Z"),
+        expires.isoformat().replace("+00:00", "Z"),
+    )
 
 
 def _owner_only(path: Path, payload: bytes) -> None:
@@ -30,6 +50,7 @@ def main() -> int:
 
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
     descriptor = args.descriptor.read_bytes()
+    issued_at, expires_at = authority_window()
     binding = exact_binding(manifest, args.candidate)
     binding.update(
         {
@@ -52,8 +73,8 @@ def main() -> int:
         "schemaVersion": "plane-agent-g4/live-authority/v1",
         "authorityId": "authority-w05-w06-c-20260816",
         "purpose": "g4-live-evaluation",
-        "issuedAt": "2026-08-16T00:00:00Z",
-        "expiresAt": "2026-08-17T00:00:00Z",
+        "issuedAt": issued_at,
+        "expiresAt": expires_at,
         "expectedCandidate": args.candidate,
         "fallbackAllowed": False,
         "binding": binding,

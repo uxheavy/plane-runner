@@ -3122,6 +3122,27 @@ records this diagnosis without changing the retained receipts.
   `9c450daecdb7c998f36765226c74a1af02778180e54d6eab47db60f942b2c3ac`;
   config SHA-256 is
   `0580db33325a9123117a6621eb2c16a1546e66485fb664d5ffc4f40158fb7c93`.
+
+## Wave 0CK — exact v14 W07/W08 authority-window repair — 2026-08-18
+
+- Root classified the earlier `authority_expired_or_invalid_window` as
+  pre-provider workflow friction. The existing
+  `tools/prepare-agent-g4-live-inputs.py` seam now derives a current UTC
+  authority window with a one-minute backdate and 24-hour TTL; no hard-coded
+  expired date remains. `tools/tests/test_agent_g4_live_launch.py` adds two
+  date-advancement regressions.
+- Fixed config-only preflight passed for wrapper
+  `11ea756e31f6cb55a61895cd461fd808903be95e`, source
+  `d4316b79272254b61d038a65cba6a9860a6afeeb`, and manifest SHA-256
+  `9bd54c851430fc1b3efe29992c59db5ac4e8c291ebce05be21a81d2d12c8f714`.
+  Focused tests passed `192`; exact-image red-team passed. Provider attempts,
+  provider effects, and Plane product effects were all `0`.
+- Canonical redacted fix receipt:
+  `user-testing-output/plane-agents/evidence/w07-w08-v14-authority-window-fix.json`,
+  SHA-256 `3711d62ac0f080e5ae12201841d8a8da1fdc53827ff4d4ecd0149300c9f5d715`.
+  Cleanup remained exact-zero for capacity marker, verifier lock, and runner
+  labels. No provider launch was made after the fix; root must integrate this
+  commit before another live slot.
 - Cleanup proof: capacity markers, verifier lock, and exact observed
   disposable containers, volumes, and networks were absent/zero. The first
   launcher scope rejection was pre-provider and produced no provider attempt;

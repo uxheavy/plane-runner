@@ -430,6 +430,27 @@ The Manager lane fast-forwarded to source `d4316b79272254b61d038a65cba6a9860a6af
 
 The tested Plane Agent policy remains `openai-codex/gpt-5.6-luna`, xhigh, fallback disabled. Provider calls and live-runner attempts are `0`; Compose/provider work was not entered. The shared candidate publication and serialized live release remain pending root integration.
 
+## Wave 0CK — exact v14 W07/W08 authority-window repair — 2026-08-18
+
+- The pre-provider stop `authority_expired_or_invalid_window` was classified
+  as trivial local workflow friction. The owning helper now emits a current
+  UTC authority window with a one-minute backdate and 24-hour bounded TTL;
+  hard-coded expired timestamps are removed. Two date-advancement regressions
+  cover the behavior.
+- Provider-free proof is green: focused W07/W08 suite `192 passed`, exact
+  v14 image red-team `passed`, and fixed config-only preflight `passed`.
+  No provider call, Compose journey, or product source change occurred after
+  the fix; provider attempts/effects remain `0`.
+- Canonical redacted fix receipt:
+  `user-testing-output/plane-agents/evidence/w07-w08-v14-authority-window-fix.json`,
+  SHA-256 `3711d62ac0f080e5ae12201841d8a8da1fdc53827ff4d4ecd0149300c9f5d715`.
+  The original bounded pre-provider stop remains at
+  `w07-w08-v14-preprovider-authority-window-stop.json`, SHA-256
+  `aae51ba9c990035cf3be1c34166d8eac55e0235eb8035651ec259f57895c1551`.
+- W07/W08 remain unproven and no live retry is authorized from this lane;
+  root must integrate the fix into the shared refreeze before any future live
+  slot.
+
 ## Wave 0CJ — exact deeper-corrected W07/W08 live stop — 2026-08-18
 
 - Candidate binding was wrapper `19e514f6024a8b8fa9b563c153f60454d97e8eaf`

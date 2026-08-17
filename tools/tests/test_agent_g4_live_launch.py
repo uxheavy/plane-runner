@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,30 @@ _SPEC = importlib.util.spec_from_file_location("agent_g4_live_launch", TOOLS / "
 assert _SPEC is not None and _SPEC.loader is not None
 launch = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(launch)
+_INPUTS_SPEC = importlib.util.spec_from_file_location(
+    "prepare_agent_g4_live_inputs", TOOLS / "prepare-agent-g4-live-inputs.py"
+)
+assert _INPUTS_SPEC is not None and _INPUTS_SPEC.loader is not None
+launch_inputs = importlib.util.module_from_spec(_INPUTS_SPEC)
+_INPUTS_SPEC.loader.exec_module(launch_inputs)
+
+
+def test_prepare_authority_window_tracks_current_utc_date() -> None:
+    first = datetime(2026, 8, 18, 12, 0, tzinfo=timezone.utc)
+    later = first + timedelta(days=365)
+
+    first_issued, first_expires = launch_inputs.authority_window(first)
+    later_issued, later_expires = launch_inputs.authority_window(later)
+
+    assert first_issued == "2026-08-18T11:59:00Z"
+    assert first_expires == "2026-08-19T12:00:00Z"
+    assert later_issued == "2027-08-18T11:59:00Z"
+    assert later_expires == "2027-08-19T12:00:00Z"
+
+
+def test_prepare_authority_window_requires_timezone() -> None:
+    with pytest.raises(ValueError, match="authority_window_requires_timezone"):
+        launch_inputs.authority_window(datetime(2026, 8, 18, 12, 0))
 
 
 def test_run_paths_are_derived_from_one_directory() -> None:
