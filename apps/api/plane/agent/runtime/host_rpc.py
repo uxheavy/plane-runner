@@ -1128,9 +1128,16 @@ class PlaneGatewayHostPort:
         if "preparedCallRef" in call.input and operation_id != "work_item.read":
             return self._error(call, "PREPARED_CALL_INVALID", "Prepared reference is only valid for work-item reads")
         operation_input = call.input
+        prepared_ref: str | None = None
         if operation_id == "work_item.read":
             try:
+                if "preparedCallRef" in call.input:
+                    prepared_ref = call.input.get("preparedCallRef")
                 operation_input = self._resolve_prepared_read_input(call.input)
+                if prepared_ref is not None:
+                    replay = self._bind_or_replay_prepared_call(call, prepared_ref)
+                    if replay is not None:
+                        return replay
             except PlaneHostRPCError:
                 return self._error(call, "PREPARED_CALL_INVALID", "Prepared work-item read reference is invalid")
         receipt = self._host.call_operation(
@@ -1141,7 +1148,13 @@ class PlaneGatewayHostPort:
         )
         if operation_id == "search_workspace" and receipt.get("ok"):
             receipt = self._prepare_search_receipt(receipt)
-        return self._from_receipt(call, receipt)
+        result = self._from_receipt(call, receipt)
+        if prepared_ref is not None:
+            with self._prepared_calls_lock:
+                record = self._prepared_calls.get(prepared_ref)
+                if record is not None and record.get("result") is None:
+                    record["result"] = result
+        return result
 
     def _prepare_search_receipt(self, receipt: Mapping[str, Any]) -> Mapping[str, Any]:
         result = receipt.get("result")
@@ -1175,7 +1188,12 @@ class PlaneGatewayHostPort:
         with self._prepared_calls_lock:
             if len(self._prepared_calls) >= MAX_PREPARED_CALLS:
                 raise PlaneHostRPCError("prepared work-item read reference budget exhausted")
-            self._prepared_calls[prepared_ref] = canonical_input
+            self._prepared_calls[prepared_ref] = {
+                "input": canonical_input,
+                "correlation_id": None,
+                "idempotency_key": None,
+                "result": None,
+            }
         return prepared_ref
 
     def _resolve_prepared_read_input(self, input_data: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -1188,15 +1206,46 @@ class PlaneGatewayHostPort:
             raise PlaneHostRPCError("prepared work-item read reference is invalid")
         _text(prepared_ref, "host.preparedCallRef", MAX_PREPARED_CALL_REF_BYTES)
         with self._prepared_calls_lock:
-            prepared_input = self._prepared_calls.pop(prepared_ref, None)
-        if prepared_input is None:
-            raise PlaneHostRPCError("prepared work-item read reference is unknown or replayed")
+            record = self._prepared_calls.get(prepared_ref)
+            prepared_input = record.get("input") if record is not None else None
+        if prepared_input is None or record is None:
+            raise PlaneHostRPCError("prepared work-item read reference is unknown")
         parts = prepared_ref.split(":", 2)
         if len(parts) != 3 or not hmac.compare_digest(parts[1], hashlib.sha256(
             _canonical(prepared_input, "prepared work-item read input")
         ).hexdigest()):
             raise PlaneHostRPCError("prepared work-item read reference digest is invalid")
         return prepared_input
+
+    def _bind_or_replay_prepared_call(
+        self, call: PlaneHostCall, prepared_ref: str
+    ) -> PlaneHostResult | None:
+        with self._prepared_calls_lock:
+            record = self._prepared_calls.get(prepared_ref)
+            if record is None:
+                raise PlaneHostRPCError("prepared work-item read reference is unknown")
+            correlation_id = record["correlation_id"]
+            idempotency_key = record["idempotency_key"]
+            if correlation_id is None:
+                record["correlation_id"] = call.correlation_id
+                record["idempotency_key"] = call.idempotency_key
+                return None
+            if correlation_id != call.correlation_id or idempotency_key != call.idempotency_key:
+                raise PlaneHostRPCError("prepared work-item read replay identity is invalid")
+            cached = record["result"]
+        if cached is None:
+            return None
+        return PlaneHostResult(
+            request_ref=call.request_ref,
+            correlation_id=call.correlation_id,
+            idempotency_key=call.idempotency_key,
+            status=cached.status if cached.status != "ok" else "replayed",
+            replayed=True,
+            output=cached.output,
+            error_code=cached.error_code,
+            error_message=cached.error_message,
+            publication=cached.publication,
+        )
 
     def _publish(self, call: PlaneHostCall) -> PlaneHostResult:
         if call.input.get("kind") != "outcome":

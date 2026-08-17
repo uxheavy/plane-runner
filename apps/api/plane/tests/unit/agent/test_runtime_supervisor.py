@@ -564,6 +564,30 @@ _ACTOR_REF = %r
 _RUN_REF = %r
 
 
+def _prepared_read_call(request_json):
+    def find(value):
+        if isinstance(value, dict):
+            if (
+                value.get("action") == "read"
+                and value.get("operationRef") == "operation:work_item.read"
+                and isinstance(value.get("input"), dict)
+                and set(value["input"]) == {"preparedCallRef"}
+            ):
+                return value
+            for child in value.values():
+                found = find(child)
+                if found is not None:
+                    return found
+        elif isinstance(value, list):
+            for child in value:
+                found = find(child)
+                if found is not None:
+                    return found
+        return None
+
+    return find(json.loads(request_json))
+
+
 def _tool_call(number, request_json):
     if number == 1:
         return "tool_search", {"query": "Plane work item", "limit": 5}
@@ -576,16 +600,23 @@ def _tool_call(number, request_json):
         }}
     if number == 4:
         return "tool_call", {"name": "plane_operation", "arguments": {
-            "action": "read", "operationRef": "operation:work_item.read",
-            "input": {"project_id": _PROJECT_ID, "issue_id": _ISSUE_ID},
+            "action": "read", "operationRef": "operation:search_workspace",
+            "input": {"query": "Gateway Issue", "limit": 1},
         }}
-    if number == 5:
+    if number in {5, 6}:
+        read_call = _prepared_read_call(request_json)
+        if read_call is None:
+            raise AssertionError("remote model request did not preserve workItemReadCall")
+        return "tool_call", {"name": "plane_operation", "arguments": {
+            **read_call,
+        }}
+    if number == 7:
         return "tool_call", {"name": "plane_operation", "arguments": {
             "action": "mutate", "operationRef": "operation:agent.outcome.evaluate",
             "input": {"outcome_ref": "outcome-submission:not-authorized",
                        "evaluator_ref": _ACTOR_REF, "verdict": "revision_requested"},
         }}
-    if number == 6:
+    if number == 8:
         return "execute_code", {"code": (
             "export default async function ({host, input}: {host: {\\n"
             "    call_plane_operation: (operationId: string, input: Record<string, unknown>, "
@@ -598,7 +629,7 @@ def _tool_call(number, request_json):
             "\\"correlation:code-mode-hermes-rename\\");\\n"
             "}"
         )}
-    if number == 7:
+    if number == 9:
         return "tool_call", {"name": "plane_operation", "arguments": {
             "action": "mutate", "operationRef": "operation:agent.outcome.submit",
             "input": {"run_ref": _RUN_REF,
@@ -606,7 +637,7 @@ def _tool_call(number, request_json):
                        "artifacts": ["artifact:g2-production"],
                        "evidence": ["evidence:g2-production"]},
         }}
-    if number == 8:
+    if number == 10:
         match = re.search(r"outcome-submission:[0-9a-f-]+", request_json)
         return "tool_call", {"name": "plane_publish", "arguments": {
             "kind": "outcome", "operationRef": "operation:agent.outcome.publish",
@@ -623,7 +654,7 @@ class _Completions:
     def create(self, **kwargs):
         self.calls += 1
         request_json = json.dumps(kwargs, sort_keys=True, default=str)
-        if self.calls <= 8:
+        if self.calls <= 10:
             name, arguments = _tool_call(self.calls, request_json)
             delta = Namespace(
                 role="assistant",
@@ -816,6 +847,8 @@ hermes_logging.setup_verbose_logging = lambda: None
     assert json.loads(frames[-1])["kind"] == "completed"
     assert [call.operation_ref for call in host_calls] == [
         "plane.operations.discover@1",
+        "operation:search_workspace",
+        "operation:work_item.read",
         "operation:agent.outcome.evaluate",
         "plane.code-mode.execute@1",
         "operation:agent.outcome.submit",
