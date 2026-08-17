@@ -2808,3 +2808,50 @@ records this diagnosis without changing the retained receipts.
 - Cleanup verified zero runner-labeled containers, networks, credential/state/
   scenario volumes, and no capacity lease. W07/W08 remain dirty; no feature
   pass or readback closure is claimed.
+
+## Wave 0CC — exact 51c5ed07 W07/W08 D first-provider stop
+
+- The one fresh W07/W08-only D commission used clean source
+  `51c5ed07e6d5d46fda7acb9794805de45231b2f7`, with no W01-W06 route in the
+  descriptor. The owner-only scenario SHA-256 was
+  `c49924959c1b5f7a33e5b70173d0e89cf4c1b16fb2126d8a71f013003f86cedb`.
+  The exact API image was `plane-agent-api:g4-v6-51c5ed07` /
+  `sha256:0751aac75e3953a785f3e0fab3571aa4ccaf2460cfa6727efb1e58a67af93c06`;
+  the separate runtime was
+  `plane-agent-runtime:hermes-292e8663-g4-v6-51c5ed07` /
+  `sha256:abb390bb88ff99b73c31aa1a4fed39815a50073371dfbaa5517bfacb12c27972`.
+  Manifest SHA-256 was
+  `b39baa1e3b935107e591964322eaa3f40f740fcc3e53182e214e1ecdc563c4a5`.
+  Hermes, MCP, and SDK were pinned to
+  `292e866374ca9e9615473fc9bf5dda1913b672e1`,
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`, and
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`.
+- Required runtime env files were copied byte-for-byte from the authoritative
+  checkout without reading, printing, or sourcing values; `setup.sh` was not
+  run. Descriptor/config/manifest validation passed, the non-vacuous runtime
+  binding and DB-role gates passed, and the scheduled fixture was created in
+  the fresh isolated workspace.
+- Exactly one capacity-gated provider-capable journey ran against
+  `https://chatgpt.com/backend-api/codex/responses` with
+  `openai-codex/gpt-5.6-luna` xhigh and fallback disabled. Run
+  `06d74a6c-f0ee-467e-930a-ecaa1bab4a70` and invocation
+  `invocation:f6b4649a-05e4-4b8d-ab5e-12f96761d409` stopped at
+  `api-invocation` after one upstream-initiated attempt. The bounded result
+  recorded generic `provider_error` and `statusClass=4xx`, followed by
+  `runtime_error / runtime_process / process_exit / runtime_execution_failed`.
+- No Plane operation, artifact, evidence item, outcome, explicit publication,
+  product terminal event, ordinary transcript evidence, or W08 readback was
+  observed. W07 and W08 are both `dirty`; no feature pass is claimed. The
+  owner-only result is
+  `user-testing-output/plane-agents/evidence/w07-w08-d-51c5ed07-result.json`,
+  SHA-256 `2bd1eb282ab8aedf65776e640b5d170395d7d3eb699ddebd6ada4c10869bd461`.
+  The deterministic redacted extract is
+  `user-testing-output/plane-agents/evidence/w07-w08-d-51c5ed07-failure-extract.json`,
+  SHA-256 `69a303c1168fdb654b9c73bd72b071255d47eaf58f719fc6133efee1be06ed2a`.
+- Provider use stopped at the first genuine failure. No retry, fallback,
+  blind `outcome_unknown` replay, or provider-disabled replay occurred.
+  Provider attempts/effects were `1` / `0` Plane product effects. Focused
+  provider-free harness checks passed `179`; Docker API/runtime/lifecycle
+  checks passed `115` with one known repository-root mount-path test
+  deselected. The focused test stack was torn down successfully; capacity
+  lease release and exact-owned live Docker cleanup were verified at zero.

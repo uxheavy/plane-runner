@@ -394,6 +394,20 @@ replay. W03-W08 remain dirty; UT-042 is open.
 - W05 and W06 remain dirty; this is provider-free boundary evidence, not route
   closure.
 
+## Current W07/W08 D route — 2026-08-17
+
+- W07 and W08 remain `dirty`. One fresh single-commission W07/W08-only
+  assignment from Plane `51c5ed07e6d5d46fda7acb9794805de45231b2f7` reached the
+  real provider path after the non-vacuous runtime binding and DB-role gates.
+  It stopped on the first upstream-initiated `provider_error` with bounded
+  `statusClass=4xx`; no Plane operation, artifact, outcome, publication,
+  terminal product event, transcript evidence, or W08 readback was observed.
+- No retry, fallback, blind `outcome_unknown` replay, or provider-disabled
+  replay was attempted because the primary was terminally failed. Durable
+  bounded evidence is
+  `user-testing-output/plane-agents/evidence/w07-w08-d-51c5ed07-failure-extract.json`
+  (SHA-256 `69a303c1168fdb654b9c73bd72b071255d47eaf58f719fc6133efee1be06ed2a`).
+
 ## Wave 0CB — exact corrected W07/W08 D provider stop
 
 - The fresh W07/W08-only candidate was clean Plane
