@@ -535,47 +535,51 @@ docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose
 ### Exact pins and migration strategy
 
 `apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` is the pin
-manifest. The current Plane deployable service candidate is the exact
-source correction `1d1012f71c48615bb28b7988ce74c82421aa1d53`, a direct child of
-wrapper `61eb87390ff8881eefc7a63f27406b358dee82e5`; the final candidate
-is exactly one metadata wrapper child of that source.
-Sol Medium's P1 rejection of wrapper
-`d42161bb29bf28f04246b96051cee3a88dcccd36` is closed by the existing Hermes
-adapter owner at commit `d2e655101f263329359e7d0de9d0b856202a3e4b`, a direct
-child of pinned Hermes `114eabf9d807b659e36d767e4de46ca056297ccb`. The
-current Plane source commit is `1d1012f71c48615bb28b7988ce74c82421aa1d53`.
-The final candidate is exactly one metadata wrapper child of that source. The current API artifact
-remains immutable and source-bound to
-`1d1012f71c48615bb28b7988ce74c82421aa1d53`; the previously accepted G3
+manifest. The current Plane deployable service candidate is the exact source
+correction `78e02a20b4b0649ce1d4844d1cb9cf39526b362a`; the final candidate is
+exactly one metadata wrapper child of that source. The previously accepted G3
 candidate is Plane commit `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
-The current binding carries Hermes commit
-`d2e655101f263329359e7d0de9d0b856202a3e4b`, MCP gitlink
-`2dc152e136d7ad952b901e5fe9364a37487297ba`, SDK gitlink
-`7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`, runtime image tag
-`plane-agent-runtime:hermes-d2e65510-g4-1d1012f7`, runtime image digest
-`sha256:6f1c2dc5857d445e13b34f9cc9723ee5c7636c2cfe2ef213c7fc4d972855c1bd`,
-runtime revision/source revision `1d1012f71c48615bb28b7988ce74c82421aa1d53`, and runtime
-contract `plane.agent-runtime/v1`. The current API artifact is tag
-`plane-agent-api:g4-1d1012f7` with image digest
-`sha256:0a350d4619c9edd55769ed8efdaa2dc740de551689ec41abd682e73565b6c3f2` and
-source revision/image label `1d1012f71c48615bb28b7988ce74c82421aa1d53`.
-API image tag: `plane-agent-api:g4-1d1012f7`. API image digest:
-`sha256:0a350d4619c9edd55769ed8efdaa2dc740de551689ec41abd682e73565b6c3f2`.
-API source revision remains the exact source revision/image label above.
-API contract: `plane.operation/v1`.
-The wrapper carries these exact values from the immutable image builds. The
-exact-image red-team probe proves the image-owned GPT-5.6 Codex child emits
-`/backend-api/codex/responses` over the bounded AF_UNIX relay; focused adapter
-tests retain XAI and fail-closed mismatch coverage. G3, G4, and the live helper
-execute the image-contained `/workspace/apps/api` tree;
-they do not bind-mount a newer host API source tree. API, worker,
+Its immutable API artifact is
+`plane-agent-api:g4-v11-78e02a` at
+`sha256:700c98e8cfe8737068d7a24347169603158490171815fa381a96df833bfacb01`,
+and its runtime artifact is
+`plane-agent-runtime:hermes-6c460f10-g4-v11-78e02a` at
+`sha256:2f11b340652a1d1e8fccaeb2514a6069deed2c0f9794b255ed886c038092a6af`.
+Both images are source-bound to `78e02a20b4b0649ce1d4844d1cb9cf39526b362a`,
+with runtime contract `plane.agent-runtime/v1` and API contract
+`plane.operation/v1`.
+
+The runtime binding carries Hermes commit
+`6c460f10fe215718dce36dd73cda94155a9a34f8` from the `uxheavy` checkout, MCP gitlink
+`c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK gitlink
+`7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The runtime image tag is
+`plane-agent-runtime:hermes-6c460f10-g4-v11-78e02a`, and the runtime image digest is
+`sha256:2f11b340652a1d1e8fccaeb2514a6069deed2c0f9794b255ed886c038092a6af`.
+The runtime revision is
+`78e02a20b4b0649ce1d4844d1cb9cf39526b362a`. The Plane service revision above is
+the current executable artifact revision; the runtime image/runtimeRevision source is
+`78e02a20b4b0649ce1d4844d1cb9cf39526b362a`. The API image tag is
+`plane-agent-api:g4-v11-78e02a` and the API image digest is
+`sha256:700c98e8cfe8737068d7a24347169603158490171815fa381a96df833bfacb01`.
+The API source revision is
+`78e02a20b4b0649ce1d4844d1cb9cf39526b362a`; the API contract is
+`plane.operation/v1`. The exact-image red-team proof
+passes the real Hermes loop, progressive `catalog.search`/`catalog.describe`,
+`plane.code-mode.execute@1`, authorized read and mutation, exact
+`NOT_AUTHORIZED`, one `OutcomeSubmission`, one applied publication, transcript
+evidence, idempotency replay, and late post-publication terminal handoff. Its
+bounded fixture has 16 planned transport turns plus one terminal stop, 13
+gateway records excluding one duplicate-mutation replay, and exactly one
+applied publication. The final exact-image bootstrap also completes with one
+synthetic relay call and `intent → started → completed`; no provider-backed
+acceptance is claimed.
+
+G3, G4, and the live helper execute the image-contained `/workspace/apps/api`
+tree; they do not bind-mount a newer host API source tree. API, worker,
 `beat-worker`, supervisor, and `agent-runtime` each use the corresponding
-current artifact revision and image digest in the manifest. The Plane service revision above is the current executable artifact revision; the runtime image/runtimeRevision source is `1d1012f71c48615bb28b7988ce74c82421aa1d53`. Here,
-`current.planeCommit` identifies the approved source parent, while the final metadata wrapper is its sole child. The
-the current service artifact revisions identify the immutable executable images
-source-bound to `1d1012f71c48615bb28b7988ce74c82421aa1d53`; the
-`previous` rollback section independently retains the last known-good G3
-service revisions and digests.
+current artifact revision and image digest in the manifest. The `previous`
+rollback section independently retains the last known-good G3 service
+revisions and digests.
 The previous services use immutable image digest
 `sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e`,
 the image pin recorded by the accepted G3 verifier. The rollback reasserts
@@ -745,7 +749,7 @@ process via `flock`; a second verifier fails closed before preflight, and no
 owner file or PID-reuse cleanup is performed inside the verifier.
 
 Before G3 begins, G4 validates two independent read-only Hermes checkouts:
-the current runtime checkout at `d2e655101f263329359e7d0de9d0b856202a3e4b`
+the current runtime checkout at `6c460f10fe215718dce36dd73cda94155a9a34f8`
 and the accepted G3 checkout at
 `114eabf9d807b659e36d767e4de46ca056297ccb`. The G3 prerequisite receives
 only the accepted-baseline checkout, while current G4 runtime tests receive

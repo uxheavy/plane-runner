@@ -4,10 +4,18 @@ This directory contains the compact execution control surface for the non-UI Pla
 
 ## Current status
 
-G0 through G3 and the offline G4 production-candidate checks are complete. The
-current exact Plane candidate is
-`dfcd3ea543e58109b0d314e3bdfd6375c65b35ff`, with Hermes
-`bc7f13d2ab392752f2667b176c646339c49405f9`.
+G0 through G3 and the provider-free exact-image G4 checks are complete for the
+current integration source `78e02a20b4b0649ce1d4844d1cb9cf39526b362a`. The
+API artifact is `plane-agent-api:g4-v11-78e02a` at
+`sha256:700c98e8cfe8737068d7a24347169603158490171815fa381a96df833bfacb01`;
+the runtime artifact is
+`plane-agent-runtime:hermes-6c460f10-g4-v11-78e02a` at
+`sha256:2f11b340652a1d1e8fccaeb2514a6069deed2c0f9794b255ed886c038092a6af`.
+Both are bound to Hermes `6c460f10fe215718dce36dd73cda94155a9a34f8`, MCP
+`c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
+`7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The exact-image functional
+red-team and final bootstrap are green provider-free; the durable metadata
+wrapper and live provider-backed W07/W08 prerequisite remain pending.
 
 S00 Wave 0AT passed at Plane
 `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with one fresh GPT-5.6 Luna
@@ -16,9 +24,9 @@ is complete for the Worker and Manager route suites and for the tested
 Operator contracts. The initial provider-backed persona tasks proved that the
 accepted runner exposes only its fixed S00 commission; a typed scenario input
 is being added to that existing runner before W/M/O routes resume. Their results
-are not inferred. O02 has a separate real external-client closure. The final
-candidate image, exact-image red team, G4 verifier, and consolidated Sol review
-remain pending.
+are not inferred. O02 has a separate real external-client closure. The single
+metadata wrapper, full G4 verifier, consolidated Sol review, and separately
+authorized live provider-backed W07/W08 run remain pending.
 
 Execution now follows the backend-first user-testing loop in [GOAL.md](./GOAL.md):
 a fast GPT-5.6 Luna provider smoke, three persistent persona journeys covering
@@ -28,7 +36,7 @@ campaign ledgers are under `user-testing-output/plane-agents/`.
 
 The rollback fixture remains a historical offline binding separate from the
 active candidate. Its `current.planeCommit` is the approved source parent
-`1d1012f71c48615bb28b7988ce74c82421aa1d53`; its final candidate wrapper is
+`78e02a20b4b0649ce1d4844d1cb9cf39526b362a`; its final candidate wrapper is
 that parent's sole child. The independent `previous` section retains the accepted G3
 service artifact digest
 `sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e`.
