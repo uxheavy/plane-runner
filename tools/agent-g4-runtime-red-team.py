@@ -16,7 +16,7 @@ from pathlib import Path
 
 HERMES_COMMIT = os.environ.get(
     "PLANE_G4_RUNTIME_HERMES_COMMIT",
-    "bc7f13d2ab392752f2667b176c646339c49405f9",
+    "6c460f10fe215718dce36dd73cda94155a9a34f8",
 )
 RESOURCE_LABEL = "com.uxheavy.plane.agent-g4-runtime"
 EXPECTED_RUNTIME_IMAGE_DIGEST = "sha256:826cc9813bd4d7ab562e2bd701bea7c9c9623cd9d19e5f37bee91ca65e5ba35a"
@@ -26,7 +26,7 @@ PLANE_CODE_MODE_OPERATION = "plane.code-mode.execute@1"
 PINNED_HERMES_RUN_AGENT_PATH = "/opt/hermes/run_agent.py"
 PINNED_HERMES_RUN_AGENT_SHA256 = os.environ.get(
     "PLANE_G4_RUNTIME_HERMES_RUN_AGENT_SHA256",
-    "67d09e1a31f2fc29ea4b32a03a9256e3d8f438d47d8e4784aafc780803ef4699",
+    "86742299a57df19cb12fc9ea1beb5d02d6f837e5",
 )
 
 
@@ -49,7 +49,7 @@ from types import SimpleNamespace
 
 
 PINNED_HERMES_RUN_AGENT_PATH = "/opt/hermes/run_agent.py"
-PINNED_HERMES_RUN_AGENT_SHA256 = "67d09e1a31f2fc29ea4b32a03a9256e3d8f438d47d8e4784aafc780803ef4699"
+PINNED_HERMES_RUN_AGENT_SHA256 = "86742299a57df19cb12fc9ea1beb5d02d6f837e5"
 
 
 class OpenAIError(Exception):
@@ -214,7 +214,7 @@ class _Completions:
                 "g4-hermes-agent-loop=ok provider_seam=deterministic_openai_transport_only "
                 "hermes_agent_identity=run_agent.AIAgent "
                 "pinned_hermes_run_agent=ok path=/opt/hermes/run_agent.py "
-                "sha256=67d09e1a31f2fc29ea4b32a03a9256e3d8f438d47d8e4784aafc780803ef4699 "
+                "sha256=86742299a57df19cb12fc9ea1beb5d02d6f837e5 "
                 "agent_tool_registration=ok callback_trace=real_tool_loop "
                 "tamper_guard=fail_closed shim_boundary=provider_transport_only"
                 if call_number == len(self._PLAN) - 1
@@ -238,7 +238,7 @@ class _Completions:
                     "g4-hermes-agent-loop=ok provider_seam=deterministic_openai_transport_only "
                     "hermes_agent_identity=run_agent.AIAgent "
                     "pinned_hermes_run_agent=ok path=/opt/hermes/run_agent.py "
-                    "sha256=67d09e1a31f2fc29ea4b32a03a9256e3d8f438d47d8e4784aafc780803ef4699 "
+                    "sha256=86742299a57df19cb12fc9ea1beb5d02d6f837e5 "
                     "agent_tool_registration=ok callback_trace=real_tool_loop "
                     "tamper_guard=fail_closed shim_boundary=provider_transport_only"
                 ),
@@ -293,7 +293,7 @@ class OpenAI:
 class AsyncOpenAI(OpenAI):
     pass
 '''.replace(
-    "67d09e1a31f2fc29ea4b32a03a9256e3d8f438d47d8e4784aafc780803ef4699",
+    "86742299a57df19cb12fc9ea1beb5d02d6f837e5",
     PINNED_HERMES_RUN_AGENT_SHA256,
 )
 
@@ -706,13 +706,23 @@ identity = {
 if (
     identity["module"] != "run_agent"
     or identity["path"] != "/opt/hermes/run_agent.py"
-    or identity["sha256"] != "67d09e1a31f2fc29ea4b32a03a9256e3d8f438d47d8e4784aafc780803ef4699"
+    or identity["sha256"] != "86742299a57df19cb12fc9ea1beb5d02d6f837e5"
     or identity["class"] != "AIAgent"
     or identity["classModule"] != "run_agent"
     or identity["shadowPresent"]
 ):
     raise SystemExit(json.dumps({"event": "g4.hermes.identity", "identity": identity}, sort_keys=True))
 print(json.dumps(identity, sort_keys=True, separators=(",", ":")))
+"""
+
+
+HERMES_TERMINAL_HANDOFF_PROBE = """
+from tests.plane_runtime.test_terminal_handoff import (
+    test_post_terminal_code_mode_host_exception_preserves_applied_publication,
+)
+
+test_post_terminal_code_mode_host_exception_preserves_applied_publication()
+print("terminal_handoff_post_terminal=passed")
 """
 
 
@@ -1130,6 +1140,29 @@ def main() -> int:
         )
         identity = json.loads(identity_raw.splitlines()[-1])
         validate_pinned_hermes_identity(identity)
+        terminal_handoff_probe = require(
+            docker(
+                "exec",
+                "-e",
+                "HOME=/tmp",
+                "-e",
+                "HERMES_HOME=/tmp/hermes-home",
+                "-e",
+                "TMPDIR=/tmp",
+                "-e",
+                "PYTHONPATH=/opt/plane/agent/dependencies:/opt:/opt/hermes",
+                "-e",
+                "PYTHONSAFEPATH=1",
+                name,
+                "python3",
+                "-c",
+                HERMES_TERMINAL_HANDOFF_PROBE,
+                timeout=30,
+            ),
+            "terminal_handoff_probe_failed",
+        )
+        if "terminal_handoff_post_terminal=passed" not in terminal_handoff_probe:
+            raise ProbeFailure("terminal_handoff_post_terminal_evidence_missing")
         if docker(
             "exec", name, "python3", "-c", "import urllib.request; urllib.request.urlopen('http://1.1.1.1', timeout=1)"
         ).returncode == 0:
@@ -1284,6 +1317,7 @@ def main() -> int:
             f"runtime_contract={RUNTIME_CONTRACT} hermes_commit={HERMES_COMMIT} "
             "dispatch_http=passed full_chain=passed launcher=passed hermes_child=passed "
             "hermes_agent_loop=passed provider_transport_seam=passed agent_identity=passed "
+            "terminal_handoff=passed "
             "codex_uds_cross_process=passed "
             "tool_registration=passed tamper_guard=passed "
             "filesystem_confinement=passed "

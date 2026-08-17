@@ -2878,6 +2878,12 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn('PLANE_CODE_MODE_OPERATION = "plane.code-mode.execute@1"', source)
         self.assertIn('"output": None', source)
         self.assertIn("validate_pinned_hermes_identity", source)
+        self.assertIn("HERMES_TERMINAL_HANDOFF_PROBE", source)
+        self.assertIn(
+            "test_post_terminal_code_mode_host_exception_preserves_applied_publication",
+            source,
+        )
+        self.assertIn("terminal_handoff_post_terminal=passed", source)
         self.assertIn("COPY hermes/ /opt/hermes/", image_dockerfile)
         self.assertIn("ENV PYTHONPATH=/opt/plane/agent/dependencies:/opt:/opt/hermes", image_dockerfile)
         self.assertIn(
