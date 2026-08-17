@@ -1,0 +1,108 @@
+{
+  "schemaVersion": "plane-agent-g4/w07-w08-failure-extract/v1",
+  "source": {
+    "candidate": "989a159cf3fa093702d6c3d61dfd3b705b6bb6a0",
+    "parent": "cf9d2b8a205d78e0c30250464a5b4c70df90169d",
+    "hermes": "292e866374ca9e9615473fc9bf5dda1913b672e1",
+    "mcp": "c04974ed6624f17b41e63ef8182661929e77e0d3",
+    "sdk": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
+  },
+  "artifacts": {
+    "api": {
+      "tag": "plane-agent-api:g4-v6-989a159c",
+      "digest": "sha256:36c8cd6b47357a78f2d49946cc5e09aed6cca368ed8880eeee7e78ef2d54c0b9"
+    },
+    "runtime": {
+      "tag": "plane-agent-runtime:hermes-292e8663-g4-v6-989a159c",
+      "digest": "sha256:2c9484c58103964a1d033998ecd3f9dae4e10676c00698348ced79d77364dc4a"
+    },
+    "manifestSha256": "eb49fea15cd69eb203430df7ea8fb13d286a01db9892db73c76dad46410059b5",
+    "scenarioSha256": "472caab0a49cd5b1e11cd7e6213e3091b926270b00b4d247e4ff05e09d892708",
+    "authoritySha256": "145d891262f3bde13b779f5b869a111fa5f22fc227563c072da25c8747420fb2",
+    "configSha256": "e645a3258f723e4daa1a7eeca7c116fc8d03d71bb780489fe5ae0abcd3ea6703"
+  },
+  "provider": {
+    "name": "openai-codex",
+    "model": "gpt-5.6-luna",
+    "reasoning": "xhigh",
+    "baseUrl": "https://chatgpt.com/backend-api/codex/responses",
+    "fallbackAllowed": false,
+    "attemptCount": 1,
+    "fallbackAttempts": 0,
+    "replayAttempts": 0
+  },
+  "assignment": {
+    "scenarioId": "worker",
+    "profileName": "Maya Worker D",
+    "commissionId": "w07-w08-artifact-publication-readback",
+    "runId": "ecd2b743-3059-40fd-a126-0f9cde45f8c4",
+    "invocationId": "invocation:adbb571f-ee73-44bf-afc3-8238a816d536",
+    "authorityId": "authority-w07-w08-d-989a159c-20260817"
+  },
+  "result": {
+    "status": "failed",
+    "failurePhase": "api-invocation",
+    "failureCode": "runtime_error",
+    "failureReasonPhase": "runtime_process",
+    "failureReasonDetail": "process_exit",
+    "failureReasonSubreason": "runtime_execution_failed",
+    "runtimeExitKind": "failed",
+    "runtimeExitFinalSequence": 1,
+    "terminalKind": "run_failure",
+    "terminalCode": "runtime_error",
+    "runtimeProgressEvents": 2
+  },
+  "providerAttempt": {
+    "sequence": 1,
+    "phase": "failed",
+    "upstreamInitiated": true,
+    "statusClassObserved": "error",
+    "requiredStatusClassAllowlist": ["4xx", "5xx", "transport"],
+    "statusClassPreserved": false,
+    "genericErrorCode": "provider_error",
+    "rawProviderStatusClass": "not_disclosed"
+  },
+  "planeEffects": {
+    "hostOperationReceipts": 0,
+    "hostOperationAuditRows": 0,
+    "outcomeSubmissions": 0,
+    "artifacts": 0,
+    "evidenceItems": 0,
+    "explicitPublications": 0,
+    "productEvents": 0,
+    "runFailureTerminalEvents": 1,
+    "outcomeTerminalEvents": 0,
+    "w07Proven": false,
+    "w08Proven": false
+  },
+  "replay": {
+    "eligible": false,
+    "attempted": false,
+    "reason": "terminal provider-backed failure; stop-on-first-failure policy"
+  },
+  "diagnosis": {
+    "providerFreeAdapterProbe": {
+      "synthetic400": {"exception": "ProviderRelayError", "statusClass": ""},
+      "synthetic500": {"exception": "ProviderRelayError", "statusClass": ""}
+    },
+    "focusedProjectionTests": {"passed": 3, "deselected": 103},
+    "rootCause": "PinnedProviderHTTPSClient raises generic ProviderRelayError for non-200 responses before the outer relay can project 4xx or 5xx."
+  },
+  "cleanup": {
+    "labeledRuntimeContainers": 0,
+    "labeledRuntimeNetworks": 0,
+    "labeledProviderSecretVolumes": 0,
+    "labeledCredentialStateVolumes": 0,
+    "labeledScenarioVolumes": 0,
+    "capacityLeasePresent": false
+  },
+  "rawResultSha256": "d5d9452a08cfed4af544317951ae9d05d463e6de480fc6b5c440ab0b2cb565b5",
+  "rawResultPath": "tmp/persona-wave-v6/w07-w08-live-989a159c/run/result.json",
+  "durableReceipts": {
+    "result": "user-testing-output/plane-agents/evidence/w07-w08-d-989a159c-result.json",
+    "manifest": "user-testing-output/plane-agents/evidence/w07-w08-d-989a159c-manifest.json",
+    "scenario": "user-testing-output/plane-agents/evidence/w07-w08-d-989a159c-scenario.json",
+    "authority": "user-testing-output/plane-agents/evidence/w07-w08-d-989a159c-authority.json",
+    "config": "user-testing-output/plane-agents/evidence/w07-w08-d-989a159c-config.json"
+  }
+}

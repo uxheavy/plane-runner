@@ -2758,3 +2758,53 @@ records this diagnosis without changing the retained receipts.
   were `0`. Test Compose cleanup verified zero containers, volumes, and
   networks. W07/W08 remain dirty and this local fix alone does not make a
   fresh assignment safe.
+
+## Wave 0CB — exact corrected W07/W08 D provider stop
+
+- The single authorized fresh D assignment used clean Plane
+  `989a159cf3fa093702d6c3d61dfd3b705b6bb6a0`, parent
+  `cf9d2b8a205d78e0c30250464a5b4c70df90169d`, exact API
+  `plane-agent-api:g4-v6-989a159c` /
+  `sha256:36c8cd6b47357a78f2d49946cc5e09aed6cca368ed8880eeee7e78ef2d54c0b9`,
+  and exact runtime
+  `plane-agent-runtime:hermes-292e8663-g4-v6-989a159c` /
+  `sha256:2c9484c58103964a1d033998ecd3f9dae4e10676c00698348ced79d77364dc4a`.
+  Hermes was `292e866374ca9e9615473fc9bf5dda1913b672e1`, MCP was
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK was
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. Manifest SHA-256 was
+  `eb49fea15cd69eb203430df7ea8fb13d286a01db9892db73c76dad46410059b5`.
+- The fresh scenario descriptor SHA-256 was
+  `472caab0a49cd5b1e11cd7e6213e3091b926270b00b4d247e4ff05e09d892708`.
+  It selected the sole commission
+  `w07-w08-artifact-publication-readback` for Maya Worker D with synthetic
+  W07/W08 acceptance criteria, GPT-5.6 Luna xhigh, fallback disabled, and no
+  fault injection. The non-vacuous runtime binding and DB role preflight
+  passed before the live phase.
+- Exactly one capacity-gated provider-capable journey ran against
+  `https://chatgpt.com/backend-api/codex/responses`. Run
+  `ecd2b743-3059-40fd-a126-0f9cde45f8c4` and invocation
+  `invocation:adbb571f-ee73-44bf-afc3-8238a816d536` stopped at
+  `api-invocation` after one upstream-initiated provider attempt. The
+  bounded receipt recorded generic `provider_error`, then
+  `runtime_error / runtime_process / process_exit / runtime_execution_failed`.
+  It also recorded legacy `statusClass=error` instead of the required bounded
+  `4xx|5xx|transport` family. No W07/W08 operation, artifact, evidence item,
+  outcome, publication, product event, or readback was observed.
+- The owner-only bounded result SHA-256 is
+  `d5d9452a08cfed4af544317951ae9d05d463e6de480fc6b5c440ab0b2cb565b5`.
+  Durable redacted evidence is
+  `user-testing-output/plane-agents/evidence/w07-w08-d-989a159c-failure-extract.json`,
+  SHA-256 `80112e72911b526ac1f2dcdad1a31643285c86c73e9b5fc32861df113263afc9`.
+  The exact result, manifest, scenario, authority, and config are also
+  promoted under `user-testing-output/plane-agents/evidence/` with their
+  individual hashes recorded in the extract.
+- Provider-free diagnosis showed synthetic 400 and 500 responses through the
+  pinned `PinnedProviderHTTPSClient` both raise generic `ProviderRelayError`
+  with an empty status family. The bounded projection tests passed `3/3` with
+  `103` deselected. This is a local status-loss finding at the existing
+  provider adapter seam. No provider retry, blind `outcome_unknown` replay,
+  or provider-disabled replay was run because the primary was terminally
+  failed and the stop policy made replay ineligible.
+- Cleanup verified zero runner-labeled containers, networks, credential/state/
+  scenario volumes, and no capacity lease. W07/W08 remain dirty; no feature
+  pass or readback closure is claimed.

@@ -394,6 +394,46 @@ replay. W03-W08 remain dirty; UT-042 is open.
 - W05 and W06 remain dirty; this is provider-free boundary evidence, not route
   closure.
 
+## Wave 0CB — exact corrected W07/W08 D provider stop
+
+- The fresh W07/W08-only candidate was clean Plane
+  `989a159cf3fa093702d6c3d61dfd3b705b6bb6a0`, directly on status-family fix
+  `cf9d2b8a205d78e0c30250464a5b4c70df90169d`. Required env files were copied
+  byte-for-byte from the designated Plane source without reading, printing, or
+  sourcing values, and `setup.sh` was not run. Exact artifacts were API
+  `plane-agent-api:g4-v6-989a159c` /
+  `sha256:36c8cd6b47357a78f2d49946cc5e09aed6cca368ed8880eeee7e78ef2d54c0b9`
+  and runtime
+  `plane-agent-runtime:hermes-292e8663-g4-v6-989a159c` /
+  `sha256:2c9484c58103964a1d033998ecd3f9dae4e10676c00698348ced79d77364dc4a`.
+  The disposable manifest SHA-256 is
+  `eb49fea15cd69eb203430df7ea8fb13d286a01db9892db73c76dad46410059b5` and
+  the Worker D descriptor SHA-256 is
+  `472caab0a49cd5b1e11cd7e6213e3091b926270b00b4d247e4ff05e09d892708`.
+- Exactly one fresh capacity-gated assignment used
+  `openai-codex/gpt-5.6-luna` xhigh with fallback disabled through
+  `https://chatgpt.com/backend-api/codex/responses`. Run
+  `ecd2b743-3059-40fd-a126-0f9cde45f8c4` and invocation
+  `invocation:adbb571f-ee73-44bf-afc3-8238a816d536` stopped at
+  `api-invocation` after one upstream-initiated attempt. The bounded result
+  recorded generic `provider_error`, `runtime_error / runtime_process /
+  process_exit / runtime_execution_failed`, and observed legacy
+  `statusClass=error`; the required `4xx|5xx|transport` family was not
+  preserved. No W07/W08 operation, artifact, outcome, publication, product
+  event, or readback claim is made.
+- Durable redacted evidence is
+  `user-testing-output/plane-agents/evidence/w07-w08-d-989a159c-failure-extract.json`,
+  SHA-256 `80112e72911b526ac1f2dcdad1a31643285c86c73e9b5fc32861df113263afc9`.
+  The bounded result is
+  `user-testing-output/plane-agents/evidence/w07-w08-d-989a159c-result.json`,
+  SHA-256 `d5d9452a08cfed4af544317951ae9d05d463e6de480fc6b5c440ab0b2cb565b5`.
+- Provider-free diagnosis showed synthetic 400 and 500 responses through the
+  pinned `PinnedProviderHTTPSClient` both raise generic `ProviderRelayError`
+  with no status family, while the three focused bounded projection tests
+  pass. No provider retry, replay, or `outcome_unknown` replay was run.
+  Cleanup verified zero runner-labeled containers, networks, credential/state/
+  scenario volumes, and no capacity lease. W07/W08 remain dirty.
+
 ### UT-050 W07/W08 provider-free status-family repair — 2026-08-17
 
 The existing `statusClass` projection was repaired at the provider relay to

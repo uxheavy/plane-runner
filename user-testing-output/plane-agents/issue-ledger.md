@@ -435,3 +435,43 @@ No provider/live journey, provider retry, replay, or `outcome_unknown` replay
 was run. Provider attempts/effects were zero. Test Compose cleanup verified
 zero containers, volumes, and networks. The new contract does not make a
 fresh assignment safe by itself; provider acceptance remains unverified.
+
+### UT-051 fresh corrected W07/W08 D provider stop — 2026-08-17
+
+The one authorized fresh D assignment started from clean Plane
+`989a159cf3fa093702d6c3d61dfd3b705b6bb6a0`, whose parent is the status-family
+fix `cf9d2b8a205d78e0c30250464a5b4c70df90169d`. Required env files were copied
+byte-for-byte without reading, printing, or sourcing values, and `setup.sh`
+was not run. The exact API/runtime images are bound by manifest
+`eb49fea15cd69eb203430df7ea8fb13d286a01db9892db73c76dad46410059b5`.
+
+The run used the authorized ChatGPT subscription route with
+`openai-codex/gpt-5.6-luna` xhigh and fallback disabled. It created one fresh
+run `ecd2b743-3059-40fd-a126-0f9cde45f8c4` and invocation
+`invocation:adbb571f-ee73-44bf-afc3-8238a816d536`. The first and only provider
+attempt was upstream-initiated, generic `provider_error`, and the lifecycle
+stopped with `runtime_error / runtime_process / process_exit /
+runtime_execution_failed`. The bounded attempt readback observed legacy
+`statusClass=error`, so the required `4xx|5xx|transport` family was not
+preserved. This is a provider-free follow-up finding at the existing
+`PinnedProviderHTTPSClient` to relay classification seam, not a successful
+W07/W08 result.
+
+The bounded result is durable at
+`user-testing-output/plane-agents/evidence/w07-w08-d-989a159c-result.json`,
+SHA-256 `d5d9452a08cfed4af544317951ae9d05d463e6de480fc6b5c440ab0b2cb565b5`.
+The deterministic redacted extract is
+`user-testing-output/plane-agents/evidence/w07-w08-d-989a159c-failure-extract.json`,
+SHA-256 `80112e72911b526ac1f2dcdad1a31643285c86c73e9b5fc32861df113263afc9`.
+It records one attempt, zero host-operation receipts/audits, zero artifacts,
+zero evidence items, zero outcomes, zero publications, zero product events,
+one run-failure terminal event, and no replay. The raw result is retained only
+as the owner-safe bounded receipt with SHA-256
+`d5d9452a08cfed4af544317951ae9d05d463e6de480fc6b5c440ab0b2cb565b5`.
+
+The provider-free adapter probe returned generic `ProviderRelayError` with an
+empty status family for synthetic 400 and 500 responses. Focused projection
+tests passed `3/3` (`103` deselected). No additional provider use, retry, or
+replay occurred. Cleanup verified zero runner-labeled containers, networks,
+credential/state/scenario volumes, and no capacity lease. W07/W08 remain
+dirty and unproven.
