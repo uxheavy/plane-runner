@@ -478,3 +478,19 @@ dirty and unproven.
 
 | UT-052 | blocker | Maya / W07-W08 D commission | `user-testing-output/plane-agents/evidence/w07-w08-d-51c5ed07-failure-extract.json` SHA-256 `69a303c1168fdb654b9c73bd72b071255d47eaf58f719fc6133efee1be06ed2a`; raw bounded result SHA-256 `2bd1eb282ab8aedf65776e640b5d170395d7d3eb699ddebd6ada4c10869bd461` | The one deliberate fresh W07/W08-only assignment reached the real provider route after runtime binding and DB-role gates, then stopped at the first upstream-initiated generic `provider_error`. The existing bounded adapter contract now preserved `statusClass=4xx`; the run failed before any Plane operation or W07/W08 product effect. | Present evidence supports a provider-side or external 4xx rejection, with no local Plane lifecycle defect established. Do not retry or replay this terminal failure. | Retain the owner-safe result and redacted extract; a future fresh assignment requires new authorization after provider/service disposition. No feature pass is claimed. | open |
 | UT-053 | repair | Maya / W07-W08 provider-free contract | `user-testing-output/plane-agents/evidence/w07-w08-provider-reason-subreason-45966c9c.json` SHA-256 `7639bf93b520c76b5e16d29d49499b20c1f12f48123770576a9c517346c9cb2c`; source fix `e46635f6727c39f15ee0915e452ebc2aa2c21e28` | Reused the existing typed `reasonSubreason` seam to distinguish bounded request rejection, auth, rate limiting, upstream unavailability, and existing transport diagnostics while preserving `provider_error`, status-family redaction, lifecycle idempotency, and API/CLI readback. The serial lifecycle failure was fixture/assertion friction, not a provider or product failure. Provider attempts/calls/replays were `0`. | Provider-free contract and runtime checks are green, but prior live W07/W08 ended in an external/provider 4xx and remains unresolved. Do not start or replay a live assignment from this task. | Keep W07/W08 unproven/dirty; root may authorize exactly one new assignment only after external provider disposition and clean gates. | open |
+
+## Operator O04/O06 reconciliation — 2026-08-17
+
+The lane is based on current functional-chain tip
+`358de27c956cfa52a8fa47c6d1b8114c87b0b83a`; descriptor commit
+`808e042b0ef3cdef77cfc0b0a86eb65beeacf85c` contains only O04/O06. Requested
+transport fix `7a08dd2611f9b5a6c5d35ac3887573d649b7a4d4` is patch-equivalent to
+current-chain commit `a50834fa0427600d236e9c7eafee151c1184c0a6`. The pure
+transport probe passed; native pytest collection was blocked by missing
+`celery`. Focused readiness passed `16 + 7 + 4`, with the support suite's
+transient ordering result cleared by focused rerun, ten repetitions, and a
+fresh full pass. No provider/live/Compose/setup/O02/clean-route run occurred.
+Durable receipt:
+`evidence/operator-o04-o06-reconciled-ready-20260817.md`, SHA-256
+`e0a04a4bbc1b38218360db5f96d72746ba82f124876d249fb8d662782e9e72ee`.
+O04/O06 remain dirty/partial and ready-only.

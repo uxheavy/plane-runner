@@ -2881,3 +2881,28 @@ records this diagnosis without changing the retained receipts.
   made no W07/W08 product claim and does not make a fresh live assignment safe
   without external provider disposition. A future root-authorized attempt
   must be a new assignment, never a replay.
+
+## Wave 0CE — reconciled Operator O04/O06 provider-free readiness
+
+- Reconciled the Operator candidate onto current functional-chain tip
+  `358de27c956cfa52a8fa47c6d1b8114c87b0b83a`; applied the O04/O06-only
+  descriptor as `808e042b0ef3cdef77cfc0b0a86eb65beeacf85c`.
+- Current chain commit `a50834fa0427600d236e9c7eafee151c1184c0a6` is
+  patch-equivalent to requested transport fix
+  `7a08dd2611f9b5a6c5d35ac3887573d649b7a4d4`. Pure transport boundary probe
+  passed; native pytest collection stopped at missing `celery` (exit `4`).
+- Provider-free readiness: support/result `16 passed`, launch `7 passed`,
+  descriptor `4 passed, 52 deselected`. The first support run had one
+  transient scheduler ordering failure; a focused rerun and ten repetitions
+  passed, followed by a fresh full `16/16` pass. No provider, live, Compose,
+  setup, O02, or clean-route execution occurred.
+- Fresh workspace:
+  `/Users/nqh/.codex/worktrees/dfba/plane/tmp/plane-agent-o04o06-reconciled-ready.20OL89`;
+  `106/106` source `.env*` copies were byte-for-byte verified without reading,
+  printing, sourcing, or synthesizing values. Reserved project:
+  `plane-agent-o04o06-reconciled-20260817-r1`.
+- Durable redacted receipt:
+  `evidence/operator-o04-o06-reconciled-ready-20260817.md`, SHA-256
+  `e0a04a4bbc1b38218360db5f96d72746ba82f124876d249fb8d662782e9e72ee`.
+  O04/O06 remain partial and ready-to-run only; the serialized capacity gate
+  remains closed.

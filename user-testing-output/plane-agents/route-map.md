@@ -394,6 +394,31 @@ replay. W03-W08 remain dirty; UT-042 is open.
 - W05 and W06 remain dirty; this is provider-free boundary evidence, not route
   closure.
 
+## Wave 0CE — reconciled Operator O04/O06 provider-free readiness
+
+- The Operator lane was reconciled onto current functional-chain tip
+  `358de27c956cfa52a8fa47c6d1b8114c87b0b83a`; the O04/O06-only descriptor was
+  applied as `808e042b0ef3cdef77cfc0b0a86eb65beeacf85c`.
+- Requested transport fix `7a08dd2611f9b5a6c5d35ac3887573d649b7a4d4` is
+  present patch-equivalently as `a50834fa0427600d236e9c7eafee151c1184c0a6`.
+  The pure provider-free boundary probe passed. The exact native pytest
+  regression was collection-blocked by missing `celery`; no Docker fallback
+  was started.
+- Focused readiness passed: support/result `16`, launch `7`, and descriptor
+  `4` with `52` deselected. A first transient capacity-ordering failure was
+  followed by a focused pass, ten repetitions with zero failures, and a fresh
+  full-suite pass. No provider, live, Compose, setup, O02, or clean-route run.
+- Fresh workspace retained at
+  `/Users/nqh/.codex/worktrees/dfba/plane/tmp/plane-agent-o04o06-reconciled-ready.20OL89`;
+  `106/106` source `.env*` copies were byte-for-byte verified without reading,
+  printing, sourcing, or synthesizing values. Reserved project:
+  `plane-agent-o04o06-reconciled-20260817-r1`.
+- Durable redacted receipt:
+  `evidence/operator-o04-o06-reconciled-ready-20260817.md`, SHA-256
+  `e0a04a4bbc1b38218360db5f96d72746ba82f124876d249fb8d662782e9e72ee`.
+- O04/O06 remain dirty/partial and ready-to-run only; the serialized capacity
+  gate remains closed.
+
 ## UT-053 W07/W08 provider-free reasonSubreason contract repair — 2026-08-17
 
 The latest serial lifecycle failure was local workflow/test friction: a
