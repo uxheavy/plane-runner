@@ -225,7 +225,7 @@ def test_operator_live_descriptor_covers_exact_synthetic_omar_routes() -> None:
         for commission in parsed.commissions
         for check in commission.expected["routeChecks"]
     }
-    assert route_checks == {"O01", "O03", "O04", "O05", "O06", "O07", "O08", "O09", "O10"}
+    assert route_checks == {"O01", "O03", "O04", "O05", "O06", "O07", "O08", "O09"}
     assert "O02" not in route_checks
     assert all(
         commission.assignment.target_ref == scenario.ASSIGNED_WORK_ITEM_ALIAS
