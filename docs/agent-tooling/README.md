@@ -5,12 +5,12 @@ This directory contains the compact execution control surface for the non-UI Pla
 ## Current status
 
 G0 through G3 and the provider-free exact-image G4 checks are complete for the
-current shared integration source `57b3ce015e4578e17b3faca6c162ff9ca55e31d0`. The
-API artifact is `plane-agent-api:g4-v17-57b3ce01` at
-`sha256:3ef8e32e449956927e09ccd90a8dd258b2d5d9067f86c17632025b22a424fd66`;
+current shared integration source `6ea6526c018c61d7142ad3412cd7c1afc2355ac6`. The
+API artifact is `plane-agent-api:g4-v18-6ea6526c` at
+`sha256:e3dd3668b607931ed03577151dcc2f9e2ad9e5819648b93293eb4634354e1350`;
 the runtime artifact is
-`plane-agent-runtime:hermes-6c460f10-g4-v17-57b3ce01` at
-`sha256:2b39dfea8af03eeea6ef3da57b72ae2a724474b31bf08b5a5b60a8c3e0dee77a`.
+`plane-agent-runtime:hermes-6c460f10-g4-v18-6ea6526c` at
+`sha256:95ce3ba56448e7abf807786235b945172138fe457b31d5e06c7cf093f869cb63`.
 Both are bound to Hermes `6c460f10fe215718dce36dd73cda94155a9a34f8`, MCP
 `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The exact-image functional
@@ -19,8 +19,9 @@ search-result-to-read handoff with target-digest correlation, versioned
 assigned-work-item binding with authorized success and out-of-scope denial;
 The durable metadata wrapper is the sole child of the approved source parent.
 W05/W06 are live-clean from their immutable v15 receipt and provider-disabled
-zero-delta replay. Manager setup diagnostics are covered by bounded provider-free
-regressions. W03/W04 and W07/W08 remain dirty pending fresh v17 runs.
+zero-delta replay. Manager setup diagnostics and Compose env isolation are covered
+by bounded provider-free regressions. W03/W04 and W07/W08 remain dirty pending
+fresh v18 runs.
 
 S00 Wave 0AT passed at Plane
 `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with one fresh GPT-5.6 Luna
@@ -41,7 +42,7 @@ campaign ledgers are under `user-testing-output/plane-agents/`.
 
 The rollback fixture remains an offline binding for the active candidate. Its
 `current.planeCommit` is the approved source parent
-`57b3ce015e4578e17b3faca6c162ff9ca55e31d0`; its final candidate wrapper is
+`6ea6526c018c61d7142ad3412cd7c1afc2355ac6`; its final candidate wrapper is
 that parent's sole child. The independent `previous` section retains the accepted G3
 service artifact digest
 `sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e`.
