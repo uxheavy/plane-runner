@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "plane-agent-g4/provider-free-fix/v1",
+  "status": "provider_free_complete",
+  "scope": {
+    "lane": "W07-W08",
+    "journey": "D diagnostic projection",
+    "providerAttempts": 0,
+    "providerReplay": false,
+    "liveJourney": false
+  },
+  "source": {
+    "baseCommit": "d56a1bd8074276ac43bd204fd2fee17434595c45",
+    "fixCommit": "cf9d2b8a205d78e0c30250464a5b4c70df90169d"
+  },
+  "rootCause": {
+    "seam": "provider relay to runtime observation to RuntimeProviderAttempt/readback",
+    "existingField": "statusClass",
+    "priorCoarsening": {
+      "http4xx": "error",
+      "http5xx": "error",
+      "transport": "unknown"
+    }
+  },
+  "projection": {
+    "statusClasses": ["2xx", "4xx", "5xx", "transport"],
+    "legacyStatusClassesPreserved": ["", "not_sent", "unknown", "error"],
+    "upstreamStatusErrorCode": "provider_error",
+    "rawProviderBodyRetained": false,
+    "rawProviderStatusRetained": false,
+    "rawHeadersRetained": false,
+    "rawCredentialsRetained": false,
+    "rawPromptOrModelOutputRetained": false
+  },
+  "providerFreeChecks": {
+    "relayFocused": {"status": "passed", "passed": 35},
+    "lifecycleReadbackFocused": {"status": "passed", "selected": 5},
+    "committedRelayLifecycleSet": {"status": "passed", "selected": 28},
+    "boundedContractSuite": {"status": "passed", "passed": 106},
+    "astAndDiffChecks": {"status": "passed"}
+  },
+  "cleanup": {
+    "composeProject": "plane_test_env",
+    "containers": 0,
+    "volumes": 0,
+    "networks": 0
+  },
+  "freshAssignmentSafe": false,
+  "freshAssignmentReason": "Provider acceptance remains unverified; this fix only makes bounded retry/readback classification lossless."
+}

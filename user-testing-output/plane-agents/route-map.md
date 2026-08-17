@@ -394,6 +394,22 @@ replay. W03-W08 remain dirty; UT-042 is open.
 - W05 and W06 remain dirty; this is provider-free boundary evidence, not route
   closure.
 
+### UT-050 W07/W08 provider-free status-family repair — 2026-08-17
+
+The existing `statusClass` projection was repaired at the provider relay to
+runtime observation to Plane attempt/readback seam. It now preserves only the
+safe allowlisted families `2xx`, `4xx`, `5xx`, and `transport`; legacy values
+remain accepted, upstream status errors remain the generic `provider_error`,
+and raw provider response data is not retained. Durable redacted evidence is
+`user-testing-output/plane-agents/evidence/w07-w08-d-e9fad5-status-family-fix.json`,
+SHA-256 `272785ec43879f85e53c43abb96b62570423950b3ed0084cf3ad745bd426ec35`.
+
+Provider-free verification passed the full relay module (35/35), committed
+relay/lifecycle/readback selection (28/28), and bounded contract suite
+(106/106). No provider/live attempt or replay was run; test Compose cleanup
+verified zero containers, volumes, and networks. W07/W08 remain dirty and a
+fresh assignment is not safe from this local fix alone.
+
 ## Wave 0BX — corrected 7466 W05/W06 replacement
 
 - The one fresh capacity-gated `context-governance` journey used clean Plane

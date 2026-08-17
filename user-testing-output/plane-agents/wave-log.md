@@ -2737,3 +2737,24 @@ records this diagnosis without changing the retained receipts.
 - The durable redacted diagnosis extract is `user-testing-output/plane-agents/evidence/w07-w08-d-e9fad5-provider-diagnosis.json`, SHA-256 `1272718d80a96c2c3c9978f117eeb170bd0826a1161fb565da8cc994627730c0`. It retains only bounded failure class/code/status, lifecycle counts, raw-result digest/size/mode, and provider-free check statuses; no raw provider response, prompt, model text, credential, or secret was persisted.
 - The existing pinned Hermes relay regressions passed `6` with `8` deselected. The deterministic local D-shaped request probe completed with valid native request shape, valid tool schema, `store=false`, no relay secret, and a terminal completion. Existing outcome-unknown and midstream-failure cases remained no-fallback and no-replay. The bounded live `provider_error` is therefore a coarsened error-class projection, not evidence of a local relay/request-shape defect; the retained receipt does not distinguish remote rejection from transient upstream failure.
 - No provider/live journey, replay, or fresh assignment was run in this diagnosis. The provider-free failure-projection regressions passed `2/2`; W07/W08 remain dirty, and a fresh assignment is not authorized from the available evidence.
+
+## Wave 0CA — W07/W08 provider-free status-family repair
+
+- The existing `statusClass` field was the sole bounded provider-attempt
+  family contract; the relay had collapsed 4xx/5xx to `error` and transport or
+  midstream ambiguity to `unknown`. Commit
+  `cf9d2b8a205d78e0c30250464a5b4c70df90169d` preserves only `2xx`, `4xx`,
+  `5xx`, and `transport`, keeps legacy values valid, and leaves the existing
+  Plane attempt/readback authority and idempotency path unchanged.
+- Red regressions cover real 4xx, real 5xx, transport/midstream failure, and
+  successful 2xx; they also verify lifecycle replay identity, Plane readback,
+  body/status/header/credential/prompt/model-output redaction, and bounded
+  live validation. The committed provider-free results are relay `35/35`,
+  selected API relay/lifecycle `28/28`, and bounded contract `106/106`.
+- Durable redacted evidence is
+  `user-testing-output/plane-agents/evidence/w07-w08-d-e9fad5-status-family-fix.json`,
+  SHA-256 `272785ec43879f85e53c43abb96b62570423950b3ed0084cf3ad745bd426ec35`.
+  No provider/live journey, retry, or replay was run; provider attempts/effects
+  were `0`. Test Compose cleanup verified zero containers, volumes, and
+  networks. W07/W08 remain dirty and this local fix alone does not make a
+  fresh assignment safe.

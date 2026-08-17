@@ -411,3 +411,27 @@ Manager, or Operator journey was started; the provider-disabled same-fresh
 replay had zero provider attempts and zero semantic deltas. Capacity release
 and exact-owned Docker cleanup passed. This supersedes the vacuous 64d1
 route claim; no additional journey or replay was run.
+
+### UT-050 W07/W08 provider-free status-family repair — 2026-08-17
+
+The provider relay, runtime observation, Plane `RuntimeProviderAttempt`, and
+readback path already used the bounded `statusClass` field. The defect was a
+local projection loss: upstream 4xx/5xx responses became `error`, transport or
+midstream ambiguity became `unknown`, and the bounded helper could not retain
+the safe family. The smallest fix preserves `2xx`, `4xx`, `5xx`, and
+`transport`, keeps legacy values accepted, and maps upstream status errors to
+the existing generic `provider_error`; raw response data remains excluded.
+
+The durable redacted provider-free result is
+`user-testing-output/plane-agents/evidence/w07-w08-d-e9fad5-status-family-fix.json`,
+SHA-256 `272785ec43879f85e53c43abb96b62570423950b3ed0084cf3ad745bd426ec35`.
+The source fix is `cf9d2b8a205d78e0c30250464a5b4c70df90169d`; the red
+regressions cover successful 2xx, real 4xx, real 5xx, transport/midstream
+failure, lifecycle idempotency, Plane readback, redaction, and bounded live
+validation. The committed provider-free checks passed 35 relay tests, 28
+selected API relay/lifecycle tests, and 106 bounded contract tests.
+
+No provider/live journey, provider retry, replay, or `outcome_unknown` replay
+was run. Provider attempts/effects were zero. Test Compose cleanup verified
+zero containers, volumes, and networks. The new contract does not make a
+fresh assignment safe by itself; provider acceptance remains unverified.
