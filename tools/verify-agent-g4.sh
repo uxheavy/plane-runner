@@ -87,6 +87,7 @@ RED_TEAM_LABEL_KEY="com.uxheavy.plane.agent-g4-runtime"
 RED_TEAM_LABEL_VALUE="true"
 G4_PROJECT_NAME="plane-agent-g4-verify-$$-${RANDOM}"
 G4_NETWORK_NAME="${G4_PROJECT_NAME}_test_env"
+G4_TEST_ENV_FILE="${ROOT_DIR}/apps/api/.env.example"
 G4_TEMP_PARENT="${ROOT_DIR}/tmp"
 G4_TEMP_PARENT_CREATED=0
 if [[ ! -d "${G4_TEMP_PARENT}" ]]; then
@@ -522,8 +523,30 @@ PY
 }
 
 compose() {
-    PLANE_TEST_ENV_FILE="${ROOT_DIR}/apps/api/.env.example" \
-        docker compose -p "${G4_PROJECT_NAME}" -f "${ROOT_DIR}/docker-compose-test.yml" "$@"
+    env \
+        -u POSTGRES_DB \
+        -u POSTGRES_HOST \
+        -u POSTGRES_PASSWORD \
+        -u POSTGRES_PORT \
+        -u POSTGRES_USER \
+        -u DATABASE_MIGRATION_URL \
+        -u DATABASE_RUNTIME_URL \
+        -u DATABASE_URL \
+        -u RABBITMQ_HOST \
+        -u RABBITMQ_PASSWORD \
+        -u RABBITMQ_PORT \
+        -u RABBITMQ_USER \
+        -u RABBITMQ_VHOST \
+        -u AMQP_URL \
+        -u REDIS_HOST \
+        -u REDIS_PORT \
+        -u REDIS_URL \
+        PLANE_TEST_ENV_FILE="${G4_TEST_ENV_FILE}" \
+        docker compose \
+            --env-file "${G4_TEST_ENV_FILE}" \
+            -p "${G4_PROJECT_NAME}" \
+            -f "${ROOT_DIR}/docker-compose-test.yml" \
+            "$@"
 }
 
 wait_for_services() {

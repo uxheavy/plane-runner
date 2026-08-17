@@ -1022,6 +1022,35 @@ class G4ContractTests(unittest.TestCase):
             service,
         )
 
+    def test_g4_compose_quarantines_machine_env_and_loads_one_test_env_file(self):
+        verifier = (TOOLS / "verify-agent-g4.sh").read_text(encoding="utf-8")
+        compose = verifier[verifier.index("compose() {") : verifier.index("wait_for_services() {")]
+
+        self.assertIn('G4_TEST_ENV_FILE="${ROOT_DIR}/apps/api/.env.example"', verifier)
+        self.assertIn('PLANE_TEST_ENV_FILE="${G4_TEST_ENV_FILE}"', compose)
+        self.assertIn('docker compose \\\n            --env-file "${G4_TEST_ENV_FILE}"', compose)
+        for name in (
+            "POSTGRES_DB",
+            "POSTGRES_HOST",
+            "POSTGRES_PASSWORD",
+            "POSTGRES_PORT",
+            "POSTGRES_USER",
+            "DATABASE_MIGRATION_URL",
+            "DATABASE_RUNTIME_URL",
+            "DATABASE_URL",
+            "RABBITMQ_HOST",
+            "RABBITMQ_PASSWORD",
+            "RABBITMQ_PORT",
+            "RABBITMQ_USER",
+            "RABBITMQ_VHOST",
+            "AMQP_URL",
+            "REDIS_HOST",
+            "REDIS_PORT",
+            "REDIS_URL",
+        ):
+            with self.subTest(name=name):
+                self.assertIn(f"        -u {name} \\", compose)
+
     def test_live_runner_stages_worker_route_observation_dependency_before_invocation(self):
         runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
 
