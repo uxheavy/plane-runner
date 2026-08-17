@@ -2869,10 +2869,14 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn("PROVIDER_TRANSPORT_SHIM", source)
         self.assertIn("from openai import OpenAI", source)
         self.assertIn("g4-hermes-agent-loop=ok", source)
+        self.assertIn("final_transcript", source)
+        self.assertIn("call_number == len(self._PLAN) - 1", source)
         self.assertIn("provider_seam=deterministic_openai_transport_only", source)
         self.assertIn("agent_tool_registration=ok", source)
         self.assertIn("tamper_guard=fail_closed", source)
         self.assertIn("filesystem_confinement=passed", source)
+        self.assertIn('PLANE_CODE_MODE_OPERATION = "plane.code-mode.execute@1"', source)
+        self.assertIn('"output": None', source)
         self.assertIn("validate_pinned_hermes_identity", source)
         self.assertIn("COPY hermes/ /opt/hermes/", image_dockerfile)
         self.assertIn("ENV PYTHONPATH=/opt/plane/agent/dependencies:/opt:/opt/hermes", image_dockerfile)
@@ -2911,6 +2915,29 @@ class G4ContractTests(unittest.TestCase):
         self.assertNotIn("spec_from_file_location", source)
         self.assertNotIn("sitecustomize.py", source)
         self.assertNotIn("bootstrap_payload", source)
+
+    def test_red_team_can_bind_hermes_identity_from_the_selected_manifest(self):
+        hermes_commit = "c" * 40
+        run_agent_sha256 = "d" * 64
+        with mock.patch.dict(
+            os.environ,
+            {
+                "PLANE_G4_RUNTIME_HERMES_COMMIT": hermes_commit,
+                "PLANE_G4_RUNTIME_HERMES_RUN_AGENT_SHA256": run_agent_sha256,
+            },
+        ):
+            spec = importlib.util.spec_from_file_location(
+                "agent_g4_runtime_red_team_manifest_bound",
+                TOOLS / "agent-g4-runtime-red-team.py",
+            )
+            self.assertIsNotNone(spec)
+            self.assertIsNotNone(spec.loader)
+            module = importlib.util.module_from_spec(spec)
+            assert spec.loader is not None
+            spec.loader.exec_module(module)
+        self.assertEqual(module.HERMES_COMMIT, hermes_commit)
+        self.assertEqual(module.PINNED_HERMES_RUN_AGENT_SHA256, run_agent_sha256)
+        self.assertIn(run_agent_sha256, module.PROVIDER_TRANSPORT_SHIM)
 
     def test_tamper_guard_rejects_shadowed_agent_identity(self):
         valid = {

@@ -14,13 +14,20 @@ import uuid
 from pathlib import Path
 
 
-HERMES_COMMIT = "bc7f13d2ab392752f2667b176c646339c49405f9"
+HERMES_COMMIT = os.environ.get(
+    "PLANE_G4_RUNTIME_HERMES_COMMIT",
+    "bc7f13d2ab392752f2667b176c646339c49405f9",
+)
 RESOURCE_LABEL = "com.uxheavy.plane.agent-g4-runtime"
 EXPECTED_RUNTIME_IMAGE_DIGEST = "sha256:826cc9813bd4d7ab562e2bd701bea7c9c9623cd9d19e5f37bee91ca65e5ba35a"
 EXPECTED_RUNTIME_IMAGE_REVISION = "99b8ba8e62a1e2311a7a0c145045c20d314f40c3"
 RUNTIME_CONTRACT = "plane.agent-runtime/v1"
+PLANE_CODE_MODE_OPERATION = "plane.code-mode.execute@1"
 PINNED_HERMES_RUN_AGENT_PATH = "/opt/hermes/run_agent.py"
-PINNED_HERMES_RUN_AGENT_SHA256 = "67d09e1a31f2fc29ea4b32a03a9256e3d8f438d47d8e4784aafc780803ef4699"
+PINNED_HERMES_RUN_AGENT_SHA256 = os.environ.get(
+    "PLANE_G4_RUNTIME_HERMES_RUN_AGENT_SHA256",
+    "67d09e1a31f2fc29ea4b32a03a9256e3d8f438d47d8e4784aafc780803ef4699",
+)
 
 
 # Injected into the exact image's existing /tmp tmpfs with docker exec. It is
@@ -141,13 +148,18 @@ class _Completions:
         ("tool_search", {"query": "Plane operation", "limit": 8}),
         ("tool_describe", {"name": "plane_operation"}),
         ("tool_call", {"name": "plane_operation", "arguments": {"action": "discover", "input": {"query": "work item", "limit": 8}}}),
+        ("tool_call", {"name": "plane_operation", "arguments": {"action": "read", "operationRef": "operation:catalog.search", "input": {"query": "work item", "limit": 8}}}),
+        ("tool_call", {"name": "plane_operation", "arguments": {"action": "read", "operationRef": "operation:catalog.describe", "input": {"operation_id": "work_item.read"}}}),
         ("tool_call", {"name": "plane_operation", "arguments": {"action": "read", "operationRef": "operation:work_item.read", "input": {"issue_ref": "issue:red-team"}}}),
-        ("execute_code", {"code": "from hermes_tools import plane_operation\nprint(plane_operation('code', 'operation:catalog.search', {'query': 'rename', 'limit': 5}))"}),
+        ("execute_code", {"code": "export default ({ input }) => ({ query: 'rename', limit: 5, input });"}),
         ("tool_call", {"name": "plane_operation", "arguments": {"action": "read", "operationRef": "operation:work_item.read", "input": {"issue_ref": "issue:red-team"}}}),
         ("tool_call", {"name": "plane_operation", "arguments": {"action": "read", "operationRef": "operation:work_item.read", "input": {"forbidden": True, "issue_ref": "issue:red-team"}}}),
+        ("tool_call", {"name": "plane_operation", "arguments": {"action": "read", "operationRef": "operation:catalog.describe", "input": {"operation_id": "work_item.rename"}}}),
         ("tool_call", {"name": "plane_operation", "arguments": {"action": "mutate", "operationRef": "operation:work_item.rename", "input": {"issue_ref": "issue:red-team", "name": "G4 exact image", "actor_ref": "actor:red-team"}}}),
         ("tool_call", {"name": "plane_operation", "arguments": {"action": "mutate", "operationRef": "operation:work_item.rename", "input": {"issue_ref": "issue:red-team", "name": "G4 exact image", "actor_ref": "actor:red-team"}}}),
+        ("tool_call", {"name": "plane_operation", "arguments": {"action": "read", "operationRef": "operation:catalog.describe", "input": {"operation_id": "agent.outcome.submit"}}}),
         ("tool_call", {"name": "plane_operation", "arguments": {"action": "mutate", "operationRef": "operation:agent.outcome.submit", "input": {"run_ref": "run:red-team", "summary": "Exact-image runtime chain completed.", "artifacts": ["artifact:g4-exact-image"], "evidence": ["evidence:g4-exact-image"]}}}),
+        ("tool_call", {"name": "plane_operation", "arguments": {"action": "read", "operationRef": "operation:catalog.describe", "input": {"operation_id": "agent.outcome.publish"}}}),
         ("tool_call", {"name": "plane_publish", "arguments": {"kind": "outcome", "operationRef": "operation:agent.outcome.publish", "resourceRef": "outcome-submission:red-team", "content": "Explicit exact-image outcome publication."}}),
     )
 
@@ -156,23 +168,37 @@ class _Completions:
         call_number = _TRANSPORT_CALLS
         _TRANSPORT_CALLS += 1
         identity = _assert_pinned_hermes_identity()
+        code_mode_call_number = next(
+            index for index, (name, _arguments) in enumerate(self._PLAN) if name == "execute_code"
+        )
         names = _tool_names(kwargs)
+        messages = kwargs.get("messages", [])
+        _diagnose({
+            "event": "g4.provider.call",
+            "callNumber": call_number,
+            "plannedName": self._PLAN[call_number][0] if call_number < len(self._PLAN) else "terminal",
+            "toolNames": sorted(names),
+            "messageRoles": [
+                message.get("role")
+                for message in messages
+                if isinstance(message, dict)
+            ],
+        })
         # Plane tools are deliberately deferred by Hermes' real tool-search
         # assembly. Drive the native bridge tools first; Hermes then unwraps
         # tool_call into the registered Plane handlers. Hermes' adapter does
         # not serialize its native registry in every provider request, so the
         # callback/tool-result trace below is the registration proof.
-        messages = kwargs.get("messages", [])
         terminal_completion = call_number == len(self._PLAN) and not names
         if call_number > 0 and not any(message.get("role") == "tool" for message in messages if isinstance(message, dict)):
             raise RuntimeError("real Hermes tool result did not return through the provider loop")
-        if call_number == 5:
+        if call_number == code_mode_call_number + 1:
             tool_messages = [
                 message for message in messages
                 if isinstance(message, dict) and message.get("role") == "tool"
             ]
             if not any(
-                '"operation":"catalog.search"' in str(message.get("content", ""))
+                f'"operation":"{PLANE_CODE_MODE_OPERATION}"' in str(message.get("content", ""))
                 and '"status":"ok"' in str(message.get("content", ""))
                 for message in tool_messages
             ):
@@ -184,9 +210,19 @@ class _Completions:
         if call_number < len(self._PLAN):
             name, arguments = self._PLAN[call_number]
             tool_delta = _tool_call("g4-call-" + str(call_number + 1), name, arguments)
+            final_transcript = (
+                "g4-hermes-agent-loop=ok provider_seam=deterministic_openai_transport_only "
+                "hermes_agent_identity=run_agent.AIAgent "
+                "pinned_hermes_run_agent=ok path=/opt/hermes/run_agent.py "
+                "sha256=67d09e1a31f2fc29ea4b32a03a9256e3d8f438d47d8e4784aafc780803ef4699 "
+                "agent_tool_registration=ok callback_trace=real_tool_loop "
+                "tamper_guard=fail_closed shim_boundary=provider_transport_only"
+                if call_number == len(self._PLAN) - 1
+                else None
+            )
             delta = SimpleNamespace(
                 role="assistant",
-                content=None,
+                content=final_transcript,
                 tool_calls=[tool_delta],
                 reasoning=None,
                 reasoning_content=None,
@@ -256,7 +292,10 @@ class OpenAI:
 
 class AsyncOpenAI(OpenAI):
     pass
-'''
+'''.replace(
+    "67d09e1a31f2fc29ea4b32a03a9256e3d8f438d47d8e4784aafc780803ef4699",
+    PINNED_HERMES_RUN_AGENT_SHA256,
+)
 
 
 CODEX_UDS_PROBE = r'''"""Exercise the image-owned Hermes Codex adapter in a child process.
@@ -371,6 +410,7 @@ import sys
 
 TOKEN = sys.argv[1]
 HOST_PROTOCOL = "plane.agent-runtime/v1"
+PLANE_CODE_MODE_OPERATION = "plane.code-mode.execute@1"
 state = {
     "events": [],
     "issueName": "Initial exact-image issue",
@@ -416,6 +456,7 @@ def error(call, code, message):
         "requestId": "request:" + suffix,
         "gatewayReceipt": "gateway:" + suffix,
         "auditReceipt": "audit:" + suffix,
+        "output": None,
         "error": {"code": code, "message": message},
     }
 
@@ -427,10 +468,52 @@ def result(call):
     payload = call["input"]
     if call["action"] == "discover":
         return "ok", receipt(call, "discover", {"operations": ["work_item.read", "work_item.rename", "agent.outcome.submit"]}), None
+    if operation == "catalog.search":
+        return "ok", receipt(
+            call,
+            operation,
+            {
+                "operations": [
+                    {"operationId": "work_item.read", "operationRef": "operation:work_item.read"},
+                    {"operationId": "work_item.rename", "operationRef": "operation:work_item.rename"},
+                    {"operationId": "agent.outcome.submit", "operationRef": "operation:agent.outcome.submit"},
+                    {"operationId": "agent.outcome.publish", "operationRef": "operation:agent.outcome.publish"},
+                ]
+            },
+        ), None
+    if operation == "catalog.describe":
+        operation_id = payload.get("operation_id") if isinstance(payload, dict) else None
+        if operation_id not in {"work_item.read", "work_item.rename", "agent.outcome.submit", "agent.outcome.publish"}:
+            return "denied", error(call, "NOT_AUTHORIZED", "catalog description is not available"), None
+        operation_ref = "operation:" + operation_id
+        operation_description = {
+            "operationId": operation_id,
+            "operationRef": operation_ref,
+            "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+        }
+        description = receipt(
+            call,
+            operation,
+            {
+                "operation": operation_description,
+            },
+        )
+        description["operation"] = operation_description
+        return "ok", description, None
     if call["action"] == "code":
-        if call["source"] != "code":
-            return "denied", error(call, "NOT_AUTHORIZED", "code callbacks require the code source"), None
-        return "ok", receipt(call, operation, {"matches": ["operation:work_item.rename"]}), None
+        if call["source"] != "code" or operation != PLANE_CODE_MODE_OPERATION:
+            return "denied", error(call, "NOT_AUTHORIZED", "code callbacks require the Plane Code Mode operation"), None
+        capsule = payload
+        if (
+            not isinstance(capsule, dict)
+            or capsule.get("schemaVersion") != "plane.code-mode/v1"
+            or capsule.get("entrypoint") != "default"
+            or capsule.get("input") != {}
+            or not isinstance(capsule.get("source"), str)
+            or not capsule["source"].lstrip().startswith("export default")
+        ):
+            return "denied", error(call, "INVALID_INPUT", "Code Mode capsule is not exact"), None
+        return "ok", receipt(call, operation, {"matches": ["operation:catalog.search"]}), None
     if operation == "work_item.read":
         if payload.get("forbidden") is True:
             return "denied", error(call, "NOT_AUTHORIZED", "policy denied this read"), None
@@ -1103,10 +1186,19 @@ def main() -> int:
                 "-c",
                 "test ! -r /tmp/g4-provider-seam-error || cat /tmp/g4-provider-seam-error",
             ).stdout
+            gateway_diagnostic = docker(
+                "exec",
+                name,
+                "python3",
+                "-c",
+                GATEWAY_GET_SCRIPT,
+                host_token,
+            ).stdout
+            runtime_diagnostic = docker("logs", name).stdout
             bounded_frames = json.dumps(frames[-3:], sort_keys=True, separators=(",", ":"))[:4096]
             raise ProbeFailure(
                 "runtime_dispatch_child_not_completed:"
-                f"frames={bounded_frames}:provider={provider_diagnostic[-2048:]}"
+                f"frames={bounded_frames}:provider={provider_diagnostic[-2048:]}:gateway={gateway_diagnostic[-4096:]}:runtime={runtime_diagnostic[-4096:]}"
             )
         if not any(
             "g4-hermes-agent-loop=ok" in frame
@@ -1162,6 +1254,8 @@ def main() -> int:
             or "operation:work_item.read" not in operations
             or "operation:work_item.rename" not in operations
             or "operation:catalog.search" not in operations
+            or "operation:catalog.describe" not in operations
+            or PLANE_CODE_MODE_OPERATION not in operations
             or "operation:agent.outcome.submit" not in operations
             or "operation:agent.outcome.publish" not in operations
         ):
