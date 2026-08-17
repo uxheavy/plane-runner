@@ -126,6 +126,11 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert 'host.call_plane_operation("work_item.rename"' in mutation.assignment.objective
     assert "hermes_tools.plane_operation" not in mutation.assignment.objective
     mutation_route_guidance = scenario.model_route_expectations(mutation.expected)
+    read_guidance = next(
+        item for item in mutation_route_guidance if "invoke work_item.read" in item
+    )
+    assert "workItemReadInput object verbatim" in read_guidance
+    assert "do not reconstruct, translate, or infer" in read_guidance
     rename_guidance = next(
         item for item in mutation_route_guidance if "invoke work_item.rename" in item
     )

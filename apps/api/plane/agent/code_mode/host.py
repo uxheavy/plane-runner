@@ -444,6 +444,9 @@ class CodeModeHostRPC:
         }
         if isinstance(error, Mapping) and isinstance(error.get("code"), str):
             observation["errorCode"] = error["code"]
+        target_digest = receipt.get("targetDigest")
+        if isinstance(target_digest, str):
+            observation["targetDigest"] = target_digest
         if len(canonical_json(observation).encode("utf-8")) > MAX_CODE_MODE_OBSERVATION_BYTES:
             raise CodeModeObservationError("Code Mode observation exceeds its size bound")
         if (
@@ -867,7 +870,26 @@ class CodeModeHostRPC:
             receipt["result"] = response.get("result", {})
         else:
             receipt["error"] = response.get("error", {"code": "INTERNAL_ERROR", "retryable": False})
+        target_digest = self._target_digest(raw)
+        if target_digest is not None:
+            receipt["targetDigest"] = target_digest
         return receipt
+
+    @staticmethod
+    def _target_digest(raw: Mapping[str, Any]) -> str | None:
+        """Expose only a stable discriminator for semantic work-item targets."""
+
+        operation_id = raw.get("operation_id")
+        input_data = raw.get("input")
+        if not isinstance(operation_id, str) or not operation_id.startswith("work_item."):
+            return None
+        if not isinstance(input_data, Mapping):
+            return None
+        target = {
+            "project_id": input_data.get("project_id"),
+            "issue_id": input_data.get("issue_id"),
+        }
+        return hashlib.sha256(canonical_json(target).encode("utf-8")).hexdigest()
 
     def _stable_replay_response(self, raw: Mapping[str, Any], response: Mapping[str, Any]) -> Mapping[str, Any]:
         """Keep replay results stable, except where publication needs disposition."""

@@ -1,8 +1,10 @@
 """Plane-side host socket proof for the Hermes production callback seam."""
 
-from datetime import timedelta
+import hashlib
 import json
 import socket
+from datetime import timedelta
+from types import SimpleNamespace
 
 from django.utils import timezone
 import pytest
@@ -22,6 +24,7 @@ from plane.agent.runtime.host_rpc import (
     PlaneHostServer,
     build_gateway_host_port,
 )
+from plane.app.permissions import ProjectEntityPermission
 from plane.db.models import (
     AgentRole,
     Issue,
@@ -36,6 +39,7 @@ from plane.db.models import (
     State,
 )
 from plane.operation_gateway.gateway import OperationGateway
+from plane.operation_gateway.operations import OperationRequest
 
 
 def _call(*, run_id, invocation_id, action, operation_ref, input, source="model"):
@@ -450,6 +454,16 @@ def test_invocation_scoped_socket_executes_typescript_through_the_bound_host(
                 "requestId": result.output["observations"][0]["requestId"],
                 "gatewayReceipt": result.output["observations"][0]["gatewayReceipt"],
                 "auditReceipt": result.output["observations"][0]["auditReceipt"],
+                "targetDigest": hashlib.sha256(
+                    json.dumps(
+                        {
+                            "project_id": str(gateway_project.id),
+                            "issue_id": str(gateway_issue.id),
+                        },
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                ).hexdigest(),
             }
         ]
         gateway_issue.refresh_from_db()
@@ -481,6 +495,133 @@ def test_invocation_scoped_socket_executes_typescript_through_the_bound_host(
         assert replay.output == result.output
         assert OperationGatewayIdempotency.objects.filter(idempotency_key="idempotency:g2-typescript-rename").count() == 1
         assert OperationGatewayAudit.objects.filter(operation_id="work_item.rename").count() == 2
+    finally:
+        server.close()
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_code_mode_search_to_read_preserves_target_and_denies_cross_project(
+    tmp_path, workspace, gateway_project, gateway_issue, create_user
+):
+    """The real host callback keeps the search target and live auth distinguishes its denial."""
+
+    actor = create_actor(
+        workspace=workspace,
+        project=gateway_project,
+        display_name="G2 search-bound worker",
+        credential_ref="plane-credential:g2-search-bound",
+        created_by=create_user,
+    )
+    profile = create_profile(
+        actor,
+        role=AgentRole.WORKER,
+        instructions="Use the invocation-bound TypeScript host.",
+        runtime_defaults={"maxCodeModeCalls": 3},
+        created_by=create_user,
+    )
+    assignment = create_assignment(
+        actor,
+        project=gateway_project,
+        target_ref=f"issue:{gateway_issue.id}",
+        objective="Exercise the search-to-read callback binding.",
+        acceptance_criteria=["Read the searched item and deny an unprivileged item."],
+        created_by=create_user,
+    )
+    run = create_run(assignment, profile, idempotency_key="idempotency:g2-search-bound-run", created_by=create_user)
+    invocation = record_invocation(
+        run,
+        idempotency_key="idempotency:g2-search-bound-invocation",
+        trigger="initial",
+    )
+    port = build_gateway_host_port(invocation=invocation, gateway=OperationGateway())
+    server = PlaneHostServer(socket_path=tmp_path / "g2-search-bound.sock", invoke=port.invoke)
+    server.start()
+    common = {"run_id": run.snapshot["runId"], "invocation_id": invocation.invocation_id}
+    assert port._host.request.user.id == actor.principal_id
+    assert port._host.request.agent_actor_ref == f"actor:{actor.id}"
+    read_source = """
+        export default async function ({host, input}: {host: any; input: any}) {
+            return await host.call_plane_operation(
+                "work_item.read", input,
+                "idempotency:g2-search-bound-read",
+                "correlation:g2-search-bound-read"
+            );
+        }
+    """
+    try:
+        search = _round_trip(
+            server.socket_path,
+            _call(
+                **common,
+                action="read",
+                operation_ref="operation:search_workspace",
+                input={"query": gateway_issue.name, "limit": 1},
+            ),
+        )
+        assert search.status == "ok", search
+        result = next(item for item in search.output["result"]["results"] if item["objectType"] == "work_item")
+        read_input = result["workItemReadInput"]
+
+        authorized = _round_trip(
+            server.socket_path,
+            _code_call(**common, source=read_source, input_data=read_input),
+        )
+        assert authorized.status == "ok", authorized
+        assert authorized.output["result"]["result"]["work_item"]["id"] == str(gateway_issue.id)
+        expected_target_digest = hashlib.sha256(
+            json.dumps(read_input, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        assert authorized.output["observations"] == [
+            {
+                "source": "code",
+                "action": "code",
+                "operationRef": "operation:work_item.read",
+                "status": "ok",
+                "requestId": authorized.output["observations"][0]["requestId"],
+                "gatewayReceipt": authorized.output["observations"][0]["gatewayReceipt"],
+                "auditReceipt": authorized.output["observations"][0]["auditReceipt"],
+                "targetDigest": expected_target_digest,
+            }
+        ]
+
+        other_project = Project.objects.create(
+            name="G2 Unprivileged Project",
+            identifier="G2U",
+            workspace=workspace,
+            created_by=create_user,
+        )
+        other_issue = Issue.objects.create(
+            name="G2 Unprivileged Issue",
+            project=other_project,
+            workspace=workspace,
+            created_by=create_user,
+        )
+        assert not ProjectMember.objects.filter(project=other_project, member=actor.principal).exists()
+        assert not ProjectEntityPermission().has_permission(
+            OperationRequest(port._host.request, method="GET"),
+            SimpleNamespace(workspace_slug=workspace.slug, project_id=str(other_project.id)),
+        )
+        denied_input = {"project_id": str(other_project.id), "issue_id": str(other_issue.id)}
+        denied = _round_trip(
+            server.socket_path,
+            _code_call(
+                **common,
+                source=read_source.replace("g2-search-bound-read", "g2-search-bound-denied"),
+                input_data=denied_input,
+            ),
+        )
+        denied_record = OperationGatewayIdempotency.objects.get(idempotency_key="idempotency:g2-search-bound-denied")
+        assert denied_record.request_input == denied_input
+        assert denied_record.caller_id == actor.principal_id
+        assert denied.status == "ok", denied
+        assert denied.output["result"]["ok"] is False
+        assert denied.output["result"]["error"]["code"] == "NOT_AUTHORIZED"
+        assert denied.output["observations"][0]["status"] == "denied"
+        assert denied.output["observations"][0]["errorCode"] == "NOT_AUTHORIZED"
+        assert denied.output["observations"][0]["targetDigest"] == hashlib.sha256(
+            json.dumps(denied_input, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
     finally:
         server.close()
 

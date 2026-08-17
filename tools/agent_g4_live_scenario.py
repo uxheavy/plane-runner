@@ -269,6 +269,16 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
                 " Use the next route operation's exact operationId as input.operation_id; never use operationRef "
                 "or an operation: prefix."
             )
+        if (
+            operation_id == "work_item.read"
+            and index > 1
+            and outcomes[index - 2].get("operationId") == "search_workspace"
+        ):
+            guidance += (
+                " Use the preceding search_workspace response's workItemReadInput object verbatim as this call's "
+                "complete input; do not reconstruct, translate, or infer project_id or issue_id from targetRef, "
+                "ref, key, title, or workspaceRef."
+            )
         if operation_id == "work_item.rename" and "W04" in route_checks:
             guidance += (
                 " This semantic mutation must be performed by the restricted Code Mode composition, not by a "
