@@ -1,0 +1,122 @@
+{
+  "schemaVersion": "plane.agent-g4/w07-w08-redacted-evidence/v1",
+  "journey": {
+    "lane": "W07-W08",
+    "scenario": "worker",
+    "commission": "w07-w08-artifact-publication-readback",
+    "descriptorSha256": "472caab0a49cd5b1e11cd7e6213e3091b926270b00b4d247e4ff05e09d892708",
+    "status": "failed_before_commission_result",
+    "firstFailure": {
+      "phase": "api-invocation",
+      "errorClass": "RuntimeError",
+      "reasonCode": "runtime_error",
+      "reasonPhase": "runtime_process",
+      "reasonDetail": "process_exit",
+      "reasonSubreason": "runtime_execution_failed"
+    }
+  },
+  "binding": {
+    "candidateCommit": "e9fad58037d539a65b453bdc64fecc387c209fb7",
+    "g3Baseline": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
+    "hermesCommit": "292e866374ca9e9615473fc9bf5dda1913b672e1",
+    "mcpGitlink": "c04974ed6624f17b41e63ef8182661929e77e0d3",
+    "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889",
+    "apiImage": {
+      "tag": "plane-agent-api:g4-w07-w08-e9fad5",
+      "digest": "sha256:732ee2fc168d27833d8d82fe375f102daee4d0157bd98cd03a00508471b7f643"
+    },
+    "runtimeImage": {
+      "tag": "plane-agent-runtime:hermes-292e8663-g4-w07-w08-e9fad5",
+      "digest": "sha256:ad4b66ce76bd759656373c63e7585686b88f86aec1f75b408b78d2f192b1cfd1"
+    },
+    "manifestSha256": "1ffda90e0da71a4ee279bb6287a15e4ec36ea681c9711e28b4304b3c21cf044e",
+    "authoritySha256": "6b29aa817c7ce2c6a5926a509aae1dc6c01467b80656e909f6499281de41d082",
+    "configSha256": "68cc5980cbfd983738cde5fc5b643e1b8ab01d47bf2a8c7258bc3d6b99ad87f8",
+    "provider": {
+      "name": "openai-codex",
+      "model": "gpt-5.6-luna",
+      "reasoning": "xhigh",
+      "baseUrl": "https://chatgpt.com/backend-api/codex/responses",
+      "fallbackAllowed": false,
+      "credentialSource": "chatgpt-subscription"
+    },
+    "providerRelay": {
+      "protocol": "plane.agent-runtime/provider-relay/v1",
+      "transport": "AF_UNIX",
+      "childNetworkPolicy": "none",
+      "externalEgressOwner": "agent-runtime",
+      "hostGatewaySeparate": true,
+      "hermesHookStatus": "integrated"
+    }
+  },
+  "preProviderGates": {
+    "configOnly": "passed",
+    "descriptor": "passed",
+    "runtimeBinding": {
+      "status": "passed",
+      "settingsSource": "django",
+      "secretTarget": "/run/plane-agent-runtime-secret",
+      "secretMode": "0600",
+      "runtimeHost": "agent-runtime",
+      "transportKind": "remote",
+      "transportClass": "RemoteRuntimeTransport"
+    },
+    "databaseRoleBoundary": "runner_reached_api_invocation_after_bootstrap_and_migrate"
+  },
+  "providerAttempts": {
+    "count": 1,
+    "rows": [
+      {
+        "sequence": 1,
+        "phase": "failed",
+        "upstreamInitiated": true,
+        "statusClass": "error",
+        "errorCode": "provider_error"
+      }
+    ],
+    "fallbackUsed": false
+  },
+  "lifecycle": {
+    "run": { "present": true, "state": "failed" },
+    "invocation": { "present": true, "state": "failed" },
+    "runtimeExit": { "present": true, "kind": "failed", "failureCode": "runtime_error" },
+    "terminal": { "present": true, "kind": "run_failure", "reasonCategory": "runtime_execution_failed" },
+    "planeOperationAudit": {
+      "search_workspace": 0,
+      "work_item.read": 0,
+      "work_item.rename": 0,
+      "agent.outcome.evaluate": 0,
+      "agent.outcome.submit": 0,
+      "agent.outcome.publish": 0
+    },
+    "artifactCount": 0,
+    "outcomeSubmissionCount": 0,
+    "publicationCount": 0,
+    "humanVisibleTerminalProductEventCount": 0,
+    "ordinaryFinalText": "not_observed",
+    "transcriptEvidence": "not_observed",
+    "ownerReadback": "not_observed",
+    "crossWorkspaceReadback": "not_observed"
+  },
+  "replay": {
+    "eligible": false,
+    "attempted": false,
+    "reason": "primary_failed_before_coherent_commission_success",
+    "providerDisabled": "not_run",
+    "deltas": "not_applicable"
+  },
+  "rawResult": {
+    "path": "tmp/persona-wave-v6/worker-live-w07-w08-d-e9fad5-20260817-05a00b39/result.json",
+    "mode": "0600",
+    "sizeBytes": 5553,
+    "sha256": "00fe2c436cac264f23aa4bf57957ddccf0151287a3653088e68a193d1f65fa5a"
+  },
+  "cleanup": {
+    "capacityLease": "absent",
+    "runnerLabeledContainers": 0,
+    "runnerLabeledVolumes": 0,
+    "runnerLabeledNetworks": 0,
+    "runnerProjectDirectories": 0
+  },
+  "conclusion": "W07 and W08 remain unproven; provider use stopped at the first genuine provider/runtime failure and no retry or replay was performed."
+}
