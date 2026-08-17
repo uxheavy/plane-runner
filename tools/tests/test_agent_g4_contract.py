@@ -3453,6 +3453,7 @@ class G4ContractTests(unittest.TestCase):
         )
         self.assertEqual(result["current"]["planeCommit"], MANIFEST["candidateBinding"]["parentCommit"])
         self.assertEqual(result["previous"]["planeCommit"], MANIFEST["candidateBinding"]["acceptedG3Baseline"])
+        self.assertNotEqual(result["acceptedG3"]["mcpGitlink"], MANIFEST["pins"]["mcpGitlink"])
         self.assertEqual(
             result["acceptedG3"]["imageDigest"],
             "sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e",
