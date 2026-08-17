@@ -192,6 +192,14 @@ print("\t".join(provider[key] for key in (
 PY
 )"
 PLANE_TEST_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48), end="")')"
+AUDIT_RUNTIME_ROLE=plane_runtime
+AUDIT_GOVERNANCE_ROLE=plane_audit_owner
+AUDIT_MIGRATION_ROLE=plane_migrator
+AUDIT_PROVISIONER_ROLE=plane
+AUDIT_RUNTIME_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48), end="")')"
+AUDIT_MIGRATION_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48), end="")')"
+RUNTIME_DATABASE_URL="postgresql://${AUDIT_RUNTIME_ROLE}:${AUDIT_RUNTIME_PASSWORD}@test-db:5432/plane"
+MIGRATION_DATABASE_URL="postgresql://${AUDIT_MIGRATION_ROLE}:${AUDIT_MIGRATION_PASSWORD}@test-db:5432/plane"
 
 api_image_id="$(docker image inspect "${API_IMAGE}" --format '{{.Id}}' 2>/dev/null)" || {
     printf '%s\n' 'event=agent.g4.live-runner status=failed expected=manifest-bound-api-image-available actual=image-unavailable suggestion=prepare-the-exact-immutable-api-artifact' >&2
@@ -742,13 +750,19 @@ live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" \
 live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" \
     docker run --rm --network "${NETWORK}" \
     --env DJANGO_SETTINGS_MODULE=plane.settings.test \
+    --env PLANE_DB_PROVISIONER_MODE=1 \
+    --env PLANE_AUDIT_ENFORCE_ROLE_SEPARATION=1 \
     --env POSTGRES_HOST=test-db \
+    --env DATABASE_PROVISIONER_URL=postgresql://plane:plane@test-db:5432/plane \
     --env DATABASE_URL=postgresql://plane:plane@test-db:5432/plane \
     --env DATABASE_RUNTIME_URL=postgresql://plane:plane@test-db:5432/plane \
     --env DATABASE_MIGRATION_URL=postgresql://plane:plane@test-db:5432/plane \
     --env PLANE_AUDIT_RUNTIME_ROLE=plane_runtime \
     --env PLANE_AUDIT_GOVERNANCE_ROLE=plane_audit_owner \
     --env PLANE_AUDIT_MIGRATION_ROLE=plane_migrator \
+    --env PLANE_AUDIT_PROVISIONER_ROLE="${AUDIT_PROVISIONER_ROLE}" \
+    --env PLANE_AUDIT_RUNTIME_PASSWORD="${AUDIT_RUNTIME_PASSWORD}" \
+    --env PLANE_AUDIT_MIGRATION_PASSWORD="${AUDIT_MIGRATION_PASSWORD}" \
     --env REDIS_HOST=test-redis \
     --env REDIS_URL=redis://test-redis:6379/ \
     --env RABBITMQ_HOST=test-mq \
@@ -761,12 +775,14 @@ live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" \
     --env DJANGO_SETTINGS_MODULE=plane.settings.test \
     --env PLANE_DB_MIGRATION_MODE=1 \
     --env POSTGRES_HOST=test-db \
-    --env DATABASE_URL=postgresql://plane:plane@test-db:5432/plane \
-    --env DATABASE_RUNTIME_URL=postgresql://plane:plane@test-db:5432/plane \
-    --env DATABASE_MIGRATION_URL=postgresql://plane:plane@test-db:5432/plane \
+    --env DATABASE_URL="${MIGRATION_DATABASE_URL}" \
+    --env DATABASE_MIGRATION_URL="${MIGRATION_DATABASE_URL}" \
     --env PLANE_AUDIT_RUNTIME_ROLE=plane_runtime \
     --env PLANE_AUDIT_GOVERNANCE_ROLE=plane_audit_owner \
     --env PLANE_AUDIT_MIGRATION_ROLE=plane_migrator \
+    --env PLANE_AUDIT_PROVISIONER_ROLE="${AUDIT_PROVISIONER_ROLE}" \
+    --env PLANE_AUDIT_RUNTIME_PASSWORD="${AUDIT_RUNTIME_PASSWORD}" \
+    --env PLANE_AUDIT_MIGRATION_PASSWORD="${AUDIT_MIGRATION_PASSWORD}" \
     --env REDIS_HOST=test-redis \
     --env REDIS_URL=redis://test-redis:6379/ \
     --env RABBITMQ_HOST=test-mq \
@@ -777,13 +793,18 @@ LIVE_PHASE=audit-bootstrap
 live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" \
     docker run --rm --network "${NETWORK}" \
     --env DJANGO_SETTINGS_MODULE=plane.settings.test \
+    --env PLANE_DB_PROVISIONER_MODE=1 \
+    --env PLANE_AUDIT_ENFORCE_ROLE_SEPARATION=1 \
     --env POSTGRES_HOST=test-db \
+    --env DATABASE_PROVISIONER_URL=postgresql://plane:plane@test-db:5432/plane \
     --env DATABASE_URL=postgresql://plane:plane@test-db:5432/plane \
     --env DATABASE_RUNTIME_URL=postgresql://plane:plane@test-db:5432/plane \
     --env DATABASE_MIGRATION_URL=postgresql://plane:plane@test-db:5432/plane \
     --env PLANE_AUDIT_RUNTIME_ROLE=plane_runtime \
     --env PLANE_AUDIT_GOVERNANCE_ROLE=plane_audit_owner \
     --env PLANE_AUDIT_MIGRATION_ROLE=plane_migrator \
+    --env PLANE_AUDIT_PROVISIONER_ROLE="${AUDIT_PROVISIONER_ROLE}" \
+    --env PLANE_AUDIT_RUNTIME_PASSWORD="${AUDIT_RUNTIME_PASSWORD}" \
     --env REDIS_HOST=test-redis \
     --env REDIS_URL=redis://test-redis:6379/ \
     --env RABBITMQ_HOST=test-mq \
@@ -880,8 +901,13 @@ live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" \
     --env SECRET_KEY="${PLANE_TEST_SECRET}" \
     --env APP_BASE_URL=http://api:8000 \
     --env WEB_URL=http://api:8000 \
-    --env DATABASE_URL=postgresql://plane:plane@test-db:5432/plane \
-    --env DATABASE_RUNTIME_URL=postgresql://plane:plane@test-db:5432/plane \
+    --env DATABASE_URL="${RUNTIME_DATABASE_URL}" \
+    --env DATABASE_RUNTIME_URL="${RUNTIME_DATABASE_URL}" \
+    --env PLANE_AUDIT_RUNTIME_ROLE="${AUDIT_RUNTIME_ROLE}" \
+    --env PLANE_AUDIT_GOVERNANCE_ROLE="${AUDIT_GOVERNANCE_ROLE}" \
+    --env PLANE_AUDIT_MIGRATION_ROLE="${AUDIT_MIGRATION_ROLE}" \
+    --env PLANE_AUDIT_PROVISIONER_ROLE="${AUDIT_PROVISIONER_ROLE}" \
+    --env PLANE_AUDIT_ENFORCE_ROLE_SEPARATION=1 \
     --env REDIS_HOST=test-redis \
     --env REDIS_URL=redis://test-redis:6379/ \
     --env RABBITMQ_HOST=test-mq \
@@ -910,8 +936,13 @@ live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" \
     --env SECRET_KEY="${PLANE_TEST_SECRET}" \
     --env APP_BASE_URL=http://api:8000 \
     --env WEB_URL=http://api:8000 \
-    --env DATABASE_URL=postgresql://plane:plane@test-db:5432/plane \
-    --env DATABASE_RUNTIME_URL=postgresql://plane:plane@test-db:5432/plane \
+    --env DATABASE_URL="${RUNTIME_DATABASE_URL}" \
+    --env DATABASE_RUNTIME_URL="${RUNTIME_DATABASE_URL}" \
+    --env PLANE_AUDIT_RUNTIME_ROLE="${AUDIT_RUNTIME_ROLE}" \
+    --env PLANE_AUDIT_GOVERNANCE_ROLE="${AUDIT_GOVERNANCE_ROLE}" \
+    --env PLANE_AUDIT_MIGRATION_ROLE="${AUDIT_MIGRATION_ROLE}" \
+    --env PLANE_AUDIT_PROVISIONER_ROLE="${AUDIT_PROVISIONER_ROLE}" \
+    --env PLANE_AUDIT_ENFORCE_ROLE_SEPARATION=1 \
     --env REDIS_HOST=test-redis \
     --env REDIS_URL=redis://test-redis:6379/ \
     --env RABBITMQ_HOST=test-mq \

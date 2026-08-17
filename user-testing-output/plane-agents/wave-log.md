@@ -2614,3 +2614,33 @@ records this diagnosis without changing the retained receipts.
 - Exactly one fresh capacity-gated `context-governance` journey used `openai-codex/gpt-5.6-luna` xhigh with fallback disabled and the checked-in ChatGPT subscription destination. Before API invocation, the exact API-container binding probe passed with `settingsSource=django`, secret target `/run/plane-agent-runtime-secret`, mode `0600`, readable owner-only secret, runtime host alias `agent-runtime`, `transportKind=remote`, and `transportClass=RemoteRuntimeTransport`. The bounded retained projection is `user-testing-output/plane-agents/evidence/w05-w06-c-d748-runtime-binding-probe.json`, SHA-256 `ad03cf8f22765516f4e246dcbb3cdbe4b3f78604b94096debf04782a0bdcc8eb`.
 - The journey then stopped at `api-invocation` with bounded `unspecified` / `unavailable`, exit `1`, before the commission result. Provider attempts/effects were `0`, runtime events were `0`, and no W05/W06 receipt, outcome, publication, or replay was produced. Run `bdc59a54-ef76-4982-bb1f-431e4eb048d9` and invocation `invocation:686e3a8a-567c-4311-994c-995d0440d06d` are retained in the owner-only result `tmp/persona-wave-v6/w05-w06-fresh-d748ecbc-r2/result.json`, mode `0600`, SHA-256 `c1c89a7363353931b74ce0475a22557adb18c3e5e58b603d928e7e057c0fe9b`; durable redacted failure evidence is `user-testing-output/plane-agents/evidence/w05-w06-c-d748-api-invocation-stop.json`, SHA-256 `0eac3da74b4c5232954773c0d59b55c596bfd48cd316f45058121f1c70e7bdb0`.
 - The provider-disabled same-invocation replay was ineligible because the primary failed before a commission result. No retry or `outcome_unknown` replay occurred. Capacity-lease release and exact-owned Docker cleanup verified zero remaining containers, volumes, networks, and lease. W05/W06 remain dirty; this is local API-invocation evidence, not route closure.
+
+## Wave 0BV — UT-049 provider-free root-cause correction
+
+- The provider-free debugger reproduced the exact API invocation boundary in
+  the immutable d748 API image (`sha256:55992ebbd2a818c0e234176ecbf98b3161a7b3f727243d977283840b79f0cca7`)
+  on a disposable debug network with a deterministic fake runtime at the
+  `agent-runtime` alias. The original failure was narrowed to
+  `AuditRoleBoundaryError` in `plane.operation_gateway.role_boundary` before
+  runtime dispatch; no provider attempts, effects, or runtime requests were
+  observed.
+- The launcher seam correction provisions the existing distinct Operation
+  Gateway roles, uses the migration role for migrations, binds production API
+  containers to the runtime role/database URL, and enables enforced audit
+  bootstrap before and after migrations. The focused red regression was
+  failing before the source correction and passes after it:
+  `G4ContractTests.test_live_runner_binds_production_audit_runtime_to_api_container`.
+- The exact production-Django binding probe passed with settings source
+  `django`, secret target `/run/plane-agent-runtime-secret`, mode `0600`,
+  root ownership/readability, runtime host `agent-runtime`, `remote`, and
+  `RemoteRuntimeTransport`. The actual checked-in invocation helper reached
+  the fake runtime and stopped at the intentionally synthetic runtime failure
+  with bounded `RuntimeError / runtime_process / process_exit /
+  runtime_execution_failed`, runtime exit present, and provider attempts/effects
+  `0`. Durable evidence is
+  `user-testing-output/plane-agents/evidence/w05-w06-c-d748-ut049-provider-free-fix.json`,
+  SHA-256 `25a8688e8ad4946091f80dec1dd8054f73c2e99b333469d7c0f610d5b4b22afc`.
+- No live/provider journey, retry, replay, or `outcome_unknown` replay was run.
+  The exact debug containers, volume, network, and temporary probe artifacts
+  are cleaned before handoff; W05/W06 remain open pending one separately
+  authorized fresh live retest of the committed fix.

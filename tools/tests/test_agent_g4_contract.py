@@ -845,6 +845,35 @@ class G4ContractTests(unittest.TestCase):
         self.assertLess(before_migrate, migrate)
         self.assertLess(migrate, after_migrate)
 
+    def test_live_runner_binds_production_audit_runtime_to_api_container(self):
+        source = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+        api_boundary = source[source.index("LIVE_PHASE=api-runtime-binding") :]
+        for expected in (
+            '--env DATABASE_URL="${RUNTIME_DATABASE_URL}"',
+            '--env DATABASE_RUNTIME_URL="${RUNTIME_DATABASE_URL}"',
+            '--env PLANE_AUDIT_RUNTIME_ROLE="${AUDIT_RUNTIME_ROLE}"',
+            '--env PLANE_AUDIT_GOVERNANCE_ROLE="${AUDIT_GOVERNANCE_ROLE}"',
+            '--env PLANE_AUDIT_MIGRATION_ROLE="${AUDIT_MIGRATION_ROLE}"',
+            '--env PLANE_AUDIT_PROVISIONER_ROLE="${AUDIT_PROVISIONER_ROLE}"',
+            '--env PLANE_AUDIT_ENFORCE_ROLE_SEPARATION=1',
+        ):
+            self.assertIn(expected, api_boundary)
+        migration = source[source.index("LIVE_PHASE=migrate") : source.index("LIVE_PHASE=audit-bootstrap")]
+        for expected in (
+            '--env DATABASE_URL="${MIGRATION_DATABASE_URL}"',
+            '--env DATABASE_MIGRATION_URL="${MIGRATION_DATABASE_URL}"',
+            '--env PLANE_AUDIT_MIGRATION_PASSWORD="${AUDIT_MIGRATION_PASSWORD}"',
+        ):
+            self.assertIn(expected, migration)
+        bootstrap_sections = (
+            source[source.index("LIVE_PHASE=compose") : source.index("LIVE_PHASE=migrate")],
+            source[source.index("LIVE_PHASE=audit-bootstrap") : source.index("LIVE_PHASE=credential-state-volume")],
+        )
+        for bootstrap in bootstrap_sections:
+            self.assertIn("--env DATABASE_PROVISIONER_URL=postgresql://plane:plane@test-db:5432/plane", bootstrap)
+            self.assertIn('--env PLANE_DB_PROVISIONER_MODE=1', bootstrap)
+            self.assertIn('--env PLANE_AUDIT_ENFORCE_ROLE_SEPARATION=1', bootstrap)
+
     def test_live_runner_validates_authority_provider_before_any_egress_or_credential_use(self):
         runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
         invoke = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
@@ -1476,8 +1505,8 @@ class G4ContractTests(unittest.TestCase):
 
         self.assertIn("secrets.token_urlsafe(48), end=\"\"", checkout)
         self.assertIn('chmod 600 "${RUNTIME_SECRET_FILE}"', checkout)
-        self.assertIn("--env DATABASE_URL=postgresql://plane:plane@test-db:5432/plane", api)
-        self.assertIn("--env DATABASE_RUNTIME_URL=postgresql://plane:plane@test-db:5432/plane", api)
+        self.assertIn('--env DATABASE_URL="${RUNTIME_DATABASE_URL}"', api)
+        self.assertIn('--env DATABASE_RUNTIME_URL="${RUNTIME_DATABASE_URL}"', api)
         for migration_environment_name in (
             "POSTGRES_HOST",
             "POSTGRES_USER",
