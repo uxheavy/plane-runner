@@ -3354,3 +3354,41 @@ records this diagnosis without changing the retained receipts.
 - Provider attempts, Compose runs, replays, and refreezes: `0`. W07/W08 remain
   unproven; root must integrate this lane commit before any future candidate
   or live assignment.
+## Wave 0CM-O — immutable v16 Operator live stop — 2026-08-18
+
+- A fresh detached Docker-visible checkout used immutable wrapper
+  `be7992f2e57a70779e3d3845a5462316c686d819` and source
+  `4e2b85384b85ecff822cd1136a668258dc76a90a`; all 13 source `.env*` files
+  byte-compared at identical paths without reading or sourcing values.
+  Manifest SHA-256 was
+  `b876b45699203c55b463fb7b86cff3f3ece13aaa7e246a4ecda80c395adcf857`;
+  API/runtime/Hermes/MCP/SDK pins matched v16 exactly. No image was rebuilt,
+  pulled, refrozen, or changed.
+- One Docker-invisible `/private/tmp` launch stopped before capacity, Compose,
+  assignment, or provider access and published no result; its two task-owned
+  leaked volumes were removed. The lane then waited for live W07 owner PID
+  71519 to exit and release the canonical lease before acquiring normally.
+- Exactly one aggregate Operator primary then used
+  `openai-codex/gpt-5.6-luna` xhigh with fallback disabled. The first
+  commission completed nine upstream `2xx` attempts, run
+  `31b0b78d-969b-43d3-b478-15316fe127b7`, invocation
+  `invocation:4322b906-cf08-47ee-9853-087b6b9c7963`, completed runtime exit
+  sequence 19, one outcome, one applied publication, and one terminal.
+- The first route gate failed because `catalog.search` and
+  `catalog.describe` were absent and `work_item.read` returned
+  `VALIDATION_ERROR`. `search_workspace` succeeded once,
+  `agent.outcome.evaluate` was denied once with `NOT_AUTHORIZED`, and submit
+  and publish succeeded once. O01/O03 remain dirty; O04-O09 never started and
+  remain untested. O02 was not rerun.
+- No retry, second primary, fallback, provider-disabled replay, or blind
+  `outcome_unknown` replay occurred. The raw bounded result passed canonical
+  validation at SHA-256
+  `3044511ea1affad4ef8da159a4958416189973246a9dc38952eafc38afa07f02`.
+  Durable redacted extract:
+  `user-testing-output/plane-agents/evidence/operator-o01-o09-v16-live-stop-20260818.json`,
+  SHA-256 `b611d6417f82d09983d2ea7543867a9920b913468c6f5a6dbb3843bc5eed7b3c`.
+- Operator cleanup was zero containers, networks, volumes, and no retained
+  lease. A subsequent global live project was positively identified as the
+  Manager lane and excluded from Operator cleanup accounting. Cross-lane
+  W03/W04 stderr digest `98b2ab8f...` did not match Operator
+  `168fb2c4...`; no module-error correlation was found.

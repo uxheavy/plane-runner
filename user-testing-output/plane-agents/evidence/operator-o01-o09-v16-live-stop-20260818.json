@@ -1,0 +1,108 @@
+{
+  "schemaVersion": "plane-agent-g4/operator-live-stop/v1",
+  "status": "failed",
+  "scope": {
+    "persona": "Omar Operator",
+    "routes": ["O01", "O03", "O04", "O05", "O06", "O07", "O08", "O09"],
+    "preservedCleanRoute": "O02",
+    "firstCommission": "presentation-and-sdk-identity",
+    "laterCommissionsStarted": false
+  },
+  "candidate": {
+    "source": "4e2b85384b85ecff822cd1136a668258dc76a90a",
+    "wrapper": "be7992f2e57a70779e3d3845a5462316c686d819",
+    "apiImage": "plane-agent-api:g4-v16-4e2b8538",
+    "apiDigest": "sha256:46b902baec80d92c6c318061b9fdcc40858d3b9a39f97749f32ace46dc321f52",
+    "runtimeImage": "plane-agent-runtime:hermes-6c460f10-g4-v16-4e2b8538",
+    "runtimeDigest": "sha256:68c23fa2cb03b21ca126dcd18a39c87123b4ec78cc5f1bfcc3dcedf507d68f1a",
+    "manifestSha256": "b876b45699203c55b463fb7b86cff3f3ece13aaa7e246a4ecda80c395adcf857",
+    "descriptorSha256": "5594c150048dc824c3ce84a1cccd163f30d9753a25d53303316bf6b45a52f6c6",
+    "hermes": "6c460f10fe215718dce36dd73cda94155a9a34f8",
+    "mcp": "c04974ed6624f17b41e63ef8182661929e77e0d3",
+    "sdk": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
+  },
+  "provider": {
+    "name": "openai-codex",
+    "model": "gpt-5.6-luna",
+    "reasoning": "xhigh",
+    "fallbackAllowed": false,
+    "freshPrimaryCount": 1,
+    "upstreamInitiated": 9,
+    "completed2xx": 9,
+    "providerErrors": 0,
+    "transportUnknown": 0,
+    "replayCount": 0,
+    "secondPrimaryCount": 0
+  },
+  "lifecycle": {
+    "runRef": "run:31b0b78d-969b-43d3-b478-15316fe127b7",
+    "runState": "succeeded",
+    "invocationRef": "invocation:4322b906-cf08-47ee-9853-087b6b9c7963",
+    "invocationState": "succeeded",
+    "runtimeExit": "completed",
+    "runtimeFinalSequence": 19,
+    "visibleOutcomeTerminals": 1,
+    "outcomeSubmissions": 1,
+    "appliedPublications": 1,
+    "productRef": "outcome-submission:613f6e73-6faf-4641-a273-146621c612d2",
+    "productEventRef": "product-event:84c5cbc6-a005-45c1-85e4-23cc5bb33ee1"
+  },
+  "firstFailure": {
+    "phase": "api-invocation",
+    "errorClass": "RuntimeError",
+    "reasonCode": "unspecified",
+    "stderrSha256": "168fb2c48d892a4ed6dc9cc1b48f915d2c958ca37bc66e9e36a755110ce08041",
+    "scenarioFailures": [
+      "operation:catalog.search",
+      "operation:catalog.describe",
+      "operation:work_item.read"
+    ],
+    "operationAudit": [
+      {"operationId": "catalog.search", "status": "absent", "count": 0},
+      {"operationId": "catalog.describe", "status": "absent", "count": 0},
+      {"operationId": "search_workspace", "status": "success", "count": 1},
+      {"operationId": "work_item.read", "status": "unavailable", "errorCode": "VALIDATION_ERROR", "count": 1},
+      {"operationId": "agent.outcome.evaluate", "status": "denied", "errorCode": "NOT_AUTHORIZED", "count": 1},
+      {"operationId": "agent.outcome.submit", "status": "success", "count": 1},
+      {"operationId": "agent.outcome.publish", "status": "success", "count": 1}
+    ]
+  },
+  "routeDisposition": {
+    "O01": "failed: catalog.search and catalog.describe were absent",
+    "O03": "failed with first commission: SDK identity proof was not completed",
+    "O04": "not_started_after_fail_stop",
+    "O05": "not_started_after_fail_stop",
+    "O06": "not_started_after_fail_stop",
+    "O07": "not_started_after_fail_stop",
+    "O08": "not_started_after_fail_stop",
+    "O09": "not_started_after_fail_stop",
+    "O02": "untouched_existing_clean_evidence_preserved"
+  },
+  "rawResult": {
+    "schemaVersion": "plane-agent-g4/live-failure/v1",
+    "mode": "0600",
+    "bytes": 10423,
+    "sha256": "3044511ea1affad4ef8da159a4958416189973246a9dc38952eafc38afa07f02",
+    "canonicalValidator": "passed"
+  },
+  "crossLaneCorrelation": {
+    "w03w04StderrSha256": "98b2ab8f98a12883dc00dfb027dd3e0397e7ff2f08fde2d44b3684bd07baf1",
+    "sameDigest": false,
+    "sameBoundedErrorClass": false
+  },
+  "preflightFriction": {
+    "dockerInvisibleCheckoutAttempt": "stopped_before_capacity_compose_assignment_provider",
+    "providerAttempts": 0,
+    "resultPublished": false,
+    "taskOwnedLeakedVolumesRemoved": 2
+  },
+  "cleanup": {
+    "operatorCapacityLeaseReleased": true,
+    "operatorContainers": 0,
+    "operatorNetworks": 0,
+    "operatorVolumes": 0,
+    "subsequentGlobalLiveOwner": "manager-v16",
+    "subsequentGlobalResourcesExcluded": true,
+    "rawSecretsRetained": false
+  }
+}

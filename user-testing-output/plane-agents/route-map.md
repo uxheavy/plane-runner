@@ -457,6 +457,35 @@ replay. W03-W08 remain dirty; UT-042 is open.
   SHA-256 `aab1c2f3f14e5d116cd204cc3cdc2569e4dcaf733264e14aac942aeb738bd1a4`.
   No retry or replay ran. Cleanup is exact-zero for the capacity marker and
   runner-labeled containers, volumes, and networks.
+## Wave 0CM-O — immutable v16 Operator live stop — 2026-08-18
+
+- One serialized aggregate Operator journey used wrapper
+  `be7992f2e57a70779e3d3845a5462316c686d819`, sole source parent
+  `4e2b85384b85ecff822cd1136a668258dc76a90a`, API
+  `plane-agent-api:g4-v16-4e2b8538@sha256:46b902baec80d92c6c318061b9fdcc40858d3b9a39f97749f32ace46dc321f52`,
+  runtime
+  `plane-agent-runtime:hermes-6c460f10-g4-v16-4e2b8538@sha256:68c23fa2cb03b21ca126dcd18a39c87123b4ec78cc5f1bfcc3dcedf507d68f1a`,
+  and manifest SHA-256
+  `b876b45699203c55b463fb7b86cff3f3ece13aaa7e246a4ecda80c395adcf857`.
+- The first commission, O01/O03 `presentation-and-sdk-identity`, reached nine
+  completed upstream `2xx` Luna attempts, one succeeded run/invocation,
+  completed runtime exit sequence 19, one outcome submission, one applied
+  publication, and one visible terminal. It then failed its route gate:
+  `catalog.search` and `catalog.describe` were absent and `work_item.read`
+  returned `VALIDATION_ERROR`. Search, evaluator denial, submission, and
+  publication succeeded.
+- Fail-stop was honored. O04-O09 did not start; there was no second primary,
+  fallback, provider retry, provider-disabled replay, or blind
+  `outcome_unknown` replay. O02 was untouched. O01/O03 are `dirty`; O04-O09
+  remain `untested` on v16.
+- Durable redacted extract:
+  `user-testing-output/plane-agents/evidence/operator-o01-o09-v16-live-stop-20260818.json`,
+  SHA-256 `b611d6417f82d09983d2ea7543867a9920b913468c6f5a6dbb3843bc5eed7b3c`.
+  Raw bounded result SHA-256 is
+  `3044511ea1affad4ef8da159a4958416189973246a9dc38952eafc38afa07f02`;
+  canonical validation passed. Operator cleanup was zero containers,
+  networks, volumes, and no retained lease before the next serialized Manager
+  lane acquired capacity.
 
 ## Wave 0CK — Operator O01/O03-O09 provider-free readiness — 2026-08-18
 
