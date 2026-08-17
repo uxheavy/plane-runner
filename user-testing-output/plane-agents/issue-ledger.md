@@ -630,6 +630,12 @@ Provider calls and live-runner attempts remain `0`; no Compose/provider journey 
 | ----- | -------- | --------------- | ---------------- | ------------------------------ | ---------------- |
 | UT-061 | blocker repair | Maya / W03-W04 and W07-W08 | `w03-w04-v15-389b25e7-live-stop.json`; raw bounded result SHA-256 `fcdce831806712e6d371e613935151c711d984fe3f39cf3395e75adb52e16a4b`; manifest SHA-256 `474f1898b1abedb29925e57cea7356434215de3484902dd8fa8234b3649c0a4a` | Two independent live lanes searched successfully but reached `VALIDATION_ERROR` and `NOT_AUTHORIZED` on the assigned `work_item.read`. The retained receipts do not expose raw arguments, so correlation is an explicit inference: the typed canonical input still required model reconstruction of the generic `plane_operation` envelope. The owning fix returns a schema-declared ready-to-call envelope and changes no authorization decision. | `READY_WITH_COMMIT`: provider-free `63 + 10 + 173` tests passed, provider attempts `0`; no second live run, fallback, replay, or blind `outcome_unknown` replay. W03/W04 and W07/W08 remain dirty pending future authorized proof. / ready |
 
+## UT-062 — v16 W03/W04 runner diagnostic gap — Wave 0CM — 2026-08-18
+
+| Issue | Severity | Persona / route | Durable evidence | Root cause / bounded disposition | Retest / status |
+| ----- | -------- | --------------- | ---------------- | ------------------------------ | ---------------- |
+| UT-062 | blocker | Maya / W03-W04 one fresh serialized assignment | `w03-w04-v16-be7992f2-live-stop.json`; raw bounded result SHA-256 `e6464c76028150d5689b86b856e6fbe16b9b5f149db7121790bb47a3ddba7fa6`; manifest SHA-256 `b876b45699203c55b463fb7b86cff3f3ece13aaa7e246a4ecda80c395adcf857` | The single corrected immutable-v16 assignment exited at `api-invocation` with `ModuleNotFoundError`, but the bounded v1 runner receipt discarded the module identifier and lifecycle counts. The exact product/provider outcome cannot be reconstructed. The existing failure path now retains only a validated dotted Python identifier, without raw stderr or a new execution abstraction. | Fail-stop observed: fallback, retry, second primary, and replay are `0`; provider-free regressions pass `129/129`; cleanup is exact. W03/W04 remain unproven and no new live assignment is authorized. / open |
+
 ### Immutable v15 W07/W08 triggering evidence
 
 | Issue | Severity | Persona / route | Durable evidence | Root cause / bounded disposition | Retest / status |

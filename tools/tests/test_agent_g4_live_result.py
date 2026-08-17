@@ -140,6 +140,36 @@ class LiveResultPersistenceTests(unittest.TestCase):
                 },
             )
 
+    def test_module_failure_receipt_retains_only_a_valid_module_identifier(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            destination = root / "module.result"
+            result = self._run_helper(
+                destination,
+                root / "missing-evidence.json",
+                "--status",
+                "1",
+                "--error-class",
+                "ModuleNotFoundError",
+                "--missing-module",
+                "plane_runtime.bridge_v2",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)["missingModule"], "plane_runtime.bridge_v2")
+
+            refused = self._run_helper(
+                root / "refused.result",
+                root / "missing-evidence.json",
+                "--status",
+                "1",
+                "--error-class",
+                "ModuleNotFoundError",
+                "--missing-module",
+                "../../provider-secret",
+            )
+            self.assertEqual(refused.returncode, 2)
+            self.assertIn(b"reason=missing_module_invalid", refused.stderr)
+
     def test_result_is_owner_only_and_survives_run_directory_deletion(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

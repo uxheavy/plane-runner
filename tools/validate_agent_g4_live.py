@@ -1989,7 +1989,7 @@ def validate_evidence(
         raise ContractError("evidence_must_be_one_json_object")
     if evidence.get("schemaVersion") == "plane-agent-g4/live-runner-failure/v1":
         required = {"schemaVersion", "status", "phase", "errorClass", "exitCode", "reasonCategory", "stderrSha256"}
-        if set(evidence) != required:
+        if not required.issubset(evidence) or set(evidence).difference(required | {"missingModule"}):
             raise ContractError("runner_failure_receipt_fields_invalid")
         _exact(evidence["status"], "failed", "runner_failure_receipt_status")
         if evidence["phase"] not in {
@@ -2036,6 +2036,12 @@ def validate_evidence(
             raise ContractError("runner_failure_receipt_reason_category_invalid")
         if not isinstance(evidence["stderrSha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", evidence["stderrSha256"]):
             raise ContractError("runner_failure_receipt_stderr_sha256_invalid")
+        if "missingModule" in evidence and (
+            evidence["errorClass"] != "ModuleNotFoundError"
+            or not isinstance(evidence["missingModule"], str)
+            or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]{0,127}", evidence["missingModule"])
+        ):
+            raise ContractError("runner_failure_receipt_missing_module_invalid")
         return {
             "evidenceSha256": hashlib.sha256(evidence_text.encode("utf-8")).hexdigest(),
             "collected": 0,

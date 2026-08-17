@@ -275,3 +275,25 @@ def test_bounded_stderr_digest_is_stable_and_redacts_secrets(tmp_path: Path) -> 
 
     assert outputs[0] == outputs[1]
     assert raw_stderr not in outputs[0]
+
+
+def test_bounded_stderr_retains_only_a_valid_missing_module_identifier(tmp_path: Path) -> None:
+    error_file = tmp_path / "error.log"
+    digest_file = tmp_path / "digest.sha256"
+    raw_stderr = (
+        "Traceback (most recent call last):\n"
+        "ModuleNotFoundError: No module named 'plane_runtime.bridge_v2'\n"
+        "provider_token=must-not-persist\n"
+    )
+    command = f"printf %s {shlex.quote(raw_stderr)} >&2; exit 1"
+    result = run_support(
+        tmp_path / "lease",
+        f'live_run_bounded_stderr "{error_file}" "{digest_file}" bash -c {shlex.quote(command)}; cat "{error_file}"',
+    )
+    assert result.returncode == 0, result.stderr
+    assert error_file.read_text(encoding="ascii") == (
+        "error_class=ModuleNotFoundError\n"
+        "reason_category=docker_precontainer_failure\n"
+        "missing_module=plane_runtime.bridge_v2\n"
+    )
+    assert "must-not-persist" not in result.stdout

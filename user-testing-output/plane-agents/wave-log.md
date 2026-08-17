@@ -3229,6 +3229,34 @@ records this diagnosis without changing the retained receipts.
   containers, volumes, and networks. The bounded tracked extract is
   `user-testing-output/plane-agents/evidence/w05-w06-v15-389b25e7-live.json`.
 
+## Wave 0CM — immutable v16 W03/W04 diagnostic stop — 2026-08-18
+
+- The exact wrapper `be7992f2e57a70779e3d3845a5462316c686d819`, source
+  `4e2b85384b85ecff822cd1136a668258dc76a90a`, manifest SHA-256
+  `b876b45699203c55b463fb7b86cff3f3ece13aaa7e246a4ecda80c395adcf857`,
+  and published API/runtime digests were verified without rebuilding. Seven
+  environment files were copied byte-for-byte without reading values, and
+  `setup.sh` was not run.
+- Provider-free acceptance passed `63` scenario/lease tests and `10`
+  API/gateway/host/Code Mode/replay/confinement tests. An exact staged-only,
+  network-disabled immutable-image probe imported all four scenario modules.
+- One pre-provider launcher call rejected the canonical manifest location as
+  out of scope. With no Plane/provider effects, the exact manifest was copied
+  byte-for-byte into the task-owned run tree. Exactly one corrected fresh
+  assignment then ran under the capacity lease and stopped at
+  `api-invocation` with `ModuleNotFoundError`, exit `1`, and stderr SHA-256
+  `98b2ab8f98a12883dc00dfb027dd3e0397e7ff2f08fde2d44b3684bd07baf1f7`.
+- The v1 runner receipt did not retain the missing module or lifecycle
+  readback. Run, invocation, provider-attempt, and Plane-effect counts are
+  therefore `unknown`, not zero. Retry, fallback, second primary, and replay
+  counts are each `0`; W03/W04 success remains withheld.
+- The existing bounded failure path now retains only a validated Python module
+  identifier when available. It still discards raw stderr, paths, prompts,
+  provider text, and secrets. Focused support/result/contract regressions pass
+  `129/129`. Cleanup proved no capacity lease and zero task-labeled
+  containers, networks, or volumes. Durable redacted evidence:
+  `user-testing-output/plane-agents/evidence/w03-w04-v16-be7992f2-live-stop.json`.
+
 ## Wave 0CL — immutable v15 W07/W08 live product stop — 2026-08-18
 
 - Immutable candidate: wrapper `389b25e76375d105120962ea548f8b8faaef04c3`,

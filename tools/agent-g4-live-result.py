@@ -62,6 +62,7 @@ SENSITIVE_FIELD_RE = re.compile(
     rb"(?i)(?:password|passwd|secret|token|api[_-]?key|authorization|credential)\s*[\"']?\s*[:=]"
 )
 STDERR_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+MODULE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")
 
 
 class ResultPersistenceError(ValueError):
@@ -117,7 +118,13 @@ def _read_schema_controlled_evidence(path: Path, *, required: bool) -> bytes:
 
 
 def _bounded_failure_line(
-    *, phase: str, error_class: str, exit_code: int, reason_category: str, stderr_sha256: str = EMPTY_STDERR_SHA256
+    *,
+    phase: str,
+    error_class: str,
+    exit_code: int,
+    reason_category: str,
+    stderr_sha256: str = EMPTY_STDERR_SHA256,
+    missing_module: str = "",
 ) -> bytes:
     if phase not in FAILURE_PHASES:
         raise ResultPersistenceError("failure_phase_invalid")
@@ -131,14 +138,23 @@ def _bounded_failure_line(
         raise ResultPersistenceError("reason_category_invalid")
     if not isinstance(stderr_sha256, str) or not STDERR_SHA256_RE.fullmatch(stderr_sha256):
         raise ResultPersistenceError("stderr_sha256_invalid")
+    if missing_module and (error_class != "ModuleNotFoundError" or not MODULE_NAME_RE.fullmatch(missing_module)):
+        raise ResultPersistenceError("missing_module_invalid")
+    module_detail = f" missing_module={missing_module}" if missing_module else ""
     return (
         f"event=agent.g4.live-runner.failure phase={phase} error_class={error_class} "
-        f"exit_code={exit_code} reason_category={reason_category} stderr_sha256={stderr_sha256}\n"
+        f"exit_code={exit_code} reason_category={reason_category} stderr_sha256={stderr_sha256}{module_detail}\n"
     ).encode("ascii")
 
 
 def _runner_failure_receipt(
-    *, phase: str, error_class: str, exit_code: int, reason_category: str, stderr_sha256: str = EMPTY_STDERR_SHA256
+    *,
+    phase: str,
+    error_class: str,
+    exit_code: int,
+    reason_category: str,
+    stderr_sha256: str = EMPTY_STDERR_SHA256,
+    missing_module: str = "",
 ) -> bytes:
     _bounded_failure_line(
         phase=phase,
@@ -146,19 +162,20 @@ def _runner_failure_receipt(
         exit_code=exit_code,
         reason_category=reason_category,
         stderr_sha256=stderr_sha256,
+        missing_module=missing_module,
     )
-    return json.dumps(
-        {
-            "schemaVersion": RUNNER_FAILURE_SCHEMA,
-            "status": "failed",
-            "phase": phase,
-            "errorClass": error_class,
-            "exitCode": exit_code,
-            "reasonCategory": reason_category,
-            "stderrSha256": stderr_sha256,
-        },
-        separators=(",", ":"),
-    ).encode("ascii")
+    receipt = {
+        "schemaVersion": RUNNER_FAILURE_SCHEMA,
+        "status": "failed",
+        "phase": phase,
+        "errorClass": error_class,
+        "exitCode": exit_code,
+        "reasonCategory": reason_category,
+        "stderrSha256": stderr_sha256,
+    }
+    if missing_module:
+        receipt["missingModule"] = missing_module
+    return json.dumps(receipt, separators=(",", ":")).encode("ascii")
 
 
 def _validate_destination_parent(destination: Path) -> Path:
@@ -269,6 +286,7 @@ def persist_result(
     error_class: str = "unavailable",
     reason_category: str = "unavailable",
     stderr_sha256: str = EMPTY_STDERR_SHA256,
+    missing_module: str = "",
 ) -> bytes:
     """Publish exactly one schema-controlled JSON receipt."""
 
@@ -282,6 +300,7 @@ def persist_result(
             exit_code=status,
             reason_category=reason_category,
             stderr_sha256=stderr_sha256,
+            missing_module=missing_module,
         )
     if evidence_payload:
         payload = evidence_payload
@@ -292,6 +311,7 @@ def persist_result(
             exit_code=status,
             reason_category=reason_category,
             stderr_sha256=stderr_sha256,
+            missing_module=missing_module,
         )
     else:
         raise ResultPersistenceError("evidence_unavailable")
@@ -313,6 +333,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--error-class", default="unavailable")
     parser.add_argument("--reason-category", default="unavailable")
     parser.add_argument("--stderr-sha256", default=EMPTY_STDERR_SHA256)
+    parser.add_argument("--missing-module", default="")
     return parser.parse_args(argv)
 
 
@@ -327,6 +348,7 @@ def main(argv: list[str] | None = None) -> int:
             error_class=args.error_class,
             reason_category=args.reason_category,
             stderr_sha256=args.stderr_sha256,
+            missing_module=args.missing_module,
         )
     except ResultPersistenceError as exc:
         print(f"event=agent.g4.live-runner.result status=failed reason={exc.reason}", file=sys.stderr)
@@ -339,6 +361,7 @@ def main(argv: list[str] | None = None) -> int:
                 exit_code=args.status,
                 reason_category=args.reason_category,
                 stderr_sha256=args.stderr_sha256,
+                missing_module=args.missing_module,
             )
         )
     sys.stdout.buffer.write(payload)

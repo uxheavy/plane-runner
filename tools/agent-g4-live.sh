@@ -277,6 +277,26 @@ else:
 PY
 }
 
+safe_missing_module() {
+    python3 - "${ERROR_FILE}" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+try:
+    text = Path(sys.argv[1]).read_bytes()[:8192].decode("ascii", errors="strict")
+except (OSError, UnicodeDecodeError):
+    raise SystemExit(0)
+
+for line in text.splitlines():
+    if line.startswith("missing_module="):
+        module = line.split("=", 1)[1]
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]{0,127}", module):
+            print(module)
+        break
+PY
+}
+
 safe_docker_failure_reason() {
     python3 - "${ERROR_FILE}" <<'PY'
 from pathlib import Path
@@ -368,6 +388,7 @@ cleanup() {
     local cleanup_status=0
     local reason_category=unavailable
     local error_class=unavailable
+    local missing_module=
     local stderr_sha256
     stderr_sha256="$(live_stderr_sha256 "${ERROR_DIGEST_FILE}")"
     if [[ "${status}" -ne 0 ]]; then
@@ -375,6 +396,7 @@ cleanup() {
             reason_category="$(safe_docker_failure_reason)"
         fi
         error_class="$(safe_error_class)"
+        missing_module="$(safe_missing_module)"
     fi
     if [[ -n "${RESULT_FILE}" ]] && ! python3 "${ROOT_DIR}/tools/agent-g4-live-result.py" \
         --destination "${RESULT_FILE}" \
@@ -382,6 +404,7 @@ cleanup() {
         --status "${status}" \
         --phase "${LIVE_PHASE}" \
         --error-class "${error_class}" \
+        --missing-module "${missing_module}" \
         --reason-category "${reason_category}" \
         --stderr-sha256 "${stderr_sha256}" >/dev/null; then
         printf '%s\n' 'event=agent.g4.live-runner status=failed phase=result-persistence expected=owner-only-atomic-result actual=persist-failed' >&2

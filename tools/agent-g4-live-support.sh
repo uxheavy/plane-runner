@@ -141,6 +141,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import stat
 import sys
 
@@ -198,6 +199,14 @@ while True:
 
 text = bytes(sample).decode("utf-8", errors="replace")
 error_class = next((name for name in ERROR_CLASSES if name in text), "unspecified")
+missing_module = ""
+if error_class == "ModuleNotFoundError":
+    match = re.search(
+        r"ModuleNotFoundError:\s+No module named ['\"]([A-Za-z_][A-Za-z0-9_.]{0,127})['\"]",
+        text,
+    )
+    if match:
+        missing_module = match.group(1)
 lowered = text.lower()
 if "read-only file system" in lowered and ("mountpoint" in lowered or "mount" in lowered):
     reason = "docker_mount_target_read_only"
@@ -222,7 +231,11 @@ if reason not in DOCKER_REASONS:
     raise SystemExit(2)
 write_owner_only(
     sys.argv[1],
-    f"error_class={error_class}\nreason_category={reason}\n".encode("ascii"),
+    (
+        f"error_class={error_class}\n"
+        f"reason_category={reason}\n"
+        + (f"missing_module={missing_module}\n" if missing_module else "")
+    ).encode("ascii"),
 )
 write_owner_only(sys.argv[2], f"{digest.hexdigest()}\n".encode("ascii"))
 PY
