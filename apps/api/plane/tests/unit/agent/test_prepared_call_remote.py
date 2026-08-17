@@ -265,3 +265,46 @@ def test_prepared_port_replay_is_cached_before_gateway(
     ))
     assert altered_correlation.status == "invalid"
     assert altered_correlation.error_code == "PREPARED_CALL_INVALID"
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_search_requires_consuming_prepared_read_before_searching_again(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    _, invocation = _invocation(
+        workspace, gateway_project, gateway_issue, create_user, suffix="prepared-port-handoff"
+    )
+    port = build_gateway_host_port(invocation=invocation, gateway=OperationGateway())
+    search_call = _port_call(
+        invocation,
+        operation_ref="operation:search_workspace",
+        input_data={"query": "Gateway Issue", "limit": 1},
+    )
+    search = port.invoke(search_call)
+    assert search.status == "ok", search
+    assert any(item.get("workItemReadCall") for item in search.output["result"]["results"])
+
+    repeated_search = port.invoke(search_call)
+
+    assert repeated_search.status == "invalid"
+    assert repeated_search.error_code == "VALIDATION_ERROR"
+    assert "prepared work-item read" in repeated_search.error_message.lower()
+    assert OperationGatewayIdempotency.objects.filter(operation_id="search_workspace").count() == 1
+
+    read_call = next(
+        item["workItemReadCall"]
+        for item in search.output["result"]["results"]
+        if item.get("workItemReadCall")
+    )
+    read = port.invoke(
+        _port_call(
+            invocation,
+            operation_ref=read_call["operationRef"],
+            input_data=read_call["input"],
+        )
+    )
+    assert read.status == "ok", read
+    resumed_search = port.invoke(search_call)
+    assert resumed_search.status == "ok", resumed_search
+    assert OperationGatewayIdempotency.objects.filter(operation_id="search_workspace").count() == 1

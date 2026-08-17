@@ -1046,6 +1046,7 @@ class PlaneGatewayHostPort:
         self._invocation_ref = host.binding.invocation_ref
         self._prepared_calls: dict[str, dict[str, Any]] = {}
         self._prepared_calls_lock = threading.RLock()
+        self._prepared_read_handoff_pending = False
 
     def invoke(self, call: PlaneHostCall) -> PlaneHostResult:
         if call.run_id != self._run_ref or call.invocation_id != self._invocation_ref:
@@ -1125,6 +1126,12 @@ class PlaneGatewayHostPort:
         if not call.operation_ref.startswith("operation:"):
             return self._error(call, "VALIDATION_ERROR", "Plane operationRef is invalid")
         operation_id = call.operation_ref.removeprefix("operation:")
+        if operation_id == "search_workspace" and self._prepared_read_handoff_is_pending():
+            return self._error(
+                call,
+                "VALIDATION_ERROR",
+                "A prepared work-item read is pending; invoke its returned workItemReadCall before another workspace search",
+            )
         if "preparedCallRef" in call.input and operation_id != "work_item.read":
             return self._error(call, "PREPARED_CALL_INVALID", "Prepared reference is only valid for work-item reads")
         operation_input = call.input
@@ -1154,6 +1161,8 @@ class PlaneGatewayHostPort:
                 record = self._prepared_calls.get(prepared_ref)
                 if record is not None and record.get("result") is None:
                     record["result"] = result
+                if result.status in {"ok", "replayed"}:
+                    self._prepared_read_handoff_pending = False
         return result
 
     def _prepare_search_receipt(self, receipt: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -1177,8 +1186,18 @@ class PlaneGatewayHostPort:
                 "input": {"preparedCallRef": prepared_ref},
             }
             prepared_results.append(prepared_item)
+        if any(
+            isinstance(item, Mapping) and "workItemReadCall" in item
+            for item in prepared_results
+        ):
+            with self._prepared_calls_lock:
+                self._prepared_read_handoff_pending = True
         prepared_result = {**result, "results": prepared_results}
         return {**receipt, "result": prepared_result}
+
+    def _prepared_read_handoff_is_pending(self) -> bool:
+        with self._prepared_calls_lock:
+            return self._prepared_read_handoff_pending
 
     def _register_prepared_call(self, read_input: Mapping[str, Any]) -> str:
         canonical_input = dict(read_input)
