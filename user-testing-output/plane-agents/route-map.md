@@ -428,6 +428,38 @@ outcome submission and one applied publication/terminal product event were
 observed, but they do not close W07/W08. Keep the route `dirty` and do not
 replay this terminal failed scenario. Durable extract:
 `user-testing-output/plane-agents/evidence/w07-w08-v18-live-stop.json`.
+## Wave 0CP-O — immutable v20 Operator first-commission stop — 2026-08-18
+
+| Route | Exact evidence and result | Disposition |
+| ----- | ------------------------- | ------------ |
+| O01 | `catalog.search=0`, `catalog.describe=1`, `search_workspace=1`; durable extract `user-testing-output/plane-agents/evidence/operator-o01-o09-v20-live-stop-20260818.json` SHA-256 `8a91e5066fac38d2d187f37fe0332bb530bdc4c1d7cb7cf492bce6d8a191143e` | partial disclosure; catalog search was not observed |
+| O03 | `work_item.read=0`; first commission stopped with `PREPARED_CALL_INVALID`; SDK identity proof incomplete; raw result SHA-256 `4c799353f65eb462df6caaf7048487d359411cfc87a1250bbc34920ec1d55766` | blocker; fail-stop |
+| O04 | no route attempt after O03 stop | untested |
+| O05 | no route attempt after O03 stop | untested |
+| O06 | no route attempt after O03 stop | untested |
+| O07 | no route attempt after O03 stop | untested |
+| O08 | no route attempt after O03 stop | untested |
+| O09 | no route attempt after O03 stop | untested |
+
+- Exact v20 candidate: source `278182149efa0cdddab88b05e27d6445162f0c9a`, wrapper
+  `2ed2a991c967230a18da4ef6f870a2605dec06a6`; API digest
+  `sha256:38c48791d38ab15f4201a24d272f9202367c1368e96ecd31bab5587f599db2ca`,
+  runtime digest
+  `sha256:7a541114d6f0fdbefad76fa4999e9fe977f02bf7979915f96c918338bc1a3ecc`,
+  manifest SHA-256 `76c10c7f48522f18c924338c79a5652b351a458e19efadcbb44b8f792a2db23c`.
+- One fresh assignment used `openai-codex/gpt-5.6-luna` xhigh with fallback
+  disabled. Run `6b40d3df-aa49-4179-88fb-f74baa7c6bf5`, invocation
+  `invocation:edcc1fc7-3452-4b0a-93bd-18fbfe75ef6c`; provider counts were
+  `2xx=9`, errors `0`, unknown `0`, retries `0`, second primary `0`, replay `0`.
+  One outcome submission, one applied publication, and one terminal were
+  observed before runtime sequence `17` failed.
+- The first genuine failure was `api-invocation` / `runtime_process`:
+  `work_item.read` had status `invalid` and `PREPARED_CALL_INVALID`; its host
+  receipt was unavailable. O02 was untouched. Cleanup proved absent lease,
+  zero exact runner resources, and the disposable checkout was removed after
+  evidence promotion. No retry, fallback, second primary, or blind
+  `outcome_unknown` replay occurred.
+
 ## Wave 0CO-O — immutable v19 Operator first-commission stop — 2026-08-18
 
 | Route | Exact evidence and result | Disposition |

@@ -3678,6 +3678,10 @@ not a provider rerun.
 
 - Candidate wrapper `2ed2a991c967230a18da4ef6f870a2605dec06a6`, source
   `278182149efa0cdddab88b05e27d6445162f0c9a`, API digest
+## Wave 0CP-O — immutable v20 Operator fail-stop — 2026-08-18
+
+- Exact candidate was source `278182149efa0cdddab88b05e27d6445162f0c9a`,
+  wrapper `2ed2a991c967230a18da4ef6f870a2605dec06a6`; API digest
   `sha256:38c48791d38ab15f4201a24d272f9202367c1368e96ecd31bab5587f599db2ca`,
   runtime digest
   `sha256:7a541114d6f0fdbefad76fa4999e9fe977f02bf7979915f96c918338bc1a3ecc`,
@@ -3725,3 +3729,30 @@ not a provider rerun.
   `1677f366e2e28e753548cc19ed1f1c510923c8bdf0226113fcb509dcc85f2640`;
   raw payloads were not durably retained. W07/W08 remain dirty/unproven and
   require provider-free diagnosis of the assigned-read authorization seam.
+  Hermes/MCP/SDK pins remained `6c460f10fe215718dce36dd73cda94155a9a34f8`,
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`, and
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`.
+- Preparation copied and byte-compared `13` required env files without reading,
+  printing, or sourcing values; `setup.sh` was not run. Descriptor SHA-256 was
+  `5594c150048dc824c3ce84a1cccd163f30d9753a25d53303316bf6b45a52f6c6`.
+  V20-relevant provider-free checks passed `215`, with four stale v16
+  assertions deselected.
+- Exactly one fresh Operator assignment used `openai-codex/gpt-5.6-luna`
+  xhigh with fallback disabled. Run
+  `6b40d3df-aa49-4179-88fb-f74baa7c6bf5`, invocation
+  `invocation:edcc1fc7-3452-4b0a-93bd-18fbfe75ef6c`; provider attempts were
+  `9` completed `2xx`, with errors/unknown/retries/second-primary/replay all
+  `0`. O01 was partial (`catalog.describe` and `search_workspace` passed;
+  `catalog.search` absent); O03 stopped at `work_item.read` with invalid
+  `PREPARED_CALL_INVALID`. O04-O09 were not started and O02 was not rerun.
+- Runtime failure was `api-invocation` / `runtime_process` / `process_exit`,
+  with host operation failure and no host receipt. One outcome submission,
+  one applied publication, and one visible terminal were observed. Raw result
+  SHA-256 was `4c799353f65eb462df6caaf7048487d359411cfc87a1250bbc34920ec1d55766`;
+  durable redacted evidence is
+  `user-testing-output/plane-agents/evidence/operator-o01-o09-v20-live-stop-20260818.json`,
+  SHA-256 `8a91e5066fac38d2d187f37fe0332bb530bdc4c1d7cb7cf492bce6d8a191143e`.
+- Cleanup completed after the exact owner exited: capacity lease absent, no
+  exact runner containers/volumes/networks, and the disposable detached
+  checkout was removed. No provider retry,
+  fallback, second primary, or blind `outcome_unknown` replay occurred.
