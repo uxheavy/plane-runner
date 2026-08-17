@@ -1,0 +1,154 @@
+{
+  "schemaVersion": "plane-agent-g4/w07-w08-failure-extract/v1",
+  "status": "failed",
+  "disposition": "first-genuine-product-failure-no-retry-no-replay",
+  "candidate": {
+    "branch": "codex/plane-agent-functional-integration-20260817",
+    "wrapperCommit": "376c5f1d0ab954b3035853193fcbfc475d064851",
+    "parentCommit": "9480f5868cd2b37e20b34aa53e2b0995fe02487c",
+    "sourceEvidenceParent": "b9ec4264ad0cec91a55e84213ac2717fb3d96048",
+    "manifestSha256": "c53b1cf52b7802a69c7f0c50186224906024e4b5c099adf178ac0a11626f19d4",
+    "apiImage": {
+      "tag": "plane-agent-api:g4-v12-9480f5",
+      "digest": "sha256:65489299ef2b41e6c3173d2f281285453e8b1c6522a9610f2b59bf3d1d46f62f",
+      "sourceRevision": "9480f5868cd2b37e20b34aa53e2b0995fe02487c"
+    },
+    "runtimeImage": {
+      "tag": "plane-agent-runtime:hermes-6c460f10-g4-v12-9480f5",
+      "digest": "sha256:b19117765f8ec9b4fa88d3f45fb3afbc8c47bf6d042eac7c44693227efc38aaf",
+      "sourceRevision": "9480f5868cd2b37e20b34aa53e2b0995fe02487c"
+    },
+    "hermesCommit": "6c460f10fe215718dce36dd73cda94155a9a34f8",
+    "mcpCommit": "c04974ed6624f17b41e63ef8182661929e77e0d3",
+    "sdkCommit": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
+  },
+  "rawEvidence": {
+    "resultSha256": "3d5bec35e65728d84e90dd6c96863327395f3fe4bed5de20aee8e9767c835e66",
+    "authoritySha256": "f4cfe455a80b1c22b84af8bc9fdedd6f6361b863d425745bf2004b827ae3f9e4",
+    "configSha256": "3a5b7989b0b5002e22ff828ad768ca5546abf1e11548313bdd5acd13fbc4c8d5",
+    "scenarioSha256": "f8573106e8b401fd39ff40964fc459bd46d20014f27fcf90ee3f55b8007e42e6",
+    "manifestSha256": "c53b1cf52b7802a69c7f0c50186224906024e4b5c099adf178ac0a11626f19d4",
+    "rawPayloadRetained": false,
+    "redaction": "Only this deterministic bounded extract is durable; credentials, prompts, model output, response bodies, URLs beyond the fixed policy route, headers, and raw error text are excluded."
+  },
+  "authority": {
+    "authorityId": "authority-w07-w08-376c5f-20260817-r3",
+    "provider": "openai-codex",
+    "model": "gpt-5.6-luna",
+    "reasoning": "xhigh",
+    "fallbackAllowed": false,
+    "route": "https://chatgpt.com/backend-api/codex/responses",
+    "credentialSource": "chatgpt-subscription",
+    "credentialRef": "PLANE_G4_PROVIDER_SECRET_SOURCE"
+  },
+  "assignment": {
+    "fresh": true,
+    "scenarioId": "worker",
+    "profile": "Maya Worker Structurally Corrected W07 W08 R3",
+    "commissionId": "w07-w08-artifact-publication-readback-20260819-r3",
+    "targetRef": "fixture:assigned-work-item-r2",
+    "routes": ["W07", "W08"]
+  },
+  "lifecycle": {
+    "runId": "e4717a19-5070-4b3e-9d7b-039f0f649567",
+    "runState": "succeeded",
+    "invocationId": "invocation:c541cbc6-674e-4d82-a8a2-67c9e0a33e11",
+    "invocationState": "succeeded",
+    "runtimeExit": {
+      "kind": "failed",
+      "finalSequence": 15,
+      "code": "runtime_error",
+      "retryable": false,
+      "cause": "host_operation_failure"
+    },
+    "runtimeEventIngress": {
+      "progressObserved": 15,
+      "outcomeSubmissionObserved": 1
+    },
+    "terminal": {
+      "present": true,
+      "kind": "outcome_submission",
+      "code": "runtime_error",
+      "reasonCategory": "unavailable"
+    }
+  },
+  "failure": {
+    "phase": "api-invocation",
+    "errorClass": "RuntimeError",
+    "exitCode": 1,
+    "reasonCode": "runtime_error",
+    "reasonPhase": "runtime_process",
+    "reasonSubreason": "runtime_execution_failed",
+    "reasonCause": "host_operation_failure",
+    "hostOperationFailure": {
+      "operationId": "unavailable",
+      "attemptRef": "host-request:79e7c3b93cb5353e06761688ee87d1891bb64bbbc020dd63a47ab97f0725f728",
+      "receiptRef": "unavailable",
+      "status": "unavailable",
+      "errorCode": "CODE_MODE_FAILED",
+      "codeModePhase": "host_callback"
+    },
+    "owningSeam": "Plane operation host callback / Code Mode boundary",
+    "firstFailure": "work_item.read expected success but returned NOT_AUTHORIZED"
+  },
+  "provider": {
+    "attemptCount": 8,
+    "statusClassCounts": {"2xx": 8, "4xx": 0, "5xx": 0, "transport": 0},
+    "allUpstreamInitiated": true,
+    "fallbackUsed": false,
+    "replayCount": 0,
+    "providerFailure": false
+  },
+  "hostOperations": [
+    {"operationId": "search_workspace", "status": "success", "count": 1},
+    {"operationId": "work_item.read", "status": "denied", "errorCode": "NOT_AUTHORIZED", "count": 1},
+    {"operationId": "catalog.search", "status": "absent", "count": 0},
+    {"operationId": "catalog.describe", "status": "absent", "count": 0},
+    {"operationId": "agent.outcome.evaluate", "status": "denied", "errorCode": "NOT_AUTHORIZED", "count": 1},
+    {"operationId": "agent.outcome.submit", "status": "success", "count": 1},
+    {"operationId": "agent.outcome.publish", "status": "success", "count": 1}
+  ],
+  "scenarioGate": {
+    "passed": false,
+    "failedPredicate": "operation:work_item.read",
+    "expected": "success",
+    "actual": "denied",
+    "errorCode": "NOT_AUTHORIZED"
+  },
+  "s00Gate": {
+    "status": "failed",
+    "firstFailedPredicate": "invocation_succeeded",
+    "visibleOutcomeTerminalCount": 0,
+    "appliedPublicationCount": 0,
+    "terminalBindingPassed": false,
+    "runtimeExitCompleted": false
+  },
+  "w07W08Proof": {
+    "assignedTargetRead": "failed_not_authorized",
+    "intentionalEvaluatorDenial": "passed",
+    "artifactToExactlyOneOutcome": "not_proven",
+    "explicitHumanVisiblePublication": "not_proven",
+    "ordinaryFinalTextTranscriptOnly": "not_proven",
+    "missingPublicationInvariant": "not_tested",
+    "correlatedApiCliSurfaceReadback": "not_reached",
+    "unprivilegedAndCrossWorkspaceDenial": "not_reached",
+    "duplicateEffects": "not_assessed",
+    "providerDisabledSameInvocationReplay": {"eligible": false, "attempts": 0, "deltas": 0}
+  },
+  "effects": {
+    "hostSubmitReceiptStatus": "success",
+    "hostPublishReceiptStatus": "success",
+    "lifecycleAppliedPublicationCount": 0,
+    "lifecycleVisibleTerminalCount": 0,
+    "productEventProven": false,
+    "duplicateEffectDelta": "not_assessed"
+  },
+  "cleanup": {
+    "capacityMarkerAbsent": true,
+    "agentG4Containers": 0,
+    "agentG4Volumes": 0,
+    "agentG4Networks": 0,
+    "exactOwnedResourcesClean": true
+  },
+  "ownerDisposition": "W07/W08 remain dirty and unproven. No further provider call, fallback, retry, replay, or provider-disabled replay was made. Provider-free diagnosis must own the Plane work-item authorization/fixture-binding seam before any new live assignment."
+}

@@ -3027,3 +3027,54 @@ records this diagnosis without changing the retained receipts.
   containers, volumes, and networks. No further provider use was made. The
   owner disposition is provider-free diagnosis of the Plane work-item
   authorization/fixture-binding seam.
+
+## Wave 0CI — exact structurally corrected W07/W08 live stop — 2026-08-17
+
+- Candidate: wrapper `376c5f1d0ab954b3035853193fcbfc475d064851`, sole
+  parent/source `9480f5868cd2b37e20b34aa53e2b0995fe02487c`, source/evidence
+  parent `b9ec4264ad0cec91a55e84213ac2717fb3d96048`; branch
+  `codex/plane-agent-functional-integration-20260817`.
+- Exact images were API
+  `plane-agent-api:g4-v12-9480f5@sha256:65489299ef2b41e6c3173d2f281285453e8b1c6522a9610f2b59bf3d1d46f62f`
+  and runtime
+  `plane-agent-runtime:hermes-6c460f10-g4-v12-9480f5@sha256:b19117765f8ec9b4fa88d3f45fb3afbc8c47bf6d042eac7c44693227efc38aaf`.
+  Manifest SHA-256 was
+  `c53b1cf52b7802a69c7f0c50186224906024e4b5c099adf178ac0a11626f19d4`;
+  Hermes/MCP/SDK pins were
+  `6c460f10fe215718dce36dd73cda94155a9a34f8`,
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`, and
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`.
+- Exactly one fresh serialized live assignment used the ChatGPT Responses
+  route with `openai-codex/gpt-5.6-luna`, xhigh, fallback disabled, and
+  commission `w07-w08-artifact-publication-readback-20260819-r3`. Scenario
+  SHA-256 was
+  `f8573106e8b401fd39ff40964fc459bd46d20014f27fcf90ee3f55b8007e42e6`.
+  Run `e4717a19-5070-4b3e-9d7b-039f0f649567`; invocation
+  `invocation:c541cbc6-674e-4d82-a8a2-67c9e0a33e11`.
+- Provider attempts/effects: `8` upstream-initiated completed `2xx`
+  attempts, `4xx=0`, `5xx=0`, `transport=0`, fallback `false`, replay `0`.
+  Search succeeded once; the assigned-target `work_item.read` failed closed
+  with `NOT_AUTHORIZED`; the intentional evaluator denial occurred once; host
+  submit and publish each reported success once. The first genuine lifecycle
+  failure was `CODE_MODE_FAILED` at `host_callback`, bounded as
+  `runtime_error/runtime_process/runtime_execution_failed` with cause
+  `host_operation_failure`.
+- S00 gate outcome: zero applied publications and zero visible outcome
+  terminals were proven. W07/W08 artifact exactness, one-to-one artifact to
+  outcome, explicit human-visible terminal publication, ordinary transcript
+  final text, authorized/API/CLI readback, isolation denial, missing-publication
+  rejection, and provider-disabled replay are not claimed. The replay was
+  ineligible and was not run; no `outcome_unknown` was replayed.
+- Durable deterministic redacted evidence:
+  `user-testing-output/plane-agents/evidence/w07-w08-376c5f-failure-extract.json`,
+  SHA-256 `94d9bb71a54d1d7ea7ce20afb8d50f81db7ae0bd9523990b626e29aafe330028`.
+  Raw result SHA-256 is
+  `3d5bec35e65728d84e90dd6c96863327395f3fe4bed5de20aee8e9767c835e66`;
+  authority SHA-256 is
+  `f4cfe455a80b1c22b84af8bc9fdedd6f6361b863d425745bf2004b827ae3f9e4`;
+  config SHA-256 is
+  `3a5b7989b0b5002e22ff828ad768ca5546abf1e11548313bdd5acd13fbc4c8d5`.
+- Cleanup proof: capacity marker absent and exact observed disposable
+  containers, volumes, and networks were zero. W07/W08 remain dirty and
+  unproven. No product source was changed during live collection and no
+  further provider call was made.

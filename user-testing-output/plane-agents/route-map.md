@@ -394,6 +394,57 @@ replay. W03-W08 remain dirty; UT-042 is open.
 - W05 and W06 remain dirty; this is provider-free boundary evidence, not route
   closure.
 
+## Wave 0CI — exact structurally corrected W07/W08 live stop — 2026-08-17
+
+- Candidate binding was wrapper `376c5f1d0ab954b3035853193fcbfc475d064851`
+  on sole parent/source `9480f5868cd2b37e20b34aa53e2b0995fe02487c`, with
+  source/evidence parent `b9ec4264ad0cec91a55e84213ac2717fb3d96048`.
+  The manifest SHA-256 was
+  `c53b1cf52b7802a69c7f0c50186224906024e4b5c099adf178ac0a11626f19d4`.
+  API image `plane-agent-api:g4-v12-9480f5` used digest
+  `sha256:65489299ef2b41e6c3173d2f281285453e8b1c6522a9610f2b59bf3d1d46f62f`;
+  runtime image `plane-agent-runtime:hermes-6c460f10-g4-v12-9480f5` used
+  digest
+  `sha256:b19117765f8ec9b4fa88d3f45fb3afbc8c47bf6d042eac7c44693227efc38aaf`.
+- One fresh serialized W07/W08 assignment used the supported ChatGPT
+  Responses route with `openai-codex/gpt-5.6-luna`, xhigh, and fallback
+  disabled. Scenario SHA-256 was
+  `f8573106e8b401fd39ff40964fc459bd46d20014f27fcf90ee3f55b8007e42e6`.
+  Run `e4717a19-5070-4b3e-9d7b-039f0f649567` and invocation
+  `invocation:c541cbc6-674e-4d82-a8a2-67c9e0a33e11` are retained by bounded
+  refs. The trusted resolver crossed the owner-only credential boundary;
+  no credential value was retained.
+- The first genuine product failure was the assigned-target
+  `work_item.read`: expected `success`, actual `denied`, `NOT_AUTHORIZED`.
+  The owning seam is the Plane operation host callback / Code Mode boundary,
+  reported as `CODE_MODE_FAILED` with
+  `runtime_error/runtime_process/runtime_execution_failed` and bounded cause
+  `host_operation_failure`. Search succeeded once; the intentional evaluator
+  denial occurred once; submit and publish host receipts each reported once.
+- Provider status counts were `2xx=8`, `4xx=0`, `5xx=0`, `transport=0`;
+  fallback was `false` and replay count was `0`. The lifecycle gate proved
+  zero applied publications and zero visible outcome terminals; artifact
+  exactness, ordinary transcript-only final text, authorized/readback,
+  isolation denial, missing-publication rejection, and replay proof are not
+  claimed. No retry, fallback, replay, or provider-disabled replay occurred.
+- Durable redacted evidence is
+  `user-testing-output/plane-agents/evidence/w07-w08-376c5f-failure-extract.json`,
+  SHA-256
+  `94d9bb71a54d1d7ea7ce20afb8d50f81db7ae0bd9523990b626e29aafe330028`.
+  It records raw result SHA-256
+  `3d5bec35e65728d84e90dd6c96863327395f3fe4bed5de20aee8e9767c835e66`,
+  authority SHA-256
+  `f4cfe455a80b1c22b84af8bc9fdedd6f6361b863d425745bf2004b827ae3f9e4`,
+  config SHA-256
+  `3a5b7989b0b5002e22ff828ad768ca5546abf1e11548313bdd5acd13fbc4c8d5`,
+  scenario SHA-256
+  `f8573106e8b401fd39ff40964fc459bd46d20014f27fcf90ee3f55b8007e42e6`,
+  and manifest SHA-256
+  `c53b1cf52b7802a69c7f0c50186224906024e4b5c099adf178ac0a11626f19d4`.
+- Cleanup proof: capacity marker absent; exact observed disposable
+  containers, volumes, and networks were all zero. W07/W08 remain dirty and
+  unproven; this is not route closure.
+
 ## Wave 0CH — exact corrected W07/W08 live stop — 2026-08-17
 
 - Exact branch `codex/plane-agent-functional-integration-20260817` was at

@@ -568,3 +568,21 @@ shows exactly one visible terminal and one applied publication with outcome
 `product-event:a7b6d14e-2c3b-4a7a-b720-d3698d44f6aa`, but artifact exactness,
 authorized readback, isolation readback, missing-publication rejection, and
 replay proof were not completed after the read denial.
+
+## UT-058 — exact structurally corrected W07/W08 live stop — Wave 0CI
+
+| Issue | Severity | Persona / route | Durable evidence | Root cause / bounded disposition | Retest / status |
+| ----- | -------- | --------------- | ---------------- | ------------------------------ | ---------------- |
+| UT-058 | blocker | Maya / W07-W08 fresh serialized assignment | `w07-w08-376c5f-failure-extract.json` SHA-256 `94d9bb71a54d1d7ea7ce20afb8d50f81db7ae0bd9523990b626e29aafe330028`; raw bounded result SHA-256 `3d5bec35e65728d84e90dd6c96863327395f3fe4bed5de20aee8e9767c835e66`; manifest SHA-256 `c53b1cf52b7802a69c7f0c50186224906024e4b5c099adf178ac0a11626f19d4`; scenario SHA-256 `f8573106e8b401fd39ff40964fc459bd46d20014f27fcf90ee3f55b8007e42e6` | One fresh candidate-bound assignment reached eight upstream-initiated 2xx attempts and stopped at the first genuine Plane product failure: assigned-target `work_item.read` returned `NOT_AUTHORIZED` instead of success. The bounded lifecycle seam is the Plane operation host callback / Code Mode boundary: `CODE_MODE_FAILED`, `runtime_error/runtime_process/runtime_execution_failed`, cause `host_operation_failure`. | No retry, fallback, replay, or provider-disabled replay. W07/W08 remain dirty/unproven; provider-free owner diagnosis is required for the work-item authorization/fixture-binding seam. / open |
+
+Run `e4717a19-5070-4b3e-9d7b-039f0f649567` and invocation
+`invocation:c541cbc6-674e-4d82-a8a2-67c9e0a33e11` are the only live refs for
+this Wave 0CI assignment. Host operation counts were search success `1`,
+assigned-target read denied `1`, intentional evaluator denial `1`, submit
+success `1`, and publish success `1`; the lifecycle gate proved zero applied
+publications and zero visible outcome terminals. Provider counts were
+`2xx=8`, `4xx=0`, `5xx=0`, `transport=0`, fallback `false`, replay `0`.
+The extract records raw authority SHA-256
+`f4cfe455a80b1c22b84af8bc9fdedd6f6361b863d425745bf2004b827ae3f9e4`, config
+SHA-256 `3a5b7989b0b5002e22ff828ad768ca5546abf1e11548313bdd5acd13fbc4c8d5`,
+and that raw payloads were not durably retained.
