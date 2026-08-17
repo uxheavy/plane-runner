@@ -133,11 +133,14 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert "complete tool arguments" in read_guidance
     assert "action, operationRef" in read_guidance
     assert "exactly those three top-level tool keys" in read_guidance
-    assert "keep only project_id and issue_id inside input" in read_guidance
+    assert "opaque input.preparedCallRef" in read_guidance
+    assert "keep only preparedCallRef inside input" in read_guidance
     assert "put the workItemReadCall object inside input" in read_guidance
     assert "rename operationRef to operation_ref" in read_guidance
+    assert "alter or replay the preparedCallRef" in read_guidance
+    assert "reconstruct project_id or issue_id" in read_guidance
     assert "Do not wrap it" in read_guidance
-    assert "reconstruct it from targetRef" in read_guidance
+    assert "reconstruct project_id or issue_id from targetRef" in read_guidance
     rename_guidance = next(
         item for item in mutation_route_guidance if "invoke execute_code" in item
     )
