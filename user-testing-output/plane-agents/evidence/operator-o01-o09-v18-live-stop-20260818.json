@@ -1,0 +1,98 @@
+{
+  "schemaVersion": "plane-agent-g4/operator-live-stop/v1",
+  "status": "failed",
+  "scope": {
+    "persona": "Omar Operator",
+    "routes": ["O01", "O03", "O04", "O05", "O06", "O07", "O08", "O09"],
+    "preservedCleanRoute": "O02",
+    "firstCommission": "presentation-and-sdk-identity",
+    "laterCommissionsStarted": false
+  },
+  "candidate": {
+    "source": "6ea6526c018c61d7142ad3412cd7c1afc2355ac6",
+    "wrapper": "31be67b471f5a2b9f4d51828d556429582adf355",
+    "apiImage": "plane-agent-api:g4-v18-6ea6526c",
+    "apiDigest": "sha256:e3dd3668b607931ed03577151dccf2e9ad9e5819648b93293eb4634354e1350",
+    "runtimeImage": "plane-agent-runtime:hermes-6c460f10-g4-v18-6ea6526c",
+    "runtimeDigest": "sha256:95ce3ba56448e7abf807786235b945172138fe457b31d5e06c7cf093f869cb63",
+    "manifestSha256": "eadc996a1e13a120990e6cd957eb288a8612289d8de54c79d8495f40e6aa6ec3",
+    "descriptorSha256": "5594c150048dc824c3ce84a1cccd163f30d9753a25d53303316bf6b45a52f6c6",
+    "hermes": "6c460f10fe215718dce36dd73cda94155a9a34f8",
+    "mcp": "c04974ed6624f17b41e63ef8182661929e77e0d3",
+    "sdk": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
+  },
+  "provider": {
+    "name": "openai-codex",
+    "model": "gpt-5.6-luna",
+    "reasoning": "xhigh",
+    "fallbackAllowed": false,
+    "freshPrimaryCount": 1,
+    "upstreamInitiated": 11,
+    "completed2xx": 11,
+    "providerErrors": 0,
+    "transportUnknown": 0,
+    "replayCount": 0,
+    "secondPrimaryCount": 0
+  },
+  "lifecycle": {
+    "runRef": "run:a0479eb7-d5c5-48e2-9537-f28fbab6d637",
+    "runState": "succeeded",
+    "invocationRef": "invocation:19e28b8f-8bf2-4fc5-bbf9-d841b2bdbe2c",
+    "invocationState": "succeeded",
+    "runtimeExit": "completed",
+    "runtimeFinalSequence": 23,
+    "visibleOutcomeTerminals": 1,
+    "outcomeSubmissions": 1,
+    "appliedPublications": 1,
+    "productRef": "outcome-submission:350664c6-7b3e-4f86-b08f-2a2ab663cdcb",
+    "productEventRef": "product-event:2033aa4e-c02d-489a-a32f-868dd7b6a242"
+  },
+  "firstFailure": {
+    "phase": "api-invocation",
+    "errorClass": "RuntimeError",
+    "reasonCode": "unspecified",
+    "reasonCategory": "unavailable",
+    "stderrSha256": "39649ff6f690042f13fdbf481c97930dabe6677af182dc8ac7ececd2cba7037f",
+    "scenarioFailures": ["operation:work_item.read"],
+    "operationAudit": [
+      {"operationId": "catalog.search", "status": "success", "count": 1},
+      {"operationId": "catalog.describe", "status": "success", "count": 1},
+      {"operationId": "search_workspace", "status": "success", "count": 1},
+      {"operationId": "work_item.read", "status": "denied", "errorCode": "NOT_AUTHORIZED", "count": 1, "targetDigest": "d2dded559f6a6018e1cd895d0c68606430dff0d3e9d3ffed8adebc3c9361b8a3"},
+      {"operationId": "agent.outcome.evaluate", "status": "denied", "errorCode": "NOT_AUTHORIZED", "count": 1},
+      {"operationId": "agent.outcome.submit", "status": "success", "count": 1},
+      {"operationId": "agent.outcome.publish", "status": "success", "count": 1}
+    ]
+  },
+  "routeDisposition": {
+    "O01": "passed: catalog.search, catalog.describe, and search_workspace succeeded",
+    "O03": "failed with first commission: work_item.read was denied and SDK identity proof was incomplete",
+    "O04": "not_started_after_fail_stop",
+    "O05": "not_started_after_fail_stop",
+    "O06": "not_started_after_fail_stop",
+    "O07": "not_started_after_fail_stop",
+    "O08": "not_started_after_fail_stop",
+    "O09": "not_started_after_fail_stop",
+    "O02": "untouched_existing_clean_evidence_preserved"
+  },
+  "rawResult": {
+    "schemaVersion": "plane-agent-g4/live-failure/v1",
+    "mode": "0600",
+    "bytes": 10816,
+    "sha256": "3f0eabfb0b28867d3d3032b4fdabc2f71ffbee51c0037c7753c7e32ef5f9f1fc",
+    "canonicalValidator": "passed"
+  },
+  "preflightFriction": {
+    "launcherCandidateMismatch": "authority_expected_candidate_mismatch; wrapper was bound correctly, manifest source parent was incorrectly passed as runner candidate",
+    "launcherEffects": "pre_lease_zero_assignment_zero_provider_zero",
+    "freshInputsRegenerated": true,
+    "productPatchMade": false
+  },
+  "cleanup": {
+    "operatorCapacityLeaseReleased": true,
+    "operatorContainers": 0,
+    "operatorNetworks": 0,
+    "operatorVolumes": 0,
+    "rawSecretsRetained": false
+  }
+}

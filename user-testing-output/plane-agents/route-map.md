@@ -428,6 +428,17 @@ outcome submission and one applied publication/terminal product event were
 observed, but they do not close W07/W08. Keep the route `dirty` and do not
 replay this terminal failed scenario. Durable extract:
 `user-testing-output/plane-agents/evidence/w07-w08-v18-live-stop.json`.
+## Wave 0CN-O — immutable v18 Operator first-commission stop — 2026-08-18
+
+- Exact v18 candidate: source `6ea6526c018c61d7142ad3412cd7c1afc2355ac6`, wrapper
+  `31be67b471f5a2b9f4d51828d556429582adf355`; API digest
+  `sha256:e3dd3668b607931ed03577151dccf2e9ad9e5819648b93293eb4634354e1350`;
+  runtime digest `sha256:95ce3ba56448e7abf807786235b945172138fe457b31d5e06c7cf093f869cb63`;
+  manifest SHA-256 `eadc996a1e13a120990e6cd957eb288a8612289d8de54c79d8495f40e6aa6ec3`.
+- The first launcher attempt stopped before lease, Compose, assignment, or provider use because it passed the source-parent revision as the runner candidate. Fresh owner-only inputs were regenerated with the wrapper as candidate; no product patch or image change was made.
+- Exactly one fresh aggregate Operator assignment used `openai-codex/gpt-5.6-luna` xhigh with fallback disabled. It reached 11 completed upstream `2xx` attempts, run `a0479eb7-d5c5-48e2-9537-f28fbab6d637`, invocation `invocation:19e28b8f-8bf2-4fc5-bbf9-d841b2bdbe2c`, runtime sequence `23`, one visible terminal, one submission, and one applied publication.
+- O01 catalog disclosure and `search_workspace` succeeded. O03 failed because `work_item.read` was denied with `NOT_AUTHORIZED` where success was expected. O04-O09 were not started; O02 was untouched.
+- No retry, second primary, fallback, or blind `outcome_unknown` replay occurred. Raw bounded result SHA-256: `3f0eabfb0b28867d3d3032b4fdabc2f71ffbee51c0037c7753c7e32ef5f9f1fc`. Durable redacted extract: `user-testing-output/plane-agents/evidence/operator-o01-o09-v18-live-stop-20260818.json`.
 
 ## Wave 0CN — v16 provider-free typed-envelope boundary repair — 2026-08-18
 

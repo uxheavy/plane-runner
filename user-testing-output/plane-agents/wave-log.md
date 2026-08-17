@@ -3558,3 +3558,30 @@ was retained; neither the canonical search project/issue digest nor the bound
 call digest was retained. No UUIDs, arguments, transcript, or secrets were
 emitted. The next action is a provider-free structural bound-call/readback fix,
 not a provider rerun.
+## Wave 0CN-O — immutable v18 Operator fail-stop — 2026-08-18
+
+- Candidate: source `6ea6526c018c61d7142ad3412cd7c1afc2355ac6`, wrapper
+  `31be67b471f5a2b9f4d51828d556429582adf355`, API digest
+  `sha256:e3dd3668b607931ed03577151dccf2e9ad9e5819648b93293eb4634354e1350`,
+  runtime digest `sha256:95ce3ba56448e7abf807786235b945172138fe457b31d5e06c7cf093f869cb63`,
+  manifest SHA-256 `eadc996a1e13a120990e6cd957eb288a8612289d8de54c79d8495f40e6aa6ec3`.
+- Provider-free focused checks: `198 passed, 1 deselected`; fresh config-only
+  and scenario validation passed. The broad legacy selection had five stale
+  v16/environment-sensitive failures and was not treated as v18 proof.
+- A first launcher attempt stopped pre-lease with
+  `authority_expected_candidate_mismatch`; root correction required fresh
+  inputs with wrapper candidate and source-parent image revisions. No product
+  patch, provider call, assignment, or Compose effect occurred in that attempt.
+- The single fresh aggregate Operator journey used Luna xhigh with fallback
+  disabled and fail-stopped at `api-invocation`: `work_item.read` was denied
+  `NOT_AUTHORIZED`, while catalog search/describe and workspace search passed.
+  Run `a0479eb7-d5c5-48e2-9537-f28fbab6d637`; invocation
+  `invocation:19e28b8f-8bf2-4fc5-bbf9-d841b2bdbe2c`; provider attempts `11`
+  (`2xx=11`, errors `0`, transport unknown `0`); retries, fallback, second
+  primary, and replay `0`.
+- One outcome submission and one applied publication were observed, with one
+  visible terminal and runtime sequence `23`. O04-O09 did not start; O02 was
+  untouched. Durable redacted evidence is
+  `operator-o01-o09-v18-live-stop-20260818.json`; its SHA is recorded in the
+  issue and route ledgers after commit. Cleanup verified no Operator lease,
+  containers, networks, or volumes.
