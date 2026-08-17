@@ -5,19 +5,21 @@ This directory contains the compact execution control surface for the non-UI Pla
 ## Current status
 
 G0 through G3 and the provider-free exact-image G4 checks are complete for the
-current integration source `9480f5868cd2b37e20b34aa53e2b0995fe02487c`. The
-API artifact is `plane-agent-api:g4-v12-9480f5` at
-`sha256:65489299ef2b41e6c3173d2f281285453e8b1c6522a9610f2b59bf3d1d46f62f`;
+current integration source `ef014eac67323f91c02c73bc9e0ab38e083c1460`. The
+API artifact is `plane-agent-api:g4-v13-ef014eac6` at
+`sha256:424f75846d398d7e9256933617dcecb685d65c40b059033dd9f378c594a9774e`;
 the runtime artifact is
-`plane-agent-runtime:hermes-6c460f10-g4-v12-9480f5` at
-`sha256:b19117765f8ec9b4fa88d3f45fb3afbc8c47bf6d042eac7c44693227efc38aaf`.
+`plane-agent-runtime:hermes-6c460f10-g4-v13-ef014eac6` at
+`sha256:ede43c620b231998391e1878f2d18a28c53e10f9b3f06320b86b65b953a9dfed`.
 Both are bound to Hermes `6c460f10fe215718dce36dd73cda94155a9a34f8`, MCP
 `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The exact-image functional
-red-team and final bootstrap are green provider-free, including versioned
+red-team and final bootstrap are green provider-free, including verbatim
+search-result-to-read handoff with target-digest correlation, versioned
 assigned-work-item binding with authorized success and out-of-scope denial;
-the durable metadata wrapper and live provider-backed W07/W08 prerequisite
-remain pending.
+The durable metadata wrapper is the sole child of the approved source parent;
+the separately authorized live provider-backed W07/W08 prerequisite remains
+pending.
 
 S00 Wave 0AT passed at Plane
 `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with one fresh GPT-5.6 Luna
@@ -38,7 +40,7 @@ campaign ledgers are under `user-testing-output/plane-agents/`.
 
 The rollback fixture remains an offline binding for the active candidate. Its
 `current.planeCommit` is the approved source parent
-`9480f5868cd2b37e20b34aa53e2b0995fe02487c`; its final candidate wrapper is
+`ef014eac67323f91c02c73bc9e0ab38e083c1460`; its final candidate wrapper is
 that parent's sole child. The independent `previous` section retains the accepted G3
 service artifact digest
 `sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e`.
