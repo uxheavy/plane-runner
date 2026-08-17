@@ -605,3 +605,9 @@ duplicate effect was observed. Raw authority SHA-256 is
 config SHA-256 is
 `0580db33325a9123117a6621eb2c16a1546e66485fb664d5ffc4f40158fb7c93`; raw
 payloads were not durably retained.
+
+## UT-060 — Operator provider-free lane readiness — Wave 0CK
+
+| Issue | Severity | Persona / route | Durable evidence | Root cause / bounded disposition | Retest / status |
+| ----- | -------- | --------------- | ---------------- | ------------------------------ | ---------------- |
+| UT-060 | positive | Omar / O01 and O03-O09 | `operator-o01-o09-provider-free-ready-20260818.md` SHA-256 `7ebfd06c0948e00a7a5bfdbaab458dfd6db99cca2f9e8ed9dbf898a83bf139bb`; lane commit `6bf7d25cd6344ff61363d29a54b1872c045fa8ca`; descriptor SHA-256 `5594c150048dc824c3ce84a1cccd163f30d9753a25d53303316bf6b45a52f6c6` | The shared Operator descriptor carried O10, outside this delegated lane. The lane-owned correction limits its route set to O01 and O03-O09 while preserving the exact `openai-codex/gpt-5.6-luna` xhigh, fallback-disabled policy. Provider-free host/contract checks and fresh-clone checks passed; native API/runtime collection is environment-blocked by missing `celery`. | Root must later run one serialized exact-candidate live journey through the capacity gate for the matrix routes. No provider, Compose, image build, O02 rerun, or unknown-outcome replay occurred. / closed for provider-free readiness; live route cells remain untested |

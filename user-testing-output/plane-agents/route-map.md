@@ -394,6 +394,35 @@ replay. W03-W08 remain dirty; UT-042 is open.
 - W05 and W06 remain dirty; this is provider-free boundary evidence, not route
   closure.
 
+## Wave 0CK — Operator O01/O03-O09 provider-free readiness — 2026-08-18
+
+- The Operator lane was reconciled onto source
+  `d4316b79272254b61d038a65cba6a9860a6afeeb`. Lane commit
+  `6bf7d25cd6344ff61363d29a54b1872c045fa8ca` narrows the Operator descriptor
+  to exactly O01 and O03-O09; O02 remains excluded as already clean and O10 is
+  outside this lane. The descriptor SHA-256 is
+  `5594c150048dc824c3ce84a1cccd163f30d9753a25d53303316bf6b45a52f6c6`.
+- Provider-free checks passed on the lane commit and fresh synthetic clone:
+  Operator scenario `4 passed, 53 deselected`, support/result/launch `23
+  passed`, contract `110 passed`; fresh full scenario `57 passed`, fresh
+  support/result/launch `23 passed`, and fresh contract `110 passed`.
+  Native API/runtime pytest collection remains environment-blocked by missing
+  `celery`; it was not represented as a pass.
+- Fresh workspace was
+  `/private/tmp/plane-agent-operator-o01-o09-provider-free-ready.qwaomK` at
+  `6bf7d25cd6344ff61363d29a54b1872c045fa8ca`. Thirteen existing source
+  `.env*` files were copied byte-for-byte to identical paths and compared
+  without displaying values; descriptor mode was `0600`. No setup script,
+  Compose/image build, provider request, capacity lease, or live journey ran;
+  provider attempts were `0`, O02 was not rerun, and no `outcome_unknown` was
+  replayed.
+- Durable redacted receipt and compact O01/O03-O09 matrix:
+  `user-testing-output/plane-agents/evidence/operator-o01-o09-provider-free-ready-20260818.md`,
+  SHA-256
+  `7ebfd06c0948e00a7a5bfdbaab458dfd6db99cca2f9e8ed9dbf898a83bf139bb`.
+  O01/O03-O09 remain `untested` for exact live closure; this wave is
+  `READY_WITH_COMMIT`, not a live route pass.
+
 ## Wave 0CJ — exact deeper-corrected W07/W08 live stop — 2026-08-18
 
 - Candidate binding was wrapper `19e514f6024a8b8fa9b563c153f60454d97e8eaf`

@@ -3126,3 +3126,34 @@ records this diagnosis without changing the retained receipts.
   disposable containers, volumes, and networks were absent/zero. The first
   launcher scope rejection was pre-provider and produced no provider attempt;
   no product source was changed and no further provider call was made.
+
+## Wave 0CK — Operator O01/O03-O09 provider-free readiness — 2026-08-18
+
+- Source was `d4316b79272254b61d038a65cba6a9860a6afeeb`; the lane-owned commit
+  is `6bf7d25cd6344ff61363d29a54b1872c045fa8ca`. The Operator descriptor
+  SHA-256 is `5594c150048dc824c3ce84a1cccd163f30d9753a25d53303316bf6b45a52f6c6`.
+  Its exact route set is O01 and O03-O09; O02 was preserved as clean and O10
+  is outside this lane. The tested descriptor policy remains
+  `openai-codex/gpt-5.6-luna`, xhigh, fallback disabled.
+- Provider-free checks passed on the lane commit: Operator scenario `4
+  passed, 53 deselected`, support/result/launch `23 passed`, and contract
+  `110 passed`. Fresh clone checks passed full scenario `57`,
+  support/result/launch `23`, and contract `110`. Native API/runtime pytest
+  collection was attempted but blocked by missing `celery`; no false pass was
+  recorded.
+- Fresh synthetic workspace was
+  `/private/tmp/plane-agent-operator-o01-o09-provider-free-ready.qwaomK`,
+  checked out at the lane commit. Thirteen existing source `.env*` files were
+  copied byte-for-byte to identical relative paths and compared without
+  displaying values; descriptor mode was `0600`. `setup.sh` was not run.
+- This batch boundary intentionally stopped before capacity acquisition,
+  Compose/image work, live execution, and provider use. Provider attempts and
+  effects were `0`; no O02 rerun and no `outcome_unknown` replay occurred.
+  The route matrix is in the durable redacted receipt
+  `user-testing-output/plane-agents/evidence/operator-o01-o09-provider-free-ready-20260818.md`,
+  SHA-256 `7ebfd06c0948e00a7a5bfdbaab458dfd6db99cca2f9e8ed9dbf898a83bf139bb`.
+- Handoff: `READY_WITH_COMMIT`. Root’s remaining proof is one serialized
+  exact-candidate Operator journey covering O01/O03-O09 against real
+  Plane/API/database/CLI/runtime contracts, with capacity lease, trusted host
+  credential handling, authorization, lifecycle/replay, budget, ingress,
+  concurrency/readback, and cleanup receipts.
