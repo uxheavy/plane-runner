@@ -2544,8 +2544,71 @@ def _aggregate_commission_evidence(root_scenario, results):
     return aggregate
 
 
+def _entrypoint_failure_evidence(
+    exc: BaseException,
+    *,
+    binding=None,
+    authority_id=None,
+    canary_ids=None,
+    provider_relay=None,
+) -> dict:
+    """Keep pre-commission failures in the same bounded receipt contract."""
+
+    return build_failure_evidence(
+        binding=binding or {},
+        failure_phase="api-invocation",
+        error_class=type(exc).__name__,
+        exit_code=1,
+        run_id=None,
+        run_state=None,
+        invocation_id=None,
+        invocation_state=None,
+        provider_attempts=[],
+        terminal_kind="none",
+        failure_code="runtime_error",
+        failure_reason=json.dumps(
+            {
+                "failureCode": "runtime_error",
+                "failurePhase": "launcher",
+                "failureDetail": "unclassified_exception",
+                "failureSubreason": "upstream_exception",
+            },
+            separators=(",", ":"),
+        ),
+        authority_id=authority_id,
+        canary_ids=canary_ids,
+        provider_relay=provider_relay,
+    )
+
+
 def main() -> int:
-    scenario = _scenario_descriptor()
+    try:
+        scenario = _scenario_descriptor()
+    except BaseException as exc:
+        try:
+            binding = _binding()
+        except BaseException:
+            binding = {}
+        try:
+            provider_relay = _provider_relay_descriptor()
+        except BaseException:
+            provider_relay = None
+        print(
+            json.dumps(
+                _entrypoint_failure_evidence(
+                    exc,
+                    binding=binding,
+                    authority_id=os.environ.get("G4_AUTHORITY_ID"),
+                    canary_ids={
+                        "permitted": os.environ.get("G4_PERMITTED_CANARY"),
+                        "denied": os.environ.get("G4_DENIED_CANARY"),
+                    },
+                    provider_relay=provider_relay,
+                ),
+                separators=(",", ":"),
+            )
+        )
+        return 1
     if scenario is None or not scenario.commissions:
         code, evidence = _run_single(scenario)
         print(json.dumps(evidence, separators=(",", ":")))

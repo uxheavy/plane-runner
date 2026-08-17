@@ -1823,6 +1823,34 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn("return_code = 1", source)
         self.assertEqual(source.count("print(json.dumps(evidence"), 1)
 
+    def test_entrypoint_preflight_failure_emits_bounded_failure_envelope(self):
+        namespace = invoke_helper_namespace()
+        source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+        manifest, authority, config, _ = fixture()
+
+        evidence = namespace["_entrypoint_failure_evidence"](
+            RuntimeError("provider-secret-must-not-appear"),
+            binding=exact_binding(manifest, CANDIDATE),
+            authority_id=authority["authorityId"],
+            canary_ids={key: row["id"] for key, row in authority["binding"]["canaries"].items()},
+            provider_relay=provider_relay_descriptor(),
+        )
+
+        self.assertEqual(evidence["schemaVersion"], "plane-agent-g4/live-failure/v1")
+        self.assertEqual(evidence["status"], "failed")
+        self.assertEqual(evidence["failure"]["errorClass"], "RuntimeError")
+        self.assertEqual(evidence["failure"]["reasonCode"], "runtime_error")
+        self.assertEqual(evidence["failure"]["reasonPhase"], "launcher")
+        self.assertEqual(evidence["failure"]["reasonDetail"], "unclassified_exception")
+        self.assertEqual(evidence["failure"]["reasonSubreason"], "upstream_exception")
+        self.assertNotIn("provider-secret-must-not-appear", json.dumps(evidence))
+        self.assertIn("except BaseException as exc", source)
+        self.assertIn("_entrypoint_failure_evidence(", source)
+
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(evidence))
+        self.addCleanup(temp.cleanup)
+        self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
+
     def test_live_helper_replays_only_after_success_with_provider_access_disabled(self):
         source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
         tree = ast.parse(source)
