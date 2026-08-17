@@ -2451,7 +2451,7 @@ def _aggregate_commission_evidence(root_scenario, results):
 
 def main() -> int:
     scenario = _scenario_descriptor()
-    if not scenario.commissions:
+    if scenario is None or not scenario.commissions:
         code, evidence = _run_single(scenario)
         print(json.dumps(evidence, separators=(",", ":")))
         return code
