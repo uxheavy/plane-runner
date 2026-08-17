@@ -3484,3 +3484,34 @@ records this diagnosis without changing the retained receipts.
 - Updated durable redacted evidence:
   `user-testing-output/plane-agents/evidence/manager-m01-m08-v18-live-stop.json`,
   SHA-256 `c69395de49a5719923be166c2e348398e382a78af8123a2c2e9ddaa664b6f251`.
+## Wave 0CO — immutable v18 W03/W04 live stop — 2026-08-18
+
+- Fresh detached wrapper `31be67b471f5a2b9f4d51828d556429582adf355` descended
+  directly from source `6ea6526c018c61d7142ad3412cd7c1afc2355ac6`. Seven env
+  files were copied byte-for-byte without reading or sourcing values; `setup.sh`
+  was not run. API/runtime images, manifest, Hermes, MCP, and SDK matched the
+  immutable v18 pins exactly. The descriptor SHA-256 was
+  `7c501096ff6d5205199b1271a18da4e3784ecfbdf0e580fafd09cb046e461f46`.
+- The claim-scoped provider-free local image run was `9/10` with the known
+  stale cross-project denial mismatch; the accepted exact API Django gate was
+  not relabeled. An immutable-image probe then hung and was cleaned. These
+  were harness variance and consumed no provider assignment.
+- One fresh serialized live assignment used `openai-codex/gpt-5.6-luna`
+  xhigh with fallback disabled and trusted resolution. The runner initially
+  stopped before Compose/provider on the wrapper/artifact candidate binding
+  seam; this zero-value workflow friction was corrected at invocation without
+  changing pins or product code. The sole assignment then reached eight
+  completed upstream `2xx` attempts. Search succeeded, but `work_item.read`
+  returned `NOT_AUTHORIZED` (target digest retained only); W03 rename and W04
+  restricted TypeScript Code Mode were not reached.
+- Submit and publish were observed once each, while the lifecycle gate withheld
+  success. Raw result SHA-256 is
+  `aa093affafab54f9e9092c79574e0a8d02a41264a2bed9da8c9025d708868568`;
+  canonical validation passed. Durable redacted extract is
+  `user-testing-output/plane-agents/evidence/w03-w04-v18-31be67b4-live-stop.json`
+  SHA-256 `81b600a21ac5cdbafd1e680adc60866c2e5a26c3409a5163d35ebc61db77fb15`.
+- No retry, fallback, second primary, provider-disabled replay, or blind
+  `outcome_unknown` replay occurred. Cleanup verified zero runner containers,
+  volumes, networks, and no capacity lease. W03/W04 remain dirty; the lane is
+  idle pending the prepared-call fix. Raw inputs, transcript, provider text,
+  and credentials were not retained.

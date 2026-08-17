@@ -394,6 +394,31 @@ replay. W03-W08 remain dirty; UT-042 is open.
 - W05 and W06 remain dirty; this is provider-free boundary evidence, not route
   closure.
 
+## Wave 0CO — immutable v18 W03/W04 live stop — 2026-08-18
+
+- Exact source `6ea6526c018c61d7142ad3412cd7c1afc2355ac6` and wrapper
+  `31be67b471f5a2b9f4d51828d556429582adf355` were used with API
+  `plane-agent-api:g4-v18-6ea6526c` / `sha256:e3dd3668b607931ed03577151dcc2f9e2ad9e5819648b93293eb4634354e1350`
+  and runtime `plane-agent-runtime:hermes-6c460f10-g4-v18-6ea6526c` /
+  `sha256:95ce3ba56448e7abf807786235b945172138fe457b31d5e06c7cf093f869cb63`.
+  Manifest SHA-256 was `eadc996a1e13a120990e6cd957eb288a8612289d8de54c79d8495f40e6aa6ec3`;
+  Hermes/MCP/SDK pins were `6c460f10fe215718dce36dd73cda94155a9a34f8`,
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`, and
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`.
+- One fresh assignment used GPT-5.6 Luna xhigh, fallback disabled, and route
+  checks W03/W04. Search succeeded, but model-facing `work_item.read` was
+  denied with `NOT_AUTHORIZED` after eight completed upstream `2xx` attempts;
+  W03 mutation and W04 restricted Code Mode proof did not occur.
+- Submit and publish were each observed once, but the scenario gate withheld
+  success. No retry, fallback, second primary, provider-disabled replay, or
+  blind `outcome_unknown` replay ran. Durable bounded evidence is
+  `user-testing-output/plane-agents/evidence/w03-w04-v18-31be67b4-live-stop.json`
+  (SHA-256 `81b600a21ac5cdbafd1e680adc60866c2e5a26c3409a5163d35ebc61db77fb15`);
+  raw owner-only result SHA-256 is
+  `aa093affafab54f9e9092c79574e0a8d02a41264a2bed9da8c9025d708868568`.
+- Cleanup verified zero runner containers, volumes, networks, and capacity
+  lease. W03/W04 remain dirty; the lane is idle pending the prepared-call fix.
+
 ## Wave 0CN — v16 provider-free typed-envelope boundary repair — 2026-08-18
 
 - The retained v16 live stop does not contain the malformed model envelope, so

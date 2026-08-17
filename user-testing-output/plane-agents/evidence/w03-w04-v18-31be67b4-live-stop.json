@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "plane-agent-g4/w03-w04-live-stop/v1",
+  "status": "failed",
+  "lane": "W03-W04",
+  "wave": "v18",
+  "candidate": {
+    "source": "6ea6526c018c61d7142ad3412cd7c1afc2355ac6",
+    "wrapper": "31be67b471f5a2b9f4d51828d556429582adf355",
+    "manifestSha256": "eadc996a1e13a120990e6cd957eb288a8612289d8de54c79d8495f40e6aa6ec3",
+    "descriptorSha256": "7c501096ff6d5205199b1271a18da4e3784ecfbdf0e580fafd09cb046e461f46",
+    "api": {
+      "image": "plane-agent-api:g4-v18-6ea6526c",
+      "digest": "sha256:e3dd3668b607931ed03577151dcc2f9e2ad9e5819648b93293eb4634354e1350"
+    },
+    "runtime": {
+      "image": "plane-agent-runtime:hermes-6c460f10-g4-v18-6ea6526c",
+      "digest": "sha256:95ce3ba56448e7abf807786235b945172138fe457b31d5e06c7cf093f869cb63"
+    },
+    "pins": {
+      "hermes": "6c460f10fe215718dce36dd73cda94155a9a34f8",
+      "mcp": "c04974ed6624f17b41e63ef8182661929e77e0d3",
+      "sdk": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
+    }
+  },
+  "policy": {
+    "provider": "openai-codex/gpt-5.6-luna",
+    "reasoning": "xhigh",
+    "fallbackAllowed": false,
+    "resolver": "trusted-only",
+    "retries": 0,
+    "replays": 0,
+    "secondPrimary": 0
+  },
+  "lifecycle": {
+    "runRef": "run:c157b245-eeb3-4028-95ff-c9bbb2729c82",
+    "invocationRef": "invocation:9891e666-3102-4628-bb9a-8f5beee5a247",
+    "runState": "succeeded",
+    "invocationState": "succeeded",
+    "runtimeExit": {"kind": "completed", "finalSequence": 17},
+    "terminal": {"kind": "outcome_submission", "code": "unavailable"},
+    "publication": {"count": 1, "action": "applied", "replayed": false},
+    "terminalAction": {"observed": true, "reason": "product_outcome_published"}
+  },
+  "provider": {
+    "attempts": 8,
+    "upstreamInitiated": 8,
+    "completed2xx": 8,
+    "completed4xx": 0,
+    "completed5xx": 0,
+    "transport": 0,
+    "effectsUnknown": false
+  },
+  "operations": [
+    {"operationId": "search_workspace", "status": "success", "count": 1},
+    {"operationId": "work_item.read", "status": "denied", "errorCode": "NOT_AUTHORIZED", "count": 1, "targetDigest": "13c820ece19e535a552204b1768c09b8c0b8739cd22549eae2175a5610029c04"},
+    {"operationId": "work_item.rename", "status": "absent", "count": 0},
+    {"operationId": "agent.outcome.evaluate", "status": "denied", "errorCode": "NOT_AUTHORIZED", "count": 1},
+    {"operationId": "agent.outcome.submit", "status": "success", "count": 1},
+    {"operationId": "agent.outcome.publish", "status": "success", "count": 1}
+  ],
+  "scenario": {
+    "descriptor": "worker",
+    "routeChecks": ["W03", "W04"],
+    "expectedMutation": "work_item.rename",
+    "expectedReplay": "same-invocation-zero-delta",
+    "gate": "failed_at_work_item.read_authorization"
+  },
+  "failure": {
+    "phase": "api-invocation",
+    "errorClass": "RuntimeError",
+    "reasonCode": "unspecified",
+    "reasonCategory": "unavailable",
+    "firstGenuineBoundary": "work_item.read returned NOT_AUTHORIZED after search_workspace success",
+    "claim": "W03/W04 success withheld; no mutation or replay proof"
+  },
+  "cleanup": {
+    "runnerContainers": 0,
+    "runnerVolumes": 0,
+    "runnerNetworks": 0,
+    "capacityLeasePresent": false,
+    "providerSecretRetained": false
+  },
+  "evidence": {
+    "rawResultSha256": "aa093affafab54f9e9092c79574e0a8d02a41264a2bed9da8c9025d708868568",
+    "rawResultPath": "tmp/persona-wave-v6/w03-w04-v18-20260818-r1/result.json",
+    "validation": "validate_agent_g4_live.py passed",
+    "redaction": "No raw operation inputs, transcript, provider text, or credentials retained"
+  }
+}
