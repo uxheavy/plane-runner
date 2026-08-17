@@ -1,0 +1,105 @@
+{
+  "schemaVersion": "plane-agent-g4/operator-live-stop/v1",
+  "status": "failed",
+  "date": "2026-08-18",
+  "persona": "Omar Operator",
+  "routes": ["O01", "O03", "O04", "O05", "O06", "O07", "O08", "O09"],
+  "preservedRoute": "O02 untouched",
+  "candidate": {
+    "source": "fe72bcefe5ffc13c43212d48c2c47f4006d85ae5",
+    "wrapper": "98424ff87e3d699c26a5374dcc5a9e48f12ecaa8",
+    "apiImage": "plane-agent-api:g4-v19-fe72bce",
+    "apiDigest": "sha256:59abfaec97cd82b74995b7cf7c64cb0bd37973bd8bf528ab07143dc4fd4472f7",
+    "runtimeImage": "plane-agent-runtime:hermes-6c460f10-g4-v19-fe72bce",
+    "runtimeDigest": "sha256:120e8f51a8193512c3be9d38e1a2b958eb9339178ce59c655e2b3f2bef03480e",
+    "manifestSha256": "da5be33ccd7ad7c53207a5642a25ca37c8ac9ebe9556740e6455fe962d9f2f02",
+    "pins": {
+      "hermes": "6c460f10fe215718dce36dd73cda94155a9a34f8",
+      "mcp": "c04974ed6624f17b41e63ef8182661929e77e0d3",
+      "sdk": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
+    }
+  },
+  "descriptorSha256": "5594c150048dc824c3ce84a1cccd163f30d9753a25d53303316bf6b45a52f6c6",
+  "provider": {
+    "profile": "openai-codex",
+    "model": "gpt-5.6-luna",
+    "reasoning": "xhigh",
+    "fallback": false,
+    "freshPrimaryAssignments": 1,
+    "attempts": 8,
+    "completed2xx": 8,
+    "errors": 0,
+    "unknown": 0,
+    "retries": 0,
+    "secondPrimary": 0,
+    "replays": 0
+  },
+  "lifecycle": {
+    "run": "542ade15-6a77-4aab-9fa8-45576b25e7ab",
+    "invocation": "invocation:0032bddd-842d-44c0-82e9-d2d2afe45b28",
+    "state": "succeeded",
+    "runtimeExit": "failed",
+    "finalSequence": 16,
+    "visibleOutcomeTerminals": 1,
+    "outcomeSubmissions": 1,
+    "appliedPublications": 1,
+    "productOutcomeRef": "outcome-submission:333308f8-ef3a-44da-8727-4d47ee443e12",
+    "productEventRef": "product-event:0886a035-f711-47fa-bfb9-807a4112ef5d"
+  },
+  "firstFailure": {
+    "phase": "api-invocation",
+    "errorClass": "RuntimeError",
+    "reason": "runtime_error",
+    "subreason": "runtime_execution_failed",
+    "cause": "host_operation_failure",
+    "operation": "work_item.read",
+    "attemptRef": "host-request:cf26fb46aab9dd025b4104d79c446f0bb2e449c8dda8c2956d2a15eb770e999a",
+    "status": "invalid",
+    "errorCode": "PREPARED_CALL_INVALID",
+    "receipt": "unavailable",
+    "stderrSha256": "4a75d739b9a6c8121253e62560eeaa826b05828f97c4fb36506470909e1d0cab"
+  },
+  "operationAudit": {
+    "catalog.search": 1,
+    "catalog.describe": 1,
+    "search_workspace": 1,
+    "work_item.read": 0,
+    "agent.outcome.evaluate": 1,
+    "agent.outcome.submit": 1,
+    "agent.outcome.publish": 1
+  },
+  "routeDisposition": {
+    "O01": "catalog disclosure/search/describe and workspace search passed",
+    "O03": "first commission stopped at prepared work_item.read; SDK identity proof incomplete",
+    "O04-O09": "not started after fail-stop",
+    "O02": "untouched; existing clean evidence preserved"
+  },
+  "rawResult": {
+    "schema": "plane-agent-g4/live-failure/v1",
+    "mode": "0600",
+    "bytes": 9731,
+    "sha256": "6d561d110141e4b7e0764b0211524a6d2a182f5681946f3ae524c41e3c2d9a2f",
+    "semanticSha256": "4e97ee223593c6f1434bafa7f9085ee4f2fd912c7d7f01caa8f180da95341351",
+    "canonicalValidator": "passed"
+  },
+  "preflight": {
+    "envCopies": 13,
+    "envComparison": "byte-identical",
+    "setupScript": "not run",
+    "launcherFriction": "wrapper/source-parent candidate wiring handled before lease with canonical runner; no source or image change"
+  },
+  "cleanup": {
+    "lease": "absent",
+    "runnerContainers": 0,
+    "runnerVolumes": 0,
+    "runnerNetworks": 0,
+    "disposableCheckout": "removed",
+    "rawSecretsTracked": false
+  },
+  "policy": {
+    "stopAtFirstGenuineFailure": true,
+    "blindOutcomeUnknownReplay": false,
+    "providerRetry": false,
+    "fallback": false
+  }
+}

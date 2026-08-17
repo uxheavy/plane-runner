@@ -3594,7 +3594,7 @@ not a provider rerun.
   runtime digest
   `sha256:120e8f51a8193512c3be9d38e1a2b958eb9339178ce59c655e2b3f2bef03480e`,
   manifest SHA-256 `da5be33ccd7ad7c53207a5642a25ca37c8ac9ebe9556740e6455fe962d9f2f02`.
-  Hermes/MCP/SDK pins were exact; seven required env files were byte-compared
+- Hermes/MCP/SDK pins were exact; seven required env files were byte-compared
   to the authoritative checkout and `setup.sh` was not run.
 - One fresh serialized W03/W04 journey used Luna xhigh with fallback disabled.
   `search_workspace` succeeded, then prepared `work_item.read` stopped with
@@ -3608,3 +3608,39 @@ not a provider rerun.
   provider-disabled replay. Cleanup verified no capacity lease and zero runner
   containers, volumes, or networks. W03/W04 remain dirty; no candidate mutation
   was made.
+
+## Wave 0CO-O — immutable v19 Operator fail-stop — 2026-08-18
+
+- Exact candidate was source `fe72bcefe5ffc13c43212d48c2c47f4006d85ae5`,
+  wrapper `98424ff87e3d699c26a5374dcc5a9e48f12ecaa8`; API digest
+  `sha256:59abfaec97cd82b74995b7cf7c64cb0bd37973bd8bf528ab07143dc4fd4472f7`,
+  runtime digest
+  `sha256:120e8f51a8193512c3be9d38e1a2b958eb9339178ce59c655e2b3f2bef03480e`,
+  manifest SHA-256 `da5be33ccd7ad7c53207a5642a25ca37c8ac9ebe9556740e6455fe962d9f2f02`.
+  Hermes/MCP/SDK pins remained `6c460f10fe215718dce36dd73cda94155a9a34f8`,
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`, and
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`.
+- Preparation copied and byte-compared `13` required env files without reading,
+  printing, or sourcing values; `setup.sh` was not run. The exact descriptor
+  SHA-256 was `5594c150048dc824c3ce84a1cccd163f30d9753a25d53303316bf6b45a52f6c6`.
+  Provider-free v19 checks passed `199`, with `1` deselected.
+- Exactly one fresh Operator assignment used `openai-codex/gpt-5.6-luna`
+  xhigh with fallback disabled. Run
+  `542ade15-6a77-4aab-9fa8-45576b25e7ab`, invocation
+  `invocation:0032bddd-842d-44c0-82e9-d2d2afe45b28`; provider attempts were
+  `8` completed `2xx`, with errors/unknown/retries/second-primary/replay all
+  `0`. O01 disclosure/search passed; O03 stopped at `work_item.read` with
+  invalid `PREPARED_CALL_INVALID`. O04-O09 were not started and O02 was not
+  rerun.
+- Runtime failure was `api-invocation` / `runtime_process` / `process_exit`,
+  with host operation failure and no host receipt. One outcome submission,
+  one applied publication, and one visible terminal were observed. Raw result
+  SHA-256 was `6d561d110141e4b7e0764b0211524a6d2a182f5681946f3ae524c41e3c2d9a2f`;
+  durable redacted evidence is
+  `user-testing-output/plane-agents/evidence/operator-o01-o09-v19-live-stop-20260818.json`,
+  SHA-256 `79883058af0978ed7a237ba0edba495329b97a170ae363a3e1e41da0864a7a07`.
+- Cleanup completed after the exact owner exited: capacity lease absent, no
+  exact runner containers/volumes/networks, and the disposable detached
+  checkout removed. No provider retry, fallback, second primary, or blind
+  `outcome_unknown` replay occurred. Routes remain open/unproven after the
+  first product failure.

@@ -428,6 +428,39 @@ outcome submission and one applied publication/terminal product event were
 observed, but they do not close W07/W08. Keep the route `dirty` and do not
 replay this terminal failed scenario. Durable extract:
 `user-testing-output/plane-agents/evidence/w07-w08-v18-live-stop.json`.
+## Wave 0CO-O — immutable v19 Operator first-commission stop — 2026-08-18
+
+| Route | Exact evidence and result | Disposition |
+| ----- | ------------------------- | ------------ |
+| O01 | `catalog.search=1`, `catalog.describe=1`, `search_workspace=1`; durable extract `user-testing-output/plane-agents/evidence/operator-o01-o09-v19-live-stop-20260818.json` SHA-256 `79883058af0978ed7a237ba0edba495329b97a170ae363a3e1e41da0864a7a07` | disclosure/progressive discovery passed |
+| O03 | `work_item.read=0`; first commission stopped with `PREPARED_CALL_INVALID`; SDK identity proof incomplete; raw result SHA-256 `6d561d110141e4b7e0764b0211524a6d2a182f5681946f3ae524c41e3c2d9a2f` | blocker; fail-stop |
+| O04 | no route attempt after O03 stop | untested |
+| O05 | no route attempt after O03 stop | untested |
+| O06 | no route attempt after O03 stop | untested |
+| O07 | no route attempt after O03 stop | untested |
+| O08 | no route attempt after O03 stop | untested |
+| O09 | no route attempt after O03 stop | untested |
+
+- Exact v19 candidate: source `fe72bcefe5ffc13c43212d48c2c47f4006d85ae5`, wrapper
+  `98424ff87e3d699c26a5374dcc5a9e48f12ecaa8`; API digest
+  `sha256:59abfaec97cd82b74995b7cf7c64cb0bd37973bd8bf528ab07143dc4fd4472f7`,
+  runtime digest
+  `sha256:120e8f51a8193512c3be9d38e1a2b958eb9339178ce59c655e2b3f2bef03480e`,
+  manifest SHA-256 `da5be33ccd7ad7c53207a5642a25ca37c8ac9ebe9556740e6455fe962d9f2f02`.
+- One fresh assignment used `openai-codex/gpt-5.6-luna` xhigh with fallback
+  disabled. Run `542ade15-6a77-4aab-9fa8-45576b25e7ab`, invocation
+  `invocation:0032bddd-842d-44c0-82e9-d2d2afe45b28`; provider counts were
+  `2xx=8`, errors `0`, unknown `0`, retries `0`, second primary `0`, replay `0`.
+  One outcome submission, one applied publication, and one terminal were
+  observed before runtime sequence `16` failed.
+- The first genuine failure was `api-invocation` / `runtime_process`:
+  `work_item.read` had status `invalid` and `PREPARED_CALL_INVALID`; its host
+  receipt was unavailable. The candidate launcher mismatch was handled
+  pre-lease by the canonical runner without changing source or images. O02 was
+  untouched. Cleanup proved absent lease, zero exact runner resources, and the
+  disposable checkout was removed. No retry, fallback, second primary, or
+  blind `outcome_unknown` replay occurred.
+
 ## Wave 0CN-O — immutable v18 Operator first-commission stop — 2026-08-18
 
 - Exact v18 candidate: source `6ea6526c018c61d7142ad3412cd7c1afc2355ac6`, wrapper
