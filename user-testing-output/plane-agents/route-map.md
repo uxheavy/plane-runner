@@ -394,6 +394,34 @@ replay. W03-W08 remain dirty; UT-042 is open.
 - W05 and W06 remain dirty; this is provider-free boundary evidence, not route
   closure.
 
+## Wave 0CH — exact corrected W07/W08 live stop — 2026-08-17
+
+- Exact branch `codex/plane-agent-functional-integration-20260817` was at
+  wrapper `139897ac356762563d8e14648712f78685eb5019`; manifest source/parent
+  was `78e02a20b4b0649ce1d4844d1cb9cf39526b362a`, SHA-256
+  `d23c6d9972a54b0bc9d69e33dfbae078eb92d05cd12d0183e6ff431451cac728`.
+  Hermes was `6c460f10fe215718dce36dd73cda94155a9a34f8`, MCP
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. API and runtime image digests
+  were `sha256:700c98e8cfe8737068d7a24347169603158490171815fa381a96df833bfacb01`
+  and `sha256:2f11b340652a1d1e8fccaeb2514a6069deed2c0f9794b255ed886c038092a6af`.
+- Seven runtime env files were copied byte-identically; `setup.sh` was not
+  run. Exact runtime red-team passed and the provider-free contract suite
+  passed `108/108`. Offline authority/config/scenario validation passed.
+- Exactly one fresh serialized assignment used `openai-codex`,
+  `gpt-5.6-luna`, xhigh, fallback disabled, and the trusted subscription
+  resolver path. It completed seven upstream 2xx attempts, then stopped when
+  `work_item.read` returned `NOT_AUTHORIZED` against the scenario’s required
+  success. One terminal outcome and one applied publication were bounded in
+  S00, but W07/W08 closure and W08 readback are not claimed.
+- No retry, fallback, replay, or `outcome_unknown` replay occurred. The
+  provider-disabled replay was ineligible after the scenario gate failure.
+  Cleanup verified the shared capacity marker absent and zero exact-labeled
+  containers, volumes, and networks.
+- Durable redacted evidence is retained under
+  `user-testing-output/plane-agents/evidence/` with hashes recorded in the
+  issue ledger.
+
 ## Wave 0CG — exact integrated W07/W08 live stop — 2026-08-17
 
 - Branch `codex/w07-w08-live-20260817` started at Plane wrapper commit

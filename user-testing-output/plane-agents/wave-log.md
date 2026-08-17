@@ -2988,3 +2988,42 @@ records this diagnosis without changing the retained receipts.
 - Cleanup proof: capacity marker absent; observed disposable containers,
   volumes, and networks were all zero. The owner disposition is a separate
   provider-free fix at the existing Code Mode host-callback seam.
+
+## Wave 0CH — exact corrected W07/W08 live stop — 2026-08-17
+
+- Exact candidate binding: branch
+  `codex/plane-agent-functional-integration-20260817`, wrapper
+  `139897ac356762563d8e14648712f78685eb5019`, sole parent/source
+  `78e02a20b4b0649ce1d4844d1cb9cf39526b362a`, manifest SHA-256
+  `d23c6d9972a54b0bc9d69e33dfbae078eb92d05cd12d0183e6ff431451cac728`.
+  API `plane-agent-api:g4-v11-78e02a` digest
+  `sha256:700c98e8cfe8737068d7a24347169603158490171815fa381a96df833bfacb01`;
+  runtime `plane-agent-runtime:hermes-6c460f10-g4-v11-78e02a` digest
+  `sha256:2f11b340652a1d1e8fccaeb2514a6069deed2c0f9794b255ed886c038092a6af`.
+- Hermes/MCP/SDK pins were `6c460f10fe215718dce36dd73cda94155a9a34f8`,
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`, and
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. Provider policy was ChatGPT
+  Responses, `openai-codex/gpt-5.6-luna`, xhigh, fallback disabled. The
+  exact runtime red-team passed; the full contract suite passed `108` tests.
+- Fresh authority `authority-w07-w08-139897-20260817-r3` ran commission
+  `w07-w08-artifact-publication-readback-20260818-r2`. Run
+  `1195a796-e2a0-46d2-ba3d-4043b158fbb3`, invocation
+  `invocation:4b962fbe-1621-46d5-9c1f-f90477b6d047`. Provider counts:
+  `2xx=7`, `4xx=0`, `5xx=0`, `transport=0`, fallback `false`, replay `0`.
+- The first genuine failure was the local Plane operation boundary:
+  `work_item.read` expected `success`, actual `denied`, error `NOT_AUTHORIZED`.
+  `search_workspace` succeeded once; evaluator was intentionally denied once;
+  outcome submit and publish each succeeded once. S00 bounded exactly one
+  terminal and one applied publication, but the scenario gate failed and no
+  artifact exactness, authorized readback, cross-workspace denial, missing
+  publication test, or replay proof is claimed.
+- Canonical result SHA-256
+  `e2ac431c2ffa34b45b951b57c2856d726f9f909e728acd7dddb94b15da176c12`;
+  authority `c741336b77bfa558a474773c751f93fd5558626763910aab47263bf5f4d18527`;
+  config `09ffb9b574b77cae3cb926fd393566832db19e77cc18feb91552e29247441385`;
+  scenario `1e643ec885cc62226ef4ab272bb772f1bc544090bf2d2dd03d137226accf3074`;
+  redacted extract `99a6dc012f806c6c7836ff707bf031429840b4c3756754eded39955c57783c97`.
+- Cleanup proof: shared capacity marker absent; exact live labels showed zero
+  containers, volumes, and networks. No further provider use was made. The
+  owner disposition is provider-free diagnosis of the Plane work-item
+  authorization/fixture-binding seam.

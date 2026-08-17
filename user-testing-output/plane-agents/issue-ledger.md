@@ -551,3 +551,20 @@ work-item read and outcome evaluation, and submit/publish host receipts; the
 exact lifecycle gates did not pass after the Code Mode failure. No W08
 readback or duplicate-effect claim is made. The capacity marker and all
 observed disposable Docker resources are absent/zero after cleanup.
+
+## Worker W07/W08 corrected-candidate live disposition — Wave 0CH — 2026-08-17
+
+| Issue | Severity | Persona / route | Durable evidence | Root cause / bounded disposition | Retest / status |
+| ----- | -------- | --------------- | ---------------- | ------------------------------- | --------------- |
+| UT-057 | blocker | Maya / W07-W08 corrected fresh serialized assignment | `w07-w08-139897-failure-extract.json` SHA-256 `99a6dc012f806c6c7836ff707bf031429840b4c3756754eded39955c57783c97`; bounded result SHA-256 `e2ac431c2ffa34b45b951b57c2856d726f9f909e728acd7dddb94b15da176c12`; manifest SHA-256 `d23c6d9972a54b0bc9d69e33dfbae078eb92d05cd12d0183e6ff431451cac728`; scenario SHA-256 `1e643ec885cc62226ef4ab272bb772f1bc544090bf2d2dd03d137226accf3074` | One fresh exact-candidate assignment completed seven upstream 2xx attempts and reached one applied publication/terminal receipt, then failed the W07/W08 scenario gate because `work_item.read` returned `NOT_AUTHORIZED` instead of the required success. This is a Plane work-item authorization/fixture-binding failure, not a provider failure. | No retry, fallback, replay, or provider-disabled replay. W07/W08 remain dirty/unproven; await provider-free owner diagnosis. / open |
+
+Run `1195a796-e2a0-46d2-ba3d-4043b158fbb3` and invocation
+`invocation:4b962fbe-1621-46d5-9c1f-f90477b6d047` are bound to wrapper
+`139897ac356762563d8e14648712f78685eb5019` and source parent
+`78e02a20b4b0649ce1d4844d1cb9cf39526b362a`. Provider attempts were `7`, all
+`2xx`, with fallback disabled and replay count `0`. The bounded S00 receipt
+shows exactly one visible terminal and one applied publication with outcome
+`outcome-submission:f0b0ad16-804e-4098-92e0-2e07456edf7a` and product event
+`product-event:a7b6d14e-2c3b-4a7a-b720-d3698d44f6aa`, but artifact exactness,
+authorized readback, isolation readback, missing-publication rejection, and
+replay proof were not completed after the read denial.
