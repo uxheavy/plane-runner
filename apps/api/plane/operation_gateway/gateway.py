@@ -6,6 +6,7 @@ import hashlib
 import json
 import time
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import timedelta
 from types import SimpleNamespace
@@ -114,6 +115,20 @@ class GatewayFailure(Exception):
 
 class RetryRunningAttempt(Exception):
     """The first-use row is fresh; let its owner finish before replaying."""
+
+
+def work_item_target_digest(operation_id: Any, input_data: Any) -> str | None:
+    """Return a redacted discriminator for a semantic work-item target."""
+
+    if not isinstance(operation_id, str) or not operation_id.startswith("work_item."):
+        return None
+    if not isinstance(input_data, Mapping):
+        return None
+    target = {
+        "project_id": input_data.get("project_id"),
+        "issue_id": input_data.get("issue_id"),
+    }
+    return hashlib.sha256(canonical_json(target).encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -1292,6 +1307,11 @@ class OperationGateway:
         result: dict[str, Any] | None,
         error: GatewayError | None,
     ) -> OperationGatewayAudit:
+        audit_result = dict(result) if isinstance(result, Mapping) else result
+        target_digest = work_item_target_digest(record.operation_id, record.request_input)
+        if target_digest is not None:
+            audit_result = dict(audit_result) if isinstance(audit_result, Mapping) else {}
+            audit_result["targetDigest"] = target_digest
         return OperationGatewayAudit.objects.create(
             invocation_id=record.invocation_id,
             phase=phase,
@@ -1304,7 +1324,7 @@ class OperationGateway:
             idempotency_key=record.idempotency_key,
             correlation_id=record.correlation_id,
             request_digest=record.request_digest,
-            result=result,
+            result=audit_result,
             error_code=error["code"] if error else None,
         )
 

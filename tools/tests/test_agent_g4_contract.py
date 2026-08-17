@@ -2057,6 +2057,26 @@ class G4ContractTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
 
+    def test_failure_receipt_accepts_redacted_work_item_target_digest(self):
+        manifest, authority, config, receipt = failure_fixture()
+        project_id = "11111111-1111-4111-8111-111111111111"
+        issue_id = "22222222-2222-4222-8222-222222222222"
+        target_digest = hashlib.sha256(
+            json.dumps(
+                {"project_id": project_id, "issue_id": issue_id},
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        receipt["planeOperationAudit"][1]["targetDigest"] = target_digest
+        receipt["semanticDigest"] = _semantic_digest(receipt)
+        encoded = json.dumps(receipt, separators=(",", ":"))
+        self.assertNotIn(project_id, encoded)
+        self.assertNotIn(issue_id, encoded)
+        temp, paths = self.write_case(manifest, authority, config, encoded)
+        self.addCleanup(temp.cleanup)
+        self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
+
     def test_failure_receipt_rejects_unbounded_provider_reason_subreason(self):
         manifest, authority, config, receipt = failure_fixture()
         receipt["providerAttempts"] = [
@@ -2414,6 +2434,42 @@ class G4ContractTests(unittest.TestCase):
             ),
         )
         self.assertEqual(evidence["providerAttempts"][0]["statusClass"], "transport")
+
+    def test_failure_evidence_preserves_redacted_work_item_target_digest(self):
+        project_id = "11111111-1111-4111-8111-111111111111"
+        issue_id = "22222222-2222-4222-8222-222222222222"
+        target_digest = hashlib.sha256(
+            json.dumps(
+                {"project_id": project_id, "issue_id": issue_id},
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        evidence = invoke_helper_namespace()["build_failure_evidence"](
+            binding={},
+            failure_phase="api-invocation",
+            error_class="RuntimeError",
+            exit_code=1,
+            run_id="run:redacted-target",
+            run_state="failed",
+            invocation_id="invocation:redacted-target",
+            invocation_state="failed",
+            provider_attempts=[],
+            terminal_kind="run_failure",
+            plane_operation_audit=[
+                {
+                    "operation_id": "work_item.read",
+                    "outcome": "denied",
+                    "error_code": "NOT_AUTHORIZED",
+                    "target_digest": target_digest,
+                }
+            ],
+        )
+        read_row = next(row for row in evidence["planeOperationAudit"] if row["operationId"] == "work_item.read")
+        self.assertEqual(read_row["targetDigest"], target_digest)
+        encoded = json.dumps(evidence, sort_keys=True, separators=(",", ":"))
+        self.assertNotIn(project_id, encoded)
+        self.assertNotIn(issue_id, encoded)
 
     def test_failure_evidence_is_bounded_structural_and_excludes_sensitive_runtime_data(self):
         source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")

@@ -1534,7 +1534,7 @@ def _validate_live_readback(evidence: dict[str, Any]) -> None:
     operation_rows = {}
     for operation_id, row in zip(_LIVE_OPERATION_IDS, audit):
         operation = _object(row, "evidence_operation_audit")
-        if set(operation) != {"operationId", "status", "errorCode", "count"}:
+        if set(operation).difference({"targetDigest"}) != {"operationId", "status", "errorCode", "count"}:
             raise ContractError("evidence_operation_audit_fields_invalid")
         if (
             operation["operationId"] != operation_id
@@ -1545,6 +1545,8 @@ def _validate_live_readback(evidence: dict[str, Any]) -> None:
             or not 0 <= operation["count"] <= 8
         ):
             raise ContractError("evidence_operation_audit_invalid")
+        if "targetDigest" in operation:
+            _hash(operation["targetDigest"], "evidence_operation_audit_targetDigest")
         operation_rows[operation_id] = operation
     if not any(
         operation_rows[operation_id]["status"] == "success"
@@ -1671,8 +1673,10 @@ def _validate_scenario_readback(evidence: dict[str, Any]) -> None:
     if not isinstance(audit, list) or len(audit) != len(_LIVE_OPERATION_IDS):
         raise ContractError("evidence_operation_audit_count_invalid")
     for row in audit:
-        if not isinstance(row, dict) or set(row) != {"operationId", "status", "errorCode", "count"} or row["status"] not in _LIVE_OPERATION_STATUSES or type(row["count"]) is not int or not 0 <= row["count"] <= 8:
+        if not isinstance(row, dict) or set(row).difference({"targetDigest"}) != {"operationId", "status", "errorCode", "count"} or row["status"] not in _LIVE_OPERATION_STATUSES or type(row["count"]) is not int or not 0 <= row["count"] <= 8:
             raise ContractError("evidence_operation_audit_invalid")
+        if "targetDigest" in row:
+            _hash(row["targetDigest"], "evidence_operation_audit_targetDigest")
     publication = evidence["explicitPublication"]
     if not isinstance(publication, dict) or set(publication) != {"count", "refs"} or type(publication["count"]) is not int or not 0 <= publication["count"] <= 8 or not isinstance(publication["refs"], list) or len(publication["refs"]) != publication["count"]:
         raise ContractError("evidence_publication_invalid")
@@ -1936,7 +1940,7 @@ def _validate_failure_receipt(
         raise ContractError("evidence_operation_audit_count_invalid")
     for operation_id, row in zip(_LIVE_OPERATION_IDS, audit):
         operation = _object(row, "evidence_operation_audit")
-        if set(operation) != {"operationId", "status", "errorCode", "count"} or (
+        if set(operation).difference({"targetDigest"}) != {"operationId", "status", "errorCode", "count"} or (
             operation["operationId"] != operation_id
             or operation["status"] not in _LIVE_OPERATION_STATUSES
             or operation["errorCode"] is not None
@@ -1945,6 +1949,8 @@ def _validate_failure_receipt(
             or not 0 <= operation["count"] <= 8
         ):
             raise ContractError("evidence_operation_audit_invalid")
+        if "targetDigest" in operation:
+            _hash(operation["targetDigest"], "evidence_operation_audit_targetDigest")
     if "providerRelay" in evidence:
         evidence_provider_relay = _provider_relay(evidence["providerRelay"], "evidence_provider_relay")
         _exact(evidence_provider_relay, authority_info["providerRelay"], "evidence_provider_relay")

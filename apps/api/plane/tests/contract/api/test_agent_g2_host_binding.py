@@ -572,6 +572,12 @@ def test_code_mode_search_to_read_preserves_target_and_denies_cross_project(
         expected_target_digest = hashlib.sha256(
             json.dumps(read_input, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
+        authorized_audit = OperationGatewayAudit.objects.get(
+            request_id=authorized.output["result"]["requestId"],
+            phase=OperationGatewayAudit.Phase.OUTCOME,
+        )
+        assert authorized_audit.result["targetDigest"] == expected_target_digest
+        assert authorized_audit.result["work_item"]["id"] == str(gateway_issue.id)
         assert authorized.output["observations"] == [
             {
                 "source": "code",
@@ -614,14 +620,25 @@ def test_code_mode_search_to_read_preserves_target_and_denies_cross_project(
         denied_record = OperationGatewayIdempotency.objects.get(idempotency_key="idempotency:g2-search-bound-denied")
         assert denied_record.request_input == denied_input
         assert denied_record.caller_id == actor.principal_id
+        denied_audit = OperationGatewayAudit.objects.get(
+            request_id=denied_record.request_id,
+            phase=OperationGatewayAudit.Phase.OUTCOME,
+        )
+        assert denied_audit.result == {"targetDigest": hashlib.sha256(
+            json.dumps(denied_input, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()}
         assert denied.status == "ok", denied
         assert denied.output["result"]["ok"] is False
         assert denied.output["result"]["error"]["code"] == "NOT_AUTHORIZED"
+        assert denied.output["result"]["targetDigest"] == denied.output["observations"][0]["targetDigest"]
         assert denied.output["observations"][0]["status"] == "denied"
         assert denied.output["observations"][0]["errorCode"] == "NOT_AUTHORIZED"
         assert denied.output["observations"][0]["targetDigest"] == hashlib.sha256(
             json.dumps(denied_input, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
+        denied_wire = json.dumps(denied.output, sort_keys=True, separators=(",", ":"))
+        assert str(other_project.id) not in denied_wire
+        assert str(other_issue.id) not in denied_wire
     finally:
         server.close()
 

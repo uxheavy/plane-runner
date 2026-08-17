@@ -870,6 +870,14 @@ def build_failure_evidence(
             if status in operation_statuses and status != "absent":
                 item["status"] = status
                 item["errorCode"] = error_code if error_code in operation_error_codes else None
+            target_digest = row.get("targetDigest", row.get("target_digest"))
+            if (
+                isinstance(target_digest, str)
+                and operation_id.startswith("work_item.")
+                and len(target_digest) == 64
+                and all(character in "0123456789abcdef" for character in target_digest)
+            ):
+                item["targetDigest"] = target_digest
         return [summary[operation_id] for operation_id in operation_ids]
 
     def bounded_identifier(value):
@@ -1647,8 +1655,17 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
         operation_audit = list(
             OperationGatewayAudit.objects.filter(correlation_id=f"correlation:{run.id}", phase="outcome")
             .order_by("created_at", "id")
-            .values("operation_id", "phase", "outcome", "error_code")[:64]
+            .values("operation_id", "phase", "outcome", "error_code", "result")[:64]
         )
+        for row in operation_audit:
+            result = row.pop("result", None)
+            target_digest = result.get("targetDigest") if isinstance(result, dict) else None
+            if (
+                isinstance(target_digest, str)
+                and len(target_digest) == 64
+                and all(character in "0123456789abcdef" for character in target_digest)
+            ):
+                row["targetDigest"] = target_digest
         host_receipts = bool(operation_audit)
         return (
             attempts,

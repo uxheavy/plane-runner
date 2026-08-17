@@ -35,7 +35,7 @@ from plane.db.models import (
     RuntimeInvocation,
 )
 from plane.operation_gateway.catalog import CATALOG_DIGEST, code_mode_callback_names, get_operation
-from plane.operation_gateway.gateway import OperationGateway
+from plane.operation_gateway.gateway import OperationGateway, work_item_target_digest
 
 from .contracts import (
     CODE_MODE_SCHEMA_VERSION,
@@ -879,17 +879,7 @@ class CodeModeHostRPC:
     def _target_digest(raw: Mapping[str, Any]) -> str | None:
         """Expose only a stable discriminator for semantic work-item targets."""
 
-        operation_id = raw.get("operation_id")
-        input_data = raw.get("input")
-        if not isinstance(operation_id, str) or not operation_id.startswith("work_item."):
-            return None
-        if not isinstance(input_data, Mapping):
-            return None
-        target = {
-            "project_id": input_data.get("project_id"),
-            "issue_id": input_data.get("issue_id"),
-        }
-        return hashlib.sha256(canonical_json(target).encode("utf-8")).hexdigest()
+        return work_item_target_digest(raw.get("operation_id"), raw.get("input"))
 
     def _stable_replay_response(self, raw: Mapping[str, Any], response: Mapping[str, Any]) -> Mapping[str, Any]:
         """Keep replay results stable, except where publication needs disposition."""
