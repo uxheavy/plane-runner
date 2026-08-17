@@ -80,6 +80,9 @@ if os.environ.get("G4_SCENARIO_DESCRIPTOR"):
     )
 
 _LIVE_USAGE_KEYS = ("inputTokens", "outputTokens", "durationMs")
+_THRESHOLD_KEYS = frozenset(
+    {"permittedSuccessRateMin", "deniedRejectionRateMin", "maxLatencyP95Ms", "maxErrorRate"}
+)
 _TERMINAL_LIFECYCLE_PROTOCOL = "hermes.terminal-lifecycle/v1"
 _TERMINAL_LIFECYCLE_STATUSES = frozenset(
     {"ok", "replayed", "denied", "conflict", "unavailable", "invalid"}
@@ -136,6 +139,20 @@ _S00_GATE_PREDICATE_FIELDS = (
     ),
     ("runtime_exit_completed", ("kind", "hasFailure")),
 )
+
+
+def _approved_thresholds(raw: str) -> dict[str, int | float]:
+    """Parse the authority-validated thresholds forwarded by the live shell."""
+
+    try:
+        value = json.loads(raw)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("G4 approved thresholds are invalid") from exc
+    if not isinstance(value, dict) or set(value) != _THRESHOLD_KEYS:
+        raise RuntimeError("G4 approved thresholds are invalid")
+    if any(isinstance(item, bool) or not isinstance(item, (int, float)) for item in value.values()):
+        raise RuntimeError("G4 approved thresholds are invalid")
+    return value
 
 
 def _s00_gate_projection(value):
@@ -2129,12 +2146,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
             "s00Gate": _s00_gate_projection(s00_gate),
             "thresholds": {
                 "profile": "g4-live-minimal-single-invocation",
-                "approved": {
-                    "permittedSuccessRateMin": 1.0,
-                    "deniedRejectionRateMin": 1.0,
-                    "maxLatencyP95Ms": 600000.0,
-                    "maxErrorRate": 0.0,
-                },
+                "approved": _approved_thresholds(os.environ["G4_APPROVED_THRESHOLDS_JSON"]),
                 "observed": {
                     "permittedSuccessRate": 1.0,
                     "deniedRejectionRate": 1.0,

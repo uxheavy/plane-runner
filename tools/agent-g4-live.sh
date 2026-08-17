@@ -151,6 +151,14 @@ provider.pop("fallbackUsed", None)
 print(json.dumps(provider, sort_keys=True, separators=(",", ":")))
 PY
 )"
+G4_APPROVED_THRESHOLDS_JSON="$(python3 - "${LIVE_CONFIG}" <<'PY'
+import json
+import sys
+
+config = json.load(open(sys.argv[1], encoding="utf-8"))
+print(json.dumps(config["thresholds"], sort_keys=True, separators=(",", ":")))
+PY
+)"
 IFS=$'\t' read -r G4_AUTHORITY_ID G4_PERMITTED_CANARY G4_DENIED_CANARY <<<"$(python3 - "${LIVE_AUTHORITY}" <<'PY'
 import json
 import sys
@@ -980,6 +988,7 @@ live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" \
     --env G4_API_CONTRACT="${G4_API_CONTRACT}" \
     --env G4_PROVIDER_DESCRIPTOR_JSON="${PROVIDER_DESCRIPTOR_JSON}" \
     --env G4_PROVIDER_RELAY_JSON="${G4_PROVIDER_RELAY_JSON}" \
+    --env G4_APPROVED_THRESHOLDS_JSON="${G4_APPROVED_THRESHOLDS_JSON}" \
     --env G4_AUTHORITY_ID="${G4_AUTHORITY_ID}" \
     --env G4_PERMITTED_CANARY="${G4_PERMITTED_CANARY}" \
     --env G4_DENIED_CANARY="${G4_DENIED_CANARY}" \

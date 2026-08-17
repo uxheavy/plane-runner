@@ -1,0 +1,129 @@
+{
+  "schemaVersion": "plane-agent-w05-w06/live-evidence/v1",
+  "status": "route-passed-validator-metadata-fixed-provider-free",
+  "worker": "W05-W06",
+  "commissionId": "context-governance",
+  "binding": {
+    "wrapperCommit": "389b25e76375d105120962ea548f8b8faaef04c3",
+    "sourceCommit": "2d349c29353fc80dc0ef181cea9736b9eef8e829",
+    "manifestSha256": "474f1898b1abedb29925e57cea7356434215de3484902dd8fa8234b3649c0a4a",
+    "apiImage": "plane-agent-api:g4-v15-2d349c29",
+    "apiImageDigest": "sha256:fa5aa7aabe13aa528bb15a4c10effb69c40ed98c88de88d795f23acce88f3ab1",
+    "runtimeImage": "plane-agent-runtime:hermes-6c460f10-g4-v15-2d349c29",
+    "runtimeImageDigest": "sha256:4f1d52367fb2175e23a9e8c278f5a3edf2795bce99cd698cca6db5194182f559",
+    "hermesCommit": "6c460f10fe215718dce36dd73cda94155a9a34f8",
+    "mcpGitlink": "c04974ed6624f17b41e63ef8182661929e77e0d3",
+    "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889",
+    "descriptorSha256": "bb94cf164497f9b86be3bd2a5c9e607dc563f371418a6ac4e038fb9ba698ea3a"
+  },
+  "provider": {
+    "name": "openai-codex",
+    "model": "gpt-5.6-luna",
+    "reasoning": "xhigh",
+    "fallbackAllowed": false,
+    "attemptCount": 8,
+    "completed2xxCount": 8,
+    "failedCount": 0
+  },
+  "workload": {
+    "runRef": "run:11483892-9a44-493c-84c4-419b5c3ba40b",
+    "invocationRef": "invocation:bd4afa32-1095-408a-8590-660ad2ba09f5",
+    "outcomeRef": "outcome-submission:531c61fe-a9aa-4144-a79e-56f6fcc8b84d",
+    "productEventRef": "product-event:0ff71282-e7b5-47b1-8db0-254c7e7909e5",
+    "runtimeEventCount": 18,
+    "terminalKind": "outcome_submission",
+    "invocationState": "succeeded",
+    "runState": "succeeded",
+    "outcomeCount": 1,
+    "publicationCount": 1,
+    "terminalEventCount": 1
+  },
+  "operations": {
+    "catalog.search": {"count": 1, "outcome": "success"},
+    "catalog.describe": {"count": 1, "outcome": "success"},
+    "agent.context.read": {"count": 1, "outcome": "success"},
+    "agent.outcome.submit": {"count": 1, "outcome": "success"},
+    "agent.outcome.publish": {"count": 1, "outcome": "success"}
+  },
+  "routes": {
+    "W05": {
+      "contextReceipt": true,
+      "privateMemoryPresent": true,
+      "subjectPreferencesSeparate": true,
+      "skillProjectionPresent": true,
+      "excludedOtherUserAgentStale": true,
+      "correctContextProjection": true,
+      "otherSubjectIsolated": true,
+      "otherAgentIsolated": true,
+      "losslessRoundTrip": true
+    },
+    "W06": {
+      "candidate": true,
+      "candidateNotProjected": true,
+      "humanApproved": true,
+      "promoted": true,
+      "privateAfterPromotion": true,
+      "rollbackRevision": true,
+      "proposalReplayStable": true,
+      "unsupportedSharedDenied": true,
+      "workspaceUnreviewedNotPromoted": true
+    }
+  },
+  "replay": {
+    "status": "passed",
+    "providerAccess": "disabled",
+    "sameInvocation": true,
+    "newChildren": 0,
+    "newProviderAttempts": 0,
+    "newInvocations": 0,
+    "newReceipts": 0,
+    "newAudits": 0,
+    "newUsage": 0,
+    "newOutcomes": 0,
+    "newPublications": 0,
+    "newTerminalEvents": 0,
+    "semanticSideEffects": 0,
+    "memoryRevisions": 0,
+    "skillRevisions": 0,
+    "proposals": 0,
+    "contextReceipts": 0
+  },
+  "receipt": {
+    "path": "tmp/persona-wave-v6/w05-w06-live-v15-389b25e7-r2/result.json",
+    "mode": "0600",
+    "bytes": 13374,
+    "sha256": "22f961a42708e2d6df172426d967f0b146758b8f50d1de3aeb72532243f03185",
+    "scenarioGate": "passed",
+    "s00Gate": "passed",
+    "runtimeExit": "completed",
+    "rawCanonicalValidation": "failed:evidence_approved_thresholds_mismatch"
+  },
+  "structuralCorrection": {
+    "rootCause": "The live invoker hardcoded an approval threshold object instead of projecting the authority-validated config thresholds into the receipt.",
+    "providerRerun": false,
+    "futureBehavior": "The live shell now forwards the validated threshold object and the invoker parses it fail-closed.",
+    "authorityThresholdReprojection": {
+      "changedFields": ["thresholds.approved", "semanticDigest"],
+      "canonicalValidation": "passed:collected=1,passed=1",
+      "sha256": "56fa0027fa93d4390942d97caa02170d56159e1ca325b26334b446a7ceb4be58"
+    },
+    "providerFreeChecks": [
+      "2 passed, 109 deselected",
+      "168 passed"
+    ]
+  },
+  "capacityContention": {
+    "assignmentCreated": false,
+    "providerAttempts": 0,
+    "receiptPath": "tmp/persona-wave-v6/w05-w06-live-v15-389b25e7-r1/result.json",
+    "receiptMode": "0600",
+    "receiptBytes": 254,
+    "receiptSha256": "1c9136d632c2205351edae6488ab8291f54e5d16ee519da65b2b939059337784"
+  },
+  "cleanup": {
+    "capacityLease": "absent",
+    "remainingLabeledContainers": 0,
+    "remainingLabeledVolumes": 0,
+    "remainingLabeledNetworks": 0
+  }
+}

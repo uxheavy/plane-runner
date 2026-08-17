@@ -1675,6 +1675,25 @@ class G4ContractTests(unittest.TestCase):
         self.assertNotIn('"protocol": "plane.agent-runtime/provider-relay/v1"', invoke)
         self.assertIn('G4_PROVIDER_RELAY_JSON', invoke)
 
+    def test_live_runner_projects_validated_approved_thresholds_into_receipt(self):
+        runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+        invoke = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+        thresholds = {
+            "permittedSuccessRateMin": 1.0,
+            "deniedRejectionRateMin": 1.0,
+            "maxLatencyP95Ms": 500,
+            "maxErrorRate": 0.0,
+        }
+        parser = invoke_helper_namespace()["_approved_thresholds"]
+
+        self.assertEqual(parser(json.dumps(thresholds)), thresholds)
+        with self.assertRaisesRegex(RuntimeError, "approved thresholds are invalid"):
+            parser(json.dumps({**thresholds, "unknown": 1}))
+        self.assertIn('config["thresholds"]', runner)
+        self.assertIn('--env G4_APPROVED_THRESHOLDS_JSON="${G4_APPROVED_THRESHOLDS_JSON}"', runner)
+        self.assertIn('_approved_thresholds(os.environ["G4_APPROVED_THRESHOLDS_JSON"])', invoke)
+        self.assertNotIn('"maxLatencyP95Ms": 600000.0', invoke)
+
     def test_helper_failure_path_reconciles_and_emits_one_nonzero_structural_object(self):
         source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
         self.assertIn("reconcile_provider_attempts", source)

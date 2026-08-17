@@ -3186,10 +3186,45 @@ records this diagnosis without changing the retained receipts.
 - The host unit import lacked `celery`, and the isolated container pytest setup could not resolve `test-db`; both are setup boundaries, not product/provider failures. No database-backed lifecycle rerun is claimed.
 - Durable redacted receipt: `user-testing-output/plane-agents/evidence/manager-m01-m08-provider-free-ready-20260818-d431.json`, SHA-256 `38499ca381ddfe86d4a7aff6dad6f554150f20a48c72a2790d9155d7bae9c260`.
 - Policy remained `openai-codex/gpt-5.6-luna`, xhigh, fallback disabled. Provider calls/live-runner attempts `0`; no Compose, live journey, replay, or `outcome_unknown` replay. Status: `READY_NO_PATCH`; root must publish the shared exact candidate before serialized live release.
-
 ## Wave 0CL — immutable v15 W03/W04 live stop and shared handoff repair — 2026-08-18
 
 - Exactly one fresh serialized assignment used wrapper `389b25e76375d105120962ea548f8b8faaef04c3`, source `2d349c29353fc80dc0ef181cea9736b9eef8e829`, manifest SHA-256 `474f1898b1abedb29925e57cea7356434215de3484902dd8fa8234b3649c0a4a`, and descriptor SHA-256 `d32092431b2d5f5ac1cc52a5b8ef5c2e1a8433d86af2b39291e3a0afca873c8f`. No image or pin was changed.
 - Run `2c576840-5fd2-4432-84a4-07d5712b416e` and invocation `invocation:95c8a5a1-70a6-4ef0-8fe1-7db94212225e` completed after eight upstream `2xx` attempts. Search succeeded once, but the assigned `work_item.read` returned `VALIDATION_ERROR`; no `work_item.rename`, Code Mode mutation, or replay was eligible. The intentional evaluator denial, one submit, one applied publication, and one visible terminal were retained, but the W03/W04 scenario gate correctly failed.
 - The correlated W07/W08 failure reached the same search-to-read seam with `NOT_AUTHORIZED`. Provider-free diagnosis found that `search_workspace` returned canonical UUID input but still made the model reconstruct the outer generic `plane_operation` arguments. The owning fix adds a schema-declared `workItemReadCall` ready for the existing tool and compiles a copy-the-whole-call route instruction. The compatibility input and live gateway authorization remain unchanged; no parallel tool or authorization model was added.
 - Provider-free proof passed: scenario/lease `63`, API/gateway/host/Code Mode/replay/confinement `10`, and extended contracts `173`, with zero provider attempts. Cleanup found zero live-labeled containers, networks, or volumes and no capacity lease. Durable redacted receipt: `user-testing-output/plane-agents/evidence/w03-w04-v15-389b25e7-live-stop.json`. Status: `READY_WITH_COMMIT`; W03/W04 and W07/W08 remain dirty pending root integration and a separately authorized future candidate/run.
+
+## Wave 0CF — exact shared-v15 W05/W06 live closure
+
+- The immutable candidate was wrapper `389b25e76375d105120962ea548f8b8faaef04c3`
+  over source `2d349c29353fc80dc0ef181cea9736b9eef8e829`, using API
+  `sha256:fa5aa7aabe13aa528bb15a4c10effb69c40ed98c88de88d795f23acce88f3ab1`
+  and runtime
+  `sha256:4f1d52367fb2175e23a9e8c278f5a3edf2795bce99cd698cca6db5194182f559`.
+  Required `.env` files were copied byte-for-byte without inspecting values;
+  `setup.sh` was not run. One capacity wait timed out before Compose, Plane
+  assignment, or provider access and is retained as zero-value workflow
+  evidence.
+- Exactly one fresh `context-governance` assignment then ran under the shared
+  capacity lease with `openai-codex/gpt-5.6-luna` xhigh and fallback disabled.
+  Run `11483892-9a44-493c-84c4-419b5c3ba40b` and invocation
+  `bd4afa32-1095-408a-8590-660ad2ba09f5` succeeded after eight completed
+  upstream `2xx` attempts. The scenario and S00 gates passed with one context
+  read, one outcome, one applied publication, one terminal event, and a
+  provider-disabled same-invocation replay with zero new records or semantic
+  effects. W05 and W06 route predicates all passed.
+- The immutable receipt is owner-only at
+  `tmp/persona-wave-v6/w05-w06-live-v15-389b25e7-r2/result.json`, mode `0600`,
+  SHA-256 `22f961a42708e2d6df172426d967f0b146758b8f50d1de3aeb72532243f03185`.
+  The post-run canonical validator found a harness-only
+  `evidence_approved_thresholds_mismatch`: the invoker hardcoded an approval
+  object instead of using the authority-validated thresholds. The structural
+  correction forwards and parses the validated object fail-closed; focused
+  provider-free checks passed `2/2` and the complete contract/scenario suite
+  passed `168/168`. A provider-free reserialization changing only
+  `thresholds.approved` and its derived `semanticDigest` then passed canonical
+  validation `1/1`, SHA-256
+  `56fa0027fa93d4390942d97caa02170d56159e1ca325b26334b446a7ceb4be58`.
+  No provider rerun occurred.
+- Capacity lease release and cleanup were verified with zero labeled
+  containers, volumes, and networks. The bounded tracked extract is
+  `user-testing-output/plane-agents/evidence/w05-w06-v15-389b25e7-live.json`.
