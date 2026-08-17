@@ -1,8 +1,6 @@
 """Gateway proof for the L5 universal work core and progressive catalog."""
 
 import json
-from uuid import uuid4
-
 import pytest
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -157,7 +155,7 @@ def test_catalog_describe_discovery_exposes_its_nested_input_schema(api_key_clie
 @pytest.mark.contract
 @pytest.mark.django_db
 def test_search_workspace_binds_visible_work_item_to_canonical_read_input(
-    api_key_client, workspace, gateway_project, gateway_issue
+    api_key_client, workspace, gateway_project, gateway_issue, create_user
 ):
     search = api_key_client.post(
         "/api/v1/operations/",
@@ -185,18 +183,38 @@ def test_search_workspace_binds_visible_work_item_to_canonical_read_input(
     assert read.status_code == status.HTTP_200_OK
     assert read.json()["ok"] is True
 
+    inaccessible_project = Project.objects.create(
+        name="Inaccessible Project",
+        identifier="NOPE",
+        workspace=workspace,
+        created_by=create_user,
+    )
+    inaccessible_issue = Issue.objects.create(
+        name="Inaccessible Issue",
+        project=inaccessible_project,
+        workspace=workspace,
+        created_by=create_user,
+    )
     denied = api_key_client.post(
         "/api/v1/operations/",
         _body(
             workspace,
             "work_item.read",
-            "read-out-of-scope-project",
-            {"project_id": str(uuid4()), "issue_id": str(gateway_issue.id)},
+            "read-cross-project-denied",
+            {"project_id": str(inaccessible_project.id), "issue_id": str(inaccessible_issue.id)},
         ),
         format="json",
     )
     assert denied.status_code == status.HTTP_403_FORBIDDEN
     assert denied.json()["error"]["code"] == "NOT_AUTHORIZED"
+    denied_record = OperationGatewayIdempotency.objects.get(idempotency_key="read-cross-project-denied")
+    assert denied_record.state == OperationGatewayIdempotency.State.DENIED
+    assert denied_record.quota_reserved is False
+    assert list(
+        OperationGatewayAudit.objects.filter(idempotency_key="read-cross-project-denied")
+        .order_by("created_at", "id")
+        .values_list("phase", "outcome", "error_code")
+    ) == [("intent", "intent", None), ("outcome", "denied", "NOT_AUTHORIZED")]
 
 
 @pytest.mark.contract
