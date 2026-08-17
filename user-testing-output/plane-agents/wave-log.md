@@ -3644,3 +3644,32 @@ not a provider rerun.
   checkout removed. No provider retry, fallback, second primary, or blind
   `outcome_unknown` replay occurred. Routes remain open/unproven after the
   first product failure.
+
+## Wave 0CM — immutable v19 Manager first live failure — 2026-08-18
+
+- Exact v19 wrapper `98424ff87e3d699c26a5374dcc5a9e48f12ecaa8` was used with
+  source `fe72bcefe5ffc13c43212d48c2c47f4006d85ae5`. API/runtime digests and
+  manifest SHA-256
+  `da5be33ccd7ad7c53207a5642a25ca37c8ac9ebe9556740e6455fe962d9f2f02`
+  matched the release. Nine env files were copied and compared byte-for-byte;
+  values were not read, printed, or sourced, and `setup.sh` was not run.
+- Root-directed workflow friction was corrected by binding
+  `PLANE_G4_ARTIFACT_CANDIDATE` to the exact wrapper while preserving the
+  manifest API/runtime source revision. Exactly one fresh Manager primary then
+  acquired and released the shared capacity lease.
+- The primary stopped at `api-invocation` with bounded
+  `plane-agent-g4/live-runner-failure/v1`, `RuntimeError`, exit `1`, and
+  `unavailable`. Result SHA-256 was
+  `d4bf6a8ab2f7a9b170d7189e52fd6ba0c25abb65370e593af407d04345653841`;
+  bounded runner log SHA-256 was
+  `a316a4e0799213ab5cf1ce1af59d40317b014027f3a102bda1db16717152beeb`;
+  stderr digest was
+  `94d815b96f4ff61efb6f27954b0ce0720e3cb23a513511fe2781a4b83b63c3f0`.
+  The receipt retained no narrower cause or provider-attempt counters, so
+  provider and lifecycle effects are not claimed absent.
+- No retry, fallback, second primary, blind `outcome_unknown` replay, or
+  provider-disabled replay occurred. Durable redacted evidence is
+  `user-testing-output/plane-agents/evidence/manager-m01-m08-v19-live-stop.json`,
+  SHA-256
+  `833019e8b5ee515098096410522ffca2f448eaa7d4a2de6327579dfadfecc111`.
+  M01-M08 remain unproven; shared API-invocation/runtime diagnosis is required.

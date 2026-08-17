@@ -1,0 +1,101 @@
+{
+  "schemaVersion": "plane.agent-manager-live-stop/v3",
+  "status": "LIVE_STOP",
+  "lane": "Manager M01-M08",
+  "journey": "dynamic plan; bounded delegation; cancellation; DST schedule; evaluator/human revision; HR governance; chief-of-staff; terminal readback",
+  "candidate": {
+    "source": "fe72bcefe5ffc13c43212d48c2c47f4006d85ae5",
+    "wrapper": "98424ff87e3d699c26a5374dcc5a9e48f12ecaa8",
+    "manifestSha256": "da5be33ccd7ad7c53207a5642a25ca37c8ac9ebe9556740e6455fe962d9f2f02",
+    "api": {
+      "tag": "plane-agent-api:g4-v19-fe72bce",
+      "digest": "sha256:59abfaec97cd82b74995b7cf7c64cb0bd37973bd8bf528ab07143dc4fd4472f7"
+    },
+    "runtime": {
+      "tag": "plane-agent-runtime:hermes-6c460f10-g4-v19-fe72bce",
+      "digest": "sha256:120e8f51a8193512c3be9d38e1a2b958eb9339178ce59c655e2b3f2bef03480e"
+    },
+    "pins": {
+      "hermes": "6c460f10fe215718dce36dd73cda94155a9a34f8",
+      "mcp": "c04974ed6624f17b41e63ef8182661929e77e0d3",
+      "sdk": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
+    }
+  },
+  "modelPolicy": {
+    "provider": "openai-codex",
+    "model": "gpt-5.6-luna",
+    "reasoning": "xhigh",
+    "fallbackAllowed": false
+  },
+  "provider": {
+    "attempts": "unavailable",
+    "effects": "cannot_exclude_from_generic_runner_failure",
+    "fallbackUsed": false,
+    "replayed": false,
+    "credentialSourceContract": "PLANE_G4_PROVIDER_SECRET_SOURCE",
+    "credentialSourceContentsRead": false,
+    "stopRule": "first genuine product/provider failure"
+  },
+  "preLiveFriction": {
+    "launcherContract": "resolved by binding PLANE_G4_ARTIFACT_CANDIDATE to wrapper while preserving manifest source revision",
+    "launcherInputAttempt": "missing --provider-source argument; runner not invoked",
+    "canonicalRunnerAttempts": 1,
+    "frictionProviderEffects": 0
+  },
+  "failure": {
+    "phase": "api-invocation",
+    "errorClass": "RuntimeError",
+    "exitCode": 1,
+    "reasonCategory": "unavailable",
+    "stderrSha256": "94d815b96f4ff61efb6f27954b0ce0720e3cb23a513511fe2781a4b83b63c3f0",
+    "rawResultSha256": "d4bf6a8ab2f7a9b170d7189e52fd6ba0c25abb65370e593af407d04345653841",
+    "rawRunnerLogSha256": "a316a4e0799213ab5cf1ce1af59d40317b014027f3a102bda1db16717152beeb",
+    "boundedCause": "generic live-runner-failure/v1; no narrower causal exception retained",
+    "crossLaneModuleNotFoundErrorDigestMatch": false
+  },
+  "inputs": {
+    "descriptorSha256": "22e50494277bb5e31cfe4d08b55f4b50914ced1aacdb03d401915a8d6e006775",
+    "authoritySha256": "23aa6cbe0e089e302fc0dae55d09aea1a47d25361cf1b84e0edda2a979e88968",
+    "configSha256": "59ad0cbda5b85898bcad1f253842579b81399bc55be4941fabb683a1dc1953ce",
+    "artifactCandidateBinding": "wrapper",
+    "manifestApiRuntimeSourceBinding": "source",
+    "descriptorContextNamespace": "valid",
+    "descriptorLineageScope": "retained",
+    "envFilesCopiedAndCompared": 9,
+    "setupScriptRun": false
+  },
+  "lifecycle": {
+    "assignment": "unavailable",
+    "run": "unavailable",
+    "invocation": "unavailable",
+    "operationReceipts": "unavailable",
+    "operationAuditRows": "unavailable",
+    "terminalPublication": "unavailable",
+    "managerCapacityLease": "acquired_then_released",
+    "externalLeaseTouched": false,
+    "stopRule": "no retry, fallback, second primary, or blind outcome_unknown replay"
+  },
+  "predicates": {
+    "M01_dynamicPlanWithoutSavedWorkflow": "unproven",
+    "M02_boundedDelegationLineageBudgetIndependentChild": "unproven",
+    "M03_parentCancellationPropagationWithoutResurrection": "unproven",
+    "M04_timezoneDstScheduleNormalAssignmentRun": "unproven",
+    "M05_evaluatorThenHumanRevisionFreshRun": "unproven",
+    "M06_hrAuthorizedDecisionStaleSelfReplayDenials": "unproven",
+    "M07_exactlyOneScopedChiefOfStaff": "unproven",
+    "M08_terminalReadbackPublicationAndChildDenial": "unproven"
+  },
+  "cleanup": {
+    "managerCapacityLease": "absent_after_runner_exit",
+    "managerPrefixedContainers": "runner_cleanup_completed; exact count not emitted by bounded receipt",
+    "managerPrefixedVolumes": "runner_cleanup_completed; exact count not emitted by bounded receipt",
+    "managerRuntimeNetworks": "runner_cleanup_completed; exact count not emitted by bounded receipt",
+    "sourceCredentialTracked": false,
+    "rawResultTracked": false
+  },
+  "ownership": {
+    "lanePatch": "none",
+    "sharedLauncherPatch": "not-owned",
+    "nextOwner": "shared api-invocation/runtime boundary"
+  }
+}

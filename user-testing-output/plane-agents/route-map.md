@@ -1217,3 +1217,23 @@ descriptor assertion and focused suite passed 190 tests. No live rerun was made.
   provider-disabled replay occurred. Cleanup verified no capacity lease and
   zero runner containers, volumes, or networks. W03/W04 remain dirty pending
   provider-free prepared-call diagnosis; no candidate mutation was made.
+## Manager M01-M08 v19 live result — 2026-08-18
+
+The exact wrapper `98424ff87e3d699c26a5374dcc5a9e48f12ecaa8` was used with
+manifest source `fe72bcefe5ffc13c43212d48c2c47f4006d85ae5`, exact v19 image
+digests, and manifest SHA-256
+`da5be33ccd7ad7c53207a5642a25ca37c8ac9ebe9556740e6455fe962d9f2f02`.
+Nine env files were copied and compared byte-for-byte; values were not read,
+printed, or sourced, and `setup.sh` was not run.
+
+After the wrapper-bound candidate correction, exactly one fresh Manager primary
+acquired and released the shared lease. It stopped at `api-invocation` with
+bounded `live-runner-failure/v1`, `RuntimeError`, exit `1`, and
+`unavailable`. The result retains no provider-attempt or lifecycle counters,
+so provider effects and Plane lifecycle effects are not claimed absent.
+M01-M08 remain unproven. No retry, fallback, second primary, or replay was
+run.
+
+Durable redacted evidence is
+`user-testing-output/plane-agents/evidence/manager-m01-m08-v19-live-stop.json`,
+SHA-256 `833019e8b5ee515098096410522ffca2f448eaa7d4a2de6327579dfadfecc111`.
