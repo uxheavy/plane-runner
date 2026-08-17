@@ -71,6 +71,21 @@ def _binding_environment(monkeypatch):
         "credentialName": "api_key",
     }
     monkeypatch.setenv("G4_PROVIDER_DESCRIPTOR_JSON", json.dumps(provider, sort_keys=True, separators=(",", ":")))
+    monkeypatch.setenv(
+        "G4_PROVIDER_RELAY_JSON",
+        json.dumps(
+            {
+                "protocol": "plane.agent-runtime/provider-relay/v1",
+                "transport": "AF_UNIX",
+                "childNetworkPolicy": "none",
+                "externalEgressOwner": "agent-runtime",
+                "hostGatewaySeparate": True,
+                "hermesHookStatus": "integrated",
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+    )
     provider_environment = {
         "PLANE_AGENT_RUNTIME_PROVIDER": provider["name"],
         "PLANE_AGENT_RUNTIME_PROVIDER_MODELS": provider["model"],
