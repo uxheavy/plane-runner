@@ -5,17 +5,19 @@ This directory contains the compact execution control surface for the non-UI Pla
 ## Current status
 
 G0 through G3 and the provider-free exact-image G4 checks are complete for the
-current integration source `78e02a20b4b0649ce1d4844d1cb9cf39526b362a`. The
-API artifact is `plane-agent-api:g4-v11-78e02a` at
-`sha256:700c98e8cfe8737068d7a24347169603158490171815fa381a96df833bfacb01`;
+current integration source `9480f5868cd2b37e20b34aa53e2b0995fe02487c`. The
+API artifact is `plane-agent-api:g4-v12-9480f5` at
+`sha256:65489299ef2b41e6c3173d2f281285453e8b1c6522a9610f2b59bf3d1d46f62f`;
 the runtime artifact is
-`plane-agent-runtime:hermes-6c460f10-g4-v11-78e02a` at
-`sha256:2f11b340652a1d1e8fccaeb2514a6069deed2c0f9794b255ed886c038092a6af`.
+`plane-agent-runtime:hermes-6c460f10-g4-v12-9480f5` at
+`sha256:b19117765f8ec9b4fa88d3f45fb3afbc8c47bf6d042eac7c44693227efc38aaf`.
 Both are bound to Hermes `6c460f10fe215718dce36dd73cda94155a9a34f8`, MCP
 `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The exact-image functional
-red-team and final bootstrap are green provider-free; the durable metadata
-wrapper and live provider-backed W07/W08 prerequisite remain pending.
+red-team and final bootstrap are green provider-free, including versioned
+assigned-work-item binding with authorized success and out-of-scope denial;
+the durable metadata wrapper and live provider-backed W07/W08 prerequisite
+remain pending.
 
 S00 Wave 0AT passed at Plane
 `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with one fresh GPT-5.6 Luna
@@ -34,9 +36,9 @@ every non-UI Plane Agent feature and failure boundary, targeted root-fix/retest
 waves, one final full G4 verifier, and one consolidated Sol Medium review. The
 campaign ledgers are under `user-testing-output/plane-agents/`.
 
-The rollback fixture remains a historical offline binding separate from the
-active candidate. Its `current.planeCommit` is the approved source parent
-`78e02a20b4b0649ce1d4844d1cb9cf39526b362a`; its final candidate wrapper is
+The rollback fixture remains an offline binding for the active candidate. Its
+`current.planeCommit` is the approved source parent
+`9480f5868cd2b37e20b34aa53e2b0995fe02487c`; its final candidate wrapper is
 that parent's sole child. The independent `previous` section retains the accepted G3
 service artifact digest
 `sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e`.
