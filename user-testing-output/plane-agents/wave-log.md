@@ -3078,3 +3078,51 @@ records this diagnosis without changing the retained receipts.
   containers, volumes, and networks were zero. W07/W08 remain dirty and
   unproven. No product source was changed during live collection and no
   further provider call was made.
+
+## Wave 0CJ — exact deeper-corrected W07/W08 live stop — 2026-08-18
+
+- Candidate: wrapper `19e514f6024a8b8fa9b563c153f60454d97e8eaf`, sole
+  parent/source `ef014eac67323f91c02c73bc9e0ab38e083c1460`, branch
+  `codex/plane-agent-functional-integration-20260817`.
+- Exact images were API
+  `plane-agent-api:g4-v13-ef014eac6@sha256:424f75846d398d7e9256933617dcecb685d65c40b059033dd9f378c594a9774e`
+  and runtime
+  `plane-agent-runtime:hermes-6c460f10-g4-v13-ef014eac6@sha256:ede43c620b231998391e1878f2d18a28c53e10f9b3f06320b86b65b953a9dfed`.
+  Manifest SHA-256 was
+  `b2624b60bfed5851ff0181ca5ae8ee198bf4dc10cc07e648f41d73171235dc8e`;
+  Hermes/MCP/SDK pins were
+  `6c460f10fe215718dce36dd73cda94155a9a34f8`,
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`, and
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`.
+- Exactly one fresh serialized provider-backed assignment used
+  `openai-codex/gpt-5.6-luna`, xhigh, fallback disabled, and commission
+  `w07-w08-artifact-publication-readback-20260820-r4`. Scenario SHA-256 was
+  `13bb571f54261edab311cec379c0a0c59c1527cb179d9762f689dee5e9924dc2`.
+  Run `7324c15a-1ce6-41d2-8794-c990f8de8edb`; invocation
+  `invocation:852dd5fd-d3ca-4f89-b171-76eb0a5c7e0f`.
+- Search succeeded once, but the assigned `work_item.read` returned
+  `NOT_AUTHORIZED` instead of success. The separate cross-project denial and
+  targetDigest correlation were not reached/proven. The provider relay then
+  recorded four completed upstream `2xx` attempts followed by attempt five as
+  `outcome_unknown`, `statusClass=transport`,
+  `reasonSubreason=upstream_channel_closed`; the terminal event was a bounded
+  `run_failure/unavailable`.
+- Provider counts/effects: `5` upstream-initiated attempts,
+  `2xx=4`, `4xx=0`, `5xx=0`, `transport=1`, fallback `false`, replay `0`.
+  No outcome submission, artifact, publication, terminal product event,
+  W08 readback, or duplicate effect was observed. The provider-disabled
+  same-invocation replay was ineligible and not run; no `outcome_unknown`
+  receipt was replayed.
+- Durable deterministic redacted evidence:
+  `user-testing-output/plane-agents/evidence/w07-w08-19e514-failure-extract.json`,
+  SHA-256 `8d0b144b29a595cf22fae4bda931ed4922319904c14532684b3e854301cb0a61`.
+  Raw result SHA-256 is
+  `130603982bd858b2648144c9b61e136e7fa575bf99e03b09d79a11b3efb4d2de`;
+  authority SHA-256 is
+  `9c450daecdb7c998f36765226c74a1af02778180e54d6eab47db60f942b2c3ac`;
+  config SHA-256 is
+  `0580db33325a9123117a6621eb2c16a1546e66485fb664d5ffc4f40158fb7c93`.
+- Cleanup proof: capacity markers, verifier lock, and exact observed
+  disposable containers, volumes, and networks were absent/zero. The first
+  launcher scope rejection was pre-provider and produced no provider attempt;
+  no product source was changed and no further provider call was made.

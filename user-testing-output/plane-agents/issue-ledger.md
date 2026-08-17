@@ -586,3 +586,22 @@ The extract records raw authority SHA-256
 `f4cfe455a80b1c22b84af8bc9fdedd6f6361b863d425745bf2004b827ae3f9e4`, config
 SHA-256 `3a5b7989b0b5002e22ff828ad768ca5546abf1e11548313bdd5acd13fbc4c8d5`,
 and that raw payloads were not durably retained.
+
+## UT-059 — exact deeper-corrected W07/W08 live stop — Wave 0CJ
+
+| Issue | Severity | Persona / route | Durable evidence | Root cause / bounded disposition | Retest / status |
+| ----- | -------- | --------------- | ---------------- | ------------------------------ | ---------------- |
+| UT-059 | blocker | Maya / W07-W08 fresh serialized assignment | `w07-w08-19e514-failure-extract.json` SHA-256 `8d0b144b29a595cf22fae4bda931ed4922319904c14532684b3e854301cb0a61`; raw bounded result SHA-256 `130603982bd858b2648144c9b61e136e7fa575bf99e03b09d79a11b3efb4d2de`; manifest SHA-256 `b2624b60bfed5851ff0181ca5ae8ee198bf4dc10cc07e648f41d73171235dc8e`; scenario SHA-256 `13bb571f54261edab311cec379c0a0c59c1527cb179d9762f689dee5e9924dc2` | One fresh candidate-bound assignment reached four completed upstream `2xx` attempts, then attempt five became terminal `outcome_unknown` with bounded `transport/upstream_channel_closed`. Before that terminal provider stop, the assigned `work_item.read` returned `NOT_AUTHORIZED` instead of success; search-to-read target-digest correlation was not proven. | No retry, fallback, blind replay, or provider-disabled replay. W07/W08 remain dirty/unproven; provider-free ownership is required for the search-to-read authorization/fixture-binding seam and external channel disposition. / open |
+
+Run `7324c15a-1ce6-41d2-8794-c990f8de8edb` and invocation
+`invocation:852dd5fd-d3ca-4f89-b171-76eb0a5c7e0f` are the only live refs for
+Wave 0CJ. Provider counts were `2xx=4`, `4xx=0`, `5xx=0`, `transport=1`,
+fallback `false`, replay `0`; provider attempt
+`provider-attempt:9b0dd4c4-2c4f-4bb0-be38-6fab757918d1` ended with provider
+event `provider-event:0d9a38dea7905d0033786bc78bf3c21851a7f3423b5f4075263520bd263641f6`.
+No artifact, outcome, publication, terminal product event, W08 readback, or
+duplicate effect was observed. Raw authority SHA-256 is
+`9c450daecdb7c998f36765226c74a1af02778180e54d6eab47db60f942b2c3ac` and raw
+config SHA-256 is
+`0580db33325a9123117a6621eb2c16a1546e66485fb664d5ffc4f40158fb7c93`; raw
+payloads were not durably retained.

@@ -394,6 +394,50 @@ replay. W03-W08 remain dirty; UT-042 is open.
 - W05 and W06 remain dirty; this is provider-free boundary evidence, not route
   closure.
 
+## Wave 0CJ — exact deeper-corrected W07/W08 live stop — 2026-08-18
+
+- Candidate binding was wrapper `19e514f6024a8b8fa9b563c153f60454d97e8eaf`
+  on sole parent/source `ef014eac67323f91c02c73bc9e0ab38e083c1460`.
+  Manifest SHA-256 was
+  `b2624b60bfed5851ff0181ca5ae8ee198bf4dc10cc07e648f41d73171235dc8e`.
+  API image `plane-agent-api:g4-v13-ef014eac6` used digest
+  `sha256:424f75846d398d7e9256933617dcecb685d65c40b059033dd9f378c594a9774e`;
+  runtime image `plane-agent-runtime:hermes-6c460f10-g4-v13-ef014eac6` used
+  digest
+  `sha256:ede43c620b231998391e1878f2d18a28c53e10f9b3f06320b86b65b953a9dfed`.
+- Exactly one fresh provider-backed assignment used the ChatGPT Responses
+  route with `openai-codex/gpt-5.6-luna`, xhigh, and fallback disabled.
+  Scenario SHA-256 was
+  `13bb571f54261edab311cec379c0a0c59c1527cb179d9762f689dee5e9924dc2`.
+  Run `7324c15a-1ce6-41d2-8794-c990f8de8edb` and invocation
+  `invocation:852dd5fd-d3ca-4f89-b171-76eb0a5c7e0f` are retained as bounded
+  lifecycle refs. A prior launcher path-scope rejection occurred before
+  provider/Compose access and was corrected without a second assignment.
+- The assigned target read failed closed: `work_item.read` expected `success`,
+  actual `denied`, `NOT_AUTHORIZED`; search succeeded once. Target-digest
+  correlation and the separate cross-project denial were not proven. The
+  first terminal provider failure was attempt 5:
+  `outcome_unknown`, `statusClass=transport`,
+  `reasonSubreason=upstream_channel_closed`.
+- Provider counts were `5` upstream-initiated attempts: `2xx=4`, `4xx=0`,
+  `5xx=0`, `transport=1`; fallback `false`, replay `0`. No outcome,
+  artifact, publication, terminal product event, W08 readback, or duplicate
+  effect was observed before stop. No `outcome_unknown` replay or further
+  provider call was made.
+- Durable deterministic redacted evidence is
+  `user-testing-output/plane-agents/evidence/w07-w08-19e514-failure-extract.json`,
+  SHA-256
+  `8d0b144b29a595cf22fae4bda931ed4922319904c14532684b3e854301cb0a61`.
+  Raw result SHA-256 is
+  `130603982bd858b2648144c9b61e136e7fa575bf99e03b09d79a11b3efb4d2de`;
+  authority SHA-256 is
+  `9c450daecdb7c998f36765226c74a1af02778180e54d6eab47db60f942b2c3ac`;
+  config SHA-256 is
+  `0580db33325a9123117a6621eb2c16a1546e66485fb664d5ffc4f40158fb7c93`.
+- Cleanup proof: capacity markers, verifier lock, and exact observed
+  disposable containers, volumes, and networks were absent/zero. W07/W08
+  remain dirty and unproven; this is not route closure.
+
 ## Wave 0CI — exact structurally corrected W07/W08 live stop — 2026-08-17
 
 - Candidate binding was wrapper `376c5f1d0ab954b3035853193fcbfc475d064851`
