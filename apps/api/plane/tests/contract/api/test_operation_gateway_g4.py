@@ -275,6 +275,57 @@ def test_agent_work_item_read_uses_live_project_membership_for_bound_target(
 
 
 @pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_create_actor_provisions_memberships_for_existing_active_bot_principal(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    principal = User.objects.create(
+        username="existing-agent-principal",
+        email="existing-agent-principal@plane.internal",
+        is_bot=True,
+        is_active=True,
+    )
+
+    actor = create_actor(
+        workspace=workspace,
+        project=gateway_project,
+        display_name="Provisioned existing worker",
+        principal=principal,
+        created_by=create_user,
+    )
+
+    assert WorkspaceMember.objects.filter(
+        workspace=workspace, member=principal, is_active=True
+    ).exists()
+    assert ProjectMember.objects.filter(
+        project=gateway_project, member=principal, is_active=True
+    ).exists()
+    request = SimpleNamespace(
+        user=principal,
+        META={},
+        agent_actor_ref=f"actor:{actor.id}",
+        agent_workspace_ref=f"workspace:{workspace.id}",
+    )
+    response, response_status = OperationGateway().execute(
+        request,
+        {
+            "schema_version": "plane.operation/v1",
+            "operation_id": "work_item.read",
+            "workspace_slug": workspace.slug,
+            "idempotency_key": "idempotency:g4-existing-principal-read",
+            "correlation_id": "correlation:g4-existing-principal-read",
+            "input": {
+                "project_id": str(gateway_project.id),
+                "issue_id": str(gateway_issue.id),
+            },
+        },
+    )
+
+    assert response_status == 200, response
+    assert response["result"]["work_item"]["id"] == str(gateway_issue.id)
+
+
+@pytest.mark.contract
 def test_new_mutation_without_reconciliation_policy_fails_closed():
     with pytest.raises(ValueError, match="explicit reconciliation policy"):
         OperationDescriptor(

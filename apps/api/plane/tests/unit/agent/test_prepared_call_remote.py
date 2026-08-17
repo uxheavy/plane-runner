@@ -21,6 +21,8 @@ from plane.agent.runtime import (
     build_gateway_host_port,
 )
 from plane.agent.runtime.host_rpc import PlaneHostCall
+from plane.agent.code_mode.host import CodeModeBindingError
+from plane.db.models import ProjectMember, WorkspaceMember
 from plane.db.models.operation_gateway import OperationGatewayAudit, OperationGatewayIdempotency
 from plane.operation_gateway.gateway import OperationGateway
 from plane.tests.unit.agent.test_runtime_supervisor import _invocation
@@ -99,6 +101,13 @@ def test_remote_runtime_preserves_search_prepared_read_envelope(
         runtime_defaults={"provider": "openai", "model": "deterministic-local", "adapter": "hermes"},
         suffix="prepared-remote-regression",
     )
+    actor = run.actor
+    assert WorkspaceMember.objects.filter(
+        workspace=workspace, member_id=actor.principal_id, is_active=True
+    ).exists()
+    assert ProjectMember.objects.filter(
+        project=gateway_project, member_id=actor.principal_id, is_active=True
+    ).exists()
     package = tmp_path / "plane_runtime" / "g1_runtime_image"
     package.mkdir(parents=True)
     (tmp_path / "plane_runtime" / "__init__.py").write_text("", encoding="utf-8")
@@ -126,11 +135,17 @@ def test_remote_runtime_preserves_search_prepared_read_envelope(
     }
     configuration = AgentRuntimeConfiguration.from_environment(environment)
     host_calls = []
+    host_call_principals = []
+    prepared_inputs = []
     port = build_gateway_host_port(invocation=invocation, gateway=OperationGateway())
 
     def invoke(call):
         host_calls.append(call)
-        return port.invoke(call)
+        host_call_principals.append(port._host.request.user.id)
+        result = port.invoke(call)
+        if call.operation_ref == "operation:search_workspace":
+            prepared_inputs.extend(record["input"] for record in port._prepared_calls.values())
+        return result
 
     host_server = PlaneHostHTTPServer(
         bind_host="127.0.0.1", advertised_host="127.0.0.1", port=0,
@@ -206,6 +221,20 @@ def test_remote_runtime_preserves_search_prepared_read_envelope(
         "operation:work_item.read",
         "operation:work_item.read",
     ]
+    assert prepared_inputs == [
+        {"project_id": str(gateway_project.id), "issue_id": str(gateway_issue.id)}
+    ]
+    assert set(host_call_principals) == {actor.principal_id}
+    assert all(
+        record.caller_id == actor.principal_id
+        for record in OperationGatewayIdempotency.objects.filter(
+            correlation_id=invocation.envelope["correlationId"]
+        )
+    )
+    actor.is_active = False
+    actor.save(update_fields=["is_active"])
+    with pytest.raises(CodeModeBindingError, match="AgentActor is inactive"):
+        build_gateway_host_port(invocation=invocation, gateway=OperationGateway())
     assert OperationGatewayIdempotency.objects.filter(
         operation_id="work_item.read", correlation_id=invocation.envelope["correlationId"]
     ).count() == 1

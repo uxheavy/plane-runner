@@ -1492,7 +1492,17 @@ def _commission_precondition_checks(shared, assignment, provider_relay):
         "isolated_workspace": workspace.owner_id == user.id and workspace.slug == f"g4-live-{setup_suffix}",
         "assigned_work_item": bool(assignment.pk and assignment.target_ref),
         "fresh_assignment": assignment.created_by_id == user.id and assignment.revision == 1,
-        "live_authorization": actor.workspace_id == workspace.id and actor.project_id == project.id,
+        "live_authorization": (
+            actor.workspace_id == workspace.id
+            and actor.project_id == project.id
+            and actor.principal.is_active
+            and WorkspaceMember.objects.filter(
+                workspace=workspace, member_id=actor.principal_id, is_active=True
+            ).exists()
+            and ProjectMember.objects.filter(
+                project=project, member_id=actor.principal_id, is_active=True
+            ).exists()
+        ),
         "separate_runtime_service": (
             provider_relay.get("hostGatewaySeparate") is True
             and provider_relay.get("externalEgressOwner") == "agent-runtime"

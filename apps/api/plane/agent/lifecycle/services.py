@@ -973,6 +973,23 @@ def create_actor(
         principal = User.objects.get(pk=getattr(principal, "pk", principal))
         if not principal.is_active or not principal.is_bot:
             raise AgentDomainError("AgentActor principal must be an active dedicated Plane Agent identity")
+    workspace_member, _ = WorkspaceMember.objects.get_or_create(
+        workspace=workspace,
+        member=principal,
+        defaults={"role": 15, "is_active": True},
+    )
+    if not workspace_member.is_active:
+        workspace_member.is_active = True
+        workspace_member.save(update_fields=["is_active"])
+    if project is not None:
+        project_member, _ = ProjectMember.objects.get_or_create(
+            project=project,
+            member=principal,
+            defaults={"role": 15, "is_active": True},
+        )
+        if not project_member.is_active:
+            project_member.is_active = True
+            project_member.save(update_fields=["is_active"])
     if chief_of_staff_for is not None:
         chief_of_staff_for = User.objects.get(pk=getattr(chief_of_staff_for, "pk", chief_of_staff_for))
         if chief_of_staff_for.is_bot or not chief_of_staff_for.is_active:
