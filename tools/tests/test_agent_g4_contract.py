@@ -2866,6 +2866,10 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn("dispatch_http=passed full_chain=passed", source)
         self.assertIn("PINNED_HERMES_RUN_AGENT_PATH = \"/opt/hermes/run_agent.py\"", source)
         self.assertIn("PINNED_HERMES_RUN_AGENT_SHA256", source)
+        self.assertIn(
+            "67d09e1a31f2fc29ea4b32a03a9256e3d8f438d47d8e4784aafc780803ef4699",
+            source,
+        )
         self.assertIn("PROVIDER_TRANSPORT_SHIM", source)
         self.assertIn("from openai import OpenAI", source)
         self.assertIn("g4-hermes-agent-loop=ok", source)

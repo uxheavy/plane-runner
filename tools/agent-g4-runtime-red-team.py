@@ -26,7 +26,7 @@ PLANE_CODE_MODE_OPERATION = "plane.code-mode.execute@1"
 PINNED_HERMES_RUN_AGENT_PATH = "/opt/hermes/run_agent.py"
 PINNED_HERMES_RUN_AGENT_SHA256 = os.environ.get(
     "PLANE_G4_RUNTIME_HERMES_RUN_AGENT_SHA256",
-    "86742299a57df19cb12fc9ea1beb5d02d6f837e5",
+    "67d09e1a31f2fc29ea4b32a03a9256e3d8f438d47d8e4784aafc780803ef4699",
 )
 
 
@@ -49,7 +49,7 @@ from types import SimpleNamespace
 
 
 PINNED_HERMES_RUN_AGENT_PATH = "/opt/hermes/run_agent.py"
-PINNED_HERMES_RUN_AGENT_SHA256 = "86742299a57df19cb12fc9ea1beb5d02d6f837e5"
+PINNED_HERMES_RUN_AGENT_SHA256 = "67d09e1a31f2fc29ea4b32a03a9256e3d8f438d47d8e4784aafc780803ef4699"
 
 
 class OpenAIError(Exception):
@@ -706,7 +706,7 @@ identity = {
 if (
     identity["module"] != "run_agent"
     or identity["path"] != "/opt/hermes/run_agent.py"
-    or identity["sha256"] != "86742299a57df19cb12fc9ea1beb5d02d6f837e5"
+    or identity["sha256"] != "67d09e1a31f2fc29ea4b32a03a9256e3d8f438d47d8e4784aafc780803ef4699"
     or identity["class"] != "AIAgent"
     or identity["classModule"] != "run_agent"
     or identity["shadowPresent"]
