@@ -692,6 +692,12 @@ provider attempt, but it cannot establish whether the application created an
 Assignment or setup lineage/schedule records before the failure. No stronger
 effect claim is made.
 
+## UT-063 — immutable v20 Manager diagnostic rerun — 2026-08-18
+
+| Issue | Severity | Persona / route | Durable evidence | Root cause / bounded disposition | Retest / status |
+| ----- | -------- | --------------- | ---------------- | ------------------------------ | ---------------- |
+| UT-063 | blocker | Manager / M01-M08 one fresh wrapper-bound primary | `manager-m01-m08-v20-live-stop.json` SHA-256 `375ee6784c53128d8446b26b56224c7d7072609aba09b16d6081b890122f5166` | After a non-consuming capacity timeout and normal lease release, the one fresh v20 Manager primary reached `api-invocation` and stopped with bounded `RuntimeError`, exit `1`, launcher `unclassified_exception` / `upstream_exception`. The receipt reports no Run, Invocation, provider attempt, host operation receipt, or audited operation; assignment/lineage/schedule pre-run effects are not reported and are not claimed absent. | Focused provider-free checks passed 190 tests; wrapper parent, exact image digests, manifest, transport, and nine env comparisons passed. No retry, fallback, second primary, blind `outcome_unknown` replay, or provider-disabled replay. Lease and labeled resources cleaned. M01-M08 remain unproven; shared API/runtime launcher diagnosis required. / open |
+
 ## UT-061 — immutable v18 Manager first product stop — Wave 0CL
 
 | Issue | Severity | Persona / route | Durable evidence | Root cause / bounded disposition | Retest / status |

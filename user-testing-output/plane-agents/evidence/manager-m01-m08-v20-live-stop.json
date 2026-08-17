@@ -1,0 +1,102 @@
+{
+  "schemaVersion": "plane-agent-manager-m01-m08-live-evidence/v1",
+  "lane": "Manager M01-M08",
+  "status": "LIVE_STOP",
+  "date": "2026-08-18",
+  "candidate": {
+    "source": "278182149efa0cdddab88b05e27d6445162f0c9a",
+    "wrapper": "2ed2a991c967230a18da4ef6f870a2605dec06a6",
+    "manifestSha256": "76c10c7f48522f18c924338c79a5652b351a458e19efadcbb44b8f792a2db23c",
+    "api": {
+      "tag": "plane-agent-api:g4-v20-2781821",
+      "digest": "sha256:38c48791d38ab15f4201a24d272f9202367c1368e96ecd31bab5587f599db2ca"
+    },
+    "runtime": {
+      "tag": "plane-agent-runtime:hermes-6c460f10-g4-v20-2781821",
+      "digest": "sha256:7a541114d6f0fdbefad76fa4999e9fe977f02bf7979915f96c918338bc1a3ecc"
+    },
+    "pins": {
+      "hermes": "6c460f10fe215718dce36dd73cda94155a9a34f8",
+      "mcp": "c04974ed6624f17b41e63ef8182661929e77e0d3",
+      "sdk": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
+    }
+  },
+  "provider": {
+    "profile": "openai-codex",
+    "model": "gpt-5.6-luna",
+    "reasoning": "xhigh",
+    "fallback": false,
+    "attemptCount": 0,
+    "fallbackCount": 0,
+    "replayCount": 0
+  },
+  "preparation": {
+    "envFilesCompared": 9,
+    "setupScriptRun": false,
+    "wrapperParentVerified": true,
+    "transportClass": "RemoteRuntimeTransport",
+    "transportKind": "remote",
+    "focusedTests": "190 passed in 15.92s",
+    "ownerInputSha256": {
+      "authority": "09a3b4313e3e90a4c9cbe99b1c0b7c8d718bb88150517f2a7d98a8704623a580",
+      "config": "29812cc96539bc327defa73106175dbdf1dc0086ef0abc25a24ace6d1fc31b7c",
+      "descriptor": "22e50494277bb5e31cfe4d08b55f4b50914ced1aacdb03d401915a8d6e006775"
+    }
+  },
+  "capacityBoundary": {
+    "initialWaitTimeout": true,
+    "phase": "capacity-lease",
+    "exitCode": 75,
+    "resultSha256": "1c9136d632c2205351edae6488ab8291f54e5d16ee519da65b2b939059337784",
+    "runnerLogSha256": "03a255a384f9171ce71a55f4fd9b7f1415794dacf07c2df268fea2c6217bdda3",
+    "assignmentRunInvocationProviderEffects": "not_started",
+    "reentryAfterNormalRelease": true
+  },
+  "primary": {
+    "commissionId": "manager-m01-m08-v20-primary-r2-20260818-01",
+    "resultSha256": "98c08370a86f68c3daa39b73d35b849620eaa5a00b31ea698f90d67a2744456e",
+    "runnerLogSha256": "342ad1b2bc0d693c2784a1ff11470f8e1ffdf16a1c8032305fca07bad08176cf",
+    "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "failure": {
+      "phase": "api-invocation",
+      "errorClass": "RuntimeError",
+      "exitCode": 1,
+      "reasonCode": "runtime_error",
+      "reasonPhase": "launcher",
+      "reasonDetail": "unclassified_exception",
+      "reasonSubreason": "upstream_exception"
+    },
+    "runPresent": false,
+    "invocationPresent": false,
+    "providerAttempts": 0,
+    "planeHostOperationReceipts": false,
+    "planeOperationCounts": {
+      "search_workspace": 0,
+      "work_item.read": 0,
+      "catalog.search": 0,
+      "catalog.describe": 0,
+      "agent.outcome.evaluate": 0,
+      "agent.outcome.submit": 0,
+      "agent.outcome.publish": 0
+    },
+    "m01_m08": {
+      "dynamicPlan": "unproven",
+      "delegationLineageBudget": "unproven",
+      "cancellationPropagation": "unproven",
+      "scheduleDst": "unproven",
+      "evaluatorHumanReviewRevision": "unproven",
+      "hrGovernance": "unproven",
+      "chiefOfStaff": "unproven",
+      "terminalAndNegativeReplayInvariants": "unproven"
+    }
+  },
+  "cleanup": {
+    "lease": "absent",
+    "composeProject": "plane-agent-g4-live-24145-20335",
+    "labeledContainers": 0,
+    "labeledVolumes": 0,
+    "labeledNetworks": 0,
+    "rawSecretsTracked": false
+  },
+  "disposition": "Stop at first genuine API-invocation launcher failure. No retry, fallback, second primary, blind outcome_unknown replay, or provider-disabled replay. Shared API/runtime owner diagnosis is required; Manager M01-M08 product predicates remain unproven."
+}

@@ -1317,3 +1317,25 @@ SHA-256 `833019e8b5ee515098096410522ffca2f448eaa7d4a2de6327579dfadfecc111`.
   provider-disabled replay occurred. Cleanup verified no capacity lease and
   zero runner containers, volumes, or networks. W03/W04 remain dirty pending
   provider-free diagnosis; no candidate mutation was made.
+## Manager M01-M08 v20 diagnostic rerun — 2026-08-18
+
+The immutable v20 source `278182149efa0cdddab88b05e27d6445162f0c9a` and exact
+wrapper `2ed2a991c967230a18da4ef6f870a2605dec06a6` were used with manifest
+SHA-256 `76c10c7f48522f18c924338c79a5652b351a458e19efadcbb44b8f792a2db23c`,
+the pinned API/runtime image digests, and Hermes/MCP/SDK pins. Nine env files
+were copied and compared byte-for-byte; values were not read, printed, or
+sourced, and `setup.sh` was not run. The wrapper parent and
+`RemoteRuntimeTransport` binding validated; focused provider-free checks passed
+190 tests.
+
+The first lease wait timed out without assignment/provider effects. After normal
+release, exactly one fresh Manager primary acquired and released the lease. It
+stopped at `api-invocation` with bounded `RuntimeError`, exit `1`, launcher
+`unclassified_exception` / `upstream_exception`; the result reports zero
+provider attempts, no Run/Invocation, no host operation receipts, and zero
+listed Plane operation counts. Assignment, lineage, and schedule setup effects
+are not reported and are not claimed absent. M01-M08 remain unproven.
+
+Durable redacted evidence is
+`user-testing-output/plane-agents/evidence/manager-m01-m08-v20-live-stop.json`,
+SHA-256 `375ee6784c53128d8446b26b56224c7d7072609aba09b16d6081b890122f5166`.

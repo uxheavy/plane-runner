@@ -3756,3 +3756,33 @@ not a provider rerun.
   exact runner containers/volumes/networks, and the disposable detached
   checkout was removed. No provider retry,
   fallback, second primary, or blind `outcome_unknown` replay occurred.
+## Wave 0CM — Manager M01-M08 immutable v20 diagnostic rerun — 2026-08-18
+
+- Candidate source `278182149efa0cdddab88b05e27d6445162f0c9a`, exact wrapper
+  `2ed2a991c967230a18da4ef6f870a2605dec06a6`, manifest SHA-256
+  `76c10c7f48522f18c924338c79a5652b351a458e19efadcbb44b8f792a2db23c`, and
+  exact API/runtime image digests were verified. Hermes, MCP, and SDK pins
+  matched the release. Nine env files were byte-compared; values were not read,
+  printed, or sourced, and `setup.sh` was not run.
+- Focused provider-free checks passed `190` tests. The wrapper-bound owner
+  inputs validated with `RemoteRuntimeTransport` and the provider remained
+  `openai-codex/gpt-5.6-luna`, xhigh, fallback disabled.
+- An initial capacity wait timed out before assignment/provider effects. After
+  normal owner release, exactly one fresh Manager primary acquired and released
+  the lease. It stopped at `api-invocation` with bounded `RuntimeError`, exit
+  `1`, launcher `unclassified_exception` / `upstream_exception`.
+- Primary result SHA-256 was
+  `98c08370a86f68c3daa39b73d35b849620eaa5a00b31ea698f90d67a2744456e`;
+  runner log SHA-256 was
+  `342ad1b2bc0d693c2784a1ff11470f8e1ffdf16a1c8032305fca07bad08176cf`;
+  bounded stderr digest was
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+  The receipt reports zero provider attempts, no Run/Invocation, no host
+  operation receipt, and zero listed Plane operation counts. Assignment,
+  lineage, and schedule setup effects are not reported and are not claimed
+  absent. M01-M08 remain unproven.
+- No retry, fallback, second primary, blind `outcome_unknown` replay, or
+  provider-disabled replay occurred. Cleanup proved absent lease and zero
+  labeled containers, volumes, and networks. Durable redacted evidence is
+  `user-testing-output/plane-agents/evidence/manager-m01-m08-v20-live-stop.json`,
+  SHA-256 `375ee6784c53128d8446b26b56224c7d7072609aba09b16d6081b890122f5166`.
