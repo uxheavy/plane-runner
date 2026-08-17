@@ -16,6 +16,7 @@ from typing import Any, Literal, Mapping, TypedDict
 
 SCENARIO_SCHEMA = "plane.agent-scenario/v1"
 ASSIGNED_WORK_ITEM_ALIAS = "fixture:assigned-work-item"
+_ASSIGNED_WORK_ITEM_ALIAS_VERSION_PREFIX = f"{ASSIGNED_WORK_ITEM_ALIAS}-"
 MAX_DESCRIPTOR_BYTES = 128 * 1024
 MAX_PROMPT_BYTES = 16 * 1024
 MAX_INSTRUCTIONS_BYTES = 8 * 1024
@@ -50,6 +51,16 @@ EXPECTED_OUTCOMES = {"success", "denied", "not_observed"}
 
 class ScenarioError(ValueError):
     """A bounded, safe descriptor failure."""
+
+
+def bind_assigned_work_item_target(target_ref: str, assigned_work_item_ref: str) -> str:
+    """Resolve the versioned fixture namespace to the fresh issue reference."""
+
+    if target_ref == ASSIGNED_WORK_ITEM_ALIAS or target_ref.startswith(
+        _ASSIGNED_WORK_ITEM_ALIAS_VERSION_PREFIX
+    ):
+        return assigned_work_item_ref
+    return target_ref
 
 
 class ExpectedOperation(TypedDict, total=False):

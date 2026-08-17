@@ -1700,12 +1700,10 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
         ]
         assignment_context_refs = []
         if scenario is not None:
-            from agent_g4_live_scenario import ASSIGNED_WORK_ITEM_ALIAS
+            from agent_g4_live_scenario import bind_assigned_work_item_target
 
-            assignment_target_ref = (
-                f"issue:{issue.id}"
-                if scenario.assignment.target_ref == ASSIGNED_WORK_ITEM_ALIAS
-                else scenario.assignment.target_ref
+            assignment_target_ref = bind_assigned_work_item_target(
+                scenario.assignment.target_ref, f"issue:{issue.id}"
             )
             assignment_objective = scenario.assignment.objective
             assignment_acceptance_criteria = list(scenario.assignment.acceptance_criteria)

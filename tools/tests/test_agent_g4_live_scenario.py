@@ -66,6 +66,26 @@ def test_supported_persona_descriptors_are_typed_and_bound(scenario_id: str) -> 
     assert parsed.evidence()["descriptorDigest"] == digest
 
 
+def test_versioned_assigned_work_item_alias_binds_to_the_fresh_issue_ref() -> None:
+    fresh_issue_ref = "issue:fresh-synthetic-issue"
+
+    assert scenario.bind_assigned_work_item_target(
+        "fixture:assigned-work-item-r2", fresh_issue_ref
+    ) == fresh_issue_ref
+    assert scenario.bind_assigned_work_item_target(
+        scenario.ASSIGNED_WORK_ITEM_ALIAS, fresh_issue_ref
+    ) == fresh_issue_ref
+    assert scenario.bind_assigned_work_item_target(
+        "fixture:assigned-work-items-r2", fresh_issue_ref
+    ) == "fixture:assigned-work-items-r2"
+    assert scenario.bind_assigned_work_item_target(
+        "fixture:assigned-work-item/r2", fresh_issue_ref
+    ) == "fixture:assigned-work-item/r2"
+    assert scenario.bind_assigned_work_item_target(
+        "issue:caller-supplied", fresh_issue_ref
+    ) == "issue:caller-supplied"
+
+
 def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names() -> None:
     path = TOOLS / "agent-g4-worker-v6.json"
     raw = path.read_bytes()
@@ -972,8 +992,7 @@ def test_identity_profile_assignment_and_evidence_are_separate() -> None:
     assert 'credential_ref="plane-credential:g4-live"' in invoke
     assert 'actor_role = AgentRole.WORKER' in invoke
     assert '"delegator": AgentRole.DELEGATOR' in invoke
-    assert "else scenario.assignment.target_ref" in invoke
-    assert "scenario.assignment.target_ref == ASSIGNED_WORK_ITEM_ALIAS" in invoke
+    assert "bind_assigned_work_item_target" in invoke
     assert 'evidence["scenario"] = scenario.evidence()' in invoke
     assert "permission" not in json.dumps(value)
     validator._validate_scenario_projection(parsed.evidence())

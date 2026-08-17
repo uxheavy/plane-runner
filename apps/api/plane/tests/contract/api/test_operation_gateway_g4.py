@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from plane.agent.lifecycle import create_actor, create_assignment, create_profile, create_run
 from plane.agent.memory import create_memory, create_user_preference
-from plane.db.models import AgentRole, User, WorkspaceMember
+from plane.db.models import AgentRole, ProjectMember, User, WorkspaceMember
 from plane.db.models import OperationGatewayAudit, OperationGatewayIdempotency, OperationGatewayQuotaBucket
 from plane.operation_gateway.catalog import (
     MUTATION_RECONCILIATION_POLICIES,
@@ -165,6 +165,113 @@ def test_agent_context_read_binds_subject_actor_and_run_snapshot(
     )
     assert denied_subject_status == 403
     assert denied_subject["error"]["code"] == "NOT_AUTHORIZED"
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_agent_work_item_read_uses_live_project_membership_for_bound_target(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    actor = create_actor(
+        workspace=workspace,
+        project=gateway_project,
+        display_name="Authorized work item reader",
+        created_by=create_user,
+    )
+    profile = create_profile(
+        actor,
+        role=AgentRole.WORKER,
+        instructions="Read the assigned work item.",
+        created_by=create_user,
+    )
+    assignment = create_assignment(
+        actor,
+        project=gateway_project,
+        target_ref=f"issue:{gateway_issue.id}",
+        objective="Read the assigned work item.",
+        acceptance_criteria=["The assigned work item is read once."],
+        created_by=create_user,
+    )
+    run = create_run(
+        assignment,
+        profile,
+        idempotency_key="idempotency:g4-work-item-read",
+        created_by=create_user,
+    )
+    request = SimpleNamespace(
+        user=actor.principal,
+        META={},
+        agent_actor_ref=run.snapshot["actorRef"],
+        agent_workspace_ref=run.snapshot["workspaceRef"],
+        agent_run_ref=run.snapshot["runId"],
+    )
+    read_input = {
+        "project_id": str(gateway_project.id),
+        "issue_id": str(gateway_issue.id),
+    }
+    read = {
+        "schema_version": "plane.operation/v1",
+        "operation_id": "work_item.read",
+        "workspace_slug": workspace.slug,
+        "idempotency_key": "idempotency:g4-work-item-read-authorized",
+        "correlation_id": "correlation:g4-work-item-read-authorized",
+        "input": read_input,
+    }
+
+    response, response_status = OperationGateway().execute(request, read)
+
+    assert response_status == 200, response
+    assert response["ok"] is True
+    assert response["result"]["work_item"]["id"] == str(gateway_issue.id)
+    assert ProjectMember.objects.filter(
+        project=gateway_project, member=actor.principal, is_active=True
+    ).exists()
+
+    unprivileged_actor = create_actor(
+        workspace=workspace,
+        display_name="Unprivileged work item reader",
+        created_by=create_user,
+    )
+    unprivileged_profile = create_profile(
+        unprivileged_actor,
+        role=AgentRole.WORKER,
+        instructions="Attempt an out-of-scope read.",
+        created_by=create_user,
+    )
+    unprivileged_assignment = create_assignment(
+        unprivileged_actor,
+        target_ref=f"issue:{gateway_issue.id}",
+        objective="Attempt an out-of-scope read.",
+        acceptance_criteria=["The read is denied."],
+        created_by=create_user,
+    )
+    unprivileged_run = create_run(
+        unprivileged_assignment,
+        unprivileged_profile,
+        idempotency_key="idempotency:g4-work-item-read-unprivileged-run",
+        created_by=create_user,
+    )
+    denied_request = SimpleNamespace(
+        user=unprivileged_actor.principal,
+        META={},
+        agent_actor_ref=unprivileged_run.snapshot["actorRef"],
+        agent_workspace_ref=unprivileged_run.snapshot["workspaceRef"],
+        agent_run_ref=unprivileged_run.snapshot["runId"],
+    )
+    denied, denied_status = OperationGateway().execute(
+        denied_request,
+        {
+            **read,
+            "idempotency_key": "idempotency:g4-work-item-read-unprivileged",
+            "correlation_id": "correlation:g4-work-item-read-unprivileged",
+        },
+    )
+
+    assert denied_status == 403
+    assert denied["error"]["code"] == "NOT_AUTHORIZED"
+    assert not ProjectMember.objects.filter(
+        project=gateway_project, member=unprivileged_actor.principal, is_active=True
+    ).exists()
 
 
 @pytest.mark.contract
