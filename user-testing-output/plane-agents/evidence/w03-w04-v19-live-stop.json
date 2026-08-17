@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "plane-agent-g4/evidence-extract/v1",
+  "status": "failed",
+  "lane": "W03-W04",
+  "wave": "0CP",
+  "candidate": {
+    "source": "fe72bcefe5ffc13c43212d48c2c47f4006d85ae5",
+    "wrapper": "98424ff87e3d699c26a5374dcc5a9e48f12ecaa8",
+    "apiDigest": "sha256:59abfaec97cd82b74995b7cf7c64cb0bd37973bd8bf528ab07143dc4fd4472f7",
+    "runtimeDigest": "sha256:120e8f51a8193512c3be9d38e1a2b958eb9339178ce59c655e2b3f2bef03480e",
+    "manifestSha256": "da5be33ccd7ad7c53207a5642a25ca37c8ac9ebe9556740e6455fe962d9f2f02",
+    "hermes": "6c460f10fe215718dce36dd73cda94155a9a34f8",
+    "mcp": "c04974ed6624f17b41e63ef8182661929e77e0d3",
+    "sdk": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
+  },
+  "provider": {
+    "profile": "openai-codex",
+    "model": "gpt-5.6-luna",
+    "effort": "xhigh",
+    "fallback": false,
+    "attempts": {"total": 5, "2xx": 5, "4xx": 0, "5xx": 0, "transport": 0, "retry": 0, "replay": 0}
+  },
+  "refs": {
+    "run": "505674e9-9dcf-40e3-ac8c-1a2483a5cb14",
+    "invocation": "invocation:9a2ce30d-b83d-41dd-b6b2-24f66ef64e9a",
+    "attempt": "host-request:8ee8e1bb674eaebd56c5707e22c1b70dfdd2f156608ec265e061357611040254",
+    "receipt": "unavailable"
+  },
+  "failure": {
+    "phase": "api-invocation",
+    "reasonCategory": "host_operation_failure",
+    "operationId": "work_item.read",
+    "errorCode": "PREPARED_CALL_INVALID",
+    "retryable": false,
+    "runtimeFinalSequence": 7,
+    "progressEvents": 8
+  },
+  "operations": {
+    "search_workspace": {"status": "success", "count": 1},
+    "work_item.read": {"status": "absent", "count": 0},
+    "work_item.rename": {"status": "absent", "count": 0},
+    "agent.outcome.evaluate": {"status": "absent", "count": 0},
+    "agent.outcome.submit": {"status": "absent", "count": 0},
+    "agent.outcome.publish": {"status": "absent", "count": 0}
+  },
+  "gates": {
+    "routeChecks": ["W03", "W04"],
+    "mutation": "unproven",
+    "publication": "unproven",
+    "replay": "ineligible_after_primary_failure",
+    "successClaim": "withheld"
+  },
+  "validation": {
+    "descriptorSha256": "ad32fca5d29fc6675881b92c437bb889146ad384b0d151f9caa6d399905ebb02",
+    "resultSha256": "411c348b4c5660f20b0c3046141f8d3e9a879d2fd300c7f9096e08d00636a60a",
+    "contract": "passed"
+  },
+  "cleanup": {
+    "capacityLease": "absent",
+    "runnerContainers": 0,
+    "runnerVolumes": 0,
+    "runnerNetworks": 0,
+    "rawInputsRetained": false,
+    "transcriptRetained": false,
+    "secretsRetained": false
+  },
+  "disposition": "First genuine product failure retained; no retry, fallback, second primary, blind outcome_unknown replay, or provider-disabled replay. W03/W04 remain dirty."
+}

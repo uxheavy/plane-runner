@@ -1153,3 +1153,34 @@ mixed `scope:manager-journey` with `context:manager-journey`, while
 only `context:*` references. The Manager descriptor now retains
 `scope:manager-journey` only under `setup.lineage.scopeRefs`; the provider-free
 descriptor assertion and focused suite passed 190 tests. No live rerun was made.
+
+## Wave 0CP — immutable v19 W03/W04 prepared-call invalid stop — 2026-08-18
+
+- The fresh detached exact wrapper was `98424ff87e3d699c26a5374dcc5a9e48f12ecaa8`,
+  source `fe72bcefe5ffc13c43212d48c2c47f4006d85ae5`, API digest
+  `sha256:59abfaec97cd82b74995b7cf7c64cb0bd37973bd8bf528ab07143dc4fd4472f7`,
+  runtime digest
+  `sha256:120e8f51a8193512c3be9d38e1a2b958eb9339178ce59c655e2b3f2bef03480e`,
+  and manifest SHA-256
+  `da5be33ccd7ad7c53207a5642a25ca37c8ac9ebe9556740e6455fe962d9f2f02`.
+  Hermes/MCP/SDK pins remained exact. Required env files were copied byte-for-byte
+  from the authoritative checkout without reading values; `setup.sh` was not run.
+- Exactly one fresh serialized W03/W04 assignment used
+  `openai-codex/gpt-5.6-luna` xhigh with fallback disabled. Search succeeded,
+  then the first model-facing prepared `work_item.read` failed with bounded
+  `PREPARED_CALL_INVALID`. Provider attempts were `5` (`2xx=5`, all other
+  classes `0`), and runtime final sequence was `7` with eight progress events.
+  No rename, authorization-negative, submit, publication, mutation, or replay
+  proof was accepted.
+- Run `505674e9-9dcf-40e3-ac8c-1a2483a5cb14`, invocation
+  `invocation:9a2ce30d-b83d-41dd-b6b2-24f66ef64e9a`, and attempt
+  `host-request:8ee8e1bb674eaebd56c5707e22c1b70dfdd2f156608ec265e061357611040254`
+  are retained in the bounded extract
+  `user-testing-output/plane-agents/evidence/w03-w04-v19-live-stop.json`,
+  SHA-256 `f75533b2134b6b6b42e987381177aee77ddeaf091a2e08273eaf9c8316c6b451`.
+  The owner-only raw result SHA-256 is
+  `411c348b4c5660f20b0c3046141f8d3e9a879d2fd300c7f9096e08d00636a60a`.
+- No retry, fallback, second primary, blind `outcome_unknown` replay, or
+  provider-disabled replay occurred. Cleanup verified no capacity lease and
+  zero runner containers, volumes, or networks. W03/W04 remain dirty pending
+  provider-free prepared-call diagnosis; no candidate mutation was made.

@@ -3585,3 +3585,26 @@ not a provider rerun.
   `operator-o01-o09-v18-live-stop-20260818.json`; its SHA is recorded in the
   issue and route ledgers after commit. Cleanup verified no Operator lease,
   containers, networks, or volumes.
+
+## Wave 0CP — immutable v19 W03/W04 prepared-call invalid stop — 2026-08-18
+
+- Candidate wrapper `98424ff87e3d699c26a5374dcc5a9e48f12ecaa8`, source
+  `fe72bcefe5ffc13c43212d48c2c47f4006d85ae5`, API digest
+  `sha256:59abfaec97cd82b74995b7cf7c64cb0bd37973bd8bf528ab07143dc4fd4472f7`,
+  runtime digest
+  `sha256:120e8f51a8193512c3be9d38e1a2b958eb9339178ce59c655e2b3f2bef03480e`,
+  manifest SHA-256 `da5be33ccd7ad7c53207a5642a25ca37c8ac9ebe9556740e6455fe962d9f2f02`.
+  Hermes/MCP/SDK pins were exact; seven required env files were byte-compared
+  to the authoritative checkout and `setup.sh` was not run.
+- One fresh serialized W03/W04 journey used Luna xhigh with fallback disabled.
+  `search_workspace` succeeded, then prepared `work_item.read` stopped with
+  `PREPARED_CALL_INVALID`. Provider counts were `2xx=5`, all other status
+  classes `0`, retries `0`, fallback `0`, replay `0`; runtime final sequence
+  `7`. Run `505674e9-9dcf-40e3-ac8c-1a2483a5cb14` and invocation
+  `invocation:9a2ce30d-b83d-41dd-b6b2-24f66ef64e9a` are in the bounded extract
+  `w03-w04-v19-live-stop.json` (SHA-256
+  `f75533b2134b6b6b42e987381177aee77ddeaf091a2e08273eaf9c8316c6b451`).
+- No retry, fallback, second primary, blind `outcome_unknown` replay, or
+  provider-disabled replay. Cleanup verified no capacity lease and zero runner
+  containers, volumes, or networks. W03/W04 remain dirty; no candidate mutation
+  was made.
