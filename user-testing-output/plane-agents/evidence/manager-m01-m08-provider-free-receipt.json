@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "plane.agent-manager-receipt/v1",
+  "status": "passed_provider_free_supporting_evidence",
+  "journey": "Manager M01-M08",
+  "source": {
+    "mechanism": "existing Plane lifecycle/application services",
+    "routeBuilder": "tools/agent_g4_manager_route.py",
+    "candidate": "424479fad17cc2fdd0b58ef27c51bee56b8f7d91",
+    "workspace": "fresh synthetic workspace",
+    "savedWorkflowProduct": false
+  },
+  "provider": {
+    "calls": 0,
+    "liveRunnerAttempts": 0,
+    "status": "not_attempted_external_authority_missing",
+    "modelPolicy": {
+      "provider": "openai-codex",
+      "model": "gpt-5.6-luna",
+      "reasoning": "xhigh",
+      "fallbackAllowed": false
+    }
+  },
+  "binding": {
+    "apiImage": {
+      "tag": "plane-agent-api:g4-v6-424479fa",
+      "digest": "sha256:3ac49cb589db52c4e4badac009046a5916b26f5c6ab77624af39a6ddda93337b"
+    },
+    "runtimeImage": {
+      "tag": "plane-agent-runtime:hermes-292e8663-g4-v6-424479fa",
+      "digest": "sha256:20344eca83b2c8b6abeaaecdf413bd78202028363c9d2edd1d65252fbace132f"
+    },
+    "hermes": "292e866374ca9e9615473fc9bf5dda1913b672e1",
+    "mcp": "c04974ed6624f17b41e63ef8182661929e77e0d3",
+    "sdk": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
+  },
+  "routeEvidence": {
+    "readback": {
+      "assignmentCount": 8,
+      "childAssignmentCount": 3,
+      "outcomeCount": 2,
+      "artifactOutcomeCount": 2,
+      "terminalEventCount": 3,
+      "governanceReadbackDigest": "5f60f0eca3eeced2931ac3d18d7f133163a83856cb8a3c8be42dc8f8bb7f1133"
+    },
+    "routes": {
+      "M01": { "dynamicPlan": true, "noSavedWorkflowProduct": true },
+      "M02": { "boundedDelegation": true, "independentChildRun": true, "lineagePersisted": true },
+      "M03": { "activeDescendantCancelled": true, "lateCallbackDenied": true, "queuedDescendantCancelled": true, "terminalVisible": true },
+      "M04": { "fireIdempotent": true, "nonUtcTimezone": true, "normalAssignmentCreated": true, "springForwardSkipped": true },
+      "M05": { "evaluatorFirst": true, "finalAccepted": true, "humanDecisionAfterEvaluator": true, "priorSnapshotImmutable": true, "revisionFreshRun": true },
+      "M06": { "humanApprovalApplied": true, "proposalRecorded": true, "selfApprovalDenied": true, "staleApprovalDenied": true },
+      "M07": { "chiefProvisioned": true, "currentMembershipCopied": true, "humanApprovalRequired": true, "noCrossWorkspaceMembership": true, "noStaleMembershipCopy": true },
+      "M08": { "evaluatorAndHumanReadback": true, "immutablePriorSnapshot": true, "outcomeAndArtifact": true, "parentChildLineage": true, "terminalEventsAgree": true },
+      "replay": { "stateMutations": 0 }
+    }
+  },
+  "verification": {
+    "migrationBackedFocusedTests": { "passed": 16, "failed": 0 },
+    "offlineLiveScenarioAndResultTests": { "passed": 64, "failed": 0 }
+  },
+  "secrets": {
+    "providerCredential": "not present",
+    "credentialSourceContract": "PLANE_G4_PROVIDER_SECRET_SOURCE",
+    "credentialSourceMetadata": { "exists": true, "mode": "0600", "contentsRead": false },
+    "rawSourceRead": false,
+    "rawSourceCopied": false
+  }
+}

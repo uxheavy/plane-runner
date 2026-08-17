@@ -394,6 +394,29 @@ replay. W03-W08 remain dirty; UT-042 is open.
 - W05 and W06 remain dirty; this is provider-free boundary evidence, not route
   closure.
 
+## Manager M01-M08 reconciliation — 2026-08-17
+
+The Manager branch's source fixes, provider-free readiness checks, and six
+redacted evidence extracts are integrated through the merge parent
+`e9281196b8e7a89466155f66c0d4d3bafdc95d6f`. The durable Manager route receipt
+records the existing M01-M08 predicates passing with assignment count `8`,
+child assignment count `3`, outcome count `2`, artifact-backed outcome count
+`2`, terminal event count `3`, and replay state mutations `0`. This remains
+supporting evidence only.
+
+Two historical fresh Manager runner attempts are retained as bounded failure
+evidence: the first stopped at `api-invocation` and the second at `migrate`;
+both recorded zero provider attempts, zero route mutations, and no replay.
+The readiness and failure extracts are integrated under
+`user-testing-output/plane-agents/evidence/manager-m01-m08-*.json` with their
+individual SHA-256 values recorded in the issue and wave ledgers. These
+historical candidate and artifact pins are evidence references, not current
+integration-branch candidate pins.
+
+M01-M08 therefore remain supporting-only and untested at provider-backed route
+level. No route is promoted, no capacity gate is opened, and no live/provider
+journey is authorized by this reconciliation.
+
 ## Wave 0CE — reconciled Operator O04/O06 provider-free readiness
 
 - The Operator lane was reconciled onto current functional-chain tip

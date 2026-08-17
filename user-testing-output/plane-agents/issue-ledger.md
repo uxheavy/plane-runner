@@ -494,3 +494,32 @@ Durable receipt:
 `evidence/operator-o04-o06-reconciled-ready-20260817.md`, SHA-256
 `e0a04a4bbc1b38218360db5f96d72746ba82f124876d249fb8d662782e9e72ee`.
 O04/O06 remain dirty/partial and ready-only.
+
+## Manager M01-M08 reconciliation — 2026-08-17
+
+No new UT issue is opened. The integrated Manager evidence preserves the
+provider-free M01-M08 route receipt and the two historical pre-provider stops:
+
+- `manager-m01-m08-provider-free-receipt.json`, SHA-256
+  `f1708324491a15274062c3a2632622598c68b766ffde2796e2df9576225cd9e5`;
+  M01-M08 supporting predicates passed and replay mutations were `0`.
+- `manager-m01-m08-fresh-live-failure.json`, SHA-256
+  `f393de463dbe7d7f0987a56168bdc2a719c8b40770c4079665970cd14c838037`;
+  the fresh attempt stopped at `api-invocation` with zero provider attempts
+  and zero route mutations.
+- `manager-m01-m08-fresh-live-failure-02.json`, SHA-256
+  `425af754560420a924a7f5de8d6100bf8653c3dfece73ccd5185d02003cb4014`;
+  the second fresh attempt stopped at `migrate` with the same zero-effect
+  disposition.
+
+Capacity, shared-fix, and transport readiness extracts are also retained:
+`manager-m01-m08-capacity-ready-20260817-01.json` (SHA-256
+`2d9cd6be63ff5c5c88a739e1297514499a14668f4f15a396c4b0251a227f1a98`),
+`manager-m01-m08-capacity-ready-20260817-02.json` (SHA-256
+`3e641870eef94553833fd9fb459df74271cea679ecde647d1bebac5c2a62d09c`), and
+`manager-m01-m08-transport-ready-20260817-03.json` (SHA-256
+`2ca8145210d924f1c28d4a94490dec28bda693086505fbf6b2c38723d8c41e92`).
+They are provider-free readiness evidence, do not replace the existing
+W05/W06 or W07/W08 issue IDs, and do not close the Manager route. M01-M08
+remain provider-backed pending; no retry, replay, or new provider attempt is
+authorized by this integration.

@@ -2906,3 +2906,31 @@ records this diagnosis without changing the retained receipts.
   `e0a04a4bbc1b38218360db5f96d72746ba82f124876d249fb8d662782e9e72ee`.
   O04/O06 remain partial and ready-to-run only; the serialized capacity gate
   remains closed.
+
+## Manager M01-M08 reconciliation — 2026-08-17
+
+- The Manager source/test/runtime changes and redacted evidence from
+  `e9281196b8e7a89466155f66c0d4d3bafdc95d6f` are integrated as a merge parent;
+  the current branch does not adopt the Manager branch's historical
+  candidate pins as its live candidate.
+- Provider-free M01-M08 route evidence remains supporting-only. The durable
+  receipt records assignment count `8`, child assignment count `3`, outcome
+  count `2`, artifact-backed outcome count `2`, terminal event count `3`, and
+  replay state mutations `0`.
+- The two retained fresh Manager attempts stopped before provider use: one at
+  `api-invocation` with `errorClass=unspecified`, and one at `migrate` with
+  `errorClass=unavailable`. Both recorded zero Plane run/invocation creation,
+  zero provider attempts, zero route mutations, and no replay. The full
+  Compose/live phase was not entered for the readiness checkpoints; the
+  transport checkpoint also records the RabbitMQ tmpfs permission stop.
+- Durable extracts are retained at
+  `user-testing-output/plane-agents/evidence/manager-m01-m08-provider-free-receipt.json`,
+  `manager-m01-m08-fresh-live-failure.json`,
+  `manager-m01-m08-fresh-live-failure-02.json`,
+  `manager-m01-m08-capacity-ready-20260817-01.json`,
+  `manager-m01-m08-capacity-ready-20260817-02.json`, and
+  `manager-m01-m08-transport-ready-20260817-03.json`; exact hashes are in
+  the issue ledger.
+- No Manager route pass, provider attempt, retry, fallback, or blind
+  `outcome_unknown` replay is claimed. M01-M08 remain untested at the
+  provider-backed route level and the capacity gate remains closed.

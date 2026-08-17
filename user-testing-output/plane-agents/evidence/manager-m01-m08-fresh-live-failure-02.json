@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "plane.agent-manager-live-result/v1",
+  "status": "failed_before_provider_dispatch",
+  "journey": "Manager M01-M08",
+  "binding": {
+    "candidate": "07706d8cbf3c46cda50e25e7658d70ce970524b8",
+    "authorityId": "manager-m01-m08-fresh-20260816-02",
+    "apiImage": {
+      "tag": "plane-agent-api:g4-v6-07706d8c",
+      "digest": "sha256:01a61cef1604593b49dd088df57df40f3a755e07b216477e4ccc8c05a7f12359"
+    },
+    "runtimeImage": {
+      "tag": "plane-agent-runtime:hermes-292e8663-g4-v6-07706d8c",
+      "digest": "sha256:9d7f875fb8a971c6998d2325d40a75bba04094fed63e8821899ee4da400f344b"
+    },
+    "hermes": "292e866374ca9e9615473fc9bf5dda1913b672e1",
+    "mcp": "c04974ed6624f17b41e63ef8182661929e77e0d3",
+    "sdk": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889",
+    "descriptorSha256": "aab70fc0194294d09e2071790f7017fb29e5c4d07411fe9f06e362e15fe0d7e1"
+  },
+  "modelPolicy": {
+    "provider": "openai-codex",
+    "model": "gpt-5.6-luna",
+    "reasoning": "xhigh",
+    "fallbackAllowed": false
+  },
+  "failure": {
+    "phase": "migrate",
+    "errorClass": "unavailable",
+    "exitCode": 1,
+    "reasonCategory": "unavailable"
+  },
+  "lifecycle": {
+    "runPresent": false,
+    "runId": null,
+    "invocationPresent": false,
+    "invocationId": null,
+    "providerCalls": 0,
+    "providerAttemptRecords": 0,
+    "routeMutations": 0,
+    "replayAttempted": false,
+    "replayEligible": false
+  },
+  "scenario": {
+    "id": "manager",
+    "actorRole": "delegator",
+    "routeChecks": ["M01", "M02", "M03", "M04", "M05", "M06", "M07", "M08"]
+  },
+  "runnerAttempt": {
+    "count": 1,
+    "disposition": "stopped_at_first_failure; no_replay",
+    "rawResult": {
+      "sha256": "ebe435782d41445482b35bab585bfd6cd9ebfdc09b153cddbf70d17f97a8ac2a",
+      "mode": "0600",
+      "source": "owner-only disposable result; redacted extract tracked here"
+    }
+  },
+  "cleanup": {
+    "liveDisposableContainersRemoved": true,
+    "liveDisposableNetworksRemoved": true,
+    "liveDisposableVolumesRemoved": true,
+    "credentialSourceMetadata": { "exists": true, "mode": "0600", "contentsRead": false },
+    "rawCredentialRead": false,
+    "rawCredentialCopied": false,
+    "credentialSourceContract": "PLANE_G4_PROVIDER_SECRET_SOURCE"
+  },
+  "ownerDisposition": {
+    "firstOwner": "shared launcher migration-process configuration boundary",
+    "lanePatch": false,
+    "providerRetry": false,
+    "note": "The second shared fix was integrated and verified; this lane retains the bounded migrate stop for the shared owner."
+  }
+}
