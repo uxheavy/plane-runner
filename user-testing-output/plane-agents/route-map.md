@@ -515,6 +515,32 @@ replay. W03-W08 remain dirty; UT-042 is open.
   `7ebfd06c0948e00a7a5bfdbaab458dfd6db99cca2f9e8ed9dbf898a83bf139bb`.
   O01/O03-O09 remain `untested` for exact live closure; this wave is
   `READY_WITH_COMMIT`, not a live route pass.
+## Wave 0CK — immutable v16 Manager pre-run stop
+
+- The corrected serialized Manager journey used wrapper
+  `be7992f2e57a70779e3d3845a5462316c686d819`, source
+  `4e2b85384b85ecff822cd1136a668258dc76a90a`, manifest SHA-256
+  `b876b45699203c55b463fb7b86cff3f3ece13aaa7e246a4ecda80c395adcf857`,
+  and the immutable v16 API/runtime digests. The shared capacity lease was
+  acquired. No image or pin was rebuilt or changed.
+- The invalid selector probe failed with `scenario_commission_not_found`
+  before `_run_single`; therefore its assignment, run, invocation, and
+  provider effects were exactly zero. Its canonical result SHA-256 is
+  `a52d064a7b4da8ffd1e6759cc758694dbfca11cbfae7bc2a77d002b02d91dd22`.
+- The one corrected assignment-capable journey stopped at `api-invocation`
+  before a Run or Invocation receipt. Provider attempts, fallback, replay,
+  gateway operations, operation audits, outcomes, publications, and terminal
+  events were zero. Assignment, delegation-fixture, and schedule-fixture
+  effects cannot be excluded because the bounded receipt does not count those
+  pre-run setup objects. M01-M08 therefore remain `unproven`.
+- Canonical result SHA-256:
+  `87689310111f6e8fe2f0ae09c21ea56e1cabf06df81d37c7e3ccac071025677c`;
+  durable stop extract SHA-256:
+  `1e7ec9033db5b37f40629c5aad03c95deb2c383a7108fc0a93fca261ad16229c`.
+  This does not match the W03/W04 `ModuleNotFoundError` signature. No retry,
+  fallback, second primary, or replay was run. Cleanup proved no capacity
+  marker, labeled container, volume, runtime network, or disposable Manager
+  worktree remained.
 
 ## Manager M01-M08 provider-free batch readiness — 2026-08-18
 

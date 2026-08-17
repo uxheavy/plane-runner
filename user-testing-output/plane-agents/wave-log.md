@@ -3392,3 +3392,38 @@ records this diagnosis without changing the retained receipts.
   Manager lane and excluded from Operator cleanup accounting. Cross-lane
   W03/W04 stderr digest `98b2ab8f...` did not match Operator
   `168fb2c4...`; no module-error correlation was found.
+
+## Wave 0CK — immutable v16 Manager pre-run stop — 2026-08-18
+
+- Exact candidate: source `4e2b85384b85ecff822cd1136a668258dc76a90a`,
+  wrapper `be7992f2e57a70779e3d3845a5462316c686d819`, API digest
+  `sha256:46b902baec80d92c6c318061b9fdcc40858d3b9a39f97749f32ace46dc321f52`,
+  runtime digest
+  `sha256:68c23fa2cb03b21ca126dcd18a39c87123b4ec78cc5f1bfcc3dcedf507d68f1a`,
+  manifest SHA-256
+  `b876b45699203c55b463fb7b86cff3f3ece13aaa7e246a4ecda80c395adcf857`.
+  Nine required env files were copied byte-identically; credential values were
+  not inspected or tracked; `setup.sh` was not run.
+- An invalid optional selector failed with `scenario_commission_not_found`
+  before `_run_single`, proving zero assignment, run, invocation, and provider
+  effects. After that proof and root authorization, exactly one corrected
+  assignment-capable journey acquired the shared capacity lease.
+- The corrected journey stopped at the first genuine failure at
+  `api-invocation`, bounded as `unspecified` / exit `1` / `unavailable`, before
+  any Run or Invocation receipt. Provider attempts `0`; fallback `0`; replay
+  `0`; gateway operations, audits, outcomes, publications, and terminal events
+  `0`. Assignment, delegation-fixture, and schedule-fixture effects cannot be
+  excluded from the receipt. M01-M08 are all unproven.
+- Durable evidence:
+  `manager-m01-m08-v16-invalid-selector-result.json` SHA-256
+  `a52d064a7b4da8ffd1e6759cc758694dbfca11cbfae7bc2a77d002b02d91dd22`;
+  `manager-m01-m08-v16-live-result.json` SHA-256
+  `87689310111f6e8fe2f0ae09c21ea56e1cabf06df81d37c7e3ccac071025677c`;
+  `manager-m01-m08-v16-live-stop.json` SHA-256
+  `1e7ec9033db5b37f40629c5aad03c95deb2c383a7108fc0a93fca261ad16229c`.
+- Focused provider-free checks passed `7` Manager scenario tests and `19`
+  result/launch tests. The failure differs from the W03/W04
+  `ModuleNotFoundError` signature. No retry, fallback, second primary, or blind
+  replay occurred. Cleanup proved the shared capacity marker absent, all G4
+  labeled container/volume/runtime-network counts zero, and both disposable
+  Manager worktrees absent.

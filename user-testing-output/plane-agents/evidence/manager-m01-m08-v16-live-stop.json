@@ -1,0 +1,110 @@
+{
+  "schemaVersion": "plane.agent-manager-live-stop/v1",
+  "recordedAt": "2026-08-18",
+  "status": "failed",
+  "lane": "Manager M01-M08",
+  "candidate": {
+    "sourceRevision": "4e2b85384b85ecff822cd1136a668258dc76a90a",
+    "wrapperRevision": "be7992f2e57a70779e3d3845a5462316c686d819",
+    "apiImage": "plane-agent-api:g4-v16-4e2b8538",
+    "apiDigest": "sha256:46b902baec80d92c6c318061b9fdcc40858d3b9a39f97749f32ace46dc321f52",
+    "runtimeImage": "plane-agent-runtime:hermes-6c460f10-g4-v16-4e2b8538",
+    "runtimeDigest": "sha256:68c23fa2cb03b21ca126dcd18a39c87123b4ec78cc5f1bfcc3dcedf507d68f1a",
+    "manifestSha256": "b876b45699203c55b463fb7b86cff3f3ece13aaa7e246a4ecda80c395adcf857",
+    "descriptorSha256": "aab70fc0194294d09e2071790f7017fb29e5c4d07411fe9f06e362e15fe0d7e1",
+    "hermesRevision": "6c460f10fe215718dce36dd73cda94155a9a34f8",
+    "mcpRevision": "c04974ed6624f17b41e63ef8182661929e77e0d3",
+    "sdkRevision": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
+  },
+  "environment": {
+    "copiedEnvFileCount": 9,
+    "byteIdenticalCopies": true,
+    "setupScriptRun": false,
+    "credentialContentsInspectedOrTracked": false,
+    "providerSecretSourceMode": "0600"
+  },
+  "invalidSelectorBoundary": {
+    "resultFile": "manager-m01-m08-v16-invalid-selector-result.json",
+    "resultSha256": "a52d064a7b4da8ffd1e6759cc758694dbfca11cbfae7bc2a77d002b02d91dd22",
+    "phase": "api-invocation",
+    "errorClass": "RuntimeError",
+    "stderrSha256": "90a993e859e0cf9f6d27f4cab8e810d1724489ef3b21f183e8e0b9803e744c5b",
+    "boundedCause": "scenario_commission_not_found",
+    "beforeRunSingle": true,
+    "assignmentEffects": 0,
+    "runEffects": 0,
+    "invocationEffects": 0,
+    "providerAttempts": 0
+  },
+  "correctedJourney": {
+    "resultFile": "manager-m01-m08-v16-live-result.json",
+    "resultSha256": "87689310111f6e8fe2f0ae09c21ea56e1cabf06df81d37c7e3ccac071025677c",
+    "semanticDigest": "78961fd93e02f7bf03e36f59db228f58c97de7fe4bd2d8de8334a511c0847644",
+    "authoritySha256": "9b60b65cbf2a5cfcb03b566b18987d821d31ea7f5f24f82c4092cb5292e9a731",
+    "configSha256": "d04ea50533712df1a27b08bff7b6f2eb370b2dc72506ea80e15260f6e46421a9",
+    "capacityLeaseAcquired": true,
+    "phase": "api-invocation",
+    "exitCode": 1,
+    "errorClass": "unspecified",
+    "reasonCategory": "unavailable",
+    "run": {
+      "present": false,
+      "state": "unknown"
+    },
+    "invocation": {
+      "present": false,
+      "state": "unknown"
+    },
+    "providerAttempts": 0,
+    "fallbackAttempts": 0,
+    "replays": 0,
+    "gatewayOperationReceipts": 0,
+    "operationAuditCount": 0,
+    "outcomes": 0,
+    "publications": 0,
+    "terminalEvents": 0,
+    "assignmentEffects": "cannot-exclude",
+    "delegationFixtureEffects": "cannot-exclude",
+    "scheduleFixtureEffects": "cannot-exclude",
+    "firstGenuineFailure": true,
+    "stoppedWithoutRetry": true
+  },
+  "predicates": {
+    "M01_dynamic_plan_without_saved_workflow": "unproven",
+    "M02_bounded_delegation_lineage_budget_independent_child": "unproven",
+    "M03_parent_cancellation_propagation_without_resurrection": "unproven",
+    "M04_timezone_dst_schedule_normal_assignment_and_run": "unproven",
+    "M05_evaluator_then_human_revision_fresh_run_and_accept": "unproven",
+    "M06_hr_proposal_authorized_decision_and_stale_self_replay_denials": "unproven",
+    "M07_exactly_one_scoped_chief_of_staff": "unproven",
+    "M08_complete_readback_terminal_parent_child_denial_and_publication": "unproven"
+  },
+  "crossLaneCorrelation": {
+    "matchesW03W04ModuleNotFoundError": false,
+    "w03w04StderrSha256": "98b2ab8f98a12883dc00dfb027dd3e0397e7ff2f08fde2d44b3684bd07baf1",
+    "managerCorrectedStderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "managerErrorClass": "unspecified"
+  },
+  "providerFreeChecks": [
+    {
+      "command": "python3 -m pytest -q tools/tests/test_agent_g4_live_scenario.py -k manager",
+      "result": "7 passed, 50 deselected"
+    },
+    {
+      "command": "python3 -m pytest -q tools/tests/test_agent_g4_live_result.py tools/tests/test_agent_g4_live_launch.py",
+      "result": "19 passed"
+    },
+    {
+      "check": "invalid selector fails before _run_single",
+      "result": "passed"
+    }
+  ],
+  "cleanup": {
+    "capacityLeasePresent": false,
+    "labeledContainers": 0,
+    "labeledVolumes": 0,
+    "labeledRuntimeNetworks": 0,
+    "disposableWorktreesPresent": 0,
+    "sharedImagesRemoved": false
+  }
+}

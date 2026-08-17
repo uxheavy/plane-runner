@@ -672,3 +672,16 @@ marker through the repository helper and verified zero labeled Docker resources.
 | Issue | Severity | Persona / route | Durable evidence | Root cause / bounded disposition | Retest / status |
 | ----- | -------- | --------------- | ---------------- | ------------------------------ | ---------------- |
 | UT-062-O | blocker | Omar / O01 and O03; O04-O09 fail-stop | `operator-o01-o09-v16-live-stop-20260818.json` SHA-256 `b611d6417f82d09983d2ea7543867a9920b913468c6f5a6dbb3843bc5eed7b3c`; raw bounded result SHA-256 `3044511ea1affad4ef8da159a4958416189973246a9dc38952eafc38afa07f02`; stderr SHA-256 `168fb2c48d892a4ed6dc9cc1b48f915d2c958ca37bc66e9e36a755110ce08041` | The first v16 Operator commission completed nine upstream `2xx` exchanges and a coherent one-publication lifecycle, but never called `catalog.search` or `catalog.describe`; its one `work_item.read` was rejected as `VALIDATION_ERROR`. The scenario gate failed those three operation predicates. The bounded digest and error class do not correlate with the separate W03/W04 `ModuleNotFoundError`. | Stopped immediately after the first failed commission. O04-O09 were not started; O02 stayed untouched. No retry, second primary, fallback, replay, or unknown-outcome replay. Exact Operator resources and lease cleaned before a later Manager lane acquired capacity. / open |
+## UT-060 — immutable v16 Manager pre-run stop — Wave 0CK
+
+| Issue | Severity | Persona / route | Durable evidence | Root cause / bounded disposition | Retest / status |
+| ----- | -------- | --------------- | ---------------- | ------------------------------ | ---------------- |
+| UT-060 | blocker | Manager / M01-M08 fresh serialized assignment | `manager-m01-m08-v16-live-stop.json` SHA-256 `1e7ec9033db5b37f40629c5aad03c95deb2c383a7108fc0a93fca261ad16229c`; corrected canonical result SHA-256 `87689310111f6e8fe2f0ae09c21ea56e1cabf06df81d37c7e3ccac071025677c`; invalid-selector canonical result SHA-256 `a52d064a7b4da8ffd1e6759cc758694dbfca11cbfae7bc2a77d002b02d91dd22`; manifest SHA-256 `b876b45699203c55b463fb7b86cff3f3ece13aaa7e246a4ecda80c395adcf857` | The corrected immutable-v16 journey acquired the capacity lease and stopped at `api-invocation` before a Run or Invocation receipt, with bounded `unspecified` / exit `1` / `unavailable`. Provider attempts, operations, audits, outcomes, publications, and terminal events were zero. Assignment, delegation-fixture, and schedule-fixture effects cannot be excluded because the receipt has no counters for those pre-run objects. The failure does not match the cross-lane `ModuleNotFoundError` digest. | No retry, fallback, second primary, or replay. M01-M08 remain dirty/unproven. Focused checks passed `7` Manager scenario tests and `19` result/launch tests; cleanup proved zero lease, labeled resources, and disposable Manager worktrees. / open |
+
+The prior invalid selector was proven to fail before `_run_single`, with zero
+assignment, run, invocation, and provider effects; correcting it therefore did
+not replay an assignment. The corrected journey was the sole fresh
+assignment-capable launch. Its bounded receipt proves no Run, Invocation, or
+provider attempt, but it cannot establish whether the application created an
+Assignment or setup lineage/schedule records before the failure. No stronger
+effect claim is made.
