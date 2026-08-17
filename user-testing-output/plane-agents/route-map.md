@@ -394,6 +394,64 @@ replay. W03-W08 remain dirty; UT-042 is open.
 - W05 and W06 remain dirty; this is provider-free boundary evidence, not route
   closure.
 
+## UT-055 W07/W08 fresh serialized D provider stop — 2026-08-17
+
+Root authorized exactly one new assignment from clean candidate
+`81023308257903d09582f2190d82c73f93368bb5`, after the W05/W06 acceptance
+reference, exact D-shaped request proof, bounded `reasonSubreason` contract,
+and capacity readiness were available. The API/runtime images and disposable
+manifest were bound to that candidate with Hermes
+`292e866374ca9e9615473fc9bf5dda1913b672e1`, MCP
+`c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
+`7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. Required runtime env files were
+copied byte-identically without reading, printing, or sourcing values;
+`setup.sh` was not run.
+
+The exact API image was `plane-agent-api:g4-v6-81023308` /
+`sha256:d47910d0b7def03ca1f836d70907203896ff0bcce3eaf43a9f408996786fa91c`.
+The separate runtime was
+`plane-agent-runtime:hermes-292e8663-g4-v6-81023308` /
+`sha256:62fc42067a945500e961dc5f217e51c5a36e5923f034c75534b0fd4538b8199a`.
+Manifest SHA-256 was
+`71f769993834cde1ab80165a60c941ff0ea196d7a586b3a06f0fd7cc9dc108a3`.
+Config, descriptor, runtime/DB, capacity, and 163 focused provider-free
+checks passed before the live invocation.
+
+The one run `8bd2eab7-39bb-4215-b1ba-ef513cc7b07a` and invocation
+`invocation:4f0fac6f-1b2c-4295-8aff-0fdbc4463c65` used
+`https://chatgpt.com/backend-api/codex/responses`,
+`openai-codex/gpt-5.6-luna` xhigh, and fallback disabled. The first and only
+provider attempt was upstream-initiated and stopped at `api-invocation` with
+public `provider_error`, bounded `statusClass=4xx`, and
+`reasonSubreason=auth`. No Plane operation, artifact, evidence item, outcome,
+explicit publication, product terminal event, ordinary transcript evidence,
+or W08 readback was observed. W07/W08 remain dirty and unproven.
+
+The descriptor used by this attempted commission reported route checks
+`W03`, `W04`, `W07`, and `W08`; because the provider failed before any
+operation, the observed W03/W04 effect count was zero. This is retained as an
+input-scope caveat; no W03/W04 journey was executed or retried.
+
+Durable bounded result:
+`user-testing-output/plane-agents/evidence/w07-w08-d-81023308-result.json`,
+SHA-256
+`cc174a868b4e38620976ee00e47e63a1fd12dc3f12375625c0443eb690ef3bfe`.
+Durable redacted extract:
+`user-testing-output/plane-agents/evidence/w07-w08-d-81023308-failure-extract.json`,
+SHA-256
+`82c45b9e9fb1d6251c6b40a0b4dc0c71ac43fcd9eeffabf66ea788adbe1703ca`.
+The extract preserves only bindings, counts, allowlisted failure family,
+generic error code, cleanup proof, and the raw-result digest/size/mode. No
+provider body, numeric status, headers, credentials, prompt, or model output
+is retained in tracked evidence. The durable decision receipt is
+`user-testing-output/plane-agents/evidence/w07-w08-d-81023308-decisions.tsv`,
+SHA-256 `207c3cedd8284957e4de6cd0df15806a6c95d6f15e8bd6edf50e3a5254c0c3f4`.
+
+No retry, fallback, blind `outcome_unknown` replay, or provider-disabled replay
+was run. Exact-owned cleanup verified zero containers, networks, volumes, and
+capacity lease. The fresh live assignment is terminally failed and does not
+close W07/W08; no additional provider attempt is authorized by this receipt.
+
 ## UT-053 W07/W08 provider-free reasonSubreason contract repair — 2026-08-17
 
 The latest serial lifecycle failure was local workflow/test friction: a

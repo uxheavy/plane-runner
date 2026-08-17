@@ -2907,3 +2907,52 @@ records this diagnosis without changing the retained receipts.
   and credential/subscription authorization are accepted. Only after that,
   plus clean candidate refreeze and non-vacuous runtime/DB/capacity gates, is
   exactly one new assignment safe. Never replay the prior invocation.
+
+## Wave 0CF — W07/W08 fresh serialized D first-provider auth stop
+
+- Root authorized exactly one new serialized-capacity W07/W08 assignment from
+  clean candidate `81023308257903d09582f2190d82c73f93368bb5`. The exact API
+  image was `plane-agent-api:g4-v6-81023308` /
+  `sha256:d47910d0b7def03ca1f836d70907203896ff0bcce3eaf43a9f408996786fa91c`;
+  the separate Hermes runtime was
+  `plane-agent-runtime:hermes-292e8663-g4-v6-81023308` /
+  `sha256:62fc42067a945500e961dc5f217e51c5a36e5923f034c75534b0fd4538b8199a`.
+  Manifest SHA-256 was
+  `71f769993834cde1ab80165a60c941ff0ea196d7a586b3a06f0fd7cc9dc108a3`.
+  Hermes, MCP, and SDK pins were `292e866374ca9e9615473fc9bf5dda1913b672e1`,
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`, and
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`.
+- Required env files were copied byte-for-byte from the authoritative
+  checkout without reading, printing, or sourcing values; `setup.sh` was not
+  run. Config, descriptor, non-vacuous runtime/DB, and capacity gates passed;
+  the focused provider-free contract/scenario suite passed `163/163`.
+- Exactly one commission used
+  `https://chatgpt.com/backend-api/codex/responses` with
+  `openai-codex/gpt-5.6-luna` xhigh and fallback disabled. Run
+  `8bd2eab7-39bb-4215-b1ba-ef513cc7b07a` and invocation
+  `invocation:4f0fac6f-1b2c-4295-8aff-0fdbc4463c65` stopped at
+  `api-invocation` after one upstream-initiated provider attempt. The
+  bounded receipt is generic `provider_error`, `statusClass=4xx`, and
+  `reasonSubreason=auth`; no fallback or second provider request occurred.
+- No Plane operation receipts, audit rows, artifacts, evidence items,
+  outcomes, explicit publication, product events, ordinary transcript
+  evidence, or W08 readback were observed. One run-failure terminal event was
+  recorded. W07/W08 remain dirty and unproven. The descriptor advertised
+  `W03/W04/W07/W08` route checks, but the provider failed before any operation;
+  W03/W04 effect count was zero and no other lane was started.
+- Durable result is
+  `user-testing-output/plane-agents/evidence/w07-w08-d-81023308-result.json`,
+  SHA-256 `cc174a868b4e38620976ee00e47e63a1fd12dc3f12375625c0443eb690ef3bfe`.
+  Durable redacted extract is
+  `user-testing-output/plane-agents/evidence/w07-w08-d-81023308-failure-extract.json`,
+  SHA-256 `82c45b9e9fb1d6251c6b40a0b4dc0c71ac43fcd9eeffabf66ea788adbe1703ca`.
+  The raw owner-only result remains only as a source for that redacted
+  extract, with SHA-256 `cc174a868b4e38620976ee00e47e63a1fd12dc3f12375625c0443eb690ef3bfe`,
+  mode `0600`, and size `5580` bytes. The durable decision receipt is
+  `user-testing-output/plane-agents/evidence/w07-w08-d-81023308-decisions.tsv`,
+  SHA-256 `207c3cedd8284957e4de6cd0df15806a6c95d6f15e8bd6edf50e3a5254c0c3f4`.
+- The provider-disabled same-invocation replay was ineligible and was not
+  run. No retry, blind `outcome_unknown` replay, or fallback was made.
+  Cleanup verified zero runner-labeled containers, networks, credential/state/
+  scenario volumes, and no capacity lease. This is terminal failure evidence,
+  not W07/W08 route closure.
