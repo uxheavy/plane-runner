@@ -2881,3 +2881,29 @@ records this diagnosis without changing the retained receipts.
   made no W07/W08 product claim and does not make a fresh live assignment safe
   without external provider disposition. A future root-authorized attempt
   must be a new assignment, never a replay.
+
+## Wave 0CE — W07/W08 fresh-assignment gate decision
+
+- The earlier provider-free D-shaped request proof remains valid: native path
+  shape, request schema, tool schema, `store=false`, absent relay secret, and
+  fake-runtime terminal completion all passed without provider dispatch. Safe
+  policy fields reconcile with the W05/W06 reference: `openai-codex`,
+  `gpt-5.6-luna`, xhigh, the ChatGPT Responses route, fallback disabled, and
+  the existing runtime relay boundary.
+- The committed `reasonSubreason` contract now safely classifies future
+  request-rejected, auth, rate-limited, upstream-unavailable, and transport
+  failures. It cannot retroactively classify the prior terminal 4xx receipt,
+  which remains generic `provider_error` plus bounded `4xx`. The prior run had
+  zero Plane product effects, was not `outcome_unknown`, and was not replayed.
+- Fresh provider-free verification passed host contract/evidence suites
+  `180/180` and serial relay/lifecycle/API checks `17/17`, with `87`
+  environment-unrelated cases deselected. Provider calls, attempts, and
+  replays were `0`; Compose teardown returned exit `0` and removed the test
+  network and runner containers. Durable redacted evidence is
+  `user-testing-output/plane-agents/evidence/w07-w08-fresh-assignment-gate-358de27c.json`,
+  SHA-256 `7ee48318fd710596492a16704e384a47b81688d179862e79d70d6dc9f194ea9f`.
+- Decision is `NO_GO` now. The smallest missing condition is one current,
+  authoritative external disposition that the exact pinned route/model policy
+  and credential/subscription authorization are accepted. Only after that,
+  plus clean candidate refreeze and non-vacuous runtime/DB/capacity gates, is
+  exactly one new assignment safe. Never replay the prior invocation.

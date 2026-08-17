@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "plane-agent-g4/w07-w08-fresh-assignment-gate/v1",
+  "status": "provider_free_no_go",
+  "scope": "W07-W08",
+  "baseEvidenceCommit": "358de27c956cfa52a8fa47c6d1b8114c87b0b83a",
+  "sourceFixCommit": "e46635f6727c39f15ee0915e452ebc2aa2c21e28",
+  "providerCallsThisTask": 0,
+  "providerAttemptsThisTask": 0,
+  "replaysThisTask": 0,
+  "localDefectProven": false,
+  "reconciledRequestProof": {
+    "diagnosisEvidence": "user-testing-output/plane-agents/evidence/w07-w08-d-e9fad5-provider-diagnosis.json",
+    "diagnosisEvidenceSha256": "1272718d80a96c2c3c9978f117eeb170bd0826a1161fb565da8cc994627730c0",
+    "nativePathShape": "matched",
+    "requestSchemaValid": true,
+    "toolSchemaValid": true,
+    "storeFalse": true,
+    "relaySecretAbsent": true,
+    "fakeRuntimeTerminal": "completed",
+    "providerDispatch": false
+  },
+  "exactPolicyReconciliation": {
+    "provider": "openai-codex",
+    "model": "gpt-5.6-luna",
+    "reasoning": "xhigh",
+    "fallbackAllowed": false,
+    "destination": "chatgpt.com/backend-api/codex/responses",
+    "apiMode": "codex_responses",
+    "transport": "AF_UNIX",
+    "externalEgressOwner": "agent-runtime",
+    "w05W06ReferenceEvidence": "user-testing-output/plane-agents/evidence/w05-w06-c-7466-live.json",
+    "w05W06ReferenceEvidenceSha256": "44c0d8285e0170d61be574a3e0d5864fd8547557dba55354326952f17e649172"
+  },
+  "boundedReasonSubreasonContract": {
+    "field": "existing_reasonSubreason",
+    "statusClasses": ["2xx", "4xx", "5xx", "transport"],
+    "families": [
+      "request_rejected",
+      "auth",
+      "rate_limited",
+      "upstream_unavailable",
+      "existing_transport_diagnostics"
+    ],
+    "publicErrorCode": "provider_error",
+    "rawStatusRetained": false,
+    "rawBodyRetained": false,
+    "rawHeadersRetained": false,
+    "credentialsRetained": false,
+    "promptsOrModelOutputRetained": false,
+    "priorLive4xxCanBeRetrospectivelyClassified": false
+  },
+  "priorLiveDisposition": {
+    "evidence": "user-testing-output/plane-agents/evidence/w07-w08-d-51c5ed07-failure-extract.json",
+    "evidenceSha256": "69a303c1168fdb654b9c73bd72b071255d47eaf58f719fc6133efee1be06ed2a",
+    "providerAttempts": 1,
+    "statusClass": "4xx",
+    "errorCode": "provider_error",
+    "terminalRunFailure": true,
+    "planeProductEffects": 0,
+    "outcomeUnknown": false,
+    "replayAttempted": false
+  },
+  "freshVerification": {
+    "hostContractEvidenceSuites": {
+      "passed": 180,
+      "providerFree": true
+    },
+    "serialRelayLifecycleApiChecks": {
+      "passed": 17,
+      "deselected": 87,
+      "providerFree": true
+    },
+    "composeDownExitCode": 0,
+    "testNetworkRemoved": true,
+    "runnerContainersRemoved": true
+  },
+  "decision": "NO_GO",
+  "smallestMissingCondition": {
+    "type": "current_external_provider_acceptance_disposition",
+    "mustCover": [
+      "the exact pinned route and model policy is accepted by the authorized provider path",
+      "the credential or subscription authorization is currently valid",
+      "the disposition is not inferred from the provider_free_fake_probe"
+    ],
+    "thenRequired": "freeze a clean candidate, pass non_vacuous_runtime_and_db_gates, acquire capacity, and run exactly one new assignment",
+    "never": "replay the prior invocation or use an outcome_unknown replay"
+  },
+  "reason": "The local exact-request proof and bounded reasonSubreason contract are green, while the prior live 4xx remains an external/provider disposition gap. No provider call is authorized in this task."
+}

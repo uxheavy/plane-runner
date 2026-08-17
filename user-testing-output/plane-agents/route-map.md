@@ -428,6 +428,31 @@ make a fresh live assignment safe by itself. A root-authorized future run
 requires external provider disposition and clean runtime/DB gates, must use a
 new assignment, and must never replay a prior invocation.
 
+## UT-054 W07/W08 fresh-assignment gate decision — 2026-08-17
+
+The exact-request proof and the bounded `reasonSubreason` contract reconcile
+without a local request/auth/config defect. The deterministic D-shaped probe
+matched the native path, validated request and tool schemas, enforced
+`store=false`, observed no relay secret, and completed against the fake runtime
+without provider dispatch. The W05/W06 reference used the same
+`openai-codex`/`gpt-5.6-luna` xhigh policy, ChatGPT Responses route, and
+fallback-disabled setting.
+
+Fresh provider-free verification passed host contract/evidence suites `180/180`
+and serial relay/lifecycle/API checks `17/17` (`87` deselected). No provider
+call, attempt, or replay occurred. Durable redacted evidence is
+`user-testing-output/plane-agents/evidence/w07-w08-fresh-assignment-gate-358de27c.json`,
+SHA-256
+`7ee48318fd710596492a16704e384a47b81688d179862e79d70d6dc9f194ea9f`.
+
+Decision: `NO_GO` for a new assignment now. The smallest missing condition is
+one current authoritative external disposition that the exact pinned route,
+model policy, and credential/subscription authorization are accepted. After
+that disposition, the candidate must be refrozen and pass non-vacuous
+runtime/DB/capacity gates before exactly one new assignment. The prior terminal
+4xx run is not `outcome_unknown`, but it cannot be retrospectively classified
+by the new reason field and must never be replayed.
+
 ## Current W07/W08 D route — 2026-08-17
 
 - W07 and W08 remain `dirty`. One fresh single-commission W07/W08-only
