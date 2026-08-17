@@ -175,6 +175,7 @@ def test_permitted_provider_request_uses_invocation_af_unix_relay_and_streams_wi
     assert request.headers == {"accept": "text/event-stream"}
     assert credentials == {"api_key": "provider-secret"}
     assert audits[-1].outcome == "allowed"
+    assert audits[-1].status_class == "2xx"
     assert "provider-secret" not in repr(audits)
 
 
@@ -430,11 +431,34 @@ def test_provider_attempt_intent_precedes_upstream_and_upstream_failure_is_unkno
     assert audits[0].upstream_called is False
     assert audits[1].upstream_called is True
     assert audits[-1].error_code == "outcome_unknown"
-    assert audits[-1].status_class == "unknown"
+    assert audits[-1].status_class == "transport"
     assert audits[-1].reason_phase == "provider_relay"
     assert audits[-1].reason_subreason == "upstream_exception"
     assert "fixture upstream failed" not in repr(audits)
     assert len(upstream.calls) == 1
+
+
+@pytest.mark.parametrize("status_code, status_class", ((400, "4xx"), (500, "5xx")))
+def test_provider_http_status_family_survives_bounded_relay_audit(tmp_path, status_code: int, status_class: str):
+    upstream = _FixtureUpstream(
+        ProviderResponse(status_code=status_code, headers={}, body_chunks=(b"provider body must not persist",)),
+        [],
+    )
+    audits: list[ProviderRelayAudit] = []
+    server = _server(tmp_path, upstream=upstream, audit=audits.append)
+    try:
+        server.start()
+        response = _round_trip(server, request_id=f"request:status-{status_code}")
+    finally:
+        server.close()
+
+    assert response[0] == 403
+    assert json.loads(response[2]) == {"error": "upstream_status"}
+    assert [audit.phase for audit in audits] == ["intent", "started", "failed"]
+    assert audits[-1].status_class == status_class
+    assert audits[-1].error_code == "upstream_status"
+    assert b"provider body must not persist" not in response[2]
+    assert "provider body must not persist" not in repr(audits)
 
 
 def test_provider_timeout_is_bounded_and_repeated_request_is_not_replayed(tmp_path):
@@ -502,6 +526,7 @@ def test_provider_response_body_failure_is_terminal_unknown(
     assert response["reasonSubreason"] == reason_subreason
     assert [audit.phase for audit in audits] == ["intent", "started", "outcome_unknown", "terminal"]
     assert audits[-1].reason_subreason == reason_subreason
+    assert audits[-1].status_class == "transport"
 
 
 def test_provider_attempt_evidence_failure_blocks_pre_send_upstream(tmp_path):

@@ -2047,7 +2047,7 @@ class G4ContractTests(unittest.TestCase):
                 "sequence": 1,
                 "phase": "failed",
                 "upstreamInitiated": True,
-                "statusClass": "error",
+                "statusClass": "4xx",
                 "errorCode": "provider_error",
             }
         ]
@@ -2342,7 +2342,7 @@ class G4ContractTests(unittest.TestCase):
                     "sequence": 1,
                     "phase": "failed",
                     "upstreamInitiated": True,
-                    "statusClass": "error",
+                    "statusClass": "4xx",
                     "errorCode": "upstream_status",
                 }
             ],
@@ -2360,11 +2360,39 @@ class G4ContractTests(unittest.TestCase):
                     "sequence": 1,
                     "phase": "failed",
                     "upstreamInitiated": True,
-                    "statusClass": "error",
+                    "statusClass": "4xx",
                     "errorCode": "provider_error",
                 }
             ],
         )
+
+    def test_failure_evidence_preserves_bounded_transport_status(self):
+        evidence = invoke_helper_namespace()["build_failure_evidence"](
+            binding={},
+            failure_phase="runtime-process",
+            error_class="RuntimeError",
+            exit_code=1,
+            run_id="run:transport",
+            run_state="failed",
+            invocation_id="invocation:transport",
+            invocation_state="failed",
+            provider_attempts=[
+                {
+                    "sequence": 1,
+                    "phase": "outcome_unknown",
+                    "upstreamInitiated": True,
+                    "statusClass": "transport",
+                    "errorCode": "outcome_unknown",
+                }
+            ],
+            terminal_kind="run_failure",
+            failure_code="outcome_unknown",
+            failure_reason=(
+                '{"failureCode":"outcome_unknown","failurePhase":"runtime_process",'
+                '"failureDetail":"process_exit","failureSubreason":"runtime_execution_failed"}'
+            ),
+        )
+        self.assertEqual(evidence["providerAttempts"][0]["statusClass"], "transport")
 
     def test_failure_evidence_is_bounded_structural_and_excludes_sensitive_runtime_data(self):
         source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")

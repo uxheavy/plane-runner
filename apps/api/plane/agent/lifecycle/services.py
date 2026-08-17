@@ -2233,6 +2233,9 @@ def reconcile_runtime_usage(run, invocation, usage=None, *, created_by=None):
 
 
 _PROVIDER_ATTEMPT_PHASES = frozenset(RuntimeProviderAttemptPhase.values)
+_PROVIDER_ATTEMPT_STATUS_CLASSES = frozenset(
+    {"", "not_sent", "unknown", "error", "2xx", "4xx", "5xx", "transport"}
+)
 _PROVIDER_ATTEMPT_REASON_PHASES = frozenset({"", "provider_relay"})
 _PROVIDER_ATTEMPT_REASON_SUBREASONS = frozenset(
     {
@@ -2291,7 +2294,7 @@ def record_provider_attempt_notice(invocation, notice: Mapping[str, object]):
     idempotency_key = _provider_attempt_text(notice["idempotencyKey"], "idempotencyKey", 128)
     status_class = notice["statusClass"]
     error_code = notice["errorCode"]
-    if not isinstance(status_class, str) or len(status_class.encode("utf-8")) > 16:
+    if not isinstance(status_class, str) or status_class not in _PROVIDER_ATTEMPT_STATUS_CLASSES:
         raise AgentDomainError("Provider attempt statusClass is invalid")
     if not isinstance(error_code, str) or len(error_code.encode("utf-8")) > 64:
         raise AgentDomainError("Provider attempt errorCode is invalid")

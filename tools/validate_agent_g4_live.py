@@ -843,7 +843,7 @@ _LIVE_OPERATION_ERROR_CODES = {
     "UPSTREAM_FAILURE",
 }
 _LIVE_ATTEMPT_PHASES = {"intent", "started", "completed", "failed", "outcome_unknown", "unknown"}
-_LIVE_ATTEMPT_STATUS_CLASSES = {"", "not_sent", "unknown", "error", "2xx", "4xx", "5xx"}
+_LIVE_ATTEMPT_STATUS_CLASSES = {"", "not_sent", "unknown", "error", "2xx", "4xx", "5xx", "transport"}
 _LIVE_ATTEMPT_ERROR_CODES = {
     "",
     "pre_send_failure",

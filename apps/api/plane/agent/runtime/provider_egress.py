@@ -84,12 +84,21 @@ class ProviderRelayError(ValueError):
     """A provider relay request cannot be admitted or safely completed."""
 
 
+class _ProviderRelayHTTPStatusError(ProviderRelayError):
+    """A bounded upstream HTTP family is available without retaining response data."""
+
+    def __init__(self, status_class: str) -> None:
+        self.status_class = status_class
+        super().__init__("provider returned an unsuccessful status")
+
+
 class ProviderRelayOutcomeUnknownError(ProviderRelayError):
     """The provider request started, but its terminal result is ambiguous."""
 
     error_code = "outcome_unknown"
     retryable = False
     upstream_initiated = True
+    status_class = "transport"
 
     def __init__(self, *, reason_subreason: str = "upstream_exception") -> None:
         if reason_subreason not in {
@@ -435,11 +444,14 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
                     phase=terminal_phase,
                     upstream_initiated=upstream_called,
                     status_class=(
-                        "unknown"
-                        if terminal_phase == "outcome_unknown"
-                        else "not_sent"
-                        if not upstream_called
-                        else "error"
+                        getattr(error_for_audit, "status_class", "")
+                        or (
+                            "unknown"
+                            if terminal_phase == "outcome_unknown"
+                            else "not_sent"
+                            if not upstream_called
+                            else "error"
+                        )
                     ),
                     error_code=code,
                     reason_phase=getattr(error_for_audit, "reason_phase", ""),
@@ -450,7 +462,7 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
                         request,
                         phase="terminal",
                         upstream_initiated=True,
-                        status_class="unknown",
+                        status_class=getattr(error_for_audit, "status_class", "transport"),
                         error_code=code,
                         reason_phase=getattr(error_for_audit, "reason_phase", ""),
                         reason_subreason=getattr(error_for_audit, "reason_subreason", ""),
@@ -476,7 +488,7 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
                     request,
                     phase="outcome_unknown" if upstream_called else "failed",
                     upstream_initiated=upstream_called,
-                    status_class="unknown" if upstream_called else "not_sent",
+                    status_class="transport" if upstream_called else "not_sent",
                     error_code="outcome_unknown" if upstream_called else "channel_closed",
                     reason_phase="provider_relay" if upstream_called else "",
                     reason_subreason=(
@@ -488,7 +500,7 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
                         request,
                         phase="terminal",
                         upstream_initiated=True,
-                        status_class="unknown",
+                        status_class="transport",
                         error_code="outcome_unknown",
                         reason_phase="provider_relay",
                         reason_subreason="channel_closed_after_upstream",
@@ -758,7 +770,10 @@ class ProviderRelayServer:
 
     @staticmethod
     def _status_class(status_code: int) -> str:
-        return f"{status_code // 100}xx"
+        if type(status_code) is not int:
+            return ""
+        family = f"{status_code // 100}xx"
+        return family if family in {"2xx", "4xx", "5xx"} else ""
 
     def _validate_lease_and_cancellation(self) -> None:
         if self._closed.is_set() or self._is_cancelled():
@@ -781,6 +796,9 @@ class ProviderRelayServer:
             if 300 <= response.status_code < 400:
                 raise ProviderRelayError("provider redirect is not permitted")
             if response.status_code != 200:
+                status_class = self._status_class(response.status_code)
+                if status_class in {"4xx", "5xx"}:
+                    raise _ProviderRelayHTTPStatusError(status_class)
                 raise ProviderRelayError("provider returned an unsuccessful status")
             try:
                 body_iterator = iter(response.body_chunks)

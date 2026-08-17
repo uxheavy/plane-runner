@@ -1600,6 +1600,8 @@ def test_provider_attempt_reconciles_process_loss_after_external_send(assignment
 
 @pytest.mark.django_db(transaction=True)
 def test_provider_attempt_diagnostics_are_bounded_and_idempotent(assignment, profile):
+    from plane.agent.readback import _provider_attempt_readback
+
     run = create_run(assignment, profile)
     invocation = record_invocation(run, idempotency_key="idempotency:provider-attempt-diagnostics")
     notice = _provider_attempt_notice(
@@ -1613,7 +1615,7 @@ def test_provider_attempt_diagnostics_are_bounded_and_idempotent(assignment, pro
     terminal = dict(
         started,
         phase=RuntimeProviderAttemptPhase.OUTCOME_UNKNOWN,
-        statusClass="unknown",
+        statusClass="transport",
         errorCode="outcome_unknown",
         reasonSubreason="upstream_timeout",
         eventRef="provider-event:" + "a" * 64,
@@ -1622,9 +1624,11 @@ def test_provider_attempt_diagnostics_are_bounded_and_idempotent(assignment, pro
     replay = record_provider_attempt_notice(invocation, terminal)
 
     assert first.id == second.id == replay.id
+    assert second.status_class == "transport"
     assert second.reason_phase == "provider_relay"
     assert second.reason_subreason == "upstream_timeout"
     assert second.event_ref == "provider-event:" + "a" * 64
+    assert _provider_attempt_readback(run, limit=10)[0]["status_class"] == "transport"
 
 
 @pytest.mark.django_db(transaction=True)
