@@ -120,7 +120,7 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
         "mutation-composition-publication": ["W03", "W04", "W07", "W08"],
         "context-governance": ["W05", "W06", "W07", "W08"],
     }
-    assert "workItemReadCall unchanged as the complete plane_operation arguments" in identity.assignment.objective
+    assert "workItemReadCall.input.preparedCallRef unchanged" in identity.assignment.objective
     assert "execute_code" in mutation.assignment.objective
     assert "export default async function" in mutation.assignment.objective
     assert 'host.call_plane_operation("work_item.rename"' in mutation.assignment.objective
@@ -141,6 +141,9 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert "reconstruct project_id or issue_id" in read_guidance
     assert "Do not wrap it" in read_guidance
     assert "reconstruct project_id or issue_id from targetRef" in read_guidance
+    assert "workItemReadCall input.preparedCallRef verbatim" in read_guidance
+    assert "do not copy raw workItemReadInput" in read_guidance
+    assert "do not reconstruct, translate, or infer" in read_guidance
     rename_guidance = next(
         item for item in mutation_route_guidance if "invoke execute_code" in item
     )
