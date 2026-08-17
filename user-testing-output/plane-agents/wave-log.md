@@ -3427,3 +3427,60 @@ records this diagnosis without changing the retained receipts.
   replay occurred. Cleanup proved the shared capacity marker absent, all G4
   labeled container/volume/runtime-network counts zero, and both disposable
   Manager worktrees absent.
+
+## Wave 0CL — immutable v18 Manager first product stop — 2026-08-18
+
+- Exact candidate: source `6ea6526c018c61d7142ad3412cd7c1afc2355ac6`, wrapper
+  `31be67b471f5a2b9f4d51828d556429582adf355`, API
+  `plane-agent-api:g4-v18-6ea6526c@sha256:e3dd3668b607931ed03577151dcc2f9e2ad9e5819648b93293eb4634354e1350`,
+  runtime
+  `plane-agent-runtime:hermes-6c460f10-g4-v18-6ea6526c@sha256:95ce3ba56448e7abf807786235b945172138fe457b31d5e06c7cf093f869cb63`,
+  and manifest SHA-256
+  `eadc996a1e13a120990e6cd957eb288a8612289d8de54c79d8495f40e6aa6ec3`.
+  Hermes/MCP/SDK pins remained
+  `6c460f10fe215718dce36dd73cda94155a9a34f8`,
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`, and
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`.
+- Nine existing env files were copied byte-for-byte into a fresh detached
+  wrapper checkout. Their values were not read, printed, sourced, or tracked;
+  `setup.sh` was not run. The provider remained
+  `openai-codex/gpt-5.6-luna` xhigh with fallback disabled through
+  `PLANE_G4_PROVIDER_SECRET_SOURCE`.
+- The v18 launcher’s source/wrapper candidate mismatch stopped twice before
+  runner/provider access; the corrected canonical runner then made exactly one
+  assignment-capable attempt. It stopped at the first genuine product failure
+  at `api-invocation` with bounded
+  `setupError.id=setup:run:AgentDomainError`, `stage=run`, and counters
+  `actors=5`, `profiles=5`, `assignments=1`, `lineageAssignments=1`,
+  `schedules=1`, `scheduleFires=1`. The causal application message was not
+  retained by the bounded result. Provider attempts/effects were `0`; no
+  Run, Invocation, publication, terminal event, retry, fallback, or replay
+  occurred. M01-M08 remain unproven.
+- Durable redacted evidence:
+  `user-testing-output/plane-agents/evidence/manager-m01-m08-v18-live-stop.json`,
+  SHA-256 `c69395de49a5719923be166c2e348398e382a78af8123a2c2e9ddaa664b6f251`.
+  Raw owner-only result SHA-256 was
+  `dccb391a2a74c48c2e4d4efebeb696df55fb702a438d0b1bcfa627ba5a05f7c2`;
+  bounded runner stderr digest was
+  `78ed2d2a47b8b8a8efee4c9dcf9b80993129097432282f883c916ce7c8493e88`.
+- Manager-prefixed containers, volumes, and runtime networks were zero after
+  cleanup. The Manager capacity lease was released normally; a later
+  Operator-owned shared lease was observed and left untouched. No provider
+  retry or further Manager journey was authorized after the product failure.
+
+## Wave 0CL provider-free root-cause fix — 2026-08-18
+
+- Root cause: `tools/agent-g4-manager-v1.json` placed `scope:manager-journey`
+  in `assignment.contextRefs`. The live `create_run` path stores those refs in
+  the selected `ProfileVersion`, and `_snapshot_context` rejects the non-
+  `context:*` reference at index 1. The existing setup counters and
+  `setup:run:AgentDomainError` match this path.
+- Fix: remove `scope:manager-journey` from `assignment.contextRefs` and retain
+  it under `setup.lineage.scopeRefs`, then add a regression asserting every
+  Manager assignment context ref starts with `context:`.
+- Provider-free validation passed the owner-only descriptor validator and
+  `190 passed` focused scenario/result/support/contract tests. No image build,
+  Compose journey, provider use, retry, or live rerun occurred.
+- Updated durable redacted evidence:
+  `user-testing-output/plane-agents/evidence/manager-m01-m08-v18-live-stop.json`,
+  SHA-256 `c69395de49a5719923be166c2e348398e382a78af8123a2c2e9ddaa664b6f251`.

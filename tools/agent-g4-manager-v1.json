@@ -37,8 +37,7 @@
       "The submitted result is published exactly once through Plane governance."
     ],
     "contextRefs": [
-      "context:manager-journey",
-      "scope:manager-journey"
+      "context:manager-journey"
     ]
   },
   "prompt": "Elena, coordinate this synthetic-only Manager journey. Start with the catalog and the assigned Plane work item, create a dynamic plan without introducing a saved workflow product, and use the exact returned Plane refs for one bounded child responsibility. Complete the assigned result through the existing evaluator and human governance path, then publish it once. The route evidence covers cancellation of queued and active descendants, a non-UTC DST schedule, HR approval and chief-of-staff provisioning, complete readback, and immutable prior revision history. Use no external tools, no real user content, and no retries after a terminal or denied operation.",

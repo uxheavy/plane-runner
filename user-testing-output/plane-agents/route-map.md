@@ -515,6 +515,33 @@ replay. W03-W08 remain dirty; UT-042 is open.
   `7ebfd06c0948e00a7a5bfdbaab458dfd6db99cca2f9e8ed9dbf898a83bf139bb`.
   O01/O03-O09 remain `untested` for exact live closure; this wave is
   `READY_WITH_COMMIT`, not a live route pass.
+## Manager M01-M08 v18 live boundary — 2026-08-18
+
+The immutable v18 candidate used source `6ea6526c018c61d7142ad3412cd7c1afc2355ac6`,
+wrapper `31be67b471f5a2b9f4d51828d556429582adf355`, manifest SHA-256
+`eadc996a1e13a120990e6cd957eb288a8612289d8de54c79d8495f40e6aa6ec3`, API
+digest `sha256:e3dd3668b607931ed03577151dcc2f9e2ad9e5819648b93293eb4634354e1350`,
+and runtime digest
+`sha256:95ce3ba56448e7abf807786235b945172138fe457b31d5e06c7cf093f869cb63`.
+The scenario descriptor digest was
+`aab70fc0194294d09e2071790f7017fb29e5c4d07411fe9f06e362e15fe0d7e1`.
+
+The one corrected canonical Manager run stopped at the first genuine product
+failure at `api-invocation`: `setupError.id=setup:run:AgentDomainError`,
+`stage=run`, with bounded setup counters `actors=5, profiles=5, assignments=1,
+lineageAssignments=1, schedules=1, scheduleFires=1`. Provider attempts were
+`0`, fallback was disabled, and no retry, second primary, replay, Run,
+Invocation, publication, or terminal event was observed. M01 through M08 remain
+unproven. The causal exception message was not retained by the bounded receipt;
+the next step is provider-free diagnosis of the existing `create_run`
+application-service seam.
+
+Durable redacted evidence is
+`user-testing-output/plane-agents/evidence/manager-m01-m08-v18-live-stop.json`,
+SHA-256 `c69395de49a5719923be166c2e348398e382a78af8123a2c2e9ddaa664b6f251`.
+Manager-prefixed resources were zero after cleanup and the Manager lease was
+released. A later Operator-owned shared lease was not recovered or removed.
+
 ## Wave 0CK — immutable v16 Manager pre-run stop
 
 - The corrected serialized Manager journey used wrapper
@@ -1073,3 +1100,10 @@ fresh assignment is not safe from this local fix alone.
   volumes, and networks for all observed disposable project identifiers.
 - W05 and W06 remain dirty; this is provider-free boundary evidence, not route
   closure.
+
+Provider-free diagnosis identified the exact cause: `assignment.contextRefs`
+mixed `scope:manager-journey` with `context:manager-journey`, while
+`ProfileVersion.context_refs` is consumed by `_snapshot_context` and accepts
+only `context:*` references. The Manager descriptor now retains
+`scope:manager-journey` only under `setup.lineage.scopeRefs`; the provider-free
+descriptor assertion and focused suite passed 190 tests. No live rerun was made.

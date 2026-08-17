@@ -283,6 +283,17 @@ def test_manager_live_descriptor_covers_elena_routes_and_fixed_model_policy() ->
     validator._validate_scenario_projection(parsed.evidence())
 
 
+def test_manager_assignment_context_refs_are_context_scoped_and_lineage_scope_is_separate() -> None:
+    descriptor = json.loads((TOOLS / "agent-g4-manager-v1.json").read_text(encoding="utf-8"))
+
+    assignment_context_refs = descriptor["assignment"]["contextRefs"]
+    lineage_scope_refs = descriptor["setup"]["lineage"]["scopeRefs"]
+
+    assert assignment_context_refs
+    assert all(ref.startswith("context:") for ref in assignment_context_refs)
+    assert lineage_scope_refs == ["scope:manager-journey"]
+
+
 def test_manager_route_validator_requires_all_bounded_routes() -> None:
     value = descriptor_for("manager")
     value["expected"] = {

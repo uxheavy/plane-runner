@@ -1,0 +1,118 @@
+{
+  "schemaVersion": "plane.agent-manager-live-stop/v2",
+  "status": "stopped_at_first_product_failure",
+  "lane": "Manager M01-M08",
+  "journey": "dynamic plan; bounded delegation; cancellation; DST schedule; evaluator/human revision; HR governance; chief-of-staff; terminal readback",
+  "candidate": {
+    "source": "6ea6526c018c61d7142ad3412cd7c1afc2355ac6",
+    "wrapper": "31be67b471f5a2b9f4d51828d556429582adf355",
+    "manifestSha256": "eadc996a1e13a120990e6cd957eb288a8612289d8de54c79d8495f40e6aa6ec3",
+    "api": {
+      "tag": "plane-agent-api:g4-v18-6ea6526c",
+      "digest": "sha256:e3dd3668b607931ed03577151dcc2f9e2ad9e5819648b93293eb4634354e1350"
+    },
+    "runtime": {
+      "tag": "plane-agent-runtime:hermes-6c460f10-g4-v18-6ea6526c",
+      "digest": "sha256:95ce3ba56448e7abf807786235b945172138fe457b31d5e06c7cf093f869cb63"
+    },
+    "pins": {
+      "hermes": "6c460f10fe215718dce36dd73cda94155a9a34f8",
+      "mcp": "c04974ed6624f17b41e63ef8182661929e77e0d3",
+      "sdk": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
+    }
+  },
+  "modelPolicy": {
+    "provider": "openai-codex",
+    "model": "gpt-5.6-luna",
+    "reasoning": "xhigh",
+    "fallbackAllowed": false
+  },
+  "provider": {
+    "attempts": 0,
+    "upstreamInitiated": false,
+    "fallbackUsed": false,
+    "replayed": false,
+    "credentialSourceContract": "PLANE_G4_PROVIDER_SECRET_SOURCE",
+    "credentialSourceContentsRead": false
+  },
+  "preProviderFriction": {
+    "launcherContractStop": "authority_expected_candidate_mismatch",
+    "effects": {
+      "assignment": 0,
+      "run": 0,
+      "invocation": 0,
+      "provider": 0
+    },
+    "disposition": "corrected by invoking the canonical runner with the wrapper-bound candidate; no provider retry"
+  },
+  "failure": {
+    "phase": "api-invocation",
+    "errorClass": "unspecified",
+    "setupError": {
+      "id": "setup:run:AgentDomainError",
+      "stage": "run",
+      "errorClass": "AgentDomainError",
+      "counters": {
+        "actors": 5,
+        "profiles": 5,
+        "assignments": 1,
+        "lineageAssignments": 1,
+        "schedules": 1,
+        "scheduleFires": 1
+      }
+    },
+    "causalMessage": "not retained by the bounded candidate receipt; no narrower cause is inferred",
+    "rawResultSha256": "dccb391a2a74c48c2e4d4efebeb696df55fb702a438d0b1bcfa627ba5a05f7c2",
+    "rawRunnerStderrSha256": "78ed2d2a47b8b8a8efee4c9dcf9b80993129097432282f883c916ce7c8493e88",
+    "rawResultFileHashSha256": "dccb391a2a74c48c2e4d4efebeb696df55fb702a438d0b1bcfa627ba5a05f7c2"
+  },
+  "diagnosisAndFix": {
+    "rootCause": "tools/agent-g4-manager-v1.json assignment.contextRefs illegally mixed scope:manager-journey with context:manager-journey",
+    "applicationPath": "ProfileVersion.context_refs -> create_run -> _snapshot_context",
+    "causalFailure": "non-context assignment reference rejected at context index 1",
+    "fix": {
+      "removed": "scope:manager-journey from assignment.contextRefs",
+      "retained": "scope:manager-journey under setup.lineage.scopeRefs",
+      "fixedDescriptorSha256": "22e50494277bb5e31cfe4d08b55f4b50914ced1aacdb03d401915a8d6e006775"
+    },
+    "providerFreeValidation": {
+      "descriptorValidator": "passed",
+      "contextReferenceAssertion": "passed",
+      "focusedTests": "190 passed",
+      "liveRerun": false
+    }
+  },
+  "lifecycle": {
+    "runPresent": false,
+    "invocationPresent": false,
+    "terminalPublication": false,
+    "operationReceipts": 0,
+    "operationAuditRows": 0,
+    "runnerAttempts": 1,
+    "stopRule": "first genuine product failure; no retry/fallback/second primary/blind outcome_unknown replay"
+  },
+  "predicates": {
+    "M01_dynamicPlanWithoutSavedWorkflow": "unproven",
+    "M02_boundedDelegationLineageBudgetIndependentChild": "unproven",
+    "M03_parentCancellationPropagationWithoutResurrection": "unproven",
+    "M04_timezoneDstScheduleNormalAssignmentRun": "unproven",
+    "M05_evaluatorThenHumanRevisionFreshRun": "unproven",
+    "M06_hrAuthorizedDecisionStaleSelfReplayDenials": "unproven",
+    "M07_exactlyOneScopedChiefOfStaff": "unproven",
+    "M08_terminalReadbackPublicationAndChildDenial": "unproven"
+  },
+  "cleanup": {
+    "managerPrefixedContainers": 0,
+    "managerPrefixedVolumes": 0,
+    "managerRuntimeNetworks": 0,
+    "managerCapacityLease": "released",
+    "operatorLeaseTouched": false,
+    "sourceCredentialTracked": false,
+    "rawResultTracked": false
+  },
+  "scenario": {
+    "id": "manager",
+    "descriptorSha256": "aab70fc0194294d09e2071790f7017fb29e5c4d07411fe9f06e362e15fe0d7e1",
+    "authorityId": "authority-manager-m01-m08-v18-20260817T205931Z"
+  }
+}

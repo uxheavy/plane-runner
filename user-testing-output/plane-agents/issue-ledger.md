@@ -685,3 +685,9 @@ assignment-capable launch. Its bounded receipt proves no Run, Invocation, or
 provider attempt, but it cannot establish whether the application created an
 Assignment or setup lineage/schedule records before the failure. No stronger
 effect claim is made.
+
+## UT-061 — immutable v18 Manager first product stop — Wave 0CL
+
+| Issue | Severity | Persona / route | Durable evidence | Root cause / bounded disposition | Retest / status |
+| ----- | -------- | --------------- | ---------------- | ------------------------------- | ---------------- |
+| UT-061 | blocker | Manager / M01-M08 fresh serialized assignment | `manager-m01-m08-v18-live-stop.json` SHA-256 `c69395de49a5719923be166c2e348398e382a78af8123a2c2e9ddaa664b6f251`; raw bounded result SHA-256 `dccb391a2a74c48c2e4d4efebeb696df55fb702a438d0b1bcfa627ba5a05f7c2`; raw runner stderr digest `78ed2d2a47b8b8a8efee4c9dcf9b80993129097432282f883c916ce7c8493e88`; manifest SHA-256 `eadc996a1e13a120990e6cd957eb288a8612289d8de54c79d8495f40e6aa6ec3` | The one fresh corrected v18 Manager assignment reached the real product boundary and stopped at `api-invocation` while creating the initial run: bounded `setup:run:AgentDomainError`, with counters `actors=5`, `profiles=5`, `assignments=1`, `lineageAssignments=1`, `schedules=1`, `scheduleFires=1`. Provider-free diagnosis traced this to `assignment.contextRefs` mixing `scope:manager-journey`; the fix removes that ref and retains it under `setup.lineage.scopeRefs`. Provider attempts/effects were `0`; no Run, Invocation, publication, or terminal event was observed. | No retry, fallback, second primary, blind `outcome_unknown` replay, or provider-disabled replay. Focused provider-free validation passed 190 tests and the corrected descriptor validator. M01-M08 remain unproven until a separately authorized fresh live run. Manager resources and lease were released; a later Operator-owned lease was not touched. / fixed-provider-free; live proof pending |
