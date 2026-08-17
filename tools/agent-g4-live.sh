@@ -297,6 +297,49 @@ for line in text.splitlines():
 PY
 }
 
+safe_setup_error() {
+    python3 - "${ERROR_FILE}" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
+
+try:
+    text = Path(sys.argv[1]).read_bytes()[:8192].decode("utf-8", errors="replace")
+except OSError:
+    raise SystemExit(0)
+
+stages = {"shared-setup", "assignment", "preconditions", "lineage", "schedule", "schedule-fire", "run", "invocation"}
+classes = {
+    "AgentDomainError", "AgentScheduleError", "AttributeError", "ConnectionError", "IntegrityError",
+    "KeyError", "LookupError", "OperationalError", "RuntimeError", "TimeoutError", "TypeError",
+    "ValidationError", "ValueError", "unknown",
+}
+counters = {"actors", "profiles", "assignments", "lineageAssignments", "schedules", "scheduleFires"}
+for line in text.splitlines():
+    if not line.startswith("setup_error="):
+        continue
+    try:
+        value = json.loads(line[len("setup_error="):])
+    except (TypeError, ValueError):
+        continue
+    if not isinstance(value, dict) or set(value) != {"id", "stage", "errorClass", "counters"}:
+        continue
+    if (
+        not isinstance(value["id"], str)
+        or not re.fullmatch(r"setup:[a-z-]+:[A-Za-z]+Error|setup:[a-z-]+:unknown", value["id"])
+        or value["stage"] not in stages
+        or value["errorClass"] not in classes
+        or not isinstance(value["counters"], dict)
+        or set(value["counters"]) != counters
+        or any(isinstance(item, bool) or not isinstance(item, int) or not 0 <= item <= 256 for item in value["counters"].values())
+    ):
+        continue
+    print(json.dumps(value, separators=(",", ":"), sort_keys=True))
+    break
+PY
+}
+
 safe_docker_failure_reason() {
     python3 - "${ERROR_FILE}" <<'PY'
 from pathlib import Path
@@ -390,7 +433,9 @@ cleanup() {
     local error_class=unavailable
     local missing_module=
     local stderr_sha256
+    local setup_error
     stderr_sha256="$(live_stderr_sha256 "${ERROR_DIGEST_FILE}")"
+    setup_error="$(safe_setup_error)"
     if [[ "${status}" -ne 0 ]]; then
         if [[ "${status}" -eq 125 ]]; then
             reason_category="$(safe_docker_failure_reason)"
@@ -406,7 +451,8 @@ cleanup() {
         --error-class "${error_class}" \
         --missing-module "${missing_module}" \
         --reason-category "${reason_category}" \
-        --stderr-sha256 "${stderr_sha256}" >/dev/null; then
+        --stderr-sha256 "${stderr_sha256}" \
+        --setup-error "${setup_error}" >/dev/null; then
         printf '%s\n' 'event=agent.g4.live-runner status=failed phase=result-persistence expected=owner-only-atomic-result actual=persist-failed' >&2
         cleanup_status=1
     elif [[ -n "${RESULT_FILE}" ]]; then

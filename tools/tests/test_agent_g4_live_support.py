@@ -297,3 +297,39 @@ def test_bounded_stderr_retains_only_a_valid_missing_module_identifier(tmp_path:
         "missing_module=plane_runtime.bridge_v2\n"
     )
     assert "must-not-persist" not in result.stdout
+
+
+def test_bounded_stderr_extracts_only_validated_setup_error_marker(tmp_path: Path) -> None:
+    marker = (
+        'event=agent.g4.live.setup-failure/v1 '
+        'setupError={"id":"setup:lineage:IntegrityError","stage":"lineage",'
+        '"errorClass":"IntegrityError","counters":{"actors":5,"profiles":5,'
+        '"assignments":1,"lineageAssignments":0,"schedules":0,"scheduleFires":0}}\n'
+    )
+    error_file = tmp_path / "error.log"
+    digest_file = tmp_path / "digest.sha256"
+    command = f"printf %s {shlex.quote(marker)} >&2; exit 1"
+    result = run_support(
+        tmp_path / "lease",
+        f'live_run_bounded_stderr "{error_file}" "{digest_file}" bash -c {shlex.quote(command)}; cat "{error_file}"',
+    )
+    assert result.returncode == 0, result.stderr
+    assert (
+        'setup_error={"counters":{"actors":5,"assignments":1,"lineageAssignments":0,'
+        '"profiles":5,"scheduleFires":0,"schedules":0},"errorClass":"IntegrityError",'
+        '"id":"setup:lineage:IntegrityError","stage":"lineage"}'
+    ) in result.stdout
+    assert "private/secret" not in result.stdout
+
+
+def test_bounded_stderr_discards_malformed_setup_error_marker(tmp_path: Path) -> None:
+    marker = 'event=agent.g4.live.setup-failure/v1 setupError={"id":"setup:lineage:/secret"}\n'
+    error_file = tmp_path / "error.log"
+    digest_file = tmp_path / "digest.sha256"
+    command = f"printf %s {shlex.quote(marker)} >&2; exit 1"
+    result = run_support(
+        tmp_path / "lease",
+        f'live_run_bounded_stderr "{error_file}" "{digest_file}" bash -c {shlex.quote(command)}; cat "{error_file}"',
+    )
+    assert result.returncode == 0, result.stderr
+    assert "setup_error=" not in result.stdout

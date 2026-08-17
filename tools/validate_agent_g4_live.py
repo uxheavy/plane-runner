@@ -58,6 +58,40 @@ _CANONICAL_PROVIDER_RELAY = {
 }
 MAX_EVIDENCE_BYTES = 16 * 1024
 SAFE_CANARY_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
+SETUP_ERROR_STAGES = {
+    "shared-setup",
+    "assignment",
+    "preconditions",
+    "lineage",
+    "schedule",
+    "schedule-fire",
+    "run",
+    "invocation",
+}
+SETUP_ERROR_CLASSES = {
+    "AgentDomainError",
+    "AgentScheduleError",
+    "AttributeError",
+    "ConnectionError",
+    "IntegrityError",
+    "KeyError",
+    "LookupError",
+    "OperationalError",
+    "RuntimeError",
+    "TimeoutError",
+    "TypeError",
+    "ValidationError",
+    "ValueError",
+    "unknown",
+}
+SETUP_ERROR_COUNTERS = {
+    "actors",
+    "profiles",
+    "assignments",
+    "lineageAssignments",
+    "schedules",
+    "scheduleFires",
+}
 PROVIDER_DESCRIPTOR_FIELDS = (
     "name",
     "model",
@@ -148,6 +182,25 @@ def _hash(value: Any, name: str) -> None:
 def _digest(value: Any, name: str) -> None:
     if not isinstance(value, str) or not DIGEST_RE.fullmatch(value):
         raise ContractError(f"{name}_must_be_sha256_digest")
+
+
+def _validate_setup_error(value: Any) -> None:
+    if not isinstance(value, dict) or set(value) != {"id", "stage", "errorClass", "counters"}:
+        raise ContractError("runner_failure_setup_error_invalid")
+    identifier = value["id"]
+    if (
+        not isinstance(identifier, str)
+        or not 1 <= len(identifier.encode("utf-8")) <= 128
+        or not re.fullmatch(r"setup:[a-z-]+:[A-Za-z]+Error|setup:[a-z-]+:unknown", identifier)
+    ):
+        raise ContractError("runner_failure_setup_error_invalid")
+    if value["stage"] not in SETUP_ERROR_STAGES or value["errorClass"] not in SETUP_ERROR_CLASSES:
+        raise ContractError("runner_failure_setup_error_invalid")
+    counters = value["counters"]
+    if not isinstance(counters, dict) or set(counters) != SETUP_ERROR_COUNTERS:
+        raise ContractError("runner_failure_setup_error_invalid")
+    if any(type(item) is not int or not 0 <= item <= 256 for item in counters.values()):
+        raise ContractError("runner_failure_setup_error_invalid")
 
 
 def _read_json(path: Path, name: str) -> dict[str, Any]:
@@ -1989,7 +2042,8 @@ def validate_evidence(
         raise ContractError("evidence_must_be_one_json_object")
     if evidence.get("schemaVersion") == "plane-agent-g4/live-runner-failure/v1":
         required = {"schemaVersion", "status", "phase", "errorClass", "exitCode", "reasonCategory", "stderrSha256"}
-        if not required.issubset(evidence) or set(evidence).difference(required | {"missingModule"}):
+        optional = {"missingModule", "setupError"}
+        if set(evidence).difference(required | optional):
             raise ContractError("runner_failure_receipt_fields_invalid")
         _exact(evidence["status"], "failed", "runner_failure_receipt_status")
         if evidence["phase"] not in {
@@ -2042,6 +2096,8 @@ def validate_evidence(
             or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]{0,127}", evidence["missingModule"])
         ):
             raise ContractError("runner_failure_receipt_missing_module_invalid")
+        if "setupError" in evidence:
+            _validate_setup_error(evidence["setupError"])
         return {
             "evidenceSha256": hashlib.sha256(evidence_text.encode("utf-8")).hexdigest(),
             "collected": 0,

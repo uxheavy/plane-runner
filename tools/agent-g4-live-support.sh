@@ -140,6 +140,7 @@ live_capture_stderr() {
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import stat
@@ -207,6 +208,47 @@ if error_class == "ModuleNotFoundError":
     )
     if match:
         missing_module = match.group(1)
+setup_error = None
+setup_stages = {"shared-setup", "assignment", "preconditions", "lineage", "schedule", "schedule-fire", "run", "invocation"}
+setup_classes = {
+    "AgentDomainError", "AgentScheduleError", "AttributeError", "ConnectionError", "IntegrityError",
+    "KeyError", "LookupError", "OperationalError", "RuntimeError", "TimeoutError", "TypeError",
+    "ValidationError", "ValueError", "unknown",
+}
+setup_counters = {"actors", "profiles", "assignments", "lineageAssignments", "schedules", "scheduleFires"}
+marker = "event=agent.g4.live.setup-failure/v1 setupError="
+for line in text.splitlines():
+    if not line.startswith(marker):
+        continue
+    try:
+        candidate = json.loads(line[len(marker):])
+    except (TypeError, ValueError):
+        continue
+    if not isinstance(candidate, dict) or set(candidate) != {"id", "stage", "errorClass", "counters"}:
+        continue
+    identifier = candidate["id"]
+    counters = candidate["counters"]
+    if (
+        not isinstance(identifier, str)
+        or not re.fullmatch(r"setup:[a-z-]+:[A-Za-z]+Error|setup:[a-z-]+:unknown", identifier)
+        or candidate["stage"] not in setup_stages
+        or candidate["errorClass"] not in setup_classes
+        or not isinstance(counters, dict)
+        or set(counters) != setup_counters
+        or any(isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 256 for value in counters.values())
+    ):
+        continue
+    setup_error = json.dumps(
+        {
+            "id": identifier,
+            "stage": candidate["stage"],
+            "errorClass": candidate["errorClass"],
+            "counters": {key: counters[key] for key in sorted(counters)},
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    break
 lowered = text.lower()
 if "read-only file system" in lowered and ("mountpoint" in lowered or "mount" in lowered):
     reason = "docker_mount_target_read_only"
@@ -235,6 +277,7 @@ write_owner_only(
         f"error_class={error_class}\n"
         f"reason_category={reason}\n"
         + (f"missing_module={missing_module}\n" if missing_module else "")
+        + (f"setup_error={setup_error}\n" if setup_error is not None else "")
     ).encode("ascii"),
 )
 write_owner_only(sys.argv[2], f"{digest.hexdigest()}\n".encode("ascii"))

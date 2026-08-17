@@ -695,6 +695,7 @@ def build_failure_evidence(
     plane_host_operation_receipts=False,
     plane_operation_audit=None,
     terminal_lifecycle=None,
+    setup_error=None,
 ):
     """Return one bounded failure object without copying runtime observations."""
 
@@ -1187,6 +1188,8 @@ def build_failure_evidence(
         "planeHostOperationReceipts": plane_host_operation_receipts is True,
         "planeOperationAudit": bounded_operation_audit(plane_operation_audit),
     }
+    if isinstance(setup_error, dict) and set(setup_error) == {"id", "stage", "errorClass", "counters"}:
+        receipt["setupError"] = setup_error
     if provider_relay is not None:
         receipt["providerRelay"] = provider_relay
     if scenario is not None:
@@ -1545,6 +1548,15 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
     context_replay_delta = {}
     context_replay_before = {}
     setup_cache = setup_cache if setup_cache is not None else {}
+    setup_stage = "shared-setup"
+    setup_counters = {
+        "actors": 0,
+        "profiles": 0,
+        "assignments": 0,
+        "lineageAssignments": 0,
+        "schedules": 0,
+        "scheduleFires": 0,
+    }
 
     def readback():
         nonlocal terminal_lifecycle
@@ -1726,6 +1738,8 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
         profile = shared["profile"]
         context_facts = shared["context_facts"]
         related_actors = dict(shared["related_actors"])
+        setup_counters["actors"] = 1 + len(related_actors)
+        setup_counters["profiles"] = 1 + len(related_actors)
         actor_role = shared["actor_role"]
         assignment_target_ref = f"issue:{issue.id}"
         assignment_objective = "Perform one live provider-backed read, authorization canary, and explicit published outcome."
@@ -1742,6 +1756,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
             assignment_objective = scenario.assignment.objective
             assignment_acceptance_criteria = list(scenario.assignment.acceptance_criteria)
             assignment_context_refs = list(scenario.assignment.context_refs)
+        setup_stage = "assignment"
         assignment = create_assignment(
             actor,
             project=project,
@@ -1751,13 +1766,16 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
             context_refs=assignment_context_refs,
             created_by=user,
         )
+        setup_counters["assignments"] = 1
         if scenario is not None:
+            setup_stage = "preconditions"
             preconditions = set(scenario.setup.preconditions)
             checks = _commission_precondition_checks(shared, assignment, provider_relay)
             missing_preconditions = [name for name in preconditions if not checks[name]]
             if missing_preconditions:
                 raise RuntimeError("scenario preconditions failed: " + ",".join(sorted(missing_preconditions)))
         if scenario is not None and scenario.setup.lineage is not None:
+            setup_stage = "lineage"
             lineage = scenario.setup.lineage
             parent = actor if lineage.parent_ref == "actor:primary" else related_actors[lineage.parent_ref]
             child = actor if lineage.child_ref == "actor:primary" else related_actors[lineage.child_ref]
@@ -1779,7 +1797,10 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                     context_refs=list(lineage.scope_refs), scope={"refs": list(lineage.scope_refs)},
                     budget={"modelCalls": lineage.budget}, idempotency_key=f"idempotency:g4-live-lineage-{suffix}", created_by=user,
                 )
+            if lineage_assignment is not None:
+                setup_counters["lineageAssignments"] = 1
         if scenario is not None and scenario.setup.schedule is not None:
+            setup_stage = "schedule"
             schedule_spec = scenario.setup.schedule
             schedule_actor = actor if schedule_spec.actor_ref == "actor:primary" else related_actors[schedule_spec.actor_ref]
             schedule = create_schedule(
@@ -1788,14 +1809,20 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                 objective=assignment_objective, acceptance_criteria=assignment_acceptance_criteria,
                 context_refs=assignment_context_refs, starts_at=datetime.fromisoformat(schedule_spec.starts_at.replace("Z", "+00:00")),
             )
+            setup_counters["schedules"] = 1
             if schedule_spec.fire_at is not None:
+                setup_stage = "schedule-fire"
                 schedule_fire = fire_schedule(
                     schedule,
                     scheduled_for=datetime.fromisoformat(schedule_spec.fire_at.replace("Z", "+00:00")),
                     created_by=user,
                 )
+                setup_counters["scheduleFires"] = int(schedule_fire is not None)
+        setup_stage = "run"
         run = create_run(assignment, profile, idempotency_key=f"idempotency:g4-live-run-{suffix}", created_by=user)
+        setup_stage = "invocation"
         invocation = record_invocation(run, idempotency_key=f"idempotency:g4-live-invocation-{suffix}", trigger="initial")
+        setup_stage = None
         if scenario is not None and scenario.scenario_id == "worker":
             substitution_evidence = attempt_actor_substitution(
                 actor=actor,
@@ -2285,6 +2312,36 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                 failure_binding = binding or _binding()
             except BaseException:
                 failure_binding = {}
+            setup_error = None
+            if setup_stage is not None:
+                setup_error_class = type(failure).__name__
+                if setup_error_class not in {
+                    "AgentDomainError",
+                    "AgentScheduleError",
+                    "AttributeError",
+                    "ConnectionError",
+                    "IntegrityError",
+                    "KeyError",
+                    "LookupError",
+                    "OperationalError",
+                    "RuntimeError",
+                    "TimeoutError",
+                    "TypeError",
+                    "ValidationError",
+                    "ValueError",
+                }:
+                    setup_error_class = "unknown"
+                setup_error = {
+                    "id": f"setup:{setup_stage}:{setup_error_class}",
+                    "stage": setup_stage,
+                    "errorClass": setup_error_class,
+                    "counters": dict(setup_counters),
+                }
+                print(
+                    "event=agent.g4.live.setup-failure/v1 setupError="
+                    + json.dumps(setup_error, separators=(",", ":"), sort_keys=True),
+                    file=sys.stderr,
+                )
             evidence = build_failure_evidence(
                 binding=failure_binding,
                 failure_phase="api-invocation",
@@ -2338,6 +2395,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                 plane_host_operation_receipts=plane_host_operation_receipts,
                 plane_operation_audit=plane_operation_audit,
                 terminal_lifecycle=terminal_lifecycle,
+                setup_error=setup_error,
             )
 
     return return_code, evidence

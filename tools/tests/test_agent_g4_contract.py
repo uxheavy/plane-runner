@@ -46,10 +46,12 @@ from validate_agent_g4_live import (  # noqa: E402
     validate_authority,
     validate_config,
     validate_runtime_provider_environment,
+    _validate_setup_error,
     validate_disposable_artifact_binding,
     validate_rollback_fixture,
     validate_rollback_runbook,
     validate_files,
+    validate_evidence,
 )
 from summarize_agent_g4 import summarize  # noqa: E402
 
@@ -434,6 +436,38 @@ def terminal_lifecycle_fixture(*, observed: bool = True) -> dict[str, object]:
 
 
 class G4ContractTests(unittest.TestCase):
+    def test_runner_setup_error_projection_is_bounded_and_validated(self):
+        valid = {
+            "id": "setup:lineage:IntegrityError",
+            "stage": "lineage",
+            "errorClass": "IntegrityError",
+            "counters": {
+                "actors": 5,
+                "profiles": 5,
+                "assignments": 1,
+                "lineageAssignments": 0,
+                "schedules": 0,
+                "scheduleFires": 0,
+            },
+        }
+        _validate_setup_error(valid)
+        runner_receipt = json.dumps(
+            {
+                "schemaVersion": "plane-agent-g4/live-runner-failure/v1",
+                "status": "failed",
+                "phase": "api-invocation",
+                "errorClass": "unspecified",
+                "exitCode": 1,
+                "reasonCategory": "unavailable",
+                "stderrSha256": "0" * 64,
+                "setupError": valid,
+            },
+            separators=(",", ":"),
+        )
+        self.assertEqual(validate_evidence(runner_receipt, {}, {}, {}, CANDIDATE)["passed"], 0)
+        with self.assertRaisesRegex(ContractError, "runner_failure_setup_error_invalid"):
+            _validate_setup_error({**valid, "id": "setup:lineage:/private/secret"})
+
     def test_failed_multi_commission_aggregate_retains_bounded_failure_envelope(self):
         manifest, authority, config, success_text = fixture()
         namespace = invoke_helper_namespace()

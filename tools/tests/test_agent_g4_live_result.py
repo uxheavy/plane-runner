@@ -183,6 +183,59 @@ class LiveResultPersistenceTests(unittest.TestCase):
             shutil.rmtree(run_directory)
             self.assertEqual(destination.read_bytes(), result.stdout)
 
+    def test_runner_failure_receipt_preserves_bounded_setup_error_marker(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            destination = root / "setup.result"
+            setup_error = json.dumps(
+                {
+                    "id": "setup:lineage:IntegrityError",
+                    "stage": "lineage",
+                    "errorClass": "IntegrityError",
+                    "counters": {
+                        "actors": 5,
+                        "profiles": 5,
+                        "assignments": 1,
+                        "lineageAssignments": 0,
+                        "schedules": 0,
+                        "scheduleFires": 0,
+                    },
+                },
+                separators=(",", ":"),
+            )
+            result = self._run_helper(
+                destination,
+                root / "missing-evidence.json",
+                "--status",
+                "1",
+                "--phase",
+                "api-invocation",
+                "--error-class",
+                "RuntimeError",
+                "--setup-error",
+                setup_error,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)["setupError"], json.loads(setup_error))
+
+    def test_runner_rejects_unbounded_setup_error_marker(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            result = self._run_helper(
+                root / "setup.result",
+                root / "missing-evidence.json",
+                "--status",
+                "1",
+                "--phase",
+                "api-invocation",
+                "--error-class",
+                "RuntimeError",
+                "--setup-error",
+                '{"id":"setup:lineage:/private/secret"}',
+            )
+            self.assertEqual(result.returncode, 2)
+            self.assertIn(b"reason=setup_error_invalid", result.stderr)
+
     def test_atomic_publish_leaves_no_destination_or_partial_file_on_publish_failure(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

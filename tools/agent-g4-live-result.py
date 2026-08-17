@@ -63,6 +63,40 @@ SENSITIVE_FIELD_RE = re.compile(
 )
 STDERR_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 MODULE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")
+SETUP_ERROR_STAGES = {
+    "shared-setup",
+    "assignment",
+    "preconditions",
+    "lineage",
+    "schedule",
+    "schedule-fire",
+    "run",
+    "invocation",
+}
+SETUP_ERROR_CLASSES = {
+    "AgentDomainError",
+    "AgentScheduleError",
+    "AttributeError",
+    "ConnectionError",
+    "IntegrityError",
+    "KeyError",
+    "LookupError",
+    "OperationalError",
+    "RuntimeError",
+    "TimeoutError",
+    "TypeError",
+    "ValueError",
+    "ValidationError",
+    "unknown",
+}
+SETUP_ERROR_COUNTERS = {
+    "actors",
+    "profiles",
+    "assignments",
+    "lineageAssignments",
+    "schedules",
+    "scheduleFires",
+}
 
 
 class ResultPersistenceError(ValueError):
@@ -147,6 +181,37 @@ def _bounded_failure_line(
     ).encode("ascii")
 
 
+def _validated_setup_error(value: str | None) -> dict | None:
+    if value in (None, ""):
+        return None
+    try:
+        parsed = json.loads(value)
+    except (TypeError, ValueError):
+        raise ResultPersistenceError("setup_error_invalid") from None
+    if not isinstance(parsed, dict) or set(parsed) != {"id", "stage", "errorClass", "counters"}:
+        raise ResultPersistenceError("setup_error_invalid")
+    identifier = parsed["id"]
+    if (
+        not isinstance(identifier, str)
+        or not 1 <= len(identifier.encode("utf-8")) <= 128
+        or not re.fullmatch(r"setup:[a-z-]+:[A-Za-z]+Error|setup:[a-z-]+:unknown", identifier)
+    ):
+        raise ResultPersistenceError("setup_error_invalid")
+    if parsed["stage"] not in SETUP_ERROR_STAGES or parsed["errorClass"] not in SETUP_ERROR_CLASSES:
+        raise ResultPersistenceError("setup_error_invalid")
+    counters = parsed["counters"]
+    if not isinstance(counters, dict) or set(counters) != SETUP_ERROR_COUNTERS:
+        raise ResultPersistenceError("setup_error_invalid")
+    if any(isinstance(item, bool) or not isinstance(item, int) or not 0 <= item <= 256 for item in counters.values()):
+        raise ResultPersistenceError("setup_error_invalid")
+    return {
+        "id": identifier,
+        "stage": parsed["stage"],
+        "errorClass": parsed["errorClass"],
+        "counters": {key: counters[key] for key in sorted(counters)},
+    }
+
+
 def _runner_failure_receipt(
     *,
     phase: str,
@@ -155,6 +220,7 @@ def _runner_failure_receipt(
     reason_category: str,
     stderr_sha256: str = EMPTY_STDERR_SHA256,
     missing_module: str = "",
+    setup_error: str | None = None,
 ) -> bytes:
     _bounded_failure_line(
         phase=phase,
@@ -165,16 +231,19 @@ def _runner_failure_receipt(
         missing_module=missing_module,
     )
     receipt = {
-        "schemaVersion": RUNNER_FAILURE_SCHEMA,
-        "status": "failed",
-        "phase": phase,
-        "errorClass": error_class,
-        "exitCode": exit_code,
-        "reasonCategory": reason_category,
-        "stderrSha256": stderr_sha256,
+            "schemaVersion": RUNNER_FAILURE_SCHEMA,
+            "status": "failed",
+            "phase": phase,
+            "errorClass": error_class,
+            "exitCode": exit_code,
+            "reasonCategory": reason_category,
+            "stderrSha256": stderr_sha256,
     }
     if missing_module:
         receipt["missingModule"] = missing_module
+    bounded_setup_error = _validated_setup_error(setup_error)
+    if bounded_setup_error is not None:
+        receipt["setupError"] = bounded_setup_error
     return json.dumps(receipt, separators=(",", ":")).encode("ascii")
 
 
@@ -287,6 +356,7 @@ def persist_result(
     reason_category: str = "unavailable",
     stderr_sha256: str = EMPTY_STDERR_SHA256,
     missing_module: str = "",
+    setup_error: str | None = None,
 ) -> bytes:
     """Publish exactly one schema-controlled JSON receipt."""
 
@@ -312,6 +382,7 @@ def persist_result(
             reason_category=reason_category,
             stderr_sha256=stderr_sha256,
             missing_module=missing_module,
+            setup_error=setup_error,
         )
     else:
         raise ResultPersistenceError("evidence_unavailable")
@@ -334,6 +405,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--reason-category", default="unavailable")
     parser.add_argument("--stderr-sha256", default=EMPTY_STDERR_SHA256)
     parser.add_argument("--missing-module", default="")
+    parser.add_argument("--setup-error", default="")
     return parser.parse_args(argv)
 
 
@@ -349,6 +421,7 @@ def main(argv: list[str] | None = None) -> int:
             reason_category=args.reason_category,
             stderr_sha256=args.stderr_sha256,
             missing_module=args.missing_module,
+            setup_error=args.setup_error,
         )
     except ResultPersistenceError as exc:
         print(f"event=agent.g4.live-runner.result status=failed reason={exc.reason}", file=sys.stderr)

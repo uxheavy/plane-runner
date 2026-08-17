@@ -335,6 +335,27 @@ def test_manager_hr_setup_is_workspace_scoped_for_chief_of_staff_governance() ->
     assert "project=related_project" in source
 
 
+def test_manager_setup_failure_receipt_has_bounded_stage_marker_and_counters() -> None:
+    invoke = (TOOLS / "agent-g4-live-invoke.py").read_text()
+    runner = (TOOLS / "agent-g4-live.sh").read_text()
+    result = (TOOLS / "agent-g4-live-result.py").read_text()
+
+    for marker in (
+        'setup_stage = "shared-setup"',
+        'setup_stage = "assignment"',
+        'setup_stage = "lineage"',
+        'setup_stage = "schedule"',
+        'setup_stage = "schedule-fire"',
+        'event=agent.g4.live.setup-failure/v1 setupError=',
+        '"lineageAssignments": 0',
+    ):
+        assert marker in invoke
+    assert 'safe_setup_error()' in runner
+    assert '--setup-error "${setup_error}"' in runner
+    assert 'parser.add_argument("--setup-error", default="")' in result
+    assert 'receipt["setupError"] = bounded_setup_error' in result
+
+
 def test_manager_fixture_is_staged_into_the_owner_only_scenario_volume() -> None:
     source = (TOOLS / "agent-g4-live.sh").read_text()
 
