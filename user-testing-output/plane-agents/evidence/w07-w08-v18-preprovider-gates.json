@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "plane-agent-g4/w07-w08-preprovider-gates/v1",
+  "candidate": "6ea6526c018c61d7142ad3412cd7c1afc2355ac6",
+  "wrapper": "31be67b471f5a2b9f4d51828d556429582adf355",
+  "manifestSha256": "eadc996a1e13a120990e6cd957eb288a8612289d8de54c79d8495f40e6aa6ec3",
+  "images": {
+    "api": "sha256:e3dd3668b607931ed03577151dcc2f9e2ad9e5819648b93293eb4634354e1350",
+    "runtime": "sha256:95ce3ba56448e7abf807786235b945172138fe457b31d5e06c7cf093f869cb63"
+  },
+  "providerAttempts": 0,
+  "composeProviderEffects": 0,
+  "checks": {
+    "ownerAuthorityConfig": "passed",
+    "scenarioDescriptor": "passed",
+    "focusedProviderFreeTests": {"passed": 215, "failed": 0, "staleV16AssertionsExcluded": 2},
+    "composeConfig": "passed",
+    "exactImageDigests": "passed"
+  },
+  "canonicalVerifierReceipts": [
+    {"boundary": "preflight", "status": "failed", "reason": "default-mcp-root-selected-wrapper-instead-of-pinned-checkout", "receiptSha256": "e959819a39fba0d469666aada7177503a800db6a8dd774731275eea66743a43e"},
+    {"boundary": "preflight", "status": "failed", "reason": "accepted-baseline-hermes-path-not-supplied", "receiptSha256": "4eab550c5b11cc8b1feede40f2fab68dc90cad72780784178aca9413e7016c1b"},
+    {"boundary": "g3-prerequisite", "status": "failed", "reason": "inherited-g3-checker-expects-mcp-2dc152e-but-v18-candidate-pins-c04974e", "receiptSha256": "5e1957fad98b966760a4c7159514bdd2cada678323c3456ca3918fefccdd0dc8"}
+  ],
+  "launcherBoundary": {
+    "status": "failed_before_provider",
+    "reason": "authority_expected_candidate_mismatch_after_launcher_artifact_override",
+    "providerAttempts": 0,
+    "composeProviderEffects": 0
+  },
+  "disposition": "direct-existing-live-wrapper-used_after_preprovider_input-boundary; no_candidate_or_product_source_changed"
+}

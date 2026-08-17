@@ -418,6 +418,16 @@ replay. W03-W08 remain dirty; UT-042 is open.
   `aa093affafab54f9e9092c79574e0a8d02a41264a2bed9da8c9025d708868568`.
 - Cleanup verified zero runner containers, volumes, networks, and capacity
   lease. W03/W04 remain dirty; the lane is idle pending the prepared-call fix.
+## W07/W08 v18 disposition — 2026-08-18
+
+The one fresh v18 W07/W08 assignment reached the provider route but is not a
+route pass. `search_workspace` succeeded once; the assigned `work_item.read`
+returned `NOT_AUTHORIZED` once, and the scenario stopped before rename,
+artifact/evidence exactness, complete W08 readback/isolation, or replay. One
+outcome submission and one applied publication/terminal product event were
+observed, but they do not close W07/W08. Keep the route `dirty` and do not
+replay this terminal failed scenario. Durable extract:
+`user-testing-output/plane-agents/evidence/w07-w08-v18-live-stop.json`.
 
 ## Wave 0CN — v16 provider-free typed-envelope boundary repair — 2026-08-18
 

@@ -1,0 +1,101 @@
+{
+  "schemaVersion": "plane-agent-g4/w07-w08-live-stop/v1",
+  "status": "failed",
+  "lane": "W07-W08",
+  "candidate": {
+    "source": "6ea6526c018c61d7142ad3412cd7c1afc2355ac6",
+    "wrapper": "31be67b471f5a2b9f4d51828d556429582adf355",
+    "manifestSha256": "eadc996a1e13a120990e6cd957eb288a8612289d8de54c79d8495f40e6aa6ec3",
+    "api": {
+      "tag": "plane-agent-api:g4-v18-6ea6526c",
+      "digest": "sha256:e3dd3668b607931ed03577151dcc2f9e2ad9e5819648b93293eb4634354e1350"
+    },
+    "runtime": {
+      "tag": "plane-agent-runtime:hermes-6c460f10-g4-v18-6ea6526c",
+      "digest": "sha256:95ce3ba56448e7abf807786235b945172138fe457b31d5e06c7cf093f869cb63"
+    },
+    "hermes": "6c460f10fe215718dce36dd73cda94155a9a34f8",
+    "mcp": "c04974ed6624f17b41e63ef8182661929e77e0d3",
+    "sdk": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
+  },
+  "policy": {
+    "provider": "openai-codex",
+    "model": "gpt-5.6-luna",
+    "reasoning": "xhigh",
+    "fallbackAllowed": false,
+    "providerSource": "trusted-chatgpt-subscription-resolver"
+  },
+  "scenario": {
+    "id": "worker",
+    "commissionId": "w07-w08-artifact-publication-readback",
+    "descriptorSha256": "472caab0a49cd5b1e11cd7e6213e3091b926270b00b4d247e4ff05e09d892708",
+    "routeChecks": ["W03", "W04", "W07", "W08"]
+  },
+  "lifecycle": {
+    "runId": "2d90015f-5c1a-47f4-a935-e57417f917d7",
+    "runRef": "run:2d90015f-5c1a-47f4-a935-e57417f917d7",
+    "runState": "succeeded",
+    "invocationRef": "invocation:25653984-b79f-416e-83e7-3a1e41082b77",
+    "invocationState": "succeeded",
+    "runtimeExit": "completed",
+    "runtimeFinalSequence": 19,
+    "terminalReason": "product_outcome_published",
+    "outcomeSubmissionRef": "outcome-submission:dd516a47-9f13-4c3e-a23c-f87f73536d19",
+    "publicationOperationRef": "operation:agent.outcome.publish",
+    "publicationAction": "applied",
+    "publicationReplayed": false,
+    "productEventRef": "product-event:21f4f3d1-bf87-49a5-8222-99b58b0db045",
+    "outcomePublicationCount": 1,
+    "visibleTerminalCount": 1,
+    "artifactEvidenceAttachment": "not_proven",
+    "ordinaryFinalText": "not_proven",
+    "providerDisabledReplay": "not_eligible_not_run"
+  },
+  "provider": {
+    "attemptCount": 9,
+    "statusClassCounts": {"2xx": 9, "4xx": 0, "5xx": 0, "transport": 0},
+    "fallbackCount": 0,
+    "retryCount": 0,
+    "replayCount": 0,
+    "effects": "provider_responses_observed; no_fallback_or_retry"
+  },
+  "operations": [
+    {"operationId": "search_workspace", "status": "success", "count": 1},
+    {"operationId": "work_item.read", "status": "denied", "errorCode": "NOT_AUTHORIZED", "count": 1, "targetDigest": "dd8700839ea6dfb5f945f501afe167d5a04b4e1f2108963a29c355af8b3349fe"},
+    {"operationId": "work_item.rename", "status": "absent", "count": 0},
+    {"operationId": "agent.outcome.evaluate", "status": "denied", "errorCode": "NOT_AUTHORIZED", "count": 1},
+    {"operationId": "agent.outcome.submit", "status": "success", "count": 1},
+    {"operationId": "agent.outcome.publish", "status": "success", "count": 1}
+  ],
+  "failure": {
+    "phase": "api-invocation",
+    "errorClass": "RuntimeError",
+    "reasonCode": "unspecified",
+    "reasonCategory": "unavailable",
+    "reasonSubreason": "unavailable",
+    "exitCode": 1,
+    "stderrSha256": "168fb2c48d892a4ed6dc9cc1b48f915d2c958ca37bc66e9e36a755110ce08041",
+    "rootBoundary": "assigned_work_item_read_NOT_AUTHORIZED"
+  },
+  "cleanup": {
+    "capacityLeasePresent": false,
+    "runnerLabeledContainers": 0,
+    "runnerLabeledNetworks": 0,
+    "runnerLabeledVolumes": 0
+  },
+  "rawResult": {
+    "ownerOnlyMode": "0600",
+    "sizeBytes": 7825,
+    "sha256": "a1e281f7af261b1b3adddae6dfd7a1ac4dbacc928af9c0b90ca8de68a162cb62"
+  },
+  "forensic": {
+    "classification": "UNAVAILABLE",
+    "workItemReadTargetDigest": "dd8700839ea6dfb5f945f501afe167d5a04b4e1f2108963a29c355af8b3349fe",
+    "canonicalSearchProjectIssueDigest": "not_retained",
+    "boundWorkItemReadCallDigest": "not_retained",
+    "rawUuidOrArgumentInspection": "not_emitted",
+    "decision": "need_structural_bound_call_fix_and_next_receipt"
+  },
+  "semanticDigest": "dc4e6ba35383f77a60d7293a2911bbeecd02e5991198fe09ebdf2b55a6779ccf",
+  "disposition": "stop_no_retry_no_fallback_no_replay; W07/W08 remain unproven"
+}

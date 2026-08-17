@@ -3515,3 +3515,46 @@ records this diagnosis without changing the retained receipts.
   volumes, networks, and no capacity lease. W03/W04 remain dirty; the lane is
   idle pending the prepared-call fix. Raw inputs, transcript, provider text,
   and credentials were not retained.
+## Wave 0CN — immutable v18 W07/W08 live stop — 2026-08-18
+
+- The fresh detached wrapper was `31be67b471f5a2b9f4d51828d556429582adf355`,
+  source `6ea6526c018c61d7142ad3412cd7c1afc2355ac6`, API digest
+  `sha256:e3dd3668b607931ed03577151dcc2f9e2ad9e5819648b93293eb4634354e1350`,
+  runtime digest
+  `sha256:95ce3ba56448e7abf807786235b945172138fe457b31d5e06c7cf093f869cb63`,
+  and manifest SHA-256
+  `eadc996a1e13a120990e6cd957eb288a8612289d8de54c79d8495f40e6aa6ec3`.
+  Hermes/MCP/SDK pins were `6c460f10fe215718dce36dd73cda94155a9a34f8`,
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`, and
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. Env files were copied from the
+  authoritative checkout byte-for-byte without reading values; `setup.sh` was
+  not run.
+- Candidate-bound config, descriptor, focused provider-free checks (`215`
+  applicable tests), Compose syntax, and exact image identity passed. The
+  inherited G3 checker stopped offline on its older MCP expectation; its
+  bounded receipt hashes and the launcher-only authority binding stop are
+  durable in `w07-w08-v18-preprovider-gates.json`.
+- Exactly one fresh serialized Worker assignment used
+  `openai-codex/gpt-5.6-luna` xhigh with fallback disabled. It made nine
+  upstream `2xx` attempts, then stopped at `api-invocation` when the assigned
+  `work_item.read` returned `NOT_AUTHORIZED` after one successful
+  `search_workspace`. The Run and Invocation completed; one outcome submission,
+  one applied publication, and one visible terminal product event were
+  observed. The artifact/evidence attachment, complete W08 readback/isolation,
+  and provider-disabled replay were not proven or run.
+- No retry, fallback, second primary, blind `outcome_unknown` replay, or source
+  patch occurred. Run `2d90015f-5c1a-47f4-a935-e57417f917d7`, invocation
+  `invocation:25653984-b79f-416e-83e7-3a1e41082b77`, outcome
+  `outcome-submission:dd516a47-9f13-4c3e-a23c-f87f73536d19`, and product event
+  `product-event:21f4f3d1-bf87-49a5-8222-99b58b0db045` are retained in the
+  bounded extract. Raw result SHA-256 is
+  `a1e281f7af261b1b3adddae6dfd7a1ac4dbacc928af9c0b90ca8de68a162cb62`.
+  Cleanup proved no capacity lease and zero runner-labeled containers,
+  networks, and volumes. W07/W08 remain dirty.
+
+Forensic comparison of the owner-only raw result is `UNAVAILABLE`: only the
+`work_item.read` target digest `dd8700839ea6dfb5f945f501afe167d5a04b4e1f2108963a29c355af8b3349fe`
+was retained; neither the canonical search project/issue digest nor the bound
+call digest was retained. No UUIDs, arguments, transcript, or secrets were
+emitted. The next action is a provider-free structural bound-call/readback fix,
+not a provider rerun.
