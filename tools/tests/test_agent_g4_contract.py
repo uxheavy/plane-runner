@@ -1440,7 +1440,10 @@ class G4ContractTests(unittest.TestCase):
         binding = runner[probe_start:invocation_start]
 
         self.assertLess(probe_start, invocation_start)
-        self.assertIn('docker run --rm --network "${NETWORK}" --hostname api --network-alias api', binding)
+        self.assertIn(
+            'docker run --rm -i --network "${NETWORK}" --hostname api --network-alias api',
+            binding,
+        )
         self.assertIn(
             '--mount type=bind,src="${RUNTIME_SECRET_FILE}",dst="${API_RUNTIME_SECRET_TARGET}",readonly',
             binding,

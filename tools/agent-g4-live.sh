@@ -895,7 +895,7 @@ test "${runtime_ready}" -eq 1
 
 LIVE_PHASE=api-runtime-binding
 live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" \
-    docker run --rm --network "${NETWORK}" --hostname api --network-alias api \
+    docker run --rm -i --network "${NETWORK}" --hostname api --network-alias api \
     --mount type=bind,src="${RUNTIME_SECRET_FILE}",dst="${API_RUNTIME_SECRET_TARGET}",readonly \
     --env DJANGO_SETTINGS_MODULE=plane.settings.production \
     --env SECRET_KEY="${PLANE_TEST_SECRET}" \

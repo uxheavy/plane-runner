@@ -330,3 +330,38 @@ Durable redacted evidence `user-testing-output/plane-agents/evidence/w05-w06-c-d
 The original exit-1 boundary was proven as `AuditRoleBoundaryError` in `plane.operation_gateway.role_boundary` before runtime dispatch. The launcher had left API invocation on the privileged bootstrap database role, migrations on the bootstrap role, and post-migration audit bootstrap without enforced role separation. The smallest seam correction now gives bootstrap/migration/runtime phases their existing distinct roles and URLs, enables enforced audit bootstrap, and adds a focused contract regression. The exact checked-in invocation helper then reached the deterministic fake runtime and stopped with the expected bounded synthetic `RuntimeError / runtime_process / process_exit / runtime_execution_failed`; provider attempts/effects remained `0`, and the fake receipt proved request and credential handoff without provider contact.
 
 Provider/live retest is still pending and no provider journey, replay, or outcome-unknown replay was run in this correction lane. The source/evidence commit is reported with the handoff.
+
+### UT-049 fresh 64d1 W05/W06 journey and binding-probe seam — 2026-08-17
+
+The one fresh capacity-gated `context-governance` journey started from clean
+Plane `64d1ea7fe76944fffc8f66cf4738bb556f02fa94` with newly built exact API
+and runtime images. Its retained owner-only result is
+`tmp/persona-wave-v6/w05-w06-fresh-64d1ea7f-live/live-result.json`, mode
+`0600`, 13,483 bytes, SHA-256
+`9a1eaf8106ed98b4d187c8b7ffd3d61c601d2631ed80efd03216cfd993ab006a`.
+The run was `c161a8be-0afe-4f1a-b41d-0c045553759e`, invocation
+`invocation:ed1c1c45-5e0c-4ad9-9304-398ecfb6e09c`, and it recorded 9
+completed upstream `2xx` provider attempts, 20 runtime events, one outcome,
+one publication, and a completed runtime. The same commission's W05/W06
+route gate passed; no separate W07, Manager, or Operator journey was started.
+
+The required live runtime-binding proof is not accepted for this result. The
+exact API-container binding command in the `64d1` launcher omitted Docker's
+`-i`; an exact provider-free reproduction therefore exited `0` with empty
+output without executing `agent_g4_runtime_binding_probe.py`. The bounded
+reproduction and diagnosis are in
+`user-testing-output/plane-agents/evidence/w05-w06-c-64d1-runtime-binding-probe.json`,
+SHA-256 `227a70fff344ea2682d088ecaba61a31d2db6dc0987a5283c91d433d49269cbb`.
+The corrected provider-free exact probe then passed with Django settings,
+`/run/plane-agent-runtime-secret`, mode `0600`, root ownership/readability,
+`agent-runtime`, `remote`, and `RemoteRuntimeTransport`. The durable live
+extract is
+`user-testing-output/plane-agents/evidence/w05-w06-c-64d1-live.json`, SHA-256
+`a58bd6186c28be09caccfef8b54f5b8422c7391a68590ea5b0cb84daf7873203`.
+
+The smallest root fix adds `-i` to the existing binding-probe Docker command
+and adds a focused contract assertion. The red regression failed before the
+fix; the focused G4 contract/live-result suites pass `115/115`. No second
+provider/live journey, retry, old invocation replay, or `outcome_unknown`
+replay was run. W05/W06 route closure remains withheld until a separately
+authorized fresh journey validates the corrected pre-dispatch proof.

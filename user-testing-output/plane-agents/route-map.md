@@ -394,6 +394,40 @@ replay. W03-W08 remain dirty; UT-042 is open.
 - W05 and W06 remain dirty; this is provider-free boundary evidence, not route
   closure.
 
+## Wave 0BW — exact 64d1 W05/W06 result with binding-gate correction
+
+- One fresh capacity-gated `context-governance` journey started from clean
+  Plane `64d1ea7fe76944fffc8f66cf4738bb556f02fa94`, using API
+  `plane-agent-api:g4-v6-64d1ea7f` /
+  `sha256:5ad0e9d874099b5b45a99607ddc04fba1b8f93c8a2931827b309c54b0d66685e`
+  and runtime
+  `plane-agent-runtime:hermes-292e8663-g4-v6-64d1ea7f` /
+  `sha256:b53453bf8f5239ff31624bad8a685b4e102b842dda2505379304f659f9205943`.
+  Manifest SHA-256 is
+  `5bc6fbe42879e2a5c77230dc2ca1d4a750d5550f07035fa8c3dcb30b04930297`.
+- The primary recorded run
+  `c161a8be-0afe-4f1a-b41d-0c045553759e` and invocation
+  `invocation:ed1c1c45-5e0c-4ad9-9304-398ecfb6e09c`, with 9 upstream `2xx`
+  provider attempts, 20 runtime events, one outcome, one publication, and a
+  completed runtime. The same context-governance commission reported W05,
+  W06, W07, and W08 predicates; no separate W07/Manager/Operator journey
+  ran.
+- The runner's runtime-binding probe gate is invalidated: its exact Docker
+  command omitted `-i`, and provider-free reproduction showed an empty,
+  zero-exit stdin-less Python invocation. The supplemental corrected exact
+  API-image probe passed and is retained in
+  `user-testing-output/plane-agents/evidence/w05-w06-c-64d1-runtime-binding-probe.json`
+  (SHA-256
+  `227a70fff344ea2682d088ecaba61a31d2db6dc0987a5283c91d433d49269cbb`).
+  The bounded live extract is
+  `user-testing-output/plane-agents/evidence/w05-w06-c-64d1-live.json`, SHA-256
+  `a58bd6186c28be09caccfef8b54f5b8422c7391a68590ea5b0cb84daf7873203`.
+- The smallest launcher correction adds `-i` and a focused regression. The
+  corrected provider-free suites passed `115/115`. No second provider
+  journey, retry, old invocation replay, or `outcome_unknown` replay was run;
+  W05/W06 remain dirty and route closure is withheld pending a separately
+  authorized fresh journey with the corrected gate.
+
 ## Wave 0BU — d748 W05/W06 boundary evidence
 
 - The one fresh `context-governance` journey used the exact d748 API/runtime

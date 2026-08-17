@@ -2644,3 +2644,49 @@ records this diagnosis without changing the retained receipts.
   The exact debug containers, volume, network, and temporary probe artifacts
   are cleaned before handoff; W05/W06 remain open pending one separately
   authorized fresh live retest of the committed fix.
+
+## Wave 0BW — exact 64d1 W05/W06 journey and binding-probe correction
+
+- Clean source was `64d1ea7fe76944fffc8f66cf4738bb556f02fa94`; required machine
+  env files were copied byte-for-byte without reading, printing, or sourcing
+  values, and `setup.sh` was not run. Fresh exact artifacts were API
+  `plane-agent-api:g4-v6-64d1ea7f` /
+  `sha256:5ad0e9d874099b5b45a99607ddc04fba1b8f93c8a2931827b309c54b0d66685e`
+  and runtime
+  `plane-agent-runtime:hermes-292e8663-g4-v6-64d1ea7f` /
+  `sha256:b53453bf8f5239ff31624bad8a685b4e102b842dda2505379304f659f9205943`.
+  Manifest SHA-256:
+  `5bc6fbe42879e2a5c77230dc2ca1d4a750d5550f07035fa8c3dcb30b04930297`.
+- Exactly one fresh capacity-gated `context-governance` journey used
+  `openai-codex/gpt-5.6-luna` xhigh with fallback disabled. Run
+  `c161a8be-0afe-4f1a-b41d-0c045553759e` and invocation
+  `invocation:ed1c1c45-5e0c-4ad9-9304-398ecfb6e09c` completed with 9 upstream
+  `2xx` provider attempts, 20 runtime events, one outcome, one publication,
+  and a completed runtime. The owner-only result is
+  `tmp/persona-wave-v6/w05-w06-fresh-64d1ea7f-live/live-result.json`, SHA-256
+  `9a1eaf8106ed98b4d187c8b7ffd3d61c601d2631ed80efd03216cfd993ab006a`.
+- A provider-free exact reproduction proved the live candidate's
+  `api-runtime-binding` probe was vacuous: the launcher omitted Docker `-i`,
+  so Python read no stdin and exited `0` without running the probe. The live
+  pre-dispatch proof is therefore invalidated, even though the route result
+  passed. The smallest fix adds `-i` and a focused regression; the red test
+  failed before the fix and the corrected G4 contract/live-result suites pass
+  `115/115`.
+- The corrected exact API-image probe against a unique fake `agent-runtime`
+  alias passed with `settingsSource=django`, secret path
+  `/run/plane-agent-runtime-secret`, mode `0600`, root ownership/readability,
+  `runtimeHost=agent-runtime`, `transportKind=remote`, and
+  `transportClass=RemoteRuntimeTransport`. Bounded evidence is
+  `user-testing-output/plane-agents/evidence/w05-w06-c-64d1-runtime-binding-probe.json`,
+  SHA-256 `227a70fff344ea2682d088ecaba61a31d2db6dc0987a5283c91d433d49269cbb`;
+  live evidence is
+  `user-testing-output/plane-agents/evidence/w05-w06-c-64d1-live.json`,
+  SHA-256 `a58bd6186c28be09caccfef8b54f5b8422c7391a68590ea5b0cb84daf7873203`.
+- The enforced DB command gate ran migration ownership through
+  `plane_migrator`, bound production API invocation to `plane_runtime`, kept
+  `plane` as the bootstrap provisioner, and enabled role separation before
+  dispatch. No passwords or URLs were retained. No second provider/live
+  journey, retry, old invocation replay, or `outcome_unknown` replay was run;
+  no W07/Manager/Operator journey was started. W05/W06 remain dirty and
+  route closure is withheld pending a separately authorized fresh run with
+  the corrected pre-dispatch gate.
