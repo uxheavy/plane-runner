@@ -281,9 +281,9 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
                 "as this call's complete input; use its workItemReadCall object verbatim as the complete tool "
                 "arguments. This ready-to-call object already contains action, operationRef, and the opaque "
                 "input.preparedCallRef. Emit exactly those three top-level tool keys; keep only preparedCallRef "
-                "inside input. Do not wrap it, put the workItemReadCall object inside input, copy raw "
+                "inside input. Do not wrap it, put the workItemReadCall object inside input, do not copy raw "
                 "workItemReadInput, rename operationRef to operation_ref, alter or replay the preparedCallRef, "
-                "or reconstruct, translate, or infer project_id or issue_id from targetRef, ref, key, title, or "
+                "do not reconstruct, translate, or infer project_id or issue_id from targetRef, ref, key, title, or "
                 "workspaceRef. Do not reconstruct project_id or issue_id from targetRef, ref, key, title, or "
                 "workspaceRef."
             )
