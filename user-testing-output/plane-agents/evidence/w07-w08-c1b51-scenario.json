@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "plane.agent-scenario/v1",
+  "scenarioId": "worker",
+  "actor": { "role": "worker" },
+  "profile": {
+    "name": "Maya Worker D W07 W08 R1",
+    "instructions": "Complete this one ordered W07-W08 commission exactly. Read only the assigned work item, deliberately attempt agent.outcome.evaluate once as this Worker and require the typed denial, then submit exactly one outcome containing exactly one real artifact and exactly one evidence item and publish it exactly once. Ordinary final text is transcript evidence only and never replaces the explicit publication. Do not retry terminal operations or replay an outcome whose state is unknown.",
+    "modelPolicy": {
+      "provider": "openai-codex",
+      "model": "gpt-5.6-luna",
+      "reasoning": "xhigh",
+      "fallbackAllowed": false
+    },
+    "toolPresentation": {
+      "eagerOperations": [
+        "search_workspace",
+        "work_item.read",
+        "agent.outcome.evaluate",
+        "agent.outcome.submit",
+        "agent.outcome.publish"
+      ]
+    }
+  },
+  "assignment": {
+    "targetRef": "fixture:assigned-work-item",
+    "objective": "Complete the single W07-W08 artifact publication and readback commission.",
+    "acceptanceCriteria": [
+      "Publish one outcome with one artifact and one evidence item, then prove bounded owner readback."
+    ],
+    "contextRefs": ["context:worker-w07-w08"]
+  },
+  "prompt": "You are Maya, the assigned Worker. Complete the one W07-W08 commission selected by Plane. Read only the assigned work item, attempt the typed outcome evaluation denial once, submit one artifact and one evidence item, publish once, and leave a bounded owner readback. Keep ordinary final text brief because it is transcript evidence, not the product event.",
+  "commissions": [
+    {
+        "id": "w07-w08-artifact-publication-readback-20260817-r1",
+      "assignment": {
+        "targetRef": "fixture:assigned-work-item",
+        "objective": "Complete one fresh synthetic W07 W08 assignment and prove one real artifact and evidence item attach to one OutcomeSubmission, explicit publication creates one visible terminal product event, and owner readback correlates all records.",
+        "acceptanceCriteria": [
+          "Call search_workspace once and pass its returned workItemReadInput unchanged to one work_item.read.",
+          "Attempt agent.outcome.evaluate as this Worker and require exact NOT_AUTHORIZED.",
+          "Submit exactly one outcome with exactly one real artifact and exactly one evidence item, then publish it exactly once.",
+          "Leave ordinary final text as transcript evidence only, and prove owner API and CLI readback, redaction, workspace isolation, and provider-disabled same-invocation replay with zero deltas."
+        ],
+        "contextRefs": ["context:worker-w07-w08"]
+      },
+      "expected": {
+        "operationOutcomes": [
+          { "operationId": "search_workspace", "outcome": "success", "count": 1 },
+          { "operationId": "work_item.read", "outcome": "success", "count": 1 },
+          { "operationId": "agent.outcome.evaluate", "outcome": "denied", "count": 1 },
+          { "operationId": "agent.outcome.submit", "outcome": "success", "count": 1 },
+          { "operationId": "agent.outcome.publish", "outcome": "success", "count": 1 }
+        ],
+        "evidenceKinds": ["assignment", "run", "invocation", "audit", "publication", "terminal_event"],
+        "durableRecords": [
+          { "kind": "assignment", "count": 1 },
+          { "kind": "run", "count": 1 },
+          { "kind": "invocation", "count": 1 },
+          { "kind": "publication", "count": 1 },
+          { "kind": "terminal_event", "count": 1 },
+          { "kind": "schedule", "count": 1 },
+          { "kind": "schedule_fire", "count": 1 }
+        ],
+        "productEvents": [
+          { "kind": "publication", "count": 1 },
+          { "kind": "outcome_submission", "count": 1 }
+        ],
+        "routeChecks": ["W07", "W08"]
+      }
+    }
+  ],
+  "setup": {
+    "preconditions": ["isolated_workspace", "assigned_work_item", "fresh_assignment", "live_authorization", "separate_runtime_service"],
+    "actors": [],
+    "schedule": {
+      "actorRef": "actor:primary",
+      "cron": "30 2 * * *",
+      "timezone": "America/Los_Angeles",
+      "startsAt": "2026-08-18T08:00:00Z",
+      "fireAt": "2026-08-19T09:30:00Z"
+    }
+  },
+  "controls": { "fault": { "selection": "none" } }
+}

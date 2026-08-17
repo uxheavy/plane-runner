@@ -2955,3 +2955,36 @@ records this diagnosis without changing the retained receipts.
   The fresh-assignment decision is `NO_GO` pending authoritative external
   acceptance/credential disposition plus clean candidate, runtime/DB, and
   capacity gates.
+
+## Wave 0CG — exact integrated W07/W08 live stop — 2026-08-17
+
+- Candidate binding: host wrapper `c1b51b2126defa83fcafab2f576bc4930bdd5265`,
+  artifact source `1fd640da20b9f0be3d480f1a3a2788826f458b82`, API image
+  `plane-agent-api:g4-v6-1fd640da` digest
+  `sha256:876934c5cfe73388a008d8028316093dfaf090d853c954e49f23366618500129`,
+  runtime image `plane-agent-runtime:hermes-9eafcb9e-g4-v7-1fd640da` digest
+  `sha256:012557645c18299af575148567aea59a2f775dca4c038e9d7943e1a2de6d7b03`,
+  manifest SHA-256 `7f9e46f75289b5c51190d02b908932c9959cacbaa1432c4b34c04f48c7d9d99b`.
+- The exact integrated provider-free red-team passed and the focused contract
+  suite passed `30` tests (`78` deselected). The fresh assignment used the
+  supported ChatGPT Responses policy with `openai-codex`, `gpt-5.6-luna`,
+  `xhigh`, and fallback disabled. It passed preflight and stopped at the first
+  genuine local product failure after eight completed provider attempts.
+- Run `db0c3e98-1df8-462c-a3dd-9d12b24c2de7` and invocation
+  `invocation:d912fca6-18a9-4f94-a021-8231b013ecdd` ended at
+  `CODE_MODE_FAILED` / `runtime_execution_failed`, phase `host_callback`,
+  operation unavailable, with bounded cause `host_operation_failure`.
+  Provider status counts were `2xx=8`, `4xx=0`, `5xx=0`, `transport=0`,
+  fallback `false`, replay `0`. Search succeeded; work-item read and outcome
+  evaluation were intentionally denied; submit/publish host receipts were
+  present, but the exact W07/W08 lifecycle gates did not pass.
+- W07/W08 feature closure, W08 readback, duplicate-effect proof, and the
+  provider-disabled replay are not claimed. No further provider use was made.
+  Durable redacted evidence is retained in the six `w07-w08-c1b51-*` files;
+  the canonical result hash is
+  `5cc3a928042ade4de9cf0b56b4a49bad3b8b7a52050e8cc7d8f741b5eea39112` and the
+  bounded extract hash is
+  `6481d2bd034d7a3882099acb5f1e9c9b3607b45c0f5ec6950e633a2ca58a56e`.
+- Cleanup proof: capacity marker absent; observed disposable containers,
+  volumes, and networks were all zero. The owner disposition is a separate
+  provider-free fix at the existing Code Mode host-callback seam.

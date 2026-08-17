@@ -394,6 +394,32 @@ replay. W03-W08 remain dirty; UT-042 is open.
 - W05 and W06 remain dirty; this is provider-free boundary evidence, not route
   closure.
 
+## Wave 0CG — exact integrated W07/W08 live stop — 2026-08-17
+
+- Branch `codex/w07-w08-live-20260817` started at Plane wrapper commit
+  `c1b51b2126defa83fcafab2f576bc4930bdd5265`; the verified artifact candidate
+  was `1fd640da20b9f0be3d480f1a3a2788826f458b82`.
+- Exact pins were Hermes `9eafcb9ef6b95e5be720c74bf9857ce2361613d2`, MCP
+  `c04974ed6624f17b41e63ef8182661929e77e0d3`, SDK
+  `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`, API digest
+  `sha256:876934c5cfe73388a008d8028316093dfaf090d853c954e49f23366618500129`,
+  and runtime digest
+  `sha256:012557645c18299af575148567aea59a2f775dca4c038e9d7943e1a2de6d7b03`.
+  The manifest hash was `7f9e46f75289b5c51190d02b908932c9959cacbaa1432c4b34c04f48c7d9d99b`.
+- Seven required environment files were copied byte-identically from the
+  authoritative checkout; `setup.sh` was not run. A first run-directory
+  rejection occurred before capacity, credential staging, Docker, or provider
+  use and is not counted as an assignment or provider attempt. The corrected
+  run acquired capacity and passed candidate/runtime/DB/source gates.
+- Exactly one fresh W07/W08 assignment then stopped after eight completed
+  upstream 2xx attempts at `CODE_MODE_FAILED` in the Plane host callback. No
+  retry, fallback, replay, or `outcome_unknown` replay occurred. W07/W08 stay
+  dirty/unproven and no provider-disabled replay was eligible.
+- Durable redacted result, authority, config, manifest, scenario, and failure
+  extract are retained under `user-testing-output/plane-agents/evidence/`.
+  Cleanup verified absent capacity marker and zero observed disposable
+  containers, volumes, and networks.
+
 ## Manager M01-M08 reconciliation — 2026-08-17
 
 The Manager branch's source fixes, provider-free readiness checks, and six

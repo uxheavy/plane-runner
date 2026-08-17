@@ -1,0 +1,113 @@
+{
+  "schemaVersion": "plane-agent-g4/w07-w08-failure-extract/v1",
+  "status": "failed",
+  "binding": {
+    "hostCandidateCommit": "c1b51b2126defa83fcafab2f576bc4930bdd5265",
+    "artifactCandidateCommit": "1fd640da20b9f0be3d480f1a3a2788826f458b82",
+    "hermesCommit": "9eafcb9ef6b95e5be720c74bf9857ce2361613d2",
+    "mcpGitlink": "c04974ed6624f17b41e63ef8182661929e77e0d3",
+    "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889",
+    "apiImageTag": "plane-agent-api:g4-v6-1fd640da",
+    "apiImageDigest": "sha256:876934c5cfe73388a008d8028316093dfaf090d853c954e49f23366618500129",
+    "runtimeImageTag": "plane-agent-runtime:hermes-9eafcb9e-g4-v7-1fd640da",
+    "runtimeImageDigest": "sha256:012557645c18299af575148567aea59a2f775dca4c038e9d7943e1a2de6d7b03",
+    "manifestSha256": "7f9e46f75289b5c51190d02b908932c9959cacbaa1432c4b34c04f48c7d9d99b",
+    "scenarioSha256": "e9d81aed86c2ade4aa17973d19b3ee48b1193c6de4c103dcaf85736e86f147b2"
+  },
+  "authority": {
+    "id": "authority-w07-w08-c1b51-20260817-r1",
+    "provider": "openai-codex",
+    "model": "gpt-5.6-luna",
+    "reasoning": "xhigh",
+    "fallbackAllowed": false,
+    "route": "chatgpt-responses",
+    "credentialSource": "chatgpt-subscription",
+    "credentialRef": "PLANE_G4_PROVIDER_SECRET_SOURCE",
+    "sourcePathRecorded": false
+  },
+  "scenario": {
+    "commissionId": "w07-w08-artifact-publication-readback-20260817-r1",
+    "actorRole": "worker",
+    "profile": "Maya Worker D W07 W08 R1",
+    "routeChecks": ["W07", "W08"],
+    "freshAssignment": true,
+    "faultSelection": "none"
+  },
+  "lifecycle": {
+    "runId": "db0c3e98-1df8-462c-a3dd-9d12b24c2de7",
+    "runState": "succeeded",
+    "invocationId": "invocation:d912fca6-18a9-4f94-a021-8231b013ecdd",
+    "invocationState": "succeeded",
+    "runtimeExit": "failed",
+    "runtimeExitFinalSequence": 15,
+    "runtimeEventCounts": {
+      "progress_observed": 15,
+      "outcome_submission_observed": 1
+    },
+    "failure": {
+      "phase": "api-invocation",
+      "reasonCode": "runtime_error",
+      "reasonPhase": "runtime_process",
+      "reasonDetail": "process_exit",
+      "reasonSubreason": "runtime_execution_failed",
+      "reasonCause": "host_operation_failure",
+      "errorCode": "CODE_MODE_FAILED",
+      "codeModePhase": "host_callback",
+      "operationId": "unavailable",
+      "attemptRef": "host-request:23cb59127c7c8ef6f2c9be36659ea438a13623026c4afb0751da7f1ae8fff139"
+    }
+  },
+  "provider": {
+    "attemptCount": 8,
+    "statusClassCounts": {"2xx": 8},
+    "completedCount": 8,
+    "fallbackUsed": false,
+    "replayAttemptCount": 0,
+    "providerDisabledReplay": "not_run_after_terminal_product_failure"
+  },
+  "planeOperations": {
+    "hostReceiptsObserved": true,
+    "counts": {
+      "search_workspace": {"status": "success", "count": 1},
+      "work_item.read": {"status": "denied", "errorCode": "NOT_AUTHORIZED", "count": 1},
+      "agent.outcome.evaluate": {"status": "denied", "errorCode": "NOT_AUTHORIZED", "count": 1},
+      "agent.outcome.submit": {"status": "success", "count": 1},
+      "agent.outcome.publish": {"status": "success", "count": 1}
+    },
+    "catalogReadback": {"catalog.search": 0, "catalog.describe": 0}
+  },
+  "featureProof": {
+    "w07": "unproven",
+    "w08": "unproven",
+    "artifactToExactlyOneOutcome": "not_observed_in_bounded_failure",
+    "explicitPublicationTerminalEvent": "not_observed_in_bounded_failure",
+    "ordinaryFinalTextTranscriptOnly": "not_observed_in_bounded_failure",
+    "missingPublicationInvariant": "not_exercised_after_stop",
+    "authorizedReadback": "not_observed_after_stop",
+    "crossWorkspaceDenial": "not_observed_after_stop",
+    "unprivilegedDenial": "not_observed_after_stop"
+  },
+  "cleanup": {
+    "capacityLease": "absent",
+    "runnerContainers": 0,
+    "runnerNetworks": 0,
+    "providerCredentialVolumes": 0,
+    "credentialStateVolumes": 0,
+    "scenarioVolumes": 0
+  },
+  "rawResult": {
+    "path": "tmp/persona-wave-v6/w07-w08-live-c1b51-20260817-r1/result.json",
+    "sha256": "5cc3a928042ade4de9cf0b56b4a49bad3b8b7a52050e8cc7d8f741b5eea39112",
+    "mode": "0600",
+    "sizeBytes": 6537
+  },
+  "redaction": {
+    "rawProviderBody": "excluded",
+    "rawProviderHeaders": "excluded",
+    "credentials": "excluded",
+    "prompts": "excluded",
+    "modelOutput": "excluded",
+    "sourcePath": "excluded"
+  },
+  "ownerDisposition": "stop_at_first_product_failure; await_provider_free_Code_Mode_host_callback_owner"
+}

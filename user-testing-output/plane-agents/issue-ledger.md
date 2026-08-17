@@ -536,3 +536,18 @@ the existing W07/W08 issue records:
 
 No Manager, W05/W06, Operator, or existing W07/W08 issue was closed by this
 merge. No further provider attempt is authorized by this integration.
+
+## Worker W07/W08 live disposition — Wave 0CG — 2026-08-17
+
+| Issue | Severity | Persona / route | Durable evidence | Root cause / bounded disposition | Retest / status |
+| ----- | -------- | --------------- | ---------------- | ------------------------------- | --------------- |
+| UT-056 | blocker | Maya / W07-W08 fresh serialized assignment | `w07-w08-c1b51-failure-extract.json` SHA-256 `6481d2bd034d7a3882099acb5f1e9c9b3607b45c0f5ec6950e633a2ca58a56e`; bounded result SHA-256 `5cc3a928042ade4de9cf0b56b4a49bad3b8b7a52050e8cc7d8f741b5eea39112`; manifest SHA-256 `7f9e46f75289b5c51190d02b908932c9959cacbaa1432c4b34c04f48c7d9d99b`; scenario SHA-256 `e9d81aed86c2ade4aa17973d19b3ee48b1193c6de4c103dcaf85736e86f147b2` | One fresh candidate-bound assignment reached eight completed upstream 2xx attempts and Plane callbacks, then stopped at `CODE_MODE_FAILED` / `runtime_execution_failed` in the `host_callback` phase with operation unavailable. This is a local Plane/Hermes host-callback failure, not a provider failure. | No retry, fallback, replay, or provider-disabled replay. W07/W08 dirty and unproven; await provider-free host-callback owner fix. / open |
+
+The run was `db0c3e98-1df8-462c-a3dd-9d12b24c2de7` and the invocation was
+`invocation:d912fca6-18a9-4f94-a021-8231b013ecdd`. Provider attempts were
+`8`, all `2xx`, with fallback disabled and replay count `0`. Bounded host
+receipts observed one successful workspace search, intentional denials for
+work-item read and outcome evaluation, and submit/publish host receipts; the
+exact lifecycle gates did not pass after the Code Mode failure. No W08
+readback or duplicate-effect claim is made. The capacity marker and all
+observed disposable Docker resources are absent/zero after cleanup.
