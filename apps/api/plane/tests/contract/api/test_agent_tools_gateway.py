@@ -171,10 +171,15 @@ def test_search_workspace_binds_visible_work_item_to_canonical_read_input(
         "project_id": str(gateway_project.id),
         "issue_id": str(gateway_issue.id),
     }
+    assert result["workItemReadCall"] == {
+        "action": "read",
+        "operationRef": "operation:work_item.read",
+        "input": result["workItemReadInput"],
+    }
 
     read = api_key_client.post(
         "/api/v1/operations/",
-        _body(workspace, "work_item.read", "read-search-bound-work-item", result["workItemReadInput"]),
+        _body(workspace, "work_item.read", "read-search-bound-work-item", result["workItemReadCall"]["input"]),
         format="json",
     )
     assert read.status_code == status.HTTP_200_OK

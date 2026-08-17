@@ -277,9 +277,10 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
             and outcomes[index - 2].get("operationId") == "search_workspace"
         ):
             guidance += (
-                " Use the preceding search_workspace response's workItemReadInput object verbatim as this call's "
-                "complete input; do not reconstruct, translate, or infer project_id or issue_id from targetRef, "
-                "ref, key, title, or workspaceRef."
+                " Call plane_operation with the preceding search_workspace response's workItemReadCall object "
+                "verbatim as the complete tool arguments. This ready-to-call object already contains action, "
+                "operationRef, and the canonical top-level input keys project_id and issue_id; do not wrap it, "
+                "reconstruct it, or infer either UUID from targetRef, ref, key, title, or workspaceRef."
             )
         if operation_id == "work_item.rename" and "W04" in route_checks:
             model_action = "execute_code"

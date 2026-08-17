@@ -401,7 +401,17 @@ _SEARCH_WORKSPACE_RESULT = {
                         "additionalProperties": False,
                         "required": ["project_id", "issue_id"],
                         "properties": {"project_id": _UUID, "issue_id": _UUID},
-                    }
+                    },
+                    "workItemReadCall": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": ["action", "operationRef", "input"],
+                        "properties": {
+                            "action": {"const": "read"},
+                            "operationRef": {"const": "operation:work_item.read"},
+                            "input": _WORK_ITEM_READ_INPUT,
+                        },
+                    },
                 },
             },
         },

@@ -561,7 +561,13 @@ def test_code_mode_search_to_read_preserves_target_and_denies_cross_project(
         )
         assert search.status == "ok", search
         result = next(item for item in search.output["result"]["results"] if item["objectType"] == "work_item")
-        read_input = result["workItemReadInput"]
+        read_call = result["workItemReadCall"]
+        assert read_call == {
+            "action": "read",
+            "operationRef": "operation:work_item.read",
+            "input": result["workItemReadInput"],
+        }
+        read_input = read_call["input"]
 
         authorized = _round_trip(
             server.socket_path,

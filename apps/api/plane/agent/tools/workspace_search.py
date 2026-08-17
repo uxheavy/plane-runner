@@ -68,7 +68,7 @@ class WorkspaceSearchService:
         # deliberately small so a large caller limit cannot create a spill.
         page_limit = min(requested_limit, MAX_SEARCH_ITEMS)
         needle = query.strip()
-        results = []
+        results: list[dict[str, Any]] = []
         results.extend(self._workspace_results(workspace, needle))
         results.extend(self._project_results(workspace, user, needle))
         results.extend(self._work_item_results(workspace, user, needle))
@@ -142,26 +142,39 @@ class WorkspaceSearchService:
             issues = issues.filter(
                 Q(name__icontains=query) | Q(sequence_id__icontains=query) | Q(project__identifier__icontains=query)
             )
-        return [
-            {
-                "objectType": "work_item",
-                "ref": _reference("work-item", issue.id),
-                "title": issue.name,
-                "workspaceRef": _reference("workspace", workspace.id),
-                "projectRef": _reference("project", issue.project_id),
-                "key": issue.sequence_id,
-                # Preserve the typed search result while providing the exact
-                # canonical input shape for the existing authorized gateway
-                # read. The gateway still re-checks live project membership.
-                "workItemReadInput": {
-                    "project_id": str(issue.project_id),
-                    "issue_id": str(issue.id),
-                },
-            }
-            for issue in issues.select_related("project")
+        results = []
+        for issue in (
+            issues.select_related("project")
             .only("id", "name", "sequence_id", "project_id")
             .order_by("name", "id")[:MAX_SEARCH_ITEMS]
-        ]
+        ):
+            read_input = {
+                "project_id": str(issue.project_id),
+                "issue_id": str(issue.id),
+            }
+            results.append(
+                {
+                    "objectType": "work_item",
+                    "ref": _reference("work-item", issue.id),
+                    "title": issue.name,
+                    "workspaceRef": _reference("workspace", workspace.id),
+                    "projectRef": _reference("project", issue.project_id),
+                    "key": issue.sequence_id,
+                    # Preserve the typed search result while providing the exact
+                    # canonical input shape for the existing authorized gateway
+                    # read. The gateway still re-checks live project membership.
+                    "workItemReadInput": read_input,
+                    # The model-facing Plane tool is one typed operation envelope.
+                    # Return that envelope ready to call so callers never rebuild
+                    # an authorization-sensitive target from display references.
+                    "workItemReadCall": {
+                        "action": "read",
+                        "operationRef": "operation:work_item.read",
+                        "input": read_input,
+                    },
+                }
+            )
+        return results
 
     @staticmethod
     def _module_results(workspace: Workspace, user: Any, query: str) -> list[dict[str, Any]]:

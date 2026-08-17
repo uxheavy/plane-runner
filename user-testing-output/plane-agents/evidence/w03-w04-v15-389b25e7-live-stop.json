@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "plane-agent-evidence/w03-w04-live-stop/v1",
+  "status": "READY_WITH_COMMIT",
+  "candidate": {
+    "source": "2d349c29353fc80dc0ef181cea9736b9eef8e829",
+    "wrapper": "389b25e76375d105120962ea548f8b8faaef04c3",
+    "manifestSha256": "474f1898b1abedb29925e57cea7356434215de3484902dd8fa8234b3649c0a4a",
+    "descriptorSha256": "d32092431b2d5f5ac1cc52a5b8ef5c2e1a8433d86af2b39291e3a0afca873c8f",
+    "apiImage": "plane-agent-api:g4-v15-2d349c29@sha256:fa5aa7aabe13aa528bb15a4c10effb69c40ed98c88de88d795f23acce88f3ab1",
+    "runtimeImage": "plane-agent-runtime:hermes-6c460f10-g4-v15-2d349c29@sha256:4f1d52367fb2175e23a9e8c278f5a3edf2795bce99cd698cca6db5194182f559",
+    "hermesCommit": "6c460f10fe215718dce36dd73cda94155a9a34f8",
+    "mcpCommit": "c04974ed6624f17b41e63ef8182661929e77e0d3",
+    "sdkCommit": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
+  },
+  "liveAttempt": {
+    "count": 1,
+    "runRef": "run:2c576840-5fd2-4432-84a4-07d5712b416e",
+    "invocationRef": "invocation:95c8a5a1-70a6-4ef0-8fe1-7db94212225e",
+    "runState": "succeeded",
+    "invocationState": "succeeded",
+    "runtimeExit": { "kind": "completed", "finalSequence": 17 },
+    "provider": {
+      "name": "openai-codex",
+      "model": "gpt-5.6-luna",
+      "reasoning": "xhigh",
+      "fallbackAllowed": false,
+      "attempts": 8,
+      "completed2xx": 8,
+      "other": 0
+    },
+    "operations": {
+      "search_workspace": { "success": 1 },
+      "work_item.read": { "unavailable": 1, "errorCode": "VALIDATION_ERROR" },
+      "work_item.rename": { "success": 0 },
+      "agent.outcome.evaluate": { "denied": 1, "errorCode": "NOT_AUTHORIZED" },
+      "agent.outcome.submit": { "success": 1 },
+      "agent.outcome.publish": { "success": 1 }
+    },
+    "effects": {
+      "semanticMutations": 0,
+      "mutationReplays": 0,
+      "duplicateMutations": 0,
+      "outcomeSubmissions": 1,
+      "appliedPublications": 1,
+      "visibleTerminalEvents": 1
+    },
+    "resultSha256": "fcdce831806712e6d371e613935151c711d984fe3f39cf3395e75adb52e16a4b",
+    "stopReason": "First genuine scenario failure: assigned work_item.read did not accept the model-composed input, so Code Mode, semantic mutation, and replay were ineligible.",
+    "retryCount": 0,
+    "fallbackCount": 0,
+    "replayCount": 0
+  },
+  "diagnosis": {
+    "sharedCorrelation": "Independent W03/W04 and W07/W08 runs both searched successfully but mis-bound the assigned work_item.read target as VALIDATION_ERROR and NOT_AUTHORIZED respectively.",
+    "rootCause": "The model-facing search handoff exposed canonical UUID input but still required the model to reconstruct the generic plane_operation envelope.",
+    "boundedEvidenceLimit": "The retained receipt does not contain raw provider arguments; the shared root-cause conclusion is an inference from the two independent typed failure outcomes.",
+    "fix": "search_workspace now returns schema-declared workItemReadCall arguments ready for the existing plane_operation tool, and compiled route guidance requires copying that complete object without reconstruction.",
+    "authorizationChanged": false,
+    "parallelToolAdded": false,
+    "rawIdentifiersRetained": false
+  },
+  "providerFreeProof": {
+    "scenarioAndLeaseTests": 63,
+    "gatewayHostCodeModeTests": 10,
+    "extendedContractTests": 173,
+    "failed": 0,
+    "providerAttempts": 0,
+    "providerEffects": 0
+  },
+  "cleanup": {
+    "liveLabeledContainers": 0,
+    "liveLabeledNetworks": 0,
+    "liveLabeledVolumes": 0,
+    "capacityLeasePresent": false
+  }
+}

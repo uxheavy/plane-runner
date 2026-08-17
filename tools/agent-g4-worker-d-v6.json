@@ -38,7 +38,7 @@
         "targetRef": "fixture:assigned-work-item",
         "objective": "Prove one real artifact and evidence item attach to one OutcomeSubmission, explicit publication creates one visible terminal product event, and owner readback correlates all records.",
         "acceptanceCriteria": [
-          "Call search_workspace once and pass its returned workItemReadInput unchanged to one work_item.read.",
+          "Call search_workspace once and pass its returned workItemReadCall unchanged as the complete plane_operation arguments for one work_item.read.",
           "Use the next model tool call for one restricted execute_code module that calls host.call_plane_operation with work_item.rename through the shared gateway.",
           "Attempt agent.outcome.evaluate as this Worker and require exact NOT_AUTHORIZED.",
           "Submit exactly one outcome with exactly one real artifact and exactly one evidence item, then publish it exactly once.",
