@@ -3294,3 +3294,63 @@ records this diagnosis without changing the retained receipts.
 - Cleanup proof: shared capacity marker absent and runner-labeled containers,
   volumes, and networks all zero. W07/W08 remain dirty; root owns coordination
   of a provider-free search-to-read authorization handoff diagnosis.
+
+## Wave 0CM — immutable v16 W07/W08 assigned-read validation stop — 2026-08-18
+
+- Exact candidate: wrapper `be7992f2e57a70779e3d3845a5462316c686d819`,
+  sole parent/source `4e2b85384b85ecff822cd1136a668258dc76a90a`,
+  manifest SHA-256
+  `b876b45699203c55b463fb7b86cff3f3ece13aaa7e246a4ecda80c395adcf857`.
+  API/runtime digests were
+  `sha256:46b902baec80d92c6c318061b9fdcc40858d3b9a39f97749f32ace46dc321f52`
+  and
+  `sha256:68c23fa2cb03b21ca126dcd18a39c87123b4ec78cc5f1bfcc3dcedf507d68f1a`.
+- Seven env files were copied byte-for-byte without inspection; `setup.sh` was
+  not run. Scenario/config validators passed and focused provider-free checks
+  passed `193` before capacity acquisition.
+- Exactly one fresh assignment used `openai-codex/gpt-5.6-luna`, xhigh,
+  fallback disabled. Run `f8ec282d-1d3c-4774-a4c4-25d3ab974199` and invocation
+  `invocation:00948df5-bc3b-4889-8fa3-b731c6e3e17c` reached seven upstream
+  `2xx` attempts. Search succeeded, but the assigned `work_item.read` returned
+  `VALIDATION_ERROR`; the scenario gate recorded `operation:work_item.read` as
+  the sole failed predicate with actual outcome `not_observed`.
+- S00 nevertheless passed: one applied publication and one visible terminal
+  bound outcome `outcome-submission:7e6541ae-69f1-41df-afcc-23896250d76a` to
+  product event `product-event:d83c784f-e5cc-47bc-a3ab-04026d8e817f` and the
+  run/invocation. This is partial lifecycle evidence only; W07/W08 remain dirty
+  because artifact exactness, complete readback/isolation, and replay were not
+  proven.
+- Provider counts: attempts `7`, `2xx=7`, all other status classes `0`, fallback
+  `false`, retries `0`, replay `0`. No second primary or provider-disabled replay
+  ran.
+- Durable redacted extract:
+  `user-testing-output/plane-agents/evidence/w07-w08-v16-work-item-read-validation-stop.json`,
+  SHA-256 `246563693e0e373945bac80d9d2c61a36f2c6200dac63bb749d7a792d7adc1b4`.
+  Raw result SHA-256 is
+  `b6e25d8e99c2563c8ca85cfabcf4e238d5d64861cad6bc212f6f49c845dac90c`.
+- Cleanup: zero runner-labeled containers, volumes, and networks. The runner's
+  dead-owner capacity marker was recovered via the repository's metadata-bound
+  compare-and-quarantine helper; the marker was absent afterward. Raw credentials,
+  prompts, model output, operation arguments, and provider text were not tracked.
+
+## Wave 0CN — v16 W07/W08 provider-free typed-envelope boundary repair
+
+- No live/provider work was performed. The retained v16 result is bounded and
+  has no raw `plane_operation` arguments, so the failure is not attributed to a
+  specific malformed field. The canonical comparison was deterministic: the
+  search result and Hermes native tool both accept `action`, `operationRef`,
+  `input`, while Plane's gateway serializer accepts only `project_id` and
+  `issue_id` inside `input`.
+- The route guidance now states that exact envelope contract and rejects common
+  wrapping/snake_case reconstruction at the model-facing instruction seam. A
+  Plane contract regression passes the complete call through the real host
+  wire parser and gateway; local execution is environment-blocked by missing
+  `celery`. The deterministic Hermes parser probe passed.
+- Focused provider-free scenario/support tests passed `82`; `git diff --check`
+  passed; gitleaks scanned 12,791 commits and reported no leaks. Durable
+  redacted evidence:
+  `user-testing-output/plane-agents/evidence/w07-w08-v16-work-item-read-contract-diagnosis.json`
+  SHA-256 `bbb542aa192ce89d175293adc5d17a68f1570e78ad708cc9d21b988d0795d54e`.
+- Provider attempts, Compose runs, replays, and refreezes: `0`. W07/W08 remain
+  unproven; root must integrate this lane commit before any future candidate
+  or live assignment.

@@ -647,3 +647,23 @@ Run `f921904f-ac18-43bf-b363-c1cd1cb067cb` and invocation
 Wave 0CL. Provider counts were `2xx=8`, `4xx=0`, `5xx=0`, `transport=0`,
 fallback `false`, retries `0`, replay `0`. Cleanup verified no capacity marker
 and zero runner-labeled containers, volumes, and networks.
+
+## UT-062 — immutable v16 W07/W08 assigned-read validation stop — Wave 0CM — 2026-08-18
+
+| Issue | Severity | Persona / route | Durable evidence | Root cause / bounded disposition | Retest / status |
+| ----- | -------- | --------------- | ---------------- | ------------------------------ | ---------------- |
+| UT-062 | blocker | Maya / W07-W08 one fresh serialized v16 assignment | `w07-w08-v16-work-item-read-validation-stop.json` SHA-256 `246563693e0e373945bac80d9d2c61a36f2c6200dac63bb749d7a792d7adc1b4`; raw bounded result SHA-256 `b6e25d8e99c2563c8ca85cfabcf4e238d5d64861cad6bc212f6f49c845dac90c`; manifest SHA-256 `b876b45699203c55b463fb7b86cff3f3ece13aaa7e246a4ecda80c395adcf857`; scenario SHA-256 `8afe382ceb3467735d5b5e7a525ca50af332ca7b36d04c536e36d4f8042acd9c` | The immutable v16 assignment reached seven completed upstream `2xx` attempts. Search succeeded, but the assigned `work_item.read` was rejected at the generic operation validation boundary with `VALIDATION_ERROR` and was not observed as a successful route operation. The integrated `workItemReadCall` guidance was present; the bounded result retains no raw arguments or target digest, so no narrower cause is asserted. | Exactly one applied publication and one visible terminal were correlated, but artifact exactness, complete W08 readback/isolation, and zero-delta replay remain unproven. No retry, fallback, second primary, or replay. W07/W08 remain dirty pending provider-free diagnosis. / open |
+
+Run `f8ec282d-1d3c-4774-a4c4-25d3ab974199`, invocation
+`invocation:00948df5-bc3b-4889-8fa3-b731c6e3e17c`, outcome
+`outcome-submission:7e6541ae-69f1-41df-afcc-23896250d76a`, and product event
+`product-event:d83c784f-e5cc-47bc-a3ab-04026d8e817f` are the bounded v16 refs.
+Provider counts were `2xx=7`, all other status classes `0`, fallback `false`,
+retries `0`, replay `0`. Cleanup recovered the runner's dead-owner capacity
+marker through the repository helper and verified zero labeled Docker resources.
+
+## UT-063 — v16 provider-free typed-envelope boundary repair — 2026-08-18
+
+| Issue | Severity | Persona / route | Durable evidence | Root cause / bounded disposition | Retest / status |
+| ----- | -------- | --------------- | ---------------- | ------------------------------ | --------------- |
+| UT-063 | repair | Maya / W07-W08 search-to-read handoff | `w07-w08-v16-work-item-read-contract-diagnosis.json` SHA-256 `bbb542aa192ce89d175293adc5d17a68f1570e78ad708cc9d21b988d0795d54e`; prior v16 extract SHA-256 `246563693e0e373945bac80d9d2c61a36f2c6200dac63bb749d7a792d7adc1b4` | Provider-free comparison confirms the canonical `workItemReadCall` fields exactly match Hermes `plane_operation` fields, while its nested input exactly matches Plane `work_item.read` fields. The retained live result contains no malformed model envelope, so no unsupported field-level attribution is made. The smallest lane-owned repair makes the model-facing route guidance explicitly require the three native top-level keys and two nested typed keys; authorization and gateway seams are unchanged. | `READY_WITH_COMMIT` after focused scenario/support `82 passed`, deterministic Hermes envelope parser probe passed, diff check passed, and gitleaks reported no leaks. No provider, Compose, replay, refreeze, or second assignment. W07/W08 remain unproven pending a separately authorized candidate. / ready |

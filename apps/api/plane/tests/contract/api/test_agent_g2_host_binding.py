@@ -569,6 +569,21 @@ def test_code_mode_search_to_read_preserves_target_and_denies_cross_project(
         }
         read_input = read_call["input"]
 
+        # Exercise the exact model-facing workItemReadCall through the real
+        # host wire parser and gateway. The native tool accepts the envelope's
+        # top-level keys and forwards only its typed input to work_item.read.
+        bound_read = _round_trip(
+            server.socket_path,
+            _call(
+                **common,
+                action=read_call["action"],
+                operation_ref=read_call["operationRef"],
+                input=read_call["input"],
+            ),
+        )
+        assert bound_read.status == "ok", bound_read
+        assert bound_read.output["result"]["work_item"]["id"] == str(gateway_issue.id)
+
         authorized = _round_trip(
             server.socket_path,
             _code_call(**common, source=read_source, input_data=read_input),

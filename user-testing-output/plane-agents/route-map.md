@@ -394,6 +394,48 @@ replay. W03-W08 remain dirty; UT-042 is open.
 - W05 and W06 remain dirty; this is provider-free boundary evidence, not route
   closure.
 
+## Wave 0CN — v16 provider-free typed-envelope boundary repair — 2026-08-18
+
+- The retained v16 live stop does not contain the malformed model envelope, so
+  no field-level cause is attributed from the `VALIDATION_ERROR`. Deterministic
+  contract comparison shows that `workItemReadCall` and Hermes `plane_operation`
+  both use top-level `action`, `operationRef`, and `input`; Plane's
+  `work_item.read` input remains exactly `project_id` and `issue_id`.
+- Lane-owned repair strengthens the existing ordered route guidance to require
+  those exact keys, forbid wrapping the call under `input`, and forbid snake_case
+  reconstruction. A real Django-backed host/gateway regression was added to
+  pass the envelope unchanged; the local checkout could not execute it because
+  `celery` is unavailable. The standalone Hermes parser probe passed.
+- Durable redacted evidence is
+  `user-testing-output/plane-agents/evidence/w07-w08-v16-work-item-read-contract-diagnosis.json`,
+  SHA-256 `bbb542aa192ce89d175293adc5d17a68f1570e78ad708cc9d21b988d0795d54e`.
+  Focused scenario/support tests passed `82`; gitleaks reported no leaks.
+  Provider attempts, Compose runs, replays, and refreezes were `0`.
+- W07/W08 remain `dirty`; no live rerun is authorized by this provider-free
+  repair. The Operator correlation had catalog search/describe absent,
+  `search_workspace` success, and `work_item.read` `VALIDATION_ERROR`; no
+  cross-lane ModuleNotFoundError digest match was observed.
+
+## Wave 0CM — immutable v16 W07/W08 assigned-read validation stop — 2026-08-18
+
+- W07 and W08 remain `dirty`. One fresh capacity-gated assignment used wrapper
+  `be7992f2e57a70779e3d3845a5462316c686d819`, source
+  `4e2b85384b85ecff822cd1136a668258dc76a90a`, and manifest SHA-256
+  `b876b45699203c55b463fb7b86cff3f3ece13aaa7e246a4ecda80c395adcf857`.
+- Run `f8ec282d-1d3c-4774-a4c4-25d3ab974199`; invocation
+  `invocation:00948df5-bc3b-4889-8fa3-b731c6e3e17c`. Seven provider attempts
+  completed `2xx` with fallback disabled. Search succeeded once, but the
+  assigned `work_item.read` returned `VALIDATION_ERROR` and the route gate
+  recorded it as not observed.
+- The lifecycle separately proved one applied publication, one visible terminal,
+  and exact run/invocation/outcome/product-event binding. Because the assigned
+  read failed, artifact exactness, transcript-only final text, complete W08
+  API/CLI/isolation readback, and zero-delta replay remain unproven.
+- Durable redacted evidence:
+  `user-testing-output/plane-agents/evidence/w07-w08-v16-work-item-read-validation-stop.json`,
+  SHA-256 `246563693e0e373945bac80d9d2c61a36f2c6200dac63bb749d7a792d7adc1b4`.
+  No retry or replay ran. Cleanup is exact-zero after bounded stale-lease recovery.
+
 ## Wave 0CL — immutable v15 W07/W08 live product stop — 2026-08-18
 
 - W07 and W08 remain `dirty`. One fresh capacity-gated assignment used wrapper
