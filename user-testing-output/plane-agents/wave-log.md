@@ -3696,3 +3696,32 @@ not a provider rerun.
   provider-disabled replay. Cleanup verified no capacity lease and zero runner
   containers, volumes, or networks. W03/W04 remain dirty; no candidate mutation
   was made.
+## Wave 0CL — exact v20 W07/W08 live stop — 2026-08-18
+
+- Candidate wrapper `2ed2a991c967230a18da4ef6f870a2605dec06a6`, sole parent
+  source `278182149efa0cdddab88b05e27d6445162f0c9a`, API digest
+  `sha256:38c48791d38ab15f4201a24d272f9202367c1368e96ecd31bab5587f599db2ca`,
+  runtime digest
+  `sha256:7a541114d6f0fdbefad76fa4999e9fe977f02bf7979915f96c918338bc1a3ecc`,
+  and manifest SHA-256
+  `76c10c7f48522f18c924338c79a5652b351a458e19efadcbb44b8f792a2db23c`.
+- Exactly one fresh serialized W07/W08 primary used
+  `openai-codex/gpt-5.6-luna` xhigh with fallback disabled. Run
+  `3aad14fd-31c4-4cd9-ad76-7298d593652b`, invocation
+  `invocation:b418085d-3e7f-45ce-a004-ac606f71959a`, and scenario SHA-256
+  `a03cedc4b644b8a6633cedc078c9770ec674e1aeeca4ddeba93daf1192403323` are
+  bound in the durable redacted extract
+  `user-testing-output/plane-agents/evidence/w07-w08-v20-live-stop.json`,
+  SHA-256 `3526c781aac463b2b03a6d2ed4addbed564169f091a9fa6a7691b53dfa82efe3`.
+- Provider attempts/effects: `8` completed upstream `2xx`, fallback `false`,
+  replay `0`. Search succeeded once; assigned work-item read failed closed
+  with `NOT_AUTHORIZED` and targetDigest
+  `3ec3d5e5a927f2204190a7ee58c3907fdc1a55ee9b3d5be3a75a8a473fdd9e20`.
+  Outcome submission and one applied publication terminal were observed, but
+  artifact exactness, mutation, authorized readback, isolation denial, and
+  replay proof were not reached.
+- No retry, fallback, or provider-disabled replay was made. The raw bounded
+  result SHA-256 is
+  `1677f366e2e28e753548cc19ed1f1c510923c8bdf0226113fcb509dcc85f2640`;
+  raw payloads were not durably retained. W07/W08 remain dirty/unproven and
+  require provider-free diagnosis of the assigned-read authorization seam.

@@ -537,6 +537,12 @@ the existing W07/W08 issue records:
 No Manager, W05/W06, Operator, or existing W07/W08 issue was closed by this
 merge. No further provider attempt is authorized by this integration.
 
+## Worker W07/W08 v20 live disposition — 2026-08-18
+
+| Issue | Severity | Persona / route | Durable evidence | Root cause / bounded disposition | Retest / status |
+| ----- | -------- | --------------- | ---------------- | ------------------------------- | ---------------- |
+| UT-061 | blocker | Maya / W07-W08 fresh v20 serialized assignment | `w07-w08-v20-live-stop.json` SHA-256 `3526c781aac463b2b03a6d2ed4addbed564169f091a9fa6a7691b53dfa82efe3`; raw bounded result SHA-256 `1677f366e2e28e753548cc19ed1f1c510923c8bdf0226113fcb509dcc85f2640`; manifest SHA-256 `76c10c7f48522f18c924338c79a5652b351a458e19efadcbb44b8f792a2db23c` | One fresh assignment reached eight completed upstream `2xx` attempts. `search_workspace` succeeded, but the assigned `work_item.read` failed closed with `NOT_AUTHORIZED`; artifact, mutation, authorized readback, isolation controls, and replay proof were not reached. | No retry, fallback, replay, or provider-disabled replay. W07/W08 remain dirty/unproven; await provider-free owner diagnosis. / open |
+
 ## Worker W07/W08 live disposition — Wave 0CG — 2026-08-17
 
 | Issue | Severity | Persona / route | Durable evidence | Root cause / bounded disposition | Retest / status |

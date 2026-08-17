@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "plane-agent-g4/w07-w08-live-stop/v1",
+  "lane": "W07-W08",
+  "status": "failed",
+  "candidate": {
+    "source": "278182149efa0cdddab88b05e27d6445162f0c9a",
+    "wrapper": "2ed2a991c967230a18da4ef6f870a2605dec06a6",
+    "manifestSha256": "76c10c7f48522f18c924338c79a5652b351a458e19efadcbb44b8f792a2db23c",
+    "apiImage": "plane-agent-api:g4-v20-2781821",
+    "apiDigest": "sha256:38c48791d38ab15f4201a24d272f9202367c1368e96ecd31bab5587f599db2ca",
+    "runtimeImage": "plane-agent-runtime:hermes-6c460f10-g4-v20-2781821",
+    "runtimeDigest": "sha256:7a541114d6f0fdbefad76fa4999e9fe977f02bf7979915f96c918338bc1a3ecc",
+    "hermes": "6c460f10fe215718dce36dd73cda94155a9a34f8",
+    "mcp": "c04974ed6624f17b41e63ef8182661929e77e0d3",
+    "sdk": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
+  },
+  "provider": {
+    "name": "openai-codex",
+    "model": "gpt-5.6-luna",
+    "reasoning": "xhigh",
+    "fallback": false,
+    "attemptCount": 8,
+    "completedCount": 8,
+    "statusClasses": ["2xx", "2xx", "2xx", "2xx", "2xx", "2xx", "2xx", "2xx"],
+    "replayCount": 0
+  },
+  "lifecycle": {
+    "runRef": "3aad14fd-31c4-4cd9-ad76-7298d593652b",
+    "invocationRef": "invocation:b418085d-3e7f-45ce-a004-ac606f71959a",
+    "runState": "succeeded",
+    "invocationState": "succeeded",
+    "failurePhase": "api-invocation",
+    "errorClass": "RuntimeError",
+    "reason": "unavailable",
+    "runtimeExit": "completed",
+    "terminalKind": "outcome_submission",
+    "terminalCode": "unavailable",
+    "outcomeRef": "outcome-submission:90ef7b93-e3d2-4a05-b206-c17b4c242ce9",
+    "productEventRef": "product-event:19732ec4-597a-4a25-8be4-50be87d6c35a",
+    "publicationAppliedCount": 1,
+    "visibleOutcomeTerminalCount": 1
+  },
+  "operations": [
+    {"operationId": "search_workspace", "status": "success", "count": 1},
+    {"operationId": "work_item.read", "status": "denied", "errorCode": "NOT_AUTHORIZED", "count": 1, "targetDigest": "3ec3d5e5a927f2204190a7ee58c3907fdc1a55ee9b3d5be3a75a8a473fdd9e20"},
+    {"operationId": "catalog.search", "status": "absent", "count": 0},
+    {"operationId": "catalog.describe", "status": "absent", "count": 0},
+    {"operationId": "agent.outcome.evaluate", "status": "denied", "errorCode": "NOT_AUTHORIZED", "count": 1},
+    {"operationId": "agent.outcome.submit", "status": "success", "count": 1},
+    {"operationId": "agent.outcome.publish", "status": "success", "count": 1}
+  ],
+  "scenario": {
+    "descriptorSha256": "a03cedc4b644b8a6633cedc078c9770ec674e1aeeca4ddeba93daf1192403323",
+    "commissionId": "w07-w08-artifact-publication-readback"
+  },
+  "effects": {
+    "artifactProof": "not_proven",
+    "workItemRenameProof": "not_reached",
+    "authorizedReadback": "not_proven",
+    "crossWorkspaceDenial": "not_reached",
+    "providerDisabledReplay": "ineligible_not_run",
+    "fallbackUsed": false
+  },
+  "cleanup": {
+    "w07LeaseReleased": true,
+    "w07OwnedResources": "runner-cleanup-completed",
+    "sharedActiveResources": "other-lane-w03-w04-left-untouched"
+  },
+  "rawResultSha256": "1677f366e2e28e753548cc19ed1f1c510923c8bdf0226113fcb509dcc85f2640",
+  "semanticDigest": "607c8e0421a76d9af79640eebfd15a5078b112ecf9c35a0a5cb26324164fff38",
+  "rawPayloadsRetained": false
+}

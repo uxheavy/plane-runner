@@ -654,6 +654,26 @@ The Manager lane fast-forwarded to source `d4316b79272254b61d038a65cba6a9860a6af
 `user-testing-output/plane-agents/evidence/manager-m01-m08-provider-free-ready-20260818-d431.json`, SHA-256 `38499ca381ddfe86d4a7aff6dad6f554150f20a48c72a2790d9155d7bae9c260`.
 
 The tested Plane Agent policy remains `openai-codex/gpt-5.6-luna`, xhigh, fallback disabled. Provider calls and live-runner attempts are `0`; Compose/provider work was not entered. The shared candidate publication and serialized live release remain pending root integration.
+## W07/W08 v20 live stop — 2026-08-18
+
+- Candidate wrapper `2ed2a991c967230a18da4ef6f870a2605dec06a6` is the sole
+  child of source `278182149efa0cdddab88b05e27d6445162f0c9a`; manifest SHA-256
+  is `76c10c7f48522f18c924338c79a5652b351a458e19efadcbb44b8f792a2db23c`.
+- One fresh W07/W08 primary used the pinned `openai-codex/gpt-5.6-luna`
+  xhigh policy with fallback disabled. Run
+  `3aad14fd-31c4-4cd9-ad76-7298d593652b`, invocation
+  `invocation:b418085d-3e7f-45ce-a004-ac606f71959a`, and scenario
+  `w07-w08-artifact-publication-readback` are retained in the bounded extract
+  `user-testing-output/plane-agents/evidence/w07-w08-v20-live-stop.json`.
+- `search_workspace` succeeded once, but assigned `work_item.read` returned
+  `NOT_AUTHORIZED` once with targetDigest
+  `3ec3d5e5a927f2204190a7ee58c3907fdc1a55ee9b3d5be3a75a8a473fdd9e20`.
+  Artifact, mutation, authorized readback, isolation, and replay proof are not
+  claimed. One outcome and one applied publication terminal were observed
+  before the scenario stop.
+- Provider counts were `8x2xx`, fallback `false`, replay `0`. No retry,
+  fallback, or provider-disabled replay was made. W07/W08 remain dirty and
+  unproven; provider-free diagnosis owns the assigned-read authorization seam.
 
 ## Wave 0CK — exact v14 W07/W08 authority-window repair — 2026-08-18
 
