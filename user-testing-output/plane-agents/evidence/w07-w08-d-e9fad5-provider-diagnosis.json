@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "plane-agent-g4/provider-free-diagnosis/v1",
+  "status": "provider_free_complete",
+  "source": {
+    "candidateCommit": "e9fad58037d539a65b453bdc64fecc387c209fb7",
+    "evidenceSha256": "dc8f39c19d8cb6a041b8b606ab150eb1ac33c9954cd7aacae6667da085528528",
+    "rawResult": {
+      "mode": "0600",
+      "sizeBytes": 5553,
+      "sha256": "00fe2c436cac264f23aa4bf57957ddccf0151287a3653088e68a193d1f65fa5a"
+    }
+  },
+  "failure": {
+    "phase": "api-invocation",
+    "errorClass": "RuntimeError",
+    "exitCode": 1,
+    "reasonCode": "runtime_error",
+    "reasonPhase": "runtime_process",
+    "reasonDetail": "process_exit",
+    "reasonSubreason": "runtime_execution_failed"
+  },
+  "providerAttempt": {
+    "count": 1,
+    "sequence": 1,
+    "phase": "failed",
+    "upstreamInitiated": true,
+    "statusClass": "error",
+    "errorCode": "provider_error",
+    "fallbackUsed": false
+  },
+  "lifecycle": {
+    "runtimeExitKind": "failed",
+    "runtimeExitFailureCode": "runtime_error",
+    "runtimeExitFinalSequence": 1,
+    "progressObserved": 2,
+    "planeOperationCount": 0,
+    "artifactCount": 0,
+    "outcomeCount": 0,
+    "publicationCount": 0,
+    "visibleTerminalProductEventCount": 0,
+    "ordinaryFinalTextObserved": false,
+    "transcriptEvidenceObserved": false,
+    "readbackObserved": false
+  },
+  "providerFreeChecks": {
+    "hermesRelayFocused": {
+      "status": "passed",
+      "passed": 6,
+      "deselected": 8
+    },
+    "failureProjectionRegression": {
+      "status": "passed",
+      "passed": 2
+    },
+    "dShapeRequestProbe": {
+      "status": "passed",
+      "terminal": "completed",
+      "nativePathShape": "matched",
+      "requestSchemaValid": true,
+      "toolSchemaValid": true,
+      "storeFalse": true,
+      "relaySecretAbsent": true
+    },
+    "responseClassification": {
+      "success": "passed",
+      "outcomeUnknown": "passed_no_fallback",
+      "midstreamFailure": "passed_no_fallback"
+    }
+  },
+  "diagnosticBoundary": {
+    "boundedErrorIsCoarsened": true,
+    "freshAssignmentSafe": false,
+    "providerUsePerformed": false,
+    "replayPerformed": false
+  }
+}
