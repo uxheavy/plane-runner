@@ -2934,3 +2934,24 @@ records this diagnosis without changing the retained receipts.
 - No Manager route pass, provider attempt, retry, fallback, or blind
   `outcome_unknown` replay is claimed. M01-M08 remain untested at the
   provider-backed route level and the capacity gate remains closed.
+
+## Worker W07/W08 fresh-assignment reconciliation — 2026-08-17
+
+- The exact Worker/W07 head `81023308257903d09582f2190d82c73f93368bb5` is
+  integrated. Its provider-free config, descriptor, runtime/DB, capacity, and
+  focused `163/163` gates passed before the single authorized assignment.
+- The assignment used the pinned ChatGPT Responses route with
+  `openai-codex/gpt-5.6-luna` xhigh and fallback disabled. It stopped at
+  `api-invocation` after one upstream-initiated attempt with bounded
+  `provider_error`, `statusClass=4xx`, and `reasonSubreason=auth`.
+- No Plane operation receipt, audit, artifact, evidence item, outcome,
+  publication, product event, ordinary transcript, or W08 readback was
+  observed. No fallback, retry, provider-disabled replay, or blind
+  `outcome_unknown` replay occurred. W07/W08 remain dirty and unproven.
+- Durable result, redacted extract, and decision receipt are retained at
+  `user-testing-output/plane-agents/evidence/w07-w08-d-81023308-result.json`,
+  `w07-w08-d-81023308-failure-extract.json`, and
+  `w07-w08-d-81023308-decisions.tsv`; exact hashes are in the issue ledger.
+  The fresh-assignment decision is `NO_GO` pending authoritative external
+  acceptance/credential disposition plus clean candidate, runtime/DB, and
+  capacity gates.

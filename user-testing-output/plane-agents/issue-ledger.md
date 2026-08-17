@@ -523,3 +523,16 @@ They are provider-free readiness evidence, do not replace the existing
 W05/W06 or W07/W08 issue IDs, and do not close the Manager route. M01-M08
 remain provider-backed pending; no retry, replay, or new provider attempt is
 authorized by this integration.
+
+## Worker W07/W08 reconciliation — 2026-08-17
+
+The exact Worker/W07 evidence is integrated without reopening or replacing
+the existing W07/W08 issue records:
+
+| Issue | Severity | Persona / routes | Durable evidence | Root cause / bounded disposition | Retest / status |
+| ----- | -------- | ---------------- | ---------------- | ------------------------------- | --------------- |
+| UT-054 | decision | Maya / W07-W08 fresh-assignment gate | `user-testing-output/plane-agents/evidence/w07-w08-fresh-assignment-gate-358de27c.json` SHA-256 `7ee48318fd710596492a16704e384a47b81688d179862e79d70d6dc9f194ea9f` | Provider-free request-shape and bounded `reasonSubreason` checks passed; the prior terminal 4xx remains an unresolved external acceptance/credential disposition. | `NO_GO`; exactly one new assignment is permitted only after external disposition, clean refreeze, and non-vacuous gates. Never replay the prior invocation. / open |
+| UT-055 | blocker | Maya / W07-W08 fresh serialized D commission | `user-testing-output/plane-agents/evidence/w07-w08-d-81023308-failure-extract.json` SHA-256 `82c45b9e9fb1d6251c6b40a0b4dc0c71ac43fcd9eeffabf66ea788adbe1703ca`; bounded result SHA-256 `cc174a868b4e38620976ee00e47e63a1fd12dc3f12375625c0443eb690ef3bfe`; decisions SHA-256 `207c3cedd8284957e4de6cd0df15806a6c95d6f15e8bd6edf50e3a5254c0c3f4` | One fresh candidate-bound assignment reached the authorized route and stopped on the first upstream `provider_error` with `statusClass=4xx` and `reasonSubreason=auth`; provider authorization remains external. | W07/W08 remain dirty/unproven; no fallback, retry, blind replay, or provider-disabled replay. / open |
+
+No Manager, W05/W06, Operator, or existing W07/W08 issue was closed by this
+merge. No further provider attempt is authorized by this integration.
