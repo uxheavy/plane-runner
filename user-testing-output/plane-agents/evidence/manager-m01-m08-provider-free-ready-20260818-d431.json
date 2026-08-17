@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "plane.agent-manager-readiness/v1",
+  "status": "READY_NO_PATCH",
+  "lane": "Manager M01-M08",
+  "source": {
+    "requestedCandidate": "d4316b79272254b61d038a65cba6a9860a6afeeb",
+    "reconciliation": "fast-forward from e9281196b8e7a89466155f66c0d4d3bafdc95d6f",
+    "laneOwnedSourceChanges": 0,
+    "savedWorkflowProduct": false
+  },
+  "freshProviderFreeChecks": {
+    "managerAndCapacityContracts": "8 passed, 175 deselected",
+    "managerScenarioContracts": "7 passed, 50 deselected",
+    "liveResultAndCapacitySupport": "16 passed",
+    "directTransportProbe": "transport-boundary=passed remote-selection=passed fail-closed-cases=2",
+    "hostUnitImport": {
+      "status": "setup_blocked",
+      "reason": "host Python environment lacks celery"
+    },
+    "containerUnitProbe": {
+      "status": "setup_blocked",
+      "reason": "pytest autouse database bootstrap could not resolve test-db"
+    }
+  },
+  "routeEvidence": {
+    "priorDurableReceipt": "manager-m01-m08-provider-free-receipt.json",
+    "priorDurableReceiptSha256": "f1708324491a15274062c3a2632622598c68b766ffde2796e2df9576225cd9e5",
+    "priorReceiptCandidate": "424479fad17cc2fdd0b58ef27c51bee56b8f7d91",
+    "freshRouteExecution": "not_claimed; database-backed lifecycle setup was not available in this batch"
+  },
+  "provider": {
+    "provider": "openai-codex",
+    "model": "gpt-5.6-luna",
+    "reasoning": "xhigh",
+    "fallbackAllowed": false,
+    "calls": 0,
+    "liveRunnerAttempts": 0,
+    "heavyComposeEntered": false,
+    "liveJourneyStarted": false,
+    "stopReason": "batch boundary before shared candidate publication"
+  },
+  "safety": {
+    "requiredEnvFilesCopiedAndCompared": 9,
+    "setupScriptRun": false,
+    "providerSecretSourceContract": "PLANE_G4_PROVIDER_SECRET_SOURCE",
+    "providerSecretSourceRead": false,
+    "rawSecretsTracked": false,
+    "provisionalApiArtifactBuiltBeforeBoundary": true,
+    "provisionalApiArtifactUsedForLive": false,
+    "runtimeArtifactBuilt": false
+  }
+}

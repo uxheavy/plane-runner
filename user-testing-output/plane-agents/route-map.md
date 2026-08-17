@@ -423,6 +423,13 @@ replay. W03-W08 remain dirty; UT-042 is open.
   O01/O03-O09 remain `untested` for exact live closure; this wave is
   `READY_WITH_COMMIT`, not a live route pass.
 
+## Manager M01-M08 provider-free batch readiness — 2026-08-18
+
+The Manager lane fast-forwarded to source `d4316b79272254b61d038a65cba6a9860a6afeeb` with no lane-owned source patch. Fresh provider-free checks passed: Manager/capacity contracts `8 passed`, Manager scenario contracts `7 passed`, live result/capacity support `16 passed`, and the direct transport probe selected `RemoteRuntimeTransport` and failed closed in both mismatched-secret cases. Database-backed lifecycle execution was not claimed because the test service was unavailable in this batch. Durable redacted readiness evidence is
+`user-testing-output/plane-agents/evidence/manager-m01-m08-provider-free-ready-20260818-d431.json`, SHA-256 `38499ca381ddfe86d4a7aff6dad6f554150f20a48c72a2790d9155d7bae9c260`.
+
+The tested Plane Agent policy remains `openai-codex/gpt-5.6-luna`, xhigh, fallback disabled. Provider calls and live-runner attempts are `0`; Compose/provider work was not entered. The shared candidate publication and serialized live release remain pending root integration.
+
 ## Wave 0CJ — exact deeper-corrected W07/W08 live stop — 2026-08-18
 
 - Candidate binding was wrapper `19e514f6024a8b8fa9b563c153f60454d97e8eaf`

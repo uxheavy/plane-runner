@@ -3157,3 +3157,11 @@ records this diagnosis without changing the retained receipts.
   Plane/API/database/CLI/runtime contracts, with capacity lease, trusted host
   credential handling, authorization, lifecycle/replay, budget, ingress,
   concurrency/readback, and cleanup receipts.
+
+## Manager M01-M08 provider-free batch readiness — 2026-08-18
+
+- Source reconciliation: fast-forwarded to `d4316b79272254b61d038a65cba6a9860a6afeeb`; no Manager-owned source fix was required.
+- Fresh provider-free checks: Manager/capacity contracts `8 passed`; Manager scenario contracts `7 passed`; live result/capacity support `16 passed`; direct transport probe `transport-boundary=passed remote-selection=passed fail-closed-cases=2`.
+- The host unit import lacked `celery`, and the isolated container pytest setup could not resolve `test-db`; both are setup boundaries, not product/provider failures. No database-backed lifecycle rerun is claimed.
+- Durable redacted receipt: `user-testing-output/plane-agents/evidence/manager-m01-m08-provider-free-ready-20260818-d431.json`, SHA-256 `38499ca381ddfe86d4a7aff6dad6f554150f20a48c72a2790d9155d7bae9c260`.
+- Policy remained `openai-codex/gpt-5.6-luna`, xhigh, fallback disabled. Provider calls/live-runner attempts `0`; no Compose, live journey, replay, or `outcome_unknown` replay. Status: `READY_NO_PATCH`; root must publish the shared exact candidate before serialized live release.
