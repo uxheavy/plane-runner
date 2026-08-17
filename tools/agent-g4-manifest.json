@@ -3,7 +3,7 @@
   "candidateBinding": {
     "mode": "exact-single-child",
     "acceptedG3Baseline": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
-    "parentCommit": "2d349c29353fc80dc0ef181cea9736b9eef8e829",
+    "parentCommit": "4e2b85384b85ecff822cd1136a668258dc76a90a",
     "candidateCommitSource": "git-head-with-exact-parent",
     "expectedCandidateSource": "external-operator-input:PLANE_G4_EXPECTED_CANDIDATE",
     "rejectDescendants": true
@@ -40,14 +40,14 @@
     "hermesCommit": "6c460f10fe215718dce36dd73cda94155a9a34f8",
     "mcpGitlink": "c04974ed6624f17b41e63ef8182661929e77e0d3",
     "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889",
-    "runtimeImageTag": "plane-agent-runtime:hermes-6c460f10-g4-v15-2d349c29",
-    "runtimeImageDigest": "sha256:4f1d52367fb2175e23a9e8c278f5a3edf2795bce99cd698cca6db5194182f559",
-    "runtimeImageRevision": "2d349c29353fc80dc0ef181cea9736b9eef8e829",
+    "runtimeImageTag": "plane-agent-runtime:hermes-6c460f10-g4-v16-4e2b8538",
+    "runtimeImageDigest": "sha256:68c23fa2cb03b21ca126dcd18a39c87123b4ec78cc5f1bfcc3dcedf507d68f1a",
+    "runtimeImageRevision": "4e2b85384b85ecff822cd1136a668258dc76a90a",
     "runtimeContract": "plane.agent-runtime/v1",
     "apiArtifact": {
-      "imageTag": "plane-agent-api:g4-v15-2d349c29",
-      "imageDigest": "sha256:fa5aa7aabe13aa528bb15a4c10effb69c40ed98c88de88d795f23acce88f3ab1",
-      "sourceRevision": "2d349c29353fc80dc0ef181cea9736b9eef8e829",
+      "imageTag": "plane-agent-api:g4-v16-4e2b8538",
+      "imageDigest": "sha256:46b902baec80d92c6c318061b9fdcc40858d3b9a39f97749f32ace46dc321f52",
+      "sourceRevision": "4e2b85384b85ecff822cd1136a668258dc76a90a",
       "contract": "plane.operation/v1"
     }
   },
@@ -165,7 +165,7 @@
     },
     "rollback": {
       "path": "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json",
-      "sha256": "eeacd5f9c6264547c2a927760d354cf32524efa72bdc20e2c97a7d5a2a72f08d",
+      "sha256": "8b4e5b750790bc72ecc29b8b7e1dc5b68875647fca913f5e9084e15455828fcf",
       "testPath": "plane/tests/contract/api/test_agent_g4_rollback_drill.py",
       "requiredOutputFields": [
         "externalWrites",

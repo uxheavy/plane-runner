@@ -5,21 +5,21 @@ This directory contains the compact execution control surface for the non-UI Pla
 ## Current status
 
 G0 through G3 and the provider-free exact-image G4 checks are complete for the
-current shared integration source `2d349c29353fc80dc0ef181cea9736b9eef8e829`. The
-API artifact is `plane-agent-api:g4-v15-2d349c29` at
-`sha256:fa5aa7aabe13aa528bb15a4c10effb69c40ed98c88de88d795f23acce88f3ab1`;
+current shared integration source `4e2b85384b85ecff822cd1136a668258dc76a90a`. The
+API artifact is `plane-agent-api:g4-v16-4e2b8538` at
+`sha256:46b902baec80d92c6c318061b9fdcc40858d3b9a39f97749f32ace46dc321f52`;
 the runtime artifact is
-`plane-agent-runtime:hermes-6c460f10-g4-v15-2d349c29` at
-`sha256:4f1d52367fb2175e23a9e8c278f5a3edf2795bce99cd698cca6db5194182f559`.
+`plane-agent-runtime:hermes-6c460f10-g4-v16-4e2b8538` at
+`sha256:68c23fa2cb03b21ca126dcd18a39c87123b4ec78cc5f1bfcc3dcedf507d68f1a`.
 Both are bound to Hermes `6c460f10fe215718dce36dd73cda94155a9a34f8`, MCP
 `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The exact-image functional
 red-team and final bootstrap are green provider-free, including verbatim
 search-result-to-read handoff with target-digest correlation, versioned
 assigned-work-item binding with authorized success and out-of-scope denial;
-The durable metadata wrapper is the sole child of the approved source parent;
-the separately authorized live provider-backed W07/W08 prerequisite remains
-pending.
+The durable metadata wrapper is the sole child of the approved source parent.
+W05/W06 are live-clean from their immutable v15 receipt and provider-disabled
+zero-delta replay. W03/W04 and W07/W08 remain dirty pending fresh v16 runs.
 
 S00 Wave 0AT passed at Plane
 `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with one fresh GPT-5.6 Luna
@@ -28,9 +28,9 @@ is complete for the Worker and Manager route suites and for the tested
 Operator contracts. The initial provider-backed persona tasks proved that the
 accepted runner exposes only its fixed S00 commission; a typed scenario input
 is being added to that existing runner before W/M/O routes resume. Their results
-are not inferred. O02 has a separate real external-client closure. The single
-metadata wrapper, full G4 verifier, consolidated Sol review, and separately
-authorized live provider-backed W07/W08 run remain pending.
+are not inferred. O02 has a separate real external-client closure. The
+consolidated Sol review and separately authorized v16 W03/W04 and W07/W08 live
+runs remain pending.
 
 Execution now follows the backend-first user-testing loop in [GOAL.md](./GOAL.md):
 a fast GPT-5.6 Luna provider smoke, three persistent persona journeys covering
@@ -40,7 +40,7 @@ campaign ledgers are under `user-testing-output/plane-agents/`.
 
 The rollback fixture remains an offline binding for the active candidate. Its
 `current.planeCommit` is the approved source parent
-`2d349c29353fc80dc0ef181cea9736b9eef8e829`; its final candidate wrapper is
+`4e2b85384b85ecff822cd1136a668258dc76a90a`; its final candidate wrapper is
 that parent's sole child. The independent `previous` section retains the accepted G3
 service artifact digest
 `sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e`.
