@@ -394,6 +394,40 @@ replay. W03-W08 remain dirty; UT-042 is open.
 - W05 and W06 remain dirty; this is provider-free boundary evidence, not route
   closure.
 
+## UT-053 W07/W08 provider-free reasonSubreason contract repair — 2026-08-17
+
+The latest serial lifecycle failure was local workflow/test friction: a
+terminal 4xx fixture expected transport and omitted the required
+`reasonPhase=provider_relay`. The fixture and assertion were corrected without
+provider use. The bounded `reasonSubreason` field already present in the
+Plane/Hermes lifecycle contract was reused; no new field, mutation path, or
+runtime authority was introduced.
+
+The fix is committed as
+`e46635f6727c39f15ee0915e452ebc2aa2c21e28`, parent
+`45966c9c4e39e63d9b6ea99bbc92fa104424650f`. It maps only safe families:
+request rejection, authorization rejection, and rate limiting remain 4xx;
+upstream unavailability remains 5xx; transport retains the existing bounded
+diagnostic and outcome-unknown semantics. Public `errorCode` remains
+`provider_error`; raw status, body, headers, URL, credentials, prompts, and
+model output are not retained. API and CLI readback now preserve the existing
+bounded reason field, while legacy evidence remains accepted and unbounded
+values are rejected.
+
+Durable redacted evidence is
+`user-testing-output/plane-agents/evidence/w07-w08-provider-reason-subreason-45966c9c.json`,
+SHA-256
+`7639bf93b520c76b5e16d29d49499b20c1f12f48123770576a9c517346c9cb2c`.
+Provider attempts, provider calls, and replays were `0`. Host evidence and
+contract suites passed `180`; the serial Docker provider/runtime/lifecycle
+selection passed `185` with `4` environment-bound cases deselected. Compose
+cleanup returned exit `0` and removed the test network and runner containers.
+
+This provider-free repair does not prove W07/W08 product behavior and does not
+make a fresh live assignment safe by itself. A root-authorized future run
+requires external provider disposition and clean runtime/DB gates, must use a
+new assignment, and must never replay a prior invocation.
+
 ## Current W07/W08 D route — 2026-08-17
 
 - W07 and W08 remain `dirty`. One fresh single-commission W07/W08-only

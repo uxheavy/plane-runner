@@ -2855,3 +2855,29 @@ records this diagnosis without changing the retained receipts.
   checks passed `115` with one known repository-root mount-path test
   deselected. The focused test stack was torn down successfully; capacity
   lease release and exact-owned live Docker cleanup were verified at zero.
+
+## Wave 0CD — W07/W08 provider-free bounded reasonSubreason repair
+
+- From clean parent `45966c9c4e39e63d9b6ea99bbc92fa104424650f`, the smallest
+  existing-contract fix was committed as
+  `e46635f6727c39f15ee0915e452ebc2aa2c21e28`. The serial lifecycle failure
+  was classified as local fixture/assertion friction: a terminal 4xx fixture
+  expected transport and omitted the required provider-relay reason phase.
+- The existing typed `reasonSubreason` field now carries only allowlisted
+  request-rejection, auth, rate-limited, upstream-unavailable, and established
+  transport diagnostics. The public attempt remains `provider_error` with
+  bounded `2xx|4xx|5xx|transport`; numeric status, body, headers, URL,
+  credentials, prompts, and model output are excluded. API and CLI readback
+  preserve the bounded field and validator compatibility remains backward
+  compatible.
+- Provider-free host contract/evidence suites passed `180`; the serial Docker
+  relay/runtime/lifecycle/attempt/API selection passed `185` with `4`
+  environment-bound cases deselected. Provider attempts, provider calls, and
+  replays were `0`. The durable redacted evidence is
+  `user-testing-output/plane-agents/evidence/w07-w08-provider-reason-subreason-45966c9c.json`,
+  SHA-256 `7639bf93b520c76b5e16d29d49499b20c1f12f48123770576a9c517346c9cb2c`.
+- Compose teardown returned exit `0`; the test network and runner containers
+  were removed, with no live provider resources or capacity lease. This wave
+  made no W07/W08 product claim and does not make a fresh live assignment safe
+  without external provider disposition. A future root-authorized attempt
+  must be a new assignment, never a replay.

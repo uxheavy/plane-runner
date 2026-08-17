@@ -1,0 +1,114 @@
+{
+  "schemaVersion": "plane-agent-g4/provider-reason-subreason/v1",
+  "status": "provider_free_fixed",
+  "scope": "W07-W08",
+  "parentSourceCommit": "45966c9c4e39e63d9b6ea99bbc92fa104424650f",
+  "fixCommit": "e46635f6727c39f15ee0915e452ebc2aa2c21e28",
+  "providerAttempts": 0,
+  "providerCalls": 0,
+  "replays": 0,
+  "serialFailureClassification": {
+    "kind": "local_test_fixture_contract_friction",
+    "cause": "terminal_4xx_fixture_expected_transport_and_omitted_required_reason_phase",
+    "providerInvolved": false,
+    "correction": "assert_4xx_and_supply_provider_relay_reason_phase"
+  },
+  "boundedMapping": [
+    {
+      "syntheticInput": "successful_upstream_2xx",
+      "statusClass": "2xx",
+      "reasonSubreason": "",
+      "nextAction": "continue_normal_success_path"
+    },
+    {
+      "syntheticInput": "request_rejection_4xx",
+      "statusClass": "4xx",
+      "reasonSubreason": "request_rejected",
+      "nextAction": "stop_and_fix_request_configuration_before_a_new_assignment"
+    },
+    {
+      "syntheticInput": "auth_rejection_4xx",
+      "statusClass": "4xx",
+      "reasonSubreason": "auth",
+      "nextAction": "stop_and_resolve_authorization_disposition_before_a_new_assignment"
+    },
+    {
+      "syntheticInput": "rate_limit_4xx",
+      "statusClass": "4xx",
+      "reasonSubreason": "rate_limited",
+      "nextAction": "stop_until_external_capacity_is_explicitly_dispositioned"
+    },
+    {
+      "syntheticInput": "upstream_failure_5xx",
+      "statusClass": "5xx",
+      "reasonSubreason": "upstream_unavailable",
+      "nextAction": "stop_until_provider_health_is_explicitly_dispositioned"
+    },
+    {
+      "syntheticInput": "transport_tls_or_socket_failure",
+      "statusClass": "transport",
+      "reasonSubreason": "existing_upstream_transport_diagnostic",
+      "nextAction": "preserve_outcome_unknown_and_never_replay_the_same_invocation"
+    }
+  ],
+  "publicContract": {
+    "errorCode": "provider_error",
+    "statusClassAllowlist": ["2xx", "4xx", "5xx", "transport"],
+    "reasonSubreasonField": "existing_typed_reason_subreason",
+    "rawNumericStatusStored": false,
+    "rawResponseBodyStored": false,
+    "rawHeadersStored": false,
+    "rawUrlStored": false,
+    "credentialsStored": false,
+    "promptOrModelOutputStored": false
+  },
+  "readbackContract": {
+    "apiProviderAttemptReasonSubreason": true,
+    "cliProviderAttemptReasonSubreason": true,
+    "legacyFiveFieldEvidenceRemainsAccepted": true,
+    "unboundedReasonValuesRejected": true,
+    "newMutationPath": false,
+    "w07W08ProductReadback": "not_run"
+  },
+  "focusedChecks": {
+    "boundedContractSelection": {
+      "passed": 3,
+      "deselected": 104
+    },
+    "providerRelayAndLifecycleSelection": {
+      "passed": 16,
+      "deselected": 78
+    },
+    "apiCliReadbackContractSelection": {
+      "passed": 1,
+      "deselected": 9
+    },
+    "dockerProviderRuntimeLifecycleContract": {
+      "passed": 185,
+      "deselected": 4,
+      "providerFree": true
+    },
+    "hostG4ContractEvidenceSuites": {
+      "passed": 180,
+      "providerFree": true
+    },
+    "diffCheck": "passed",
+    "syntaxCheck": "passed_without_bytecode_writes",
+    "secretScan": "passed"
+  },
+  "cleanup": {
+    "composeDownExitCode": 0,
+    "testNetworkRemoved": true,
+    "runnerContainersRemoved": true,
+    "providerResourcesCreated": false,
+    "capacityLeaseAcquired": false
+  },
+  "freshW07W08Safe": false,
+  "freshRunDisposition": "not_safe_or_authorized_from_this_provider_free_task",
+  "freshRunCondition": "A_root_authorized_new_assignment_requires_external_provider_disposition_and_clean_runtime_db_gates; it must be a new assignment, never a replay",
+  "durability": {
+    "rawProviderReceiptTracked": false,
+    "redactedCanonicalExtract": true,
+    "secretsIncluded": false
+  }
+}
