@@ -2049,12 +2049,31 @@ class G4ContractTests(unittest.TestCase):
                 "upstreamInitiated": True,
                 "statusClass": "4xx",
                 "errorCode": "provider_error",
+                "reasonSubreason": "auth",
             }
         ]
         receipt["semanticDigest"] = _semantic_digest(receipt)
         temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt, separators=(",", ":")))
         self.addCleanup(temp.cleanup)
         self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
+
+    def test_failure_receipt_rejects_unbounded_provider_reason_subreason(self):
+        manifest, authority, config, receipt = failure_fixture()
+        receipt["providerAttempts"] = [
+            {
+                "sequence": 1,
+                "phase": "failed",
+                "upstreamInitiated": True,
+                "statusClass": "4xx",
+                "errorCode": "provider_error",
+                "reasonSubreason": "provider-code-401",
+            }
+        ]
+        receipt["semanticDigest"] = _semantic_digest(receipt)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt, separators=(",", ":")))
+        self.addCleanup(temp.cleanup)
+        with self.assertRaisesRegex(ContractError, "evidence_provider_attempt_reason_subreason_invalid"):
+            validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
 
     def test_failure_receipt_validates_bounded_host_operation_context(self):
         manifest, authority, config, receipt = failure_fixture()
@@ -2344,6 +2363,7 @@ class G4ContractTests(unittest.TestCase):
                     "upstreamInitiated": True,
                     "statusClass": "4xx",
                     "errorCode": "upstream_status",
+                    "reasonSubreason": "auth",
                 }
             ],
             terminal_kind="run_failure",
@@ -2362,6 +2382,7 @@ class G4ContractTests(unittest.TestCase):
                     "upstreamInitiated": True,
                     "statusClass": "4xx",
                     "errorCode": "provider_error",
+                    "reasonSubreason": "auth",
                 }
             ],
         )

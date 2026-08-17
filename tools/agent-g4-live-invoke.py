@@ -786,6 +786,10 @@ def build_failure_evidence(
         "upstream_timeout",
         "channel_closed_after_upstream",
         "reconciliation_required",
+        "request_rejected",
+        "auth",
+        "rate_limited",
+        "upstream_unavailable",
     }
     runtime_exit_kinds = {"completed", "waiting_for_input", "failed", "blocked", "cancelled"}
     runtime_failure_codes = {"budget_exhausted", "runtime_error"}
@@ -973,18 +977,22 @@ def build_failure_evidence(
         error_code = row.get("errorCode") if row.get("errorCode") in error_codes else (
             "provider_error" if status_class in {"error", "4xx", "5xx"} else "unspecified"
         )
+        reason_subreason = row.get("reasonSubreason")
+        if not isinstance(reason_subreason, str) or reason_subreason not in failure_subreasons:
+            reason_subreason = ""
         sequence = row.get("sequence")
         if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 1 or sequence > 256:
             sequence = 0
-        attempts.append(
-            {
-                "sequence": sequence,
-                "phase": phase,
-                "upstreamInitiated": row.get("upstreamInitiated") is True,
-                "statusClass": status_class,
-                "errorCode": error_code,
-            }
-        )
+        bounded_attempt = {
+            "sequence": sequence,
+            "phase": phase,
+            "upstreamInitiated": row.get("upstreamInitiated") is True,
+            "statusClass": status_class,
+            "errorCode": error_code,
+        }
+        if reason_subreason:
+            bounded_attempt["reasonSubreason"] = reason_subreason
+        attempts.append(bounded_attempt)
 
     if not isinstance(exit_code, int) or isinstance(exit_code, bool) or not 1 <= exit_code <= 255:
         exit_code = 1
@@ -2067,6 +2075,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                     "upstreamInitiated": attempt.upstream_initiated,
                     "statusClass": attempt.status_class,
                     "errorCode": attempt.error_code,
+                    "reasonSubreason": attempt.reason_subreason,
                 }
                 for attempt in provider_attempts
             ],
@@ -2265,6 +2274,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                         "upstreamInitiated": attempt.upstream_initiated,
                         "statusClass": attempt.status_class,
                         "errorCode": attempt.error_code,
+                        "reasonSubreason": attempt.reason_subreason,
                     }
                     for attempt in provider_attempts
                 ],

@@ -355,6 +355,82 @@ def test_run_api_and_cli_readbacks_fail_closed_on_cross_invocation_provider_evid
 
 
 @pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
+def test_run_api_and_cli_readbacks_preserve_bounded_provider_reason_subreason(
+    api_key_client,
+    workspace,
+    create_user,
+    agent_admin_gateway_project,
+    capsys,
+):
+    actor = create_actor(
+        workspace=workspace,
+        project=agent_admin_gateway_project,
+        display_name="Provider reason worker",
+        created_by=create_user,
+    )
+    profile = create_profile(actor, role=AgentRole.WORKER, instructions="Produce bounded provider evidence.")
+    assignment = create_assignment(
+        actor,
+        project=agent_admin_gateway_project,
+        target_ref="issue:provider-reason",
+        objective="Record a safe provider rejection family.",
+        acceptance_criteria=["Only an allowlisted provider reason is readable."],
+        created_by=create_user,
+    )
+    run = create_run(assignment, profile, idempotency_key="idempotency:provider-reason-run", created_by=create_user)
+    invocation = record_invocation(run, idempotency_key="idempotency:provider-reason-invocation")
+    notice = {
+        "phase": RuntimeProviderAttemptPhase.INTENT,
+        "runId": str(run.id),
+        "invocationId": invocation.invocation_id,
+        "leaseId": "lease:provider-reason",
+        "provider": "fixture-provider",
+        "model": "fixture-model",
+        "destinationHost": "provider.invalid",
+        "destinationPath": "/v1/chat/completions",
+        "requestId": "request:provider-reason",
+        "idempotencyKey": "idempotency:provider-reason-attempt",
+        "sequence": 1,
+        "upstreamInitiated": False,
+        "statusClass": "",
+        "errorCode": "",
+    }
+    record_provider_attempt_notice(invocation, notice)
+    record_provider_attempt_notice(
+        invocation,
+        {
+            **notice,
+            "phase": RuntimeProviderAttemptPhase.STARTED,
+            "upstreamInitiated": True,
+        },
+    )
+    record_provider_attempt_notice(
+        invocation,
+        {
+            **notice,
+            "phase": RuntimeProviderAttemptPhase.FAILED,
+            "upstreamInitiated": True,
+            "statusClass": "4xx",
+            "errorCode": "provider_error",
+            "reasonPhase": "provider_relay",
+            "reasonSubreason": "auth",
+        },
+    )
+
+    api_response = api_key_client.get(_admin_url(workspace, f"runs/{run.id}/"))
+    assert api_response.status_code == 200
+    api_readback = api_response.json()
+    assert api_readback["provider_attempts"][-1]["error_code"] == "provider_error"
+    assert api_readback["provider_attempts"][-1]["reason_subreason"] == "auth"
+
+    call_command("agent_readback", workspace_slug=workspace.slug, run_id=str(run.id), limit=1)
+    cli_readback = json.loads(capsys.readouterr().out)
+    assert cli_readback == api_readback
+    assert "provider-code" not in json.dumps(cli_readback)
+
+
+@pytest.mark.contract
 @pytest.mark.django_db
 def test_admin_api_is_idempotent_paged_and_denies_without_side_effect(api_key_client, workspace):
     actor_response = _actor(api_key_client, workspace, "Idempotent worker")

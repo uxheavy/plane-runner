@@ -2240,6 +2240,10 @@ _PROVIDER_ATTEMPT_REASON_PHASES = frozenset({"", "provider_relay"})
 _PROVIDER_ATTEMPT_REASON_SUBREASONS = frozenset(
     {
         "",
+        "request_rejected",
+        "auth",
+        "rate_limited",
+        "upstream_unavailable",
         "upstream_exception",
         "upstream_channel_closed",
         "upstream_timeout",
@@ -2307,6 +2311,10 @@ def record_provider_attempt_notice(invocation, notice: Mapping[str, object]):
         raise AgentDomainError("Provider attempt reasonPhase is invalid")
     if not isinstance(reason_subreason, str) or reason_subreason not in _PROVIDER_ATTEMPT_REASON_SUBREASONS:
         raise AgentDomainError("Provider attempt reasonSubreason is invalid")
+    if reason_subreason in {"request_rejected", "auth", "rate_limited"} and status_class != "4xx":
+        raise AgentDomainError("Provider attempt reasonSubreason does not match statusClass")
+    if reason_subreason == "upstream_unavailable" and status_class != "5xx":
+        raise AgentDomainError("Provider attempt reasonSubreason does not match statusClass")
     if event_ref:
         _provider_attempt_text(event_ref, "eventRef", 128)
         allowed_ref_characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:/-"

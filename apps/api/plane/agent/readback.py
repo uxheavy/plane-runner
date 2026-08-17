@@ -201,6 +201,7 @@ def _provider_attempt_readback(run: RunAttempt, *, limit: int) -> list[dict[str,
                 "upstream_initiated": attempt.upstream_initiated,
                 "status_class": attempt.status_class,
                 "error_code": attempt.error_code,
+                "reason_subreason": attempt.reason_subreason,
                 "terminal_at": attempt.terminal_at.isoformat() if attempt.terminal_at else None,
             }
         )

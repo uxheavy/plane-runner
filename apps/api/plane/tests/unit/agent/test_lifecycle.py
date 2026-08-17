@@ -1614,21 +1614,23 @@ def test_provider_attempt_diagnostics_are_bounded_and_idempotent(assignment, pro
     record_provider_attempt_notice(invocation, started)
     terminal = dict(
         started,
-        phase=RuntimeProviderAttemptPhase.OUTCOME_UNKNOWN,
-        statusClass="transport",
-        errorCode="outcome_unknown",
-        reasonSubreason="upstream_timeout",
+        phase=RuntimeProviderAttemptPhase.FAILED,
+        statusClass="4xx",
+        errorCode="provider_error",
+        reasonPhase="provider_relay",
+        reasonSubreason="request_rejected",
         eventRef="provider-event:" + "a" * 64,
     )
     second = record_provider_attempt_notice(invocation, terminal)
     replay = record_provider_attempt_notice(invocation, terminal)
 
     assert first.id == second.id == replay.id
-    assert second.status_class == "transport"
+    assert second.status_class == "4xx"
     assert second.reason_phase == "provider_relay"
-    assert second.reason_subreason == "upstream_timeout"
+    assert second.reason_subreason == "request_rejected"
     assert second.event_ref == "provider-event:" + "a" * 64
-    assert _provider_attempt_readback(run, limit=10)[0]["status_class"] == "transport"
+    assert _provider_attempt_readback(run, limit=10)[0]["status_class"] == "4xx"
+    assert _provider_attempt_readback(run, limit=10)[0]["reason_subreason"] == "request_rejected"
 
 
 @pytest.mark.django_db(transaction=True)

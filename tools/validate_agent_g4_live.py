@@ -853,6 +853,29 @@ _LIVE_ATTEMPT_ERROR_CODES = {
     "upstream_error",
     "unspecified",
 }
+_LIVE_ATTEMPT_REASON_SUBREASONS = {
+    "",
+    "upstream_exception",
+    "upstream_channel_closed",
+    "upstream_timeout",
+    "channel_closed_after_upstream",
+    "reconciliation_required",
+    "request_rejected",
+    "auth",
+    "rate_limited",
+    "upstream_unavailable",
+}
+
+
+def _validate_live_provider_attempt_reason(status_class: str, reason_subreason: str) -> None:
+    if reason_subreason not in _LIVE_ATTEMPT_REASON_SUBREASONS:
+        raise ContractError("evidence_provider_attempt_reason_subreason_invalid")
+    if reason_subreason in {"request_rejected", "auth", "rate_limited"} and status_class != "4xx":
+        raise ContractError("evidence_provider_attempt_reason_subreason_invalid")
+    if reason_subreason == "upstream_unavailable" and status_class != "5xx":
+        raise ContractError("evidence_provider_attempt_reason_subreason_invalid")
+
+
 _LIVE_PUBLICATION_REF_PREFIXES = {
     "productRef": "outcome-submission:",
     "operationAttemptRef": "operation-attempt:",
@@ -1462,7 +1485,8 @@ def _validate_live_readback(evidence: dict[str, Any]) -> None:
     previous_sequence = 0
     for row in attempts:
         attempt = _object(row, "evidence_provider_attempt")
-        if set(attempt) != {"sequence", "phase", "upstreamInitiated", "statusClass", "errorCode"}:
+        base_fields = {"sequence", "phase", "upstreamInitiated", "statusClass", "errorCode"}
+        if set(attempt) not in (base_fields, base_fields | {"reasonSubreason"}):
             raise ContractError("evidence_provider_attempt_fields_invalid")
         sequence = attempt["sequence"]
         if (
@@ -1475,6 +1499,8 @@ def _validate_live_readback(evidence: dict[str, Any]) -> None:
             or attempt["errorCode"] not in _LIVE_ATTEMPT_ERROR_CODES
         ):
             raise ContractError("evidence_provider_attempt_sequence_invalid")
+        if "reasonSubreason" in attempt:
+            _validate_live_provider_attempt_reason(attempt["statusClass"], attempt["reasonSubreason"])
         previous_sequence = sequence
     if any(
         attempt["phase"] == "outcome_unknown" or attempt["errorCode"] == "outcome_unknown"
@@ -1628,10 +1654,13 @@ def _validate_scenario_readback(evidence: dict[str, Any]) -> None:
         raise ContractError("evidence_provider_attempts_invalid")
     previous = 0
     for row in attempts:
-        if not isinstance(row, dict) or set(row) != {"sequence", "phase", "upstreamInitiated", "statusClass", "errorCode"}:
+        base_fields = {"sequence", "phase", "upstreamInitiated", "statusClass", "errorCode"}
+        if not isinstance(row, dict) or set(row) not in (base_fields, base_fields | {"reasonSubreason"}):
             raise ContractError("evidence_provider_attempt_invalid")
         if type(row["sequence"]) is not int or row["sequence"] <= previous or row["phase"] not in _LIVE_ATTEMPT_PHASES:
             raise ContractError("evidence_provider_attempt_invalid")
+        if "reasonSubreason" in row:
+            _validate_live_provider_attempt_reason(row["statusClass"], row["reasonSubreason"])
         previous = row["sequence"]
     runtime_exit = _object(evidence["runtimeExit"], "evidence_runtime_exit")
     if set(runtime_exit) != {"present", "kind", "finalSequence", "failure"} or runtime_exit["kind"] not in {"completed", "waiting_for_input", "failed", "blocked", "cancelled", "unknown"}:
@@ -1871,7 +1900,8 @@ def _validate_failure_receipt(
     previous_sequence = 0
     for row in attempts:
         attempt = _object(row, "evidence_provider_attempt")
-        if set(attempt) != {"sequence", "phase", "upstreamInitiated", "statusClass", "errorCode"}:
+        base_fields = {"sequence", "phase", "upstreamInitiated", "statusClass", "errorCode"}
+        if set(attempt) not in (base_fields, base_fields | {"reasonSubreason"}):
             raise ContractError("evidence_provider_attempt_fields_invalid")
         if (
             type(attempt["sequence"]) is not int
@@ -1883,6 +1913,8 @@ def _validate_failure_receipt(
             or attempt["errorCode"] not in _LIVE_ATTEMPT_ERROR_CODES
         ):
             raise ContractError("evidence_provider_attempt_invalid")
+        if "reasonSubreason" in attempt:
+            _validate_live_provider_attempt_reason(attempt["statusClass"], attempt["reasonSubreason"])
         previous_sequence = attempt["sequence"]
 
     terminal = _object(evidence["terminal"], "evidence_terminal")

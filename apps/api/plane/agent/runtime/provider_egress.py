@@ -79,25 +79,49 @@ _SENSITIVE_NAMES = frozenset(
     }
 )
 _PROVIDER_ERROR_STATUS_CLASSES = frozenset({"", "4xx", "5xx", "transport"})
+_PROVIDER_ERROR_REASON_SUBREASONS = frozenset(
+    {
+        "",
+        "request_rejected",
+        "auth",
+        "rate_limited",
+        "upstream_unavailable",
+        "upstream_exception",
+        "upstream_channel_closed",
+        "upstream_timeout",
+        "channel_closed_after_upstream",
+    }
+)
 
 
 class ProviderRelayError(ValueError):
     """A provider relay request cannot be admitted or safely completed."""
 
     status_class = ""
+    reason_subreason = ""
 
-    def __init__(self, message: str, *, status_class: str = "") -> None:
+    def __init__(self, message: str, *, status_class: str = "", reason_subreason: str = "") -> None:
         self.status_class = (
             status_class if isinstance(status_class, str) and status_class in _PROVIDER_ERROR_STATUS_CLASSES else ""
         )
+        if (
+            isinstance(reason_subreason, str)
+            and reason_subreason in _PROVIDER_ERROR_REASON_SUBREASONS
+            and reason_subreason
+        ):
+            self.reason_subreason = reason_subreason
         super().__init__(message)
 
 
 class _ProviderRelayHTTPStatusError(ProviderRelayError):
     """A bounded upstream HTTP family is available without retaining response data."""
 
-    def __init__(self, status_class: str) -> None:
-        super().__init__("provider returned an unsuccessful status", status_class=status_class)
+    def __init__(self, status_class: str, *, reason_subreason: str = "") -> None:
+        super().__init__(
+            "provider returned an unsuccessful status",
+            status_class=status_class,
+            reason_subreason=reason_subreason,
+        )
 
 
 class ProviderRelayOutcomeUnknownError(ProviderRelayError):
@@ -117,7 +141,11 @@ class ProviderRelayOutcomeUnknownError(ProviderRelayError):
             reason_subreason = "upstream_exception"
         self.reason_phase = "provider_relay"
         self.reason_subreason = reason_subreason
-        super().__init__("provider request outcome is unknown", status_class="transport")
+        super().__init__(
+            "provider request outcome is unknown",
+            status_class="transport",
+            reason_subreason=reason_subreason,
+        )
 
 
 @dataclass(frozen=True)
@@ -783,6 +811,20 @@ class ProviderRelayServer:
         family = f"{status_code // 100}xx"
         return family if family in {"2xx", "4xx", "5xx"} else ""
 
+    @staticmethod
+    def _status_reason_subreason(status_code: int, status_class: str) -> str:
+        if type(status_code) is not int:
+            return ""
+        if status_code in {400, 422} and status_class == "4xx":
+            return "request_rejected"
+        if status_code in {401, 403} and status_class == "4xx":
+            return "auth"
+        if status_code == 429 and status_class == "4xx":
+            return "rate_limited"
+        if status_class == "5xx":
+            return "upstream_unavailable"
+        return ""
+
     def _validate_lease_and_cancellation(self) -> None:
         if self._closed.is_set() or self._is_cancelled():
             raise ProviderRelayError("provider invocation was cancelled")
@@ -806,7 +848,10 @@ class ProviderRelayServer:
             if response.status_code != 200:
                 status_class = self._status_class(response.status_code)
                 if status_class in {"4xx", "5xx"}:
-                    raise _ProviderRelayHTTPStatusError(status_class)
+                    raise _ProviderRelayHTTPStatusError(
+                        status_class,
+                        reason_subreason=self._status_reason_subreason(response.status_code, status_class),
+                    )
                 raise ProviderRelayError("provider returned an unsuccessful status")
             try:
                 body_iterator = iter(response.body_chunks)
@@ -924,7 +969,7 @@ class ProviderRelayServer:
         if "redirect" in message:
             return "redirect_denied"
         if "provider" in message and "status" in message:
-            return "upstream_status"
+            return "provider_error"
         return "denied"
 
     @staticmethod
@@ -1087,7 +1132,10 @@ class PinnedProviderHTTPSClient:
                 status_class = ProviderRelayServer._status_class(response.status)
                 connection.close()
                 if status_class in {"4xx", "5xx"}:
-                    raise _ProviderRelayHTTPStatusError(status_class)
+                    raise _ProviderRelayHTTPStatusError(
+                        status_class,
+                        reason_subreason=ProviderRelayServer._status_reason_subreason(response.status, status_class),
+                    )
                 raise ProviderRelayError("provider returned an unsuccessful status")
 
             def chunks() -> Iterable[bytes]:

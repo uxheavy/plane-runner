@@ -220,7 +220,41 @@ def test_pinned_provider_http_error_preserves_only_bounded_status_family(
     error = caught.value
     assert error.status_class == status_class
     assert str(error) == "provider returned an unsuccessful status"
-    assert vars(error) == {"status_class": status_class}
+    assert error.reason_subreason in {"request_rejected", "rate_limited", "upstream_unavailable"}
+    assert vars(error)["status_class"] == status_class
+    assert str(status_code) not in repr(error)
+    assert "provider body must not persist" not in repr(error)
+    assert "provider-secret" not in repr(error)
+    assert connection.closed is True
+
+
+@pytest.mark.parametrize(
+    "status_code, status_class, reason_subreason",
+    (
+        (400, "4xx", "request_rejected"),
+        (422, "4xx", "request_rejected"),
+        (401, "4xx", "auth"),
+        (403, "4xx", "auth"),
+        (429, "4xx", "rate_limited"),
+        (500, "5xx", "upstream_unavailable"),
+    ),
+)
+def test_pinned_provider_http_error_preserves_bounded_reason_subreason(
+    monkeypatch, status_code: int, status_class: str, reason_subreason: str
+):
+    policy, request = _pinned_request()
+    connection = _FixtureHTTPSConnection(
+        response=_FixtureHTTPSResponse(status_code, body=b"provider body must not persist"),
+    )
+    monkeypatch.setattr(provider_egress.http.client, "HTTPSConnection", lambda *_args, **_kwargs: connection)
+
+    with pytest.raises(ProviderRelayError) as caught:
+        PinnedProviderHTTPSClient(policy)(request, {"api_key": "provider-secret"}, lambda: False)
+
+    error = caught.value
+    assert error.status_class == status_class
+    assert error.reason_subreason == reason_subreason
+    assert str(error) == "provider returned an unsuccessful status"
     assert str(status_code) not in repr(error)
     assert "provider body must not persist" not in repr(error)
     assert "provider-secret" not in repr(error)
@@ -228,9 +262,10 @@ def test_pinned_provider_http_error_preserves_only_bounded_status_family(
 
 
 def test_provider_relay_error_rejects_unbounded_status_class():
-    error = ProviderRelayError("provider error", status_class="429")
+    error = ProviderRelayError("provider error", status_class="429", reason_subreason="provider-code-429")
 
     assert error.status_class == ""
+    assert error.reason_subreason == ""
     assert vars(error) == {"status_class": ""}
 
 
@@ -279,10 +314,10 @@ def test_pinned_provider_http_error_reaches_bounded_relay_audit(monkeypatch, tmp
         server.close()
 
     assert response[0] == 403
-    assert json.loads(response[2]) == {"error": "upstream_status"}
+    assert json.loads(response[2]) == {"error": "provider_error"}
     assert [audit.phase for audit in audits] == ["intent", "started", "failed"]
     assert audits[-1].status_class == "4xx"
-    assert audits[-1].error_code == "upstream_status"
+    assert audits[-1].error_code == "provider_error"
     assert b"provider body must not persist" not in response[2]
     assert "provider body must not persist" not in repr(audits)
 
@@ -590,10 +625,46 @@ def test_provider_http_status_family_survives_bounded_relay_audit(tmp_path, stat
         server.close()
 
     assert response[0] == 403
-    assert json.loads(response[2]) == {"error": "upstream_status"}
+    assert json.loads(response[2]) == {"error": "provider_error"}
     assert [audit.phase for audit in audits] == ["intent", "started", "failed"]
     assert audits[-1].status_class == status_class
-    assert audits[-1].error_code == "upstream_status"
+    assert audits[-1].error_code == "provider_error"
+    assert b"provider body must not persist" not in response[2]
+    assert "provider body must not persist" not in repr(audits)
+
+
+@pytest.mark.parametrize(
+    "status_code, reason_subreason",
+    (
+        (400, "request_rejected"),
+        (422, "request_rejected"),
+        (401, "auth"),
+        (403, "auth"),
+        (429, "rate_limited"),
+        (500, "upstream_unavailable"),
+    ),
+)
+def test_provider_http_reason_subreason_survives_bounded_relay_audit(
+    tmp_path, status_code: int, reason_subreason: str
+):
+    upstream = _FixtureUpstream(
+        ProviderResponse(status_code=status_code, headers={}, body_chunks=(b"provider body must not persist",)),
+        [],
+    )
+    audits: list[ProviderRelayAudit] = []
+    server = _server(tmp_path, upstream=upstream, audit=audits.append)
+    try:
+        server.start()
+        response = _round_trip(server, request_id=f"request:reason-{status_code}")
+    finally:
+        server.close()
+
+    assert response[0] == 403
+    assert json.loads(response[2]) == {"error": "provider_error"}
+    assert [audit.phase for audit in audits] == ["intent", "started", "failed"]
+    assert audits[-1].status_class == ("5xx" if status_code == 500 else "4xx")
+    assert audits[-1].reason_subreason == reason_subreason
+    assert audits[-1].error_code == "provider_error"
     assert b"provider body must not persist" not in response[2]
     assert "provider body must not persist" not in repr(audits)
 
