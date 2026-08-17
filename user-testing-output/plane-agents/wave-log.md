@@ -3673,3 +3673,26 @@ not a provider rerun.
   SHA-256
   `833019e8b5ee515098096410522ffca2f448eaa7d4a2de6327579dfadfecc111`.
   M01-M08 remain unproven; shared API-invocation/runtime diagnosis is required.
+
+## Wave 0CQ — immutable v20 W03/W04 missing-outcome stop — 2026-08-18
+
+- Candidate wrapper `2ed2a991c967230a18da4ef6f870a2605dec06a6`, source
+  `278182149efa0cdddab88b05e27d6445162f0c9a`, API digest
+  `sha256:38c48791d38ab15f4201a24d272f9202367c1368e96ecd31bab5587f599db2ca`,
+  runtime digest
+  `sha256:7a541114d6f0fdbefad76fa4999e9fe977f02bf7979915f96c918338bc1a3ecc`,
+  manifest SHA-256 `76c10c7f48522f18c924338c79a5652b351a458e19efadcbb44b8f792a2db23c`.
+  Hermes/MCP/SDK pins were exact; seven required env files were byte-compared
+  to the authoritative checkout and `setup.sh` was not run.
+- One fresh serialized W03/W04 journey used Luna xhigh with fallback disabled.
+  The runtime completed with no explicit outcome (`missing_outcome`) after
+  seven completed `2xx` provider attempts. `search_workspace` was audited
+  three times; prepared read, mutation, negative authorization, submit, and
+  publication were absent. Run `cb9ca35a-9c6f-48d2-8067-6e8a705f0d9f` and
+  invocation `invocation:6205d47f-990a-4d44-b3dd-ff8d490339e7` are in the
+  bounded extract `w03-w04-v20-live-stop.json` (SHA-256
+  `23ff7ad966549b2a1651231327a0356fbcfb767b949bd7747f5f3137150c66e5`).
+- No retry, fallback, second primary, blind `outcome_unknown` replay, or
+  provider-disabled replay. Cleanup verified no capacity lease and zero runner
+  containers, volumes, or networks. W03/W04 remain dirty; no candidate mutation
+  was made.
