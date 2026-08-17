@@ -5,12 +5,12 @@ This directory contains the compact execution control surface for the non-UI Pla
 ## Current status
 
 G0 through G3 and the provider-free exact-image G4 checks are complete for the
-current integration source `ef014eac67323f91c02c73bc9e0ab38e083c1460`. The
-API artifact is `plane-agent-api:g4-v13-ef014eac6` at
-`sha256:424f75846d398d7e9256933617dcecb685d65c40b059033dd9f378c594a9774e`;
+current integration source `d4316b79272254b61d038a65cba6a9860a6afeeb`. The
+API artifact is `plane-agent-api:g4-v14-d4316b79` at
+`sha256:fcd65d1f8fc88b4230ef58370e80d9fd613d7c83fa033cb8bd08f60a68f51422`;
 the runtime artifact is
-`plane-agent-runtime:hermes-6c460f10-g4-v13-ef014eac6` at
-`sha256:ede43c620b231998391e1878f2d18a28c53e10f9b3f06320b86b65b953a9dfed`.
+`plane-agent-runtime:hermes-6c460f10-g4-v14-d4316b79` at
+`sha256:00ccc365bf07da61ab1ec24ba307d4e2659fb2dffaff2ce53f8a76f4a64ec139`.
 Both are bound to Hermes `6c460f10fe215718dce36dd73cda94155a9a34f8`, MCP
 `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The exact-image functional
@@ -40,7 +40,7 @@ campaign ledgers are under `user-testing-output/plane-agents/`.
 
 The rollback fixture remains an offline binding for the active candidate. Its
 `current.planeCommit` is the approved source parent
-`ef014eac67323f91c02c73bc9e0ab38e083c1460`; its final candidate wrapper is
+`d4316b79272254b61d038a65cba6a9860a6afeeb`; its final candidate wrapper is
 that parent's sole child. The independent `previous` section retains the accepted G3
 service artifact digest
 `sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e`.
