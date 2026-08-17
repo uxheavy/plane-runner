@@ -394,6 +394,28 @@ replay. W03-W08 remain dirty; UT-042 is open.
 - W05 and W06 remain dirty; this is provider-free boundary evidence, not route
   closure.
 
+## Wave 0CL — immutable v15 W07/W08 live product stop — 2026-08-18
+
+- W07 and W08 remain `dirty`. One fresh capacity-gated assignment used wrapper
+  `389b25e76375d105120962ea548f8b8faaef04c3`, source
+  `2d349c29353fc80dc0ef181cea9736b9eef8e829`, and manifest SHA-256
+  `474f1898b1abedb29925e57cea7356434215de3484902dd8fa8234b3649c0a4a`.
+- Run `f921904f-ac18-43bf-b363-c1cd1cb067cb`; invocation
+  `invocation:322ac8ca-c0ab-4edc-889c-c252341ab953`. The provider completed
+  eight `2xx` attempts with fallback disabled. The assigned `work_item.read`
+  returned `NOT_AUTHORIZED`, and Code Mode terminated with
+  `CODE_MODE_FAILED` at `host_callback`.
+- Search succeeded once, the intentional Worker evaluation denial succeeded,
+  and one submit plus one publish host operation were observed. The failed
+  lifecycle gate confirmed neither a visible terminal nor an applied durable
+  publication, so artifact/outcome exactness, API/CLI readback, isolation, and
+  zero-delta replay remain unproven.
+- Durable redacted evidence:
+  `user-testing-output/plane-agents/evidence/w07-w08-v15-code-mode-failure-extract.json`,
+  SHA-256 `aab1c2f3f14e5d116cd204cc3cdc2569e4dcaf733264e14aac942aeb738bd1a4`.
+  No retry or replay ran. Cleanup is exact-zero for the capacity marker and
+  runner-labeled containers, volumes, and networks.
+
 ## Wave 0CK — Operator O01/O03-O09 provider-free readiness — 2026-08-18
 
 - The Operator lane was reconciled onto source

@@ -3228,3 +3228,41 @@ records this diagnosis without changing the retained receipts.
 - Capacity lease release and cleanup were verified with zero labeled
   containers, volumes, and networks. The bounded tracked extract is
   `user-testing-output/plane-agents/evidence/w05-w06-v15-389b25e7-live.json`.
+
+## Wave 0CL — immutable v15 W07/W08 live product stop — 2026-08-18
+
+- Immutable candidate: wrapper `389b25e76375d105120962ea548f8b8faaef04c3`,
+  source `2d349c29353fc80dc0ef181cea9736b9eef8e829`, manifest SHA-256
+  `474f1898b1abedb29925e57cea7356434215de3484902dd8fa8234b3649c0a4a`.
+  Exact API/runtime digests were
+  `sha256:fa5aa7aabe13aa528bb15a4c10effb69c40ed98c88de88d795f23acce88f3ab1`
+  and
+  `sha256:4f1d52367fb2175e23a9e8c278f5a3edf2795bce99cd698cca6db5194182f559`.
+- Seven required env files were copied byte-for-byte without inspection;
+  `setup.sh` was not run. Scenario/config validation and `192` focused tests
+  passed before the heavy phase. The launcher recovered a structurally stale
+  lease marker, then acquired the shared lease before Compose/provider work.
+- Exactly one fresh assignment used `openai-codex/gpt-5.6-luna`, xhigh,
+  fallback disabled. Run `f921904f-ac18-43bf-b363-c1cd1cb067cb` and invocation
+  `invocation:322ac8ca-c0ab-4edc-889c-c252341ab953` reached eight upstream
+  `2xx` attempts. Search succeeded, but the assigned `work_item.read` returned
+  `NOT_AUTHORIZED`; the runtime stopped with `CODE_MODE_FAILED` at
+  `host_callback`, `runtime_error/runtime_process/process_exit`, subreason
+  `runtime_execution_failed`, cause `host_operation_failure`.
+- Host audit counts were search success `1`, assigned read denial `1`,
+  intentional evaluator denial `1`, submit success `1`, and publish success
+  `1`. The failed lifecycle gate confirmed visible terminals `0` and applied
+  durable publications `0`; W07/W08 product success, readback, isolation, and
+  replay claims are withheld.
+- Provider counts: attempts `8`, `2xx=8`, all other status classes `0`, fallback
+  `false`, retries `0`, replay `0`. No second primary or provider-disabled
+  replay was launched.
+- Durable redacted extract:
+  `user-testing-output/plane-agents/evidence/w07-w08-v15-code-mode-failure-extract.json`,
+  SHA-256 `aab1c2f3f14e5d116cd204cc3cdc2569e4dcaf733264e14aac942aeb738bd1a4`.
+  Raw result SHA-256 is
+  `2ede37b46419d0e8510bb4bd3b7fa94975e8b90bc8f516875ac4792ef3c4dc81`;
+  raw credentials, prompts, model output, and provider text were not tracked.
+- Cleanup proof: shared capacity marker absent and runner-labeled containers,
+  volumes, and networks all zero. W07/W08 remain dirty; root owns coordination
+  of a provider-free search-to-read authorization handoff diagnosis.

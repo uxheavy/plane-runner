@@ -629,3 +629,15 @@ Provider calls and live-runner attempts remain `0`; no Compose/provider journey 
 | Issue | Severity | Persona / route | Durable evidence | Root cause / bounded disposition | Retest / status |
 | ----- | -------- | --------------- | ---------------- | ------------------------------ | ---------------- |
 | UT-061 | blocker repair | Maya / W03-W04 and W07-W08 | `w03-w04-v15-389b25e7-live-stop.json`; raw bounded result SHA-256 `fcdce831806712e6d371e613935151c711d984fe3f39cf3395e75adb52e16a4b`; manifest SHA-256 `474f1898b1abedb29925e57cea7356434215de3484902dd8fa8234b3649c0a4a` | Two independent live lanes searched successfully but reached `VALIDATION_ERROR` and `NOT_AUTHORIZED` on the assigned `work_item.read`. The retained receipts do not expose raw arguments, so correlation is an explicit inference: the typed canonical input still required model reconstruction of the generic `plane_operation` envelope. The owning fix returns a schema-declared ready-to-call envelope and changes no authorization decision. | `READY_WITH_COMMIT`: provider-free `63 + 10 + 173` tests passed, provider attempts `0`; no second live run, fallback, replay, or blind `outcome_unknown` replay. W03/W04 and W07/W08 remain dirty pending future authorized proof. / ready |
+
+### Immutable v15 W07/W08 triggering evidence
+
+| Issue | Severity | Persona / route | Durable evidence | Root cause / bounded disposition | Retest / status |
+| ----- | -------- | --------------- | ---------------- | ------------------------------ | ---------------- |
+| UT-061 | blocker | Maya / W07-W08 one fresh serialized assignment | `w07-w08-v15-code-mode-failure-extract.json` SHA-256 `aab1c2f3f14e5d116cd204cc3cdc2569e4dcaf733264e14aac942aeb738bd1a4`; raw bounded result SHA-256 `2ede37b46419d0e8510bb4bd3b7fa94975e8b90bc8f516875ac4792ef3c4dc81`; manifest SHA-256 `474f1898b1abedb29925e57cea7356434215de3484902dd8fa8234b3649c0a4a`; scenario SHA-256 `cd1d1e9735da255dd50103e97474a18c90df29103fa16f104f836ad6f2bafa66` | The immutable v15 assignment reached eight completed upstream `2xx` attempts, then failed at the first genuine Plane product boundary: `CODE_MODE_FAILED` in `host_callback` after the assigned `work_item.read` returned `NOT_AUTHORIZED`. One submit and one publish host operation were observed, but the failed lifecycle gate did not confirm their durable product bindings. | No retry, fallback, second primary, or replay. W07/W08 remain dirty/unproven; root must coordinate provider-free diagnosis of the search-to-read host callback authorization handoff before another shared candidate. / open |
+
+Run `f921904f-ac18-43bf-b363-c1cd1cb067cb` and invocation
+`invocation:322ac8ca-c0ab-4edc-889c-c252341ab953` are the only live refs for
+Wave 0CL. Provider counts were `2xx=8`, `4xx=0`, `5xx=0`, `transport=0`,
+fallback `false`, retries `0`, replay `0`. Cleanup verified no capacity marker
+and zero runner-labeled containers, volumes, and networks.
