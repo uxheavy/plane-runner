@@ -8,83 +8,32 @@ This goal covers the full Plane Agent control plane and the hidden execution ser
 
 Functional completion and controlled rollout are separate outcomes. This goal ends when the non-UI product passes the complete live dogfood matrix, the production-candidate checks, and integration into a named Plane branch. Development, allowlisted-workspace, expanded-cohort, and GA rollout are a successor goal requiring their own deployment authority; they are not evidence that the product implementation works and are not a completion condition here.
 
-### Current provider-free integration refreeze (2026-08-18)
+### Current v25 functional-completion plan (2026-08-18)
 
-The named integration branch currently carries one metadata wrapper child of
-host-runner source `b993b802401a2c5c7d6399fe7ca8acce19db54c8`. Its exact API artifact remains
-`plane-agent-api:g4-v22-c9174ae7` at
-`sha256:e4d143327dff4f8299d846cd23059964bf922135c7d639dbe380d093d4389f69`;
-its exact runtime artifact is
-`plane-agent-runtime:hermes-c2fa44-g4-v24-b993b8` at
-`sha256:ea1022f3f4c84c99b0f299e2de105cb61f144bbbcaa32efa14fc7c44befe4aea`.
-The runtime is bound to Hermes `c2fa44db6168c19dbe2a4b94fda522f80a2a370b`,
-MCP `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
-`7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The exact-image red-team chain is
-green provider-free, including progressive catalog discovery, verbatim
-search-result-to-read handoff, authorized and denied work-item receipts with
-canonical targetDigest correlation through bounded audit/readback, raw-ID
-absence, Code Mode, authorized read/mutation, exact `NOT_AUTHORIZED`, one
-outcome submission, one applied publication, transcript-only ordinary text,
-idempotency replay, and late post-publication terminal completion. The source
-also binds model-facing search results to one ready-to-call typed
-`workItemReadCall` and forwards authority-approved thresholds into bounded live
-receipts. The v24 wrapper is the sole child of the bound source. W05/W06
-historical v15 proof remains applicable to unchanged lifecycle, gateway,
-publication, and terminal seams; a fresh current-candidate W05/W06 lane is
-still authoritative for current release status. W03/W04, W07/W08, and Operator
-remain dirty after their v20 stops, and Manager remains dirty after its v20
-diagnostic stop. The v21 fixes are provider-free; no provider call or live
-journey was made during this refreeze.
+The named integration branch is
+`codex/plane-agent-functional-v25-20260818` at source
+`fefcf8c4d2fc1ffad15172913fcfba6a09561cd3`. No current-candidate persona route
+is claimed passed. Earlier provider-backed waves are history and do not replace
+the matrix below. The unchanged O02 exact external-client proof is the sole
+retained live exception.
 
-The older G4 artifact bindings and Wave 0X evidence below are historical, not
-the active delivery state. The current host-side harness checkpoint is
-`8d94fcc16e5ff161b1e128fd3fd22f6a4f851071`, including the aggregate failure
-envelope fix `aef02407a4`. The exact functional API/runtime artifacts are bound
-to this source candidate and Hermes
-`292e866374ca9e9615473fc9bf5dda1913b672e1`. S00 Wave 0AT passed at Plane
-`dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with one fresh Luna primary and one
-eligible provider-disabled replay. Provider-free PF1 evidence is complete for
-W01–W08, M01–M08, and the tested Operator contracts. The first broader persona
-attempts reached the provider with completed attempts but were later
-misclassified as provider reconciliation failures by the invoker; an
-independent relay shutdown/audit race was also fixed at the runtime owner.
-W01/W02 are clean in Wave 0BF: after reconciliation of the prior failed
-`outcome_unknown/upstream_channel_closed` run, one deliberate fresh identity
-AssignmentContract/RunAttempt completed route evidence and an eligible
-provider-disabled same-invocation replay with zero deltas. W03–W04 remain
-unreached; W05–W08 were attempted in the current delegated C addendum below
-and remain dirty. Wave 0BC and the subsequent fresh
-82b468de identity commission reached the provider and completed their
-lifecycles, but the reusable W08 readback probe exceeded the established
-8-KiB projection ceiling; the helper is now narrowed to the bounded
-correlation projection. The fresh `1d4bf351` identity primary then reached
-publication with 13 completed upstream `2xx` attempts, but Hermes exhausted
-the bounded model-call budget after publication. Its scenario gate also
-revealed that the harness counted delivery-intent rows instead of the explicit
-outcome publication; `adff362456` now reuses the validated explicit
-publication projection. The receipt remains dirty and no replay or later
-commission ran. The standalone synthetic-only B commission in Wave 0BG reached
-16 completed upstream `2xx` attempts but exhausted the finite model-call
-allowance before publication. The integrated Plane/Hermes TypeScript bridge
-then reached the real Code Mode host callback in Wave 0BJ, but one fresh B
-primary failed with bounded `CODE_MODE_FAILED` / `host_callback` after nine
-completed upstream `2xx` attempts. No replay or further provider use is
-permitted; its retained receipt and root-fix disposition are recorded below.
-The separate synthetic C addendum was already attempted twice; its retained
-receipts and provider-free contract fixes are recorded below, and W05-W08
-remain dirty.
-The W05/W06 architecture check retains `agent.context.read`: the immutable
-run snapshot and Hermes adapter carry only context references/revisions/digests,
-not subject-bound projection contents. The established gateway operation is
-the existing narrow seam that binds actor/workspace/run/subject, invokes
-`assemble_agent_context`, and returns separate memory, preference, and skill
-projections under live authorization and audit.
-The provider-free exact candidate image and exact-image red team are now green.
-The single metadata wrapper, full G4 verifier, consolidated Sol review, and
-live provider-backed W07/W08 run remain pending.
-G5 remains a separate rollout goal.
+Functional completion now requires exactly one current-candidate journey for
+each internal persona: Worker W01–W08, Manager M01–M08, and Operator
+O01/O03–O09. These are consolidated user journeys, not one provider journey
+per route-map cell. Each journey must include its own permitted and denied
+canary, explicit outcome submission, publication and terminal state, plus
+bounded replay or idempotency and durable readback wherever the route applies.
+Deterministic destructive and failure boundaries remain provider-free tests;
+they do not justify additional model journeys.
 
-### Current delegated live disposition (2026-08-16)
+A standalone provider smoke is required only when the first final journey has
+not already proved provider authentication and preflight. It may be the first
+bounded segment of that journey and must not duplicate it. After the three
+persona journeys pass on one current candidate, run one production-candidate
+verifier and one consolidated Sol Medium review. There is no second duplicate
+“final clean wave.” G5 remains a separate rollout goal.
+
+### Historical delegated live disposition (2026-08-16)
 
 The synthetic-only Maya C context-governance commission was attempted once on
 the exact `713fb8c685c7298cbb7fdd2b3fe965c60ba413e9` artifacts and once as the
@@ -119,7 +68,7 @@ It reached nine completed upstream `2xx` attempts, failed at the real Code
 Mode host callback, and had no eligible replay; further provider use is
 stopped pending root-fix review.
 
-### Wave 0BK current disposition
+### Historical Wave 0BK disposition
 
 The typed Code Mode root fix `76ecdd120748c66e08cf07708e237291aace3e19` is
 integrated as Plane `c561bdfe89fb7413877b910900b5675b9f4b779d`. Provider-free
@@ -144,7 +93,7 @@ the failed commission and retains both commission rows; the behavior-level
 canonical-validator regression is included in the `149/149` harness pass. No
 provider retry, replay, image rebuild, or new disposable resource occurred.
 
-### Wave 0BL current disposition
+### Historical Wave 0BL disposition
 
 The exact functional candidate is Plane
 `8d94fcc16e5ff161b1e128fd3fd22f6a4f851071`, API
@@ -180,7 +129,7 @@ The bounded envelope exposes no narrower cause, so this is a real local
 runtime failure rather than an external-provider prerequisite. The failed
 commission was not replayed and all W03-W08 remain dirty.
 
-### Wave 0BJ current disposition
+### Historical Wave 0BJ disposition
 
 The integrated Plane/Hermes TypeScript bridge was exercised by one fresh
 synthetic-only B primary on exact Plane `7a6983ed68519e8a267748998b4e8189f0fdae78`
@@ -191,7 +140,7 @@ mutation, applied publication, complete W08 readback, or eligible replay was
 proven. UT-038 remains open, W03/W04/W07/W08 remain dirty, and no further
 provider use is authorized pending root-fix review.
 
-## Current v22 status and authorization
+## Historical v22 status and authorization
 
 The v22 source candidate is `c9174ae7d585d55659c447ba8fe4d7e0d2e5380a`.
 Its provider-free exact API image is
@@ -210,7 +159,7 @@ v19 opaque `api-invocation` stop. Fresh serialized reruns are required.
 
 ## Historical status and authorization
 
-| Active item        | Current truth                                                                                                                                                                                                                                                                                                                                                                      |
+| Historical item    | Recorded state                                                                                                                                                                                                                                                                                                                                                                     |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Delivery candidate | Exact shared provider-free source `fe72bcefe5ffc13c43212d48c2c47f4006d85ae5`; its final candidate is the sole metadata-wrapper child; API `plane-agent-api:g4-v19-fe72bce` / `sha256:59abfaec97cd82b74995b7cf7c64cb0bd37973bd8bf528ab07143dc4fd4472f7`; runtime `plane-agent-runtime:hermes-6c460f10-g4-v19-fe72bce` / `sha256:120e8f51a8193512c3be9d38e1a2b958eb9339178ce59c655e2b3f2bef03480e`; Hermes `6c460f10fe215718dce36dd73cda94155a9a34f8`, MCP `c04974ed6624f17b41e63ef8182661929e77e0d3`, SDK `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The source includes the exact `preparedCallRef` model guidance, typed work-item handoff, authority-threshold forwarding, retained W03/W04 and W07/W08 live-stop evidence, W05/W06 immutable live success, Operator O01/O03-O09 scope, Manager readiness evidence, bounded authority-window generation, Manager setup diagnostics, corrected cross-project denial fixture, and Compose env isolation. Exact-image and focused authorization/idempotency regressions remain provider-free gates; raw work-item IDs are absent. |
 | Functional gate    | S00 Wave 0AT is clean at Plane `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with Hermes `bc7f13d2ab392752f2667b176c646339c49405f9`: ten ordered upstream `2xx` attempts, three searches, two reads, one exact `NOT_AUTHORIZED` denial, one submit, one applied publication, one matching terminal, and `RuntimeExit.completed`; replay semantic deltas were zero and cleanup passed. |
@@ -223,21 +172,21 @@ The table below preserves accepted gate history and older frozen artifact
 bindings. Its G4/dogfood rows are historical evidence and do not override the
 active execution status above.
 
-| Item                                | Current state                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Item                                | Recorded state                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | G0                                  | Complete as a lightweight start condition: ADRs 0001–0010 exist and cohere, scope and non-goals are explicit here, and local implementation is authorized.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | G1                                  | Complete at Plane commit `44edd3a6e94b4c7ab6efb2e92e516699a0cb2d12`, independently accepted by the G1 gate reviewer. Fresh PostgreSQL proved the linear 0122→0130 migration chain, 0130 reverse/reapply cleanup, serialized concurrent replay, and UPDATE/DELETE/TRUNCATE denial on both append-only runtime-evidence tables. The exact no-model/no-UI G1 body crossed canonical-JSON dispatch and ingress, kept runtime completion evidence-only, then used the authorized/idempotent/audited gateway and explicit `OutcomeSubmission` to record exactly one terminal product event. Durable counts were one runtime event, one runtime exit, one outcome, one terminal event, two gateway records, and eight audit records. Packaged lifecycle schemas matched the accepted L1 manifest digests.                                                                                                                                                                                                                            |
 | G2                                  | Complete at Plane commit `c6d12931aefcafe9abc9fcc6775fd24ea91c3e5f` with Hermes commit `e573a46611e2cb988f1ab43ad34cd8cc3b2cb659`, independently accepted by the single consolidated G2 reviewer. The committed proof begins at the production `agent_supervisor` command, launches the separate trusted Hermes bootstrap with a loopback deterministic provider, executes progressive discovery, native read, restricted Code Mode, one gateway mutation, explicit outcome submission/publication, transcript-only final text, and matching API/CLI readback. Durable counts were one actor, profile, assignment, run, invocation, outcome, and visible terminal event; six gateway receipts across five operations; and twelve correlated audit rows. Exact replay created no child, usage, receipt, audit row, outcome, publication, terminal event, or semantic side effect. Cancellation, timeout/process death, malformed evidence, budget failure, and `outcome_unknown` reconcile through Plane without blind replay. |
 | G3                                  | Complete at Plane commit `7c9d35f4c324865c27c84da5016be2c84e460bcc`, independently accepted by the consolidated G3 reviewer in Codex task `019fd6ab-bfb0-7322-8bc4-f6e6609f6bee`. The accepted offline baseline reran the G3 prerequisite at `256/256`, with reversible migrations through leaf `0140`, the complete `177 = 86 gateway + 90 unsupported + 1 local` action disposition, exact candidate-derived Hermes/MCP/SDK revisions, read-only host-resolved community credential topology, no-chat-UI checks, and isolated cleanup.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| G4 offline candidate                | The current shared source candidate is `fe72bcefe5ffc13c43212d48c2c47f4006d85ae5` with API `plane-agent-api:g4-v19-fe72bce` / `sha256:59abfaec97cd82b74995b7cf7c64cb0bd37973bd8bf528ab07143dc4fd4472f7` and runtime `plane-agent-runtime:hermes-6c460f10-g4-v19-fe72bce` / `sha256:120e8f51a8193512c3be9d38e1a2b958eb9339178ce59c655e2b3f2bef03480e`, all bound to Hermes `6c460f10fe215718dce36dd73cda94155a9a34f8`, MCP `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. Accepted G3 baseline remains `7c9d35f4c324865c27c84da5016be2c84e460bcc`; W05/W06 live acceptance is retained from v15, while W03/W04 and W07/W08 require fresh serialized proof. |
+| G4 offline candidate                | The recorded shared source candidate was `fe72bcefe5ffc13c43212d48c2c47f4006d85ae5` with API `plane-agent-api:g4-v19-fe72bce` / `sha256:59abfaec97cd82b74995b7cf7c64cb0bd37973bd8bf528ab07143dc4fd4472f7` and runtime `plane-agent-runtime:hermes-6c460f10-g4-v19-fe72bce` / `sha256:120e8f51a8193512c3be9d38e1a2b958eb9339178ce59c655e2b3f2bef03480e`, all bound to Hermes `6c460f10fe215718dce36dd73cda94155a9a34f8`, MCP `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. Accepted G3 baseline remains `7c9d35f4c324865c27c84da5016be2c84e460bcc`; W05/W06 live acceptance was retained from v15, while W03/W04 and W07/W08 required fresh serialized proof. |
 | Dogfood branch                      | `codex/agent-functional-dogfood` starts from wrapper `3f2a478209fb94049376f781d33ddd4b63a038de` and source `1d1012f71c48615bb28b7988ce74c82421aa1d53`. Dogfood evidence and documentation may advance the branch without refreezing images. Functional fixes must extend the established Plane or Hermes owner and receive targeted verification; images and immutable provenance are rebuilt once from the final clean source before the final G4 verifier.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | Provider egress seam                | The trusted runtime owns an invocation-bound AF_UNIX relay and the sole external-egress network; Hermes commit `6c460f10fe215718dce36dd73cda94155a9a34f8` is wired through the existing bootstrap/service chain and the candidate image is pinned below. The live authority/config contract admits only the typed ChatGPT subscription descriptor `openai-codex/gpt-5.6-luna` at `https://chatgpt.com/backend-api/codex/responses`, with fallback disabled, and validates it before credential read, relay startup, DNS, or provider request. Separately authorized live provider proof remains pending and requires a fresh run. |
-| Live functional dogfood             | The retained explicitly authorized live failure receipt SHA-256 is `2013336c367397263ea1d5fdf41e46dfda5ed449c8f0be39913f5c6d5c727861`; it failed at `api-invocation` with Docker exit 125 because the runner directly mounted the caller-owned provider source under `/private/tmp`, which was not bind-visible to Colima. No Plane run, invocation, or evidence object was created and no provider request occurred. The source correction stages the credential in a Docker-visible, owner-only location. It remains unproven until the fast provider smoke and complete dogfood matrix run successfully. An older live canary receipt `20be555eb93cac98a53ea3c0be1f56d3b6642179b77d9b6acf76ffd23dc76c7a` remains historical `outcome_unknown` evidence and must not be replayed.                                                                                                                                                                                                                                           |
+| Live functional dogfood             | The retained explicitly authorized live failure receipt SHA-256 is `2013336c367397263ea1d5fdf41e46dfda5ed449c8f0be39913f5c6d5c727861`; it failed at `api-invocation` with Docker exit 125 because the runner directly mounted the caller-owned provider source under `/private/tmp`, which was not bind-visible to Colima. No Plane run, invocation, or evidence object was created and no provider request occurred. The source correction stages the credential in a Docker-visible, owner-only location. At the time, live dogfood remained unproven; current completion is governed by the v25 matrix above. An older live canary receipt `20be555eb93cac98a53ea3c0be1f56d3b6642179b77d9b6acf76ffd23dc76c7a` remains historical `outcome_unknown` evidence and must not be replayed.                                                                                                                                                                                                                                           |
 | Controlled rollout                  | Out of scope for this goal. Historical G5 branches contain rollout-control schemas and offline evidence tooling, but no rollout stage was executed or promoted. Do not restore or extend that work until the functionally complete candidate is integrated and a separate rollout goal is authorized.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | Retained pre-live lifecycle failure | The earlier pre-live root failure retained receipt SHA-256 `4e2a96a9fcaa5dccf5a8a1994b008016bf45aa7b8cc5c163f32aabb4cb4f958c` and failure-log SHA-256 `a412273116e90263dabade32d29e1a2b856e8dde64fe8c047c88850a5bf7bc52`; it made no provider request, live invocation, credential mutation, or G5 action and is not `outcome_unknown`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Source authorization                | Codex task `019fc7db-e8bf-7f92-8f2b-b2346e5eeeb8`, 2026-08-04.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
-The current G4 remediation binds the final wrapper through the external
+The recorded G4 remediation binds the final wrapper through the external
 operator input `PLANE_G4_EXPECTED_CANDIDATE`; the committed manifest binds only
 the wrapper's approved source parent. G3 and G4 share a process-lifetime
 advisory lock whose inherited descriptor is path-checked rather than caller
@@ -262,7 +211,7 @@ This authorization removes the obsolete implementation-blocking approval-manifes
 | Runtime artifact   | Candidate image `plane-agent-runtime:hermes-114eabf9-g4-c47ddfe`; digest `sha256:b4a701905bae50bef643ef67c3883ef74d8f6ddcde2cf669d1dab50c44999b0c`; runtime/source revision `c47ddfe6174ecd6d66257d8fedbd5d425c7f3172`; Hermes `114eabf9d807b659e36d767e4de46ca056297ccb`; remote `github.com/uxheavy/hermes-agent`; contract `plane.agent-runtime/v1`. The prior detached-worker image remains rollback/history evidence only. |
 | Offline proof      | Fresh G3 prerequisite `279/279`; runtime contracts `13/13`; cross-process `15/15`; service `9/9`; focused provider-egress reconciliation `19/19`; exact-image genuine-Hermes red-team `1/1`; the bounded 128-request load threshold passed with `0.0` error rate; migration leaf `0142`; rollback/readback/config pass; installed resolver fails closed without leakage; final secret scan clean; zero labeled resources.       |
 | Live guard         | An unconfigured `--live` run exits `2` as `external_required`, with `offline=not_run` and no provider call.                                                                                                                                                                                                                                                                                                                     |
-| Independent review | Consolidated Sol Medium reviewer task `019fd8e8-b562-7cf3-a20b-bb5307a65e66` accepted the earlier offline G4 baseline with no actionable P0/P1/P2 remaining. The current provider-reconciliation/resolver correction has complete Luna verification but awaits the single consolidated current-candidate review after live G4 evidence is available.                                                                            |
+| Independent review | Consolidated Sol Medium reviewer task `019fd8e8-b562-7cf3-a20b-bb5307a65e66` accepted the earlier offline G4 baseline with no actionable P0/P1/P2 remaining. The recorded provider-reconciliation/resolver correction had complete Luna verification but awaited the single consolidated current-candidate review after live G4 evidence became available.                                                                            |
 
 ## Durable authority
 
@@ -428,22 +377,41 @@ authorization/audit evidence, failure or denial case, replay expectation, and
 cleanup result. A unit test, fixture, schema, count, prompt, or generated file
 alone cannot mark a cell clean.
 
-### Wave order
+### Minimal final functional matrix
 
-1. **Fast provider smoke:** before any broad suite, start the real runtime and
-   complete one fresh read, denied canary, submit, and publish journey. Stop at
-   the first real boundary failure and diagnose it directly.
-2. **Happy-path coverage:** the three personas execute every feature journey
-   assigned in the route map using GPT-5.6 Luna.
-3. **Boundary coverage:** repeat the journeys with denial, cross-scope access,
-   invalid input, interruption, replay, cancellation, restart, timeout,
-   exhausted budget, stale revision, and external-client edge cases.
-4. **Root-fix and retest:** batch observed blocker and friction findings, fix
-   the original code owner, run only affected regression tests, and send dirty
-   route-map cells back to the same personas.
-5. **Final clean wave:** after all cells are clean, run the complete dogfood
-   matrix once, then run one full G4 production-candidate verifier and one
-   consolidated Sol Medium review.
+The final live proof is deliberately limited to this matrix. A route-map cell
+is covered inside its persona's consolidated journey; it does not require a
+separate provider run.
+
+| Matrix row | Current-candidate live proof | Required coverage |
+| ---------- | ---------------------------- | ----------------- |
+| Worker | One journey | W01–W08, including one permitted and one denied canary, explicit outcome/publication/terminal state, bounded replay or idempotency, and durable readback. |
+| Manager | One journey | M01–M08, including dynamic planning, delegation lineage and budgets, cancellation, schedule/DST behavior, evaluation and human revision, HR governance, chief-of-staff provisioning, explicit outcome/publication/terminal state, bounded replay or idempotency, and durable readback. |
+| Operator | One journey | O01/O03–O09, including one permitted and one denied canary, isolation and operational controls, explicit outcome/publication/terminal state, bounded replay or idempotency, and durable readback. |
+| External client | No new journey | Retain the unchanged O02 exact external MCP/SDK client proof. |
+
+#### Provider-free boundaries and provider smoke
+
+Run deterministic destructive and failure boundaries provider-free. This
+includes cancellation propagation, timeout or process death, malformed,
+oversized, duplicate or out-of-order events, exhausted budgets, stale
+revisions, `outcome_unknown`, credential revocation, quota/load limits,
+rollback, and safety-stop behavior. These tests prove system behavior without
+spending extra model journeys on predetermined outcomes.
+
+Run a separate provider smoke only if provider authentication and preflight
+have not already been proved by the first final journey. The smoke may be the
+first bounded segment of that journey and must not become a second assignment
+or duplicate journey. Stop at the first genuine product or provider failure.
+
+#### Failure handling and completion
+
+A failed journey returns to its original code owner. Run the affected
+provider-free regressions, then rerun only that persona's unreconciled journey
+under the established replay rules. Once all three journeys pass on the same
+candidate and the retained O02 proof remains applicable, run exactly one full
+G4 production-candidate verifier and one consolidated Sol Medium review. Do
+not run a second duplicate final wave.
 
 Do not rebuild, refreeze, or create a metadata wrapper merely because evidence
 text changed. During dogfood iterations, use targeted tests and the affected
@@ -451,12 +419,13 @@ journey. Preserve receipts outside the source commit and bind them to its hash.
 The full G3/G4 verifier runs once on the final functionally clean source, not
 before every provider attempt or individual fix.
 
-The dogfood loop stops only when every route-map cell is clean with real
-evidence, no blocker or high-severity friction remains, replay creates no
-duplicate semantic side effect, cleanup is complete, and the source is on a
-named integration branch. An unavailable external provider or credential may
-block provider-backed cells, but ordinary product defects never do; they return
-to the fix loop.
+The dogfood loop stops only when the three matrix journeys pass on one current
+candidate, every route-map cell is covered by its journey or the retained O02
+proof, the deterministic boundary suite passes, no blocker or high-severity
+friction remains, replay creates no duplicate semantic side effect, cleanup is
+complete, and the source is on a named integration branch. An unavailable
+external provider or credential may block provider-backed cells, but ordinary
+product defects never do; they return to the fix loop.
 
 ## Gates
 
@@ -467,7 +436,7 @@ G0 is complete under the lightweight condition above. Later gates are implementa
 | G1 — deterministic domain spine      | Fixtures and contract tests create the five Plane records, run snapshot, invocation, and terminal outcome without a model or UI; the deterministic runtime crosses the intended dispatch/event seam; one authorized semantic mutation proves gateway authorization, idempotency, bounded output, and audit.                       |
 | G2 — real single-Agent slice         | A real forked-Hermes process completes one assigned outcome through native tools and restricted TypeScript composition; Plane publishes exactly one visible terminal event; denials, stable replay, host-only credentials, and API/CLI readback pass.                                                                             |
 | G3 — non-UI breadth                  | Full supported Plane integration/action coverage, memory/skills, schedules, delegation, artifacts, evaluator review, HR governance, chief-of-staff provisioning, MCP convergence, and API/CLI administration satisfy their contracts; settings reuse is proven and no chat UI exists.                                             |
-| G4 — functional production candidate | Three real provider-backed persona journeys cover every supported Plane Agent capability and failure boundary, with no model fallback; the final clean candidate then passes clean-checkout contract, authorization, isolation, mutation, compatibility, load, recovery, observability, credential, runbook, and rollback checks. |
+| G4 — functional production candidate | Exactly three current-candidate provider-backed journeys—one Worker, one Manager, and one Operator—cover the full persona matrix with no model fallback; the unchanged O02 exact external-client proof remains applicable; deterministic destructive/failure boundaries pass provider-free; then the candidate passes one clean-checkout contract, authorization, isolation, mutation, compatibility, load, recovery, observability, credential, runbook, and rollback verifier. |
 
 Controlled rollout is intentionally not a gate in this goal. A successor G5 goal may begin only after G4 is complete, the candidate is integrated into a named Plane branch, and rollout/deployment authority is separately granted.
 
@@ -487,7 +456,7 @@ Each phase has one accountable lane. A lane may run in parallel with the lanes l
 | P7    | Implement dynamic planning, delegation lineage, HR proposals, chief-of-staff provisioning, and evaluator-before-human review.         | L7      | G2                                     | G3    |
 | P8    | Converge the supported external MCP/SDK surface on the shared gateway with explicit per-action disposition.                           | L8      | G1                                     | G3    |
 | P9    | Implement platform isolation, credentials, quotas, observability, reliability, incident response, and reused settings/admin surfaces. | L9, L10 | L9 after G0; L10 after G1              | G4    |
-| P10   | Run the provider smoke, complete persona dogfood waves, targeted root-fix/retest loops, and one final production-candidate verifier.  | L11     | G2                                     | G4    |
+| P10   | Run the conditional provider smoke, one consolidated journey per persona, targeted root-fix/retest loops, and one final production-candidate verifier. | L11 | G2 | G4 |
 
 ## Parallel lane map
 
@@ -504,7 +473,7 @@ Each phase has one accountable lane. A lane may run in parallel with the lanes l
 | L8   | External MCP and SDK convergence; preserve compatibility while routing supported actions through the gateway.                           | G1 → G3        | L1, L7, L9, L10, L11                         |
 | L9   | Platform, security, reliability, and operations; isolation, credentials, limits, telemetry, runbooks, kill switches, and rollback.      | G0 → G4        | L1, L4, L5, L8, L10, L11                     |
 | L10  | Minimal administration and settings; API/CLI first, then extend existing Plane settings primitives only.                                | G1 → G3        | L1, L2, L3, L5, L6, L7, L8, L9, L11          |
-| L11  | Functional dogfood and production proof; persona journeys, requirement-level evidence, live readback, canaries, and final verification. | G2 → G4        | L1, L7, L8, L9, L10                          |
+| L11  | Functional dogfood and production proof; three consolidated persona journeys, requirement-level evidence, live readback, canaries, and one final verification. | G2 → G4 | L1, L7, L8, L9, L10 |
 
 ## Worker and review protocol
 
@@ -512,7 +481,7 @@ Each phase has one accountable lane. A lane may run in parallel with the lanes l
 - Delegate implementation and review through separate Codex tasks owned and routed by the coordinator. Workers and reviewers must not create nested subagents or an alternate delegation tree.
 - Let Luna iterate within its lane until the complete lane verifier is green and the coordinator judges its commit and evidence ready for integration. Luna owns routine remediation, mechanical follow-ups, environment reruns, and documentation/status corrections without a Sol review.
 - The coordinator may accept and integrate a lane after inspecting its scope, verifier output, requirement evidence, unresolved risks, and exact commit. A lane does not receive a standalone Sol review by default.
-- Use Sol Medium only for consolidated, independently verifiable system gates: the combined G2 real-Agent slice, the combined G3 non-UI breadth candidate, and the final clean G4 functional production candidate. Batch all dogfood fixes and compatible seams before that review. Rollout review belongs to a separate authorized goal.
+- Use Sol Medium only for consolidated, independently verifiable system gates: the combined G2 real-Agent slice, the combined G3 non-UI breadth candidate, and the G4 functional production candidate after the minimal final matrix passes. Batch all dogfood fixes and compatible seams before that review. Rollout review belongs to a separate authorized goal.
 - A standalone pre-gate Sol review is exceptional. Use one only when a security- or authority-critical boundary cannot reasonably wait for its consolidated gate and the unresolved decision blocks further integration. The coordinator must record why the exception was necessary.
 - One Sol reviewer owns each consolidated gate from initial assessment through closure. Return all findings as one batch to Luna workers, accumulate every remediation, rerun the complete gate verifier, and request one closure review from the same reviewer. Do not request review for individual fixes, commits, or partial finding sets.
 - Limit a normal consolidated gate to two Sol passes: one full assessment and one closure pass. If closure still fails, Luna and the coordinator must finish the entire remaining finding set and produce fresh complete evidence before the same reviewer is asked again; repeated reviewer polling is forbidden.
@@ -534,6 +503,6 @@ The full outcome is complete only when every row below has executable evidence f
 | Full action breadth          | The supported Plane integration/action catalog and external MCP surface are generated or explicitly dispositioned per action, with representative real-client coverage and no count-only or wildcard claim.                                                                                               |
 | Context and delegation       | Agent-private memory/skills, gardener revisions/rollback, schedules, dynamic plans, delegation lineage, cancellation, and permissions pass leakage, provenance, replay, and recovery tests. No saved workflow-definition product is introduced.                                                           |
 | Non-UI operability           | API, CLI, fixtures, operator surfaces, ordinary Plane object pages, and reused settings/admin primitives configure and inspect the required system. No chat, composer, thread, inbox, sidecar, transcript, or conversation-navigation UI is required.                                                     |
-| Functional production proof  | Every dogfood route-map cell has real provider-backed journey evidence; clean-checkout static/contract/security/reliability/load/recovery/observability checks pass once on the final candidate; live permitted/denied canaries, audit/version readback, rollback, and safety-stop behavior are recorded. |
+| Functional production proof  | One current-candidate Worker journey covers W01–W08, one Manager journey covers M01–M08, and one Operator journey covers O01/O03–O09; the unchanged O02 exact external-client proof remains applicable. Each live journey records permitted/denied canaries, explicit outcome/publication/terminal state, bounded replay or idempotency, and audit/version readback as applicable. Deterministic destructive/failure boundaries and clean-checkout static/contract/security/reliability/load/recovery/observability checks pass provider-free once on the same final candidate. |
 
-Completion requires all rows, G1–G4, a clean final dogfood wave, one final full production-candidate verifier, one consolidated Sol Medium review, a named integration branch, a clean final worktree, and no unresolved blocker or high-severity friction, security-critical failure, credential disclosure, authorization bypass, duplicate committed mutation, missing audit event, unsafe replay, or isolation escape. Controlled rollout and GA evidence are explicitly not required by this goal.
+Completion requires all rows, G1–G4, the three current-candidate matrix journeys, the retained O02 proof, the deterministic boundary suite, one final full production-candidate verifier, one consolidated Sol Medium review, a named integration branch, a clean final worktree, and no unresolved blocker or high-severity friction, security-critical failure, credential disclosure, authorization bypass, duplicate committed mutation, missing audit event, unsafe replay, or isolation escape. A second duplicate “final clean wave” is explicitly not required. Controlled rollout and GA evidence are explicitly not required by this goal.
