@@ -171,6 +171,11 @@ def _parse_codex_auth_document(value: object) -> str:
         raise RuntimeCredentialError("deployment credential JSON fields are invalid") from exc
     if refreshed_at.tzinfo != timezone.utc:
         raise RuntimeCredentialError("deployment credential JSON fields are invalid")
+    tokens = value["tokens"]
+    if not isinstance(tokens, dict) or set(tokens) != _CODEX_AUTH_TOKEN_KEYS:
+        raise RuntimeCredentialError("deployment credential JSON fields are invalid")
+    for token_name in _CODEX_AUTH_TOKEN_KEYS:
+        _bounded_deployment_secret(tokens[token_name])
     refresh_age = time.time() - refreshed_at.timestamp()
     if (
         refresh_age > _CODEX_AUTH_MAX_AGE_SECONDS
@@ -179,11 +184,6 @@ def _parse_codex_auth_document(value: object) -> str:
         raise RuntimeCredentialError(
             "deployment credential source requires trusted resolver refresh"
         )
-    tokens = value["tokens"]
-    if not isinstance(tokens, dict) or set(tokens) != _CODEX_AUTH_TOKEN_KEYS:
-        raise RuntimeCredentialError("deployment credential JSON fields are invalid")
-    for token_name in _CODEX_AUTH_TOKEN_KEYS:
-        _bounded_deployment_secret(tokens[token_name])
     # External Codex login owns refresh. The host accepts only the resulting
     # short-lived access token while the refresh timestamp is still fresh.
     return _bounded_deployment_secret(tokens["access_token"])

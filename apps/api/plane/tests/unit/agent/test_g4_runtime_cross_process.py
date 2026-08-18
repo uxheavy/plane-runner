@@ -265,7 +265,7 @@ def test_g4_runtime_dispatch_is_cross_process_and_revokes_invocation_credentials
 
 
 def test_g4_provider_dispatch_crosses_runtime_boundary_before_provider_request(tmp_path, monkeypatch):
-    monkeypatch.setattr(runtime_credentials.time, "time", lambda: 1_786_000_000.0)
+    monkeypatch.setattr(runtime_credentials.time, "time", lambda: 1_786_097_520.0)
     source = tmp_path / "provider-source"
     source.write_text(
         json.dumps(
