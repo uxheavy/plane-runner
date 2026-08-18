@@ -127,8 +127,9 @@ class FailingRuntimeTransport:
 
 
 class CausalRuntimeTransport:
-    def __init__(self):
+    def __init__(self, cause="host_operation_failure"):
         self.calls = 0
+        self.cause = cause
 
     def dispatch(self, snapshot_json, envelope_json):
         self.calls += 1
@@ -139,7 +140,7 @@ class CausalRuntimeTransport:
                 "code": "runtime_error",
                 "message": "raw provider callback secret should not escape the bounded result",
                 "retryable": False,
-                "cause": "host_operation_failure",
+                "cause": self.cause,
             },
         )
 
@@ -1256,12 +1257,24 @@ def test_supervisor_preserves_finite_runtime_error_failure_through_terminal_outp
     assert transport.calls == 1
 
 
+@pytest.mark.parametrize(
+    "cause",
+    [
+        "host_operation_failure",
+        "dependency_failure",
+        "permission_failure",
+        "resource_failure",
+        "timeout_failure",
+        "provider_client_failure",
+        "runtime_unknown_failure",
+    ],
+)
 @pytest.mark.django_db(transaction=True)
 def test_supervisor_preserves_runtime_failure_cause_without_copying_raw_message(
-    workspace, gateway_project, gateway_issue, create_user
+    workspace, gateway_project, gateway_issue, create_user, cause
 ):
     run, invocation = _invocation(workspace, gateway_project, gateway_issue, create_user, suffix="runtime-cause")
-    transport = CausalRuntimeTransport()
+    transport = CausalRuntimeTransport(cause)
 
     result = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
 
@@ -1270,7 +1283,7 @@ def test_supervisor_preserves_runtime_failure_cause_without_copying_raw_message(
         "failurePhase": "runtime_process",
         "failureDetail": "process_exit",
         "failureSubreason": "runtime_execution_failed",
-        "failureCause": "host_operation_failure",
+        "failureCause": cause,
     }
     control = RuntimeInvocationControl.objects.get(invocation=invocation)
     terminal = RunTerminalEvent.objects.get(invocation=invocation, visible=True)
@@ -1278,7 +1291,7 @@ def test_supervisor_preserves_runtime_failure_cause_without_copying_raw_message(
     assert result.failure == expected
     assert json.loads(control.failure_reason) == expected
     assert json.loads(terminal.reason) == expected
-    assert "host_operation_failure" in output
+    assert cause in output
     assert "raw provider callback secret" not in output
     assert "raw provider callback secret" not in control.failure_reason
     assert "raw provider callback secret" not in terminal.reason

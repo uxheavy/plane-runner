@@ -183,6 +183,18 @@ def test_runtime_exit_failure_cause_is_finite_and_runtime_error_only():
     )
     assert validate_runtime_exit(causal)["failure"]["cause"] == "host_operation_failure"
 
+    for cause in (
+        "dependency_failure",
+        "permission_failure",
+        "resource_failure",
+        "timeout_failure",
+        "provider_client_failure",
+        "runtime_unknown_failure",
+    ):
+        candidate = copy.deepcopy(causal)
+        candidate["failure"]["cause"] = cause
+        assert validate_runtime_exit(candidate)["failure"]["cause"] == cause
+
     invalid_cause = copy.deepcopy(causal)
     invalid_cause["failure"]["cause"] = "raw-host-message"
     with pytest.raises(RuntimeContractError):

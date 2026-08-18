@@ -950,6 +950,12 @@ def build_failure_evidence(
         "cancellation_monitor_failure",
         "invalid_usage_accounting",
         "static_configuration_failure",
+        "dependency_failure",
+        "permission_failure",
+        "resource_failure",
+        "timeout_failure",
+        "provider_client_failure",
+        "runtime_unknown_failure",
     }
     operation_ids = (
         "search_workspace",

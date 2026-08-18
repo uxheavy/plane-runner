@@ -2847,6 +2847,44 @@ class G4ContractTests(unittest.TestCase):
             },
         )
 
+    def test_failure_evidence_preserves_finite_runtime_failure_causes(self):
+        helper = invoke_helper_namespace()
+        for cause in (
+            "dependency_failure",
+            "permission_failure",
+            "resource_failure",
+            "timeout_failure",
+            "provider_client_failure",
+            "runtime_unknown_failure",
+        ):
+            reason = json.dumps(
+                {
+                    "failureCode": "runtime_error",
+                    "failurePhase": "runtime_process",
+                    "failureDetail": "process_exit",
+                    "failureSubreason": "runtime_execution_failed",
+                    "failureCause": cause,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            evidence = helper["build_failure_evidence"](
+                binding={},
+                failure_phase="runtime-process",
+                error_class="RuntimeError",
+                exit_code=1,
+                run_id="run:runtime-cause",
+                run_state="failed",
+                invocation_id="invocation:runtime-cause",
+                invocation_state="failed",
+                provider_attempts=[],
+                terminal_kind="run_failure",
+                failure_code="runtime_error",
+                failure_reason=reason,
+            )
+            self.assertEqual(evidence["failure"]["reasonCause"], cause)
+            self.assertEqual(evidence["runtimeExit"]["failure"]["cause"], cause)
+
     def test_failure_evidence_preserves_redacted_work_item_target_digest(self):
         project_id = "11111111-1111-4111-8111-111111111111"
         issue_id = "22222222-2222-4222-8222-222222222222"
