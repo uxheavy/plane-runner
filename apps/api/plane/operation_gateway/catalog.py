@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Literal, Mapping
 
+from plane.agent.runtime.contracts import model_operation_entry
+
 from .contracts import MAX_RESULT_BYTES, SCHEMA_VERSION, canonical_json
 
 CatalogKind = Literal["read", "mutation"]
@@ -215,18 +217,6 @@ _WORK_ITEM_READ_INPUT = {
     "additionalProperties": False,
     "required": ["project_id", "issue_id"],
     "properties": {"project_id": _UUID, "issue_id": _UUID},
-}
-_MODEL_PREPARED_READ_INPUT = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": ["preparedCallRef"],
-    "properties": {
-        "preparedCallRef": {
-            "type": "string",
-            "minLength": len("prepared-call:"),
-            "maxLength": 256,
-        }
-    },
 }
 _WORK_ITEM_RENAME_INPUT = {
     "type": "object",
@@ -859,32 +849,6 @@ def _catalog_entry(descriptor: OperationDescriptor) -> dict[str, Any]:
         "maxResultBytes": descriptor.max_result_bytes,
         "universal": descriptor.universal,
     }
-
-
-def model_operation_entry(operation: Mapping[str, Any]) -> dict[str, Any]:
-    """Project canonical operation schemas into the model-facing host contract."""
-
-    projected = _thaw(operation)
-    if not isinstance(projected, dict):
-        raise TypeError("operation catalog entry must be an object")
-    if projected.get("operationId") == "work_item.read":
-        projected["inputSchema"] = _thaw(_MODEL_PREPARED_READ_INPUT)
-    if projected.get("operationId") == "search_workspace":
-        result_schema = projected.get("resultSchema")
-        if isinstance(result_schema, dict):
-            results = result_schema.get("properties", {}).get("results")
-            if isinstance(results, dict):
-                item_schema = results.get("items")
-                if isinstance(item_schema, dict):
-                    item_properties = item_schema.get("properties")
-                    if isinstance(item_properties, dict):
-                        item_properties.pop("workItemReadInput", None)
-                        read_call = item_properties.get("workItemReadCall")
-                        if isinstance(read_call, dict):
-                            read_call_properties = read_call.get("properties")
-                            if isinstance(read_call_properties, dict):
-                                read_call_properties["input"] = _thaw(_MODEL_PREPARED_READ_INPUT)
-    return projected
 
 
 def _catalog_payload() -> dict[str, Any]:

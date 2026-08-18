@@ -9,6 +9,7 @@ import json
 import os
 import re
 import signal
+import shutil
 import subprocess
 import tarfile
 import sys
@@ -795,6 +796,31 @@ class G4ContractTests(unittest.TestCase):
             self.assertTrue((destination / "plane_code_mode_contracts/__init__.py").is_file())
             self.assertTrue((destination / "plane_code_mode_contracts/contracts.py").is_file())
             self.assertFalse((destination / "plane_code_mode_contracts/host.py").exists())
+
+    def test_staged_runtime_imports_host_rpc_without_plane_product_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            staged = root / "staged"
+            staged.mkdir(mode=0o700)
+            revision = _BUILDER.run("git", "rev-parse", "HEAD", cwd=ROOT)
+            _BUILDER.stage_plane_runtime(staged, revision)
+
+            runtime_root = root / "runtime-root"
+            runtime_package = runtime_root / "plane" / "agent"
+            runtime_package.mkdir(mode=0o700, parents=True)
+            shutil.copytree(staged / "plane_runtime_service", runtime_package / "runtime")
+            shutil.copytree(staged / "plane_code_mode_contracts", runtime_package / "code_mode")
+
+            environment = os.environ.copy()
+            environment["PYTHONPATH"] = str(runtime_root)
+            result = subprocess.run(
+                [sys.executable, "-c", "import plane.agent.runtime.host_rpc"],
+                cwd=runtime_root,
+                env=environment,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_disposable_manifest_binds_api_runtime_and_hermes_to_one_candidate(self):
         candidate = "a" * 40

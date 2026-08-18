@@ -2,8 +2,60 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-from typing import Protocol
+from collections.abc import Iterable, Mapping
+from typing import Any, Protocol
+
+
+PREPARED_CALL_PREFIX = "prepared-call:"
+MAX_PREPARED_CALL_REF_BYTES = 256
+_MODEL_PREPARED_READ_INPUT = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["preparedCallRef"],
+    "properties": {
+        "preparedCallRef": {
+            "type": "string",
+            "minLength": len(PREPARED_CALL_PREFIX),
+            "maxLength": MAX_PREPARED_CALL_REF_BYTES,
+        }
+    },
+}
+
+
+def _thaw_contract_json(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {key: _thaw_contract_json(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_thaw_contract_json(item) for item in value]
+    if isinstance(value, list):
+        return [_thaw_contract_json(item) for item in value]
+    return value
+
+
+def model_operation_entry(operation: Mapping[str, Any]) -> dict[str, Any]:
+    """Project a canonical operation entry into the model-facing host contract."""
+
+    projected = _thaw_contract_json(operation)
+    if not isinstance(projected, dict):
+        raise TypeError("operation catalog entry must be an object")
+    if projected.get("operationId") == "work_item.read":
+        projected["inputSchema"] = _thaw_contract_json(_MODEL_PREPARED_READ_INPUT)
+    if projected.get("operationId") == "search_workspace":
+        result_schema = projected.get("resultSchema")
+        if isinstance(result_schema, dict):
+            results = result_schema.get("properties", {}).get("results")
+            if isinstance(results, dict):
+                item_schema = results.get("items")
+                if isinstance(item_schema, dict):
+                    item_properties = item_schema.get("properties")
+                    if isinstance(item_properties, dict):
+                        item_properties.pop("workItemReadInput", None)
+                        read_call = item_properties.get("workItemReadCall")
+                        if isinstance(read_call, dict):
+                            read_call_properties = read_call.get("properties")
+                            if isinstance(read_call_properties, dict):
+                                read_call_properties["input"] = _thaw_contract_json(_MODEL_PREPARED_READ_INPUT)
+    return projected
 
 
 RUNTIME_TRANSPORT_PRE_DISPATCH_FAILURE = "runtime_transport_pre_dispatch_failure"
@@ -127,6 +179,8 @@ class RuntimeTransport(Protocol):
 
 
 __all__ = [
+    "MAX_PREPARED_CALL_REF_BYTES",
+    "PREPARED_CALL_PREFIX",
     "RUNTIME_CONFIGURATION_PRE_DISPATCH_FAILURE",
     "RUNTIME_PROCESS_CANCELLED",
     "RUNTIME_PROCESS_FAILED",
@@ -136,4 +190,5 @@ __all__ = [
     "RUNTIME_TRANSPORT_PRE_DISPATCH_FAILURE",
     "RuntimeDispatchError",
     "RuntimeTransport",
+    "model_operation_entry",
 ]

@@ -30,7 +30,8 @@ from plane.agent.code_mode.contracts import (
     CodeModeExecutionError,
     CodeModeExecutionRequest,
 )
-from plane.operation_gateway.catalog import model_operation_entry
+
+from .contracts import MAX_PREPARED_CALL_REF_BYTES, PREPARED_CALL_PREFIX, model_operation_entry
 
 HOST_PROTOCOL = "plane.agent-runtime/v1"
 PLANE_DISCOVERY_OPERATION = "plane.operations.discover@1"
@@ -50,9 +51,7 @@ MAX_PROVIDER_ATTEMPT_NOTICES_PER_SEQUENCE = 4
 MAX_HOST_OBSERVATION_CALLS = MAX_PROVIDER_ATTEMPT_SEQUENCE * MAX_PROVIDER_ATTEMPT_NOTICES_PER_SEQUENCE
 MAX_HOST_OPERATION_REF_BYTES = 256
 MAX_HOST_CONTENT_BYTES = 4 * 1024
-MAX_PREPARED_CALL_REF_BYTES = 256
 MAX_PREPARED_CALLS = MAX_HOST_CALLS * 20
-PREPARED_CALL_PREFIX = "prepared-call:"
 _ACTIONS = {"discover", "read", "mutate", "code", "publish", "observe"}
 _SOURCES = {"model", "code", "runtime"}
 _RESULT_STATUSES = {"ok", "replayed", "denied", "conflict", "unavailable", "invalid"}
