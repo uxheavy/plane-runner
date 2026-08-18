@@ -966,6 +966,7 @@ def build_failure_evidence(
     operation_ids = (
         "search_workspace",
         "work_item.read",
+        "work_item.rename",
         "catalog.search",
         "catalog.describe",
         "agent.outcome.evaluate",

@@ -273,7 +273,6 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
     if expected is None:
         return ()
     outcomes = expected.get("operationOutcomes", [])
-    route_checks = set(expected.get("routeChecks", ()))
     rendered: list[str] = []
     for index, item in enumerate(outcomes, start=1):
         operation_id = item["operationId"]
@@ -304,7 +303,7 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
                 "workspaceRef. Do not reconstruct project_id or issue_id from targetRef, ref, key, title, or "
                 "workspaceRef."
             )
-        if operation_id == "work_item.rename" and "W04" in route_checks:
+        if operation_id == "work_item.rename":
             model_action = "execute_code"
             action_detail = " to perform work_item.rename"
             guidance += (

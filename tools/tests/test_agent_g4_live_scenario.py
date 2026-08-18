@@ -95,7 +95,7 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert parsed.scenario_id == "worker"
     assert [commission.commission_id for commission in parsed.commissions] == [
         "identity-discovery",
-        "mutation-composition-publication",
+        "mutation-semantic-rename",
         "context-governance",
     ]
     assert parsed.expected is None
@@ -118,13 +118,15 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
         for commission in parsed.commissions
     } == {
         "identity-discovery": ["W01", "W02"],
-        "mutation-composition-publication": ["W03", "W04", "W07", "W08"],
+        "mutation-semantic-rename": ["W03", "W04", "W07", "W08"],
         "context-governance": ["W05", "W06", "W07", "W08"],
     }
     assert "workItemReadCall.input.preparedCallRef unchanged" in identity.assignment.objective
     assert "execute_code" in mutation.assignment.objective
     assert "export default async function" in mutation.assignment.objective
     assert 'host.call_plane_operation("work_item.rename"' in mutation.assignment.objective
+    assert "W08 readback" in mutation.assignment.objective
+    assert "before agent.outcome.submit" in mutation.assignment.objective
     assert "hermes_tools.plane_operation" not in mutation.assignment.objective
     mutation_route_guidance = scenario.model_route_expectations(mutation.expected)
     read_guidance = next(
@@ -611,6 +613,58 @@ def test_expected_operations_render_as_ordered_model_route_outcomes() -> None:
         "Route step 3: invoke agent.context.read exactly 1 time(s) and expect success. After this route call returns, advance immediately to the next route step; do not invoke this operation again for confirmation, inspection, refresh, or retry. This one response is the complete subject-bound projection; do not request it again.",
         "Route step 4: invoke agent.outcome.evaluate exactly 1 time(s) and expect denied. After this route call returns, advance immediately to the next route step; do not invoke this operation again for confirmation, inspection, refresh, or retry.",
     )
+
+
+def test_rename_route_always_exposes_the_exact_code_mode_callback() -> None:
+    guidance = scenario.model_route_expectations(
+        {
+            "operationOutcomes": [
+                {"operationId": "work_item.read", "outcome": "success", "count": 1},
+                {"operationId": "work_item.rename", "outcome": "success", "count": 1},
+            ],
+            "routeChecks": [],
+        }
+    )
+
+    assert guidance[1].startswith("Route step 2: invoke execute_code exactly 1 time(s) to perform work_item.rename")
+    assert 'host.call_plane_operation("work_item.rename", input, idempotencyKey, correlationId)' in guidance[1]
+
+
+def test_semantic_rename_commission_rejects_publication_without_rename_evidence() -> None:
+    raw = (TOOLS / "agent-g4-worker-v6.json").read_bytes()
+    parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
+    expected = parsed.commissions[1].expected
+    assert expected is not None
+    operations = [
+        row
+        for row in expected["operationOutcomes"]
+        if row["operationId"] != "work_item.rename"
+    ]
+    records = list(expected.get("durableRecords", []))
+    product_events = list(expected.get("productEvents", []))
+    evidence_kinds = list(expected["evidenceKinds"])
+
+    failed = scenario.evaluate_expectations(
+        expected,
+        operations=operations,
+        records=records,
+        product_events=product_events,
+        evidence_kinds=evidence_kinds,
+    )
+    assert failed["passed"] is False
+    assert "operation:work_item.rename" in failed["failures"]
+
+    complete = scenario.evaluate_expectations(
+        expected,
+        operations=[
+            *operations,
+            {"operationId": "work_item.rename", "outcome": "success", "count": 1},
+        ],
+        records=records,
+        product_events=product_events,
+        evidence_kinds=evidence_kinds,
+    )
+    assert complete["passed"] is True
 
 
 def test_manager_setup_controls_and_durable_expectations_are_typed() -> None:

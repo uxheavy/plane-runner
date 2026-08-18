@@ -503,7 +503,7 @@ class G4ContractTests(unittest.TestCase):
             root_scenario,
             [
                 ("identity-discovery", 0, success),
-                ("mutation-composition-publication", 1, failed),
+                ("mutation-semantic-rename", 1, failed),
             ],
         )
 
@@ -2273,6 +2273,7 @@ class G4ContractTests(unittest.TestCase):
             [
                 "search_workspace",
                 "work_item.read",
+                "work_item.rename",
                 "catalog.search",
                 "catalog.describe",
                 "agent.outcome.evaluate",
@@ -2282,7 +2283,7 @@ class G4ContractTests(unittest.TestCase):
         )
         self.assertEqual(readback["runtimeExit"]["kind"], "completed")
         self.assertEqual(
-            readback["planeOperationAudit"][4],
+            readback["planeOperationAudit"][5],
             {"operationId": "agent.outcome.evaluate", "status": "denied", "errorCode": "NOT_AUTHORIZED", "count": 1},
         )
         self.assertEqual(readback["transcriptEvidence"]["count"], 1)
@@ -2614,7 +2615,7 @@ class G4ContractTests(unittest.TestCase):
 
     def test_live_validator_rejects_false_s00_operation_readback(self):
         def false_evaluation(evidence):
-            evaluation = evidence["readback"]["planeOperationAudit"][4]
+            evaluation = evidence["readback"]["planeOperationAudit"][5]
             evaluation.update(status="success", errorCode=None)
 
         self._assert_live_fixture_rejected(false_evaluation, "evidence_evaluate_not_authorized_invalid")
@@ -3064,6 +3065,7 @@ class G4ContractTests(unittest.TestCase):
             [
                 {"operationId": "search_workspace", "status": "absent", "errorCode": None, "count": 0},
                 {"operationId": "work_item.read", "status": "absent", "errorCode": None, "count": 0},
+                {"operationId": "work_item.rename", "status": "absent", "errorCode": None, "count": 0},
                 {"operationId": "catalog.search", "status": "absent", "errorCode": None, "count": 0},
                 {"operationId": "catalog.describe", "status": "absent", "errorCode": None, "count": 0},
                 {
