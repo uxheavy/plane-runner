@@ -166,9 +166,9 @@ def _bounded_failure_line(
         raise ResultPersistenceError("error_class_invalid")
     if isinstance(exit_code, bool) or not isinstance(exit_code, int) or not 1 <= exit_code <= 255:
         raise ResultPersistenceError("exit_code_invalid")
-    if exit_code == 125 and reason_category not in DOCKER_REASON_CATEGORIES:
+    if (exit_code == 125 or phase == "compose") and reason_category not in DOCKER_REASON_CATEGORIES:
         raise ResultPersistenceError("docker_reason_category_invalid")
-    if exit_code != 125 and reason_category != "unavailable":
+    if exit_code != 125 and phase != "compose" and reason_category != "unavailable":
         raise ResultPersistenceError("reason_category_invalid")
     if not isinstance(stderr_sha256, str) or not STDERR_SHA256_RE.fullmatch(stderr_sha256):
         raise ResultPersistenceError("stderr_sha256_invalid")

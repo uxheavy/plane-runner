@@ -312,6 +312,25 @@ class LiveResultPersistenceTests(unittest.TestCase):
             self.assertFalse(refused_destination.exists())
             self.assertNotIn(b"/private/secret/provider-source", refused.stderr)
 
+    def test_compose_exit_one_preserves_allowlisted_docker_reason(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evidence = self._evidence(root, schema="plane-agent-g4/live-failure/v1")
+            destination = root / "compose.result"
+            result = self._run_helper(
+                destination,
+                evidence,
+                "--status",
+                "1",
+                "--phase",
+                "compose",
+                "--reason-category",
+                "docker_precontainer_failure",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(b"reason_category=docker_precontainer_failure", result.stderr)
+            self.assertNotIn(b"docker_precontainer_failure", destination.read_bytes())
+
     def test_runner_publishes_before_resource_cleanup_and_never_deletes_ack_file(self):
         runner = RUNNER_PATH.read_text(encoding="utf-8")
         cleanup = runner[runner.index("cleanup()") : runner.index("trap cleanup EXIT INT TERM")]

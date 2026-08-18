@@ -437,7 +437,7 @@ cleanup() {
     stderr_sha256="$(live_stderr_sha256 "${ERROR_DIGEST_FILE}")"
     setup_error="$(safe_setup_error)"
     if [[ "${status}" -ne 0 ]]; then
-        if [[ "${status}" -eq 125 ]]; then
+        if [[ "${status}" -eq 125 || "${LIVE_PHASE}" == "compose" ]]; then
             reason_category="$(safe_docker_failure_reason)"
         fi
         error_class="$(safe_error_class)"

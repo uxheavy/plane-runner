@@ -3796,3 +3796,38 @@ not a provider rerun.
   stderr remain digest-only. Exact cross-process prepared-call tests passed 9;
   no narrower local defect is proven. No retry, fallback, replay, or second
   primary occurred; cleanup is zero/absent.
+
+
+## Wave 0CV — immutable v38 W07/W08 Code Mode live stop — 2026-08-19
+
+- The exact V38 wrapper `d32e50005a69f71be653af9f5cb98d50ad056f77` was used with
+  source `2120e524dfd448bb1d5848e0668b5599765eaff5`, manifest SHA-256
+  `4a2ef217e8cf6ee947555d198b26b32f384e6811766501412fe5081f0bc35fe2`, API
+  digest `sha256:7c7173a76d09e4b8de6bdd17037774c9c2346305196c44d6bf99896337041362`,
+  runtime digest
+  `sha256:599c67b591cded3d7f25dd966203f545c63d9cc8c1246a7b2b9673b24292d600`,
+  and Hermes `bd85acfed9845e25ef24554d24d885ae3f0d0798`.
+- Seven required env files were copied byte-identically from the authoritative
+  checkout without reading values; `setup.sh` was not run. The tested policy
+  was `openai-codex/gpt-5.6-luna`, xhigh, fallback disabled, and the selected
+  commission was `code-mode-semantic-rename`.
+- One fresh primary acquired and released the shared capacity lease, then
+  stopped at `compose` with bounded `unavailable` / exit `1` before API
+  invocation or provider use. Provider attempts were `0`; no Run, Invocation,
+  Code Mode call, host callback, gateway rename, outcome, publication, or
+  terminal product event was created.
+- Durable redacted evidence is
+  `user-testing-output/plane-agents/evidence/w07-w08-v38-code-mode-compose-stop.json`
+  SHA-256 `921c3f1cb28b036bdd0449f2cc6963de4697874a97fb441b69b05faae2423d6c`.
+  Bounded result SHA-256 is
+  `d8096583182d3c046740c5215088f41b28cd0d63a0b9f4dff717f2f0522d0072`;
+  stderr SHA-256 is
+  `c3b449fbdbfd629a5fcdc0d72b530cf784f3c9f21e85755a9c7c086ca20303f9`.
+- No retry, fallback, second primary, replay, or blind `outcome_unknown` replay
+  occurred. Cleanup proved the capacity lease absent and zero runner-labeled
+  containers, volumes, and networks. W07/W08 remain dirty and unproven.
+
+
+### V38 provider-free Compose diagnosis and bounded fix — 2026-08-19
+
+The original `compose/unavailable` result cannot be narrowed to a service because the runner removed raw stderr after persisting only its digest. A no-start Compose config check passed; all four dependency images were present; one dependency-only Compose pass reached healthy `test-db`, `test-minio`, `test-mq`, and `test-redis`, then cleaned zero containers, volumes, and networks. No provider/API command was run. The local runner defect was proven at the existing bounded projection seam: Compose exit `1` did not receive the already allowlisted Docker reason classifier, which was restricted to exit `125`. The smallest fix applies that family only to the `compose` phase and adds a focused regression; no authorization, provider, or product path changed.

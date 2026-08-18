@@ -754,3 +754,15 @@ Run `2d90015f-5c1a-47f4-a935-e57417f917d7` and invocation `invocation:25653984-b
 | Issue | Severity | Persona / route | Durable evidence | Root cause / bounded disposition | Retest / status |
 | ----- | -------- | --------------- | ---------------- | ------------------------------ | ---------------- |
 | UT-067 | blocker | Maya / W07-W08 one fresh serialized assignment | `w07-w08-v24-live-stop.json` SHA-256 `3c48ae71461c3e08d1b67489d238274e7cf6cebe2ca44ac89f06aef12774433f`; raw result SHA-256 `e95a0433d196dd0623ce99bb53ef72f27431209bd1925fa5e1a4a9ecb3c83b07`; stderr SHA-256 `21b06bc035fdb46eda6d004ca37c25ab347b17f0b50bbd44570c382535fb6331` | One v24 primary stopped at `work_item.read` with `PREPARED_CALL_INVALID` after 8 completed upstream `2xx` attempts. Provider-free exact cross-process prepared-call tests passed 9; no narrower local registry/binding defect is proven from bounded evidence. | No retry, fallback, replay, or second primary. W07/W08 remain dirty/unproven. / open |
+
+
+## UT-068 — immutable v38 Code Mode compose stop — 2026-08-19
+
+| Issue | Severity | Persona / route | Durable evidence | Root cause / bounded disposition | Retest / status |
+| ----- | -------- | --------------- | ---------------- | ------------------------------ | ---------------- |
+| UT-068 | blocker | Maya / W07-W08 code-mode-semantic-rename | `w07-w08-v38-code-mode-compose-stop.json` SHA-256 `921c3f1cb28b036bdd0449f2cc6963de4697874a97fb441b69b05faae2423d6c`; bounded result SHA-256 `d8096583182d3c046740c5215088f41b28cd0d63a0b9f4dff717f2f0522d0072`; stderr SHA-256 `c3b449fbdbfd629a5fcdc0d72b530cf784f3c9f21e85755a9c7c086ca20303f9`; manifest SHA-256 `4a2ef217e8cf6ee947555d198b26b32f384e6811766501412fe5081f0bc35fe2` | The one V38 primary stopped at the runner `compose` phase with bounded `unavailable` / exit `1` before API invocation or provider use. The model-visible toolset, TypeScript callback, gateway rename, readback, outcome, publication, and terminal proof were therefore not reached. This is an infrastructure/workflow stop; no provider fault is inferred. | Provider attempts `0`; run/invocation and all product effects `0`/not created. No retry, fallback, second primary, replay, or blind `outcome_unknown` replay. Cleanup proved no lease and zero labeled containers, volumes, and networks. W07/W08 remain dirty and unproven. / open |
+
+
+### UT-068 provider-free diagnosis — 2026-08-19
+
+The no-start Compose config check passed, all four dependency images were present, and one dependency-only Compose diagnostic passed with all four services healthy and zero cleanup leftovers. The original raw stderr was already deleted by the runner, so no narrower service attribution is claimed. The proven local workflow observability defect was that `docker compose --wait` exit `1` was forced to generic `unavailable`; the existing allowlisted Docker reason projection was only enabled for exit `125`. The bounded fix preserves that allowlisted family for the `compose` phase only. Focused regression: `python3 -m pytest -q tools/tests/test_agent_g4_live_result.py -k compose_exit_one_preserves_allowlisted_docker_reason` — `1 passed, 13 deselected`.
