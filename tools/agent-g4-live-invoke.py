@@ -79,6 +79,44 @@ if os.environ.get("G4_SCENARIO_DESCRIPTOR"):
         worker_readback_facts,
     )
 
+
+_SCENARIO_PREFLIGHT_SUBREASONS = frozenset(
+    {
+        "scenario_inputs_incomplete",
+        "scenario_parser_unavailable",
+        "scenario_path_invalid",
+        "scenario_path_unavailable",
+        "scenario_path_not_owner_file",
+        "scenario_path_not_owner_only",
+        "scenario_path_read_failed",
+        "scenario_descriptor_too_large",
+        "scenario_digest_invalid",
+        "scenario_digest_mismatch",
+        "scenario_commission_not_found",
+        "scenario_descriptor_rejected",
+        "upstream_exception",
+    }
+)
+
+
+def _scenario_preflight_subreason(exc: BaseException) -> str:
+    """Return only a finite structural scenario boundary classification."""
+
+    candidate = getattr(exc, "reason_subreason", None)
+    if isinstance(candidate, str) and candidate in _SCENARIO_PREFLIGHT_SUBREASONS:
+        return candidate
+    return "upstream_exception"
+
+
+def _scenario_preflight_error(message: str, reason_subreason: str) -> RuntimeError:
+    error = RuntimeError(message)
+    error.reason_subreason = (
+        reason_subreason
+        if reason_subreason in _SCENARIO_PREFLIGHT_SUBREASONS
+        else "upstream_exception"
+    )
+    return error
+
 _LIVE_USAGE_KEYS = ("inputTokens", "outputTokens", "durationMs")
 _THRESHOLD_KEYS = frozenset(
     {"permittedSuccessRateMin", "deniedRejectionRateMin", "maxLatencyP95Ms", "maxErrorRate"}
@@ -559,17 +597,29 @@ def _scenario_descriptor():
     if not path and not digest:
         return None
     if not path or not digest:
-        raise RuntimeError("live invocation scenario descriptor inputs are incomplete")
+        raise _scenario_preflight_error(
+            "live invocation scenario descriptor inputs are incomplete",
+            "scenario_inputs_incomplete",
+        )
     try:
         from agent_g4_live_scenario import ScenarioError, load_descriptor, select_commission
-    except ImportError as exc:
-        raise RuntimeError("live invocation scenario parser is unavailable") from exc
+    except ImportError:
+        raise _scenario_preflight_error(
+            "live invocation scenario parser is unavailable",
+            "scenario_parser_unavailable",
+        ) from None
     try:
         descriptor = load_descriptor(path, digest)
         commission_id = os.environ.get("G4_SCENARIO_COMMISSION_ID", "")
         return select_commission(descriptor, commission_id) if commission_id else descriptor
     except ScenarioError as exc:
-        raise RuntimeError(f"live invocation scenario descriptor rejected: {exc}") from exc
+        reason_subreason = getattr(exc, "code", None)
+        if reason_subreason not in _SCENARIO_PREFLIGHT_SUBREASONS:
+            reason_subreason = "scenario_descriptor_rejected"
+        raise _scenario_preflight_error(
+            "live invocation scenario descriptor rejected",
+            reason_subreason,
+        ) from None
 
 
 def _scenario_legacy_s00(scenario):
@@ -802,6 +852,7 @@ def build_failure_evidence(
         "upstream_exception",
         "upstream_channel_closed",
         "upstream_timeout",
+        *_SCENARIO_PREFLIGHT_SUBREASONS,
         "channel_closed_after_upstream",
         "reconciliation_required",
         "request_rejected",
@@ -2581,7 +2632,7 @@ def _entrypoint_failure_evidence(
                 "failureCode": "runtime_error",
                 "failurePhase": "launcher",
                 "failureDetail": "unclassified_exception",
-                "failureSubreason": "upstream_exception",
+                "failureSubreason": _scenario_preflight_subreason(exc),
             },
             separators=(",", ":"),
         ),

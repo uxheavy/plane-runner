@@ -52,6 +52,10 @@ EXPECTED_OUTCOMES = {"success", "denied", "not_observed"}
 class ScenarioError(ValueError):
     """A bounded, safe descriptor failure."""
 
+    def __init__(self, code: str):
+        self.code = code
+        super().__init__(code)
+
 
 def bind_assigned_work_item_target(target_ref: str, assigned_work_item_ref: str) -> str:
     """Resolve the versioned fixture namespace to the fresh issue reference."""

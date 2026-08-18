@@ -1851,6 +1851,39 @@ class G4ContractTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
 
+    def test_entrypoint_scenario_preflight_reason_is_allowlisted_without_exception_text(self):
+        namespace = invoke_helper_namespace()
+        manifest, authority, config, _ = fixture()
+        error = namespace["_scenario_preflight_error"](
+            "descriptor bytes and provider details must not appear",
+            "scenario_path_not_owner_file",
+        )
+
+        evidence = namespace["_entrypoint_failure_evidence"](
+            error,
+            binding=exact_binding(manifest, CANDIDATE),
+            authority_id=authority["authorityId"],
+            canary_ids={key: row["id"] for key, row in authority["binding"]["canaries"].items()},
+            provider_relay=provider_relay_descriptor(),
+        )
+
+        self.assertEqual(evidence["failure"]["reasonSubreason"], "scenario_path_not_owner_file")
+        self.assertNotIn("descriptor bytes and provider details", json.dumps(evidence))
+
+        error.reason_subreason = "not-an-allowlisted-reason"
+        fallback = namespace["_entrypoint_failure_evidence"](
+            error,
+            binding=exact_binding(manifest, CANDIDATE),
+            authority_id=authority["authorityId"],
+            canary_ids={key: row["id"] for key, row in authority["binding"]["canaries"].items()},
+            provider_relay=provider_relay_descriptor(),
+        )
+        self.assertEqual(fallback["failure"]["reasonSubreason"], "upstream_exception")
+
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(evidence))
+        self.addCleanup(temp.cleanup)
+        self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
+
     def test_live_helper_replays_only_after_success_with_provider_access_disabled(self):
         source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
         tree = ast.parse(source)
