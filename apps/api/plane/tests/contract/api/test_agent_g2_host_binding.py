@@ -424,7 +424,7 @@ def test_code_mode_catalog_describe_projects_operation_id_for_next_callback(
                             "idempotency:g2-code-catalog-describe",
                             "correlation:g2-code-catalog-describe"
                         );
-                        const operationId = described.operationId;
+                        const operationId = described.operation?.operationId;
                         if (typeof operationId !== "string") throw new Error("operationId unavailable");
                         return await host.call_plane_operation(
                             operationId, input,
