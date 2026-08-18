@@ -1889,10 +1889,18 @@ def _validate_failure_receipt(
         "digest_mismatch",
         "malformed",
     }
+    host_failure_diagnostic_fields = {"callbackPhase", "operationRefDigest"}
     if (
         set(failure).difference(
             required_failure_fields
-            | {"reasonCause", "hostOperationFailure", "providerAttemptRef", "providerEventRef"}
+            | {
+                "reasonCause",
+                "hostOperationFailure",
+                "providerAttemptRef",
+                "providerEventRef",
+                "callbackPhase",
+                "operationRefDigest",
+            }
         )
         or not required_failure_fields.issubset(failure)
     ):
@@ -1909,13 +1917,25 @@ def _validate_failure_receipt(
             _safe_ref(failure[field], f"evidence_failure_{field}")
             if not failure[field].startswith(prefix):
                 raise ContractError(f"evidence_failure_{field}_prefix_invalid")
+    top_level_diagnostic_fields = {"callbackPhase", "operationRefDigest"}.intersection(failure)
+    if top_level_diagnostic_fields and top_level_diagnostic_fields != {"callbackPhase", "operationRefDigest"}:
+        raise ContractError("evidence_failure_diagnostic_fields_invalid")
+    if top_level_diagnostic_fields:
+        if failure["callbackPhase"] not in {"before_host_call", "host_return", "model_observation_emit", "adapter_event"}:
+            raise ContractError("evidence_failure_callback_phase_invalid")
+        digest = failure["operationRefDigest"]
+        if not isinstance(digest, str) or len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
+            raise ContractError("evidence_failure_operation_ref_digest_invalid")
     if "hostOperationFailure" in failure:
         host_failure = _object(failure["hostOperationFailure"], "evidence_host_operation_failure")
-        if set(host_failure) not in (
-            host_failure_fields,
-            host_failure_fields | {"preparedCallInvalidReason"},
+        if (
+            set(host_failure).difference(host_failure_fields | host_failure_diagnostic_fields | {"preparedCallInvalidReason"})
+            or not host_failure_fields.issubset(host_failure)
         ):
             raise ContractError("evidence_host_operation_failure_fields_invalid")
+        diagnostic_fields = set(host_failure).intersection(host_failure_diagnostic_fields)
+        if diagnostic_fields and diagnostic_fields != host_failure_diagnostic_fields:
+            raise ContractError("evidence_host_operation_failure_diagnostic_fields_invalid")
         if host_failure["status"] not in {"denied", "conflict", "unavailable", "invalid"}:
             raise ContractError("evidence_host_operation_failure_status_invalid")
         if host_failure["codeModePhase"] not in {"host_callback", "unavailable"}:
@@ -1928,6 +1948,12 @@ def _validate_failure_receipt(
             or host_failure["preparedCallInvalidReason"] not in prepared_call_reasons
         ):
             raise ContractError("evidence_host_operation_failure_prepared_call_reason_invalid")
+        if diagnostic_fields:
+            if host_failure["callbackPhase"] not in {"before_host_call", "host_return", "model_observation_emit", "adapter_event"}:
+                raise ContractError("evidence_host_operation_failure_callback_phase_invalid")
+            digest = host_failure["operationRefDigest"]
+            if not isinstance(digest, str) or len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
+                raise ContractError("evidence_host_operation_failure_operation_ref_digest_invalid")
 
     for name in ("run", "invocation"):
         state = _object(evidence[name], f"evidence_{name}")
@@ -1956,7 +1982,8 @@ def _validate_failure_receipt(
         raise ContractError("evidence_runtime_exit_sequence_invalid")
     if runtime_exit["failure"] is not None:
         runtime_failure = _object(runtime_exit["failure"], "evidence_runtime_exit_failure")
-        if set(runtime_failure).difference({"code", "retryable", "cause"}) or not {
+        runtime_failure_diagnostic_fields = {"callbackPhase", "operationRefDigest"}
+        if set(runtime_failure).difference({"code", "retryable", "cause"} | runtime_failure_diagnostic_fields) or not {
             "code",
             "retryable",
         }.issubset(runtime_failure):
@@ -1967,6 +1994,15 @@ def _validate_failure_receipt(
             raise ContractError("evidence_runtime_exit_failure_invalid")
         if "cause" in runtime_failure:
             _safe_ref(runtime_failure["cause"], "evidence_runtime_exit_failure_cause")
+        diagnostic_fields = set(runtime_failure).intersection(runtime_failure_diagnostic_fields)
+        if diagnostic_fields and diagnostic_fields != runtime_failure_diagnostic_fields:
+            raise ContractError("evidence_runtime_exit_failure_diagnostic_fields_invalid")
+        if diagnostic_fields:
+            if runtime_failure["callbackPhase"] not in {"before_host_call", "host_return", "model_observation_emit", "adapter_event"}:
+                raise ContractError("evidence_runtime_exit_failure_callback_phase_invalid")
+            digest = runtime_failure["operationRefDigest"]
+            if not isinstance(digest, str) or len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
+                raise ContractError("evidence_runtime_exit_failure_operation_ref_digest_invalid")
 
     ingress = _object(evidence["runtimeEventIngress"], "evidence_runtime_ingress")
     if list(ingress) != ["kindCounts"]:

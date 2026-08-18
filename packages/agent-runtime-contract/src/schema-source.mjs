@@ -102,6 +102,15 @@ const definitions = {
           "static_configuration_failure",
         ],
       },
+      callbackPhase: {
+        enum: ["before_host_call", "host_return", "model_observation_emit", "adapter_event"],
+      },
+      operationRefDigest: {
+        type: "string",
+        minLength: 64,
+        maxLength: 64,
+        pattern: "^[a-f0-9]{64}$",
+      },
     },
     allOf: [
       {
@@ -378,6 +387,7 @@ const toolCatalog = {
   required: ["catalogDigest", "eagerOperations"],
   properties: {
     catalogDigest: ref("contentDigest"),
+    modelToolset: { enum: ["standard", "code_mode_only"] },
     eagerOperations: {
       type: "array",
       maxItems: MAX_EAGER_OPERATIONS,

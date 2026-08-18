@@ -1075,10 +1075,13 @@ def build_failure_evidence(
             "digest_mismatch",
             "malformed",
         }
-        if not isinstance(value, dict) or set(value) not in (
-            required,
-            required | {"preparedCallInvalidReason"},
-        ):
+        diagnostic_fields = {"callbackPhase", "operationRefDigest"}
+        if not isinstance(value, dict) or set(value).difference(required | diagnostic_fields | {"preparedCallInvalidReason"}):
+            return None
+        if not required.issubset(value):
+            return None
+        present_diagnostic_fields = set(value).intersection(diagnostic_fields)
+        if present_diagnostic_fields and present_diagnostic_fields != diagnostic_fields:
             return None
         status = value.get("status")
         phase = value.get("codeModePhase")
@@ -1122,6 +1125,23 @@ def build_failure_evidence(
             if error_code != "PREPARED_CALL_INVALID" or reason not in prepared_call_reasons:
                 return None
             bounded["preparedCallInvalidReason"] = reason
+        if present_diagnostic_fields:
+            if value["callbackPhase"] not in {
+                "before_host_call",
+                "host_return",
+                "model_observation_emit",
+                "adapter_event",
+            }:
+                return None
+            operation_ref_digest = value["operationRefDigest"]
+            if (
+                not isinstance(operation_ref_digest, str)
+                or len(operation_ref_digest) != 64
+                or any(char not in "0123456789abcdef" for char in operation_ref_digest)
+            ):
+                return None
+            bounded["callbackPhase"] = value["callbackPhase"]
+            bounded["operationRefDigest"] = operation_ref_digest
         return bounded
 
     def bounded_binding_value(key, value):
@@ -1213,6 +1233,8 @@ def build_failure_evidence(
                 "hostOperationFailure",
                 "providerAttemptRef",
                 "providerEventRef",
+                "callbackPhase",
+                "operationRefDigest",
             }
             if base_keys.issubset(candidate) and not set(candidate).difference(
                 base_keys | optional_keys
@@ -1285,6 +1307,16 @@ def build_failure_evidence(
                 and runtime_failure_cause in runtime_failure_causes
             ):
                 bounded_runtime_exit["failure"]["cause"] = runtime_failure_cause
+            callback_phase = runtime_failure.get("callbackPhase")
+            operation_ref_digest = runtime_failure.get("operationRefDigest")
+            if (
+                callback_phase in {"before_host_call", "host_return", "model_observation_emit", "adapter_event"}
+                and isinstance(operation_ref_digest, str)
+                and len(operation_ref_digest) == 64
+                and all(char in "0123456789abcdef" for char in operation_ref_digest)
+            ):
+                bounded_runtime_exit["failure"]["callbackPhase"] = callback_phase
+                bounded_runtime_exit["failure"]["operationRefDigest"] = operation_ref_digest
 
     bounded_event_kind_counts = {}
     if isinstance(runtime_event_kind_counts, dict):
@@ -1344,6 +1376,20 @@ def build_failure_evidence(
     bounded_child = _bounded_child_diagnostic(reason.get("childDiagnostic"))
     if bounded_child is not None:
         bounded_failure["childDiagnostic"] = bounded_child
+    if bounded_host_failure is not None:
+        for field in ("callbackPhase", "operationRefDigest"):
+            if field in bounded_host_failure:
+                bounded_failure[field] = bounded_host_failure[field]
+    top_level_phase = reason.get("callbackPhase")
+    top_level_digest = reason.get("operationRefDigest")
+    if (
+        top_level_phase in {"before_host_call", "host_return", "model_observation_emit", "adapter_event"}
+        and isinstance(top_level_digest, str)
+        and len(top_level_digest) == 64
+        and all(char in "0123456789abcdef" for char in top_level_digest)
+    ):
+        bounded_failure["callbackPhase"] = top_level_phase
+        bounded_failure["operationRefDigest"] = top_level_digest
     for field, prefix in (
         ("providerAttemptRef", "provider-attempt:"),
         ("providerEventRef", "provider-event:"),
@@ -1402,12 +1448,16 @@ def _supervisor_failure_reason(output):
         "childDiagnostic",
         "providerAttemptRef",
         "providerEventRef",
+        "callbackPhase",
+        "operationRefDigest",
     }
     required_keys = allowed_keys - {
         "failureSubreason",
         "childDiagnostic",
         "providerAttemptRef",
         "providerEventRef",
+        "callbackPhase",
+        "operationRefDigest",
     }
     allowed_shapes = {
         frozenset(required_keys),
@@ -1430,12 +1480,12 @@ def _supervisor_failure_reason(output):
         "digest_mismatch",
         "malformed",
     }
+    host_failure_diagnostic_fields = {"callbackPhase", "operationRefDigest"}
 
     def bounded_host_failure(value):
-        if not isinstance(value, dict) or set(value) not in (
-            host_failure_fields,
-            host_failure_fields | {"preparedCallInvalidReason"},
-        ):
+        if not isinstance(value, dict) or set(value).difference(
+            host_failure_fields | host_failure_diagnostic_fields | {"preparedCallInvalidReason"}
+        ) or not host_failure_fields.issubset(value):
             return None
         if value["status"] not in {"denied", "conflict", "unavailable", "invalid"}:
             return None
@@ -1457,6 +1507,22 @@ def _supervisor_failure_reason(output):
             if value["errorCode"] != "PREPARED_CALL_INVALID" or reason not in prepared_call_reasons:
                 return None
             bounded["preparedCallInvalidReason"] = reason
+        diagnostic_fields = set(value).intersection(host_failure_diagnostic_fields)
+        if diagnostic_fields and diagnostic_fields != host_failure_diagnostic_fields:
+            return None
+        if diagnostic_fields:
+            if value["callbackPhase"] not in {
+                "before_host_call",
+                "host_return",
+                "model_observation_emit",
+                "adapter_event",
+            }:
+                return None
+            digest = value["operationRefDigest"]
+            if not isinstance(digest, str) or len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
+                return None
+            bounded["callbackPhase"] = value["callbackPhase"]
+            bounded["operationRefDigest"] = digest
         return bounded
 
     for line in reversed(output.splitlines()):
@@ -1471,15 +1537,18 @@ def _supervisor_failure_reason(output):
         if not isinstance(value, dict):
             continue
         value_keys = frozenset(value)
-        diagnostic_refs = value_keys & {
-            "childDiagnostic",
-            "providerAttemptRef",
-            "providerEventRef",
-        }
-        if value_keys - diagnostic_refs not in allowed_shapes:
+        diagnostic_refs = value_keys & {"childDiagnostic", "providerAttemptRef", "providerEventRef"}
+        top_level_diagnostic_fields = value_keys & host_failure_diagnostic_fields
+        if top_level_diagnostic_fields and top_level_diagnostic_fields != host_failure_diagnostic_fields:
+            continue
+        if value_keys - diagnostic_refs - top_level_diagnostic_fields not in allowed_shapes:
             if (
                 "hostOperationFailure" not in value
-                or value_keys - diagnostic_refs - {"hostOperationFailure"} not in allowed_shapes
+                or value_keys
+                - diagnostic_refs
+                - top_level_diagnostic_fields
+                - {"hostOperationFailure"}
+                not in allowed_shapes
             ):
                 continue
         if not all(
@@ -1506,6 +1575,17 @@ def _supervisor_failure_reason(output):
                 continue
             value = dict(value)
             value["childDiagnostic"] = bounded_child
+        if top_level_diagnostic_fields:
+            if value["callbackPhase"] not in {
+                "before_host_call",
+                "host_return",
+                "model_observation_emit",
+                "adapter_event",
+            }:
+                continue
+            digest = value["operationRefDigest"]
+            if not isinstance(digest, str) or len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
+                continue
         for field, prefix in (
             ("providerAttemptRef", "provider-attempt:"),
             ("providerEventRef", "provider-event:"),
@@ -1644,7 +1724,10 @@ def _prepare_shared_worker_setup(scenario, provider, provider_relay, suffix, *, 
         persona=profile_persona,
         model_defaults=profile_model_defaults,
         tool_presentation=(
-            {"eager_operations": list(scenario.profile.tool_presentation)}
+            {
+                "eager_operations": list(scenario.profile.tool_presentation),
+                "model_toolset": scenario.profile.model_toolset,
+            }
             if scenario is not None and scenario.profile.tool_presentation
             else None
         ),
@@ -1992,7 +2075,10 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                     "model": scenario.profile.model_policy.model,
                     "reasoning_effort": scenario.profile.model_policy.reasoning,
                 },
-                tool_presentation={"eager_operations": list(scenario.profile.tool_presentation)},
+                tool_presentation={
+                    "eager_operations": list(scenario.profile.tool_presentation),
+                    "model_toolset": scenario.profile.model_toolset,
+                },
                 runtime_defaults={
                     "provider": provider["name"],
                     "model": scenario.profile.model_policy.model,

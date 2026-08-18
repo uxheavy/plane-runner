@@ -106,6 +106,9 @@
         "catalogDigest": {
           "$ref": "#/$defs/contentDigest"
         },
+        "modelToolset": {
+          "enum": ["standard", "code_mode_only"]
+        },
         "eagerOperations": {
           "type": "array",
           "maxItems": 64,

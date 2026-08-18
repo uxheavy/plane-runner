@@ -3,7 +3,7 @@
   "schemas": {
     "run-snapshot": {
       "filename": "run-snapshot.schema.json",
-      "sha256": "308101c6a2c9f56e7deb5c6a07c8bc74b59831b92cbbb5b07c5a7eefc21f4947"
+      "sha256": "1d04c2a36f07d0e8128c3616e7dcae29af104fe4aa44d71cb1b7f43e55c0869b"
     },
     "invocation-envelope": {
       "filename": "invocation-envelope.schema.json",
@@ -15,7 +15,7 @@
     },
     "runtime-exit": {
       "filename": "runtime-exit.schema.json",
-      "sha256": "aa7aaf6e8b99e7001b87f02bec3cce206d83d585e1db40eaf7c810439f409d91"
+      "sha256": "ed127d0ebec8f5d432ce87a6be1a8eb41b31caf808badc27ed23cd0ba9115a24"
     },
     "runtime-durable-state": {
       "filename": "runtime-durable-state.schema.json",

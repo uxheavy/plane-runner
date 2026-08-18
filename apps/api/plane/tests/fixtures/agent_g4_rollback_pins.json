@@ -71,9 +71,9 @@
     "planeCommit": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
     "migrationLeaf": "db.0142_runtime_provider_attempts",
     "apiArtifact": {
-      "imageTag": "plane-g3-external-client-api-tests:prepared",
-      "imageDigest": "sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e",
-      "sourceRevision": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
+      "imageTag": "plane-agent-api:g4-v32-9a0e870f",
+      "imageDigest": "sha256:7812ed213b9cfcbe50580ded7b5e78a30d317e37dd66c1082c5dff97a9e98031",
+      "sourceRevision": "9a0e870fb313eb85d93b89778076087a8897d2a2",
       "contract": "plane.operation/v1"
     },
     "services": {

@@ -306,6 +306,7 @@ PROFILE_TOOL_KEYS = {
     "eagerOperations",
     "catalogDigest",
     "catalog_digest",
+    "model_toolset",
 }
 
 

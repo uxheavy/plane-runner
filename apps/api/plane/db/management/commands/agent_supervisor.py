@@ -75,7 +75,11 @@ def _supervisor_result_output(
             host_operation_failure is not None
             and result.failure.get("failureCause") == "host_operation_failure"
         ):
-            failure["hostOperationFailure"] = dict(host_operation_failure)
+            host_failure = dict(host_operation_failure)
+            for field in ("callbackPhase", "operationRefDigest"):
+                if field in failure:
+                    host_failure[field] = failure[field]
+            failure["hostOperationFailure"] = host_failure
         output += " failure=" + json.dumps(
             failure,
             ensure_ascii=False,

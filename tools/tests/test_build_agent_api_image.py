@@ -64,7 +64,7 @@ def test_prepared_base_binding_comes_from_rollback_truth() -> None:
     tag, digest = builder.default_base_image_binding()
 
     assert tag == builder.DEFAULT_BASE_IMAGE
-    assert digest == "sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e"
+    assert digest == "sha256:7812ed213b9cfcbe50580ded7b5e78a30d317e37dd66c1082c5dff97a9e98031"
 
 
 def test_prepared_base_tag_drift_is_rejected_before_compiler_probe(

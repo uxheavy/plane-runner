@@ -2479,6 +2479,59 @@ class G4ContractTests(unittest.TestCase):
         ):
             validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
 
+    def test_failure_receipt_retains_digested_host_callback_diagnostic(self):
+        namespace = invoke_helper_namespace()
+        builder = namespace["build_failure_evidence"]
+        diagnostic = {
+            "operationId": "work_item.read",
+            "attemptRef": "host-request:prepared-read",
+            "receiptRef": "unavailable",
+            "status": "invalid",
+            "errorCode": "PREPARED_CALL_INVALID",
+            "codeModePhase": "unavailable",
+            "callbackPhase": "host_return",
+            "operationRefDigest": hashlib.sha256("operation:work_item.read".encode()).hexdigest(),
+        }
+        evidence = builder(
+            binding=exact_binding(fixture()[0], CANDIDATE),
+            failure_phase="api-invocation",
+            error_class="RuntimeError",
+            exit_code=1,
+            run_id="run:diagnostic",
+            run_state="failed",
+            invocation_id="invocation:diagnostic",
+            invocation_state="failed",
+            provider_attempts=[],
+            terminal_kind="run_failure",
+            failure_code="runtime_error",
+            failure_reason=json.dumps(
+                {
+                    "failureCode": "runtime_error",
+                    "failurePhase": "runtime_process",
+                    "failureDetail": "process_exit",
+                    "failureSubreason": "runtime_execution_failed",
+                    "failureCause": "host_operation_failure",
+                    "hostOperationFailure": diagnostic,
+                },
+                separators=(",", ":"),
+            ),
+            runtime_exit={
+                "kind": "failed",
+                "finalSequence": 1,
+                "failure": {
+                    "code": "runtime_error",
+                    "retryable": False,
+                    "cause": "host_operation_failure",
+                    "callbackPhase": "host_return",
+                    "operationRefDigest": diagnostic["operationRefDigest"],
+                },
+            },
+        )
+        self.assertEqual(evidence["failure"]["hostOperationFailure"], diagnostic)
+        self.assertEqual(evidence["failure"]["callbackPhase"], "host_return")
+        self.assertEqual(evidence["runtimeExit"]["failure"]["operationRefDigest"], diagnostic["operationRefDigest"])
+        self.assertNotIn("prepared-call-secret", json.dumps(evidence))
+
     def test_failure_receipt_accepts_versioned_code_mode_operation_id(self):
         manifest, authority, config, receipt = failure_fixture()
         receipt["failure"]["hostOperationFailure"] = {

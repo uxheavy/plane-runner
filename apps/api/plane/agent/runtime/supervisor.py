@@ -120,6 +120,24 @@ _RUNTIME_FAILURE_CAUSES = frozenset(
         "provider_unknown_failure",
     }
 )
+_RUNTIME_CALLBACK_PHASES = frozenset(
+    {"before_host_call", "host_return", "model_observation_emit", "adapter_event"}
+)
+
+
+def _bounded_runtime_host_diagnostic(failure: object) -> dict[str, str]:
+    if not isinstance(failure, dict):
+        return {}
+    phase = failure.get("callbackPhase")
+    operation_ref_digest = failure.get("operationRefDigest")
+    if (
+        phase not in _RUNTIME_CALLBACK_PHASES
+        or not isinstance(operation_ref_digest, str)
+        or len(operation_ref_digest) != 64
+        or any(char not in "0123456789abcdef" for char in operation_ref_digest)
+    ):
+        return {}
+    return {"callbackPhase": phase, "operationRefDigest": operation_ref_digest}
 
 
 @dataclass(frozen=True)
@@ -314,6 +332,7 @@ def _runtime_exit_failure_classification(failure: object) -> dict[str, str] | No
     cause = failure.get("cause")
     if code == "runtime_error" and cause in _RUNTIME_FAILURE_CAUSES:
         bounded["failureCause"] = cause
+    bounded.update(_bounded_runtime_host_diagnostic(failure))
     return bounded
 
 

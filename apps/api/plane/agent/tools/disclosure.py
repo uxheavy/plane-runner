@@ -28,6 +28,8 @@ _RESERVED_PRESENTATION_KEYS = frozenset(
     }
 )
 _PRESENTATION_KEYS = ("eager", "eager_operations", "eagerOperations")
+MODEL_TOOLSET_KEY = "model_toolset"
+MODEL_TOOLSETS = frozenset({"standard", "code_mode_only"})
 MAX_EAGER_OPERATIONS = 64
 MAX_EAGER_INPUT_SCHEMA_BYTES = MAX_BOUNDED_BYTE_COUNT // MAX_EAGER_OPERATIONS
 MAX_EAGER_PRESENTATION_BYTES = MAX_BOUNDED_BYTE_COUNT // 2
@@ -128,6 +130,9 @@ def compose_tool_catalog(profile: Any, assignment: Any) -> dict[str, Any]:
     forbidden = _RESERVED_PRESENTATION_KEYS & set(presentation)
     if forbidden:
         raise ValueError("tool presentation cannot define authorization or allowlists")
+    model_toolset = presentation.get(MODEL_TOOLSET_KEY, "standard")
+    if model_toolset not in MODEL_TOOLSETS:
+        raise ValueError("model_toolset must be standard or code_mode_only")
 
     selected: list[str] = []
     # Keep the universal work core present, but let explicit route operations
@@ -146,7 +151,7 @@ def compose_tool_catalog(profile: Any, assignment: Any) -> dict[str, Any]:
     # mutation/read schema.  The complete catalog remains progressively
     # discoverable and gateway authorization is unchanged.
     if explicit_ids:
-        return _bounded_eager_catalog(selected)
+        return _bounded_eager_catalog(selected, model_toolset=model_toolset)
 
     tokens = _objective_tokens(assignment)
     for operation_id, descriptor in OPERATION_CATALOG.items():
@@ -157,12 +162,13 @@ def compose_tool_catalog(profile: Any, assignment: Any) -> dict[str, Any]:
         if _matches_assignment(descriptor, tokens):
             selected.append(operation_id)
 
-    return _bounded_eager_catalog(selected)
+    return _bounded_eager_catalog(selected, model_toolset=model_toolset)
 
 
-def _bounded_eager_catalog(selected: list[str]) -> dict[str, Any]:
+def _bounded_eager_catalog(selected: list[str], *, model_toolset: str = "standard") -> dict[str, Any]:
     catalog = {
         "catalogDigest": CATALOG_DIGEST,
+        "modelToolset": model_toolset,
         "eagerOperations": [_entry(OPERATION_CATALOG[operation_id]) for operation_id in selected],
     }
     presentation_bytes = len(canonical_json(catalog).encode("utf-8"))

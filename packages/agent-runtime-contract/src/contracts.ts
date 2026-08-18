@@ -1234,7 +1234,7 @@ function parseArtifact(value: unknown, path: string): ArtifactReference {
 }
 
 function parseRuntimeFailure(value: unknown, path: string): RuntimeFailure {
-  const object = requireRecord(value, path, ["code", "message", "retryable"], ["cause"]);
+  const object = requireRecord(value, path, ["code", "message", "retryable"], ["cause", "callbackPhase", "operationRefDigest"]);
   const codes = ["runtime_error", "lease_expired", "invalid_continuation", "budget_exhausted", "cancelled"] as const;
   const causes = [
     "host_operation_failure",
@@ -1256,11 +1256,32 @@ function parseRuntimeFailure(value: unknown, path: string): RuntimeFailure {
       throw new ContractParseError(`${path}.cause`, "requires the runtime_error failure code");
     }
   }
+  const callbackPhases = ["before_host_call", "host_return", "model_observation_emit", "adapter_event"] as const;
+  const hasCallbackPhase = object.callbackPhase !== undefined;
+  const hasOperationRefDigest = object.operationRefDigest !== undefined;
+  if (hasCallbackPhase !== hasOperationRefDigest) {
+    throw new ContractParseError(path, "host diagnostic fields must be provided together");
+  }
+  if (hasCallbackPhase && !callbackPhases.includes(object.callbackPhase as (typeof callbackPhases)[number])) {
+    throw new ContractParseError(`${path}.callbackPhase`, "is not a supported host callback phase");
+  }
+  if (hasOperationRefDigest && (
+    typeof object.operationRefDigest !== "string"
+    || !/^[a-f0-9]{64}$/.test(object.operationRefDigest)
+  )) {
+    throw new ContractParseError(`${path}.operationRefDigest`, "must be a lowercase SHA-256 hex digest");
+  }
   return {
     code: object.code,
     message: parseBoundedText(object.message, `${path}.message`),
     retryable: object.retryable,
     ...(object.cause === undefined ? {} : { cause: object.cause as RuntimeFailure["cause"] }),
+    ...(hasCallbackPhase
+      ? {
+          callbackPhase: object.callbackPhase as RuntimeFailure["callbackPhase"],
+          operationRefDigest: object.operationRefDigest as RuntimeFailure["operationRefDigest"],
+        }
+      : {}),
   } as RuntimeFailure;
 }
 
@@ -2034,6 +2055,8 @@ export type RuntimeFailure = Readonly<{
     | "cancellation_monitor_failure"
     | "invalid_usage_accounting"
     | "static_configuration_failure";
+  callbackPhase?: "before_host_call" | "host_return" | "model_observation_emit" | "adapter_event";
+  operationRefDigest?: string;
 }>;
 
 export type RuntimeUsage = Readonly<{

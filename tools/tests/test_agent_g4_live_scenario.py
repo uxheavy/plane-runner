@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import replace
 import hashlib
 import json
 import subprocess
@@ -648,7 +649,8 @@ def test_commission_descriptor_keeps_shared_profile_and_binds_each_assignment() 
     mutation = scenario.commission_descriptor(parsed, parsed.commissions[1])
     code_mode = scenario.commission_descriptor(parsed, parsed.commissions[2])
     context = scenario.commission_descriptor(parsed, parsed.commissions[3])
-    assert identity.profile == mutation.profile == code_mode.profile == context.profile == parsed.profile
+    assert identity.profile == mutation.profile == context.profile == parsed.profile
+    assert code_mode.profile == replace(parsed.profile, model_toolset="code_mode_only")
     assert identity.assignment.target_ref == mutation.assignment.target_ref == code_mode.assignment.target_ref == context.assignment.target_ref == scenario.ASSIGNED_WORK_ITEM_ALIAS
     assert identity.expected["routeChecks"] != mutation.expected["routeChecks"]
     assert mutation.expected["routeChecks"] == code_mode.expected["routeChecks"]

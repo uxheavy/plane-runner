@@ -101,6 +101,8 @@ type EagerOperationPresentation = Readonly<{
 
 The input schema is the bounded canonical JSON Schema object from the canonical gateway descriptor. `schemaDigest` still identifies the complete descriptor, including the result schema. The immutable `RunSnapshot.contentDigest` authenticates the embedded input-schema bytes. The runtime contract permits at most 64 eager entries, 16 KiB per canonical input schema, and 512 KiB for the aggregate eager presentation. Oversize schemas are rejected rather than truncated. No result schema, alias, broad coercion, or per-operation permission is part of this presentation shape.
 
+The enclosing `toolCatalog` may also carry the bounded enum `modelToolset`, either `"standard"` or `"code_mode_only"`. It is an immutable model-tool availability signal, not a permission or workflow language; omitted legacy snapshots mean `"standard"`. A Code Mode-only commission therefore presents the existing `plane_execute_typescript` and `plane_publish` tools while suppressing only the eager `plane_operation` tool. Plane authorization remains final at the Operation Gateway.
+
 This is a pre-release v1 contract correction found by functional dogfood. It is not a deployed compatibility migration and does not add a compatibility version or migration path.
 
 Each kernel dispatch receives a separate immutable `InvocationEnvelope`:

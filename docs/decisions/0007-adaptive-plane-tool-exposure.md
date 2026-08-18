@@ -30,6 +30,8 @@ All supported Plane integrations and actions are represented in the shared opera
 
 Catalog discoverability is global: an authenticated agent client can search the complete supported operation/action catalog. Role and assignment context decide which schemas are eager, not whether a supported operation exists. Discovering an operation does not imply that the current actor may execute it; live Plane authorization remains final for every call.
 
+For commissions whose productive action is supplied as bounded Code Mode, the immutable presentation adds the typed `modelToolset: "code_mode_only"` signal. Hermes uses this availability signal to expose the existing `plane_execute_typescript` and `plane_publish` tools without exposing the competing `plane_operation` route. Normal commissions use `modelToolset: "standard"` and retain `plane_operation`. This changes model-facing availability only; the Operation Gateway remains the sole authorization and execution authority for both native and Code Mode callbacks.
+
 The universal core includes one `search_workspace` operation that returns typed references across Plane objects. Ordinary reads may use one typed-reference reader when it can preserve clear schemas and authorization behavior. Mutations remain explicit semantic operations rather than one universal mutation tool.
 
 The exact universal-core membership, final names, promotion rules, and schemas remain separate catalog decisions and must be verified against real Plane work. Presentation never grants, denies, or pre-authorizes an operation; live Plane authorization remains final.

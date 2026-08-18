@@ -1,6 +1,7 @@
 """Production-entrypoint contracts for the Plane runtime supervisor."""
 
 import json
+import hashlib
 import os
 import re
 import socket
@@ -1309,6 +1310,8 @@ def test_supervisor_preserves_runtime_failure_cause_without_copying_raw_message(
         "status": "unavailable",
         "errorCode": "OPERATION_UNAVAILABLE",
         "codeModePhase": "host_callback",
+        "callbackPhase": "host_return",
+        "operationRefDigest": expected["operationRefDigest"],
     }
     output_with_diagnostic = _supervisor_result_output(
         result,

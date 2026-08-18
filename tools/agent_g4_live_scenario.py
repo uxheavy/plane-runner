@@ -180,6 +180,7 @@ class ProfileSpec:
     instructions: str
     model_policy: ModelPolicy
     tool_presentation: tuple[str, ...] = ()
+    model_toolset: Literal["standard", "code_mode_only"] = "standard"
 
 
 @dataclass(frozen=True)
@@ -195,6 +196,7 @@ class CommissionSpec:
     commission_id: str
     assignment: AssignmentSpec
     expected: ExpectedPredicates | None
+    model_toolset: Literal["standard", "code_mode_only"] = "standard"
 
 
 @dataclass(frozen=True)
@@ -235,6 +237,7 @@ class ScenarioDescriptor:
                         "contextRefs": list(commission.assignment.context_refs),
                     },
                     "expected": commission.expected,
+                    "modelToolset": commission.model_toolset,
                 }
                 for commission in self.commissions
             ]
@@ -250,6 +253,7 @@ def commission_descriptor(descriptor: ScenarioDescriptor, commission: Commission
         descriptor,
         assignment=commission.assignment,
         expected=commission.expected,
+        profile=replace(descriptor.profile, model_toolset=commission.model_toolset),
         commissions=(),
         selected_commission_id=commission.commission_id,
     )
@@ -656,16 +660,22 @@ def _commissions(value: Any) -> tuple[CommissionSpec, ...]:
     seen = set()
     for index, raw in enumerate(value):
         row = _object(raw, f"commission_{index}")
-        _keys(row, {"id", "assignment", "expected"}, f"commission_{index}")
+        commission_keys = {"id", "assignment", "expected", "modelToolset"}
+        if set(row).difference(commission_keys) or not {"id", "assignment", "expected"}.issubset(row):
+            raise ScenarioError(f"scenario_commission_{index}_fields_mismatch")
         commission_id = _ref(row["id"], f"commission_{index}_id", 64)
         if commission_id in seen:
             raise ScenarioError("scenario_commission_id_duplicate")
         seen.add(commission_id)
+        model_toolset = row.get("modelToolset", "standard")
+        if model_toolset not in {"standard", "code_mode_only"}:
+            raise ScenarioError("scenario_commission_model_toolset_invalid")
         result.append(
             CommissionSpec(
                 commission_id=commission_id,
                 assignment=_assignment(row["assignment"], f"commission_{index}_assignment"),
                 expected=_expected(row["expected"]),
+                model_toolset=model_toolset,
             )
         )
     return tuple(result)
