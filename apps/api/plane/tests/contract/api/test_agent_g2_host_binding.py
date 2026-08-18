@@ -375,6 +375,79 @@ def test_invocation_scoped_socket_routes_gateway_and_explicit_outcome(
 
 @pytest.mark.contract
 @pytest.mark.django_db(transaction=True)
+def test_code_mode_catalog_describe_projects_operation_id_for_next_callback(
+    tmp_path, workspace, gateway_project, gateway_issue, create_user
+):
+    """Code Mode can use catalog.describe output to resolve its next operation."""
+
+    actor = create_actor(
+        workspace=workspace,
+        project=gateway_project,
+        display_name="G2 Code Mode catalog worker",
+        credential_ref="plane-credential:g2-code-catalog",
+        created_by=create_user,
+    )
+    profile = create_profile(
+        actor,
+        role=AgentRole.WORKER,
+        instructions="Use the typed TypeScript host.",
+        runtime_defaults={"maxCodeModeCalls": 4},
+        created_by=create_user,
+    )
+    assignment = create_assignment(
+        actor,
+        project=gateway_project,
+        target_ref=f"issue:{gateway_issue.id}",
+        objective="Resolve a catalog operation and rename the assigned work item.",
+        acceptance_criteria=["The described operation is callable by its exact operationId."],
+        created_by=create_user,
+    )
+    run = create_run(assignment, profile, idempotency_key="idempotency:g2-code-catalog-run", created_by=create_user)
+    invocation = record_invocation(
+        run,
+        idempotency_key="idempotency:g2-code-catalog-invocation",
+        trigger="initial",
+    )
+    port = build_gateway_host_port(invocation=invocation, gateway=OperationGateway())
+    server = PlaneHostServer(socket_path=tmp_path / "g2-code-catalog.sock", invoke=port.invoke)
+    server.start()
+    try:
+        result = _round_trip(
+            server.socket_path,
+            _code_call(
+                run_id=run.snapshot["runId"],
+                invocation_id=invocation.invocation_id,
+                source="""
+                    export default async function ({host, input}: {host: any; input: any}) {
+                        const described = await host.call_plane_operation(
+                            "catalog.describe", {operation_id: "work_item.rename"},
+                            "idempotency:g2-code-catalog-describe",
+                            "correlation:g2-code-catalog-describe"
+                        );
+                        const operationId = described.operationId;
+                        if (typeof operationId !== "string") throw new Error("operationId unavailable");
+                        return await host.call_plane_operation(
+                            operationId, input,
+                            "idempotency:g2-code-catalog-rename",
+                            "correlation:g2-code-catalog-rename"
+                        );
+                    }
+                """,
+                input_data={
+                    "project_id": str(gateway_project.id),
+                    "issue_id": str(gateway_issue.id),
+                    "name": "G2 catalog-resolved rename",
+                },
+            ),
+        )
+        assert result.status == "ok", result
+        assert result.output["result"]["ok"] is True
+    finally:
+        server.close()
+
+
+@pytest.mark.contract
+@pytest.mark.django_db(transaction=True)
 def test_invocation_scoped_socket_executes_typescript_through_the_bound_host(
     tmp_path, workspace, gateway_project, gateway_issue, create_user
 ):

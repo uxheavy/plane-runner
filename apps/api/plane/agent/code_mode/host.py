@@ -24,6 +24,7 @@ from plane.agent.lifecycle.runtime_contract import (
     validate_invocation_envelope,
     validate_run_snapshot,
 )
+from plane.agent.runtime.contracts import model_operation_entry
 from plane.agent.runtime.dispatch import RuntimeDispatchError, _dispatch_binding
 from plane.db.models import (
     InvocationState,
@@ -896,6 +897,15 @@ class CodeModeHostRPC:
         }
         if response.get("ok"):
             receipt["result"] = response.get("result", {})
+            if raw["operation_id"] == "catalog.describe":
+                described = receipt["result"]
+                if isinstance(described, Mapping) and isinstance(described.get("operation"), Mapping):
+                    # Code Mode callbacks consume the receipt directly. Keep
+                    # the canonical gateway result intact while projecting the
+                    # model-facing operation at the same boundary used by the
+                    # separate runtime host, so the next callback can resolve
+                    # operationId without reconstructing or guessing it.
+                    receipt["operation"] = model_operation_entry(described["operation"])
         else:
             receipt["error"] = response.get("error", {"code": "INTERNAL_ERROR", "retryable": False})
         target_digest = self._target_digest(raw)
