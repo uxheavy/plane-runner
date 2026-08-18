@@ -604,9 +604,9 @@ def _scenario_descriptor():
         raise _scenario_preflight_error(
             "live invocation scenario descriptor inputs are incomplete",
             "scenario_inputs_incomplete",
-        )
+    )
     try:
-        from agent_g4_live_scenario import ScenarioError, load_descriptor, select_commission
+        from agent_g4_live_scenario import ScenarioError, load_descriptor, select_runtime_descriptor
     except ImportError:
         raise _scenario_preflight_error(
             "live invocation scenario parser is unavailable",
@@ -615,7 +615,7 @@ def _scenario_descriptor():
     try:
         descriptor = load_descriptor(path, digest)
         commission_id = os.environ.get("G4_SCENARIO_COMMISSION_ID", "")
-        return select_commission(descriptor, commission_id) if commission_id else descriptor
+        return select_runtime_descriptor(descriptor, commission_id) if commission_id else descriptor
     except ScenarioError as exc:
         reason_subreason = getattr(exc, "code", None)
         if reason_subreason not in _SCENARIO_PREFLIGHT_SUBREASONS:

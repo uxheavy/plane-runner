@@ -254,6 +254,19 @@ def select_commission(descriptor: ScenarioDescriptor, commission_id: str) -> Sce
     raise ScenarioError("scenario_commission_not_found")
 
 
+def select_runtime_descriptor(descriptor: ScenarioDescriptor, commission_id: str) -> ScenarioDescriptor:
+    """Resolve a multi-commission selector while preserving a single assignment descriptor.
+
+    The launcher commission id is also a per-run identity for single-assignment
+    descriptors. Only descriptors that declare commission choices may use it as
+    a selector; otherwise the validated descriptor is already the selection.
+    """
+
+    if not descriptor.commissions:
+        return descriptor
+    return select_commission(descriptor, commission_id)
+
+
 def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, ...]:
     """Render the typed route gate as bounded, ordered model-facing outcomes."""
 

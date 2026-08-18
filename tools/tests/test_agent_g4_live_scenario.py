@@ -209,6 +209,19 @@ def test_select_commission_keeps_source_digest_and_removes_other_commissions() -
         scenario.select_commission(parsed, "missing")
 
 
+def test_single_manager_descriptor_ignores_per_run_commission_identity() -> None:
+    path = TOOLS / "agent-g4-manager-v1.json"
+    raw = path.read_bytes()
+    parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
+
+    selected = scenario.select_runtime_descriptor(parsed, "manager-m01-m08-v23-primary-20260818-01")
+
+    assert selected.commissions == ()
+    assert selected.selected_commission_id is None
+    assert selected.descriptor_digest == parsed.descriptor_digest
+    assert selected.assignment == parsed.assignment
+
+
 def test_operator_live_descriptor_covers_exact_synthetic_omar_routes() -> None:
     path = TOOLS / "agent-g4-operator-v6.json"
     raw = path.read_bytes()
