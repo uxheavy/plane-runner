@@ -33,7 +33,7 @@ MAX_INTEGER = 2_147_483_647
 # API image copies ``plane/`` as a unit, so the bytes are available in both
 # host checkouts and ``/code`` containers without a runtime package fallback.
 ARTIFACT_DIRECTORY = Path(__file__).resolve().parent / "contract_artifacts" / "v1"
-EXPECTED_MANIFEST_SHA256 = "d1a5b746d15b1e8cc64bd105b1e8440fc133b3d22608208256cbe0b409ae7d71"
+EXPECTED_MANIFEST_SHA256 = "0ebbaef00c56af0c7f35ff74c0fc711353fb1690e04b8df80a73d5f1ae651fd1"
 LEGACY_COMMAND_FINGERPRINT_PREFIX = "legacy1:"
 _SCHEMA_NAMES = frozenset(
     {

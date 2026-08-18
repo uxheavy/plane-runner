@@ -2856,6 +2856,12 @@ class G4ContractTests(unittest.TestCase):
             "timeout_failure",
             "provider_client_failure",
             "runtime_unknown_failure",
+            "provider_auth_failure",
+            "provider_entitlement_failure",
+            "provider_rate_limit",
+            "provider_request_failure",
+            "provider_transport_failure",
+            "provider_unknown_failure",
         ):
             reason = json.dumps(
                 {
@@ -2881,6 +2887,10 @@ class G4ContractTests(unittest.TestCase):
                 terminal_kind="run_failure",
                 failure_code="runtime_error",
                 failure_reason=reason,
+                runtime_exit={
+                    "kind": "failed",
+                    "failure": {"code": "runtime_error", "cause": cause},
+                },
             )
             self.assertEqual(evidence["failure"]["reasonCause"], cause)
             self.assertEqual(evidence["runtimeExit"]["failure"]["cause"], cause)

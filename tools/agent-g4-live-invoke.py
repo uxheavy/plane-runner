@@ -956,6 +956,12 @@ def build_failure_evidence(
         "timeout_failure",
         "provider_client_failure",
         "runtime_unknown_failure",
+        "provider_auth_failure",
+        "provider_entitlement_failure",
+        "provider_rate_limit",
+        "provider_request_failure",
+        "provider_transport_failure",
+        "provider_unknown_failure",
     }
     operation_ids = (
         "search_workspace",
