@@ -8,16 +8,16 @@ This goal covers the full Plane Agent control plane and the hidden execution ser
 
 Functional completion and controlled rollout are separate outcomes. This goal ends when the non-UI product passes the complete live dogfood matrix, the production-candidate checks, and integration into a named Plane branch. Development, allowlisted-workspace, expanded-cohort, and GA rollout are a successor goal requiring their own deployment authority; they are not evidence that the product implementation works and are not a completion condition here.
 
-### Current v26 functional-completion plan (2026-08-18)
+### Current v27 functional-completion plan (2026-08-18)
 
 The named integration branch is
 `codex/plane-agent-functional-v25-20260818` at source
-`a853a9053a867dc3b910723f0b2670110479f59b`. Its exact API artifact is
-`plane-agent-api:g4-v26-a853a905` at
-`sha256:e1a7541e5feab42146e469a7421185d7e737db173b7f801d268e054622e305a9`,
+`59b8b8f277262dad4e2a3ba53d0cfb0490bc2bbc`. Its exact API artifact is
+`plane-agent-api:g4-v27-59b8b8f2` at
+`sha256:47f735ade456d18773275caffb94a15d03bc48a57837738fd5ad2b00f8b844c6`,
 and its exact runtime artifact is
-`plane-agent-runtime:hermes-c2fa44-g4-v26-a853a905` at
-`sha256:985b9acdbcffd473ee1839673c233fa0f1ea1008e5e674a5ebf79747ba22dcc0`.
+`plane-agent-runtime:hermes-c2fa44-g4-v27-59b8b8f2` at
+`sha256:398fb2a09d8af26f6a958af624a2f6ef2b7fcaa681632c1c4e56488b84fff326`.
 No current-candidate persona route
 is claimed passed. Earlier provider-backed waves are history and do not replace
 the matrix below. The unchanged O02 exact external-client proof is the sole
