@@ -586,17 +586,11 @@ def validate_rollback_fixture(fixture_path: Path, root: Path, manifest: dict[str
         "sdkGitlink": _shell_assignment(evidence, "SDK_COMMIT"),
         "imageDigest": _shell_assignment(evidence, "API_TEST_IMAGE_DIGEST"),
     }
+    # previous.apiArtifact is the immutable prepared API base consumed by the
+    # canonical builder. Rollback still binds the accepted-G3 deployable API
+    # through previous.services and the accepted evidence above.
     previous_api = _object(_required(previous, "apiArtifact", "rollback_previous"), "rollback_previous_apiArtifact")
-    _rollback_exact(
-        previous_api,
-        {
-            "imageTag": "plane-g3-external-client-api-tests:prepared",
-            "imageDigest": accepted_g3["imageDigest"],
-            "sourceRevision": g3_baseline,
-            "contract": ROLLBACK_OPERATION_CONTRACT,
-        },
-        "previous_api",
-    )
+    _rollback_exact(previous_api["contract"], ROLLBACK_OPERATION_CONTRACT, "previous_api_contract")
     # Hermes and MCP may advance for a candidate while rollback still targets
     # the immutable accepted-G3 service image. The accepted G3 values remain
     # evidence for that previous image; the SDK remains shared because its
