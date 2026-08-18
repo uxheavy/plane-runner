@@ -536,17 +536,17 @@ docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose
 
 `apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` is the pin
 manifest. The current Plane deployable service candidate is the exact source
-`59b8b8f277262dad4e2a3ba53d0cfb0490bc2bbc`; the final candidate is
+`3b84cca2eff17a92e218a3071df874b3da95ef92`; the final candidate is
 exactly one metadata wrapper child of that source. The previously accepted G3
 candidate is Plane commit `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
 Its immutable API artifact is
-`plane-agent-api:g4-v27-59b8b8f2` at
-`sha256:47f735ade456d18773275caffb94a15d03bc48a57837738fd5ad2b00f8b844c6`,
+`plane-agent-api:g4-v28-3b84cca2` at
+`sha256:de5a552cd350df4df33e59fae560730c4693c83d2dff1bb3f0c383a529b088aa`,
 and its runtime artifact is
 `plane-agent-runtime:hermes-c2fa44-g4-v27-59b8b8f2` at
 `sha256:398fb2a09d8af26f6a958af624a2f6ef2b7fcaa681632c1c4e56488b84fff326`.
-The API and runtime images remain source-bound to
-`59b8b8f277262dad4e2a3ba53d0cfb0490bc2bbc`,
+The API is source-bound to `3b84cca2eff17a92e218a3071df874b3da95ef92`; the
+runtime remains source-bound to `59b8b8f277262dad4e2a3ba53d0cfb0490bc2bbc`,
 with runtime contract `plane.agent-runtime/v1` and API contract
 `plane.operation/v1`.
 
@@ -560,10 +560,10 @@ The runtime revision is
 `59b8b8f277262dad4e2a3ba53d0cfb0490bc2bbc`. The Plane service revision above is
 the current executable artifact revision; the runtime image/runtimeRevision source is
 `59b8b8f277262dad4e2a3ba53d0cfb0490bc2bbc`. The API image tag is
-`plane-agent-api:g4-v27-59b8b8f2` and the API image digest is
-`sha256:47f735ade456d18773275caffb94a15d03bc48a57837738fd5ad2b00f8b844c6`.
+`plane-agent-api:g4-v28-3b84cca2` and the API image digest is
+`sha256:de5a552cd350df4df33e59fae560730c4693c83d2dff1bb3f0c383a529b088aa`.
 The API source revision is
-`59b8b8f277262dad4e2a3ba53d0cfb0490bc2bbc`; the API contract is
+`3b84cca2eff17a92e218a3071df874b3da95ef92`; the API contract is
 `plane.operation/v1`. The exact-image red-team proof
 passes the real Hermes loop, progressive `catalog.search`/`catalog.describe`,
 verbatim search-result-to-read handoff with target-digest correlation,
