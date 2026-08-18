@@ -149,12 +149,12 @@ def test_g4_deployment_credential_resolver_accepts_provider_neutral_chatgpt_sour
 
 
 @pytest.mark.parametrize(
-    "include_optional_api_key",
+    "document_shape",
     (False, True),
-    ids=("current", "legacy"),
+    ids=("legacy-without-host-metadata", "current"),
 )
 def test_g4_deployment_credential_resolver_accepts_fresh_codex_auth_document(
-    monkeypatch, tmp_path, include_optional_api_key
+    monkeypatch, tmp_path, document_shape
 ):
     now = runtime_credentials.datetime.fromisoformat("2026-08-07T10:12:00+00:00").timestamp()
     monkeypatch.setattr(runtime_credentials.time, "time", lambda: now)
@@ -167,8 +167,9 @@ def test_g4_deployment_credential_resolver_accepts_fresh_codex_auth_document(
             "refresh_token": "synthetic-refresh-token",
         },
     }
-    if include_optional_api_key:
+    if document_shape:
         document["OPENAI_API_KEY"] = None
+        document["auth_mode"] = "chatgpt"
     source = tmp_path / "auth.json"
     source.write_text(json.dumps(document), encoding="utf-8")
     monkeypatch.setattr(runtime_credentials, "DEPLOYMENT_CREDENTIAL_SOURCE_PATH", str(source))
@@ -261,6 +262,10 @@ def test_g4_codex_auth_document_rejects_unusable_jwt_lifetime(monkeypatch, tmp_p
         lambda document: document["tokens"].update(extra="ambiguous-token"),
         lambda document: document.update(api_key="ambiguous-token"),
         lambda document: document.update(OPENAI_API_KEY="ambiguous-token"),
+        lambda document: document.pop("auth_mode"),
+        lambda document: document.update(auth_mode="api"),
+        lambda document: document.update(auth_mode=1),
+        lambda document: document.update(extra="ambiguous-token"),
         lambda document: document.update(last_refresh=None),
     ),
     ids=(
@@ -270,6 +275,10 @@ def test_g4_codex_auth_document_rejects_unusable_jwt_lifetime(monkeypatch, tmp_p
         "extra-token",
         "extra-top-level",
         "non-null-openai-key",
+        "missing-auth-mode",
+        "other-auth-mode",
+        "non-string-auth-mode",
+        "extra-top-level",
         "null-refresh-time",
     ),
 )
@@ -279,6 +288,7 @@ def test_g4_deployment_credential_resolver_rejects_malformed_ambiguous_or_null_c
     source = tmp_path / "auth.json"
     document = {
         "OPENAI_API_KEY": None,
+        "auth_mode": "chatgpt",
         "last_refresh": "2026-08-13T00:00:00Z",
         "tokens": {
             "access_token": "synthetic-access-token",

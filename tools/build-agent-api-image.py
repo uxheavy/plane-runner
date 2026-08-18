@@ -247,6 +247,8 @@ def verify_resolver_image(tag: str) -> None:
         source.write_text(
             json.dumps(
                 {
+                    "OPENAI_API_KEY": None,
+                    "auth_mode": "chatgpt",
                     "last_refresh": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                     "tokens": {
                         "access_token": synthetic_access_token,

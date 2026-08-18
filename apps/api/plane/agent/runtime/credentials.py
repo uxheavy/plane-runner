@@ -84,11 +84,13 @@ DEPLOYMENT_CREDENTIAL_ALLOWED_REFS = frozenset({"runtime"})
 # single-line token.  The broker still exposes only the canonical api_key
 # value to the trusted runtime parent.
 _DEPLOYMENT_CREDENTIAL_KEYS = frozenset({"API_KEY", "OPENAI_API_KEY", "XAI_API_KEY", "api_key"})
-# Codex auth.json currently omits OPENAI_API_KEY. Keep accepting the older
-# shape when that field is present, but require it to remain null.
+# Keep accepting the older shape without host metadata. The current Codex
+# document is exact: its API-key placeholder is null and auth mode is chatgpt.
 _CODEX_AUTH_DOCUMENT_KEYS = frozenset({"last_refresh", "tokens"})
-_CODEX_AUTH_DOCUMENT_WITH_API_KEY_KEYS = frozenset({"OPENAI_API_KEY", "last_refresh", "tokens"})
-_CODEX_AUTH_DOCUMENT_SHAPES = (_CODEX_AUTH_DOCUMENT_KEYS, _CODEX_AUTH_DOCUMENT_WITH_API_KEY_KEYS)
+_CODEX_AUTH_CURRENT_DOCUMENT_KEYS = frozenset(
+    {"OPENAI_API_KEY", "auth_mode", "last_refresh", "tokens"}
+)
+_CODEX_AUTH_DOCUMENT_SHAPES = (_CODEX_AUTH_DOCUMENT_KEYS, _CODEX_AUTH_CURRENT_DOCUMENT_KEYS)
 _CODEX_AUTH_TOKEN_KEYS = frozenset({"access_token", "account_id", "id_token", "refresh_token"})
 _CODEX_AUTH_MAX_FUTURE_SKEW_SECONDS = 60
 _CODEX_ACCESS_TOKEN_MAX_LIFETIME_SECONDS = 14 * 24 * 60 * 60
@@ -159,7 +161,9 @@ def _parse_deployment_dotenv(text: str) -> str:
 def _parse_codex_auth_document(value: object) -> str:
     if not isinstance(value, dict) or frozenset(value) not in _CODEX_AUTH_DOCUMENT_SHAPES:
         raise RuntimeCredentialError("deployment credential JSON fields are invalid")
-    if "OPENAI_API_KEY" in value and value["OPENAI_API_KEY"] is not None:
+    if "OPENAI_API_KEY" in value and (
+        value["OPENAI_API_KEY"] is not None or value.get("auth_mode") != "chatgpt"
+    ):
         raise RuntimeCredentialError("deployment credential JSON fields are invalid")
     last_refresh = value["last_refresh"]
     if not isinstance(last_refresh, str) or not last_refresh.strip():
