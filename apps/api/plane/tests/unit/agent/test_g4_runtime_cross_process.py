@@ -441,7 +441,7 @@ def test_g4_runtime_http_classifies_incomplete_hermes_policy_without_raw_excepti
     }
 
 
-def test_g4_provider_dispatch_reaches_one_fake_provider_attempt_and_cleans_relay(tmp_path, monkeypatch):
+def test_g4_provider_dispatch_reissues_invocation_relay_and_lease(tmp_path, monkeypatch):
     from plane.agent.runtime.subprocess import RuntimeProcessPolicy, SubprocessRuntimeTransport
 
     secret = "synthetic-provider-secret"
@@ -530,7 +530,14 @@ def test_g4_provider_dispatch_reaches_one_fake_provider_attempt_and_cleans_relay
         relay_paths.append(Path(relay.descriptor.socket_path))
         return relay
 
-    executor.open_provider_relay = open_with_fake  # type: ignore[method-assign]
+    relay_tokens: list[str] = []
+
+    def open_with_fake_and_capture(**kwargs):
+        relay = open_with_fake(**kwargs)
+        relay_tokens.append(relay.descriptor.token)
+        return relay
+
+    executor.open_provider_relay = open_with_fake_and_capture  # type: ignore[method-assign]
 
     callback_phases: list[str] = []
 
@@ -584,31 +591,55 @@ def test_g4_provider_dispatch_reaches_one_fake_provider_attempt_and_cleans_relay
         "maxCodeModeOutputBytes",
         "maxCodeModeCalls",
     }
-    snapshot_json = json.dumps(snapshot, sort_keys=True, separators=(",", ":"))
+    runtime_policy = snapshot["runtimePolicy"]
+
+    def dispatch_body(suffix: str) -> tuple[str, str]:
+        raw_snapshot, raw_invocation = _dispatch_body(suffix)
+        payload = json.loads(raw_snapshot)
+        payload["runtimePolicy"] = runtime_policy
+        return json.dumps(payload, sort_keys=True, separators=(",", ":")), raw_invocation
+
+    broker = RuntimeCredentialBroker({"runtime": {"api_key": secret}}, state_file=state_file)
+    issued_lease_ids: list[str] = []
+    original_issue = broker.issue
+
+    def issue(**kwargs):
+        lease, values = original_issue(**kwargs)
+        issued_lease_ids.append(lease.lease_id)
+        return lease, values
+
+    monkeypatch.setattr(broker, "issue", issue)
+    transport = RemoteRuntimeTransport(
+        runtime_url=f"http://127.0.0.1:{server.server_port}",
+        shared_secret=configuration.shared_secret,
+        credential_broker=broker,
+        host_endpoint_factory=lambda _invocation_id: nullcontext(
+            RuntimeHostEndpoint(url="http://plane-host.invalid", token="host-token")
+        ),
+    )
     try:
-        frames = RemoteRuntimeTransport(
-            runtime_url=f"http://127.0.0.1:{server.server_port}",
-            shared_secret=configuration.shared_secret,
-            credential_broker=RuntimeCredentialBroker(
-                {"runtime": {"api_key": secret}}, state_file=state_file
-            ),
-            host_endpoint_factory=lambda _invocation_id: nullcontext(
-                RuntimeHostEndpoint(url="http://plane-host.invalid", token="host-token")
-            ),
-        ).dispatch(snapshot_json, invocation_json)
+        first_frames = transport.dispatch(*dispatch_body("provider-fake-one"))
+        second_frames = transport.dispatch(*dispatch_body("provider-fake-two"))
     finally:
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
 
-    assert frames == ('{"protocol":"fixture","status":"completed"}',)
-    assert fake_attempts == 1
-    assert callback_phases == ["intent", "started", "completed"]
-    assert secret not in json.dumps(frames, sort_keys=True)
+    assert first_frames == second_frames == ('{"protocol":"fixture","status":"completed"}',)
+    assert fake_attempts == 2
+    assert callback_phases == ["intent", "started", "completed"] * 2
+    assert secret not in json.dumps(first_frames + second_frames, sort_keys=True)
+    assert len(issued_lease_ids) == 2
+    assert len(set(issued_lease_ids)) == 2
     assert state_file.exists()
-    assert secret not in state_file.read_text(encoding="utf-8")
-    assert json.loads(state_file.read_text(encoding="utf-8"))["revokedLeases"]
-    assert relay_paths and all(not path.exists() for path in relay_paths)
+    state = json.loads(state_file.read_text(encoding="utf-8"))
+    assert secret not in json.dumps(state, sort_keys=True)
+    assert state["revokedLeases"] == issued_lease_ids
+    assert len(relay_paths) == 2
+    assert len({str(path) for path in relay_paths}) == 2
+    assert len(relay_tokens) == 2
+    assert len(set(relay_tokens)) == 2
+    assert all(not path.exists() for path in relay_paths)
 
 
 def test_g4_remote_dispatch_preserves_success_after_expired_lease_cleanup(tmp_path, monkeypatch):
