@@ -11,8 +11,8 @@ import pytest
 import importlib.util
 
 TOOLS = Path(__file__).parents[1]
-V16_SOURCE = "4e2b85384b85ecff822cd1136a668258dc76a90a"
-V16_WRAPPER = "be7992f2e57a70779e3d3845a5462316c686d819"
+V21_SOURCE = "9ad2d5c41a6019effa47fc10d96d338d7ffb1378"
+V21_WRAPPER = "91e495559c2c601840da2f6bfa1456263292e28a"
 _SPEC = importlib.util.spec_from_file_location("agent_g4_live_launch", TOOLS / "agent-g4-live-launch.py")
 assert _SPEC is not None and _SPEC.loader is not None
 launch = importlib.util.module_from_spec(_SPEC)
@@ -62,13 +62,13 @@ def test_prepare_defaults_to_manifest_for_exact_checked_in_wrapper(
             "--run-dir",
             str(run_dir),
             "--candidate",
-            V16_WRAPPER,
+            V21_WRAPPER,
         ],
     )
 
     assert launch_inputs.main() == 0
     authority = json.loads((run_dir / "authority.json").read_text(encoding="utf-8"))
-    assert authority["expectedCandidate"] == V16_WRAPPER
+    assert authority["expectedCandidate"] == V21_WRAPPER
 
 
 def test_prepare_rejects_source_when_wrapper_is_required(
@@ -89,7 +89,7 @@ def test_prepare_rejects_source_when_wrapper_is_required(
             "--run-dir",
             str(tmp_path / "rejected"),
             "--candidate",
-            V16_SOURCE,
+            V21_SOURCE,
         ],
     )
 
@@ -128,7 +128,7 @@ def test_launch_defaults_to_checked_in_wrapper_manifest() -> None:
     assert launch.resolve_manifest(None) == launch.DEFAULT_MANIFEST
     launch._checked_in_manifest(launch.DEFAULT_MANIFEST)
     provenance = launch.load_manifest_provenance(launch.DEFAULT_MANIFEST)
-    assert provenance["candidate"] == V16_SOURCE
+    assert provenance["candidate"] == V21_SOURCE
 
 
 def test_launch_rejects_similarly_named_manifest_outside_owned_tmp(tmp_path: Path) -> None:

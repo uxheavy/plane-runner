@@ -51,6 +51,32 @@
       "contract": "plane.operation/v1"
     }
   },
+  "scenarioModules": [
+    {
+      "module": "agent_g4_live_scenario",
+      "source": "tools/agent_g4_live_scenario.py",
+      "runtime": "/run/plane-scenario/agent_g4_live_scenario.py",
+      "sha256": "aa6944a7a628a02dafd82a56d666c5b413038e58b0498abf3c74e7275bbabc44"
+    },
+    {
+      "module": "agent_g4_worker_route",
+      "source": "tools/agent_g4_worker_route.py",
+      "runtime": "/run/plane-scenario/agent_g4_worker_route.py",
+      "sha256": "6feae4e0242ee6c866b24924c379a0968d168963d5d6c4fb06e48fdd5c600ef7"
+    },
+    {
+      "module": "agent_g4_worker_route_observations",
+      "source": "tools/agent_g4_worker_route_observations.py",
+      "runtime": "/run/plane-scenario/agent_g4_worker_route_observations.py",
+      "sha256": "861373282e8af62560c39762d6ebac4ad484d91cf98e784f5abc69ffabf0c146"
+    },
+    {
+      "module": "agent_g4_manager_route",
+      "source": "tools/agent_g4_manager_route.py",
+      "runtime": "/run/plane-scenario/agent_g4_manager_route.py",
+      "sha256": "7d6d2da3940624360a3bc0b8c0ce1ed82811462c2cbed6e3ae1b4a177996a4d1"
+    }
+  ],
   "liveContract": {
     "authoritySchema": "tools/agent-g4-live-authority.schema.json",
     "configSchema": "tools/agent-g4-live-config.schema.json",
@@ -103,6 +129,7 @@
     "tools/verify-agent-g3.sh",
     "tools/verify-agent-g4.sh",
     "tools/agent-verifier-lock.py",
+    "tools/agent_g4_scenario_modules.py",
     "apps/api/Dockerfile.g4",
     "apps/api/.dockerignore",
     "tools/summarize_agent_g4.py",

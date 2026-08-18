@@ -15,6 +15,7 @@ TOOLS = Path(__file__).parents[1]
 sys.path.insert(0, str(TOOLS))
 
 import agent_g4_live_scenario as scenario  # noqa: E402
+import agent_g4_scenario_modules as scenario_modules  # noqa: E402
 import validate_agent_g4_live as validator  # noqa: E402
 
 
@@ -376,8 +377,43 @@ def test_manager_setup_failure_receipt_has_bounded_stage_marker_and_counters() -
 def test_manager_fixture_is_staged_into_the_owner_only_scenario_volume() -> None:
     source = (TOOLS / "agent-g4-live.sh").read_text()
 
-    assert 'destination = "/run/plane-scenario/agent_g4_manager_route.py"' in source
-    assert '<"${ROOT_DIR}/tools/agent_g4_manager_route.py"' in source
+    manifest = json.loads((TOOLS / "agent-g4-manifest.json").read_text(encoding="utf-8"))
+    manager = next(item for item in manifest["scenarioModules"] if item["module"] == "agent_g4_manager_route")
+    assert manager["runtime"] == "/run/plane-scenario/agent_g4_manager_route.py"
+    assert "agent_g4_manager_route" in (TOOLS / "agent_g4_scenario_modules.py").read_text(encoding="utf-8")
+    assert "stage_scenario_module" in source
+    assert "scenario_module_source_hash_mismatch" in source
+
+
+def test_live_scenario_module_manifest_binds_every_runtime_import() -> None:
+    manifest = TOOLS / "agent-g4-manifest.json"
+    modules = scenario_modules.scenario_modules(manifest, TOOLS.parent)
+
+    assert {item["module"] for item in modules} == scenario_modules.REQUIRED_MODULES
+    assert all(item["runtime"].startswith("/run/plane-scenario/") for item in modules)
+    runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+    assert "scenario-module-preflight=passed" in runner
+    assert "PYTHONPATH=/run/plane-scenario:/workspace/apps/api" in runner
+
+
+def test_live_scenario_module_manifest_rejects_omitted_manager_route(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    manifest = json.loads((TOOLS / "agent-g4-manifest.json").read_text(encoding="utf-8"))
+    manifest["scenarioModules"] = [
+        item for item in manifest["scenarioModules"] if item["module"] != "agent_g4_manager_route"
+    ]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="required_set_mismatch"):
+        scenario_modules.scenario_modules(manifest_path, TOOLS.parent)
+
+
+def test_live_invocation_inserts_the_owner_only_scenario_import_root() -> None:
+    source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+
+    assert 'scenario_module_root = "/run/plane-scenario"' in source
+    assert 'sys.path.insert(0, scenario_module_root)' in source
+    assert "scenario_module_root_missing" in source
 
 
 def test_commission_descriptor_keeps_shared_profile_and_binds_each_assignment() -> None:

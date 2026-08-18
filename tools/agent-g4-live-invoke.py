@@ -67,6 +67,10 @@ from plane.db.models.operation_gateway import (
 )
 
 if os.environ.get("G4_SCENARIO_DESCRIPTOR"):
+    scenario_module_root = "/run/plane-scenario"
+    if not os.path.isdir(scenario_module_root):
+        raise RuntimeError("scenario_module_root_missing")
+    sys.path.insert(0, scenario_module_root)
     from agent_g4_manager_route import build_manager_route_evidence
     from agent_g4_worker_route import (
         attempt_actor_substitution,

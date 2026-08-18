@@ -561,6 +561,57 @@ if [[ "${SCENARIO_ENABLED}" -eq 1 ]]; then
         --label "com.uxheavy.plane.agent-g4-project=${PROJECT}" \
         "${SCENARIO_VOLUME}" >/dev/null
     SCENARIO_VOLUME_CREATED=1
+    SCENARIO_MODULES="$(python3 "${ROOT_DIR}/tools/agent_g4_scenario_modules.py" --manifest "${MANIFEST}" --root "${ROOT_DIR}")" || {
+        printf '%s\n' 'event=agent.g4.live-runner status=failed phase=scenario-staging expected=manifest-bound-scenario-modules actual=invalid suggestion=repair-scenario-module-manifest' >&2
+        exit 2
+    }
+    SCENARIO_MODULE_ROWS=()
+    while IFS=$'\t' read -r module source runtime sha256; do
+        SCENARIO_MODULE_ROWS+=("${module}"$'\t'"${source}"$'\t'"${runtime}"$'\t'"${sha256}")
+    done <<<"${SCENARIO_MODULES}"
+    declare -A SCENARIO_MODULE_SEEN=()
+    for row in "${SCENARIO_MODULE_ROWS[@]}"; do
+        IFS=$'\t' read -r module source runtime sha256 <<<"${row}"
+        [[ -z "${SCENARIO_MODULE_SEEN[${module}]:-}" ]] || {
+            printf 'event=agent.g4.live-runner status=failed phase=scenario-staging expected=unique-scenario-module-names actual=duplicate module=%s\n' "${module}" >&2
+            exit 2
+        }
+        SCENARIO_MODULE_SEEN["${module}"]=1
+    done
+    stage_scenario_module() {
+        local module="$1"
+        local source="$2"
+        local runtime="$3"
+        local sha256="$4"
+        docker run --rm -i --network none \
+            --mount type=volume,src="${SCENARIO_VOLUME}",dst=/run/plane-scenario,volume-nocopy \
+            --entrypoint python3 "${API_IMAGE}" -c '
+import hashlib
+import os
+import stat
+import sys
+
+destination, expected = sys.argv[1:]
+payload = sys.stdin.buffer.read()
+if hashlib.sha256(payload).hexdigest() != expected:
+    raise SystemExit("scenario_module_source_hash_mismatch")
+fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
+try:
+    os.fchmod(fd, 0o600)
+    view = memoryview(payload)
+    while view:
+        written = os.write(fd, view)
+        if written <= 0:
+            raise OSError("scenario module staging made no progress")
+        view = view[written:]
+    os.fsync(fd)
+finally:
+    os.close(fd)
+metadata = os.stat(destination, follow_symlinks=False)
+if not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o600:
+    raise SystemExit("scenario_module_runtime_file_invalid")
+' "${runtime}" "${sha256}" <"${ROOT_DIR}/${source}" >/dev/null
+    }
     docker run --rm -i --network none \
         --mount type=volume,src="${SCENARIO_VOLUME}",dst=/run/plane-scenario,volume-nocopy \
         --entrypoint python3 "${API_IMAGE}" -c '
@@ -588,26 +639,6 @@ metadata = os.stat("/run/plane-scenario/descriptor.json", follow_symlinks=False)
 if not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o600:
     raise SystemExit(1)
 ' <"${SCENARIO_DESCRIPTOR_PATH_INPUT}" >/dev/null 2>&1
-    docker run --rm -i --network none \
-        --mount type=volume,src="${SCENARIO_VOLUME}",dst=/run/plane-scenario,volume-nocopy \
-        --entrypoint python3 "${API_IMAGE}" -c '
-import os
-import shutil
-import stat
-
-destination = "/run/plane-scenario/agent_g4_live_scenario.py"
-fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
-try:
-    os.fchmod(fd, 0o600)
-    with os.fdopen(fd, "wb", closefd=False) as output:
-        shutil.copyfileobj(os.fdopen(0, "rb", closefd=False), output, 65536)
-    os.fsync(fd)
-finally:
-    os.close(fd)
-metadata = os.stat(destination, follow_symlinks=False)
-if not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o600:
-    raise SystemExit(1)
-' <"${ROOT_DIR}/tools/agent_g4_live_scenario.py" >/dev/null 2>&1
     docker run --rm --network none \
         --mount type=volume,src="${SCENARIO_VOLUME}",dst=/run/plane-scenario,readonly,volume-nocopy \
         --entrypoint python3 "${API_IMAGE}" -c '
@@ -618,66 +649,36 @@ payload = open("/run/plane-scenario/descriptor.json", "rb").read(131073)
 if len(payload) > 131072 or hashlib.sha256(payload).hexdigest() != sys.argv[1]:
     raise SystemExit(1)
 ' "${SCENARIO_DESCRIPTOR_SHA256}" >/dev/null 2>&1
-    docker run --rm -i --network none \
-        --mount type=volume,src="${SCENARIO_VOLUME}",dst=/run/plane-scenario,volume-nocopy \
-        --entrypoint python3 "${API_IMAGE}" -c '
-import os
-import shutil
-import stat
+    for row in "${SCENARIO_MODULE_ROWS[@]}"; do
+        IFS=$'\t' read -r module source runtime sha256 <<<"${row}"
+        stage_scenario_module "${module}" "${source}" "${runtime}" "${sha256}"
+    done
+    SCENARIO_PREFLIGHT_ARGS=()
+    for row in "${SCENARIO_MODULE_ROWS[@]}"; do
+        IFS=$'\t' read -r module source runtime sha256 <<<"${row}"
+        SCENARIO_PREFLIGHT_ARGS+=("${module}" "${runtime}" "${sha256}")
+    done
+    docker run --rm --network none \
+        --mount type=volume,src="${SCENARIO_VOLUME}",dst=/run/plane-scenario,readonly,volume-nocopy \
+        --env DJANGO_SETTINGS_MODULE=plane.settings.test \
+        --env REDIS_URL=redis://127.0.0.1:6379/ \
+        --env PYTHONPATH=/run/plane-scenario:/workspace/apps/api \
+        --entrypoint python3 "${API_IMAGE}" - "${SCENARIO_PREFLIGHT_ARGS[@]}" <<'PY'
+import hashlib
+import importlib
+import importlib.util
+import sys
 
-destination = "/run/plane-scenario/agent_g4_worker_route.py"
-fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
-try:
-    os.fchmod(fd, 0o600)
-    with os.fdopen(fd, "wb", closefd=False) as output:
-        shutil.copyfileobj(os.fdopen(0, "rb", closefd=False), output, 65536)
-    os.fsync(fd)
-finally:
-    os.close(fd)
-metadata = os.stat(destination, follow_symlinks=False)
-if not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o600:
-    raise SystemExit(1)
-' <"${ROOT_DIR}/tools/agent_g4_worker_route.py" >/dev/null 2>&1
-    docker run --rm -i --network none \
-        --mount type=volume,src="${SCENARIO_VOLUME}",dst=/run/plane-scenario,volume-nocopy \
-        --entrypoint python3 "${API_IMAGE}" -c '
-import os
-import shutil
-import stat
-
-destination = "/run/plane-scenario/agent_g4_worker_route_observations.py"
-fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
-try:
-    os.fchmod(fd, 0o600)
-    with os.fdopen(fd, "wb", closefd=False) as output:
-        shutil.copyfileobj(os.fdopen(0, "rb", closefd=False), output, 65536)
-    os.fsync(fd)
-finally:
-    os.close(fd)
-metadata = os.stat(destination, follow_symlinks=False)
-if not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o600:
-    raise SystemExit(1)
-' <"${ROOT_DIR}/tools/agent_g4_worker_route_observations.py" >/dev/null 2>&1
-    docker run --rm -i --network none \
-        --mount type=volume,src="${SCENARIO_VOLUME}",dst=/run/plane-scenario,volume-nocopy \
-        --entrypoint python3 "${API_IMAGE}" -c '
-import os
-import shutil
-import stat
-
-destination = "/run/plane-scenario/agent_g4_manager_route.py"
-fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
-try:
-    os.fchmod(fd, 0o600)
-    with os.fdopen(fd, "wb", closefd=False) as output:
-        shutil.copyfileobj(os.fdopen(0, "rb", closefd=False), output, 65536)
-    os.fsync(fd)
-finally:
-    os.close(fd)
-metadata = os.stat(destination, follow_symlinks=False)
-if not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o600:
-    raise SystemExit(1)
-' <"${ROOT_DIR}/tools/agent_g4_manager_route.py" >/dev/null 2>&1
+for offset in range(0, len(sys.argv[1:]), 3):
+    module_name, runtime_path, expected_sha256 = sys.argv[1 + offset : 4 + offset]
+    if hashlib.sha256(open(runtime_path, "rb").read()).hexdigest() != expected_sha256:
+        raise SystemExit(f"scenario_module_runtime_hash_mismatch:{module_name}")
+    spec = importlib.util.find_spec(module_name)
+    if spec is None or spec.origin != runtime_path:
+        raise SystemExit(f"scenario_module_import_path_mismatch:{module_name}")
+    importlib.import_module(module_name)
+print("scenario-module-preflight=passed")
+PY
     SCENARIO_MOUNT_ARGS=(
         --mount
         "type=volume,src=${SCENARIO_VOLUME},dst=/run/plane-scenario,readonly,volume-nocopy"
