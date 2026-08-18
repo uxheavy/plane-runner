@@ -569,14 +569,17 @@ if [[ "${SCENARIO_ENABLED}" -eq 1 ]]; then
     while IFS=$'\t' read -r module source runtime sha256; do
         SCENARIO_MODULE_ROWS+=("${module}"$'\t'"${source}"$'\t'"${runtime}"$'\t'"${sha256}")
     done <<<"${SCENARIO_MODULES}"
-    declare -A SCENARIO_MODULE_SEEN=()
+    SCENARIO_MODULE_SEEN=()
     for row in "${SCENARIO_MODULE_ROWS[@]}"; do
         IFS=$'\t' read -r module source runtime sha256 <<<"${row}"
-        [[ -z "${SCENARIO_MODULE_SEEN[${module}]:-}" ]] || {
-            printf 'event=agent.g4.live-runner status=failed phase=scenario-staging expected=unique-scenario-module-names actual=duplicate module=%s\n' "${module}" >&2
-            exit 2
-        }
-        SCENARIO_MODULE_SEEN["${module}"]=1
+        for ((seen_index = 0; seen_index < ${#SCENARIO_MODULE_SEEN[@]}; seen_index++)); do
+            seen_module="${SCENARIO_MODULE_SEEN[seen_index]}"
+            [[ "${seen_module}" != "${module}" ]] || {
+                printf 'event=agent.g4.live-runner status=failed phase=scenario-staging expected=unique-scenario-module-names actual=duplicate module=%s\n' "${module}" >&2
+                exit 2
+            }
+        done
+        SCENARIO_MODULE_SEEN+=("${module}")
     done
     stage_scenario_module() {
         local module="$1"

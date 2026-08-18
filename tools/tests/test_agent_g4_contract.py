@@ -1085,6 +1085,101 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn('scenario-module-preflight=passed', runner)
         self.assertLess(runner.index('scenario-module-preflight=passed'), runner.index("LIVE_PHASE=api-invocation"))
 
+    def test_live_runner_scenario_staging_runs_on_bash3_and_rejects_duplicate_modules(self):
+        runner_path = TOOLS / "agent-g4-live.sh"
+        runner = runner_path.read_text(encoding="utf-8")
+        syntax = run_bounded_process(
+            ["/bin/bash", "-n", str(runner_path)],
+            cwd=ROOT,
+            capture_output=True,
+        )
+        self.assertEqual(syntax.returncode, 0, syntax.stdout + syntax.stderr)
+
+        staging_start = runner.index('if [[ "${SCENARIO_ENABLED}" -eq 1 ]]; then')
+        staging_end = runner.index("LIVE_PHASE=credential-staging", staging_start)
+        staging_block = runner[staging_start:staging_end]
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            tools = root / "tools"
+            fake_bin = root / "bin"
+            tools.mkdir(mode=0o700)
+            fake_bin.mkdir(mode=0o700)
+            descriptor = root / "descriptor.json"
+            descriptor.write_text("{}", encoding="utf-8")
+            docker_log = root / "docker.log"
+
+            (tools / "agent_g4_scenario_modules.py").write_text(
+                "#!/usr/bin/env python3\n"
+                "import os\n"
+                "rows = (\n"
+                "    'module_a\\ttools/module_a.py\\t/run/plane-scenario/module_a.py\\t' + 'a' * 64,\n"
+                "    'module_a\\ttools/module_b.py\\t/run/plane-scenario/module_b.py\\t' + 'b' * 64,\n"
+                ") if os.environ.get('SCENARIO_DUPLICATE') == '1' else (\n"
+                "    'module_a\\ttools/module_a.py\\t/run/plane-scenario/module_a.py\\t' + 'a' * 64,\n"
+                "    'module_b\\ttools/module_b.py\\t/run/plane-scenario/module_b.py\\t' + 'b' * 64,\n"
+                ")\n"
+                "print('\\n'.join(rows))\n",
+                encoding="utf-8",
+            )
+            for name in ("module_a.py", "module_b.py"):
+                (tools / name).write_text("# scenario fixture\n", encoding="utf-8")
+            (fake_bin / "docker").write_text(
+                "#!/bin/sh\n"
+                "printf '%s\\n' \"$*\" >> \"$DOCKER_LOG\"\n"
+                "case \" $* \" in\n"
+                "  *\" volume inspect \"*) exit 1 ;;\n"
+                "  *\" volume create \"*|*\" volume rm \"*) exit 0 ;;\n"
+                "esac\n"
+                "exit 0\n",
+                encoding="utf-8",
+            )
+            (fake_bin / "docker").chmod(0o700)
+            harness = root / "scenario-staging.sh"
+            harness.write_text(
+                "#!/bin/bash\n"
+                "set -Eeuo pipefail\n"
+                f"ROOT_DIR={root}\n"
+                "PROJECT=scenario-test\n"
+                "SCENARIO_ENABLED=1\n"
+                "SCENARIO_VOLUME=scenario-volume\n"
+                f"SCENARIO_DESCRIPTOR_PATH_INPUT={descriptor}\n"
+                f"SCENARIO_DESCRIPTOR_SHA256={'0' * 64}\n"
+                "SCENARIO_COMMISSION_ID=\n"
+                "API_IMAGE=plane-agent-api:test\n"
+                f"MANIFEST={root / 'manifest.json'}\n"
+                f"{staging_block}\n"
+                "printf '%s\\n' scenario-staging=passed\n",
+                encoding="utf-8",
+            )
+            harness.chmod(0o700)
+
+            environment = {**os.environ, "PATH": f"{fake_bin}:{os.environ['PATH']}", "DOCKER_LOG": str(docker_log)}
+            valid = run_bounded_process(
+                ["/bin/bash", str(harness)],
+                cwd=root,
+                env={**environment, "SCENARIO_DUPLICATE": "0"},
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(valid.returncode, 0, valid.stdout + valid.stderr)
+            self.assertIn("scenario-staging=passed", valid.stdout)
+            self.assertIn("--entrypoint python3", docker_log.read_text(encoding="utf-8"))
+
+            duplicate = run_bounded_process(
+                ["/bin/bash", str(harness)],
+                cwd=root,
+                env={**environment, "SCENARIO_DUPLICATE": "1"},
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(duplicate.returncode, 2, duplicate.stdout + duplicate.stderr)
+            self.assertIn(
+                "event=agent.g4.live-runner status=failed phase=scenario-staging "
+                "expected=unique-scenario-module-names actual=duplicate module=module_a",
+                duplicate.stderr,
+            )
+
     def test_live_runner_uses_default_and_disposable_manifest_paths_before_offline_preflight(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
