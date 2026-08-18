@@ -112,6 +112,33 @@ _FAILURE_SUBREASONS = frozenset(
         "runtime_configuration_rejected",
     }
 )
+_CHILD_EXCEPTION_CLASSES = frozenset(
+    {
+        "ModuleNotFoundError",
+        "ImportError",
+        "PermissionError",
+        "OSError",
+        "MemoryError",
+        "TimeoutError",
+        "PythonException",
+        "Signal",
+        "Unknown",
+    }
+)
+_CHILD_MODULES = frozenset({"plane", "plane_runtime", "run_agent", "openai", "hermes", "dependency", "unknown"})
+_CHILD_FAILURE_CATEGORIES = frozenset(
+    {
+        "module_not_found",
+        "import_error",
+        "permission_denied",
+        "os_eperm",
+        "memory_exhausted",
+        "timeout",
+        "python_traceback",
+        "signal",
+        "unknown",
+    }
+)
 
 
 class RuntimeDispatchError(ValueError):
@@ -125,6 +152,7 @@ class RuntimeDispatchError(ValueError):
         failure_phase: str | None = None,
         failure_detail: str | None = None,
         failure_subreason: str | None = None,
+        child_diagnostic: Mapping[str, object] | None = None,
     ) -> None:
         super().__init__(message)
         classification_is_valid = (
@@ -157,17 +185,44 @@ class RuntimeDispatchError(ValueError):
             if isinstance(failure_subreason, str) and failure_subreason in _FAILURE_SUBREASONS
             else None
         )
+        self.child_diagnostic = self._bounded_child_diagnostic(child_diagnostic)
 
-    def public_failure(self) -> dict[str, str]:
+    @staticmethod
+    def _bounded_child_diagnostic(value: Mapping[str, object] | None) -> dict[str, object] | None:
+        if value is None or set(value) != {
+            "exceptionClass", "module", "category", "stderrSha256", "stderrBytes", "termination", "exitCode"
+        }:
+            return None
+        if (
+            value.get("exceptionClass") not in _CHILD_EXCEPTION_CLASSES
+            or value.get("module") not in _CHILD_MODULES
+            or value.get("category") not in _CHILD_FAILURE_CATEGORIES
+            or not isinstance(value.get("stderrSha256"), str)
+            or len(value["stderrSha256"]) != 64
+            or any(char not in "0123456789abcdef" for char in value["stderrSha256"])
+            or isinstance(value.get("stderrBytes"), bool)
+            or not isinstance(value.get("stderrBytes"), int)
+            or not 0 <= value["stderrBytes"] <= 64 * 1024
+            or value.get("termination") not in {"exit", "signal"}
+            or isinstance(value.get("exitCode"), bool)
+            or not isinstance(value.get("exitCode"), int)
+            or not -255 <= value["exitCode"] <= 255
+        ):
+            return None
+        return dict(value)
+
+    def public_failure(self) -> dict[str, object]:
         """Return only a bounded cross-process classification, never exception text."""
 
-        failure = {
+        failure: dict[str, object] = {
             "failureCode": self.failure_code,
             "failurePhase": self.failure_phase,
             "failureDetail": self.failure_detail,
         }
         if self.failure_subreason is not None:
             failure["failureSubreason"] = self.failure_subreason
+        if self.child_diagnostic is not None:
+            failure["childDiagnostic"] = dict(self.child_diagnostic)
         return failure
 
 

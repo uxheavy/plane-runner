@@ -67,7 +67,8 @@ def _structured_rejection(body: bytes) -> RuntimeDispatchError | None:
         "failurePhase",
         "failureDetail",
     }
-    if not isinstance(value, dict) or set(value) not in (required, required | {"failureSubreason"}):
+    optional = {"failureSubreason", "childDiagnostic"}
+    if not isinstance(value, dict) or not required.issubset(value) or set(value).difference(required | optional):
         return None
     if value.get("error") != "runtime_dispatch_failed":
         return None
@@ -76,6 +77,9 @@ def _structured_rejection(body: bytes) -> RuntimeDispatchError | None:
         return None
     failure_subreason = value.get("failureSubreason")
     if failure_subreason is not None and not isinstance(failure_subreason, str):
+        return None
+    child_diagnostic = value.get("childDiagnostic")
+    if child_diagnostic is not None and not isinstance(child_diagnostic, dict):
         return None
     if _canonical(value, "runtime rejection") != body:
         return None
@@ -92,13 +96,17 @@ def _structured_rejection(body: bytes) -> RuntimeDispatchError | None:
         # Its redacted response is still safe to classify at this authenticated
         # HTTP seam, so the Plane supervisor can persist a bounded reason.
         failure_subreason = "runtime_configuration_rejected"
-    return RuntimeDispatchError(
+    error = RuntimeDispatchError(
         "runtime dispatch was rejected",
         failure_code=fields["failureCode"],
         failure_phase=fields["failurePhase"],
         failure_detail=fields["failureDetail"],
         failure_subreason=failure_subreason,
+        child_diagnostic=child_diagnostic,
     )
+    if child_diagnostic is not None and error.child_diagnostic is None:
+        return None
+    return error
 
 
 class RemoteRuntimeTransport(RuntimeTransport):

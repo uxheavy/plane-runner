@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -35,6 +36,78 @@ from plane.agent.runtime import credentials as runtime_credentials
 from plane.agent.runtime.provider_egress import ProviderResponse
 from plane.agent.runtime.remote import _structured_rejection
 from plane.agent.runtime.service import RUNTIME_DISPATCH_PROTOCOL, RuntimeDispatchExecutor, _RuntimeHTTPServer
+from plane.agent.runtime.subprocess import RuntimeProcessPolicy, SubprocessRuntimeTransport, _classify_child_failure
+
+
+@pytest.mark.parametrize(
+    ("stderr", "returncode", "exception_class", "module", "category"),
+    (
+        (b"Traceback\nModuleNotFoundError: No module named 'plane_runtime.missing'\n", 1, "ModuleNotFoundError", "plane_runtime", "module_not_found"),
+        (b"Traceback\nImportError: cannot import name hidden from openai\n", 1, "ImportError", "unknown", "import_error"),
+        (b"PermissionError: [Errno 13] secret path\n", 1, "PermissionError", "unknown", "permission_denied"),
+        (b"OSError: [Errno 1] Operation not permitted: token-value\n", 1, "OSError", "unknown", "os_eperm"),
+        (b"MemoryError\n", 1, "MemoryError", "unknown", "memory_exhausted"),
+        (b"TimeoutError: hidden prompt\n", 1, "TimeoutError", "unknown", "timeout"),
+        (b"Traceback (most recent call last):\nValueError: hidden env\n", 1, "PythonException", "unknown", "python_traceback"),
+        (b"never-retained", -9, "Signal", "unknown", "signal"),
+        (b"opaque token-value", 2, "Unknown", "unknown", "unknown"),
+    ),
+)
+def test_child_failure_classifier_retains_only_finite_metadata(
+    stderr, returncode, exception_class, module, category
+):
+    diagnostic = _classify_child_failure(stderr, returncode)
+
+    assert diagnostic == {
+        "exceptionClass": exception_class,
+        "module": module,
+        "category": category,
+        "stderrSha256": hashlib.sha256(stderr).hexdigest(),
+        "stderrBytes": len(stderr),
+        "termination": "signal" if returncode < 0 else "exit",
+        "exitCode": returncode,
+    }
+    assert "token-value" not in json.dumps(diagnostic, sort_keys=True)
+
+
+def test_nonzero_child_exit_threads_bounded_diagnostic_without_stderr(tmp_path):
+    stderr = b"Traceback\nModuleNotFoundError: No module named 'plane_runtime.secret'\ntoken-value\n"
+    transport = SubprocessRuntimeTransport(
+        command=(
+            sys.executable,
+            "-c",
+            "import sys; sys.stdin.buffer.read(); sys.stderr.buffer.write(" + repr(stderr) + "); raise SystemExit(1)",
+        ),
+        ledger_path=tmp_path / "ledger.sqlite",
+        process_policy=RuntimeProcessPolicy(enforce_kernel_policy=False),
+    )
+
+    with pytest.raises(RuntimeDispatchError) as raised:
+        transport._run_process(b"{}\n")
+
+    failure = raised.value.public_failure()
+    assert failure["childDiagnostic"] == _classify_child_failure(stderr, 1)
+    assert "token-value" not in json.dumps(failure, sort_keys=True)
+
+
+def test_remote_rejection_preserves_only_valid_child_diagnostic():
+    diagnostic = _classify_child_failure(b"ImportError: hidden token-value\n", 1)
+    rejection = {
+        "error": "runtime_dispatch_failed",
+        "failureCode": "runtime_process_failed",
+        "failurePhase": "runtime_process",
+        "failureDetail": "process_exit",
+        "childDiagnostic": diagnostic,
+    }
+    body = json.dumps(rejection, sort_keys=True, separators=(",", ":")).encode()
+
+    error = _structured_rejection(body)
+
+    assert error is not None
+    assert error.public_failure()["childDiagnostic"] == diagnostic
+    assert "token-value" not in json.dumps(error.public_failure(), sort_keys=True)
+    rejection["childDiagnostic"] = {**diagnostic, "message": "token-value"}
+    assert _structured_rejection(json.dumps(rejection, sort_keys=True, separators=(",", ":")).encode()) is None
 
 
 def _runtime_environment(tmp_path: Path, source: str, command: str | None = None) -> dict[str, str]:

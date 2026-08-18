@@ -77,7 +77,7 @@ class SupervisorResult:
     state: str
     terminal_kind: str | None
     accepted_frames: int
-    failure: dict[str, str] | None = None
+    failure: dict[str, object] | None = None
 
 
 _FAILURE_CLASSIFICATIONS: dict[str, dict[str, str]] = {
@@ -263,7 +263,7 @@ def _durable_control(invocation_id: Any) -> RuntimeInvocationControl | None:
     return RuntimeInvocationControl.objects.filter(invocation_id=invocation_id).first()
 
 
-def _serialized_failure(reason: dict[str, str]) -> str:
+def _serialized_failure(reason: dict[str, object]) -> str:
     return json.dumps(reason, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
@@ -307,7 +307,7 @@ def _runtime_exit_failure_classification(failure: object) -> dict[str, str] | No
 
 def _terminalize_dispatch_failure(
     invocation: RuntimeInvocation,
-    reason: dict[str, str],
+    reason: dict[str, object],
     *,
     known_dispatch_failure: bool = False,
 ) -> SupervisorResult:

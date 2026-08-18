@@ -18,6 +18,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import resource
 import shutil
 import signal
@@ -74,6 +75,52 @@ _HERMES_REQUIRED_RUNTIME_POLICY_FIELDS = frozenset(
 )
 _HERMES_DISPATCH_PROTOCOL = "plane.agent-runtime/dispatch-control/v1"
 _HERMES_CREDENTIAL_PROTOCOL = "plane.agent-runtime/credential-control/v1"
+
+
+def _child_module(stderr_text: str) -> str:
+    match = re.search(r"No module named ['\"]([A-Za-z0-9_.]+)['\"]", stderr_text)
+    candidate = match.group(1) if match else ""
+    root = candidate.split(".", 1)[0]
+    if root == "plane":
+        return "plane"
+    if root == "plane_runtime":
+        return "plane_runtime"
+    if root in {"run_agent", "openai", "hermes"}:
+        return root
+    return "dependency" if candidate else "unknown"
+
+
+def _classify_child_failure(stderr: bytes, returncode: int) -> dict[str, object]:
+    """Reduce bounded child stderr to finite non-content diagnostics."""
+
+    text = stderr.decode("utf-8", errors="replace")
+    exception_class = "Unknown"
+    category = "unknown"
+    if returncode < 0:
+        exception_class, category = "Signal", "signal"
+    elif "ModuleNotFoundError:" in text:
+        exception_class, category = "ModuleNotFoundError", "module_not_found"
+    elif "ImportError:" in text:
+        exception_class, category = "ImportError", "import_error"
+    elif "PermissionError:" in text:
+        exception_class, category = "PermissionError", "permission_denied"
+    elif "MemoryError" in text:
+        exception_class, category = "MemoryError", "memory_exhausted"
+    elif "TimeoutError:" in text:
+        exception_class, category = "TimeoutError", "timeout"
+    elif "OSError:" in text and ("[Errno 1]" in text or "Operation not permitted" in text):
+        exception_class, category = "OSError", "os_eperm"
+    elif "Traceback (most recent call last):" in text:
+        exception_class, category = "PythonException", "python_traceback"
+    return {
+        "exceptionClass": exception_class,
+        "module": _child_module(text),
+        "category": category,
+        "stderrSha256": hashlib.sha256(stderr).hexdigest(),
+        "stderrBytes": len(stderr),
+        "termination": "signal" if returncode < 0 else "exit",
+        "exitCode": returncode,
+    }
 
 
 @dataclass(frozen=True)
@@ -1071,6 +1118,7 @@ class SubprocessRuntimeTransport(RuntimeTransport):
                 failure_code="runtime_process_failed",
                 failure_phase="launcher" if launcher_rejected else "runtime_process",
                 failure_detail="bootstrap_argv_rejected" if launcher_rejected else "process_exit",
+                child_diagnostic=_classify_child_failure(bytes(stderr), process.returncode),
             )
         if not stdout or not stdout.endswith(b"\n"):
             raise RuntimeDispatchError(
