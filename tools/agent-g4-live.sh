@@ -700,6 +700,10 @@ PY
 fi
 LIVE_PHASE=credential-staging
 PROVIDER_SECRET_SOURCE="${PLANE_G4_PROVIDER_SECRET_SOURCE:?configured provider source is required}"
+if [[ "${PROVIDER_SECRET_SOURCE}" == */.plane-agent-runtime.secret ]]; then
+    printf '%s\n' 'event=agent.g4.live-runner status=failed phase=credential-staging expected=owner-only-provider-source actual=plane-runtime-secret-misbinding suggestion=use-the-installed-chatgpt-subscription-resolver' >&2
+    exit 2
+fi
 python3 - "${PROVIDER_SECRET_SOURCE}" "${PROVIDER_SECRET_FILE}" <<'PY' >/dev/null 2>&1 || {
 import os
 import stat

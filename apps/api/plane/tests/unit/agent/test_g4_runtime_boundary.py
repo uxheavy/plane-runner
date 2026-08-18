@@ -146,7 +146,7 @@ def test_g4_deployment_credential_resolver_accepts_provider_neutral_chatgpt_sour
     (False, True),
     ids=("current", "legacy"),
 )
-def test_g4_deployment_credential_resolver_accepts_codex_auth_document_without_forwarding_unused_tokens(
+def test_g4_deployment_credential_resolver_requires_host_refresh_for_codex_auth_document(
     monkeypatch, tmp_path, include_optional_api_key
 ):
     document = {
@@ -164,14 +164,19 @@ def test_g4_deployment_credential_resolver_accepts_codex_auth_document_without_f
     source.write_text(json.dumps(document), encoding="utf-8")
     monkeypatch.setattr(runtime_credentials, "DEPLOYMENT_CREDENTIAL_SOURCE_PATH", str(source))
 
-    resolved = runtime_credentials.resolve_deployment_credential("runtime")
+    with pytest.raises(
+        runtime_credentials.RuntimeCredentialError,
+        match="requires trusted resolver refresh",
+    ):
+        runtime_credentials.resolve_deployment_credential("runtime")
 
-    assert resolved == {"api_key": "synthetic-access-token"}
-    assert set(resolved) == {"api_key"}
-    resolved_text = json.dumps(resolved)
-    assert all(
-        unused not in resolved_text
-        for unused in ("synthetic-account-id", "synthetic-id-token", "synthetic-refresh-token")
+
+def test_g4_codex_auth_document_refresh_gap_is_classified_without_leaking_values():
+    error = runtime_credentials.RuntimeCredentialError(
+        "deployment credential source requires trusted resolver refresh"
+    )
+    assert runtime_credentials.credential_failure_subreason(error) == (
+        "credential_source_requires_refresh"
     )
 
 

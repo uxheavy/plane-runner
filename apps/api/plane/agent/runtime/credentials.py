@@ -45,6 +45,8 @@ def credential_failure_subreason(error: RuntimeCredentialError) -> str:
         return "credential_resolver_failed"
     if "resolver returned" in message or "resolver must return" in message:
         return "credential_resolver_output_invalid"
+    if "requires trusted resolver refresh" in message:
+        return "credential_source_requires_refresh"
     if "state is unavailable" in message:
         return "credential_state_unavailable"
     if "state is invalid" in message:
@@ -163,10 +165,14 @@ def _parse_codex_auth_document(value: object) -> str:
         raise RuntimeCredentialError("deployment credential JSON fields are invalid")
     for token_name in _CODEX_AUTH_TOKEN_KEYS:
         _bounded_deployment_secret(tokens[token_name])
-    # The relay contract accepts only its canonical bearer-token field.  The
-    # Codex refresh, ID, and account fields are validated as part of the known
-    # auth document but never leave the trusted parent.
-    return tokens["access_token"]
+    # A Codex auth document is a refreshable credential lifecycle, not a
+    # bearer credential. This stdlib parser deliberately has no OAuth client
+    # or egress and must never freeze its access_token into a lease while
+    # silently discarding refresh_token. The trusted host resolver must use
+    # the installed Codex mechanism and hand us a fresh single-line bearer.
+    raise RuntimeCredentialError(
+        "deployment credential source requires trusted resolver refresh"
+    )
 
 
 def _parse_deployment_credential_document(raw: bytes) -> str:

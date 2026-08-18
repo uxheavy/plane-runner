@@ -1005,6 +1005,14 @@ class G4ContractTests(unittest.TestCase):
         self.assertNotIn("api.x.ai", invoke)
         self.assertNotIn("grok-4", invoke)
 
+    def test_live_runner_rejects_plane_runtime_secret_as_provider_source(self):
+        runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+        self.assertIn(
+            'PROVIDER_SECRET_SOURCE}" == */.plane-agent-runtime.secret',
+            runner,
+        )
+        self.assertIn("plane-runtime-secret-misbinding", runner)
+
     def test_live_runner_resolves_selected_manifest_before_validation_and_pin_extraction(self):
         runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
 
