@@ -16,7 +16,7 @@ from pathlib import Path
 
 HERMES_COMMIT = os.environ.get(
     "PLANE_G4_RUNTIME_HERMES_COMMIT",
-    "6c460f10fe215718dce36dd73cda94155a9a34f8",
+    "d4b32a3e0ac9b528eb6e513274227e18a279906c",
 )
 RESOURCE_LABEL = "com.uxheavy.plane.agent-g4-runtime"
 EXPECTED_RUNTIME_IMAGE_DIGEST = os.environ.get("PLANE_G4_RUNTIME_IMAGE_DIGEST", "")
