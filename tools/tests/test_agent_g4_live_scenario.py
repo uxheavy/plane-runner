@@ -439,7 +439,17 @@ def test_sequential_commissions_reuse_fixture_preconditions_before_new_run() -> 
         for node in tree.body
         if isinstance(node, ast.FunctionDef) and node.name == "_commission_precondition_checks"
     )
-    namespace: dict[str, object] = {}
+    class _ActiveMemberships:
+        def filter(self, **_kwargs):
+            return self
+
+        def exists(self) -> bool:
+            return True
+
+    namespace: dict[str, object] = {
+        "WorkspaceMember": SimpleNamespace(objects=_ActiveMemberships()),
+        "ProjectMember": SimpleNamespace(objects=_ActiveMemberships()),
+    }
     exec(
         compile(
             ast.Module(body=[helper], type_ignores=[]),
@@ -454,7 +464,12 @@ def test_sequential_commissions_reuse_fixture_preconditions_before_new_run() -> 
         "user": first_setup,
         "workspace": SimpleNamespace(owner_id="setup-owner", id="workspace:first", slug="g4-live-first"),
         "project": SimpleNamespace(id="project:first"),
-        "actor": SimpleNamespace(workspace_id="workspace:first", project_id="project:first"),
+        "actor": SimpleNamespace(
+            workspace_id="workspace:first",
+            project_id="project:first",
+            principal_id="actor:first",
+            principal=SimpleNamespace(is_active=True),
+        ),
         "setup_suffix": "first",
     }
     first_assignment = SimpleNamespace(
