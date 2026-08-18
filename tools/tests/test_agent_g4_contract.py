@@ -294,6 +294,7 @@ def fixture(candidate: str = CANDIDATE, source_manifest: dict | None = None) -> 
                 for operation_id in (
                     "search_workspace",
                     "work_item.read",
+                    "work_item.rename",
                     "catalog.search",
                     "catalog.describe",
                     "agent.outcome.evaluate",

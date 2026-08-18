@@ -867,6 +867,7 @@ def _summary(summary: Any, name: str) -> dict[str, Any]:
 _LIVE_OPERATION_IDS = (
     "search_workspace",
     "work_item.read",
+    "work_item.rename",
     "catalog.search",
     "catalog.describe",
     "agent.outcome.evaluate",
