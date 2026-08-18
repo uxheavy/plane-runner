@@ -146,11 +146,13 @@ def test_g4_deployment_credential_resolver_accepts_provider_neutral_chatgpt_sour
     (False, True),
     ids=("current", "legacy"),
 )
-def test_g4_deployment_credential_resolver_requires_host_refresh_for_codex_auth_document(
+def test_g4_deployment_credential_resolver_accepts_fresh_codex_auth_document(
     monkeypatch, tmp_path, include_optional_api_key
 ):
+    now = runtime_credentials.datetime.fromisoformat("2026-08-07T10:12:00+00:00").timestamp()
+    monkeypatch.setattr(runtime_credentials.time, "time", lambda: now)
     document = {
-        "last_refresh": "2026-08-13T00:00:00Z",
+        "last_refresh": "2026-08-07T10:12:00Z",
         "tokens": {
             "access_token": "synthetic-access-token",
             "account_id": "synthetic-account-id",
@@ -164,10 +166,44 @@ def test_g4_deployment_credential_resolver_requires_host_refresh_for_codex_auth_
     source.write_text(json.dumps(document), encoding="utf-8")
     monkeypatch.setattr(runtime_credentials, "DEPLOYMENT_CREDENTIAL_SOURCE_PATH", str(source))
 
-    with pytest.raises(
-        runtime_credentials.RuntimeCredentialError,
-        match="requires trusted resolver refresh",
-    ):
+    assert runtime_credentials.resolve_deployment_credential("runtime") == {
+        "api_key": "synthetic-access-token"
+    }
+
+
+@pytest.mark.parametrize(
+    ("last_refresh", "expected"),
+    (
+        ("2026-08-07T09:21:59Z", "requires trusted resolver refresh"),
+        ("2026-08-07T10:13:01Z", "requires trusted resolver refresh"),
+        ("2026-08-07T10:12:00+00:00", "JSON fields are invalid"),
+        ("not-a-timestamp", "JSON fields are invalid"),
+    ),
+    ids=("stale", "future", "non-zulu", "malformed"),
+)
+def test_g4_deployment_credential_resolver_rejects_nonfresh_codex_auth_document(
+    monkeypatch, tmp_path, last_refresh, expected
+):
+    now = runtime_credentials.datetime.fromisoformat("2026-08-07T10:12:00+00:00").timestamp()
+    monkeypatch.setattr(runtime_credentials.time, "time", lambda: now)
+    source = tmp_path / "auth.json"
+    source.write_text(
+        json.dumps(
+            {
+                "last_refresh": last_refresh,
+                "tokens": {
+                    "access_token": "synthetic-access-token",
+                    "account_id": "synthetic-account-id",
+                    "id_token": "synthetic-id-token",
+                    "refresh_token": "synthetic-refresh-token",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runtime_credentials, "DEPLOYMENT_CREDENTIAL_SOURCE_PATH", str(source))
+
+    with pytest.raises(runtime_credentials.RuntimeCredentialError, match=expected):
         runtime_credentials.resolve_deployment_credential("runtime")
 
 

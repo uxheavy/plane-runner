@@ -18,6 +18,7 @@ import threading
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -88,6 +89,8 @@ _CODEX_AUTH_DOCUMENT_KEYS = frozenset({"last_refresh", "tokens"})
 _CODEX_AUTH_DOCUMENT_WITH_API_KEY_KEYS = frozenset({"OPENAI_API_KEY", "last_refresh", "tokens"})
 _CODEX_AUTH_DOCUMENT_SHAPES = (_CODEX_AUTH_DOCUMENT_KEYS, _CODEX_AUTH_DOCUMENT_WITH_API_KEY_KEYS)
 _CODEX_AUTH_TOKEN_KEYS = frozenset({"access_token", "account_id", "id_token", "refresh_token"})
+_CODEX_AUTH_MAX_AGE_SECONDS = 50 * 60
+_CODEX_AUTH_MAX_FUTURE_SKEW_SECONDS = 60
 _DEPLOYMENT_CREDENTIAL_MAX_BYTES = 64 * 1024
 _DEPLOYMENT_CREDENTIAL_MAX_VALUE_BYTES = 16 * 1024
 _DEPLOYMENT_ENV_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -160,19 +163,30 @@ def _parse_codex_auth_document(value: object) -> str:
         raise RuntimeCredentialError("deployment credential JSON fields are invalid")
     if len(last_refresh.encode("utf-8")) > _DEPLOYMENT_CREDENTIAL_MAX_VALUE_BYTES:
         raise RuntimeCredentialError("deployment credential source value is oversized")
+    if not last_refresh.endswith("Z"):
+        raise RuntimeCredentialError("deployment credential JSON fields are invalid")
+    try:
+        refreshed_at = datetime.fromisoformat(f"{last_refresh[:-1]}+00:00")
+    except ValueError as exc:
+        raise RuntimeCredentialError("deployment credential JSON fields are invalid") from exc
+    if refreshed_at.tzinfo != timezone.utc:
+        raise RuntimeCredentialError("deployment credential JSON fields are invalid")
+    refresh_age = time.time() - refreshed_at.timestamp()
+    if (
+        refresh_age > _CODEX_AUTH_MAX_AGE_SECONDS
+        or refresh_age < -_CODEX_AUTH_MAX_FUTURE_SKEW_SECONDS
+    ):
+        raise RuntimeCredentialError(
+            "deployment credential source requires trusted resolver refresh"
+        )
     tokens = value["tokens"]
     if not isinstance(tokens, dict) or set(tokens) != _CODEX_AUTH_TOKEN_KEYS:
         raise RuntimeCredentialError("deployment credential JSON fields are invalid")
     for token_name in _CODEX_AUTH_TOKEN_KEYS:
         _bounded_deployment_secret(tokens[token_name])
-    # A Codex auth document is a refreshable credential lifecycle, not a
-    # bearer credential. This stdlib parser deliberately has no OAuth client
-    # or egress and must never freeze its access_token into a lease while
-    # silently discarding refresh_token. The trusted host resolver must use
-    # the installed Codex mechanism and hand us a fresh single-line bearer.
-    raise RuntimeCredentialError(
-        "deployment credential source requires trusted resolver refresh"
-    )
+    # External Codex login owns refresh. The host accepts only the resulting
+    # short-lived access token while the refresh timestamp is still fresh.
+    return _bounded_deployment_secret(tokens["access_token"])
 
 
 def _parse_deployment_credential_document(raw: bytes) -> str:
