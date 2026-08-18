@@ -1338,4 +1338,12 @@ are not reported and are not claimed absent. M01-M08 remain unproven.
 
 Durable redacted evidence is
 `user-testing-output/plane-agents/evidence/manager-m01-m08-v20-live-stop.json`,
-SHA-256 `375ee6784c53128d8446b26b56224c7d7072609aba09b16d6081b890122f5166`.
+  SHA-256 `375ee6784c53128d8446b26b56224c7d7072609aba09b16d6081b890122f5166`.
+
+## Worker W07/W08 v24 live stop — 2026-08-18
+
+One fresh v24 primary stopped at `work_item.read` with
+`PREPARED_CALL_INVALID` after 8 completed provider `2xx` attempts. Durable
+redacted evidence is `user-testing-output/plane-agents/evidence/w07-w08-v24-live-stop.json`;
+W07/W08 remain unproven. Provider-free cross-process prepared-call tests passed
+9; no authorization weakening or target substitution was made.

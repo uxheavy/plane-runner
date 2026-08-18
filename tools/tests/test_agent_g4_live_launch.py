@@ -11,8 +11,9 @@ import pytest
 import importlib.util
 
 TOOLS = Path(__file__).parents[1]
-V21_SOURCE = "9ad2d5c41a6019effa47fc10d96d338d7ffb1378"
-V21_WRAPPER = "91e495559c2c601840da2f6bfa1456263292e28a"
+V24_API_SOURCE = "c9174ae7d585d55659c447ba8fe4d7e0d2e5380a"
+V24_RUNTIME_SOURCE = "b993b802401a2c5c7d6399fe7ca8acce19db54c8"
+V24_WRAPPER = "1f60fb23aa7f53dcdddb6c3e1c4f3aacd2f10da0"
 _SPEC = importlib.util.spec_from_file_location("agent_g4_live_launch", TOOLS / "agent-g4-live-launch.py")
 assert _SPEC is not None and _SPEC.loader is not None
 launch = importlib.util.module_from_spec(_SPEC)
@@ -62,13 +63,13 @@ def test_prepare_defaults_to_manifest_for_exact_checked_in_wrapper(
             "--run-dir",
             str(run_dir),
             "--candidate",
-            V21_WRAPPER,
+            V24_WRAPPER,
         ],
     )
 
     assert launch_inputs.main() == 0
     authority = json.loads((run_dir / "authority.json").read_text(encoding="utf-8"))
-    assert authority["expectedCandidate"] == V21_WRAPPER
+    assert authority["expectedCandidate"] == V24_WRAPPER
 
 
 def test_prepare_rejects_source_when_wrapper_is_required(
@@ -89,7 +90,7 @@ def test_prepare_rejects_source_when_wrapper_is_required(
             "--run-dir",
             str(tmp_path / "rejected"),
             "--candidate",
-            V21_SOURCE,
+            V24_RUNTIME_SOURCE,
         ],
     )
 
@@ -124,11 +125,19 @@ def test_launch_binds_host_wrapper_and_artifact_revisions_separately() -> None:
     assert environment["PLANE_G4_ARTIFACT_CANDIDATE"] == "a" * 40
 
 
+def test_runner_binds_lifecycle_candidate_to_host_wrapper() -> None:
+    runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+
+    assert 'G4_CANDIDATE="${G4_EXPECTED_HOST_CANDIDATE}"' in runner
+    assert 'G4_CANDIDATE="${PLANE_G4_ARTIFACT_CANDIDATE:-${G4_EXPECTED_HOST_CANDIDATE}}"' not in runner
+
+
 def test_launch_defaults_to_checked_in_wrapper_manifest() -> None:
     assert launch.resolve_manifest(None) == launch.DEFAULT_MANIFEST
     launch._checked_in_manifest(launch.DEFAULT_MANIFEST)
     provenance = launch.load_manifest_provenance(launch.DEFAULT_MANIFEST)
-    assert provenance["candidate"] == V21_SOURCE
+    assert provenance["candidate"] == V24_API_SOURCE
+    assert provenance["runtimeImage"]["sourceRevision"] == V24_RUNTIME_SOURCE
 
 
 def test_launch_rejects_similarly_named_manifest_outside_owned_tmp(tmp_path: Path) -> None:
@@ -338,7 +347,7 @@ def test_manifest_provenance_derives_current_api_runtime_and_hermes_pins(tmp_pat
     }
 
 
-def test_manifest_provenance_rejects_mixed_source_revisions(tmp_path: Path) -> None:
+def test_manifest_provenance_preserves_split_source_revisions(tmp_path: Path) -> None:
     manifest = tmp_path / "manifest.json"
     manifest.write_text(
         json.dumps(
@@ -359,5 +368,7 @@ def test_manifest_provenance_rejects_mixed_source_revisions(tmp_path: Path) -> N
     )
     manifest.chmod(0o600)
 
-    with pytest.raises(ValueError, match="launch_manifest_provenance_mismatch"):
-        launch.load_manifest_provenance(manifest)
+    provenance = launch.load_manifest_provenance(manifest)
+
+    assert provenance["candidate"] == "b" * 40
+    assert provenance["runtimeImage"]["sourceRevision"] == "e" * 40

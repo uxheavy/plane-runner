@@ -3786,3 +3786,13 @@ not a provider rerun.
   labeled containers, volumes, and networks. Durable redacted evidence is
   `user-testing-output/plane-agents/evidence/manager-m01-m08-v20-live-stop.json`,
   SHA-256 `375ee6784c53128d8446b26b56224c7d7072609aba09b16d6081b890122f5166`.
+
+## Wave 0CP — immutable v24 W07/W08 live stop — 2026-08-18
+
+- One fresh serialized primary used the exact v24 candidate and Luna xhigh
+  with fallback disabled; it stopped at `work_item.read` with bounded
+  `PREPARED_CALL_INVALID` after 8 completed upstream `2xx` attempts.
+- Durable redacted evidence is `w07-w08-v24-live-stop.json`; raw result and
+  stderr remain digest-only. Exact cross-process prepared-call tests passed 9;
+  no narrower local defect is proven. No retry, fallback, replay, or second
+  primary occurred; cleanup is zero/absent.

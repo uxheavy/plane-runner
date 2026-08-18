@@ -90,7 +90,8 @@ def load_manifest_provenance(manifest: Path) -> dict[str, object]:
     if (
         not isinstance(candidate, str)
         or not SHA_RE.fullmatch(candidate)
-        or runtime_revision != candidate
+        or not isinstance(runtime_revision, str)
+        or not SHA_RE.fullmatch(runtime_revision)
         or not isinstance(hermes_commit, str)
         or not SHA_RE.fullmatch(hermes_commit)
         or not isinstance(api_digest, str)
