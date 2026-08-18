@@ -9,7 +9,14 @@ from plane.agent.lifecycle.runtime_contract import (
     validate_runtime_event,
     validate_runtime_exit,
 )
-from plane.agent.runtime.host_rpc import PlaneHostCall, PlaneHostHTTPServer, PlaneHostResult, PlaneHostServer
+from plane.agent.runtime.host_rpc import (
+    PlaneHostCall,
+    PlaneHostHTTPServer,
+    PlaneHostResult,
+    PlaneHostServer,
+    PreparedCallInvalid,
+    PreparedCallRegistry,
+)
 
 
 def _event():
@@ -69,6 +76,86 @@ def _genesis():
         "acceptedExits": [],
     }
     return {**state, "stateDigest": content_digest(state)}
+
+
+def test_prepared_call_rejections_have_bounded_private_reasons():
+    registry = PreparedCallRegistry()
+    prepared_ref = registry.register({"project_id": "project:test", "issue_id": "issue:test"})
+
+    cases = [
+        ({"preparedCallRef": prepared_ref, "issue_id": "must-not-escape"}, "malformed"),
+        ({"preparedCallRef": f"prepared-call:{'0' * 64}:unknown"}, "unknown"),
+    ]
+    for input_data, reason in cases:
+        with pytest.raises(PreparedCallInvalid) as captured:
+            registry.resolve(input_data)
+        assert captured.value.reason == reason
+        assert prepared_ref not in str(captured.value)
+        assert "must-not-escape" not in str(captured.value)
+
+    registry.records[prepared_ref]["input"] = {"project_id": "different", "issue_id": "target"}
+    with pytest.raises(PreparedCallInvalid) as captured:
+        registry.resolve({"preparedCallRef": prepared_ref})
+    assert captured.value.reason == "digest_mismatch"
+
+    bound = PreparedCallRegistry()
+    bound_ref = bound.register({"project_id": "project:test", "issue_id": "issue:test"})
+    bound.resolve(
+        {"preparedCallRef": bound_ref},
+        correlation_id="correlation:first",
+        idempotency_key="idempotency:first",
+    )
+    with pytest.raises(PreparedCallInvalid) as captured:
+        bound.resolve(
+            {"preparedCallRef": bound_ref},
+            correlation_id="correlation:other",
+            idempotency_key="idempotency:other",
+        )
+    assert captured.value.reason == "binding_mismatch"
+
+    bound.mark_consumed(bound_ref)
+    with pytest.raises(PreparedCallInvalid) as captured:
+        bound.resolve(
+            {"preparedCallRef": bound_ref},
+            correlation_id="correlation:other",
+            idempotency_key="idempotency:other",
+        )
+    assert captured.value.reason == "consumed"
+
+
+def test_prepared_call_reason_is_owner_evidence_only(tmp_path):
+    call = PlaneHostCall(
+        run_id="run:test",
+        invocation_id="invocation:test",
+        correlation_id="correlation:test",
+        action="read",
+        operation_ref="operation:work_item.read",
+        input={"preparedCallRef": "prepared-call:opaque"},
+        source="model",
+    )
+    result = PlaneHostResult(
+        request_ref=call.request_ref,
+        correlation_id=call.correlation_id,
+        idempotency_key=call.idempotency_key,
+        status="invalid",
+        replayed=False,
+        error_code="PREPARED_CALL_INVALID",
+        error_message="Prepared work-item read reference is invalid",
+        prepared_call_invalid_reason="unknown",
+    )
+    server = PlaneHostServer(socket_path=tmp_path / "host.sock", invoke=lambda _call: result)
+
+    assert "preparedCallInvalidReason" not in result.to_wire()
+    assert server._invoke_once(call) == result
+    assert server.failure_evidence == {
+        "operationId": "work_item.read",
+        "attemptRef": call.request_ref,
+        "receiptRef": "unavailable",
+        "status": "invalid",
+        "errorCode": "PREPARED_CALL_INVALID",
+        "codeModePhase": "unavailable",
+        "preparedCallInvalidReason": "unknown",
+    }
 
 
 def test_runtime_event_and_exit_use_generated_schema_validation():

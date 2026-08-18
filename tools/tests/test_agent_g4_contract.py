@@ -2453,6 +2453,30 @@ class G4ContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "evidence_host_operation_failure_errorCode_sensitive"):
             validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
 
+        receipt["failure"]["hostOperationFailure"] = {
+            "operationId": "work_item.read",
+            "attemptRef": "host-request:prepared-call",
+            "receiptRef": "unavailable",
+            "status": "invalid",
+            "errorCode": "PREPARED_CALL_INVALID",
+            "codeModePhase": "unavailable",
+            "preparedCallInvalidReason": "binding_mismatch",
+        }
+        receipt["semanticDigest"] = _semantic_digest(receipt)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt, separators=(",", ":")))
+        self.addCleanup(temp.cleanup)
+        self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
+
+        receipt["failure"]["hostOperationFailure"]["preparedCallInvalidReason"] = "raw-provider-message"
+        receipt["semanticDigest"] = _semantic_digest(receipt)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt, separators=(",", ":")))
+        self.addCleanup(temp.cleanup)
+        with self.assertRaisesRegex(
+            ContractError,
+            "evidence_host_operation_failure_prepared_call_reason_invalid",
+        ):
+            validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
+
     def test_failure_receipt_accepts_versioned_code_mode_operation_id(self):
         manifest, authority, config, receipt = failure_fixture()
         receipt["failure"]["hostOperationFailure"] = {
@@ -2785,6 +2809,43 @@ class G4ContractTests(unittest.TestCase):
             ),
         )
         self.assertEqual(evidence["providerAttempts"][0]["statusClass"], "transport")
+
+    def test_failure_evidence_preserves_only_bounded_prepared_call_reason(self):
+        evidence = invoke_helper_namespace()["build_failure_evidence"](
+            binding={},
+            failure_phase="runtime-process",
+            error_class="RuntimeError",
+            exit_code=1,
+            run_id="run:prepared-call",
+            run_state="failed",
+            invocation_id="invocation:prepared-call",
+            invocation_state="failed",
+            provider_attempts=[],
+            terminal_kind="run_failure",
+            failure_code="runtime_error",
+            failure_reason=(
+                '{"failureCode":"runtime_error","failurePhase":"runtime_process",'
+                '"failureDetail":"process_exit","failureSubreason":"runtime_execution_failed",'
+                '"failureCause":"host_operation_failure","hostOperationFailure":{'
+                '"operationId":"work_item.read","attemptRef":"host-request:opaque",'
+                '"receiptRef":"unavailable","status":"invalid",'
+                '"errorCode":"PREPARED_CALL_INVALID","codeModePhase":"unavailable",'
+                '"preparedCallInvalidReason":"malformed"}}'
+            ),
+        )
+
+        self.assertEqual(
+            evidence["failure"]["hostOperationFailure"],
+            {
+                "operationId": "work_item.read",
+                "attemptRef": "host-request:opaque",
+                "receiptRef": "unavailable",
+                "status": "invalid",
+                "errorCode": "PREPARED_CALL_INVALID",
+                "codeModePhase": "unavailable",
+                "preparedCallInvalidReason": "malformed",
+            },
+        )
 
     def test_failure_evidence_preserves_redacted_work_item_target_digest(self):
         project_id = "11111111-1111-4111-8111-111111111111"

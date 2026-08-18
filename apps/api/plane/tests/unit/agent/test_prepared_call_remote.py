@@ -286,6 +286,12 @@ def test_remote_runtime_preserves_search_prepared_read_envelope(
 
     assert service.returncode == 0, stderr.decode("utf-8", errors="replace")
     assert json.loads(frames[-1])["kind"] == "completed"
+    assert host_server.failure_evidence is not None
+    assert host_server.failure_evidence["operationId"] == "work_item.read"
+    assert host_server.failure_evidence["status"] == "invalid"
+    assert host_server.failure_evidence["errorCode"] == "PREPARED_CALL_INVALID"
+    assert host_server.failure_evidence["preparedCallInvalidReason"] == "unknown"
+    assert "preparedCallRef" not in json.dumps(host_server.failure_evidence, sort_keys=True)
     assert [call.operation_ref for call in host_calls] == [
         "operation:catalog.describe",
         "operation:catalog.describe",
@@ -368,6 +374,7 @@ def test_prepared_port_replay_is_cached_before_gateway(
     ))
     assert altered_correlation.status == "invalid"
     assert altered_correlation.error_code == "PREPARED_CALL_INVALID"
+    assert altered_correlation.prepared_call_invalid_reason == "consumed"
 
 
 @pytest.mark.contract

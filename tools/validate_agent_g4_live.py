@@ -1881,6 +1881,13 @@ def _validate_failure_receipt(
         "errorCode",
         "codeModePhase",
     }
+    prepared_call_reasons = {
+        "unknown",
+        "consumed",
+        "binding_mismatch",
+        "digest_mismatch",
+        "malformed",
+    }
     if (
         set(failure).difference(
             required_failure_fields
@@ -1903,7 +1910,10 @@ def _validate_failure_receipt(
                 raise ContractError(f"evidence_failure_{field}_prefix_invalid")
     if "hostOperationFailure" in failure:
         host_failure = _object(failure["hostOperationFailure"], "evidence_host_operation_failure")
-        if set(host_failure) != host_failure_fields:
+        if set(host_failure) not in (
+            host_failure_fields,
+            host_failure_fields | {"preparedCallInvalidReason"},
+        ):
             raise ContractError("evidence_host_operation_failure_fields_invalid")
         if host_failure["status"] not in {"denied", "conflict", "unavailable", "invalid"}:
             raise ContractError("evidence_host_operation_failure_status_invalid")
@@ -1912,6 +1922,11 @@ def _validate_failure_receipt(
         _safe_operation_id(host_failure["operationId"], "evidence_host_operation_failure_operationId")
         for field in ("attemptRef", "receiptRef", "errorCode"):
             _safe_ref(host_failure[field], f"evidence_host_operation_failure_{field}")
+        if "preparedCallInvalidReason" in host_failure and (
+            host_failure["errorCode"] != "PREPARED_CALL_INVALID"
+            or host_failure["preparedCallInvalidReason"] not in prepared_call_reasons
+        ):
+            raise ContractError("evidence_host_operation_failure_prepared_call_reason_invalid")
 
     for name in ("run", "invocation"):
         state = _object(evidence[name], f"evidence_{name}")

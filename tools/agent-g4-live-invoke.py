@@ -989,7 +989,17 @@ def build_failure_evidence(
             "errorCode",
             "codeModePhase",
         }
-        if not isinstance(value, dict) or set(value) != required:
+        prepared_call_reasons = {
+            "unknown",
+            "consumed",
+            "binding_mismatch",
+            "digest_mismatch",
+            "malformed",
+        }
+        if not isinstance(value, dict) or set(value) not in (
+            required,
+            required | {"preparedCallInvalidReason"},
+        ):
             return None
         status = value.get("status")
         phase = value.get("codeModePhase")
@@ -1020,7 +1030,7 @@ def build_failure_evidence(
             or error_code is None
         ):
             return None
-        return {
+        bounded = {
             "operationId": operation_id,
             "attemptRef": attempt_ref,
             "receiptRef": receipt_ref,
@@ -1028,6 +1038,12 @@ def build_failure_evidence(
             "errorCode": error_code,
             "codeModePhase": phase,
         }
+        if "preparedCallInvalidReason" in value:
+            reason = value["preparedCallInvalidReason"]
+            if error_code != "PREPARED_CALL_INVALID" or reason not in prepared_call_reasons:
+                return None
+            bounded["preparedCallInvalidReason"] = reason
+        return bounded
 
     def bounded_binding_value(key, value):
         if not isinstance(value, str) or len(value.encode("utf-8")) > 128:
@@ -1312,9 +1328,19 @@ def _supervisor_failure_reason(output):
         "errorCode",
         "codeModePhase",
     }
+    prepared_call_reasons = {
+        "unknown",
+        "consumed",
+        "binding_mismatch",
+        "digest_mismatch",
+        "malformed",
+    }
 
     def bounded_host_failure(value):
-        if not isinstance(value, dict) or set(value) != host_failure_fields:
+        if not isinstance(value, dict) or set(value) not in (
+            host_failure_fields,
+            host_failure_fields | {"preparedCallInvalidReason"},
+        ):
             return None
         if value["status"] not in {"denied", "conflict", "unavailable", "invalid"}:
             return None
@@ -1331,6 +1357,11 @@ def _supervisor_failure_reason(output):
             bounded[field] = item
         bounded["status"] = value["status"]
         bounded["codeModePhase"] = value["codeModePhase"]
+        if "preparedCallInvalidReason" in value:
+            reason = value["preparedCallInvalidReason"]
+            if value["errorCode"] != "PREPARED_CALL_INVALID" or reason not in prepared_call_reasons:
+                return None
+            bounded["preparedCallInvalidReason"] = reason
         return bounded
 
     for line in reversed(output.splitlines()):

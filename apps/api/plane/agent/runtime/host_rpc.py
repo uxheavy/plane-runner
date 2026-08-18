@@ -61,6 +61,21 @@ class PlaneHostRPCError(ValueError):
     """A malformed, unavailable, or rejected Plane host callback."""
 
 
+_PREPARED_CALL_INVALID_REASONS = frozenset(
+    {"unknown", "consumed", "binding_mismatch", "digest_mismatch", "malformed"}
+)
+
+
+class PreparedCallInvalid(PlaneHostRPCError):
+    """Private bounded classification for one rejected prepared call."""
+
+    def __init__(self, reason: str) -> None:
+        if reason not in _PREPARED_CALL_INVALID_REASONS:
+            raise ValueError("unsupported prepared-call rejection reason")
+        self.reason = reason
+        super().__init__("prepared work-item read reference is invalid")
+
+
 class PreparedCallRegistry:
     """Invocation-local prepared-call state shared by model and Code Mode callbacks."""
 
@@ -105,31 +120,34 @@ class PreparedCallRegistry:
         if "preparedCallRef" not in input_data:
             return input_data
         if set(input_data) != {"preparedCallRef"}:
-            raise PlaneHostRPCError("prepared work-item read input is not canonical")
+            raise PreparedCallInvalid("malformed")
         prepared_ref = input_data["preparedCallRef"]
         if not isinstance(prepared_ref, str) or not prepared_ref.startswith(PREPARED_CALL_PREFIX):
-            raise PlaneHostRPCError("prepared work-item read reference is invalid")
-        _text(prepared_ref, "host.preparedCallRef", MAX_PREPARED_CALL_REF_BYTES)
+            raise PreparedCallInvalid("malformed")
+        try:
+            _text(prepared_ref, "host.preparedCallRef", MAX_PREPARED_CALL_REF_BYTES)
+        except PlaneHostRPCError as exc:
+            raise PreparedCallInvalid("malformed") from exc
         with self.lock:
             record = self.records.get(prepared_ref)
             prepared_input = record.get("input") if record is not None else None
             if prepared_input is None or record is None:
-                raise PlaneHostRPCError("prepared work-item read reference is unknown")
+                raise PreparedCallInvalid("unknown")
             parts = prepared_ref.split(":", 2)
             if len(parts) != 3 or not hmac.compare_digest(
                 parts[1], hashlib.sha256(_canonical(prepared_input, "prepared work-item read input")).hexdigest()
             ):
-                raise PlaneHostRPCError("prepared work-item read reference digest is invalid")
+                raise PreparedCallInvalid("digest_mismatch")
             if correlation_id is not None or idempotency_key is not None:
                 if not isinstance(correlation_id, str) or not isinstance(idempotency_key, str):
-                    raise PlaneHostRPCError("prepared work-item read replay identity is invalid")
+                    raise PreparedCallInvalid("malformed")
                 bound_correlation = record["correlation_id"]
                 bound_idempotency = record["idempotency_key"]
                 if bound_correlation is None:
                     record["correlation_id"] = correlation_id
                     record["idempotency_key"] = idempotency_key
                 elif bound_correlation != correlation_id or bound_idempotency != idempotency_key:
-                    raise PlaneHostRPCError("prepared work-item read replay identity is invalid")
+                    raise PreparedCallInvalid("consumed" if record["consumed"] else "binding_mismatch")
             return prepared_input
 
 
@@ -360,6 +378,7 @@ class PlaneHostResult:
     error_code: str | None = None
     error_message: str | None = None
     publication: Mapping[str, Any] | None = None
+    prepared_call_invalid_reason: str | None = None
 
     def __post_init__(self) -> None:
         _text(self.request_ref, "host.result.requestRef", 256)
@@ -377,6 +396,13 @@ class PlaneHostResult:
             _text(self.error_message, "host.result.errorMessage", 2048)
         elif self.error_code is not None or self.error_message is not None:
             raise PlaneHostRPCError("successful host result cannot carry an error")
+        if self.prepared_call_invalid_reason is not None:
+            if (
+                self.error_code != "PREPARED_CALL_INVALID"
+                or status != "invalid"
+                or self.prepared_call_invalid_reason not in _PREPARED_CALL_INVALID_REASONS
+            ):
+                raise PlaneHostRPCError("prepared-call diagnostic is invalid")
         if self.publication is not None:
             _object(self.publication, "host.result.publication")
         _bounded(self.to_wire(), "host.result", MAX_HOST_RESULT_BYTES)
@@ -500,7 +526,7 @@ def _host_operation_failure_evidence(
     status = result.status if result is not None else "unavailable"
     if status not in {"denied", "conflict", "unavailable", "invalid"}:
         status = "unavailable"
-    return {
+    evidence = {
         "operationId": bounded_operation_id(operation_id),
         "attemptRef": bounded_ref(request_id, "operation-attempt:")
         if request_id is not None
@@ -516,6 +542,9 @@ def _host_operation_failure_evidence(
             else "unavailable"
         ),
     }
+    if result is not None and result.prepared_call_invalid_reason in _PREPARED_CALL_INVALID_REASONS:
+        evidence["preparedCallInvalidReason"] = result.prepared_call_invalid_reason
+    return evidence
 
 
 class PlaneHostServer:
@@ -718,6 +747,7 @@ class PlaneHostServer:
                     error_code=replay.error_code,
                     error_message=replay.error_message,
                     publication=None,
+                    prepared_call_invalid_reason=replay.prepared_call_invalid_reason,
                 )
             if _is_provider_attempt_observation(call):
                 if self._observation_count >= self._max_observation_calls:
@@ -1069,6 +1099,7 @@ class PlaneHostHTTPServer:
                     error_code=replay.error_code,
                     error_message=replay.error_message,
                     publication=None,
+                    prepared_call_invalid_reason=replay.prepared_call_invalid_reason,
                 )
             if _is_provider_attempt_observation(call):
                 if self._observation_count >= self._max_observation_calls:
@@ -1242,8 +1273,20 @@ class PlaneGatewayHostPort:
                     replay = self._bind_or_replay_prepared_call(call, prepared_ref)
                     if replay is not None:
                         return replay
+            except PreparedCallInvalid as exc:
+                return self._error(
+                    call,
+                    "PREPARED_CALL_INVALID",
+                    "Prepared work-item read reference is invalid",
+                    prepared_call_invalid_reason=exc.reason,
+                )
             except PlaneHostRPCError:
-                return self._error(call, "PREPARED_CALL_INVALID", "Prepared work-item read reference is invalid")
+                return self._error(
+                    call,
+                    "PREPARED_CALL_INVALID",
+                    "Prepared work-item read reference is invalid",
+                    prepared_call_invalid_reason="malformed",
+                )
         receipt = self._host.call_operation(
             operation_id,
             operation_input,
@@ -1309,7 +1352,7 @@ class PlaneGatewayHostPort:
         with self._prepared_calls_lock:
             record = self._prepared_calls.get(prepared_ref)
             if record is None:
-                raise PlaneHostRPCError("prepared work-item read reference is unknown")
+                raise PreparedCallInvalid("unknown")
             correlation_id = record["correlation_id"]
             idempotency_key = record["idempotency_key"]
             if correlation_id is None:
@@ -1317,7 +1360,7 @@ class PlaneGatewayHostPort:
                 record["idempotency_key"] = call.idempotency_key
                 return None
             if correlation_id != call.correlation_id or idempotency_key != call.idempotency_key:
-                raise PlaneHostRPCError("prepared work-item read replay identity is invalid")
+                raise PreparedCallInvalid("consumed" if record["consumed"] else "binding_mismatch")
             cached = record["result"]
         if cached is None:
             return None
@@ -1331,6 +1374,7 @@ class PlaneGatewayHostPort:
             error_code=cached.error_code,
             error_message=cached.error_message,
             publication=cached.publication,
+            prepared_call_invalid_reason=cached.prepared_call_invalid_reason,
         )
 
     def _publish(self, call: PlaneHostCall) -> PlaneHostResult:
@@ -1442,7 +1486,13 @@ class PlaneGatewayHostPort:
         )
 
     @staticmethod
-    def _error(call: PlaneHostCall, code: str, message: str) -> PlaneHostResult:
+    def _error(
+        call: PlaneHostCall,
+        code: str,
+        message: str,
+        *,
+        prepared_call_invalid_reason: str | None = None,
+    ) -> PlaneHostResult:
         return PlaneHostResult(
             request_ref=call.request_ref,
             correlation_id=call.correlation_id,
@@ -1460,6 +1510,7 @@ class PlaneGatewayHostPort:
             output=None,
             error_code=code,
             error_message=message,
+            prepared_call_invalid_reason=prepared_call_invalid_reason,
         )
 
 
