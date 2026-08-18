@@ -134,6 +134,72 @@ def _scenario_preflight_error(message: str, reason_subreason: str) -> RuntimeErr
     )
     return error
 
+
+_CHILD_DIAGNOSTIC_FIELDS = frozenset(
+    {
+        "exceptionClass",
+        "module",
+        "category",
+        "stderrSha256",
+        "stderrBytes",
+        "termination",
+        "exitCode",
+    }
+)
+_CHILD_DIAGNOSTIC_EXCEPTION_CLASSES = frozenset(
+    {
+        "ModuleNotFoundError",
+        "ImportError",
+        "PermissionError",
+        "OSError",
+        "MemoryError",
+        "TimeoutError",
+        "PythonException",
+        "Signal",
+        "Unknown",
+    }
+)
+_CHILD_DIAGNOSTIC_MODULES = frozenset(
+    {"plane", "plane_runtime", "run_agent", "openai", "hermes", "dependency", "unknown"}
+)
+_CHILD_DIAGNOSTIC_CATEGORIES = frozenset(
+    {
+        "module_not_found",
+        "import_error",
+        "permission_denied",
+        "os_eperm",
+        "memory_exhausted",
+        "timeout",
+        "python_traceback",
+        "signal",
+        "unknown",
+    }
+)
+
+
+def _bounded_child_diagnostic(value):
+    """Preserve only the finite runtime child-failure contract."""
+
+    if not isinstance(value, dict) or set(value) != _CHILD_DIAGNOSTIC_FIELDS:
+        return None
+    if (
+        value.get("exceptionClass") not in _CHILD_DIAGNOSTIC_EXCEPTION_CLASSES
+        or value.get("module") not in _CHILD_DIAGNOSTIC_MODULES
+        or value.get("category") not in _CHILD_DIAGNOSTIC_CATEGORIES
+        or not isinstance(value.get("stderrSha256"), str)
+        or len(value["stderrSha256"]) != 64
+        or any(character not in "0123456789abcdef" for character in value["stderrSha256"])
+        or isinstance(value.get("stderrBytes"), bool)
+        or not isinstance(value.get("stderrBytes"), int)
+        or not 0 <= value["stderrBytes"] <= 64 * 1024
+        or value.get("termination") not in {"exit", "signal"}
+        or isinstance(value.get("exitCode"), bool)
+        or not isinstance(value.get("exitCode"), int)
+        or not -255 <= value["exitCode"] <= 255
+    ):
+        return None
+    return dict(value)
+
 _LIVE_USAGE_KEYS = ("inputTokens", "outputTokens", "durationMs")
 _THRESHOLD_KEYS = frozenset(
     {"permittedSuccessRateMin", "deniedRejectionRateMin", "maxLatencyP95Ms", "maxErrorRate"}
@@ -1130,6 +1196,7 @@ def build_failure_evidence(
             optional_keys = {
                 "failureSubreason",
                 "failureCause",
+                "childDiagnostic",
                 "hostOperationFailure",
                 "providerAttemptRef",
                 "providerEventRef",
@@ -1144,6 +1211,12 @@ def build_failure_evidence(
                         reason.pop("hostOperationFailure", None)
                     else:
                         reason["hostOperationFailure"] = bounded_host_failure
+                if "childDiagnostic" in reason:
+                    bounded_child = _bounded_child_diagnostic(reason["childDiagnostic"])
+                    if bounded_child is None:
+                        reason.pop("childDiagnostic", None)
+                    else:
+                        reason["childDiagnostic"] = bounded_child
     reason_code = reason.get("failureCode")
     bounded_failure_code = (
         reason_code
@@ -1255,6 +1328,9 @@ def build_failure_evidence(
     bounded_host_failure = bounded_host_operation_failure(reason.get("hostOperationFailure"))
     if bounded_host_failure is not None:
         bounded_failure["hostOperationFailure"] = bounded_host_failure
+    bounded_child = _bounded_child_diagnostic(reason.get("childDiagnostic"))
+    if bounded_child is not None:
+        bounded_failure["childDiagnostic"] = bounded_child
     for field, prefix in (
         ("providerAttemptRef", "provider-attempt:"),
         ("providerEventRef", "provider-event:"),
@@ -1310,10 +1386,16 @@ def _supervisor_failure_reason(output):
         "failureDetail",
         "failureSubreason",
         "failureCause",
+        "childDiagnostic",
         "providerAttemptRef",
         "providerEventRef",
     }
-    required_keys = allowed_keys - {"failureSubreason", "providerAttemptRef", "providerEventRef"}
+    required_keys = allowed_keys - {
+        "failureSubreason",
+        "childDiagnostic",
+        "providerAttemptRef",
+        "providerEventRef",
+    }
     allowed_shapes = {
         frozenset(required_keys),
         frozenset(required_keys | {"failureSubreason"}),
@@ -1376,7 +1458,11 @@ def _supervisor_failure_reason(output):
         if not isinstance(value, dict):
             continue
         value_keys = frozenset(value)
-        diagnostic_refs = value_keys & {"providerAttemptRef", "providerEventRef"}
+        diagnostic_refs = value_keys & {
+            "childDiagnostic",
+            "providerAttemptRef",
+            "providerEventRef",
+        }
         if value_keys - diagnostic_refs not in allowed_shapes:
             if (
                 "hostOperationFailure" not in value
@@ -1401,6 +1487,12 @@ def _supervisor_failure_reason(output):
                 continue
             value = dict(value)
             value["hostOperationFailure"] = bounded
+        if "childDiagnostic" in value:
+            bounded_child = _bounded_child_diagnostic(value["childDiagnostic"])
+            if bounded_child is None:
+                continue
+            value = dict(value)
+            value["childDiagnostic"] = bounded_child
         for field, prefix in (
             ("providerAttemptRef", "provider-attempt:"),
             ("providerEventRef", "provider-event:"),

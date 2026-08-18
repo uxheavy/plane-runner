@@ -3317,6 +3317,47 @@ class G4ContractTests(unittest.TestCase):
             re.compile(r"(?i)(password|secret|token|api[_-]?key|authorization|credential)"),
         )
 
+    def test_failure_evidence_preserves_bounded_child_diagnostic(self):
+        namespace = invoke_helper_namespace()
+        diagnostic = {
+            "exceptionClass": "ModuleNotFoundError",
+            "module": "plane_runtime",
+            "category": "module_not_found",
+            "stderrSha256": "a" * 64,
+            "stderrBytes": 128,
+            "termination": "exit",
+            "exitCode": 1,
+        }
+        reason = {
+            "failureCode": "runtime_process_failed",
+            "failurePhase": "runtime_process",
+            "failureDetail": "process_exit",
+            "failureSubreason": "runtime_execution_failed",
+            "childDiagnostic": diagnostic,
+        }
+        evidence = namespace["build_failure_evidence"](
+            binding={},
+            failure_phase="api-invocation",
+            error_class="RuntimeError",
+            exit_code=1,
+            run_id=None,
+            run_state="failed",
+            invocation_id=None,
+            invocation_state="failed",
+            provider_attempts=[],
+            terminal_kind="run_failure",
+            terminal_code="runtime_error",
+            terminal_reason=json.dumps(reason, sort_keys=True, separators=(",", ":")),
+            failure_code="runtime_process_failed",
+            failure_reason=json.dumps(reason, sort_keys=True, separators=(",", ":")),
+        )
+
+        self.assertEqual(evidence["failure"]["childDiagnostic"], diagnostic)
+        parsed = namespace["_supervisor_failure_reason"](
+            "state=failed failure=" + json.dumps(reason, sort_keys=True, separators=(",", ":"))
+        )
+        self.assertEqual(json.loads(parsed)["childDiagnostic"], diagnostic)
+
     def test_provider_attempt_reconciliation_leaves_completed_attempt_completed(self):
         source = (ROOT / "apps/api/plane/tests/unit/agent/test_lifecycle.py").read_text(encoding="utf-8")
         self.assertIn("def test_provider_attempt_reconciliation_leaves_completed_attempt_completed", source)
