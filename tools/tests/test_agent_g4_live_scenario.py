@@ -236,6 +236,8 @@ def test_operator_live_descriptor_covers_exact_synthetic_omar_routes() -> None:
     ]
     assert parsed.assignment.target_ref == scenario.ASSIGNED_WORK_ITEM_ALIAS
     assert parsed.profile.model_policy == scenario.ModelPolicy("openai-codex", "gpt-5.6-luna", "xhigh", False)
+    assert "pass that entry's exact operationId to catalog.describe" in parsed.profile.instructions
+    assert "never pass operationRef or an operation: reference" in parsed.profile.instructions
     assert parsed.profile.tool_presentation == (
         "catalog.search",
         "catalog.describe",

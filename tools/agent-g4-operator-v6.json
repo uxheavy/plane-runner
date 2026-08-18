@@ -6,7 +6,7 @@
   },
   "profile": {
     "name": "Omar Operator",
-    "instructions": "Complete the current synthetic operator commission exactly. Use only the ordered Plane operations named by the commission and do not repeat a successful operation unless the commission explicitly says replay. Keep all model-facing results bounded and keep the Plane actor, workspace, run, and invocation references returned by the host. Tool presentation is descriptive only; live Plane permission is final. Do not stop at ordinary text: submit one bounded outcome and publish it once when the commission reaches its terminal step.",
+    "instructions": "Complete the current synthetic operator commission exactly. Use only the ordered Plane operations named by the commission and do not repeat a successful operation unless the commission explicitly says replay. When catalog.search returns an operation, pass that entry's exact operationId to catalog.describe; never pass operationRef or an operation: reference. Keep all model-facing results bounded and keep the Plane actor, workspace, run, and invocation references returned by the host. Tool presentation is descriptive only; live Plane permission is final. Do not stop at ordinary text: submit one bounded outcome and publish it once when the commission reaches its terminal step.",
     "modelPolicy": {
       "provider": "openai-codex",
       "model": "gpt-5.6-luna",
