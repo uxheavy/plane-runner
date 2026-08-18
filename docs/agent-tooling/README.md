@@ -5,21 +5,21 @@ This directory contains the compact execution control surface for the non-UI Pla
 ## Current status
 
 G0 through G3 and the provider-free exact-image G4 checks are complete for the
-current v25 wrapper, whose sole source parent is
-`9385d0dc3607905729bdcbf936b3cbeb95504cb5`. The
-API artifact is `plane-agent-api:g4-v25-9385d0dc` at
-`sha256:3b04585ef655538c33c61b7cd7fee6519c427449d758fcf0844376a58ff2a30c`;
+current v26 wrapper, whose sole source parent is
+`a853a9053a867dc3b910723f0b2670110479f59b`. The
+API artifact is `plane-agent-api:g4-v26-a853a905` at
+`sha256:e1a7541e5feab42146e469a7421185d7e737db173b7f801d268e054622e305a9`;
 the runtime artifact is
-`plane-agent-runtime:hermes-c2fa44-g4-v25-9385d0dc` at
-`sha256:1f324541441cdfc9faa87172105e9630c9e540ed8e4a1429bc6fcb5edf2073e8`.
-Both artifacts remain source-bound to `9385d0dc3607905729bdcbf936b3cbeb95504cb5`;
+`plane-agent-runtime:hermes-c2fa44-g4-v26-a853a905` at
+`sha256:985b9acdbcffd473ee1839673c233fa0f1ea1008e5e674a5ebf79747ba22dcc0`.
+Both artifacts remain source-bound to `a853a9053a867dc3b910723f0b2670110479f59b`;
 the runtime is bound to Hermes `c2fa44db6168c19dbe2a4b94fda522f80a2a370b`, MCP
 `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The exact-image functional
 red-team is green provider-free, including verbatim
 search-result-to-read handoff with target-digest correlation, versioned
 assigned-work-item binding with authorized success and out-of-scope denial.
-The v25 wrapper is the sole child of the bound source. No current-candidate
+The v26 wrapper is the sole child of the bound source. No current-candidate
 persona journey is claimed passed; the unchanged O02 exact external-client
 proof is the retained exception. The final Worker, Manager, and Operator
 journeys remain separately authorized.
