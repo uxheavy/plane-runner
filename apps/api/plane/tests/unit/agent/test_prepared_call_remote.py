@@ -61,6 +61,22 @@ invocation = request["invocation"]
 invocation_id = invocation["invocationId"]
 correlation_id = invocation["correlationId"]
 socket_path = sys.argv[sys.argv.index("--plane-host-socket") + 1]
+describe = host(
+    socket_path,
+    run_id,
+    invocation_id,
+    correlation_id,
+    "operation:catalog.describe",
+    {"operation_id": "search_workspace"},
+)
+assert describe["status"] == "ok", describe
+described_schema = describe["output"]["operation"]["resultSchema"]
+assert "workItemReadInput" not in described_schema["properties"]["results"]["items"]["properties"], describe
+described_read_input = described_schema["properties"]["results"]["items"]["properties"]["workItemReadCall"][
+    "properties"
+]["input"]
+assert described_read_input["required"] == ["preparedCallRef"], describe
+assert set(described_read_input["properties"]) == {"preparedCallRef"}, describe
 search = host(socket_path, run_id, invocation_id, correlation_id, "operation:search_workspace", {"query": "Gateway Issue", "limit": 1})
 assert search["status"] == "ok", search
 item = next(item for item in search["output"]["result"]["results"] if item["objectType"] == "work_item")
@@ -216,6 +232,7 @@ def test_remote_runtime_preserves_search_prepared_read_envelope(
     assert service.returncode == 0, stderr.decode("utf-8", errors="replace")
     assert json.loads(frames[-1])["kind"] == "completed"
     assert [call.operation_ref for call in host_calls] == [
+        "operation:catalog.describe",
         "operation:search_workspace",
         "operation:work_item.read",
         "operation:work_item.read",

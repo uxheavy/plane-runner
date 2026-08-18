@@ -8,6 +8,7 @@ publication remain Plane-owned.
 
 from __future__ import annotations
 
+from copy import deepcopy
 import hashlib
 import hmac
 import http.client
@@ -17,8 +18,8 @@ import secrets
 import socket
 import stat
 import threading
-import urllib.parse
 import sys
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from dataclasses import dataclass
 from pathlib import Path
@@ -57,6 +58,18 @@ _SOURCES = {"model", "code", "runtime"}
 _RESULT_STATUSES = {"ok", "replayed", "denied", "conflict", "unavailable", "invalid"}
 HOST_HTTP_PATH = "/v1/host"
 MAX_HOST_HTTP_RESPONSE_BYTES = MAX_HOST_RESULT_BYTES + 1024
+_MODEL_PREPARED_READ_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["preparedCallRef"],
+    "properties": {
+        "preparedCallRef": {
+            "type": "string",
+            "minLength": len(PREPARED_CALL_PREFIX),
+            "maxLength": MAX_PREPARED_CALL_REF_BYTES,
+        }
+    },
+}
 
 
 class PlaneHostRPCError(ValueError):
@@ -101,6 +114,42 @@ def _reject_unknown(value: Mapping[str, Any], allowed: set[str], name: str) -> N
     unknown = sorted(set(value).difference(allowed))
     if unknown:
         raise PlaneHostRPCError(f"{name} has unknown field(s): {', '.join(unknown)}")
+
+
+def _model_catalog_operation(operation: Mapping[str, Any]) -> dict[str, Any]:
+    """Project the host-only prepared-call form of a catalog description.
+
+    The canonical gateway descriptor remains raw-ID compatible for direct API
+    callers.  The model-facing host boundary instead exposes the opaque,
+    invocation-local envelope that the host creates from search results.
+    """
+
+    projected = deepcopy(dict(operation))
+    if projected.get("operationId") != "search_workspace":
+        return projected
+    result_schema = projected.get("resultSchema")
+    if not isinstance(result_schema, dict):
+        return projected
+    results = result_schema.get("properties", {}).get("results")
+    if not isinstance(results, dict):
+        return projected
+    item_schema = results.get("items")
+    if not isinstance(item_schema, dict):
+        return projected
+    item_properties = item_schema.get("properties")
+    if not isinstance(item_properties, dict):
+        return projected
+    item_properties.pop("workItemReadInput", None)
+    read_call = item_properties.get("workItemReadCall")
+    if not isinstance(read_call, dict):
+        return projected
+    read_call_properties = read_call.get("properties")
+    if not isinstance(read_call_properties, dict):
+        return projected
+    if "input" not in read_call_properties:
+        return projected
+    read_call_properties["input"] = deepcopy(_MODEL_PREPARED_READ_INPUT_SCHEMA)
+    return projected
 
 
 def _digest(value: Mapping[str, Any]) -> str:
@@ -1338,7 +1387,7 @@ class PlaneGatewayHostPort:
                     # described operation from the host output. Preserve the
                     # canonical gateway receipt while projecting that bounded
                     # operation object at the adapter boundary.
-                    output["operation"] = dict(nested_result["operation"])
+                    output["operation"] = _model_catalog_operation(nested_result["operation"])
             return PlaneHostResult(
                 request_ref=call.request_ref,
                 correlation_id=call.correlation_id,
