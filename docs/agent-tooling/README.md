@@ -5,7 +5,9 @@ This directory contains the compact execution control surface for the non-UI Pla
 ## Current status
 
 G0 through G3 and the provider-free exact-image G4 checks are complete for the
-current shared integration source `c9174ae7d585d55659c447ba8fe4d7e0d2e5380a`. The
+current shared host-runner source `11d63bb75aac6629dde6ac42ba398aa01381521b`.
+The product artifacts remain source-bound to
+`c9174ae7d585d55659c447ba8fe4d7e0d2e5380a`. The
 API artifact is `plane-agent-api:g4-v22-c9174ae7` at
 `sha256:e4d143327dff4f8299d846cd23059964bf922135c7d639dbe380d093d4389f69`;
 the runtime artifact is
@@ -44,7 +46,7 @@ campaign ledgers are under `user-testing-output/plane-agents/`.
 
 The rollback fixture remains an offline binding for the active candidate. Its
 `current.planeCommit` is the approved source parent
-`c9174ae7d585d55659c447ba8fe4d7e0d2e5380a`; its final candidate wrapper is
+`11d63bb75aac6629dde6ac42ba398aa01381521b`; its final candidate wrapper is
 that parent's sole child. The independent `previous` section retains the accepted G3
 service artifact digest
 `sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e`.

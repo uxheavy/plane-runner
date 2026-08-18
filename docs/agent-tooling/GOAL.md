@@ -10,8 +10,9 @@ Functional completion and controlled rollout are separate outcomes. This goal en
 
 ### Current provider-free integration refreeze (2026-08-18)
 
-The named integration branch currently carries source candidate
-`c9174ae7d585d55659c447ba8fe4d7e0d2e5380a`. Its exact API artifact is
+The named integration branch currently carries host-runner source candidate
+`11d63bb75aac6629dde6ac42ba398aa01381521b`, descended from product source
+`c9174ae7d585d55659c447ba8fe4d7e0d2e5380a`. Its exact API artifact remains
 `plane-agent-api:g4-v22-c9174ae7` at
 `sha256:e4d143327dff4f8299d846cd23059964bf922135c7d639dbe380d093d4389f69`;
 its exact runtime artifact is
