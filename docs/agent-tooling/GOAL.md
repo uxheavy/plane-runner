@@ -11,12 +11,12 @@ Functional completion and controlled rollout are separate outcomes. This goal en
 ### Current provider-free integration refreeze (2026-08-18)
 
 The named integration branch currently carries source candidate
-`278182149efa0cdddab88b05e27d6445162f0c9a`. Its exact API artifact is
-`plane-agent-api:g4-v20-2781821` at
-`sha256:38c48791d38ab15f4201a24d272f9202367c1368e96ecd31bab5587f599db2ca`;
+`9ad2d5c41a6019effa47fc10d96d338d7ffb1378`. Its exact API artifact is
+`plane-agent-api:g4-v21-9ad2d5c` at
+`sha256:82fb034a78b35622a53167fb6ec2d47ce9e46e53fd0855ae06ef565254e933b1`;
 its exact runtime artifact is
-`plane-agent-runtime:hermes-6c460f10-g4-v20-2781821` at
-`sha256:7a541114d6f0fdbefad76fa4999e9fe977f02bf7979915f96c918338bc1a3ecc`.
+`plane-agent-runtime:hermes-6c460f10-g4-v21-9ad2d5c` at
+`sha256:e7fe74d4bc3fdcb61a572336a32aae964fc95fe487eac4284a39423ae8062c60`.
 The runtime is bound to Hermes `6c460f10fe215718dce36dd73cda94155a9a34f8`,
 MCP `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The exact-image red-team chain is
@@ -28,11 +28,13 @@ outcome submission, one applied publication, transcript-only ordinary text,
 idempotency replay, and late post-publication terminal completion. The source
 also binds model-facing search results to one ready-to-call typed
 `workItemReadCall` and forwards authority-approved thresholds into bounded live
-receipts. The v20 source is ready for one final metadata wrapper. W05/W06 are
-live-clean from immutable v15 evidence; W03/W04 and W07/W08 remain dirty after
-their v19 `PREPARED_CALL_INVALID` stops, and Manager remains dirty after its
-v19 opaque `api-invocation` stop. The v20 fixes are provider-free; no provider
-call or live journey was made during this refreeze.
+receipts. The v21 source is ready for one final metadata wrapper. W05/W06
+historical v15 proof remains applicable to unchanged lifecycle, gateway,
+publication, and terminal seams; a fresh current-candidate W05/W06 lane is
+still authoritative for current release status. W03/W04, W07/W08, and Operator
+remain dirty after their v20 stops, and Manager remains dirty after its v20
+diagnostic stop. The v21 fixes are provider-free; no provider call or live
+journey was made during this refreeze.
 
 The older G4 artifact bindings and Wave 0X evidence below are historical, not
 the active delivery state. The current host-side harness checkpoint is
@@ -189,16 +191,16 @@ mutation, applied publication, complete W08 readback, or eligible replay was
 proven. UT-038 remains open, W03/W04/W07/W08 remain dirty, and no further
 provider use is authorized pending root-fix review.
 
-## Current v20 status and authorization
+## Current v21 status and authorization
 
-The v20 source candidate is `278182149efa0cdddab88b05e27d6445162f0c9a`.
+The v21 source candidate is `9ad2d5c41a6019effa47fc10d96d338d7ffb1378`.
 Its provider-free exact API image is
-`plane-agent-api:g4-v20-2781821` at
-`sha256:38c48791d38ab15f4201a24d272f9202367c1368e96ecd31bab5587f599db2ca`;
+`plane-agent-api:g4-v21-9ad2d5c` at
+`sha256:82fb034a78b35622a53167fb6ec2d47ce9e46e53fd0855ae06ef565254e933b1`;
 its exact runtime image is
-`plane-agent-runtime:hermes-6c460f10-g4-v20-2781821` at
-`sha256:7a541114d6f0fdbefad76fa4999e9fe977f02bf7979915f96c918338bc1a3ecc`.
-The final v20 wrapper is created only after the manifest-bound gates pass and
+`plane-agent-runtime:hermes-6c460f10-g4-v21-9ad2d5c` at
+`sha256:e7fe74d4bc3fdcb61a572336a32aae964fc95fe487eac4284a39423ae8062c60`.
+The final v21 wrapper is created only after the manifest-bound gates pass and
 will be the sole child of this source. Hermes remains
 `6c460f10fe215718dce36dd73cda94155a9a34f8`; MCP remains
 `c04974ed6624f17b41e63ef8182661929e77e0d3`; SDK remains
