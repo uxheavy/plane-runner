@@ -9,6 +9,8 @@ import json
 import re
 import stat
 import subprocess
+import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -26,6 +28,8 @@ SOURCE_FILES = {
     "PLANE_API_ADMIN_SHA256": "apps/api/plane/api/views/agent_admin.py",
     "PLANE_API_CORRUPTION_TEST_SHA256": "apps/api/plane/tests/contract/api/test_agent_admin.py",
     "PLANE_API_PROVIDER_CONFIG_SHA256": "apps/api/plane/agent/runtime/config.py",
+    "PLANE_API_CREDENTIALS_SHA256": "apps/api/plane/agent/runtime/credentials.py",
+    "PLANE_API_CREDENTIAL_RESOLVER_SHA256": "apps/api/bin/plane-agent-runtime-credential-resolver",
 }
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 HASH_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -224,6 +228,58 @@ def image_metadata(tag: str) -> dict[str, object]:
     return {"imageTag": tag, "imageDigest": image_id, "labels": labels}
 
 
+def verify_resolver_image(tag: str) -> None:
+    """Exercise the packaged resolver network-none without exposing its token."""
+
+    (ROOT / "tmp").mkdir(mode=0o700, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="agent-api-resolver-", dir=ROOT / "tmp") as directory:
+        source = Path(directory) / "auth.json"
+        source.write_text(
+            json.dumps(
+                {
+                    "last_refresh": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                    "tokens": {
+                        "access_token": "synthetic-access-token",
+                        "account_id": "synthetic-account-id",
+                        "id_token": "synthetic-id-token",
+                        "refresh_token": "synthetic-refresh-token",
+                    },
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+            encoding="utf-8",
+        )
+        source.chmod(0o600)
+        probe = (
+            "import json,subprocess,sys;"
+            "r=subprocess.run(['/usr/local/bin/plane-agent-runtime-credential-resolver','runtime'],capture_output=True,text=True);"
+            "p=json.loads(r.stdout) if r.returncode==0 else {};"
+            "ok=r.returncode==0 and set(p)=={'api_key'} and isinstance(p['api_key'],str) and bool(p['api_key']);"
+            "print(json.dumps({'exitCode':r.returncode,'keys':sorted(p),'valueShape':'nonempty-string' if ok else 'invalid'},sort_keys=True,separators=(',',':')));"
+            "sys.exit(0 if ok else 1)"
+        )
+        result = json.loads(
+            _run(
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--read-only",
+                "--mount",
+                f"type=bind,source={source},target=/run/secrets/plane_agent_provider_credentials,readonly",
+                "--entrypoint",
+                "python3",
+                tag,
+                "-c",
+                probe,
+            )
+        )
+    if result != {"exitCode": 0, "keys": ["api_key"], "valueShape": "nonempty-string"}:
+        raise RuntimeError("API image credential resolver probe returned an invalid shape")
+
+
 def build_api_image(
     *,
     candidate: str | None = None,
@@ -250,10 +306,15 @@ def build_api_image(
         "org.uxheavy.plane.api.source.agent-admin.sha256": hashes["PLANE_API_ADMIN_SHA256"],
         "org.uxheavy.plane.api.source.corruption-test.sha256": hashes["PLANE_API_CORRUPTION_TEST_SHA256"],
         "org.uxheavy.plane.api.source.provider-config.sha256": hashes["PLANE_API_PROVIDER_CONFIG_SHA256"],
+        "org.uxheavy.plane.api.source.credentials.sha256": hashes["PLANE_API_CREDENTIALS_SHA256"],
+        "org.uxheavy.plane.api.source.credential-resolver.sha256": hashes[
+            "PLANE_API_CREDENTIAL_RESOLVER_SHA256"
+        ],
     }
     for label, expected in expected_labels.items():
         if str(labels.get(label, "")) != expected:
             raise RuntimeError(f"API image label mismatch: {label}")
+    verify_resolver_image(selected_tag)
     return {"imageTag": selected_tag, "imageDigest": str(metadata["imageDigest"]), "sourceRevision": resolved, "contract": CONTRACT}
 
 

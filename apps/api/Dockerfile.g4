@@ -4,7 +4,9 @@ FROM ${BASE_API_IMAGE}
 WORKDIR /workspace/apps/api
 COPY . /workspace/apps/api
 COPY --chown=root:root ./bin/plane-agent-runtime-credential-resolver /usr/local/bin/plane-agent-runtime-credential-resolver
-RUN chmod 755 /usr/local/bin/plane-agent-runtime-credential-resolver
+COPY --chown=root:root ./plane/agent/runtime/credentials.py /usr/local/lib/plane-agent-runtime/credentials.py
+RUN chmod 755 /usr/local/bin/plane-agent-runtime-credential-resolver \
+    && chmod 0444 /usr/local/lib/plane-agent-runtime/credentials.py
 
 # The prepared base keeps its development source under /code. Make the
 # copied candidate source authoritative for every Python command in this
@@ -20,6 +22,8 @@ ARG PLANE_API_READBACK_SHA256
 ARG PLANE_API_ADMIN_SHA256
 ARG PLANE_API_CORRUPTION_TEST_SHA256
 ARG PLANE_API_PROVIDER_CONFIG_SHA256
+ARG PLANE_API_CREDENTIALS_SHA256
+ARG PLANE_API_CREDENTIAL_RESOLVER_SHA256
 
 # This Dockerfile's canonical context is apps/api. A repository-root context
 # would copy the tree below /workspace/apps/api/apps/api and leave the base
@@ -36,6 +40,8 @@ RUN DJANGO_SETTINGS_MODULE="plane.settings.test" \
     PLANE_API_ADMIN_SHA256="${PLANE_API_ADMIN_SHA256}" \
     PLANE_API_CORRUPTION_TEST_SHA256="${PLANE_API_CORRUPTION_TEST_SHA256}" \
     PLANE_API_PROVIDER_CONFIG_SHA256="${PLANE_API_PROVIDER_CONFIG_SHA256}" \
+    PLANE_API_CREDENTIALS_SHA256="${PLANE_API_CREDENTIALS_SHA256}" \
+    PLANE_API_CREDENTIAL_RESOLVER_SHA256="${PLANE_API_CREDENTIAL_RESOLVER_SHA256}" \
     python - <<'PY'
 import hashlib
 import importlib
@@ -51,6 +57,8 @@ required = {
     "plane/api/views/agent_admin.py": os.environ["PLANE_API_ADMIN_SHA256"],
     "plane/tests/contract/api/test_agent_admin.py": os.environ["PLANE_API_CORRUPTION_TEST_SHA256"],
     "plane/agent/runtime/config.py": os.environ["PLANE_API_PROVIDER_CONFIG_SHA256"],
+    "plane/agent/runtime/credentials.py": os.environ["PLANE_API_CREDENTIALS_SHA256"],
+    "bin/plane-agent-runtime-credential-resolver": os.environ["PLANE_API_CREDENTIAL_RESOLVER_SHA256"],
 }
 if not (root / "manage.py").is_file() or not (root / "plane").is_dir():
     raise SystemExit("apps/api build context must contain manage.py and plane/")
@@ -70,11 +78,13 @@ for relative, expected in required.items():
 
 resolver_source = root / "bin/plane-agent-runtime-credential-resolver"
 installed_resolver = Path("/usr/local/bin/plane-agent-runtime-credential-resolver")
+installed_credentials = Path("/usr/local/lib/plane-agent-runtime/credentials.py")
 if not resolver_source.is_file():
     raise SystemExit("candidate credential resolver source is missing")
 try:
     resolver_source_stat = resolver_source.lstat()
     installed_resolver_stat = installed_resolver.lstat()
+    installed_credentials_stat = installed_credentials.lstat()
 except FileNotFoundError as exc:
     raise SystemExit("installed credential resolver is missing") from exc
 if not stat.S_ISREG(installed_resolver_stat.st_mode):
@@ -83,12 +93,23 @@ if stat.S_IMODE(installed_resolver_stat.st_mode) != 0o755:
     raise SystemExit("installed credential resolver mode is not 0755")
 if installed_resolver_stat.st_uid != 0 or installed_resolver_stat.st_gid != 0:
     raise SystemExit("installed credential resolver is not owned by root:root")
+if not stat.S_ISREG(installed_credentials_stat.st_mode):
+    raise SystemExit("installed credential parser is not a regular file")
+if stat.S_IMODE(installed_credentials_stat.st_mode) != 0o444:
+    raise SystemExit("installed credential parser mode is not 0444")
+if installed_credentials_stat.st_uid != 0 or installed_credentials_stat.st_gid != 0:
+    raise SystemExit("installed credential parser is not owned by root:root")
 if not stat.S_ISREG(resolver_source_stat.st_mode):
     raise SystemExit("candidate credential resolver source is not a regular file")
 source_sha256 = hashlib.sha256(resolver_source.read_bytes()).hexdigest()
 installed_sha256 = hashlib.sha256(installed_resolver.read_bytes()).hexdigest()
 if installed_sha256 != source_sha256:
     raise SystemExit("installed credential resolver does not match candidate source")
+if installed_sha256 != os.environ["PLANE_API_CREDENTIAL_RESOLVER_SHA256"]:
+    raise SystemExit("installed credential resolver hash is not source-bound")
+credentials_sha256 = hashlib.sha256(installed_credentials.read_bytes()).hexdigest()
+if credentials_sha256 != os.environ["PLANE_API_CREDENTIALS_SHA256"]:
+    raise SystemExit("installed credential parser hash is not source-bound")
 
 plane_module = importlib.import_module("plane")
 plane_path = Path(plane_module.__file__).resolve()
@@ -127,7 +148,9 @@ LABEL org.uxheavy.plane.api.artifact="plane-agent-api-g4" \
       org.uxheavy.plane.api.source.readback.sha256="${PLANE_API_READBACK_SHA256}" \
       org.uxheavy.plane.api.source.agent-admin.sha256="${PLANE_API_ADMIN_SHA256}" \
       org.uxheavy.plane.api.source.corruption-test.sha256="${PLANE_API_CORRUPTION_TEST_SHA256}" \
-      org.uxheavy.plane.api.source.provider-config.sha256="${PLANE_API_PROVIDER_CONFIG_SHA256}"
+      org.uxheavy.plane.api.source.provider-config.sha256="${PLANE_API_PROVIDER_CONFIG_SHA256}" \
+      org.uxheavy.plane.api.source.credentials.sha256="${PLANE_API_CREDENTIALS_SHA256}" \
+      org.uxheavy.plane.api.source.credential-resolver.sha256="${PLANE_API_CREDENTIAL_RESOLVER_SHA256}"
 
 # The prepared base image installs dependencies in its development entrypoint.
 # The bound artifact is already prepared; verifier and live invocations must

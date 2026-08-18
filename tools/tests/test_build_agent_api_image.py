@@ -100,3 +100,22 @@ def test_default_image_tag_comes_from_current_manifest() -> None:
 def test_unpinned_candidate_requires_an_explicit_tag() -> None:
     with pytest.raises(ValueError, match="--tag is required"):
         builder.image_tag("a" * 40)
+
+
+def test_resolver_probe_is_network_none_and_emits_shape_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+
+    def fake_run(*args, **_kwargs):
+        calls.append(args)
+        return '{"exitCode":0,"keys":["api_key"],"valueShape":"nonempty-string"}'
+
+    monkeypatch.setattr(builder, "_run", fake_run)
+
+    builder.verify_resolver_image("plane-agent-api:g4-test")
+
+    command = calls[0]
+    assert command[:4] == ("docker", "run", "--rm", "--network")
+    assert "none" in command
+    assert "--read-only" in command
+    assert any("target=/run/secrets/plane_agent_provider_credentials" in item for item in command)
+    assert "synthetic-access-token" not in " ".join(command)

@@ -11,9 +11,16 @@ import pytest
 import importlib.util
 
 TOOLS = Path(__file__).parents[1]
-V24_API_SOURCE = "c9174ae7d585d55659c447ba8fe4d7e0d2e5380a"
-V24_RUNTIME_SOURCE = "b993b802401a2c5c7d6399fe7ca8acce19db54c8"
-V24_WRAPPER = "1f60fb23aa7f53dcdddb6c3e1c4f3aacd2f10da0"
+ROOT = TOOLS.parent
+CURRENT_MANIFEST = json.loads((TOOLS / "agent-g4-manifest.json").read_text(encoding="utf-8"))
+CURRENT_API_SOURCE = CURRENT_MANIFEST["pins"]["apiArtifact"]["sourceRevision"]
+CURRENT_RUNTIME_SOURCE = CURRENT_MANIFEST["pins"]["runtimeImageRevision"]
+CURRENT_WRAPPER = subprocess.run(
+    ["git", "-C", str(ROOT), "rev-parse", "HEAD"],
+    check=True,
+    capture_output=True,
+    text=True,
+).stdout.strip()
 _SPEC = importlib.util.spec_from_file_location("agent_g4_live_launch", TOOLS / "agent-g4-live-launch.py")
 assert _SPEC is not None and _SPEC.loader is not None
 launch = importlib.util.module_from_spec(_SPEC)
@@ -63,13 +70,13 @@ def test_prepare_defaults_to_manifest_for_exact_checked_in_wrapper(
             "--run-dir",
             str(run_dir),
             "--candidate",
-            V24_WRAPPER,
+            CURRENT_WRAPPER,
         ],
     )
 
     assert launch_inputs.main() == 0
     authority = json.loads((run_dir / "authority.json").read_text(encoding="utf-8"))
-    assert authority["expectedCandidate"] == V24_WRAPPER
+    assert authority["expectedCandidate"] == CURRENT_WRAPPER
 
 
 def test_prepare_rejects_source_when_wrapper_is_required(
@@ -90,7 +97,7 @@ def test_prepare_rejects_source_when_wrapper_is_required(
             "--run-dir",
             str(tmp_path / "rejected"),
             "--candidate",
-            V24_RUNTIME_SOURCE,
+            CURRENT_RUNTIME_SOURCE,
         ],
     )
 
@@ -136,8 +143,8 @@ def test_launch_defaults_to_checked_in_wrapper_manifest() -> None:
     assert launch.resolve_manifest(None) == launch.DEFAULT_MANIFEST
     launch._checked_in_manifest(launch.DEFAULT_MANIFEST)
     provenance = launch.load_manifest_provenance(launch.DEFAULT_MANIFEST)
-    assert provenance["candidate"] == V24_API_SOURCE
-    assert provenance["runtimeImage"]["sourceRevision"] == V24_RUNTIME_SOURCE
+    assert provenance["candidate"] == CURRENT_API_SOURCE
+    assert provenance["runtimeImage"]["sourceRevision"] == CURRENT_RUNTIME_SOURCE
 
 
 def test_launch_rejects_similarly_named_manifest_outside_owned_tmp(tmp_path: Path) -> None:

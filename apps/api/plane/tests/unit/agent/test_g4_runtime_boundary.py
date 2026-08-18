@@ -174,7 +174,7 @@ def test_g4_deployment_credential_resolver_accepts_fresh_codex_auth_document(
 @pytest.mark.parametrize(
     ("last_refresh", "expected"),
     (
-        ("2026-08-07T09:21:59Z", "requires trusted resolver refresh"),
+        ("2026-08-07T09:16:59Z", "requires trusted resolver refresh"),
         ("2026-08-07T10:13:01Z", "requires trusted resolver refresh"),
         ("2026-08-07T10:12:00+00:00", "JSON fields are invalid"),
         ("not-a-timestamp", "JSON fields are invalid"),

@@ -3615,7 +3615,8 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn("config_module.__file__", dockerfile)
         self.assertIn('config_module.RUNTIME_PROTOCOL != "plane.agent-runtime/v1"', dockerfile)
         self.assertIn("importlib.util.spec_from_file_location", resolver)
-        self.assertIn('_CREDENTIALS_SOURCE = "/workspace/apps/api/plane/agent/runtime/credentials.py"', resolver)
+        self.assertIn('_CREDENTIALS_SOURCE = "/usr/local/lib/plane-agent-runtime/credentials.py"', resolver)
+        self.assertIn('Path("/workspace/apps/api/plane/agent/runtime/credentials.py")', resolver)
         self.assertNotIn("from plane.agent.runtime.credentials import", resolver)
         self.assertNotIn('sys.path.insert(0, "/code")', resolver)
 
@@ -3630,6 +3631,14 @@ class G4ContractTests(unittest.TestCase):
             "/usr/local/bin/plane-agent-runtime-credential-resolver"
         )
         self.assertIn(copy, dockerfile)
+        parser_copy = (
+            "COPY --chown=root:root ./plane/agent/runtime/credentials.py "
+            "/usr/local/lib/plane-agent-runtime/credentials.py"
+        )
+        self.assertIn(parser_copy, dockerfile)
+        self.assertIn("chmod 0444 /usr/local/lib/plane-agent-runtime/credentials.py", dockerfile)
+        self.assertIn("org.uxheavy.plane.api.source.credentials.sha256", dockerfile)
+        self.assertIn("org.uxheavy.plane.api.source.credential-resolver.sha256", dockerfile)
         self.assertIn("RUN chmod 755 /usr/local/bin/plane-agent-runtime-credential-resolver", dockerfile)
         self.assertIn('root / "bin/plane-agent-runtime-credential-resolver"', dockerfile)
         self.assertIn('Path("/usr/local/bin/plane-agent-runtime-credential-resolver")', dockerfile)
