@@ -376,12 +376,12 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
                 "workspaceRef."
             )
         if operation_id == "work_item.rename":
-            model_action = "execute_code"
+            model_action = "plane_execute_typescript"
             action_detail = " to perform work_item.rename"
             guidance += (
                 " The route outcome is work_item.rename, but the direct model action is the restricted Code Mode "
-                "composition, not by a native model mutation: the next model tool call after the bounded work_item.read is execute_code, "
-                "and the module must export a default function that uses only "
+                "composition, not by a native model mutation: the next model tool call after the bounded work_item.read is plane_execute_typescript, "
+                "and the module must export a default async function receiving {host,input} that uses only "
                 "host.call_plane_operation(\"work_item.rename\", input, idempotencyKey, correlationId). "
                 "Only after the authorized work_item.read succeeds, use read.result.project verbatim as input.project_id "
                 "and read.result.id verbatim as input.issue_id; never infer either value from targetRef, search results, "

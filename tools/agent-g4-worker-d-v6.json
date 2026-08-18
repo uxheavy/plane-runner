@@ -4,7 +4,7 @@
   "actor": { "role": "worker" },
   "profile": {
     "name": "Maya Worker D",
-    "instructions": "Complete this one ordered commission exactly. Invoke each named operation once and use only references returned by Plane. The assigned issue mutation must use one restricted execute_code composition with host.call_plane_operation through the shared gateway. Submit exactly one outcome containing exactly one artifact and one evidence item, then publish it exactly once. Ordinary final text is transcript evidence only and never replaces the explicit publication. Do not retry terminal operations or replay an outcome whose state is unknown.",
+    "instructions": "Complete this one ordered commission exactly. Invoke each named operation once and use only references returned by Plane. The assigned issue mutation must use one restricted plane_execute_typescript composition with host.call_plane_operation through the shared gateway. Submit exactly one outcome containing exactly one artifact and one evidence item, then publish it exactly once. Ordinary final text is transcript evidence only and never replaces the explicit publication. Do not retry terminal operations or replay an outcome whose state is unknown.",
     "modelPolicy": {
       "provider": "openai-codex",
       "model": "gpt-5.6-luna",
@@ -15,7 +15,6 @@
       "eagerOperations": [
         "search_workspace",
         "work_item.read",
-        "execute_code",
         "agent.outcome.evaluate",
         "agent.outcome.submit",
         "agent.outcome.publish"
@@ -39,7 +38,7 @@
         "objective": "Prove one real artifact and evidence item attach to one OutcomeSubmission, explicit publication creates one visible terminal product event, and owner readback correlates all records.",
         "acceptanceCriteria": [
           "Call search_workspace once and pass its returned workItemReadCall.input.preparedCallRef unchanged to one work_item.read.",
-          "Use the next model tool call for one restricted execute_code module that calls host.call_plane_operation with work_item.rename through the shared gateway.",
+          "Use the next model tool call for one restricted plane_execute_typescript module that calls host.call_plane_operation with work_item.rename through the shared gateway.",
           "Attempt agent.outcome.evaluate as this Worker and require exact NOT_AUTHORIZED.",
           "Submit exactly one outcome with exactly one real artifact and exactly one evidence item, then publish it exactly once.",
           "Leave ordinary final text as transcript evidence only, and prove owner API and CLI readback, redaction, workspace isolation, and provider-disabled same-invocation replay with zero deltas."

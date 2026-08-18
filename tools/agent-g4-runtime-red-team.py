@@ -151,7 +151,7 @@ class _Completions:
         ("tool_call", {"name": "plane_operation", "arguments": {"action": "read", "operationRef": "operation:catalog.search", "input": {"query": "work item", "limit": 8}}}),
         ("tool_call", {"name": "plane_operation", "arguments": {"action": "read", "operationRef": "operation:catalog.describe", "input": {"operation_id": "work_item.read"}}}),
         ("tool_call", {"name": "plane_operation", "arguments": {"action": "read", "operationRef": "operation:work_item.read", "input": {"issue_ref": "issue:red-team"}}}),
-        ("execute_code", {"code": "export default ({ input }) => ({ query: 'rename', limit: 5, input });"}),
+        ("plane_execute_typescript", {"typescript_source": "export default async function ({host, input}) { return { query: 'rename', limit: 5, input }; }"}),
         ("tool_call", {"name": "plane_operation", "arguments": {"action": "read", "operationRef": "operation:work_item.read", "input": {"issue_ref": "issue:red-team"}}}),
         ("tool_call", {"name": "plane_operation", "arguments": {"action": "read", "operationRef": "operation:work_item.read", "input": {"forbidden": True, "issue_ref": "issue:red-team"}}}),
         ("tool_call", {"name": "plane_operation", "arguments": {"action": "read", "operationRef": "operation:catalog.describe", "input": {"operation_id": "work_item.rename"}}}),
@@ -169,7 +169,7 @@ class _Completions:
         _TRANSPORT_CALLS += 1
         identity = _assert_pinned_hermes_identity()
         code_mode_call_number = next(
-            index for index, (name, _arguments) in enumerate(self._PLAN) if name == "execute_code"
+            index for index, (name, _arguments) in enumerate(self._PLAN) if name == "plane_execute_typescript"
         )
         names = _tool_names(kwargs)
         messages = kwargs.get("messages", [])
@@ -206,7 +206,7 @@ class _Completions:
                     "event": "g4.hermes.code-mode-result",
                     "toolMessages": tool_messages[-3:],
                 })
-                raise RuntimeError("genuine execute_code did not return the Plane Code Mode callback")
+                raise RuntimeError("genuine plane_execute_typescript did not return the Plane Code Mode callback")
         if call_number < len(self._PLAN):
             name, arguments = self._PLAN[call_number]
             tool_delta = _tool_call("g4-call-" + str(call_number + 1), name, arguments)

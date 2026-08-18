@@ -99,7 +99,7 @@ def test_code_mode_commission_binds_exact_runtime_values_and_hides_native_rename
         "context-governance",
     ]
     assert "work_item.rename" not in parsed.profile.tool_presentation
-    assert "execute_code" in parsed.profile.tool_presentation
+    assert "plane_execute_typescript" not in parsed.profile.tool_presentation
     commission = parsed.commissions[2]
     assert commission.expected["operationOutcomes"] == [
         {"operationId": "search_workspace", "outcome": "success", "count": 1},
@@ -159,7 +159,6 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
         "agent.context.read",
         "search_workspace",
         "work_item.read",
-        "execute_code",
         "agent.outcome.evaluate",
         "agent.outcome.submit",
         "agent.outcome.publish",
@@ -178,7 +177,7 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
         "context-governance": ["W05", "W06", "W07", "W08"],
     }
     assert "workItemReadCall.input.preparedCallRef unchanged" in identity.assignment.objective
-    assert "execute_code" in mutation.assignment.objective
+    assert "plane_execute_typescript" in mutation.assignment.objective
     assert "export default async function" in mutation.assignment.objective
     assert "({host}: {host: any})" in mutation.assignment.objective
     assert 'host.call_plane_operation("work_item.rename"' in mutation.assignment.objective
@@ -195,7 +194,7 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert "{{issueId}}" in code_mode.assignment.objective
     assert "{{invocationId}}" in code_mode.assignment.objective
     assert "{{newName}}" in code_mode.assignment.objective
-    assert "execute_code exactly once" in code_mode.assignment.objective
+    assert "plane_execute_typescript exactly once" in code_mode.assignment.objective
     assert "native work_item.rename is not model-visible" in code_mode.assignment.acceptance_criteria[-1]
     mutation_route_guidance = scenario.model_route_expectations(mutation.expected)
     read_guidance = next(
@@ -217,13 +216,13 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert "do not copy raw workItemReadInput" in read_guidance
     assert "do not reconstruct, translate, or infer" in read_guidance
     rename_guidance = next(
-        item for item in mutation_route_guidance if "invoke execute_code" in item
+        item for item in mutation_route_guidance if "invoke plane_execute_typescript" in item
     )
-    assert rename_guidance.startswith("Route step 3: invoke execute_code exactly 1 time(s)")
+    assert rename_guidance.startswith("Route step 3: invoke plane_execute_typescript exactly 1 time(s)")
     assert "restricted Code Mode composition" in rename_guidance
     assert "not by a native model mutation" in rename_guidance
-    assert "execute_code" in rename_guidance
-    assert "export a default function" in rename_guidance
+    assert "plane_execute_typescript" in rename_guidance
+    assert "export a default async function receiving {host,input}" in rename_guidance
     assert "({host}: {host: any})" in rename_guidance
     assert 'host.call_plane_operation("work_item.rename"' in rename_guidance
     assert "read.result.project verbatim as input.project_id" in rename_guidance
@@ -239,7 +238,7 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert "never invent, copy, or substitute another run reference" in parsed.profile.instructions
     assert "after a terminal or rejected outcome callback, do not retry either terminal operation" in parsed.profile.instructions
     assert "agent.context.read returns the complete subject-bound projection in one response" in parsed.profile.instructions
-    assert "bounded TypeScript module exporting a default function" in parsed.profile.instructions
+    assert "bounded TypeScript module exporting a default async function receiving {host,input}" in parsed.profile.instructions
     assert "host.call_plane_operation(operationId, input, idempotencyKey, correlationId)" in parsed.profile.instructions
     assert "hermes_tools.plane_operation" not in parsed.profile.instructions
     assert "exactly one artifact and exactly one evidence item" in context.assignment.objective
@@ -687,7 +686,7 @@ def test_multi_commission_prompt_preserves_the_typed_mutation_route() -> None:
     expected = namespace["_profile_expected_outcomes"](mutation)
 
     assert expected == list(scenario.model_route_expectations(mutation.expected))
-    assert "execute_code" in expected[2]
+    assert "plane_execute_typescript" in expected[2]
     assert 'host.call_plane_operation("work_item.rename"' in expected[2]
     assert expected[3].startswith("Route step 4: invoke agent.outcome.evaluate")
     assert expected[-2].startswith("Route step 5: invoke agent.outcome.submit")
@@ -835,7 +834,7 @@ def test_rename_route_always_exposes_the_exact_code_mode_callback() -> None:
         }
     )
 
-    assert guidance[1].startswith("Route step 2: invoke execute_code exactly 1 time(s) to perform work_item.rename")
+    assert guidance[1].startswith("Route step 2: invoke plane_execute_typescript exactly 1 time(s) to perform work_item.rename")
     assert 'host.call_plane_operation("work_item.rename", input, idempotencyKey, correlationId)' in guidance[1]
 
 

@@ -618,7 +618,7 @@ def _tool_call(number, request_json):
                        "evaluator_ref": _ACTOR_REF, "verdict": "revision_requested"},
         }}
     if number == 8:
-        return "execute_code", {"code": (
+        return "plane_execute_typescript", {"typescript_source": (
             "export default async function ({host, input}: {host: {\\n"
             "    call_plane_operation: (operationId: string, input: Record<string, unknown>, "
             "idempotencyKey: string, correlationId: string) => Promise<Record<string, unknown>>\\n"
@@ -1880,14 +1880,14 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
                         },
                     }
                 elif provider_stream_count == 8:
-                    function_name = "execute_code"
+                    function_name = "plane_execute_typescript"
                     arguments = {
-                        "code": (
+                        "typescript_source": (
                             "result = 2 + 2\n"
                             "print(result)"
                         )
                     }
-                    code_callbacks.append(arguments["code"])
+                    code_callbacks.append(arguments["typescript_source"])
                 elif provider_stream_count == 9:
                     function_name = "tool_call"
                     arguments = {
@@ -2064,7 +2064,7 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
         "tool_call",
         "tool_call",
         "tool_call",
-        "execute_code",
+        "plane_execute_typescript",
         "tool_call",
         "tool_call",
     ]
