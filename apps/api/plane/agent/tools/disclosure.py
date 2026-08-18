@@ -7,7 +7,12 @@ from collections.abc import Mapping
 from typing import Any
 
 from plane.agent.lifecycle.runtime_contract import MAX_BOUNDED_BYTE_COUNT
-from plane.operation_gateway.catalog import CATALOG_DIGEST, OPERATION_CATALOG, OperationDescriptor
+from plane.operation_gateway.catalog import (
+    CATALOG_DIGEST,
+    OPERATION_CATALOG,
+    OperationDescriptor,
+    model_operation_entry,
+)
 from plane.operation_gateway.catalog import describe_operation
 from plane.operation_gateway.contracts import canonical_json
 
@@ -97,7 +102,8 @@ def _matches_assignment(descriptor: OperationDescriptor, tokens: set[str]) -> bo
 
 
 def _entry(descriptor: OperationDescriptor) -> dict[str, Any]:
-    input_schema = describe_operation(descriptor.operation_id)["operation"]["inputSchema"]
+    operation = model_operation_entry(describe_operation(descriptor.operation_id)["operation"])
+    input_schema = operation["inputSchema"]
     if not isinstance(input_schema, dict):
         raise ValueError(f"{descriptor.operation_id} input schema must be a JSON Schema object")
     input_schema_bytes = len(canonical_json(input_schema).encode("utf-8"))

@@ -99,7 +99,18 @@ def test_composed_eager_catalog_carries_work_item_read_input_schema():
 
     eager = next(item for item in catalog["eagerOperations"] if item["operationRef"] == "operation:work_item.read")
     assert set(eager) == {"operationRef", "schemaDigest", "inputSchema", "disclosure"}
-    assert eager["inputSchema"] == describe_operation("work_item.read")["operation"]["inputSchema"]
+    assert eager["inputSchema"] == {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["preparedCallRef"],
+        "properties": {
+            "preparedCallRef": {
+                "type": "string",
+                "minLength": len("prepared-call:"),
+                "maxLength": 256,
+            }
+        },
+    }
     assert eager["disclosure"] == "eager"
 
 

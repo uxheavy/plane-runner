@@ -8,7 +8,6 @@ publication remain Plane-owned.
 
 from __future__ import annotations
 
-from copy import deepcopy
 import hashlib
 import hmac
 import http.client
@@ -31,6 +30,7 @@ from plane.agent.code_mode.contracts import (
     CodeModeExecutionError,
     CodeModeExecutionRequest,
 )
+from plane.operation_gateway.catalog import model_operation_entry
 
 HOST_PROTOCOL = "plane.agent-runtime/v1"
 PLANE_DISCOVERY_OPERATION = "plane.operations.discover@1"
@@ -58,20 +58,6 @@ _SOURCES = {"model", "code", "runtime"}
 _RESULT_STATUSES = {"ok", "replayed", "denied", "conflict", "unavailable", "invalid"}
 HOST_HTTP_PATH = "/v1/host"
 MAX_HOST_HTTP_RESPONSE_BYTES = MAX_HOST_RESULT_BYTES + 1024
-_MODEL_PREPARED_READ_INPUT_SCHEMA = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": ["preparedCallRef"],
-    "properties": {
-        "preparedCallRef": {
-            "type": "string",
-            "minLength": len(PREPARED_CALL_PREFIX),
-            "maxLength": MAX_PREPARED_CALL_REF_BYTES,
-        }
-    },
-}
-
-
 class PlaneHostRPCError(ValueError):
     """A malformed, unavailable, or rejected Plane host callback."""
 
@@ -124,32 +110,7 @@ def _model_catalog_operation(operation: Mapping[str, Any]) -> dict[str, Any]:
     invocation-local envelope that the host creates from search results.
     """
 
-    projected = deepcopy(dict(operation))
-    if projected.get("operationId") != "search_workspace":
-        return projected
-    result_schema = projected.get("resultSchema")
-    if not isinstance(result_schema, dict):
-        return projected
-    results = result_schema.get("properties", {}).get("results")
-    if not isinstance(results, dict):
-        return projected
-    item_schema = results.get("items")
-    if not isinstance(item_schema, dict):
-        return projected
-    item_properties = item_schema.get("properties")
-    if not isinstance(item_properties, dict):
-        return projected
-    item_properties.pop("workItemReadInput", None)
-    read_call = item_properties.get("workItemReadCall")
-    if not isinstance(read_call, dict):
-        return projected
-    read_call_properties = read_call.get("properties")
-    if not isinstance(read_call_properties, dict):
-        return projected
-    if "input" not in read_call_properties:
-        return projected
-    read_call_properties["input"] = deepcopy(_MODEL_PREPARED_READ_INPUT_SCHEMA)
-    return projected
+    return model_operation_entry(operation)
 
 
 def _digest(value: Mapping[str, Any]) -> str:

@@ -61,6 +61,22 @@ invocation = request["invocation"]
 invocation_id = invocation["invocationId"]
 correlation_id = invocation["correlationId"]
 socket_path = sys.argv[sys.argv.index("--plane-host-socket") + 1]
+eager_read = next(
+    item for item in request["run"]["toolCatalog"]["eagerOperations"]
+    if item["operationRef"] == "operation:work_item.read"
+)
+assert eager_read["inputSchema"] == {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["preparedCallRef"],
+    "properties": {
+        "preparedCallRef": {
+            "type": "string",
+            "minLength": len("prepared-call:"),
+            "maxLength": 256,
+        }
+    },
+}, eager_read
 describe = host(
     socket_path,
     run_id,
@@ -77,6 +93,16 @@ described_read_input = described_schema["properties"]["results"]["items"]["prope
 ]["input"]
 assert described_read_input["required"] == ["preparedCallRef"], describe
 assert set(described_read_input["properties"]) == {"preparedCallRef"}, describe
+read_describe = host(
+    socket_path,
+    run_id,
+    invocation_id,
+    correlation_id,
+    "operation:catalog.describe",
+    {"operation_id": "work_item.read"},
+)
+assert read_describe["status"] == "ok", read_describe
+assert read_describe["output"]["operation"]["inputSchema"] == eager_read["inputSchema"], read_describe
 search = host(socket_path, run_id, invocation_id, correlation_id, "operation:search_workspace", {"query": "Gateway Issue", "limit": 1})
 assert search["status"] == "ok", search
 item = next(item for item in search["output"]["result"]["results"] if item["objectType"] == "work_item")
@@ -115,6 +141,7 @@ def test_remote_runtime_preserves_search_prepared_read_envelope(
         gateway_issue,
         create_user,
         runtime_defaults={"provider": "openai", "model": "deterministic-local", "adapter": "hermes"},
+        tool_presentation={"eagerOperations": ["work_item.read"]},
         suffix="prepared-remote-regression",
     )
     actor = run.actor
@@ -232,6 +259,7 @@ def test_remote_runtime_preserves_search_prepared_read_envelope(
     assert service.returncode == 0, stderr.decode("utf-8", errors="replace")
     assert json.loads(frames[-1])["kind"] == "completed"
     assert [call.operation_ref for call in host_calls] == [
+        "operation:catalog.describe",
         "operation:catalog.describe",
         "operation:search_workspace",
         "operation:work_item.read",
