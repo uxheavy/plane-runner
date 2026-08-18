@@ -5,27 +5,24 @@ This directory contains the compact execution control surface for the non-UI Pla
 ## Current status
 
 G0 through G3 and the provider-free exact-image G4 checks are complete for the
-current v24 wrapper, whose sole source parent is
-`b993b802401a2c5c7d6399fe7ca8acce19db54c8`. The
-API artifact is `plane-agent-api:g4-v22-c9174ae7` at
-`sha256:e4d143327dff4f8299d846cd23059964bf922135c7d639dbe380d093d4389f69`;
+current v25 wrapper, whose sole source parent is
+`9385d0dc3607905729bdcbf936b3cbeb95504cb5`. The
+API artifact is `plane-agent-api:g4-v25-9385d0dc` at
+`sha256:3b04585ef655538c33c61b7cd7fee6519c427449d758fcf0844376a58ff2a30c`;
 the runtime artifact is
-`plane-agent-runtime:hermes-c2fa44-g4-v24-b993b8` at
-`sha256:ea1022f3f4c84c99b0f299e2de105cb61f144bbbcaa32efa14fc7c44befe4aea`.
-The API remains source-bound to `c9174ae7d585d55659c447ba8fe4d7e0d2e5380a`;
+`plane-agent-runtime:hermes-c2fa44-g4-v25-9385d0dc` at
+`sha256:1f324541441cdfc9faa87172105e9630c9e540ed8e4a1429bc6fcb5edf2073e8`.
+Both artifacts remain source-bound to `9385d0dc3607905729bdcbf936b3cbeb95504cb5`;
 the runtime is bound to Hermes `c2fa44db6168c19dbe2a4b94fda522f80a2a370b`, MCP
 `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The exact-image functional
-red-team and final bootstrap are green provider-free, including verbatim
+red-team is green provider-free, including verbatim
 search-result-to-read handoff with target-digest correlation, versioned
-assigned-work-item binding with authorized success and out-of-scope denial;
-The v24 wrapper is the sole child of the bound source.
-W05/W06 are live-clean from their immutable v15 receipt and provider-disabled
-zero-delta replay. Manager setup diagnostics and Compose env isolation are covered
-by bounded provider-free regressions. W03/W04 and W07/W08 remain dirty after
-their v19 `PREPARED_CALL_INVALID` stops; Manager remains dirty after its v19
-opaque `api-invocation` stop. Fresh serialized reruns remain separately
-authorized.
+assigned-work-item binding with authorized success and out-of-scope denial.
+The v25 wrapper is the sole child of the bound source. No current-candidate
+persona journey is claimed passed; the unchanged O02 exact external-client
+proof is the retained exception. The final Worker, Manager, and Operator
+journeys remain separately authorized.
 
 S00 Wave 0AT passed at Plane
 `dcb9ce46e97292777dd3f6f6beff5d520e69bdb6` with one fresh GPT-5.6 Luna

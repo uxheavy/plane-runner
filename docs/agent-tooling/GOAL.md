@@ -12,7 +12,13 @@ Functional completion and controlled rollout are separate outcomes. This goal en
 
 The named integration branch is
 `codex/plane-agent-functional-v25-20260818` at source
-`fefcf8c4d2fc1ffad15172913fcfba6a09561cd3`. No current-candidate persona route
+`9385d0dc3607905729bdcbf936b3cbeb95504cb5`. Its exact API artifact is
+`plane-agent-api:g4-v25-9385d0dc` at
+`sha256:3b04585ef655538c33c61b7cd7fee6519c427449d758fcf0844376a58ff2a30c`,
+and its exact runtime artifact is
+`plane-agent-runtime:hermes-c2fa44-g4-v25-9385d0dc` at
+`sha256:1f324541441cdfc9faa87172105e9630c9e540ed8e4a1429bc6fcb5edf2073e8`.
+No current-candidate persona route
 is claimed passed. Earlier provider-backed waves are history and do not replace
 the matrix below. The unchanged O02 exact external-client proof is the sole
 retained live exception.
