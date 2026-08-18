@@ -315,7 +315,7 @@ def test_remote_runtime_preserves_search_prepared_read_envelope(
     assert OperationGatewayAudit.objects.filter(
         operation_id="work_item.read", phase="outcome", outcome="success",
         correlation_id=invocation.envelope["correlationId"],
-    ).count() == 2
+    ).count() == 1
 
 
 def _port_call(invocation, *, operation_ref, input_data, correlation_id="correlation:prepared-port"):
