@@ -11,13 +11,13 @@ Functional completion and controlled rollout are separate outcomes. This goal en
 ### Current provider-free integration refreeze (2026-08-18)
 
 The named integration branch currently carries source candidate
-`9ad2d5c41a6019effa47fc10d96d338d7ffb1378`. Its exact API artifact is
-`plane-agent-api:g4-v21-9ad2d5c` at
-`sha256:82fb034a78b35622a53167fb6ec2d47ce9e46e53fd0855ae06ef565254e933b1`;
+`c9174ae7d585d55659c447ba8fe4d7e0d2e5380a`. Its exact API artifact is
+`plane-agent-api:g4-v22-c9174ae7` at
+`sha256:e4d143327dff4f8299d846cd23059964bf922135c7d639dbe380d093d4389f69`;
 its exact runtime artifact is
-`plane-agent-runtime:hermes-6c460f10-g4-v21-9ad2d5c` at
-`sha256:e7fe74d4bc3fdcb61a572336a32aae964fc95fe487eac4284a39423ae8062c60`.
-The runtime is bound to Hermes `6c460f10fe215718dce36dd73cda94155a9a34f8`,
+`plane-agent-runtime:hermes-d4b32a3-g4-v22-c9174ae7` at
+`sha256:3654ce1aba475c10c78fc05203b0af9e9ebce9fdd72d08520a5bbe32af36af21`.
+The runtime is bound to Hermes `d4b32a3e0ac9b528eb6e513274227e18a279906c`,
 MCP `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The exact-image red-team chain is
 green provider-free, including progressive catalog discovery, verbatim
@@ -191,18 +191,18 @@ mutation, applied publication, complete W08 readback, or eligible replay was
 proven. UT-038 remains open, W03/W04/W07/W08 remain dirty, and no further
 provider use is authorized pending root-fix review.
 
-## Current v21 status and authorization
+## Current v22 status and authorization
 
-The v21 source candidate is `9ad2d5c41a6019effa47fc10d96d338d7ffb1378`.
+The v22 source candidate is `c9174ae7d585d55659c447ba8fe4d7e0d2e5380a`.
 Its provider-free exact API image is
-`plane-agent-api:g4-v21-9ad2d5c` at
-`sha256:82fb034a78b35622a53167fb6ec2d47ce9e46e53fd0855ae06ef565254e933b1`;
+`plane-agent-api:g4-v22-c9174ae7` at
+`sha256:e4d143327dff4f8299d846cd23059964bf922135c7d639dbe380d093d4389f69`;
 its exact runtime image is
-`plane-agent-runtime:hermes-6c460f10-g4-v21-9ad2d5c` at
-`sha256:e7fe74d4bc3fdcb61a572336a32aae964fc95fe487eac4284a39423ae8062c60`.
-The final v21 wrapper is created only after the manifest-bound gates pass and
+`plane-agent-runtime:hermes-d4b32a3-g4-v22-c9174ae7` at
+`sha256:3654ce1aba475c10c78fc05203b0af9e9ebce9fdd72d08520a5bbe32af36af21`.
+The final v22 wrapper is created only after the manifest-bound gates pass and
 will be the sole child of this source. Hermes remains
-`6c460f10fe215718dce36dd73cda94155a9a34f8`; MCP remains
+`d4b32a3e0ac9b528eb6e513274227e18a279906c`; MCP remains
 `c04974ed6624f17b41e63ef8182661929e77e0d3`; SDK remains
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. W03/W04 and W07/W08 remain dirty
 after v19 `PREPARED_CALL_INVALID` stops, and Manager remains dirty after its
