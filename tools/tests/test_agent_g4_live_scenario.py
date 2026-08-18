@@ -124,6 +124,7 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert "workItemReadCall.input.preparedCallRef unchanged" in identity.assignment.objective
     assert "execute_code" in mutation.assignment.objective
     assert "export default async function" in mutation.assignment.objective
+    assert "({host}: {host: any})" in mutation.assignment.objective
     assert 'host.call_plane_operation("work_item.rename"' in mutation.assignment.objective
     assert "read.result.project verbatim as input.project_id" in mutation.assignment.objective
     assert "read.result.id verbatim as input.issue_id" in mutation.assignment.objective
@@ -161,6 +162,7 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert "not by a native model mutation" in rename_guidance
     assert "execute_code" in rename_guidance
     assert "export a default function" in rename_guidance
+    assert "({host}: {host: any})" in rename_guidance
     assert 'host.call_plane_operation("work_item.rename"' in rename_guidance
     assert "read.result.project verbatim as input.project_id" in rename_guidance
     assert "read.result.id verbatim as input.issue_id" in rename_guidance
@@ -180,6 +182,80 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert "hermes_tools.plane_operation" not in parsed.profile.instructions
     assert "exactly one artifact and exactly one evidence item" in context.assignment.objective
     assert "exactly one artifact and exactly one evidence item" in context.assignment.acceptance_criteria[-1]
+
+
+def test_generated_rename_template_executes_one_bound_callback_in_restricted_isolate() -> None:
+    source = scenario.rename_code_mode_template()
+    source = source.replace("<read.result.project>", "project-1")
+    source = source.replace("<read.result.id>", "issue-1")
+    source = source.replace("<bounded new name>", "Renamed by V35")
+    runner = TOOLS.parent / "apps" / "api" / "plane" / "agent" / "code_mode" / "runner.mjs"
+    help_result = subprocess.run(["node", "--help"], check=False, capture_output=True, text=True)
+    permission_flag = "--permission" if "--permission" in f"{help_result.stdout}\n{help_result.stderr}" else "--experimental-permission"
+    process = subprocess.Popen(
+        [
+            "node",
+            permission_flag,
+            "--no-addons",
+            "--no-global-search-paths",
+            "--experimental-vm-modules",
+            "--disable-proto=throw",
+            f"--allow-fs-read={runner}",
+            "--allow-fs-read=/usr/share/node_modules/typescript",
+            str(runner),
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    assert process.stdin is not None
+    assert process.stdout is not None
+    try:
+        process.stdin.write(
+            json.dumps(
+                {
+                    "type": "run",
+                    "source": source,
+                    "input": {},
+                    "callbacks": {
+                        "search": "search_plane_operations",
+                        "describe": "describe_plane_operation",
+                        "operation": "call_plane_operation",
+                        "spill": "spill_plane_result",
+                    },
+                }
+            )
+            + "\n"
+        )
+        process.stdin.flush()
+        callback = json.loads(process.stdout.readline())
+        assert callback["type"] == "callback"
+        assert callback["kind"] == "operation"
+        assert callback["name"] == "call_plane_operation"
+        assert callback["args"] == [
+            "work_item.rename",
+            {"project_id": "project-1", "issue_id": "issue-1", "name": "Renamed by V35"},
+            "idempotency:{{invocationId}}:work_item.rename",
+            "correlation:{{invocationId}}:work_item.read->work_item.rename",
+        ]
+        process.stdin.write(
+            json.dumps(
+                {
+                    "type": "callback_result",
+                    "id": callback["id"],
+                    "receipt": {"ok": True, "operationId": "work_item.rename"},
+                }
+            )
+            + "\n"
+        )
+        process.stdin.flush()
+        result = json.loads(process.stdout.readline())
+        assert result == {"type": "result", "value": {"ok": True, "operationId": "work_item.rename"}}
+    finally:
+        if process.poll() is None:
+            process.terminate()
+        process.wait(timeout=5)
 
 
 def test_select_commission_keeps_source_digest_and_removes_other_commissions() -> None:

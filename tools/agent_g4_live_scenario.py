@@ -49,6 +49,17 @@ SCENARIO_ROLES: dict[str, Literal["worker", "delegator"]] = {
 EXPECTED_OUTCOMES = {"success", "denied", "not_observed"}
 
 
+def rename_code_mode_template() -> str:
+    """Return the bounded Code Mode template used by the rename guidance."""
+
+    return (
+        'export default async function ({host}: {host: any}) { return await host.call_plane_operation('
+        '"work_item.rename", { project_id: "<read.result.project>", issue_id: "<read.result.id>", '
+        'name: "<bounded new name>" }, "idempotency:{{invocationId}}:work_item.rename", '
+        '"correlation:{{invocationId}}:work_item.read->work_item.rename"); }'
+    )
+
+
 class ScenarioError(ValueError):
     """A bounded, safe descriptor failure."""
 
@@ -314,9 +325,7 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
                 "Only after the authorized work_item.read succeeds, use read.result.project verbatim as input.project_id "
                 "and read.result.id verbatim as input.issue_id; never infer either value from targetRef, search results, "
                 "title, or any other field. Use this exact bounded TypeScript template, replacing only the read-derived "
-                "placeholders: export default async function () { return await host.call_plane_operation(\"work_item.rename\", "
-                "{ project_id: \"<read.result.project>\", issue_id: \"<read.result.id>\", name: \"<bounded new name>\" }, "
-                "\"idempotency:{{invocationId}}:work_item.rename\", \"correlation:{{invocationId}}:work_item.read->work_item.rename\"); }. "
+                f"placeholders: {rename_code_mode_template()}. "
                 "The idempotency and correlation strings must be unique for this invocation."
             )
         if operation_id == "agent.context.read":
