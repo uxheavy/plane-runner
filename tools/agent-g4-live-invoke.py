@@ -1729,9 +1729,12 @@ def _commission_precondition_checks(shared, assignment, provider_relay):
 def _profile_expected_outcomes(scenario):
     """Keep each commission's typed route contract in its immutable profile."""
 
-    from agent_g4_live_scenario import model_route_expectations
+    from agent_g4_live_scenario import model_route_expectations, substitute_code_mode_placeholders
 
-    return list(model_route_expectations(scenario.expected))
+    rendered = model_route_expectations(scenario.expected)
+    if scenario.runtime_bindings:
+        rendered = tuple(substitute_code_mode_placeholders(item, scenario.runtime_bindings) for item in rendered)
+    return list(rendered)
 
 
 def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
@@ -1740,6 +1743,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
     provider = _provider_descriptor()
     provider_relay = _provider_relay_descriptor()
     suffix = uuid.uuid4().hex[:12]
+    planned_invocation_id = uuid.uuid4()
     run = None
     invocation = None
     actor = None
@@ -1967,6 +1971,38 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
         setup_counters["actors"] = 1 + len(related_actors)
         setup_counters["profiles"] = 1 + len(related_actors)
         actor_role = shared["actor_role"]
+        if scenario is not None and scenario.selected_commission_id == "code-mode-semantic-rename":
+            from agent_g4_live_scenario import bind_code_mode_runtime_values
+
+            scenario = bind_code_mode_runtime_values(
+                scenario,
+                project_id=str(project.id),
+                issue_id=str(issue.id),
+                invocation_id=str(planned_invocation_id),
+                new_name=f"V36 Code Mode {suffix}",
+            )
+            profile = create_profile(
+                actor,
+                role=actor_role,
+                instructions=scenario.profile.instructions,
+                display_name=scenario.profile.name,
+                persona=scenario.prompt,
+                model_defaults={
+                    "provider": scenario.profile.model_policy.provider,
+                    "model": scenario.profile.model_policy.model,
+                    "reasoning_effort": scenario.profile.model_policy.reasoning,
+                },
+                tool_presentation={"eager_operations": list(scenario.profile.tool_presentation)},
+                runtime_defaults={
+                    "provider": provider["name"],
+                    "model": scenario.profile.model_policy.model,
+                    "adapter": "hermes",
+                },
+                expected_outcomes=_profile_expected_outcomes(scenario),
+                context_refs=[*scenario.assignment.context_refs, f"context:user-{user.id}"],
+                created_by=user,
+            )
+            setup_counters["profiles"] += 1
         assignment_target_ref = f"issue:{issue.id}"
         assignment_objective = "Perform one live provider-backed read, authorization canary, and explicit published outcome."
         assignment_acceptance_criteria = [
@@ -2047,7 +2083,12 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
         setup_stage = "run"
         run = create_run(assignment, profile, idempotency_key=f"idempotency:g4-live-run-{suffix}", created_by=user)
         setup_stage = "invocation"
-        invocation = record_invocation(run, idempotency_key=f"idempotency:g4-live-invocation-{suffix}", trigger="initial")
+        invocation = record_invocation(
+            run,
+            invocation_id=planned_invocation_id,
+            idempotency_key=f"idempotency:g4-live-invocation-{suffix}",
+            trigger="initial",
+        )
         setup_stage = None
         if scenario is not None and scenario.scenario_id == "worker":
             substitution_evidence = attempt_actor_substitution(

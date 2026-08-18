@@ -87,6 +87,59 @@ def test_versioned_assigned_work_item_alias_binds_to_the_fresh_issue_ref() -> No
     ) == "issue:caller-supplied"
 
 
+def test_code_mode_commission_binds_exact_runtime_values_and_hides_native_rename() -> None:
+    path = TOOLS / "agent-g4-worker-v6.json"
+    raw = path.read_bytes()
+    parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
+
+    assert [commission.commission_id for commission in parsed.commissions] == [
+        "identity-discovery",
+        "mutation-semantic-rename",
+        "code-mode-semantic-rename",
+        "context-governance",
+    ]
+    assert "work_item.rename" not in parsed.profile.tool_presentation
+    assert "execute_code" in parsed.profile.tool_presentation
+    commission = parsed.commissions[2]
+    assert commission.expected["operationOutcomes"] == [
+        {"operationId": "search_workspace", "outcome": "success", "count": 1},
+        {"operationId": "work_item.read", "outcome": "success", "count": 1},
+        {"operationId": "work_item.rename", "outcome": "success", "count": 1},
+        {"operationId": "agent.outcome.submit", "outcome": "success", "count": 1},
+        {"operationId": "agent.outcome.publish", "outcome": "success", "count": 1},
+    ]
+    assert "{{projectId}}" in commission.assignment.objective
+    assert "{{issueId}}" in commission.assignment.objective
+    assert "{{invocationId}}" in commission.assignment.objective
+    assert "{{newName}}" in commission.assignment.objective
+
+
+def test_code_mode_runtime_binding_substitutes_every_placeholder_once() -> None:
+    raw = (TOOLS / "agent-g4-worker-v6.json").read_bytes()
+    parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
+    commission = scenario.commission_descriptor(parsed, parsed.commissions[2])
+    bound = scenario.bind_code_mode_runtime_values(
+        commission,
+        project_id="project-fresh",
+        issue_id="issue-fresh",
+        invocation_id="invocation-fresh",
+        new_name="V36 Code Mode Rename",
+    )
+
+    text = "\n".join(
+        [bound.assignment.objective, *bound.assignment.acceptance_criteria, bound.prompt, bound.profile.instructions]
+    )
+    assert "{{projectId}}" not in text
+    assert "{{issueId}}" not in text
+    assert "{{invocationId}}" not in text
+    assert "{{newName}}" not in text
+    assert 'project_id: "project-fresh"' in text
+    assert 'issue_id: "issue-fresh"' in text
+    assert '"idempotency:invocation-fresh:code-mode-rename"' in text
+    assert '"correlation:invocation-fresh:code-mode-rename"' in text
+    assert 'name: "V36 Code Mode Rename"' in text
+
+
 def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names() -> None:
     path = TOOLS / "agent-g4-worker-v6.json"
     raw = path.read_bytes()
@@ -96,6 +149,7 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert [commission.commission_id for commission in parsed.commissions] == [
         "identity-discovery",
         "mutation-semantic-rename",
+        "code-mode-semantic-rename",
         "context-governance",
     ]
     assert parsed.expected is None
@@ -105,20 +159,22 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
         "agent.context.read",
         "search_workspace",
         "work_item.read",
-        "work_item.rename",
+        "execute_code",
         "agent.outcome.evaluate",
         "agent.outcome.submit",
         "agent.outcome.publish",
     )
     identity = parsed.commissions[0]
     mutation = parsed.commissions[1]
-    context = parsed.commissions[2]
+    code_mode = parsed.commissions[2]
+    context = parsed.commissions[3]
     assert {
         commission.commission_id: commission.expected["routeChecks"]
         for commission in parsed.commissions
     } == {
         "identity-discovery": ["W01", "W02"],
         "mutation-semantic-rename": ["W03", "W04", "W07", "W08"],
+        "code-mode-semantic-rename": ["W03", "W04", "W07", "W08"],
         "context-governance": ["W05", "W06", "W07", "W08"],
     }
     assert "workItemReadCall.input.preparedCallRef unchanged" in identity.assignment.objective
@@ -135,6 +191,12 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert "W08 readback" in mutation.assignment.objective
     assert "before agent.outcome.submit" in mutation.assignment.objective
     assert "hermes_tools.plane_operation" not in mutation.assignment.objective
+    assert "{{projectId}}" in code_mode.assignment.objective
+    assert "{{issueId}}" in code_mode.assignment.objective
+    assert "{{invocationId}}" in code_mode.assignment.objective
+    assert "{{newName}}" in code_mode.assignment.objective
+    assert "execute_code exactly once" in code_mode.assignment.objective
+    assert "native work_item.rename is not model-visible" in code_mode.assignment.acceptance_criteria[-1]
     mutation_route_guidance = scenario.model_route_expectations(mutation.expected)
     read_guidance = next(
         item for item in mutation_route_guidance if "invoke work_item.read" in item
@@ -252,6 +314,63 @@ def test_generated_rename_template_executes_one_bound_callback_in_restricted_iso
         process.stdin.flush()
         result = json.loads(process.stdout.readline())
         assert result == {"type": "result", "value": {"ok": True, "operationId": "work_item.rename"}}
+    finally:
+        if process.poll() is None:
+            process.terminate()
+        process.wait(timeout=5)
+
+
+def test_bound_code_mode_commission_module_executes_one_gateway_callback_in_isolate() -> None:
+    raw = (TOOLS / "agent-g4-worker-v6.json").read_bytes()
+    parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
+    bound = scenario.bind_code_mode_runtime_values(
+        scenario.commission_descriptor(parsed, parsed.commissions[2]),
+        project_id="project-36",
+        issue_id="issue-36",
+        invocation_id="invocation-36",
+        new_name="V36 Code Mode",
+    )
+    objective = bound.assignment.objective
+    start = objective.index("export default async function")
+    end = objective.index("}. Do not alter", start) + 1
+    source = objective[start:end]
+    runner = TOOLS.parent / "apps" / "api" / "plane" / "agent" / "code_mode" / "runner.mjs"
+    help_result = subprocess.run(["node", "--help"], check=False, capture_output=True, text=True)
+    permission_flag = "--permission" if "--permission" in f"{help_result.stdout}\n{help_result.stderr}" else "--experimental-permission"
+    process = subprocess.Popen(
+        [
+            "node", permission_flag, "--no-addons", "--no-global-search-paths", "--experimental-vm-modules",
+            "--disable-proto=throw", f"--allow-fs-read={runner}",
+            "--allow-fs-read=/usr/share/node_modules/typescript", str(runner),
+        ], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    assert process.stdin is not None and process.stdout is not None
+    try:
+        process.stdin.write(json.dumps({
+            "type": "run", "source": source, "input": {},
+            "callbacks": {
+                "search": "search_plane_operations", "describe": "describe_plane_operation",
+                "operation": "call_plane_operation", "spill": "spill_plane_result",
+            },
+        }) + "\n")
+        process.stdin.flush()
+        callback = json.loads(process.stdout.readline())
+        assert callback["type"] == "callback"
+        assert callback["name"] == "call_plane_operation"
+        assert callback["args"] == [
+            "work_item.rename",
+            {"project_id": "project-36", "issue_id": "issue-36", "name": "V36 Code Mode"},
+            "idempotency:invocation-36:code-mode-rename",
+            "correlation:invocation-36:code-mode-rename",
+        ]
+        process.stdin.write(json.dumps({
+            "type": "callback_result", "id": callback["id"],
+            "receipt": {"ok": True, "operationId": "work_item.rename"},
+        }) + "\n")
+        process.stdin.flush()
+        assert json.loads(process.stdout.readline()) == {
+            "type": "result", "value": {"ok": True, "operationId": "work_item.rename"}
+        }
     finally:
         if process.poll() is None:
             process.terminate()
@@ -528,12 +647,14 @@ def test_commission_descriptor_keeps_shared_profile_and_binds_each_assignment() 
 
     identity = scenario.commission_descriptor(parsed, parsed.commissions[0])
     mutation = scenario.commission_descriptor(parsed, parsed.commissions[1])
-    context = scenario.commission_descriptor(parsed, parsed.commissions[2])
-    assert identity.profile == mutation.profile == context.profile == parsed.profile
-    assert identity.assignment.target_ref == mutation.assignment.target_ref == context.assignment.target_ref == scenario.ASSIGNED_WORK_ITEM_ALIAS
+    code_mode = scenario.commission_descriptor(parsed, parsed.commissions[2])
+    context = scenario.commission_descriptor(parsed, parsed.commissions[3])
+    assert identity.profile == mutation.profile == code_mode.profile == context.profile == parsed.profile
+    assert identity.assignment.target_ref == mutation.assignment.target_ref == code_mode.assignment.target_ref == context.assignment.target_ref == scenario.ASSIGNED_WORK_ITEM_ALIAS
     assert identity.expected["routeChecks"] != mutation.expected["routeChecks"]
-    assert mutation.expected["routeChecks"] != context.expected["routeChecks"]
-    assert identity.commissions == mutation.commissions == context.commissions == ()
+    assert mutation.expected["routeChecks"] == code_mode.expected["routeChecks"]
+    assert code_mode.expected["routeChecks"] != context.expected["routeChecks"]
+    assert identity.commissions == mutation.commissions == code_mode.commissions == context.commissions == ()
 
 
 def test_multi_commission_prompt_preserves_the_typed_mutation_route() -> None:

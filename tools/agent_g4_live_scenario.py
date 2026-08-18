@@ -210,6 +210,7 @@ class ScenarioDescriptor:
     descriptor_digest: str
     commissions: tuple[CommissionSpec, ...] = ()
     selected_commission_id: str | None = None
+    runtime_bindings: tuple[tuple[str, str], ...] = ()
 
     def evidence(self) -> dict[str, Any]:
         result: dict[str, Any] = {
@@ -251,6 +252,66 @@ def commission_descriptor(descriptor: ScenarioDescriptor, commission: Commission
         expected=commission.expected,
         commissions=(),
         selected_commission_id=commission.commission_id,
+    )
+
+
+def _runtime_binding_value(value: str, name: str, *, name_value: bool = False) -> str:
+    if not isinstance(value, str) or not value or len(value.encode("utf-8")) > 128:
+        raise ScenarioError(f"scenario_{name}_binding_invalid")
+    if FORBIDDEN_RE.search(value) or "{{" in value or "}}" in value:
+        raise ScenarioError(f"scenario_{name}_binding_invalid")
+    if name_value:
+        if not SAFE_NAME_RE.fullmatch(value):
+            raise ScenarioError("scenario_new_name_binding_invalid")
+    elif not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}", value):
+        raise ScenarioError(f"scenario_{name}_binding_invalid")
+    return value
+
+
+def substitute_code_mode_placeholders(value: str, bindings: tuple[tuple[str, str], ...]) -> str:
+    """Substitute only the four typed values used by the Code Mode commission."""
+
+    result = value
+    for placeholder, replacement in bindings:
+        result = result.replace(placeholder, replacement)
+    return result
+
+
+def bind_code_mode_runtime_values(
+    descriptor: ScenarioDescriptor,
+    *,
+    project_id: str,
+    issue_id: str,
+    invocation_id: str,
+    new_name: str,
+) -> ScenarioDescriptor:
+    """Bind fresh setup values before the run snapshot is created."""
+
+    bindings = (
+        ("{{projectId}}", _runtime_binding_value(project_id, "project_id")),
+        ("{{issueId}}", _runtime_binding_value(issue_id, "issue_id")),
+        ("{{invocationId}}", _runtime_binding_value(invocation_id, "invocation_id")),
+        ("{{newName}}", _runtime_binding_value(new_name, "new_name", name_value=True)),
+    )
+
+    def bind(text: str) -> str:
+        return substitute_code_mode_placeholders(text, bindings)
+
+    assignment = replace(
+        descriptor.assignment,
+        objective=bind(descriptor.assignment.objective),
+        acceptance_criteria=tuple(bind(item) for item in descriptor.assignment.acceptance_criteria),
+    )
+    profile = replace(
+        descriptor.profile,
+        instructions=bind(descriptor.profile.instructions),
+    )
+    return replace(
+        descriptor,
+        assignment=assignment,
+        profile=profile,
+        prompt=bind(descriptor.prompt),
+        runtime_bindings=bindings,
     )
 
 
