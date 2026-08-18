@@ -34,19 +34,24 @@ import json
 import socket
 import sys
 
-def host(path, run_id, invocation_id, correlation_id, operation_ref, payload):
+def host_idempotency(run_id, invocation_id, action, operation_ref, payload):
+    identity = {
+        "protocol": "plane.agent-runtime/v1", "runId": run_id,
+        "invocationId": invocation_id, "action": action,
+        "operationRef": operation_ref, "input": payload,
+    }
+    digest = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return "host-idempotency:" + digest
+
+def host(path, run_id, invocation_id, correlation_id, operation_ref, payload, action="read", source="model"):
     call = {
         "protocol": "plane.agent-runtime/v1", "runId": run_id,
         "invocationId": invocation_id, "correlationId": correlation_id,
-        "action": "read", "operationRef": operation_ref, "input": payload,
-        "source": "model",
+        "action": action, "operationRef": operation_ref, "input": payload,
+        "source": source,
     }
-    identity = {key: call[key] for key in (
-        "protocol", "runId", "invocationId", "action", "operationRef", "input"
-    )}
-    digest = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-    call["requestRef"] = "host-request:" + digest
-    call["idempotencyKey"] = "host-idempotency:" + digest
+    call["idempotencyKey"] = host_idempotency(run_id, invocation_id, action, operation_ref, payload)
+    call["requestRef"] = call["idempotencyKey"].replace("host-idempotency:", "host-request:")
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as channel:
         channel.connect(path)
         channel.sendall(json.dumps(call, sort_keys=True, separators=(",", ":")).encode() + b"\n")
@@ -126,6 +131,29 @@ altered = host(
 assert altered["status"] == "invalid" and altered["errorCode"] == "PREPARED_CALL_INVALID", altered
 cross = prepared_read("invocation:cross")
 assert cross["status"] == "denied" and cross["errorCode"] == "CALLBACK_BINDING_INVALID", cross
+code = host(
+    socket_path,
+    run_id,
+    invocation_id,
+    correlation_id,
+    "plane.code-mode.execute@1",
+    {
+        "schemaVersion": "plane.code-mode/v1",
+        "entrypoint": "default",
+        "source": "export default async function ({host, input}) { const result = await host.call_plane_operation('work_item.read', {preparedCallRef: input.preparedCallRef}, input.idempotencyKey, input.correlationId); if (!result.ok) throw new Error('prepared read failed'); return result; }",
+            "input": {
+                "preparedCallRef": read_call["input"]["preparedCallRef"],
+                "correlationId": correlation_id,
+                "idempotencyKey": host_idempotency(
+                    run_id, invocation_id, "read", read_call["operationRef"], read_call["input"]
+                ),
+            },
+    },
+    action="code",
+    source="code",
+)
+assert code["status"] == "ok", code
+assert code["output"]["result"]["ok"] is True, code
 print(json.dumps({"kind": "completed"}, separators=(",", ":")))
 '''
 
@@ -265,6 +293,7 @@ def test_remote_runtime_preserves_search_prepared_read_envelope(
         "operation:work_item.read",
         "operation:work_item.read",
         "operation:work_item.read",
+        "plane.code-mode.execute@1",
     ]
     assert prepared_inputs == [
         {"project_id": str(gateway_project.id), "issue_id": str(gateway_issue.id)}
@@ -286,7 +315,7 @@ def test_remote_runtime_preserves_search_prepared_read_envelope(
     assert OperationGatewayAudit.objects.filter(
         operation_id="work_item.read", phase="outcome", outcome="success",
         correlation_id=invocation.envelope["correlationId"],
-    ).count() == 1
+    ).count() == 2
 
 
 def _port_call(invocation, *, operation_ref, input_data, correlation_id="correlation:prepared-port"):

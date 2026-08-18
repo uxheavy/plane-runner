@@ -62,6 +62,78 @@ class PlaneHostRPCError(ValueError):
     """A malformed, unavailable, or rejected Plane host callback."""
 
 
+class PreparedCallRegistry:
+    """Invocation-local prepared-call state shared by model and Code Mode callbacks."""
+
+    def __init__(self) -> None:
+        self.records: dict[str, dict[str, Any]] = {}
+        self.lock = threading.RLock()
+
+    def register(self, read_input: Mapping[str, Any]) -> str:
+        canonical_input = dict(read_input)
+        digest = hashlib.sha256(_canonical(canonical_input, "prepared work-item read input")).hexdigest()
+        prepared_ref = f"{PREPARED_CALL_PREFIX}{digest}:{secrets.token_urlsafe(24)}"
+        _text(prepared_ref, "host.preparedCallRef", MAX_PREPARED_CALL_REF_BYTES)
+        with self.lock:
+            if len(self.records) >= MAX_PREPARED_CALLS:
+                raise PlaneHostRPCError("prepared work-item read reference budget exhausted")
+            self.records[prepared_ref] = {
+                "input": canonical_input,
+                "correlation_id": None,
+                "idempotency_key": None,
+                "result": None,
+                "consumed": False,
+            }
+        return prepared_ref
+
+    def mark_consumed(self, prepared_ref: str) -> None:
+        with self.lock:
+            record = self.records.get(prepared_ref)
+            if record is not None:
+                record["consumed"] = True
+
+    def has_unconsumed(self) -> bool:
+        with self.lock:
+            return any(not record["consumed"] for record in self.records.values())
+
+    def resolve(
+        self,
+        input_data: Mapping[str, Any],
+        *,
+        correlation_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> Mapping[str, Any]:
+        if "preparedCallRef" not in input_data:
+            return input_data
+        if set(input_data) != {"preparedCallRef"}:
+            raise PlaneHostRPCError("prepared work-item read input is not canonical")
+        prepared_ref = input_data["preparedCallRef"]
+        if not isinstance(prepared_ref, str) or not prepared_ref.startswith(PREPARED_CALL_PREFIX):
+            raise PlaneHostRPCError("prepared work-item read reference is invalid")
+        _text(prepared_ref, "host.preparedCallRef", MAX_PREPARED_CALL_REF_BYTES)
+        with self.lock:
+            record = self.records.get(prepared_ref)
+            prepared_input = record.get("input") if record is not None else None
+            if prepared_input is None or record is None:
+                raise PlaneHostRPCError("prepared work-item read reference is unknown")
+            parts = prepared_ref.split(":", 2)
+            if len(parts) != 3 or not hmac.compare_digest(
+                parts[1], hashlib.sha256(_canonical(prepared_input, "prepared work-item read input")).hexdigest()
+            ):
+                raise PlaneHostRPCError("prepared work-item read reference digest is invalid")
+            if correlation_id is not None or idempotency_key is not None:
+                if not isinstance(correlation_id, str) or not isinstance(idempotency_key, str):
+                    raise PlaneHostRPCError("prepared work-item read replay identity is invalid")
+                bound_correlation = record["correlation_id"]
+                bound_idempotency = record["idempotency_key"]
+                if bound_correlation is None:
+                    record["correlation_id"] = correlation_id
+                    record["idempotency_key"] = idempotency_key
+                elif bound_correlation != correlation_id or bound_idempotency != idempotency_key:
+                    raise PlaneHostRPCError("prepared work-item read replay identity is invalid")
+            return prepared_input
+
+
 def _canonical(value: Any, name: str) -> bytes:
     try:
         return json.dumps(
@@ -1054,8 +1126,12 @@ class PlaneGatewayHostPort:
         self._provider_attempt_recorder = provider_attempt_recorder
         self._run_ref = host.binding.run_ref
         self._invocation_ref = host.binding.invocation_ref
-        self._prepared_calls: dict[str, dict[str, Any]] = {}
-        self._prepared_calls_lock = threading.RLock()
+        self._prepared_call_registry = PreparedCallRegistry()
+        self._prepared_calls = self._prepared_call_registry.records
+        self._prepared_calls_lock = self._prepared_call_registry.lock
+        setter = getattr(host, "set_prepared_call_registry", None)
+        if callable(setter):
+            setter(self._prepared_call_registry)
         self._prepared_read_handoff_pending = False
 
     def invoke(self, call: PlaneHostCall) -> PlaneHostResult:
@@ -1172,6 +1248,7 @@ class PlaneGatewayHostPort:
                 if record is not None and record.get("result") is None:
                     record["result"] = result
                 if result.status in {"ok", "replayed"}:
+                    self._prepared_call_registry.mark_consumed(prepared_ref)
                     self._prepared_read_handoff_pending = False
         return result
 
@@ -1207,44 +1284,13 @@ class PlaneGatewayHostPort:
 
     def _prepared_read_handoff_is_pending(self) -> bool:
         with self._prepared_calls_lock:
-            return self._prepared_read_handoff_pending
+            return self._prepared_read_handoff_pending and self._prepared_call_registry.has_unconsumed()
 
     def _register_prepared_call(self, read_input: Mapping[str, Any]) -> str:
-        canonical_input = dict(read_input)
-        digest = hashlib.sha256(_canonical(canonical_input, "prepared work-item read input")).hexdigest()
-        prepared_ref = f"{PREPARED_CALL_PREFIX}{digest}:{secrets.token_urlsafe(24)}"
-        _text(prepared_ref, "host.preparedCallRef", MAX_PREPARED_CALL_REF_BYTES)
-        with self._prepared_calls_lock:
-            if len(self._prepared_calls) >= MAX_PREPARED_CALLS:
-                raise PlaneHostRPCError("prepared work-item read reference budget exhausted")
-            self._prepared_calls[prepared_ref] = {
-                "input": canonical_input,
-                "correlation_id": None,
-                "idempotency_key": None,
-                "result": None,
-            }
-        return prepared_ref
+        return self._prepared_call_registry.register(read_input)
 
     def _resolve_prepared_read_input(self, input_data: Mapping[str, Any]) -> Mapping[str, Any]:
-        if "preparedCallRef" not in input_data:
-            return input_data
-        if set(input_data) != {"preparedCallRef"}:
-            raise PlaneHostRPCError("prepared work-item read input is not canonical")
-        prepared_ref = input_data["preparedCallRef"]
-        if not isinstance(prepared_ref, str) or not prepared_ref.startswith(PREPARED_CALL_PREFIX):
-            raise PlaneHostRPCError("prepared work-item read reference is invalid")
-        _text(prepared_ref, "host.preparedCallRef", MAX_PREPARED_CALL_REF_BYTES)
-        with self._prepared_calls_lock:
-            record = self._prepared_calls.get(prepared_ref)
-            prepared_input = record.get("input") if record is not None else None
-        if prepared_input is None or record is None:
-            raise PlaneHostRPCError("prepared work-item read reference is unknown")
-        parts = prepared_ref.split(":", 2)
-        if len(parts) != 3 or not hmac.compare_digest(parts[1], hashlib.sha256(
-            _canonical(prepared_input, "prepared work-item read input")
-        ).hexdigest()):
-            raise PlaneHostRPCError("prepared work-item read reference digest is invalid")
-        return prepared_input
+        return self._prepared_call_registry.resolve(input_data)
 
     def _bind_or_replay_prepared_call(
         self, call: PlaneHostCall, prepared_ref: str

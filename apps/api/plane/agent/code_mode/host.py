@@ -101,6 +101,7 @@ class CodeModeHostRPC:
         self._code_mode_observations: list[dict[str, Any]] = []
         self._code_mode_active = False
         self.max_inline_result_bytes = MAX_CODE_MODE_INLINE_RESULT_BYTES
+        self._prepared_call_registry: Any | None = None
 
     @classmethod
     def from_invocation(
@@ -151,6 +152,11 @@ class CodeModeHostRPC:
 
         return code_mode_callback_names()
 
+    def set_prepared_call_registry(self, registry: Any) -> None:
+        """Bind the invocation-local prepared-call registry owned by the host port."""
+
+        self._prepared_call_registry = registry
+
     def search_operations(
         self,
         query: str = "",
@@ -196,6 +202,14 @@ class CodeModeHostRPC:
             correlation_id=correlation_id,
             workspace_slug=workspace_slug,
         )
+        if (
+            operation_id == "work_item.read"
+            and isinstance(input_data, Mapping)
+            and isinstance(input_data.get("preparedCallRef"), str)
+            and receipt.get("ok")
+            and self._prepared_call_registry is not None
+        ):
+            self._prepared_call_registry.mark_consumed(input_data["preparedCallRef"])
         self._record_code_mode_observation(operation_id, receipt)
         return receipt
 
@@ -221,6 +235,20 @@ class CodeModeHostRPC:
             # model-supplied run_ref is redundant payload and is normalized
             # rather than allowed to redirect or poison this bound callback.
             raw["input"] = {**raw["input"], "run_ref": self.binding.run_ref}
+        if (
+            operation_id == "work_item.read"
+            and self._prepared_call_registry is not None
+            and isinstance(raw["input"], Mapping)
+            and "preparedCallRef" in raw["input"]
+        ):
+            try:
+                raw["input"] = self._prepared_call_registry.resolve(
+                    raw["input"],
+                    correlation_id=correlation_id,
+                    idempotency_key=idempotency_key,
+                )
+            except ValueError:
+                return self._reject(raw, "PREPARED_CALL_INVALID", 409)
         invalid = self._preflight(raw)
         if invalid is not None:
             return invalid
