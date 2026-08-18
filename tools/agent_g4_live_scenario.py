@@ -310,7 +310,14 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
                 " The route outcome is work_item.rename, but the direct model action is the restricted Code Mode "
                 "composition, not by a native model mutation: the next model tool call after the bounded work_item.read is execute_code, "
                 "and the module must export a default function that uses only "
-                "host.call_plane_operation(\"work_item.rename\", input, idempotencyKey, correlationId)."
+                "host.call_plane_operation(\"work_item.rename\", input, idempotencyKey, correlationId). "
+                "Only after the authorized work_item.read succeeds, use read.result.project verbatim as input.project_id "
+                "and read.result.id verbatim as input.issue_id; never infer either value from targetRef, search results, "
+                "title, or any other field. Use this exact bounded TypeScript template, replacing only the read-derived "
+                "placeholders: export default async function () { return await host.call_plane_operation(\"work_item.rename\", "
+                "{ project_id: \"<read.result.project>\", issue_id: \"<read.result.id>\", name: \"<bounded new name>\" }, "
+                "\"idempotency:{{invocationId}}:work_item.rename\", \"correlation:{{invocationId}}:work_item.read->work_item.rename\"); }. "
+                "The idempotency and correlation strings must be unique for this invocation."
             )
         if operation_id == "agent.context.read":
             guidance += " This one response is the complete subject-bound projection; do not request it again."

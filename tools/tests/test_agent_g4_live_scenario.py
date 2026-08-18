@@ -125,6 +125,12 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert "execute_code" in mutation.assignment.objective
     assert "export default async function" in mutation.assignment.objective
     assert 'host.call_plane_operation("work_item.rename"' in mutation.assignment.objective
+    assert "read.result.project verbatim as input.project_id" in mutation.assignment.objective
+    assert "read.result.id verbatim as input.issue_id" in mutation.assignment.objective
+    assert 'project_id: "<read.result.project>"' in mutation.assignment.objective
+    assert 'issue_id: "<read.result.id>"' in mutation.assignment.objective
+    assert '"idempotency:{{invocationId}}:work_item.rename"' in mutation.assignment.objective
+    assert '"correlation:{{invocationId}}:work_item.read->work_item.rename"' in mutation.assignment.objective
     assert "W08 readback" in mutation.assignment.objective
     assert "before agent.outcome.submit" in mutation.assignment.objective
     assert "hermes_tools.plane_operation" not in mutation.assignment.objective
@@ -156,6 +162,12 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert "execute_code" in rename_guidance
     assert "export a default function" in rename_guidance
     assert 'host.call_plane_operation("work_item.rename"' in rename_guidance
+    assert "read.result.project verbatim as input.project_id" in rename_guidance
+    assert "read.result.id verbatim as input.issue_id" in rename_guidance
+    assert 'project_id: "<read.result.project>"' in rename_guidance
+    assert 'issue_id: "<read.result.id>"' in rename_guidance
+    assert '"idempotency:{{invocationId}}:work_item.rename"' in rename_guidance
+    assert '"correlation:{{invocationId}}:work_item.read->work_item.rename"' in rename_guidance
     assert "hermes_tools.plane_operation" not in rename_guidance
     assert '"subject_user_ref":"{{subjectUserRef}}"' in context.assignment.objective
     assert "private memory" in context.assignment.objective
