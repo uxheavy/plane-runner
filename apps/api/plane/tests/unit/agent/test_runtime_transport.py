@@ -20,6 +20,7 @@ from plane.agent.runtime import (
     RuntimeDispatchError,
     SubprocessRuntimeTransport,
 )
+from plane.agent.runtime.host_rpc import _host_operation_failure_evidence
 from plane.agent.runtime.subprocess import (
     _HERMES_CREDENTIAL_PROTOCOL,
     _HERMES_DISPATCH_PROTOCOL,
@@ -159,6 +160,33 @@ def test_catalog_describe_receipt_projects_operation_for_hermes_disclosure():
 
     assert result.output["result"]["operation"] == operation
     assert result.output["operation"] == operation
+
+
+def test_code_mode_failure_preserves_versioned_operation_id_in_bounded_evidence():
+    call = PlaneHostCall(
+        run_id="run:test",
+        invocation_id="invocation:test",
+        correlation_id="correlation:test",
+        action="code",
+        operation_ref="plane.code-mode.execute@1",
+        input={},
+        source="code",
+    )
+    result = PlaneHostResult(
+        request_ref=call.request_ref,
+        correlation_id=call.correlation_id,
+        idempotency_key=call.idempotency_key,
+        status="unavailable",
+        replayed=False,
+        output={},
+        error_code="CODE_MODE_FAILED",
+        error_message="bounded",
+    )
+
+    evidence = _host_operation_failure_evidence(call, result)
+
+    assert evidence is not None
+    assert evidence["operationId"] == "plane.code-mode.execute@1"
 
 
 def test_hermes_projection_has_no_handwritten_run_snapshot_digest():

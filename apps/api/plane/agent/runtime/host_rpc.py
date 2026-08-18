@@ -485,11 +485,23 @@ def _host_operation_failure_evidence(
             return "unavailable"
         return value
 
+    def bounded_operation_id(value: Any) -> str:
+        if not isinstance(value, str) or not value:
+            return "unavailable"
+        # Versioned host operations use the canonical ``name@version`` form
+        # (for example, plane.code-mode.execute@1). Keep that exact identity
+        # in bounded diagnostics while retaining the stricter error-code
+        # alphabet above.
+        allowed = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:-@"
+        if len(value.encode("utf-8")) > 128 or any(char not in allowed for char in value):
+            return "unavailable"
+        return value
+
     status = result.status if result is not None else "unavailable"
     if status not in {"denied", "conflict", "unavailable", "invalid"}:
         status = "unavailable"
     return {
-        "operationId": bounded_code(operation_id),
+        "operationId": bounded_operation_id(operation_id),
         "attemptRef": bounded_ref(request_id, "operation-attempt:")
         if request_id is not None
         else call.request_ref,

@@ -997,7 +997,19 @@ def build_failure_evidence(
             return None
         if phase not in {"host_callback", "unavailable"}:
             return None
-        operation_id = bounded_identifier(value.get("operationId"))
+        operation_id_value = value.get("operationId")
+        if isinstance(operation_id_value, str):
+            operation_id = (
+                operation_id_value
+                if 0 < len(operation_id_value.encode("utf-8")) <= 128
+                and all(
+                    character in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:-@"
+                    for character in operation_id_value
+                )
+                else "unavailable"
+            )
+        else:
+            operation_id = "unavailable"
         attempt_ref = bounded_identifier(value.get("attemptRef"))
         receipt_ref = bounded_identifier(value.get("receiptRef"))
         error_code = bounded_identifier(value.get("errorCode"))

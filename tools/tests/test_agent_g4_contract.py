@@ -2445,6 +2445,21 @@ class G4ContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "evidence_host_operation_failure_errorCode_sensitive"):
             validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
 
+    def test_failure_receipt_accepts_versioned_code_mode_operation_id(self):
+        manifest, authority, config, receipt = failure_fixture()
+        receipt["failure"]["hostOperationFailure"] = {
+            "operationId": "plane.code-mode.execute@1",
+            "attemptRef": "host-request:code-mode",
+            "receiptRef": "unavailable",
+            "status": "unavailable",
+            "errorCode": "CODE_MODE_FAILED",
+            "codeModePhase": "host_callback",
+        }
+        receipt["semanticDigest"] = _semantic_digest(receipt)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt, separators=(",", ":")))
+        self.addCleanup(temp.cleanup)
+        self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
+
     def test_live_validator_rejects_missing_tampered_gate_and_digest(self):
         self._assert_live_fixture_rejected(
             lambda evidence: evidence.pop("s00Gate"),
@@ -3072,7 +3087,7 @@ class G4ContractTests(unittest.TestCase):
                 '"failureSubreason":"runtime_execution_failed",'
                 '"failureCause":"host_operation_failure",'
                 '"hostOperationFailure":{'
-                '"operationId":"work_item.rename",'
+                '"operationId":"plane.code-mode.execute@1",'
                 '"attemptRef":"operation-attempt:request:worker",'
                 '"receiptRef":"audit-receipt:audit:worker",'
                 '"status":"unavailable",'
@@ -3125,7 +3140,7 @@ class G4ContractTests(unittest.TestCase):
         self.assertEqual(
             runtime_failure["failure"]["hostOperationFailure"],
             {
-                "operationId": "work_item.rename",
+                "operationId": "plane.code-mode.execute@1",
                 "attemptRef": "operation-attempt:request:worker",
                 "receiptRef": "audit-receipt:audit:worker",
                 "status": "unavailable",

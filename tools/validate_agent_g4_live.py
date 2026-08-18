@@ -1038,10 +1038,19 @@ _S00_GATE_PREDICATE_FIELDS = (
     ("runtime_exit_completed", ("kind", "hasFailure")),
 )
 _S00_SAFE_REF_RE = re.compile(r"^[A-Za-z0-9_.:/-]{1,128}$")
+_S00_OPERATION_ID_RE = re.compile(r"^[A-Za-z0-9_.:/@-]{1,128}$")
 
 
 def _safe_ref(value: Any, name: str) -> str:
     if not isinstance(value, str) or not _S00_SAFE_REF_RE.fullmatch(value):
+        raise ContractError(f"{name}_invalid")
+    if any(term in value.lower() for term in ("password", "secret", "token", "credential", "authorization", "api_key")):
+        raise ContractError(f"{name}_sensitive")
+    return value
+
+
+def _safe_operation_id(value: Any, name: str) -> str:
+    if not isinstance(value, str) or not _S00_OPERATION_ID_RE.fullmatch(value):
         raise ContractError(f"{name}_invalid")
     if any(term in value.lower() for term in ("password", "secret", "token", "credential", "authorization", "api_key")):
         raise ContractError(f"{name}_sensitive")
@@ -1900,7 +1909,8 @@ def _validate_failure_receipt(
             raise ContractError("evidence_host_operation_failure_status_invalid")
         if host_failure["codeModePhase"] not in {"host_callback", "unavailable"}:
             raise ContractError("evidence_host_operation_failure_phase_invalid")
-        for field in ("operationId", "attemptRef", "receiptRef", "errorCode"):
+        _safe_operation_id(host_failure["operationId"], "evidence_host_operation_failure_operationId")
+        for field in ("attemptRef", "receiptRef", "errorCode"):
             _safe_ref(host_failure[field], f"evidence_host_operation_failure_{field}")
 
     for name in ("run", "invocation"):
