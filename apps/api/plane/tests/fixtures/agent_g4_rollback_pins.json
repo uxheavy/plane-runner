@@ -12,15 +12,15 @@
     "compatibilityRule": "The previous API, worker, beat, supervisor, and runtime contract ignore 0142 provider-attempt evidence; the database remains at 0142 and reconciliation reads durable effect, audit, outcome, quota, and provider-attempt state before any replay."
   },
   "current": {
-    "planeCommit": "11d63bb75aac6629dde6ac42ba398aa01381521b",
+    "planeCommit": "b993b802401a2c5c7d6399fe7ca8acce19db54c8",
     "migrationLeaf": "db.0142_runtime_provider_attempts",
     "runtime": {
-      "hermesCommit": "d4b32a3e0ac9b528eb6e513274227e18a279906c",
+      "hermesCommit": "c2fa44db6168c19dbe2a4b94fda522f80a2a370b",
       "mcpGitlink": "c04974ed6624f17b41e63ef8182661929e77e0d3",
       "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889",
-      "imageTag": "plane-agent-runtime:hermes-d4b32a3-g4-v22-c9174ae7",
-      "imageDigest": "sha256:3654ce1aba475c10c78fc05203b0af9e9ebce9fdd72d08520a5bbe32af36af21",
-      "runtimeRevision": "c9174ae7d585d55659c447ba8fe4d7e0d2e5380a",
+      "imageTag": "plane-agent-runtime:hermes-c2fa44-g4-v24-b993b8",
+      "imageDigest": "sha256:ea1022f3f4c84c99b0f299e2de105cb61f144bbbcaa32efa14fc7c44befe4aea",
+      "runtimeRevision": "b993b802401a2c5c7d6399fe7ca8acce19db54c8",
       "contract": "plane.agent-runtime/v1"
     },
     "apiArtifact": {
@@ -59,10 +59,10 @@
         "contract": "plane.agent-runtime/v1"
       },
       "agent-runtime": {
-        "revision": "c9174ae7d585d55659c447ba8fe4d7e0d2e5380a",
-        "imageDigest": "sha256:3654ce1aba475c10c78fc05203b0af9e9ebce9fdd72d08520a5bbe32af36af21",
+        "revision": "b993b802401a2c5c7d6399fe7ca8acce19db54c8",
+        "imageDigest": "sha256:ea1022f3f4c84c99b0f299e2de105cb61f144bbbcaa32efa14fc7c44befe4aea",
         "artifactKind": "runtime",
-        "artifactSourceRevision": "c9174ae7d585d55659c447ba8fe4d7e0d2e5380a",
+        "artifactSourceRevision": "b993b802401a2c5c7d6399fe7ca8acce19db54c8",
         "contract": "plane.agent-runtime/v1"
       }
     }

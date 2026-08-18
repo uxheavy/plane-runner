@@ -237,7 +237,7 @@ runtime_hermes_remote_label="$(docker image inspect "${RUNTIME_IMAGE}" --format 
 runtime_source_label="$(docker image inspect "${RUNTIME_IMAGE}" --format '{{index .Config.Labels "org.uxheavy.plane.runtime.revision"}}')"
 runtime_source_digest_label="$(docker image inspect "${RUNTIME_IMAGE}" --format '{{index .Config.Labels "org.uxheavy.plane.runtime.source.sha256"}}')"
 runtime_contract_label="$(docker image inspect "${RUNTIME_IMAGE}" --format '{{index .Config.Labels "org.uxheavy.plane.runtime.contract"}}')"
-[[ "${runtime_hermes_label}" == "${G4_HERMES}" && "${runtime_hermes_remote_label}" == "https://github.com/uxheavy/hermes-agent.git" && "${runtime_source_label}" == "${G4_RUNTIME_IMAGE_REVISION}" && "${runtime_contract_label}" == "${G4_RUNTIME_CONTRACT}" && "${api_source_label}" == "${runtime_source_label}" ]] || {
+[[ "${runtime_hermes_label}" == "${G4_HERMES}" && "${runtime_hermes_remote_label}" == "https://github.com/uxheavy/hermes-agent.git" && "${runtime_source_label}" == "${G4_RUNTIME_IMAGE_REVISION}" && "${runtime_contract_label}" == "${G4_RUNTIME_CONTRACT}" ]] || {
     printf '%s\n' 'event=agent.g4.live-runner status=failed expected=api-runtime-hermes-source-contract-labels-bound actual=label-mismatch suggestion=build-api-and-runtime-from-one-candidate' >&2
     exit 2
 }

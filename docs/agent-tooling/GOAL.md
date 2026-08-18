@@ -10,15 +10,14 @@ Functional completion and controlled rollout are separate outcomes. This goal en
 
 ### Current provider-free integration refreeze (2026-08-18)
 
-The named integration branch currently carries host-runner source candidate
-`11d63bb75aac6629dde6ac42ba398aa01381521b`, descended from product source
-`c9174ae7d585d55659c447ba8fe4d7e0d2e5380a`. Its exact API artifact remains
+The named integration branch currently carries one metadata wrapper child of
+host-runner source `b993b802401a2c5c7d6399fe7ca8acce19db54c8`. Its exact API artifact remains
 `plane-agent-api:g4-v22-c9174ae7` at
 `sha256:e4d143327dff4f8299d846cd23059964bf922135c7d639dbe380d093d4389f69`;
 its exact runtime artifact is
-`plane-agent-runtime:hermes-d4b32a3-g4-v22-c9174ae7` at
-`sha256:3654ce1aba475c10c78fc05203b0af9e9ebce9fdd72d08520a5bbe32af36af21`.
-The runtime is bound to Hermes `d4b32a3e0ac9b528eb6e513274227e18a279906c`,
+`plane-agent-runtime:hermes-c2fa44-g4-v24-b993b8` at
+`sha256:ea1022f3f4c84c99b0f299e2de105cb61f144bbbcaa32efa14fc7c44befe4aea`.
+The runtime is bound to Hermes `c2fa44db6168c19dbe2a4b94fda522f80a2a370b`,
 MCP `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The exact-image red-team chain is
 green provider-free, including progressive catalog discovery, verbatim
@@ -29,7 +28,7 @@ outcome submission, one applied publication, transcript-only ordinary text,
 idempotency replay, and late post-publication terminal completion. The source
 also binds model-facing search results to one ready-to-call typed
 `workItemReadCall` and forwards authority-approved thresholds into bounded live
-receipts. The v21 source is ready for one final metadata wrapper. W05/W06
+receipts. The v24 wrapper is the sole child of the bound source. W05/W06
 historical v15 proof remains applicable to unchanged lifecycle, gateway,
 publication, and terminal seams; a fresh current-candidate W05/W06 lane is
 still authoritative for current release status. W03/W04, W07/W08, and Operator

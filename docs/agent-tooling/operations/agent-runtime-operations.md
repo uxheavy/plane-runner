@@ -536,29 +536,30 @@ docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose
 
 `apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` is the pin
 manifest. The current Plane deployable service candidate is the exact source
-host-runner correction `11d63bb75aac6629dde6ac42ba398aa01381521b`; the final candidate is
+host-runner correction `b993b802401a2c5c7d6399fe7ca8acce19db54c8`; the final candidate is
 exactly one metadata wrapper child of that source. The previously accepted G3
 candidate is Plane commit `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
 Its immutable API artifact is
 `plane-agent-api:g4-v22-c9174ae7` at
 `sha256:e4d143327dff4f8299d846cd23059964bf922135c7d639dbe380d093d4389f69`,
 and its runtime artifact is
-`plane-agent-runtime:hermes-d4b32a3-g4-v22-c9174ae7` at
-`sha256:3654ce1aba475c10c78fc05203b0af9e9ebce9fdd72d08520a5bbe32af36af21`.
-Both images are source-bound to `c9174ae7d585d55659c447ba8fe4d7e0d2e5380a`,
+`plane-agent-runtime:hermes-c2fa44-g4-v24-b993b8` at
+`sha256:ea1022f3f4c84c99b0f299e2de105cb61f144bbbcaa32efa14fc7c44befe4aea`.
+The API image remains source-bound to `c9174ae7d585d55659c447ba8fe4d7e0d2e5380a`,
+while the runtime is source-bound to `b993b802401a2c5c7d6399fe7ca8acce19db54c8`,
 with runtime contract `plane.agent-runtime/v1` and API contract
 `plane.operation/v1`.
 
 The runtime binding carries Hermes commit
-`d4b32a3e0ac9b528eb6e513274227e18a279906c` from the `uxheavy` checkout, MCP gitlink
+`c2fa44db6168c19dbe2a4b94fda522f80a2a370b` from the `uxheavy` checkout, MCP gitlink
 `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK gitlink
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The runtime image tag is
-`plane-agent-runtime:hermes-d4b32a3-g4-v22-c9174ae7`, and the runtime image digest is
-`sha256:3654ce1aba475c10c78fc05203b0af9e9ebce9fdd72d08520a5bbe32af36af21`.
+`plane-agent-runtime:hermes-c2fa44-g4-v24-b993b8`, and the runtime image digest is
+`sha256:ea1022f3f4c84c99b0f299e2de105cb61f144bbbcaa32efa14fc7c44befe4aea`.
 The runtime revision is
-`11d63bb75aac6629dde6ac42ba398aa01381521b`. The Plane service revision above is
+`b993b802401a2c5c7d6399fe7ca8acce19db54c8`. The Plane service revision above is
 the current executable artifact revision; the runtime image/runtimeRevision source is
-`c9174ae7d585d55659c447ba8fe4d7e0d2e5380a`. The API image tag is
+`b993b802401a2c5c7d6399fe7ca8acce19db54c8`. The API image tag is
 `plane-agent-api:g4-v22-c9174ae7` and the API image digest is
 `sha256:e4d143327dff4f8299d846cd23059964bf922135c7d639dbe380d093d4389f69`.
 The API source revision is

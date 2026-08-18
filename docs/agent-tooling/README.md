@@ -5,21 +5,21 @@ This directory contains the compact execution control surface for the non-UI Pla
 ## Current status
 
 G0 through G3 and the provider-free exact-image G4 checks are complete for the
-current shared host-runner source `11d63bb75aac6629dde6ac42ba398aa01381521b`.
-The product artifacts remain source-bound to
-`c9174ae7d585d55659c447ba8fe4d7e0d2e5380a`. The
+current v24 wrapper, whose sole source parent is
+`b993b802401a2c5c7d6399fe7ca8acce19db54c8`. The
 API artifact is `plane-agent-api:g4-v22-c9174ae7` at
 `sha256:e4d143327dff4f8299d846cd23059964bf922135c7d639dbe380d093d4389f69`;
 the runtime artifact is
-`plane-agent-runtime:hermes-d4b32a3-g4-v22-c9174ae7` at
-`sha256:3654ce1aba475c10c78fc05203b0af9e9ebce9fdd72d08520a5bbe32af36af21`.
-Both are bound to Hermes `d4b32a3e0ac9b528eb6e513274227e18a279906c`, MCP
+`plane-agent-runtime:hermes-c2fa44-g4-v24-b993b8` at
+`sha256:ea1022f3f4c84c99b0f299e2de105cb61f144bbbcaa32efa14fc7c44befe4aea`.
+The API remains source-bound to `c9174ae7d585d55659c447ba8fe4d7e0d2e5380a`;
+the runtime is bound to Hermes `c2fa44db6168c19dbe2a4b94fda522f80a2a370b`, MCP
 `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The exact-image functional
 red-team and final bootstrap are green provider-free, including verbatim
 search-result-to-read handoff with target-digest correlation, versioned
 assigned-work-item binding with authorized success and out-of-scope denial;
-The v22 source is ready for one final durable metadata wrapper.
+The v24 wrapper is the sole child of the bound source.
 W05/W06 are live-clean from their immutable v15 receipt and provider-disabled
 zero-delta replay. Manager setup diagnostics and Compose env isolation are covered
 by bounded provider-free regressions. W03/W04 and W07/W08 remain dirty after
