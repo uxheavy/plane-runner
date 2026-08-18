@@ -1085,6 +1085,14 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn('scenario-module-preflight=passed', runner)
         self.assertLess(runner.index('scenario-module-preflight=passed'), runner.index("LIVE_PHASE=api-invocation"))
 
+    def test_supervisor_loads_scenario_modules_from_the_bound_runtime_mount(self):
+        supervisor = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+
+        self.assertIn("spec_from_file_location(module_name, module_path)", supervisor)
+        self.assertIn('os.path.join(scenario_module_root, f"{module_name}.py")', supervisor)
+        self.assertIn('_load_scenario_module("agent_g4_manager_route")', supervisor)
+        self.assertNotIn("from agent_g4_manager_route import build_manager_route_evidence", supervisor)
+
     def test_live_runner_scenario_staging_runs_on_bash3_and_rejects_duplicate_modules(self):
         runner_path = TOOLS / "agent-g4-live.sh"
         runner = runner_path.read_text(encoding="utf-8")

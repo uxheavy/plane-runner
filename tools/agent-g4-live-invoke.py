@@ -6,6 +6,7 @@ from __future__ import annotations
 # ruff: noqa: E402
 
 import hashlib
+import importlib.util
 import io
 import json
 import os
@@ -70,18 +71,30 @@ if os.environ.get("G4_SCENARIO_DESCRIPTOR"):
     scenario_module_root = "/run/plane-scenario"
     if not os.path.isdir(scenario_module_root):
         raise RuntimeError("scenario_module_root_missing")
-    sys.path.insert(0, scenario_module_root)
-    from agent_g4_manager_route import build_manager_route_evidence
-    from agent_g4_worker_route import (
-        attempt_actor_substitution,
-        build_worker_route_evidence,
-        context_state_counts,
-        govern_worker_skill,
-        replay_worker_rename,
-        seed_worker_context,
-        worker_code_mode_controls,
-        worker_readback_facts,
-    )
+
+    def _load_scenario_module(module_name):
+        module_path = os.path.join(scenario_module_root, f"{module_name}.py")
+        spec = importlib.util.spec_from_file_location(module_name, module_path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError("scenario_module_spec_unavailable")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+        return module
+
+    _load_scenario_module("agent_g4_live_scenario")
+    _load_scenario_module("agent_g4_worker_route_observations")
+    worker_route = _load_scenario_module("agent_g4_worker_route")
+    manager_route = _load_scenario_module("agent_g4_manager_route")
+    build_manager_route_evidence = manager_route.build_manager_route_evidence
+    attempt_actor_substitution = worker_route.attempt_actor_substitution
+    build_worker_route_evidence = worker_route.build_worker_route_evidence
+    context_state_counts = worker_route.context_state_counts
+    govern_worker_skill = worker_route.govern_worker_skill
+    replay_worker_rename = worker_route.replay_worker_rename
+    seed_worker_context = worker_route.seed_worker_context
+    worker_code_mode_controls = worker_route.worker_code_mode_controls
+    worker_readback_facts = worker_route.worker_readback_facts
 
 
 _SCENARIO_PREFLIGHT_SUBREASONS = frozenset(
