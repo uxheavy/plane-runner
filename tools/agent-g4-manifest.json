@@ -3,7 +3,7 @@
   "candidateBinding": {
     "mode": "exact-single-child",
     "acceptedG3Baseline": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
-    "parentCommit": "3b84cca2eff17a92e218a3071df874b3da95ef92",
+    "parentCommit": "34e9d4dee7a7f53b7c342009161482cb6ff793eb",
     "candidateCommitSource": "git-head-with-exact-parent",
     "expectedCandidateSource": "external-operator-input:PLANE_G4_EXPECTED_CANDIDATE",
     "rejectDescendants": true
@@ -37,17 +37,17 @@
     "apps/api/plane/agent/tools/AGENTS.md"
   ],
   "pins": {
-    "hermesCommit": "c2fa44db6168c19dbe2a4b94fda522f80a2a370b",
+    "hermesCommit": "b8e2d88427f6db398fcfdec677259a7ad90235f8",
     "mcpGitlink": "c04974ed6624f17b41e63ef8182661929e77e0d3",
     "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889",
-    "runtimeImageTag": "plane-agent-runtime:hermes-c2fa44-g4-v27-59b8b8f2",
-    "runtimeImageDigest": "sha256:398fb2a09d8af26f6a958af624a2f6ef2b7fcaa681632c1c4e56488b84fff326",
-    "runtimeImageRevision": "59b8b8f277262dad4e2a3ba53d0cfb0490bc2bbc",
+    "runtimeImageTag": "plane-agent-runtime:hermes-b8e2d884-g4-v31-34e9d4de",
+    "runtimeImageDigest": "sha256:5c022cf613570db4c218d5d80743ac9aba2d479ef97a750ccbb2ab9d46e1bbc5",
+    "runtimeImageRevision": "34e9d4dee7a7f53b7c342009161482cb6ff793eb",
     "runtimeContract": "plane.agent-runtime/v1",
     "apiArtifact": {
-      "imageTag": "plane-agent-api:g4-v28-3b84cca2",
-      "imageDigest": "sha256:de5a552cd350df4df33e59fae560730c4693c83d2dff1bb3f0c383a529b088aa",
-      "sourceRevision": "3b84cca2eff17a92e218a3071df874b3da95ef92",
+      "imageTag": "plane-agent-api:g4-v31-34e9d4de",
+      "imageDigest": "sha256:c5ef5cfea8da44571da6ac4e9bee3dea84f23dcba801611ccc3c4cc41a8b4c2b",
+      "sourceRevision": "34e9d4dee7a7f53b7c342009161482cb6ff793eb",
       "contract": "plane.operation/v1"
     }
   },
@@ -192,7 +192,7 @@
     },
     "rollback": {
       "path": "apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json",
-      "sha256": "9322432163a29ec92f952f879e1af75019feeaeb509b320233b88d9170142591",
+    "sha256": "ccf3ecf403b148371847c5e3a6972feecea908418dd8d14a88e0e8c41e95b122",
       "testPath": "plane/tests/contract/api/test_agent_g4_rollback_drill.py",
       "requiredOutputFields": [
         "externalWrites",
@@ -207,7 +207,7 @@
     },
     "runtimeService": {
       "path": "apps/api/plane/tests/unit/agent/test_runtime_supervisor.py",
-    "sha256": "3ed2988e2dfb137f4c58444fe9e65f3d81de8df1e9c9749632c99de84dbd18c0",
+    "sha256": "fdc6153afa119fb666d73767a3d95e318f7e7b036ea3e2be408a0aa34a071528",
       "testPath": "plane/tests/unit/agent/test_runtime_supervisor.py",
       "testName": "test_pinned_hermes_runs_through_http_service_launcher_and_bound_host_socket",
       "requiredMarkers": [
