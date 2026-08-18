@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import re
@@ -234,12 +235,21 @@ def verify_resolver_image(tag: str) -> None:
     (ROOT / "tmp").mkdir(mode=0o700, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="agent-api-resolver-", dir=ROOT / "tmp") as directory:
         source = Path(directory) / "auth.json"
+        now = int(datetime.now(timezone.utc).timestamp())
+        encode = lambda value: base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+        synthetic_access_token = ".".join(
+            (
+                encode(b'{"alg":"none"}'),
+                encode(json.dumps({"iat": now, "exp": now + 3600}, separators=(",", ":")).encode()),
+                "synthetic-signature",
+            )
+        )
         source.write_text(
             json.dumps(
                 {
                     "last_refresh": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                     "tokens": {
-                        "access_token": "synthetic-access-token",
+                        "access_token": synthetic_access_token,
                         "account_id": "synthetic-account-id",
                         "id_token": "synthetic-id-token",
                         "refresh_token": "synthetic-refresh-token",

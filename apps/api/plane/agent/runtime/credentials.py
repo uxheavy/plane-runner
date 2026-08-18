@@ -8,6 +8,7 @@ returned to the already-isolated child only for the active invocation.
 from __future__ import annotations
 
 import hashlib
+import base64
 import json
 import math
 import os
@@ -89,8 +90,10 @@ _CODEX_AUTH_DOCUMENT_KEYS = frozenset({"last_refresh", "tokens"})
 _CODEX_AUTH_DOCUMENT_WITH_API_KEY_KEYS = frozenset({"OPENAI_API_KEY", "last_refresh", "tokens"})
 _CODEX_AUTH_DOCUMENT_SHAPES = (_CODEX_AUTH_DOCUMENT_KEYS, _CODEX_AUTH_DOCUMENT_WITH_API_KEY_KEYS)
 _CODEX_AUTH_TOKEN_KEYS = frozenset({"access_token", "account_id", "id_token", "refresh_token"})
-_CODEX_AUTH_MAX_AGE_SECONDS = 55 * 60
 _CODEX_AUTH_MAX_FUTURE_SKEW_SECONDS = 60
+_CODEX_ACCESS_TOKEN_MAX_LIFETIME_SECONDS = 14 * 24 * 60 * 60
+_CODEX_ACCESS_TOKEN_MIN_REMAINING_SECONDS = 60
+_CODEX_ACCESS_TOKEN_PAYLOAD_MAX_BYTES = 8 * 1024
 _DEPLOYMENT_CREDENTIAL_MAX_BYTES = 64 * 1024
 _DEPLOYMENT_CREDENTIAL_MAX_VALUE_BYTES = 16 * 1024
 _DEPLOYMENT_ENV_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -176,17 +179,58 @@ def _parse_codex_auth_document(value: object) -> str:
         raise RuntimeCredentialError("deployment credential JSON fields are invalid")
     for token_name in _CODEX_AUTH_TOKEN_KEYS:
         _bounded_deployment_secret(tokens[token_name])
-    refresh_age = time.time() - refreshed_at.timestamp()
-    if (
-        refresh_age > _CODEX_AUTH_MAX_AGE_SECONDS
-        or refresh_age < -_CODEX_AUTH_MAX_FUTURE_SKEW_SECONDS
-    ):
+    now = time.time()
+    if refreshed_at.timestamp() - now > _CODEX_AUTH_MAX_FUTURE_SKEW_SECONDS:
         raise RuntimeCredentialError(
             "deployment credential source requires trusted resolver refresh"
         )
-    # External Codex login owns refresh. The host accepts only the resulting
-    # short-lived access token while the refresh timestamp is still fresh.
-    return _bounded_deployment_secret(tokens["access_token"])
+    access_token = _bounded_deployment_secret(tokens["access_token"])
+    segments = access_token.split(".")
+    if len(segments) != 3 or any(not segment for segment in segments):
+        raise RuntimeCredentialError("deployment credential source requires trusted resolver refresh")
+    payload_segment = segments[1]
+    if len(payload_segment) > (_CODEX_ACCESS_TOKEN_PAYLOAD_MAX_BYTES * 4 // 3) + 4:
+        raise RuntimeCredentialError("deployment credential source requires trusted resolver refresh")
+    try:
+        payload = base64.b64decode(
+            payload_segment + "=" * (-len(payload_segment) % 4),
+            altchars=b"-_",
+            validate=True,
+        )
+        if len(payload) > _CODEX_ACCESS_TOKEN_PAYLOAD_MAX_BYTES:
+            raise ValueError("oversized JWT payload")
+
+        def reject_duplicate_claims(pairs: list[tuple[str, object]]) -> dict[str, object]:
+            claims: dict[str, object] = {}
+            for key, claim in pairs:
+                if key in claims:
+                    raise ValueError("duplicate JWT claim")
+                claims[key] = claim
+            return claims
+
+        claims = json.loads(payload, object_pairs_hook=reject_duplicate_claims)
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise RuntimeCredentialError(
+            "deployment credential source requires trusted resolver refresh"
+        ) from exc
+    if not isinstance(claims, dict):
+        raise RuntimeCredentialError("deployment credential source requires trusted resolver refresh")
+    issued_at = claims.get("iat")
+    expires_at = claims.get("exp")
+    if (
+        isinstance(issued_at, bool)
+        or not isinstance(issued_at, int)
+        or isinstance(expires_at, bool)
+        or not isinstance(expires_at, int)
+        or issued_at > now + _CODEX_AUTH_MAX_FUTURE_SKEW_SECONDS
+        or expires_at <= now + _CODEX_ACCESS_TOKEN_MIN_REMAINING_SECONDS
+        or expires_at <= issued_at
+        or expires_at - issued_at > _CODEX_ACCESS_TOKEN_MAX_LIFETIME_SECONDS
+    ):
+        raise RuntimeCredentialError("deployment credential source requires trusted resolver refresh")
+    # Signature verification remains provider-owned. This trusted-host check
+    # only fails fast on malformed or unusable token lifetime metadata.
+    return access_token
 
 
 def _parse_deployment_credential_document(raw: bytes) -> str:

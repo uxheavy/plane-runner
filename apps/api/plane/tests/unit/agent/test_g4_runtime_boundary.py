@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import subprocess
 import sys
@@ -29,6 +30,12 @@ from plane.agent.runtime.config import runtime_settings_from_environment
 from plane.agent.runtime import credentials as runtime_credentials
 from plane.agent.runtime.provider_egress import ProviderRelayError
 from plane.agent.runtime.service import RuntimeDispatchExecutor, _RuntimeHTTPServer
+
+
+def _synthetic_jwt(*, issued_at: int, expires_at: int, payload: bytes | None = None) -> str:
+    encode = lambda value: base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+    claims = payload or json.dumps({"iat": issued_at, "exp": expires_at}, separators=(",", ":")).encode()
+    return f"{encode(b'{}')}.{encode(claims)}.synthetic-signature"
 
 
 def _runtime_environment(**overrides: str) -> dict[str, str]:
@@ -152,9 +159,9 @@ def test_g4_deployment_credential_resolver_accepts_fresh_codex_auth_document(
     now = runtime_credentials.datetime.fromisoformat("2026-08-07T10:12:00+00:00").timestamp()
     monkeypatch.setattr(runtime_credentials.time, "time", lambda: now)
     document = {
-        "last_refresh": "2026-08-07T10:12:00Z",
+        "last_refresh": "2026-08-01T10:12:00Z",
         "tokens": {
-            "access_token": "synthetic-access-token",
+            "access_token": _synthetic_jwt(issued_at=int(now) - 300, expires_at=int(now) + 3600),
             "account_id": "synthetic-account-id",
             "id_token": "synthetic-id-token",
             "refresh_token": "synthetic-refresh-token",
@@ -167,19 +174,18 @@ def test_g4_deployment_credential_resolver_accepts_fresh_codex_auth_document(
     monkeypatch.setattr(runtime_credentials, "DEPLOYMENT_CREDENTIAL_SOURCE_PATH", str(source))
 
     assert runtime_credentials.resolve_deployment_credential("runtime") == {
-        "api_key": "synthetic-access-token"
+        "api_key": document["tokens"]["access_token"]
     }
 
 
 @pytest.mark.parametrize(
     ("last_refresh", "expected"),
     (
-        ("2026-08-07T09:16:59Z", "requires trusted resolver refresh"),
         ("2026-08-07T10:13:01Z", "requires trusted resolver refresh"),
         ("2026-08-07T10:12:00+00:00", "JSON fields are invalid"),
         ("not-a-timestamp", "JSON fields are invalid"),
     ),
-    ids=("stale", "future", "non-zulu", "malformed"),
+    ids=("future", "non-zulu", "malformed"),
 )
 def test_g4_deployment_credential_resolver_rejects_nonfresh_codex_auth_document(
     monkeypatch, tmp_path, last_refresh, expected
@@ -211,6 +217,36 @@ def test_g4_codex_auth_document_refresh_gap_is_classified_without_leaking_values
     error = runtime_credentials.RuntimeCredentialError(
         "deployment credential source requires trusted resolver refresh"
     )
+
+
+@pytest.mark.parametrize(
+    "access_token",
+    (
+        "not-a-jwt",
+        _synthetic_jwt(issued_at=1787064000, expires_at=1787063000),
+        _synthetic_jwt(issued_at=1787064000, expires_at=1787064060),
+        _synthetic_jwt(issued_at=1787060000, expires_at=1788270001),
+        _synthetic_jwt(issued_at=0, expires_at=0, payload=b'{"iat":1,"iat":2,"exp":3}'),
+        _synthetic_jwt(issued_at=0, expires_at=0, payload=b"{" + b"x" * 8193 + b"}"),
+    ),
+    ids=("malformed", "expired", "future-iat", "lifetime-too-long", "duplicate-claim", "oversized"),
+)
+def test_g4_codex_auth_document_rejects_unusable_jwt_lifetime(monkeypatch, tmp_path, access_token):
+    now = 1787063898
+    monkeypatch.setattr(runtime_credentials.time, "time", lambda: now)
+    source = tmp_path / "auth.json"
+    source.write_text(json.dumps({
+        "last_refresh": "2026-08-01T00:00:00Z",
+        "tokens": {
+            "access_token": access_token,
+            "account_id": "synthetic-account-id",
+            "id_token": "synthetic-id-token",
+            "refresh_token": "synthetic-refresh-token",
+        },
+    }), encoding="utf-8")
+    monkeypatch.setattr(runtime_credentials, "DEPLOYMENT_CREDENTIAL_SOURCE_PATH", str(source))
+    with pytest.raises(runtime_credentials.RuntimeCredentialError, match="requires trusted resolver refresh"):
+        runtime_credentials.resolve_deployment_credential("runtime")
     assert runtime_credentials.credential_failure_subreason(error) == (
         "credential_source_requires_refresh"
     )
