@@ -423,11 +423,12 @@ def test_live_scenario_module_manifest_rejects_omitted_manager_route(tmp_path: P
         scenario_modules.scenario_modules(manifest_path, TOOLS.parent)
 
 
-def test_live_invocation_inserts_the_owner_only_scenario_import_root() -> None:
+def test_live_invocation_loads_scenario_modules_from_the_owner_only_mount() -> None:
     source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
 
     assert 'scenario_module_root = "/run/plane-scenario"' in source
-    assert 'sys.path.insert(0, scenario_module_root)' in source
+    assert "spec_from_file_location(module_name, module_path)" in source
+    assert '_load_scenario_module("agent_g4_manager_route")' in source
     assert "scenario_module_root_missing" in source
 
 

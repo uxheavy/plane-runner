@@ -56,7 +56,7 @@
       "module": "agent_g4_live_scenario",
       "source": "tools/agent_g4_live_scenario.py",
       "runtime": "/run/plane-scenario/agent_g4_live_scenario.py",
-      "sha256": "aa6944a7a628a02dafd82a56d666c5b413038e58b0498abf3c74e7275bbabc44"
+      "sha256": "be3927e7f0a5ce28896c053da905c6ca7e6ca8b1addebe9b8d11062793a6cb75"
     },
     {
       "module": "agent_g4_worker_route",
