@@ -23,7 +23,7 @@
     "candidateCommitSource": "git-head-with-exact-parent",
     "expectedCandidateSource": "external-operator-input:PLANE_G4_EXPECTED_CANDIDATE",
     "mode": "exact-single-child",
-    "parentCommit": "078cd13f73e94c0c4a7e10b325be431d78c058d0",
+    "parentCommit": "204e555bc2436d83347a5588d5b9987199cd6875",
     "rejectDescendants": true
   },
   "cleanup": {
@@ -100,7 +100,7 @@
         "activeQuotaReservations",
         "temporaryDatabaseRemoved"
       ],
-      "sha256": "e0daa5fa9561265abe76f482e2d7eeef0198173f7dda0cbccd5e4c67e4047c08",
+      "sha256": "9e9d72e30b293574a0c0f8ca2667b339df690f7b188d0e4465d19fe22ab84472",
       "testPath": "plane/tests/contract/api/test_agent_g4_rollback_drill.py"
     },
     "runtimeService": {
@@ -127,16 +127,16 @@
   "pins": {
     "apiArtifact": {
       "contract": "plane.operation/v1",
-      "imageDigest": "sha256:9d231f8156c6f8acd03cfcdc438527d46185775623637ad566dbc7cbefbeea1f",
-      "imageTag": "plane-agent-api:g4-v55-078cd13f",
-      "sourceRevision": "078cd13f73e94c0c4a7e10b325be431d78c058d0"
+      "imageDigest": "sha256:8cc78e70768ffa5139f8d89b0b74086811ab76c470901957af34da03845dd86a",
+      "imageTag": "plane-agent-api:g4-v62-204e555b",
+      "sourceRevision": "204e555bc2436d83347a5588d5b9987199cd6875"
     },
-    "hermesCommit": "4b6ea28dd8b625c5d91bfe7cdb2ca399bf0298f5",
+    "hermesCommit": "d6938038f35027bb818756f19e03ce702889d210",
     "mcpGitlink": "c04974ed6624f17b41e63ef8182661929e77e0d3",
     "runtimeContract": "plane.agent-runtime/v1",
-    "runtimeImageDigest": "sha256:b5733cf49f22cb4ae4e9da177ab59001d9819ff5aace7ec1a2c059b31764f952",
-    "runtimeImageRevision": "078cd13f73e94c0c4a7e10b325be431d78c058d0",
-    "runtimeImageTag": "plane-agent-runtime:hermes-a9b7a403-g4-v55-078cd13f",
+    "runtimeImageDigest": "sha256:bd80145ecc2694e6ba42d34d892a39083a6f30074965b75678fb4007a0e65397",
+    "runtimeImageRevision": "204e555bc2436d83347a5588d5b9987199cd6875",
+    "runtimeImageTag": "plane-agent-runtime:hermes-d6938038-g4-v62-204e555b",
     "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
   },
   "pytestPaths": [

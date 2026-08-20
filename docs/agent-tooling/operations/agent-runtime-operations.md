@@ -536,34 +536,34 @@ docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose
 
 `apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` is the pin
 manifest. The current Plane deployable service candidate is the exact source
-`3a60056faad84e6361ddb9c205677503517db1d9`; the final candidate is
+`204e555bc2436d83347a5588d5b9987199cd6875`; the final candidate is
 exactly one metadata wrapper child of that source. The previously accepted G3
 candidate is Plane commit `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
 Its immutable API artifact is
-`plane-agent-api:g4-v39-14bd3966` at
-`sha256:5493898a068a664e38db965d8829dddcd36aee3673efff664a86955a6663bc2a`,
+`plane-agent-api:g4-v62-204e555b` at
+`sha256:8cc78e70768ffa5139f8d89b0b74086811ab76c470901957af34da03845dd86a`,
 and its runtime artifact is
-`plane-agent-runtime:hermes-6c546d36-g4-v39-14bd3966` at
-`sha256:8863c6178b9ee9e571caf4600de67fa9efd780d4560e77e2100caa02f00eff30`.
-The API is source-bound to `14bd3966fa385f291d01868e75e16621d68ba010`; the
-runtime remains source-bound to `14bd3966fa385f291d01868e75e16621d68ba010`,
+`plane-agent-runtime:hermes-d6938038-g4-v62-204e555b` at
+`sha256:bd80145ecc2694e6ba42d34d892a39083a6f30074965b75678fb4007a0e65397`.
+The API is source-bound to `204e555bc2436d83347a5588d5b9987199cd6875`; the
+runtime remains source-bound to `204e555bc2436d83347a5588d5b9987199cd6875`,
 with runtime contract `plane.agent-runtime/v1` and API contract
 `plane.operation/v1`.
 
 The runtime binding carries Hermes commit
-`6c546d36cf1ff56ff21ec2d3b07e15e0377cef2d` from the `uxheavy` checkout, MCP gitlink
+`d6938038f35027bb818756f19e03ce702889d210` from the `uxheavy` checkout, MCP gitlink
 `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK gitlink
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The runtime image tag is
-`plane-agent-runtime:hermes-6c546d36-g4-v39-14bd3966`, and the runtime image digest is
-`sha256:8863c6178b9ee9e571caf4600de67fa9efd780d4560e77e2100caa02f00eff30`.
+`plane-agent-runtime:hermes-d6938038-g4-v62-204e555b`, and the runtime image digest is
+`sha256:bd80145ecc2694e6ba42d34d892a39083a6f30074965b75678fb4007a0e65397`.
 The runtime revision is
-`14bd3966fa385f291d01868e75e16621d68ba010`. The Plane service revision above is
+`204e555bc2436d83347a5588d5b9987199cd6875`. The Plane service revision above is
 the current executable artifact revision; the runtime image/runtimeRevision source is
-`14bd3966fa385f291d01868e75e16621d68ba010`. The API image tag is
-`plane-agent-api:g4-v39-14bd3966` and the API image digest is
-`sha256:5493898a068a664e38db965d8829dddcd36aee3673efff664a86955a6663bc2a`.
+`204e555bc2436d83347a5588d5b9987199cd6875`. The API image tag is
+`plane-agent-api:g4-v62-204e555b` and the API image digest is
+`sha256:8cc78e70768ffa5139f8d89b0b74086811ab76c470901957af34da03845dd86a`.
 The API source revision is
-`14bd3966fa385f291d01868e75e16621d68ba010`; the API contract is
+`204e555bc2436d83347a5588d5b9987199cd6875`; the API contract is
 `plane.operation/v1`. The exact-image red-team proof
 passes the real Hermes loop, progressive `catalog.search`/`catalog.describe`,
 verbatim search-result-to-read handoff with target-digest correlation,
