@@ -15,7 +15,7 @@
     "planeCommit": "3a60056faad84e6361ddb9c205677503517db1d9",
     "migrationLeaf": "db.0142_runtime_provider_attempts",
     "runtime": {
-      "hermesCommit": "fe02d06368a66a61b0f1886aee3052414bbfa415",
+      "hermesCommit": "1fe2149316954941e98f35081ccea54248a782b0",
       "mcpGitlink": "c04974ed6624f17b41e63ef8182661929e77e0d3",
       "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889",
       "imageTag": "plane-agent-runtime:hermes-6c546d36-g4-v39-14bd3966",
@@ -71,7 +71,7 @@
     "planeCommit": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
     "migrationLeaf": "db.0142_runtime_provider_attempts",
     "apiArtifact": {
-      "imageTag": "plane-agent-api:g4-v32-9a0e870f",
+      "imageTag": "plane-g3-external-client-api-tests:prepared",
       "imageDigest": "sha256:7812ed213b9cfcbe50580ded7b5e78a30d317e37dd66c1082c5dff97a9e98031",
       "sourceRevision": "9a0e870fb313eb85d93b89778076087a8897d2a2",
       "contract": "plane.operation/v1"
