@@ -1805,6 +1805,7 @@ _FAILURE_REQUIRED_TOP_LEVEL_FIELDS = _FAILURE_TOP_LEVEL_FIELDS - {
 _FAILURE_STAGES = {
     "initialization",
     "compose",
+    "audit-bootstrap-pre-migrate",
     "audit-bootstrap",
     "runtime-start",
     "runtime-health",
@@ -2108,6 +2109,7 @@ def validate_evidence(
             "credential-bind-preflight",
             "credential-state-volume",
             "compose",
+            "audit-bootstrap-pre-migrate",
             "audit-bootstrap",
             "migrate",
             "runtime-start",

@@ -469,7 +469,7 @@ cleanup() {
     stderr_sha256="$(live_stderr_sha256 "${ERROR_DIGEST_FILE}")"
     setup_error="$(safe_setup_error)"
     if [[ "${status}" -ne 0 ]]; then
-        if [[ "${status}" -eq 125 || "${LIVE_PHASE}" == "compose" ]]; then
+        if [[ "${status}" -eq 125 || "${LIVE_PHASE}" == "compose" || "${LIVE_PHASE}" == "audit-bootstrap-pre-migrate" ]]; then
             reason_category="$(safe_docker_failure_reason)"
         fi
         error_class="$(safe_error_class)"
@@ -865,6 +865,7 @@ live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" \
     -p "${PROJECT}" -f "${ROOT_DIR}/docker-compose-test.yml" \
     up -d --wait test-db test-redis test-mq test-minio >/dev/null
 
+LIVE_PHASE=audit-bootstrap-pre-migrate
 live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" \
     docker run --rm --network "${NETWORK}" \
     --env DJANGO_SETTINGS_MODULE=plane.settings.test \

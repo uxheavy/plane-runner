@@ -1000,8 +1000,10 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn("PLANE_AUDIT_GOVERNANCE_ROLE=plane_audit_owner", source)
         self.assertIn("PLANE_AUDIT_MIGRATION_ROLE=plane_migrator", source)
         before_migrate = source.index("phase=before-migrate")
+        pre_migrate_phase = source.index("LIVE_PHASE=audit-bootstrap-pre-migrate")
         migrate = source.index("python manage.py migrate", before_migrate)
         after_migrate = source.index("phase=after-migrate", migrate)
+        self.assertLess(pre_migrate_phase, migrate)
         self.assertLess(before_migrate, migrate)
         self.assertLess(migrate, after_migrate)
 
@@ -1018,7 +1020,8 @@ class G4ContractTests(unittest.TestCase):
             '--env PLANE_AUDIT_ENFORCE_ROLE_SEPARATION=1',
         ):
             self.assertIn(expected, api_boundary)
-        migration = source[source.index("LIVE_PHASE=migrate") : source.index("LIVE_PHASE=audit-bootstrap")]
+        migrate_start = source.index("LIVE_PHASE=migrate")
+        migration = source[migrate_start : source.index("LIVE_PHASE=audit-bootstrap", migrate_start)]
         for expected in (
             '--env DATABASE_URL="${MIGRATION_DATABASE_URL}"',
             '--env DATABASE_MIGRATION_URL="${MIGRATION_DATABASE_URL}"',
