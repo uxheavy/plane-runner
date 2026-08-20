@@ -1052,6 +1052,89 @@ def _safe_operation_id(value: Any, name: str) -> str:
     return value
 
 
+_PREPARED_DIAGNOSTIC_FORMS = frozenset(
+    {"canonical_ref", "ready_to_call", "unrecognized"}
+)
+_PREPARED_DIAGNOSTIC_FAILURES = frozenset(
+    {"malformed", "unknown", "digest_mismatch", "binding_mismatch"}
+)
+_PREPARED_DIAGNOSTIC_VALUE_TYPES = frozenset(
+    {"null", "boolean", "string", "integer", "number", "object", "array", "unknown"}
+)
+_PREPARED_DIAGNOSTIC_SIZE_CLASSES = frozenset({"small", "medium", "large", "unknown"})
+_PREPARED_DIAGNOSTIC_SENSITIVE_KEYS = frozenset(
+    {"auth", "credential", "key", "password", "secret", "token"}
+)
+
+
+def _bounded_prepared_shape_key(value: Any) -> str | None:
+    if not isinstance(value, str) or not value or len(value) > 64:
+        return None
+    lowered = value.casefold()
+    if any(part in lowered for part in _PREPARED_DIAGNOSTIC_SENSITIVE_KEYS):
+        return None
+    allowed = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-"
+    if any(char not in allowed for char in value):
+        return None
+    parts = value.split("-")
+    if len(parts) == 5 and [len(part) for part in parts] == [8, 4, 4, 4, 12]:
+        if all(char in "0123456789abcdefABCDEF" for part in parts for char in part):
+            return None
+    if len(value) >= 32 and all(char in "0123456789abcdefABCDEF" for char in value):
+        return None
+    return value
+
+
+def _bounded_prepared_shape_diagnostic(value: Any) -> dict[str, Any] | None:
+    """Validate only finite shape metadata; reject raw prepared values."""
+
+    fields = {"schemaVersion", "acceptedForm", "failureClass", "shape"}
+    shape_fields = {"keyNames", "keyNamesTruncated", "valueTypes", "nestingDepth", "sizeClass"}
+    if not isinstance(value, dict) or set(value) != fields:
+        return None
+    if (
+        value.get("schemaVersion") != "plane.prepared-call-shape/v1"
+        or value.get("acceptedForm") not in _PREPARED_DIAGNOSTIC_FORMS
+        or value.get("failureClass") not in _PREPARED_DIAGNOSTIC_FAILURES
+    ):
+        return None
+    shape = value.get("shape")
+    if not isinstance(shape, dict) or set(shape) != shape_fields:
+        return None
+    key_names = shape.get("keyNames")
+    value_types = shape.get("valueTypes")
+    if (
+        not isinstance(key_names, list)
+        or len(key_names) > 16
+        or any(_bounded_prepared_shape_key(item) != item for item in key_names)
+        or len(set(key_names)) != len(key_names)
+        or type(shape.get("keyNamesTruncated")) is not bool
+        or not isinstance(value_types, list)
+        or len(value_types) > len(_PREPARED_DIAGNOSTIC_VALUE_TYPES)
+        or any(
+            not isinstance(item, str) or item not in _PREPARED_DIAGNOSTIC_VALUE_TYPES
+            for item in value_types
+        )
+        or len(set(value_types)) != len(value_types)
+        or type(shape.get("nestingDepth")) is not int
+        or not 0 <= shape["nestingDepth"] <= 8
+        or shape.get("sizeClass") not in _PREPARED_DIAGNOSTIC_SIZE_CLASSES
+    ):
+        return None
+    return {
+        "schemaVersion": "plane.prepared-call-shape/v1",
+        "acceptedForm": value["acceptedForm"],
+        "failureClass": value["failureClass"],
+        "shape": {
+            "keyNames": list(key_names),
+            "keyNamesTruncated": shape["keyNamesTruncated"],
+            "valueTypes": list(value_types),
+            "nestingDepth": shape["nestingDepth"],
+            "sizeClass": shape["sizeClass"],
+        },
+    }
+
+
 def _validate_s00_gate(value: Any) -> None:
     gate = _object(value, "evidence_s00Gate")
     if list(gate) != ["status", "firstFailedPredicate", "predicates"]:
@@ -1962,7 +2045,7 @@ def _validate_failure_receipt(
             set(host_failure).difference(
                 host_failure_fields
                 | host_failure_diagnostic_fields
-                | {"preparedCallInvalidReason", "failureClass"}
+                | {"preparedCallInvalidReason", "failureClass", "shapeDiagnostic"}
             )
             or not host_failure_fields.issubset(host_failure)
         ):
@@ -1984,6 +2067,11 @@ def _validate_failure_receipt(
             or host_failure["preparedCallInvalidReason"] not in prepared_call_reasons
         ):
             raise ContractError("evidence_host_operation_failure_prepared_call_reason_invalid")
+        if "shapeDiagnostic" in host_failure:
+            if host_failure["errorCode"] != "PREPARED_CALL_INVALID":
+                raise ContractError("evidence_host_operation_failure_shape_diagnostic_invalid")
+            if _bounded_prepared_shape_diagnostic(host_failure["shapeDiagnostic"]) is None:
+                raise ContractError("evidence_host_operation_failure_shape_diagnostic_invalid")
         if diagnostic_fields:
             if host_failure["callbackPhase"] not in {"before_host_call", "host_return", "model_observation_emit", "adapter_event"}:
                 raise ContractError("evidence_host_operation_failure_callback_phase_invalid")

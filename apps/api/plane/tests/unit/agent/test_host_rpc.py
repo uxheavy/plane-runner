@@ -175,7 +175,7 @@ def test_prepared_shape_diagnostic_redacts_sensitive_key_names_and_values():
     assert "another-secret" not in encoded
     assert "api_token" not in encoded
     assert "password" not in encoded
-    assert diagnostic["shape"]["keyNames"].count("redacted_key") == 2
+    assert diagnostic["shape"]["keyNames"].count("redacted_key") == 1
 
 
 def test_prepared_shape_diagnostic_redacts_id_shaped_key_names():
@@ -208,6 +208,13 @@ def test_prepared_invalid_host_receipt_carries_only_bounded_diagnostic():
     assert result.output["shapeDiagnostic"]["failureClass"] == "unknown"
     round_tripped = PlaneHostResult.from_wire(result.to_wire())
     assert round_tripped.output == result.output
+    evidence = host_rpc._host_operation_failure_evidence(_call(
+        operationRef="operation:work_item.read",
+        input={"preparedCallRef": "prepared-call:unknown"},
+    ), result)
+    assert evidence["preparedCallInvalidReason"] == "unknown"
+    assert evidence["shapeDiagnostic"] == result.output["shapeDiagnostic"]
+    assert "prepared-call:unknown" not in json.dumps(evidence)
 
 
 def test_http_host_distinguishes_callback_exception_after_successful_search():

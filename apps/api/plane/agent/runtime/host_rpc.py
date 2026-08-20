@@ -373,6 +373,16 @@ _PREPARED_DIAGNOSTIC_FAILURES = frozenset(
 _PREPARED_DIAGNOSTIC_FORMS = frozenset(
     {"canonical_ref", "ready_to_call", "unrecognized"}
 )
+_PREPARED_DIAGNOSTIC_FIELDS = frozenset(
+    {"schemaVersion", "acceptedForm", "failureClass", "shape"}
+)
+_PREPARED_DIAGNOSTIC_SHAPE_FIELDS = frozenset(
+    {"keyNames", "keyNamesTruncated", "valueTypes", "nestingDepth", "sizeClass"}
+)
+_PREPARED_DIAGNOSTIC_VALUE_TYPES = frozenset(
+    {"null", "boolean", "string", "integer", "number", "object", "array", "unknown"}
+)
+_PREPARED_DIAGNOSTIC_SIZE_CLASSES = frozenset({"small", "medium", "large", "unknown"})
 _SHAPE_KEY_ALLOWED = frozenset(
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-"
 )
@@ -485,6 +495,54 @@ def _prepared_shape_diagnostic(value: Any, failure_class: str) -> dict[str, Any]
     }
 
 
+def _bounded_prepared_shape_diagnostic(value: Any) -> dict[str, Any] | None:
+    """Keep only the finite, value-free prepared-call shape contract."""
+
+    if not isinstance(value, Mapping) or set(value) != _PREPARED_DIAGNOSTIC_FIELDS:
+        return None
+    if (
+        value.get("schemaVersion") != "plane.prepared-call-shape/v1"
+        or value.get("acceptedForm") not in _PREPARED_DIAGNOSTIC_FORMS
+        or value.get("failureClass") not in _PREPARED_DIAGNOSTIC_FAILURES
+    ):
+        return None
+    shape = value.get("shape")
+    if not isinstance(shape, Mapping) or set(shape) != _PREPARED_DIAGNOSTIC_SHAPE_FIELDS:
+        return None
+    key_names = shape.get("keyNames")
+    value_types = shape.get("valueTypes")
+    if (
+        not isinstance(key_names, list)
+        or len(key_names) > _SHAPE_KEY_LIMIT
+        or any(_safe_shape_key(item) != item for item in key_names)
+        or len(set(key_names)) != len(key_names)
+        or type(shape.get("keyNamesTruncated")) is not bool
+        or not isinstance(value_types, list)
+        or len(value_types) > len(_PREPARED_DIAGNOSTIC_VALUE_TYPES)
+        or any(
+            not isinstance(item, str) or item not in _PREPARED_DIAGNOSTIC_VALUE_TYPES
+            for item in value_types
+        )
+        or len(set(value_types)) != len(value_types)
+        or type(shape.get("nestingDepth")) is not int
+        or not 0 <= shape["nestingDepth"] <= _SHAPE_DEPTH_LIMIT
+        or shape.get("sizeClass") not in _PREPARED_DIAGNOSTIC_SIZE_CLASSES
+    ):
+        return None
+    return {
+        "schemaVersion": "plane.prepared-call-shape/v1",
+        "acceptedForm": value["acceptedForm"],
+        "failureClass": value["failureClass"],
+        "shape": {
+            "keyNames": list(key_names),
+            "keyNamesTruncated": shape["keyNamesTruncated"],
+            "valueTypes": list(value_types),
+            "nestingDepth": shape["nestingDepth"],
+            "sizeClass": shape["sizeClass"],
+        },
+    }
+
+
 @dataclass(frozen=True)
 class PlaneHostResult:
     """Canonical host response returned to Hermes."""
@@ -589,7 +647,7 @@ def _host_operation_failure_evidence(
     *,
     error_code: str | None = None,
     failure_class: str | None = None,
-) -> dict[str, str] | None:
+) -> dict[str, Any] | None:
     """Project one failed callback into the bounded runner evidence shape."""
 
     if call.action == "observe":
@@ -667,6 +725,14 @@ def _host_operation_failure_evidence(
         evidence["failureClass"] = failure_class
     if result is not None and result.prepared_call_invalid_reason in _PREPARED_CALL_INVALID_REASONS:
         evidence["preparedCallInvalidReason"] = result.prepared_call_invalid_reason
+    if result is not None and resolved_error_code == "PREPARED_CALL_INVALID":
+        shape_diagnostic = _bounded_prepared_shape_diagnostic(output.get("shapeDiagnostic"))
+        if shape_diagnostic is None:
+            shape_diagnostic = _prepared_shape_diagnostic(
+                call.input,
+                result.prepared_call_invalid_reason or "malformed",
+            )
+        evidence["shapeDiagnostic"] = shape_diagnostic
     return evidence
 
 
@@ -707,7 +773,7 @@ class PlaneHostServer:
         self._closed = threading.Event()
         self._error: BaseException | None = None
         self._records: dict[str, PlaneHostResult] = {}
-        self._failure_evidence: dict[str, str] | None = None
+        self._failure_evidence: dict[str, Any] | None = None
         self._call_count = 0
         self._observation_count = 0
         self._lock = threading.RLock()
@@ -727,7 +793,7 @@ class PlaneHostServer:
             return self._observation_count
 
     @property
-    def failure_evidence(self) -> dict[str, str] | None:
+    def failure_evidence(self) -> dict[str, Any] | None:
         with self._lock:
             return dict(self._failure_evidence) if self._failure_evidence is not None else None
 
@@ -872,9 +938,14 @@ class PlaneHostServer:
                         idempotency_key=call.idempotency_key,
                         status="invalid",
                         replayed=False,
-                        output=None,
+                        output={
+                            "shapeDiagnostic": _prepared_shape_diagnostic(
+                                call.input, "malformed"
+                            )
+                        },
                         error_code="PREPARED_CALL_INVALID",
                         error_message="Prepared reference replay identity is invalid",
+                        prepared_call_invalid_reason="malformed",
                     )
                 replay_status = (
                     replay.status if replay.status in {"denied", "conflict", "unavailable", "invalid"} else "replayed"
@@ -1161,7 +1232,7 @@ class PlaneHostHTTPServer:
         self._max_calls = max_calls
         self._max_observation_calls = max_observation_calls
         self._records: dict[str, PlaneHostResult] = {}
-        self._failure_evidence: dict[str, str] | None = None
+        self._failure_evidence: dict[str, Any] | None = None
         self._call_count = 0
         self._observation_count = 0
         self._lock = threading.RLock()
@@ -1213,7 +1284,7 @@ class PlaneHostHTTPServer:
             return self._observation_count
 
     @property
-    def failure_evidence(self) -> dict[str, str] | None:
+    def failure_evidence(self) -> dict[str, Any] | None:
         with self._lock:
             return dict(self._failure_evidence) if self._failure_evidence is not None else None
 
@@ -1248,9 +1319,14 @@ class PlaneHostHTTPServer:
                         idempotency_key=call.idempotency_key,
                         status="invalid",
                         replayed=False,
-                        output=None,
+                        output={
+                            "shapeDiagnostic": _prepared_shape_diagnostic(
+                                call.input, "malformed"
+                            )
+                        },
                         error_code="PREPARED_CALL_INVALID",
                         error_message="Prepared reference replay identity is invalid",
+                        prepared_call_invalid_reason="malformed",
                     )
                 return PlaneHostResult(
                     request_ref=replay.request_ref,
@@ -1432,7 +1508,17 @@ class PlaneGatewayHostPort:
                 "A prepared work-item read is pending; invoke its returned workItemReadCall before another workspace search",
             )
         if "preparedCallRef" in call.input and operation_id != "work_item.read":
-            return self._error(call, "PREPARED_CALL_INVALID", "Prepared reference is only valid for work-item reads")
+            return self._error(
+                call,
+                "PREPARED_CALL_INVALID",
+                "Prepared reference is only valid for work-item reads",
+                output={
+                    "shapeDiagnostic": _prepared_shape_diagnostic(
+                        call.input, "malformed"
+                    )
+                },
+                prepared_call_invalid_reason="malformed",
+            )
         operation_input = call.input
         prepared_ref: str | None = None
         if operation_id == "work_item.read":

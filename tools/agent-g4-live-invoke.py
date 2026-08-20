@@ -200,6 +200,89 @@ def _bounded_child_diagnostic(value):
         return None
     return dict(value)
 
+
+_PREPARED_DIAGNOSTIC_FORMS = frozenset(
+    {"canonical_ref", "ready_to_call", "unrecognized"}
+)
+_PREPARED_DIAGNOSTIC_FAILURES = frozenset(
+    {"malformed", "unknown", "digest_mismatch", "binding_mismatch"}
+)
+_PREPARED_DIAGNOSTIC_VALUE_TYPES = frozenset(
+    {"null", "boolean", "string", "integer", "number", "object", "array", "unknown"}
+)
+_PREPARED_DIAGNOSTIC_SIZE_CLASSES = frozenset({"small", "medium", "large", "unknown"})
+_PREPARED_DIAGNOSTIC_SENSITIVE_KEYS = frozenset(
+    {"auth", "credential", "key", "password", "secret", "token"}
+)
+
+
+def _bounded_prepared_shape_key(value):
+    if not isinstance(value, str) or not value or len(value) > 64:
+        return None
+    lowered = value.casefold()
+    if any(part in lowered for part in _PREPARED_DIAGNOSTIC_SENSITIVE_KEYS):
+        return None
+    allowed = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-"
+    if any(char not in allowed for char in value):
+        return None
+    parts = value.split("-")
+    if len(parts) == 5 and [len(part) for part in parts] == [8, 4, 4, 4, 12]:
+        if all(char in "0123456789abcdefABCDEF" for part in parts for char in part):
+            return None
+    if len(value) >= 32 and all(char in "0123456789abcdefABCDEF" for char in value):
+        return None
+    return value
+
+
+def _bounded_prepared_shape_diagnostic(value):
+    """Retain only finite shape metadata; never accept raw prepared values."""
+
+    fields = {"schemaVersion", "acceptedForm", "failureClass", "shape"}
+    shape_fields = {"keyNames", "keyNamesTruncated", "valueTypes", "nestingDepth", "sizeClass"}
+    if not isinstance(value, dict) or set(value) != fields:
+        return None
+    if (
+        value.get("schemaVersion") != "plane.prepared-call-shape/v1"
+        or value.get("acceptedForm") not in _PREPARED_DIAGNOSTIC_FORMS
+        or value.get("failureClass") not in _PREPARED_DIAGNOSTIC_FAILURES
+    ):
+        return None
+    shape = value.get("shape")
+    if not isinstance(shape, dict) or set(shape) != shape_fields:
+        return None
+    key_names = shape.get("keyNames")
+    value_types = shape.get("valueTypes")
+    if (
+        not isinstance(key_names, list)
+        or len(key_names) > 16
+        or any(_bounded_prepared_shape_key(item) != item for item in key_names)
+        or len(set(key_names)) != len(key_names)
+        or type(shape.get("keyNamesTruncated")) is not bool
+        or not isinstance(value_types, list)
+        or len(value_types) > len(_PREPARED_DIAGNOSTIC_VALUE_TYPES)
+        or any(
+            not isinstance(item, str) or item not in _PREPARED_DIAGNOSTIC_VALUE_TYPES
+            for item in value_types
+        )
+        or len(set(value_types)) != len(value_types)
+        or type(shape.get("nestingDepth")) is not int
+        or not 0 <= shape["nestingDepth"] <= 8
+        or shape.get("sizeClass") not in _PREPARED_DIAGNOSTIC_SIZE_CLASSES
+    ):
+        return None
+    return {
+        "schemaVersion": "plane.prepared-call-shape/v1",
+        "acceptedForm": value["acceptedForm"],
+        "failureClass": value["failureClass"],
+        "shape": {
+            "keyNames": list(key_names),
+            "keyNamesTruncated": shape["keyNamesTruncated"],
+            "valueTypes": list(value_types),
+            "nestingDepth": shape["nestingDepth"],
+            "sizeClass": shape["sizeClass"],
+        },
+    }
+
 _LIVE_USAGE_KEYS = ("inputTokens", "outputTokens", "durationMs")
 _THRESHOLD_KEYS = frozenset(
     {"permittedSuccessRateMin", "deniedRejectionRateMin", "maxLatencyP95Ms", "maxErrorRate"}
@@ -1134,7 +1217,9 @@ def build_failure_evidence(
         diagnostic_fields = {"callbackPhase", "operationRefDigest"}
         failure_classes = {"transport_unavailable", "callback_exception"}
         if not isinstance(value, dict) or set(value).difference(
-            required | diagnostic_fields | {"preparedCallInvalidReason", "failureClass"}
+            required
+            | diagnostic_fields
+            | {"preparedCallInvalidReason", "failureClass", "shapeDiagnostic"}
         ):
             return None
         if not required.issubset(value):
@@ -1188,6 +1273,13 @@ def build_failure_evidence(
             if error_code != "PREPARED_CALL_INVALID" or reason not in prepared_call_reasons:
                 return None
             bounded["preparedCallInvalidReason"] = reason
+        if "shapeDiagnostic" in value:
+            if error_code != "PREPARED_CALL_INVALID":
+                return None
+            shape_diagnostic = _bounded_prepared_shape_diagnostic(value["shapeDiagnostic"])
+            if shape_diagnostic is None:
+                return None
+            bounded["shapeDiagnostic"] = shape_diagnostic
         if present_diagnostic_fields:
             if value["callbackPhase"] not in {
                 "before_host_call",
@@ -1554,7 +1646,7 @@ def _supervisor_failure_reason(output):
         if not isinstance(value, dict) or set(value).difference(
             host_failure_fields
             | host_failure_diagnostic_fields
-            | {"preparedCallInvalidReason", "failureClass"}
+            | {"preparedCallInvalidReason", "failureClass", "shapeDiagnostic"}
         ) or not host_failure_fields.issubset(value):
             return None
         if value["status"] not in {"denied", "conflict", "unavailable", "invalid"}:
@@ -1581,6 +1673,13 @@ def _supervisor_failure_reason(output):
             if value["errorCode"] != "PREPARED_CALL_INVALID" or reason not in prepared_call_reasons:
                 return None
             bounded["preparedCallInvalidReason"] = reason
+        if "shapeDiagnostic" in value:
+            if value["errorCode"] != "PREPARED_CALL_INVALID":
+                return None
+            shape_diagnostic = _bounded_prepared_shape_diagnostic(value["shapeDiagnostic"])
+            if shape_diagnostic is None:
+                return None
+            bounded["shapeDiagnostic"] = shape_diagnostic
         diagnostic_fields = set(value).intersection(host_failure_diagnostic_fields)
         if diagnostic_fields and diagnostic_fields != host_failure_diagnostic_fields:
             return None

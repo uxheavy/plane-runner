@@ -2735,12 +2735,39 @@ class G4ContractTests(unittest.TestCase):
             "errorCode": "PREPARED_CALL_INVALID",
             "codeModePhase": "unavailable",
             "preparedCallInvalidReason": "binding_mismatch",
+            "shapeDiagnostic": {
+                "schemaVersion": "plane.prepared-call-shape/v1",
+                "acceptedForm": "canonical_ref",
+                "failureClass": "binding_mismatch",
+                "shape": {
+                    "keyNames": ["preparedCallRef"],
+                    "keyNamesTruncated": False,
+                    "valueTypes": ["object", "string"],
+                    "nestingDepth": 1,
+                    "sizeClass": "small",
+                },
+            },
         }
         receipt["semanticDigest"] = _semantic_digest(receipt)
         temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt, separators=(",", ":")))
         self.addCleanup(temp.cleanup)
         self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
 
+        receipt["failure"]["hostOperationFailure"]["shapeDiagnostic"]["shape"]["keyNames"] = [
+            "550e8400-e29b-41d4-a716-446655440000"
+        ]
+        receipt["semanticDigest"] = _semantic_digest(receipt)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt, separators=(",", ":")))
+        self.addCleanup(temp.cleanup)
+        with self.assertRaisesRegex(
+            ContractError,
+            "evidence_host_operation_failure_shape_diagnostic_invalid",
+        ):
+            validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
+
+        receipt["failure"]["hostOperationFailure"]["shapeDiagnostic"]["shape"]["keyNames"] = [
+            "preparedCallRef"
+        ]
         receipt["failure"]["hostOperationFailure"]["preparedCallInvalidReason"] = "raw-provider-message"
         receipt["semanticDigest"] = _semantic_digest(receipt)
         temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt, separators=(",", ":")))
@@ -2761,6 +2788,18 @@ class G4ContractTests(unittest.TestCase):
             "status": "invalid",
             "errorCode": "PREPARED_CALL_INVALID",
             "codeModePhase": "unavailable",
+            "shapeDiagnostic": {
+                "schemaVersion": "plane.prepared-call-shape/v1",
+                "acceptedForm": "canonical_ref",
+                "failureClass": "malformed",
+                "shape": {
+                    "keyNames": ["preparedCallRef"],
+                    "keyNamesTruncated": False,
+                    "valueTypes": ["object", "string"],
+                    "nestingDepth": 1,
+                    "sizeClass": "small",
+                },
+            },
             "callbackPhase": "host_return",
             "operationRefDigest": hashlib.sha256("operation:work_item.read".encode()).hexdigest(),
         }
@@ -3157,7 +3196,11 @@ class G4ContractTests(unittest.TestCase):
                 '"operationId":"work_item.read","attemptRef":"host-request:opaque",'
                 '"receiptRef":"unavailable","status":"invalid",'
                 '"errorCode":"PREPARED_CALL_INVALID","codeModePhase":"unavailable",'
-                '"preparedCallInvalidReason":"malformed"}}'
+                '"preparedCallInvalidReason":"malformed","shapeDiagnostic":{'
+                '"schemaVersion":"plane.prepared-call-shape/v1",'
+                '"acceptedForm":"canonical_ref","failureClass":"malformed","shape":{'
+                '"keyNames":["preparedCallRef"],"keyNamesTruncated":false,'
+                '"valueTypes":["object","string"],"nestingDepth":1,"sizeClass":"small"}}}}'
             ),
         )
 
@@ -3171,6 +3214,18 @@ class G4ContractTests(unittest.TestCase):
                 "errorCode": "PREPARED_CALL_INVALID",
                 "codeModePhase": "unavailable",
                 "preparedCallInvalidReason": "malformed",
+                "shapeDiagnostic": {
+                    "schemaVersion": "plane.prepared-call-shape/v1",
+                    "acceptedForm": "canonical_ref",
+                    "failureClass": "malformed",
+                    "shape": {
+                        "keyNames": ["preparedCallRef"],
+                        "keyNamesTruncated": False,
+                        "valueTypes": ["object", "string"],
+                        "nestingDepth": 1,
+                        "sizeClass": "small",
+                    },
+                },
             },
         )
 
