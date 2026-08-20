@@ -2596,7 +2596,25 @@ def reconcile_outcome_unknown(run, *, idempotency_key, operator):
         return value if isinstance(value, str) and value else None
 
     outcome_ref = result_ref(submit, "outcome", "outcomeRef")
+    publish_outcome_ref = result_ref(publish, "outcome", "outcomeRef")
     publication_ref = result_ref(publish, "outcome", "productEventRef")
+    if publish is not None:
+        if publish_outcome_ref != outcome_ref or publication_ref is None:
+            raise IdempotencyConflictError("Outcome publication is not bound to the submitted outcome")
+        publish_audited = OperationGatewayAudit.objects.filter(
+            invocation_id=invocation.pk,
+            request_id=publish.request_id,
+            operation_id="agent.outcome.publish",
+            workspace_id=locked_run.workspace_id,
+            workspace_slug=publish.workspace_slug,
+            caller_id=publish.caller_id,
+            idempotency_key=publish.idempotency_key,
+            correlation_id=publish.correlation_id,
+            request_digest=publish.request_digest,
+            outcome=OperationGatewayAudit.Outcome.SUCCESS,
+        ).exists()
+        if not publish_audited:
+            raise AgentDomainError("Successful outcome publication has no matching success audit")
     outcome = None
     if outcome_ref and outcome_ref.startswith("outcome-submission:"):
         try:

@@ -78,6 +78,7 @@ from plane.db.models import (
     RuntimeInvocation,
     RuntimeProviderAttempt,
     RuntimeProviderAttemptPhase,
+    RuntimeReconciliation,
     ProfileVersion,
 )
 from plane.db.models.operation_gateway import OperationGatewayAudit, OperationGatewayIdempotency
@@ -1600,6 +1601,64 @@ def test_reconcile_submit_success_without_terminal_result_is_explicitly_unsafe(
         idempotency_key="idempotency:reconcile-decision",
         operator=create_user,
     ).pk == reconciliation.pk
+    assert RuntimeInvocation.objects.filter(run=run).count() == 1
+    assert OperationGatewayIdempotency.objects.filter(invocation_id=invocation.pk).count() == 1
+
+
+@pytest.mark.django_db
+def test_reconcile_rejects_mismatched_successful_publication(assignment, profile, create_user):
+    run = create_run(assignment, profile, idempotency_key="idempotency:mismatch-run")
+    invocation = record_invocation(run, idempotency_key="idempotency:mismatch-invocation")
+    transition_run(run, RunState.OUTCOME_UNKNOWN)
+    outcome = OutcomeSubmission.objects.create(
+        workspace=run.workspace, project=run.project, run=run, summary="Submitted", artifacts=[], evidence=[]
+    )
+    other_outcome = f"outcome-submission:{uuid4()}"
+    for operation_id, key, result in (
+        (
+            "agent.outcome.submit",
+            "gateway:mismatch-submit",
+            {"outcome": {"outcomeRef": f"outcome-submission:{outcome.id}"}},
+        ),
+        (
+            "agent.outcome.publish",
+            "gateway:mismatch-publish",
+            {
+                "published": True,
+                "outcome": {"outcomeRef": other_outcome, "productEventRef": "product-event:mismatch"},
+            },
+        ),
+    ):
+        receipt = OperationGatewayIdempotency.objects.create(
+            invocation_id=invocation.pk,
+            operation_id=operation_id,
+            workspace_id=run.workspace_id,
+            workspace_slug=run.workspace.slug,
+            caller_id=create_user.id,
+            idempotency_key=key,
+            correlation_id="correlation:mismatch",
+            request_digest=("b" if operation_id.endswith("submit") else "c") * 64,
+            state=OperationGatewayIdempotency.State.SUCCEEDED,
+            request_input={},
+            result=result,
+        )
+        OperationGatewayAudit.objects.create(
+            invocation_id=invocation.pk,
+            phase=OperationGatewayAudit.Phase.OUTCOME,
+            outcome=OperationGatewayAudit.Outcome.SUCCESS,
+            request_id=receipt.request_id,
+            operation_id=operation_id,
+            workspace_id=run.workspace_id,
+            workspace_slug=run.workspace.slug,
+            caller_id=create_user.id,
+            idempotency_key=key,
+            correlation_id=receipt.correlation_id,
+            request_digest=receipt.request_digest,
+        )
+
+    with pytest.raises(IdempotencyConflictError, match="not bound"):
+        reconcile_outcome_unknown(run, idempotency_key="idempotency:mismatch-decision", operator=create_user)
+    assert RuntimeReconciliation.objects.filter(invocation=invocation).count() == 0
 
 
 @pytest.mark.django_db

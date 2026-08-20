@@ -8,9 +8,17 @@ import pytest
 from django.core.management import call_command
 
 from plane.agent import runtime
-from plane.agent.lifecycle import create_actor, create_assignment, create_profile, create_run, record_invocation
+from plane.agent.lifecycle import (
+    create_actor,
+    create_assignment,
+    create_profile,
+    create_run,
+    record_invocation,
+    transition_run,
+)
 from plane.agent.operations_readback import MAX_OPERATOR_ITEMS
-from plane.db.models import AgentRole
+from plane.db.models import AgentRole, OutcomeSubmission, RunState
+from plane.db.models.operation_gateway import OperationGatewayAudit, OperationGatewayIdempotency
 
 
 def _url(workspace, suffix):
@@ -91,6 +99,65 @@ def test_operator_readback_has_stable_pagination_and_correlation_gaps(
     )
     assert denied.status_code == 403
     assert "G4 operator worker" not in denied.content.decode("utf-8")
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
+def test_operator_reconciliation_api_is_idempotent_and_conflict_bound(api_key_client, workspace, create_user):
+    actor = create_actor(workspace=workspace, display_name="G4 reconciliation worker", created_by=create_user)
+    profile = create_profile(actor, role=AgentRole.WORKER, instructions="Reconcile one unknown run.", created_by=create_user)
+    assignment = create_assignment(
+        actor,
+        target_ref="issue:g4-reconciliation-api",
+        objective="Reconcile one unknown run.",
+        acceptance_criteria=["No replay occurs."],
+        created_by=create_user,
+    )
+    run = create_run(assignment, profile, created_by=create_user)
+    invocation = record_invocation(run, idempotency_key="idempotency:api-reconcile-invocation")
+    transition_run(run, RunState.OUTCOME_UNKNOWN)
+    outcome = OutcomeSubmission.objects.create(
+        workspace=workspace, project=run.project, run=run, summary="Submitted", artifacts=[], evidence=[]
+    )
+    receipt = OperationGatewayIdempotency.objects.create(
+        invocation_id=invocation.pk,
+        operation_id="agent.outcome.submit",
+        workspace_id=workspace.id,
+        workspace_slug=workspace.slug,
+        caller_id=create_user.id,
+        idempotency_key="gateway:api-reconcile-submit",
+        correlation_id="correlation:api-reconcile",
+        request_digest="d" * 64,
+        state=OperationGatewayIdempotency.State.SUCCEEDED,
+        request_input={},
+        result={"outcome": {"outcomeRef": f"outcome-submission:{outcome.id}"}},
+    )
+    OperationGatewayAudit.objects.create(
+        invocation_id=invocation.pk,
+        phase=OperationGatewayAudit.Phase.OUTCOME,
+        outcome=OperationGatewayAudit.Outcome.SUCCESS,
+        request_id=receipt.request_id,
+        operation_id=receipt.operation_id,
+        workspace_id=workspace.id,
+        workspace_slug=workspace.slug,
+        caller_id=create_user.id,
+        idempotency_key=receipt.idempotency_key,
+        correlation_id=receipt.correlation_id,
+        request_digest=receipt.request_digest,
+    )
+    payload = {"run_id": str(run.id), "idempotency_key": "idempotency:api-reconcile-decision"}
+    first = api_key_client.post(_url(workspace, "reconcile/"), payload, format="json")
+    second = api_key_client.post(_url(workspace, "reconcile/"), payload, format="json")
+    conflict = api_key_client.post(
+        _url(workspace, "reconcile/"),
+        {**payload, "idempotency_key": "idempotency:api-reconcile-other"},
+        format="json",
+    )
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["reconciliation"]["id"] == first.json()["reconciliation"]["id"]
+    assert first.json()["reconciliation"]["fresh_assignment_decision"] == "unsafe"
+    assert conflict.status_code == 409
 
 
 @pytest.mark.contract
