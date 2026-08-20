@@ -237,6 +237,25 @@ def test_prepared_invalid_host_receipt_carries_only_bounded_diagnostic():
     assert "prepared-call:unknown" not in json.dumps(evidence)
 
 
+def test_prepared_wrapper_is_rejected_on_non_read_operation():
+    class FakeHost:
+        binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
+
+        def call_operation(self, *_args, **_kwargs):
+            raise AssertionError("prepared input must not reach another operation")
+
+    result = PlaneGatewayHostPort(FakeHost()).invoke(
+        _call(
+            operationRef="operation:work_item.rename",
+            input={"input": {"preparedCallRef": "prepared-call:unknown"}},
+        )
+    )
+
+    assert result.status == "invalid"
+    assert result.error_code == "PREPARED_CALL_INVALID"
+    assert result.prepared_call_invalid_reason == "malformed"
+
+
 def test_http_host_distinguishes_callback_exception_after_successful_search():
     def invoke(call):
         if call.operation_ref == "operation:work_item.read":
@@ -404,7 +423,7 @@ def test_gateway_host_preserves_valid_search_to_prepared_read_handoff():
     read = port.invoke(
         _call(
             operationRef=read_call["operationRef"],
-            input=read_call["input"],
+            input={"input": read_call["input"]},
         )
     )
 

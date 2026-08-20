@@ -53,6 +53,9 @@ MAX_HOST_OBSERVATION_CALLS = MAX_PROVIDER_ATTEMPT_SEQUENCE * MAX_PROVIDER_ATTEMP
 MAX_HOST_OPERATION_REF_BYTES = 256
 MAX_HOST_CONTENT_BYTES = 4 * 1024
 MAX_PREPARED_CALLS = MAX_HOST_CALLS * 20
+MAX_PREPARED_CALL_NORMALIZATION_BYTES = 1024
+MAX_PREPARED_CALL_NORMALIZATION_DEPTH = 3
+MAX_PREPARED_CALL_NORMALIZATION_NODES = 16
 _ACTIONS = {"discover", "read", "mutate", "code", "publish", "observe"}
 _SOURCES = {"model", "code", "runtime"}
 _RESULT_STATUSES = {"ok", "replayed", "denied", "conflict", "unavailable", "invalid"}
@@ -111,6 +114,78 @@ class PreparedCallRegistry:
         with self.lock:
             return any(not record["consumed"] for record in self.records.values())
 
+    @staticmethod
+    def contains_prepared_ref(value: Any, depth: int = 0) -> bool:
+        if depth > MAX_PREPARED_CALL_NORMALIZATION_DEPTH:
+            return True
+        if isinstance(value, Mapping):
+            return any(
+                key == "preparedCallRef"
+                or PreparedCallRegistry.contains_prepared_ref(child, depth + 1)
+                for key, child in value.items()
+            )
+        if isinstance(value, list):
+            return any(
+                PreparedCallRegistry.contains_prepared_ref(child, depth + 1)
+                for child in value
+            )
+        return False
+
+    @staticmethod
+    def normalize(input_data: Mapping[str, Any]) -> Mapping[str, Any]:
+        """Accept one bounded wrapper around the opaque prepared-call ref."""
+
+        if not PreparedCallRegistry.contains_prepared_ref(input_data):
+            return input_data
+        try:
+            encoded = _canonical(input_data, "prepared work-item read input")
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise PreparedCallInvalid("malformed") from exc
+        if len(encoded) > MAX_PREPARED_CALL_NORMALIZATION_BYTES:
+            raise PreparedCallInvalid("malformed")
+
+        refs: list[str] = []
+        node_count = 0
+
+        def visit(value: Any, depth: int) -> None:
+            nonlocal node_count
+            if depth > MAX_PREPARED_CALL_NORMALIZATION_DEPTH:
+                raise PreparedCallInvalid("malformed")
+            node_count += 1
+            if node_count > MAX_PREPARED_CALL_NORMALIZATION_NODES:
+                raise PreparedCallInvalid("malformed")
+            if not isinstance(value, Mapping) or not value:
+                raise PreparedCallInvalid("malformed")
+            for key, child in value.items():
+                if key == "preparedCallRef":
+                    if isinstance(child, str):
+                        try:
+                            _text(child, "host.preparedCallRef", MAX_PREPARED_CALL_REF_BYTES)
+                        except PlaneHostRPCError as exc:
+                            raise PreparedCallInvalid("malformed") from exc
+                        if not child.startswith(PREPARED_CALL_PREFIX):
+                            raise PreparedCallInvalid("malformed")
+                        refs.append(child)
+                    elif isinstance(child, Mapping):
+                        visit(child, depth + 1)
+                    else:
+                        raise PreparedCallInvalid("malformed")
+                elif key == "action":
+                    if child != "read":
+                        raise PreparedCallInvalid("malformed")
+                elif key == "operationRef":
+                    if child != "operation:work_item.read":
+                        raise PreparedCallInvalid("malformed")
+                elif key in {"input", "workItemReadCall"}:
+                    visit(child, depth + 1)
+                else:
+                    raise PreparedCallInvalid("malformed")
+
+        visit(input_data, 0)
+        if len(refs) != 1:
+            raise PreparedCallInvalid("malformed")
+        return {"preparedCallRef": refs[0]}
+
     def resolve(
         self,
         input_data: Mapping[str, Any],
@@ -118,17 +193,10 @@ class PreparedCallRegistry:
         correlation_id: str | None = None,
         idempotency_key: str | None = None,
     ) -> Mapping[str, Any]:
-        if "preparedCallRef" not in input_data:
-            return input_data
-        if set(input_data) != {"preparedCallRef"}:
-            raise PreparedCallInvalid("malformed")
-        prepared_ref = input_data["preparedCallRef"]
-        if not isinstance(prepared_ref, str) or not prepared_ref.startswith(PREPARED_CALL_PREFIX):
-            raise PreparedCallInvalid("malformed")
-        try:
-            _text(prepared_ref, "host.preparedCallRef", MAX_PREPARED_CALL_REF_BYTES)
-        except PlaneHostRPCError as exc:
-            raise PreparedCallInvalid("malformed") from exc
+        normalized_input = self.normalize(input_data)
+        if "preparedCallRef" not in normalized_input:
+            return normalized_input
+        prepared_ref = normalized_input["preparedCallRef"]
         with self.lock:
             record = self.records.get(prepared_ref)
             prepared_input = record.get("input") if record is not None else None
@@ -1588,7 +1656,10 @@ class PlaneGatewayHostPort:
                 "VALIDATION_ERROR",
                 "A prepared work-item read is pending; invoke its returned workItemReadCall before another workspace search",
             )
-        if "preparedCallRef" in call.input and operation_id != "work_item.read":
+        if (
+            self._prepared_call_registry.contains_prepared_ref(call.input)
+            and operation_id != "work_item.read"
+        ):
             return self._error(
                 call,
                 "PREPARED_CALL_INVALID",
@@ -1604,9 +1675,10 @@ class PlaneGatewayHostPort:
         prepared_ref: str | None = None
         if operation_id == "work_item.read":
             try:
-                if "preparedCallRef" in call.input:
-                    prepared_ref = call.input.get("preparedCallRef")
-                operation_input = self._resolve_prepared_read_input(call.input)
+                operation_input = self._normalize_prepared_read_input(call.input)
+                if "preparedCallRef" in operation_input:
+                    prepared_ref = operation_input["preparedCallRef"]
+                operation_input = self._resolve_prepared_read_input(operation_input)
                 if prepared_ref is not None:
                     replay = self._bind_or_replay_prepared_call(call, prepared_ref)
                     if replay is not None:
@@ -1693,6 +1765,9 @@ class PlaneGatewayHostPort:
 
     def _resolve_prepared_read_input(self, input_data: Mapping[str, Any]) -> Mapping[str, Any]:
         return self._prepared_call_registry.resolve(input_data)
+
+    def _normalize_prepared_read_input(self, input_data: Mapping[str, Any]) -> Mapping[str, Any]:
+        return self._prepared_call_registry.normalize(input_data)
 
     def _bind_or_replay_prepared_call(
         self, call: PlaneHostCall, prepared_ref: str
