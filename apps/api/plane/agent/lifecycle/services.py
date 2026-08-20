@@ -124,6 +124,25 @@ def _lock_assignment_run(run_id):
     return assignment, run
 
 
+def _require_safe_reconciliation(source):
+    """Allow a new run from an unknown attempt only after one safe decision."""
+
+    if source.state != RunState.OUTCOME_UNKNOWN:
+        return
+    reconciliations = list(
+        RuntimeReconciliation.objects.select_for_update().select_related("invocation").filter(run_id=source.pk)
+    )
+    if (
+        len(reconciliations) != 1
+        or reconciliations[0].invocation.invocation_id != source.last_invocation_id
+        or reconciliations[0].state != ReconciliationState.RECONCILED
+        or reconciliations[0].fresh_assignment_decision != FreshAssignmentDecision.SAFE
+    ):
+        raise RecoveryIntentRequiredError(
+            "An outcome-unknown run requires one SAFE runtime reconciliation before a fresh or recovery run"
+        )
+
+
 def lock_invocation_path(invocation_id):
     """Lock assignment, run, and invocation before runtime control or terminal rows.
 
@@ -1757,6 +1776,8 @@ def create_run(
         )
     if recovery_intent is not None and recovery_of is None:
         raise RecoveryIntentRequiredError("Recovery intent requires an outcome-unknown source run")
+    if source is not None:
+        _require_safe_reconciliation(source)
 
     previous_terminal = RunAttempt.objects.filter(
         assignment=locked_assignment,
