@@ -758,6 +758,17 @@ def test_manager_m03_m04_satisfied_route_returns_before_later_cells() -> None:
     assert 'if not scenario_gate["passed"]:' in invoke
 
 
+def test_manager_m05_m06_satisfied_route_returns_before_later_cells() -> None:
+    route = (TOOLS / "agent_g4_manager_route.py").read_text(encoding="utf-8")
+    m05_m06_return = route.index('if selected_route_ids <= {"M05", "M06"}:')
+    m07_start = route.index("# M07:", m05_m06_return)
+
+    selected = route[m05_m06_return:m07_start]
+    assert "return {" in selected
+    assert '("M05", m05)' in selected
+    assert '("M06", m06)' in selected
+
+
 def test_manager_synthetic_fixture_stays_outside_the_production_agent_package() -> None:
     fixture = TOOLS / "agent_g4_manager_route.py"
     production = TOOLS.parent / "apps" / "api" / "plane" / "agent" / "manager_route.py"

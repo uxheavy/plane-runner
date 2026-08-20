@@ -478,6 +478,20 @@ def _exercise_manager_journey(
         "staleApprovalDenied": stale_approval_denied,
     }
 
+    # M05/M06 is a complete selected commission.  Stop at its terminal route
+    # boundary so later chief-of-staff setup cannot turn satisfied review/HR
+    # evidence into a generic runner failure.
+    if selected_route_ids <= {"M05", "M06"}:
+        return {
+            "routes": {
+                route_id: route
+                for route_id, route in (("M05", m05), ("M06", m06))
+                if route_id in selected_route_ids
+            }
+            | {"replay": {"stateMutations": 0}},
+            "readback": _manager_readback(workspace),
+        }
+
     # M07: chief-of-staff provisioning copies only the subject's live
     # membership at decision time and cannot be approved by the HR bot.
     subject = _synthetic_human(workspace, suffix=suffix, role=10)
