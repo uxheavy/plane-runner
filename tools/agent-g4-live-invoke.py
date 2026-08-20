@@ -2445,6 +2445,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
             if not scenario_gate["passed"]:
                 raise RuntimeError("Worker route expectations failed: " + ",".join(scenario_gate["failures"]))
         if scenario is not None and scenario.scenario_id == "manager":
+            manager_route_checks = set((scenario.expected or {}).get("routeChecks", ()))
             manager_route_evidence, manager_route_failures = build_manager_route_evidence(
                 workspace=workspace,
                 project=project,
@@ -2454,6 +2455,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                 hr=related_actors["actor:hr"],
                 human_admin=user,
                 suffix=suffix,
+                route_checks=manager_route_checks,
             )
             scenario_actual["routeEvidence"] = manager_route_evidence
             scenario_gate["failures"].extend(manager_route_failures)

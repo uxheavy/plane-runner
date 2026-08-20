@@ -83,6 +83,41 @@ def _digest(value: object) -> str:
     ).hexdigest()
 
 
+def _manager_readback(workspace: Workspace) -> dict[str, object]:
+    """Return the bounded readback required by the selected route cell."""
+
+    governance = build_governance_readback(workspace, limit=64)
+    all_assignments = AssignmentContract.objects.filter(workspace=workspace)
+    all_outcomes = OutcomeSubmission.objects.filter(workspace=workspace)
+    all_events = RunTerminalEvent.objects.filter(workspace=workspace, visible=True)
+    artifact_outcomes = [
+        outcome
+        for outcome in all_outcomes
+        if outcome.artifacts and outcome.evidence
+    ]
+    outcome_event_agreement = all(
+        all_events.filter(run=outcome.run, kind="outcome_submission").count() == 1
+        for outcome in all_outcomes
+    )
+    return {
+        "assignmentCount": all_assignments.count(),
+        "childAssignmentCount": all_assignments.filter(lineage_of__isnull=False).count(),
+        "outcomeCount": all_outcomes.count(),
+        "artifactOutcomeCount": len(artifact_outcomes),
+        "terminalEventCount": all_events.count(),
+        "governanceReadbackDigest": _digest(
+            {
+                "assignments": governance["assignments"],
+                "hrProposals": governance["hr_proposals"],
+                "evaluatorReviews": governance["evaluator_reviews"],
+                "outcomeCount": all_outcomes.count(),
+                "terminalEventCount": all_events.count(),
+                "outcomeEventAgreement": outcome_event_agreement,
+            }
+        ),
+    }
+
+
 @transaction.atomic
 def _exercise_manager_journey(
     *,
@@ -94,6 +129,7 @@ def _exercise_manager_journey(
     hr,
     human_admin: User,
     suffix: str,
+    route_checks: set[str] | None = None,
 ) -> dict[str, object]:
     """Create one disposable, provider-free M01-M08 evidence graph."""
 
@@ -158,6 +194,23 @@ def _exercise_manager_journey(
         and child_run.actor_id == worker.id
         and child_run.snapshot["assignment"]["assignmentRef"] == f"assignment:{delegated_child.id}",
     }
+
+    # A selected commission owns only its declared route cell.  In
+    # particular, M01/M02 must not enter the later M03-M08 fixture transaction:
+    # a failure in an unrelated synthetic route would roll back this evidence
+    # and incorrectly turn a satisfied Plane commission into a generic runner
+    # failure.
+    selected_route_ids = set(route_checks) if route_checks is not None else set(_ROUTE_IDS)
+    if selected_route_ids <= {"M01", "M02"}:
+        return {
+            "routes": {
+                route_id: route
+                for route_id, route in (("M01", m01), ("M02", m02))
+                if route_id in selected_route_ids
+            }
+            | {"replay": {"stateMutations": 0}},
+            "readback": _manager_readback(workspace),
+        }
 
     # M03: cancellation reconciles both queued and active descendants.  The
     # outcome callback is attempted after cancellation and must fail closed.
@@ -487,6 +540,8 @@ def _exercise_manager_journey(
     }
 
     routes = {"M01": m01, "M02": m02, "M03": m03, "M04": m04, "M05": m05, "M06": m06, "M07": m07, "M08": m08}
+    if route_checks is not None:
+        routes = {route_id: routes[route_id] for route_id in _ROUTE_IDS if route_id in route_checks}
     routes["replay"] = {"stateMutations": 0}
     return {
         "routes": routes,
@@ -504,11 +559,13 @@ def _exercise_manager_journey(
 def build_manager_route_evidence(**kwargs) -> tuple[dict[str, object], list[str]]:
     """Return bounded Manager evidence and deterministic route failures."""
 
+    route_checks = kwargs.get("route_checks")
     evidence = _exercise_manager_journey(**kwargs)
     routes = evidence["routes"]
+    selected_route_ids = set(route_checks) if route_checks is not None else set(_ROUTE_IDS)
     failures = [
         route_id
-        for route_id in _ROUTE_IDS
+        for route_id in selected_route_ids
         if not _all_true(routes[route_id])
     ]
     return evidence, failures

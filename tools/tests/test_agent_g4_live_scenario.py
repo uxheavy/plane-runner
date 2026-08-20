@@ -603,6 +603,21 @@ def test_manager_route_validator_requires_all_bounded_routes() -> None:
     validator._validate_scenario_projection(projection)
 
 
+def test_manager_commission_scopes_fixture_to_declared_route_checks() -> None:
+    descriptor = json.loads((TOOLS / "agent-g4-manager-v1.json").read_text(encoding="utf-8"))
+    parsed = scenario.parse_descriptor_bytes(*descriptor_bytes(descriptor))
+    selected = scenario.select_runtime_descriptor(parsed, "planning-delegation")
+    assert selected.expected["routeChecks"] == ["M01", "M02"]
+
+    invoke = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+    route = (TOOLS / "agent_g4_manager_route.py").read_text(encoding="utf-8")
+    assert "route_checks=manager_route_checks" in invoke
+    scope_start = route.index("selected_route_ids = set(route_checks)")
+    later_route = route.index("# M03:", scope_start)
+    assert "if selected_route_ids <= {\"M01\", \"M02\"}:" in route[scope_start:later_route]
+    assert "route_checks is not None" in route[route.index("def build_manager_route_evidence"):]
+
+
 def test_manager_synthetic_fixture_stays_outside_the_production_agent_package() -> None:
     fixture = TOOLS / "agent_g4_manager_route.py"
     production = TOOLS.parent / "apps" / "api" / "plane" / "agent" / "manager_route.py"
