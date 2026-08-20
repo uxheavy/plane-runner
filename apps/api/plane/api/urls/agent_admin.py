@@ -17,6 +17,7 @@ from plane.api.views.agent_admin import (
     AgentOperatorCanaryAPIEndpoint,
     AgentOperatorHealthAPIEndpoint,
     AgentOperatorReadbackAPIEndpoint,
+    AgentOperatorOutcomeReconciliationAPIEndpoint,
     AgentOperatorSafetyStopAPIEndpoint,
     AgentOutcomeAcceptAPIEndpoint,
     AgentOutcomeAdminCreateAPIEndpoint,
@@ -176,6 +177,11 @@ urlpatterns = [
         "workspaces/<str:slug>/agent-admin/operator/safety-stop/",
         AgentOperatorSafetyStopAPIEndpoint.as_view(http_method_names=["post"]),
         name="agent-admin-operator-safety-stop",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-admin/operator/reconcile/",
+        AgentOperatorOutcomeReconciliationAPIEndpoint.as_view(http_method_names=["post"]),
+        name="agent-admin-operator-reconcile",
     ),
     path(
         "workspaces/<str:slug>/agent-admin/actors/<uuid:actor_id>/memory/",

@@ -54,12 +54,16 @@ from plane.db.models import (
     RuntimeExitEvidence,
     RuntimeProviderAttempt,
     RuntimeProviderAttemptPhase,
+    RuntimeReconciliation,
+    FreshAssignmentDecision,
+    ReconciliationState,
     RuntimeUsageObservation,
     HRProposalKind,
     HRProposalState,
     TerminalEventKind,
     TerminalEventSource,
 )
+from plane.db.models.operation_gateway import OperationGatewayAudit, OperationGatewayIdempotency
 from plane.db.models.project import ProjectMember
 from plane.db.models.user import User
 from plane.db.models.workspace import WorkspaceMember
@@ -2550,6 +2554,110 @@ def reconcile_provider_attempts(invocation):
 
 def provider_attempts_reconciled(invocation) -> bool:
     return not RuntimeProviderAttempt.objects.filter(invocation=invocation, terminal_at__isnull=True).exists()
+
+
+@transaction.atomic
+def reconcile_outcome_unknown(run, *, idempotency_key, operator):
+    """Record a Plane-only decision from durable receipts; never dispatch or replay."""
+
+    _ensure_human_workspace_admin(run.workspace, operator)
+    _assignment, locked_run = _lock_assignment_run(run.pk)
+    if not locked_run.last_invocation_id:
+        raise RecoveryIntentRequiredError("Outcome-unknown reconciliation requires an invocation")
+    invocation = RuntimeInvocation.objects.select_for_update().get(invocation_id=locked_run.last_invocation_id)
+    control = RuntimeInvocationControl.objects.select_for_update().filter(invocation=invocation).first()
+    if locked_run.state != RunState.OUTCOME_UNKNOWN and not (
+        control and control.state == RuntimeControlState.OUTCOME_UNKNOWN
+    ):
+        raise RecoveryIntentRequiredError("Run has no outcome-unknown state to reconcile")
+    if not isinstance(idempotency_key, str) or not idempotency_key or len(idempotency_key.encode("utf-8")) > 128:
+        raise AgentDomainError("Reconciliation idempotency_key is invalid")
+    existing = RuntimeReconciliation.objects.select_for_update().filter(invocation=invocation).first()
+    if existing is not None:
+        if existing.idempotency_key != idempotency_key:
+            raise IdempotencyConflictError("Reconciliation is already bound to another idempotency key")
+        return existing
+
+    receipts = list(
+        OperationGatewayIdempotency.objects.filter(
+            invocation_id=invocation.pk,
+            operation_id__in=("agent.outcome.submit", "agent.outcome.publish"),
+        ).order_by("created_at", "id")
+    )
+    submit = next((row for row in receipts if row.operation_id == "agent.outcome.submit" and row.state == "succeeded"), None)
+    publish = next((row for row in receipts if row.operation_id == "agent.outcome.publish" and row.state == "succeeded"), None)
+
+    def result_ref(receipt, *path):
+        value = receipt.result if receipt is not None else None
+        for key in path:
+            if not isinstance(value, dict):
+                return None
+            value = value.get(key)
+        return value if isinstance(value, str) and value else None
+
+    outcome_ref = result_ref(submit, "outcome", "outcomeRef")
+    publication_ref = result_ref(publish, "outcome", "productEventRef")
+    outcome = None
+    if outcome_ref and outcome_ref.startswith("outcome-submission:"):
+        try:
+            outcome = OutcomeSubmission.objects.filter(
+                run=locked_run, pk=outcome_ref.removeprefix("outcome-submission:")
+            ).first()
+        except (TypeError, ValueError):
+            outcome = None
+    terminal = RunTerminalEvent.objects.filter(invocation=invocation, visible=True).first()
+    runtime_exit = RuntimeExitEvidence.objects.filter(invocation=invocation).first()
+    provider_initiated = RuntimeProviderAttempt.objects.filter(invocation=invocation, upstream_initiated=True).exists()
+    submit_audited = bool(
+        submit
+        and OperationGatewayAudit.objects.filter(
+            invocation_id=invocation.pk,
+            request_id=submit.request_id,
+            operation_id="agent.outcome.submit",
+            outcome=OperationGatewayAudit.Outcome.SUCCESS,
+        ).exists()
+    )
+    evidence = {
+        "submitReceipt": submit.state if submit else None,
+        "submitAudit": submit_audited,
+        "publishReceipt": publish.state if publish else None,
+        "outcomeBound": outcome is not None,
+        "publicationBound": publication_ref is not None,
+        "terminalBound": terminal is not None,
+        "runtimeExitBound": runtime_exit is not None,
+        "providerInitiated": provider_initiated,
+        "replay": False,
+    }
+    fresh_safe = bool(
+        not provider_initiated
+        and submit is None
+        and publish is None
+        and terminal is not None
+        and terminal.kind != TerminalEventKind.OUTCOME_SUBMISSION
+        and runtime_exit is not None
+    )
+    fingerprint = command_fingerprint(
+        "reconcile_outcome_unknown",
+        {"runId": str(locked_run.id), "invocationId": invocation.invocation_id, "idempotencyKey": idempotency_key, "evidence": evidence},
+    )
+    return RuntimeReconciliation.objects.create(
+        workspace=locked_run.workspace,
+        project=locked_run.project,
+        invocation=invocation,
+        run=locked_run,
+        state=ReconciliationState.RECONCILED,
+        fresh_assignment_decision=FreshAssignmentDecision.SAFE if fresh_safe else FreshAssignmentDecision.UNSAFE,
+        outcome_ref=outcome_ref if outcome is not None and submit_audited else None,
+        publication_ref=publication_ref,
+        terminal_event_ref=terminal.product_event_ref if terminal else None,
+        runtime_exit_ref=f"runtime-exit:{runtime_exit.id}" if runtime_exit else None,
+        evidence=evidence,
+        idempotency_key=idempotency_key,
+        command_fingerprint=fingerprint,
+        reconciled_by=operator,
+        reconciled_at=timezone.now(),
+        created_by=operator,
+    )
 
 
 def _code_mode_usage_fields(

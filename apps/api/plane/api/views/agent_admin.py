@@ -39,6 +39,7 @@ from plane.agent.lifecycle import (
     record_invocation,
     request_revision,
     review_outcome,
+    reconcile_outcome_unknown,
 )
 from plane.api.serializers import (
     AgentActorAdminSerializer,
@@ -60,7 +61,11 @@ from plane.api.serializers import (
     RuntimeInvocationAdminSerializer,
     AgentGovernanceCommandSerializer,
 )
-from plane.api.serializers.agent_admin import AgentOperatorReadbackSerializer, AgentSafetyStopSerializer
+from plane.api.serializers.agent_admin import (
+    AgentOperatorReadbackSerializer,
+    AgentOutcomeReconciliationSerializer,
+    AgentSafetyStopSerializer,
+)
 from plane.api.views.base import BaseAPIView
 from plane.db.models import (
     AgentActor,
@@ -587,3 +592,35 @@ class AgentOperatorSafetyStopAPIEndpoint(AgentAdminAPIView):
             operator=request.user,
         )
         return Response({"control": result, "readback": build_operator_readback(workspace, limit=1)})
+
+
+class AgentOperatorOutcomeReconciliationAPIEndpoint(AgentAdminAPIView):
+    """Resolve one unknown run from durable Plane evidence only."""
+
+    def post(self, request, slug):
+        serializer = AgentOutcomeReconciliationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        run = get_object_or_404(RunAttempt, workspace=self.workspace(), pk=serializer.validated_data["run_id"])
+        try:
+            reconciliation = reconcile_outcome_unknown(
+                run,
+                idempotency_key=serializer.validated_data["idempotency_key"],
+                operator=request.user,
+            )
+        except (AgentDomainError, IdempotencyConflictError) as exc:
+            return Response({"error": {"code": "RECONCILIATION_REJECTED", "message": str(exc)}}, status=409)
+        return Response(
+            {
+                "reconciliation": {
+                    "id": str(reconciliation.id),
+                    "state": reconciliation.state,
+                    "fresh_assignment_decision": reconciliation.fresh_assignment_decision,
+                    "outcome_ref": reconciliation.outcome_ref,
+                    "publication_ref": reconciliation.publication_ref,
+                    "terminal_event_ref": reconciliation.terminal_event_ref,
+                    "runtime_exit_ref": reconciliation.runtime_exit_ref,
+                    "evidence": reconciliation.evidence,
+                },
+                "readback": build_operator_readback(self.workspace(), limit=1, run_id=str(run.id)),
+            }
+        )

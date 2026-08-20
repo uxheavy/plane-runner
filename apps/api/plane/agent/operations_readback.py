@@ -45,6 +45,7 @@ from plane.db.models import (
     RuntimeExitEvidence,
     RuntimeInvocation,
     RuntimeInvocationControl,
+    RuntimeReconciliation,
 )
 from plane.db.models.operation_gateway import OperationGatewayAudit, OperationGatewayIdempotency
 
@@ -390,6 +391,11 @@ def build_operator_readback(
     queued = [row for row in runs if row["state"] == RunState.QUEUED]
     stale = [row for row in runs if row["stale_lease"]]
     unknown = [row for row in runs if row["outcome_unknown"]]
+    reconciliations = list(
+        RuntimeReconciliation.objects.filter(workspace=workspace, run_id__in=[row["run_id"] for row in runs])
+        .select_related("invocation")
+        .order_by("created_at", "id")[:limit]
+    )
     health = build_health_readback(workspace, limit=limit)
     payload = {
         "schema_version": OPERATOR_SCHEMA_VERSION,
@@ -403,6 +409,20 @@ def build_operator_readback(
             "outcome_unknown": unknown,
             "page": pagination,
         },
+        "reconciliations": [
+            {
+                "run_id": str(row.run_id),
+                "invocation_id": row.invocation.invocation_id,
+                "state": row.state,
+                "fresh_assignment_decision": row.fresh_assignment_decision,
+                "outcome_ref": row.outcome_ref,
+                "publication_ref": row.publication_ref,
+                "terminal_event_ref": row.terminal_event_ref,
+                "runtime_exit_ref": row.runtime_exit_ref,
+                "evidence": row.evidence,
+            }
+            for row in reconciliations
+        ],
         "recent_failures": _recent_failures(workspace, limit=limit),
         "safety_stop": health["safety_stop"],
         "governance": _schedules_and_delegation(workspace, limit=limit),

@@ -452,6 +452,11 @@ class AgentSafetyStopSerializer(serializers.Serializer):
         return attrs
 
 
+class AgentOutcomeReconciliationSerializer(serializers.Serializer):
+    run_id = serializers.UUIDField()
+    idempotency_key = serializers.CharField(max_length=128, allow_blank=False, trim_whitespace=True)
+
+
 class GatewayReceiptAdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = OperationGatewayIdempotency

@@ -115,6 +115,15 @@ class RuntimeControlState(models.TextChoices):
     RELEASED = "released", "Released"
 
 
+class ReconciliationState(models.TextChoices):
+    RECONCILED = "reconciled", "Reconciled"
+
+
+class FreshAssignmentDecision(models.TextChoices):
+    SAFE = "safe", "Safe"
+    UNSAFE = "unsafe", "Unsafe"
+
+
 class RuntimeProviderAttemptPhase(models.TextChoices):
     INTENT = "intent", "Intent recorded"
     STARTED = "started", "External request started"
@@ -1191,6 +1200,46 @@ class RuntimeExitEvidence(AgentScopedModel):
             or run.snapshot_content_digest != self.snapshot_content_digest
         ):
             raise ValidationError("Runtime exit evidence must bind one invocation, actor, run, and snapshot")
+
+
+class RuntimeReconciliation(AgentScopedModel):
+    """Append-only Plane decision for an outcome-unknown invocation."""
+
+    invocation = models.OneToOneField(RuntimeInvocation, on_delete=models.PROTECT, related_name="reconciliation")
+    run = models.ForeignKey(RunAttempt, on_delete=models.PROTECT, related_name="reconciliations")
+    state = models.CharField(max_length=24, choices=ReconciliationState.choices)
+    fresh_assignment_decision = models.CharField(max_length=16, choices=FreshAssignmentDecision.choices)
+    outcome_ref = models.CharField(max_length=128, null=True, blank=True, editable=False)
+    publication_ref = models.CharField(max_length=128, null=True, blank=True, editable=False)
+    terminal_event_ref = models.CharField(max_length=128, null=True, blank=True, editable=False)
+    runtime_exit_ref = models.CharField(max_length=128, null=True, blank=True, editable=False)
+    evidence = models.JSONField(default=default_dict, editable=False)
+    idempotency_key = models.CharField(max_length=128, unique=True, editable=False)
+    command_fingerprint = models.CharField(max_length=72, editable=False)
+    reconciled_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="agent_runtime_reconciliations")
+    reconciled_at = models.DateTimeField(editable=False)
+
+    class Meta:
+        db_table = "agent_runtime_reconciliations"
+        ordering = ("-created_at",)
+        constraints = [models.UniqueConstraint(fields=["run", "invocation"], name="agent_reconciliation_run_invocation_unique")]
+
+    IMMUTABLE_FIELDS = (
+        "workspace_id", "project_id", "invocation_id", "run_id", "state",
+        "fresh_assignment_decision", "outcome_ref", "publication_ref",
+        "terminal_event_ref", "runtime_exit_ref", "evidence", "idempotency_key",
+        "command_fingerprint", "reconciled_by_id", "reconciled_at",
+    )
+
+    def save(self, *args, **kwargs):
+        _assert_immutable(self, self.IMMUTABLE_FIELDS)
+        super().save(*args, **kwargs)
+
+    def validate_agent_scope(self):
+        invocation = RuntimeInvocation.objects.only("run_id", "workspace_id", "project_id").get(pk=self.invocation_id)
+        run = RunAttempt.objects.only("workspace_id", "project_id").get(pk=self.run_id)
+        if invocation.run_id != self.run_id or (run.workspace_id, run.project_id) != (self.workspace_id, self.project_id):
+            raise ValidationError("Runtime reconciliation must bind one invocation, run, and Plane scope")
 
 
 class OutcomeSubmission(AgentScopedModel):

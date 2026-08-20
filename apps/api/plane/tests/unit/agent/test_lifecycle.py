@@ -33,6 +33,7 @@ from plane.agent.lifecycle import (
     record_input_event,
     record_invocation,
     record_provider_attempt_notice,
+    reconcile_outcome_unknown,
     reconcile_provider_attempts,
     provider_attempts_reconciled,
     request_revision,
@@ -79,6 +80,7 @@ from plane.db.models import (
     RuntimeProviderAttemptPhase,
     ProfileVersion,
 )
+from plane.db.models.operation_gateway import OperationGatewayAudit, OperationGatewayIdempotency
 
 
 AGENT_TEST_HEAD = ("db", "0144_provider_attempt_diagnostics")
@@ -1537,6 +1539,67 @@ def test_failed_and_unknown_runs_require_deliberate_new_run_lineage(assignment, 
     assert recovered.lineage_reason == RunLineageReason.RECOVERY
     with pytest.raises(InvalidTransitionError):
         record_invocation(unknown, idempotency_key="idempotency:blind-replay")
+
+
+@pytest.mark.django_db
+def test_reconcile_submit_success_without_terminal_result_is_explicitly_unsafe(
+    assignment, profile, create_user
+):
+    run = create_run(assignment, profile, idempotency_key="idempotency:reconcile-run")
+    invocation = record_invocation(run, idempotency_key="idempotency:reconcile-invocation")
+    transition_run(run, RunState.OUTCOME_UNKNOWN)
+    outcome = OutcomeSubmission.objects.create(
+        workspace=run.workspace,
+        project=run.project,
+        run=run,
+        summary="Durable submit result",
+        artifacts=[],
+        evidence=[],
+        state=OutcomeState.PROPOSED,
+    )
+    receipt = OperationGatewayIdempotency.objects.create(
+        invocation_id=invocation.pk,
+        operation_id="agent.outcome.submit",
+        workspace_id=run.workspace_id,
+        workspace_slug=run.workspace.slug,
+        caller_id=create_user.id,
+        idempotency_key="gateway:reconcile-submit",
+        correlation_id="correlation:reconcile-submit",
+        request_digest="a" * 64,
+        state=OperationGatewayIdempotency.State.SUCCEEDED,
+        request_input={},
+        result={"outcome": {"outcomeRef": f"outcome-submission:{outcome.id}"}},
+    )
+    OperationGatewayAudit.objects.create(
+        invocation_id=invocation.pk,
+        phase=OperationGatewayAudit.Phase.OUTCOME,
+        outcome=OperationGatewayAudit.Outcome.SUCCESS,
+        request_id=receipt.request_id,
+        operation_id=receipt.operation_id,
+        workspace_id=run.workspace_id,
+        workspace_slug=run.workspace.slug,
+        caller_id=create_user.id,
+        idempotency_key=receipt.idempotency_key,
+        correlation_id=receipt.correlation_id,
+        request_digest=receipt.request_digest,
+    )
+
+    reconciliation = reconcile_outcome_unknown(
+        run,
+        idempotency_key="idempotency:reconcile-decision",
+        operator=create_user,
+    )
+
+    assert reconciliation.state == "reconciled"
+    assert reconciliation.fresh_assignment_decision == "unsafe"
+    assert reconciliation.outcome_ref == f"outcome-submission:{outcome.id}"
+    assert reconciliation.publication_ref is None
+    assert reconciliation.evidence["replay"] is False
+    assert reconcile_outcome_unknown(
+        run,
+        idempotency_key="idempotency:reconcile-decision",
+        operator=create_user,
+    ).pk == reconciliation.pk
 
 
 @pytest.mark.django_db
