@@ -467,16 +467,35 @@ def _prepared_shape_summary(value: Any) -> dict[str, Any]:
 
 
 def _prepared_accepted_form(value: Any) -> str:
+    def is_prepared_ref_shape(candidate: Any) -> bool:
+        if not isinstance(candidate, str) or not candidate.startswith(
+            PREPARED_CALL_PREFIX
+        ):
+            return False
+        try:
+            _text(candidate, "host.preparedCallRef", MAX_PREPARED_CALL_REF_BYTES)
+        except PlaneHostRPCError:
+            return False
+        return True
+
     if not isinstance(value, Mapping):
         return "unrecognized"
     if set(value) == {"preparedCallRef"}:
-        return "canonical_ref"
+        return (
+            "canonical_ref"
+            if is_prepared_ref_shape(value["preparedCallRef"])
+            else "unrecognized"
+        )
     if set(value) != {"action", "operationRef", "input"}:
         return "unrecognized"
     if value.get("action") != "read" or value.get("operationRef") != "operation:work_item.read":
         return "unrecognized"
     nested = value.get("input")
-    if isinstance(nested, Mapping) and set(nested) == {"preparedCallRef"}:
+    if (
+        isinstance(nested, Mapping)
+        and set(nested) == {"preparedCallRef"}
+        and is_prepared_ref_shape(nested["preparedCallRef"])
+    ):
         return "ready_to_call"
     return "unrecognized"
 

@@ -128,6 +128,23 @@ def test_prepared_shape_diagnostic_classifies_existing_forms(input_value, accept
     assert "prepared-call:opaque" not in json.dumps(diagnostic)
 
 
+def test_prepared_shape_diagnostic_does_not_call_nested_ref_canonical():
+    diagnostic = host_rpc._prepared_shape_diagnostic(
+        {
+            "preparedCallRef": {
+                "action": "read",
+                "operationRef": "operation:work_item.read",
+                "input": {"preparedCallRef": "prepared-call:opaque"},
+            }
+        },
+        "malformed",
+    )
+
+    assert diagnostic["acceptedForm"] == "unrecognized"
+    assert diagnostic["failureClass"] == "malformed"
+    assert "prepared-call:opaque" not in json.dumps(diagnostic)
+
+
 @pytest.mark.parametrize(
     ("input_value", "failure_class", "accepted_form"),
     [
