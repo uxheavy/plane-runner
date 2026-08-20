@@ -801,6 +801,61 @@ def _record_continuation_invocation(run, event, suffix, user, trigger):
     )
 
 
+def _bounded_runtime_diagnostics(value):
+    """Project only finite request/response metadata from Hermes Code Mode."""
+
+    if not isinstance(value, dict) or set(value) != {"version", "requests", "responses"}:
+        return None
+    if value["version"] != 1:
+        return None
+    requests = value["requests"]
+    responses = value["responses"]
+    if not isinstance(requests, list) or not isinstance(responses, list) or len(requests) > 32 or len(responses) > 32:
+        return None
+    bounded_requests = []
+    for row in requests:
+        if not isinstance(row, dict) or set(row) != {"sequence", "toolChoice", "visibleToolset", "visibleToolCount", "serialized"}:
+            return None
+        if (
+            type(row["sequence"]) is not int
+            or not 1 <= row["sequence"] <= 256
+            or row["toolChoice"] not in {"required", "auto", "absent"}
+            or row["visibleToolset"] not in {"execute_only", "execute_and_publish", "other", "empty"}
+            or type(row["visibleToolCount"]) is not int
+            or not 0 <= row["visibleToolCount"] <= 64
+            or row["serialized"] is not True
+        ):
+            return None
+        bounded_requests.append(
+            {
+                "sequence": row["sequence"],
+                "toolChoice": row["toolChoice"],
+                "visibleToolset": row["visibleToolset"],
+                "visibleToolCount": row["visibleToolCount"],
+                "serialized": True,
+            }
+        )
+    bounded_responses = []
+    for row in responses:
+        if not isinstance(row, dict) or set(row) != {"sequence", "responseClass", "toolCall"}:
+            return None
+        if (
+            type(row["sequence"]) is not int
+            or not 1 <= row["sequence"] <= 256
+            or row["responseClass"] not in {"tool_call", "text_response"}
+            or row["toolCall"] not in {"execute", "publish", "other", "none", "multiple"}
+        ):
+            return None
+        bounded_responses.append(
+            {
+                "sequence": row["sequence"],
+                "responseClass": row["responseClass"],
+                "toolCall": row["toolCall"],
+            }
+        )
+    return {"version": 1, "requests": bounded_requests, "responses": bounded_responses}
+
+
 def build_failure_evidence(
     *,
     binding,
@@ -827,6 +882,7 @@ def build_failure_evidence(
     scenario_gate=None,
     plane_host_operation_receipts=False,
     plane_operation_audit=None,
+    runtime_diagnostics=None,
     terminal_lifecycle=None,
     setup_error=None,
 ):
@@ -1398,6 +1454,10 @@ def build_failure_evidence(
         if isinstance(value, str) and value.startswith(prefix) and bounded_identifier(value) != "unavailable":
             bounded_failure[field] = bounded_identifier(value)
 
+    bounded_runtime_diagnostics = _bounded_runtime_diagnostics(runtime_diagnostics)
+    runtime_event_ingress = {"kindCounts": bounded_event_kind_counts}
+    if bounded_runtime_diagnostics is not None:
+        runtime_event_ingress["diagnostics"] = bounded_runtime_diagnostics
     receipt = {
         "schemaVersion": "plane-agent-g4/live-failure/v1",
         "status": "failed",
@@ -1412,7 +1472,7 @@ def build_failure_evidence(
             "state": bounded_state(invocation_state),
         },
         "runtimeExit": bounded_runtime_exit,
-        "runtimeEventIngress": {"kindCounts": bounded_event_kind_counts},
+        "runtimeEventIngress": runtime_event_ingress,
         "providerAttempts": attempts,
         "terminal": terminal,
         "s00Gate": _s00_gate_projection(s00_gate),
@@ -1839,6 +1899,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
     control = None
     exit_evidence = None
     runtime_event_kind_counts = {}
+    runtime_diagnostics = None
     terminal_lifecycle = None
     plane_host_operation_receipts = False
     plane_operation_audit = []
@@ -1872,7 +1933,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
     }
 
     def readback():
-        nonlocal terminal_lifecycle
+        nonlocal terminal_lifecycle, runtime_diagnostics
         invocation.refresh_from_db()
         run.refresh_from_db()
         attempts = list(RuntimeProviderAttempt.objects.filter(invocation=invocation).order_by("sequence")[:32])
@@ -1918,6 +1979,16 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                 if terminal_lifecycle is not None and terminal_lifecycle != candidate_lifecycle:
                     raise RuntimeError("multiple terminal lifecycle observations disagree")
                 terminal_lifecycle = candidate_lifecycle
+            payload_diagnostics = (
+                {key: value for key, value in payload.items() if key != "kind"}
+                if isinstance(payload, dict) and payload.get("kind") == "runtime_diagnostics"
+                else None
+            )
+            candidate_diagnostics = _bounded_runtime_diagnostics(payload_diagnostics)
+            if candidate_diagnostics is not None:
+                if runtime_diagnostics is not None and runtime_diagnostics != candidate_diagnostics:
+                    raise RuntimeError("multiple runtime diagnostics disagree")
+                runtime_diagnostics = candidate_diagnostics
             if event["kind"] == "transcript_evidence_observed":
                 if not isinstance(body, dict) or body.get("publication") != {"action": "observation_only"}:
                     raise RuntimeError("transcript evidence was not observation_only")
@@ -2510,6 +2581,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
             plane_host_operation_receipts=plane_host_operation_receipts,
             plane_operation_audit=plane_operation_audit,
             terminal_lifecycle=terminal_lifecycle,
+            runtime_diagnostics=runtime_diagnostics,
         )
         success_receipt = {
             "schemaVersion": "plane-agent-g4/live-evidence/v1",
@@ -2750,6 +2822,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                 plane_host_operation_receipts=plane_host_operation_receipts,
                 plane_operation_audit=plane_operation_audit,
                 terminal_lifecycle=terminal_lifecycle,
+                runtime_diagnostics=runtime_diagnostics,
                 setup_error=setup_error,
             )
 

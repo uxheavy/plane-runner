@@ -1533,6 +1533,36 @@ def _read_bounded_text(path: Path) -> str:
         raise ContractError("evidence_invalid_utf8") from exc
 
 
+def _validate_runtime_diagnostics(value: Any) -> None:
+    diagnostics = _object(value, "evidence_runtime_diagnostics")
+    if set(diagnostics) != {"version", "requests", "responses"} or diagnostics["version"] != 1:
+        raise ContractError("evidence_runtime_diagnostics_fields_invalid")
+    for key, maximum in (("requests", 32), ("responses", 32)):
+        rows = diagnostics[key]
+        if not isinstance(rows, list) or len(rows) > maximum:
+            raise ContractError("evidence_runtime_diagnostics_rows_invalid")
+        previous = 0
+        for row in rows:
+            item = _object(row, f"evidence_runtime_diagnostics_{key}")
+            if key == "requests":
+                expected = {"sequence", "toolChoice", "visibleToolset", "visibleToolCount", "serialized"}
+                valid = (
+                    item.get("toolChoice") in {"required", "auto", "absent"}
+                    and item.get("visibleToolset") in {"execute_only", "execute_and_publish", "other", "empty"}
+                    and type(item.get("visibleToolCount")) is int
+                    and 0 <= item.get("visibleToolCount") <= 64
+                    and item.get("serialized") is True
+                )
+            else:
+                expected = {"sequence", "responseClass", "toolCall"}
+                valid = item.get("responseClass") in {"tool_call", "text_response"} and item.get("toolCall") in {
+                    "execute", "publish", "other", "none", "multiple"
+                }
+            if set(item) != expected or type(item.get("sequence")) is not int or not 1 <= item["sequence"] <= 256 or item["sequence"] <= previous or not valid:
+                raise ContractError("evidence_runtime_diagnostics_row_invalid")
+            previous = item["sequence"]
+
+
 def _validate_live_readback(evidence: dict[str, Any]) -> None:
     if set(evidence) != _LIVE_READBACK_FIELDS:
         raise ContractError("evidence_readback_fields_invalid")
@@ -1577,13 +1607,15 @@ def _validate_live_readback(evidence: dict[str, Any]) -> None:
         raise ContractError("evidence_runtime_exit_final_sequence_invalid")
 
     ingress = _object(_required(evidence, "runtimeEventIngress", "evidence"), "evidence_runtime_ingress")
-    if set(ingress) != {"kindCounts"}:
+    if set(ingress).difference({"kindCounts", "diagnostics"}) or "kindCounts" not in ingress:
         raise ContractError("evidence_runtime_ingress_fields_invalid")
     kind_counts = _object(_required(ingress, "kindCounts", "evidence_runtime_ingress"), "evidence_runtime_ingress_counts")
     if set(kind_counts).difference(_LIVE_RUNTIME_EVENT_KINDS) or any(
         type(count) is not int or not 0 <= count <= 256 for count in kind_counts.values()
     ):
         raise ContractError("evidence_runtime_ingress_invalid")
+    if "diagnostics" in ingress:
+        _validate_runtime_diagnostics(ingress["diagnostics"])
 
     audit = _required(evidence, "planeOperationAudit", "evidence")
     if not isinstance(audit, list) or len(audit) != len(_LIVE_OPERATION_IDS):
@@ -1724,8 +1756,10 @@ def _validate_scenario_readback(evidence: dict[str, Any]) -> None:
     runtime_exit = _object(evidence["runtimeExit"], "evidence_runtime_exit")
     if set(runtime_exit) != {"present", "kind", "finalSequence", "failure"} or runtime_exit["kind"] not in {"completed", "waiting_for_input", "failed", "blocked", "cancelled", "unknown"}:
         raise ContractError("evidence_runtime_exit_invalid")
-    if not isinstance(evidence["runtimeEventIngress"], dict) or set(evidence["runtimeEventIngress"]) != {"kindCounts"}:
+    if not isinstance(evidence["runtimeEventIngress"], dict) or set(evidence["runtimeEventIngress"]).difference({"kindCounts", "diagnostics"}) or "kindCounts" not in evidence["runtimeEventIngress"]:
         raise ContractError("evidence_runtime_ingress_invalid")
+    if "diagnostics" in evidence["runtimeEventIngress"]:
+        _validate_runtime_diagnostics(evidence["runtimeEventIngress"]["diagnostics"])
     audit = evidence["planeOperationAudit"]
     if not isinstance(audit, list) or len(audit) != len(_LIVE_OPERATION_IDS):
         raise ContractError("evidence_operation_audit_count_invalid")
@@ -2000,13 +2034,15 @@ def _validate_failure_receipt(
                 raise ContractError("evidence_runtime_exit_failure_operation_ref_digest_invalid")
 
     ingress = _object(evidence["runtimeEventIngress"], "evidence_runtime_ingress")
-    if list(ingress) != ["kindCounts"]:
+    if set(ingress).difference({"kindCounts", "diagnostics"}) or "kindCounts" not in ingress:
         raise ContractError("evidence_runtime_ingress_fields_invalid")
     counts = _object(ingress["kindCounts"], "evidence_runtime_ingress_counts")
     if set(counts).difference(_LIVE_RUNTIME_EVENT_KINDS) or any(
         type(count) is not int or not 0 <= count <= 256 for count in counts.values()
     ):
         raise ContractError("evidence_runtime_ingress_invalid")
+    if "diagnostics" in ingress:
+        _validate_runtime_diagnostics(ingress["diagnostics"])
 
     attempts = evidence["providerAttempts"]
     if not isinstance(attempts, list) or len(attempts) > 32:

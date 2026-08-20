@@ -53,6 +53,7 @@ from validate_agent_g4_live import (  # noqa: E402
     validate_rollback_runbook,
     validate_files,
     validate_evidence,
+    _validate_runtime_diagnostics,
 )
 from summarize_agent_g4 import summarize  # noqa: E402
 
@@ -438,6 +439,63 @@ def terminal_lifecycle_fixture(*, observed: bool = True) -> dict[str, object]:
 
 
 class G4ContractTests(unittest.TestCase):
+    def test_runtime_diagnostics_are_finite_and_exclude_model_payload(self):
+        builder = invoke_helper_namespace()["build_failure_evidence"]
+        manifest, authority, _, _ = fixture()
+        receipt = builder(
+            binding=exact_binding(manifest, CANDIDATE),
+            authority_id=authority["authorityId"],
+            canary_ids={key: row["id"] for key, row in authority["binding"]["canaries"].items()},
+            failure_phase="api-invocation",
+            error_class="RuntimeError",
+            exit_code=1,
+            run_id="run:diagnostic",
+            run_state="failed",
+            invocation_id="invocation:diagnostic",
+            invocation_state="failed",
+            provider_attempts=[],
+            terminal_kind="run_failure",
+            runtime_diagnostics={
+                "version": 1,
+                "requests": [
+                    {
+                        "sequence": 1,
+                        "toolChoice": "required",
+                        "visibleToolset": "execute_only",
+                        "visibleToolCount": 1,
+                        "serialized": True,
+                    }
+                ],
+                "responses": [
+                    {"sequence": 1, "responseClass": "text_response", "toolCall": "none"}
+                ],
+            },
+        )
+        diagnostics = receipt["runtimeEventIngress"]["diagnostics"]
+        self.assertEqual(diagnostics["requests"][0]["visibleToolset"], "execute_only")
+        self.assertEqual(diagnostics["responses"][0]["responseClass"], "text_response")
+        self.assertNotIn("prompt", json.dumps(diagnostics))
+
+    def test_runtime_diagnostics_validator_rejects_unbounded_payload_fields(self):
+        valid = {
+            "version": 1,
+            "requests": [
+                {
+                    "sequence": 1,
+                    "toolChoice": "required",
+                    "visibleToolset": "execute_only",
+                    "visibleToolCount": 1,
+                    "serialized": True,
+                }
+            ],
+            "responses": [],
+        }
+        _validate_runtime_diagnostics(valid)
+        invalid = copy.deepcopy(valid)
+        invalid["requests"][0]["prompt"] = "must not be retained"
+        with self.assertRaises(ContractError):
+            _validate_runtime_diagnostics(invalid)
+
     def test_runner_setup_error_projection_is_bounded_and_validated(self):
         valid = {
             "id": "setup:lineage:IntegrityError",
@@ -2536,6 +2594,28 @@ class G4ContractTests(unittest.TestCase):
                 "reasonSubreason": "auth",
             }
         ]
+        receipt["semanticDigest"] = _semantic_digest(receipt)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt, separators=(",", ":")))
+        self.addCleanup(temp.cleanup)
+        self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
+
+    def test_failure_receipt_accepts_bounded_runtime_diagnostics(self):
+        manifest, authority, config, receipt = failure_fixture()
+        receipt["runtimeEventIngress"]["diagnostics"] = {
+            "version": 1,
+            "requests": [
+                {
+                    "sequence": 1,
+                    "toolChoice": "required",
+                    "visibleToolset": "execute_only",
+                    "visibleToolCount": 1,
+                    "serialized": True,
+                }
+            ],
+            "responses": [
+                {"sequence": 1, "responseClass": "tool_call", "toolCall": "execute"}
+            ],
+        }
         receipt["semanticDigest"] = _semantic_digest(receipt)
         temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt, separators=(",", ":")))
         self.addCleanup(temp.cleanup)
