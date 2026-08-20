@@ -103,6 +103,8 @@ G4_EXPECTED_CANDIDATE="${G4_CANDIDATE}"
 }
 
 MANIFEST="$(python3 - "${ROOT_DIR}" "${MANIFEST_INPUT}" <<'PY'
+import os
+import stat
 from pathlib import Path
 import sys
 
@@ -110,6 +112,11 @@ root = Path(sys.argv[1]).resolve()
 candidate = Path(sys.argv[2])
 if not candidate.is_absolute():
     candidate = root / candidate
+try:
+    if candidate.is_symlink():
+        raise SystemExit("manifest_path_must_not_be_a_symlink")
+except OSError:
+    raise SystemExit("manifest_path_missing_or_unresolvable")
 
 try:
     resolved = candidate.resolve(strict=True)
@@ -120,8 +127,18 @@ durable = root / "tools" / "agent-g4-manifest.json"
 disposable_root = root / "tmp"
 if resolved != durable and not resolved.is_relative_to(disposable_root):
     raise SystemExit("manifest_path_out_of_scope")
-if not resolved.is_file():
+try:
+    metadata = resolved.lstat()
+except OSError:
     raise SystemExit("manifest_path_not_a_regular_file")
+if not stat.S_ISREG(metadata.st_mode):
+    raise SystemExit("manifest_path_not_a_regular_file")
+if resolved == durable:
+    if metadata.st_mode & 0o022:
+        raise SystemExit("manifest_path_not_safe_regular_file")
+else:
+    if metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) != 0o600:
+        raise SystemExit("manifest_path_not_owner_only_regular_file")
 print(resolved)
 PY
 )" || {
@@ -557,6 +574,10 @@ mkdir -m 700 -- "${RUN_DIR}" || {
     exit 2
 }
 RUN_DIR_CREATED=1
+LIVE_PHASE=capacity-lease
+live_capacity_lease_acquire || exit $?
+LIVE_PHASE=checkout-bind-preflight
+
 python3 -c 'import secrets; print(secrets.token_urlsafe(48), end="")' >"${RUNTIME_SECRET_FILE}" || {
     printf '%s\n' 'event=agent.g4.live-runner status=failed phase=checkout-bind-preflight expected=owner-only-runtime-secret actual=staging-failed suggestion=use-a-writable-repository-owned-tmp-root' >&2
     exit 2
@@ -854,9 +875,6 @@ if stat.S_IMODE(metadata.st_mode) != 0o600:
 if metadata.st_size > 64 * 1024:
     raise SystemExit(1)
 ' <"${PROVIDER_SECRET_FILE}" >/dev/null 2>&1
-
-LIVE_PHASE=capacity-lease
-live_capacity_lease_acquire || exit $?
 
 LIVE_PHASE=compose
 

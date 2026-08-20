@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import importlib.util
 import json
+import stat
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
@@ -8,19 +10,12 @@ from pathlib import Path
 
 import pytest
 
-import importlib.util
-
 TOOLS = Path(__file__).parents[1]
 ROOT = TOOLS.parent
 CURRENT_MANIFEST = json.loads((TOOLS / "agent-g4-manifest.json").read_text(encoding="utf-8"))
 CURRENT_API_SOURCE = CURRENT_MANIFEST["pins"]["apiArtifact"]["sourceRevision"]
 CURRENT_RUNTIME_SOURCE = CURRENT_MANIFEST["pins"]["runtimeImageRevision"]
-CURRENT_WRAPPER = subprocess.run(
-    ["git", "-C", str(ROOT), "rev-parse", "HEAD"],
-    check=True,
-    capture_output=True,
-    text=True,
-).stdout.strip()
+V64_WRAPPER = "01a67e40b73801438638ea56d09105c318b1f444"
 _SPEC = importlib.util.spec_from_file_location("agent_g4_live_launch", TOOLS / "agent-g4-live-launch.py")
 assert _SPEC is not None and _SPEC.loader is not None
 launch = importlib.util.module_from_spec(_SPEC)
@@ -70,13 +65,18 @@ def test_prepare_defaults_to_manifest_for_exact_checked_in_wrapper(
             "--run-dir",
             str(run_dir),
             "--candidate",
-            CURRENT_WRAPPER,
+            V64_WRAPPER,
         ],
     )
 
     assert launch_inputs.main() == 0
     authority = json.loads((run_dir / "authority.json").read_text(encoding="utf-8"))
-    assert authority["expectedCandidate"] == CURRENT_WRAPPER
+    assert authority["expectedCandidate"] == V64_WRAPPER
+    for name in ("authority.json", "config.json", "descriptor.json"):
+        metadata = (run_dir / name).stat()
+        assert metadata.st_uid == launch_inputs.os.getuid()
+        assert launch_inputs.stat.S_ISREG(metadata.st_mode)
+        assert launch_inputs.stat.S_IMODE(metadata.st_mode) == 0o600
 
 
 def test_prepare_rejects_source_when_wrapper_is_required(
@@ -115,6 +115,32 @@ def test_run_paths_are_derived_from_one_directory() -> None:
         "descriptor": Path("/tmp/persona-wave-v6/worker/descriptor.json"),
         "result": Path("/tmp/persona-wave-v6/worker/result.json"),
     }
+
+
+def test_stage_manifest_copies_into_owner_only_run_scope(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    run_dir.mkdir(mode=0o700)
+    source = tmp_path / "manifest.json"
+    source.write_bytes(b'{"pins":{}}')
+    source.chmod(0o600)
+
+    staged = launch.stage_owner_only_manifest(run_dir, source)
+
+    assert staged == run_dir / "manifest.json"
+    assert staged.read_bytes() == source.read_bytes()
+    assert stat.S_IMODE(staged.stat().st_mode) == 0o600
+
+
+def test_stage_manifest_rejects_reused_destination(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run"
+    run_dir.mkdir(mode=0o700)
+    (run_dir / "manifest.json").write_bytes(b"caller-owned")
+    source = tmp_path / "manifest-source.json"
+    source.write_bytes(b"manifest")
+    source.chmod(0o600)
+
+    with pytest.raises(ValueError, match="launch_manifest_staging_collision"):
+        launch.stage_owner_only_manifest(run_dir, source)
 
 
 def test_launch_binds_host_wrapper_and_artifact_revisions_separately() -> None:
@@ -235,6 +261,7 @@ def test_launch_uses_wrapper_for_host_and_manifest_source_for_artifact(
 
     monkeypatch.setattr(launch, "resolve_manifest", lambda _manifest: launch.DEFAULT_MANIFEST)
     monkeypatch.setattr(launch, "validate_run_inputs", lambda _run_dir, _manifest: paths)
+    monkeypatch.setattr(launch, "stage_owner_only_manifest", lambda _run_dir, _manifest: paths["manifest"])
     monkeypatch.setattr(launch, "_validate_config", lambda _paths, _candidate: None)
     monkeypatch.setattr(launch, "_validate_descriptor", lambda _paths: "c" * 64)
     monkeypatch.setattr(launch, "_host_revision", lambda: wrapper)

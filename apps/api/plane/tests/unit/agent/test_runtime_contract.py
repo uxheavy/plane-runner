@@ -123,66 +123,31 @@ def test_prepared_call_rejections_have_bounded_private_reasons():
     assert captured.value.reason == "consumed"
 
 
-@pytest.mark.parametrize(
-    "wrapped_input",
-    [
-        lambda ref: {"preparedCallRef": ref},
-        lambda ref: {"input": {"preparedCallRef": ref}},
-        lambda ref: {
-            "action": "read",
-            "operationRef": "operation:work_item.read",
-            "input": {"preparedCallRef": ref},
-        },
-        lambda ref: {
-            "workItemReadCall": {
-                "action": "read",
-                "operationRef": "operation:work_item.read",
-                "input": {"preparedCallRef": ref},
-            }
-        },
-        lambda ref: {
-            "preparedCallRef": {
-                "action": "read",
-                "operationRef": "operation:work_item.read",
-                "input": {"preparedCallRef": ref},
-            }
-        },
-    ],
-)
-def test_prepared_call_normalizes_one_bounded_lossless_wrapper(wrapped_input):
+def test_prepared_call_accepts_only_the_canonical_ref_shape():
     registry = PreparedCallRegistry()
     prepared_ref = registry.register({"project_id": "project:test", "issue_id": "issue:test"})
 
-    assert registry.normalize(wrapped_input(prepared_ref)) == {"preparedCallRef": prepared_ref}
-    assert registry.resolve(wrapped_input(prepared_ref)) == {
+    assert registry.normalize({"preparedCallRef": prepared_ref}) == {"preparedCallRef": prepared_ref}
+    assert registry.resolve({"preparedCallRef": prepared_ref}) == {
         "project_id": "project:test",
         "issue_id": "issue:test",
     }
 
 
 @pytest.mark.parametrize(
-    "wrapped_input",
+    "malformed_input",
     [
-        lambda ref: {"input": {"preparedCallRef": ref, "extra": "x"}},
-        lambda ref: {
-            "action": "read",
-            "operationRef": "operation:other",
-            "input": {"preparedCallRef": ref},
-        },
-        lambda ref: {
-            "input": {"preparedCallRef": ref},
-            "workItemReadCall": {"input": {"preparedCallRef": ref}},
-        },
-        lambda ref: {"input": {"input": {"input": {"input": {"preparedCallRef": ref}}}}},
-        lambda ref: {"input": {"preparedCallRef": ref}, "extra": "x" * 2048},
+        lambda ref: {"preparedCallRef": {"preparedCallRef": ref}},
+        lambda ref: {"preparedCallRef": ref, "extra": "x"},
+        lambda ref: {"preparedCallRef": "not-a-prepared-call"},
     ],
 )
-def test_prepared_call_normalization_rejects_tamper_extra_wrong_op_depth_and_size(wrapped_input):
+def test_prepared_call_normalization_rejects_wrappers_and_extra_fields(malformed_input):
     registry = PreparedCallRegistry()
     prepared_ref = registry.register({"project_id": "project:test", "issue_id": "issue:test"})
 
     with pytest.raises(PreparedCallInvalid) as captured:
-        registry.normalize(wrapped_input(prepared_ref))
+        registry.normalize(malformed_input(prepared_ref))
 
     assert captured.value.reason == "malformed"
     assert prepared_ref not in str(captured.value)
@@ -220,6 +185,18 @@ def test_prepared_call_reason_is_owner_evidence_only(tmp_path):
         "errorCode": "PREPARED_CALL_INVALID",
         "codeModePhase": "unavailable",
         "preparedCallInvalidReason": "unknown",
+        "shapeDiagnostic": {
+            "schemaVersion": "plane.prepared-call-shape/v1",
+            "acceptedForm": "canonical_ref",
+            "failureClass": "unknown",
+            "shape": {
+                "keyNames": ["preparedCallRef"],
+                "keyNamesTruncated": False,
+                "valueTypes": ["object", "string"],
+                "nestingDepth": 1,
+                "sizeClass": "small",
+            },
+        },
     }
 
 

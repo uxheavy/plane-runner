@@ -53,9 +53,7 @@ MAX_HOST_OBSERVATION_CALLS = MAX_PROVIDER_ATTEMPT_SEQUENCE * MAX_PROVIDER_ATTEMP
 MAX_HOST_OPERATION_REF_BYTES = 256
 MAX_HOST_CONTENT_BYTES = 4 * 1024
 MAX_PREPARED_CALLS = MAX_HOST_CALLS * 20
-MAX_PREPARED_CALL_NORMALIZATION_BYTES = 1024
-MAX_PREPARED_CALL_NORMALIZATION_DEPTH = 3
-MAX_PREPARED_CALL_NORMALIZATION_NODES = 16
+MAX_PREPARED_CALL_WRAPPER_BYTES = 1024
 _ACTIONS = {"discover", "read", "mutate", "code", "publish", "observe"}
 _SOURCES = {"model", "code", "runtime"}
 _RESULT_STATUSES = {"ok", "replayed", "denied", "conflict", "unavailable", "invalid"}
@@ -115,76 +113,36 @@ class PreparedCallRegistry:
             return any(not record["consumed"] for record in self.records.values())
 
     @staticmethod
-    def contains_prepared_ref(value: Any, depth: int = 0) -> bool:
-        if depth > MAX_PREPARED_CALL_NORMALIZATION_DEPTH:
-            return True
-        if isinstance(value, Mapping):
-            return any(
-                key == "preparedCallRef"
-                or PreparedCallRegistry.contains_prepared_ref(child, depth + 1)
-                for key, child in value.items()
-            )
-        if isinstance(value, list):
-            return any(
-                PreparedCallRegistry.contains_prepared_ref(child, depth + 1)
-                for child in value
-            )
-        return False
-
-    @staticmethod
     def normalize(input_data: Mapping[str, Any]) -> Mapping[str, Any]:
-        """Accept one bounded wrapper around the opaque prepared-call ref."""
+        """Accept one canonical opaque ref or its exact serialized read envelope."""
 
-        if not PreparedCallRegistry.contains_prepared_ref(input_data):
+        if "preparedCallRef" not in input_data:
             return input_data
+        if set(input_data) != {"preparedCallRef"}:
+            raise PreparedCallInvalid("malformed")
+        prepared_ref = input_data["preparedCallRef"]
+        if not isinstance(prepared_ref, str):
+            raise PreparedCallInvalid("malformed")
+        if not prepared_ref.startswith(PREPARED_CALL_PREFIX):
+            try:
+                envelope = _canonical_prepared_wrapper(prepared_ref)
+            except PlaneHostRPCError as exc:
+                raise PreparedCallInvalid("malformed") from exc
+            if set(envelope) != {"action", "operationRef", "input"}:
+                raise PreparedCallInvalid("malformed")
+            if envelope.get("action") != "read" or envelope.get("operationRef") != "operation:work_item.read":
+                raise PreparedCallInvalid("malformed")
+            nested = envelope.get("input")
+            if not isinstance(nested, Mapping) or set(nested) != {"preparedCallRef"}:
+                raise PreparedCallInvalid("malformed")
+            prepared_ref = nested["preparedCallRef"]
+            if not isinstance(prepared_ref, str) or not prepared_ref.startswith(PREPARED_CALL_PREFIX):
+                raise PreparedCallInvalid("malformed")
         try:
-            encoded = _canonical(input_data, "prepared work-item read input")
-        except (TypeError, ValueError, OverflowError) as exc:
+            _text(prepared_ref, "host.preparedCallRef", MAX_PREPARED_CALL_REF_BYTES)
+        except PlaneHostRPCError as exc:
             raise PreparedCallInvalid("malformed") from exc
-        if len(encoded) > MAX_PREPARED_CALL_NORMALIZATION_BYTES:
-            raise PreparedCallInvalid("malformed")
-
-        refs: list[str] = []
-        node_count = 0
-
-        def visit(value: Any, depth: int) -> None:
-            nonlocal node_count
-            if depth > MAX_PREPARED_CALL_NORMALIZATION_DEPTH:
-                raise PreparedCallInvalid("malformed")
-            node_count += 1
-            if node_count > MAX_PREPARED_CALL_NORMALIZATION_NODES:
-                raise PreparedCallInvalid("malformed")
-            if not isinstance(value, Mapping) or not value:
-                raise PreparedCallInvalid("malformed")
-            for key, child in value.items():
-                if key == "preparedCallRef":
-                    if isinstance(child, str):
-                        try:
-                            _text(child, "host.preparedCallRef", MAX_PREPARED_CALL_REF_BYTES)
-                        except PlaneHostRPCError as exc:
-                            raise PreparedCallInvalid("malformed") from exc
-                        if not child.startswith(PREPARED_CALL_PREFIX):
-                            raise PreparedCallInvalid("malformed")
-                        refs.append(child)
-                    elif isinstance(child, Mapping):
-                        visit(child, depth + 1)
-                    else:
-                        raise PreparedCallInvalid("malformed")
-                elif key == "action":
-                    if child != "read":
-                        raise PreparedCallInvalid("malformed")
-                elif key == "operationRef":
-                    if child != "operation:work_item.read":
-                        raise PreparedCallInvalid("malformed")
-                elif key in {"input", "workItemReadCall"}:
-                    visit(child, depth + 1)
-                else:
-                    raise PreparedCallInvalid("malformed")
-
-        visit(input_data, 0)
-        if len(refs) != 1:
-            raise PreparedCallInvalid("malformed")
-        return {"preparedCallRef": refs[0]}
+        return {"preparedCallRef": prepared_ref}
 
     def resolve(
         self,
@@ -282,6 +240,28 @@ def _duplicate_rejecting_pairs(items: list[tuple[str, Any]]) -> dict[str, Any]:
             raise json.JSONDecodeError("duplicate object key", "", 0)
         result[key] = value
     return result
+
+
+def _canonical_prepared_wrapper(value: str) -> Mapping[str, Any]:
+    """Decode one bounded, exact JSON string carrying a prepared read envelope."""
+
+    def reject_constant(_constant: str) -> None:
+        raise ValueError("non-finite JSON constant")
+
+    try:
+        encoded = value.encode("utf-8")
+        if len(encoded) > MAX_PREPARED_CALL_WRAPPER_BYTES:
+            raise PlaneHostRPCError("prepared work-item read input is oversized")
+        decoded = json.loads(
+            value,
+            object_pairs_hook=_duplicate_rejecting_pairs,
+            parse_constant=reject_constant,
+        )
+    except (UnicodeError, TypeError, ValueError) as exc:
+        raise PlaneHostRPCError("prepared work-item read input is not canonical JSON") from exc
+    if not isinstance(decoded, Mapping) or _canonical(decoded, "prepared work-item read input") != encoded:
+        raise PlaneHostRPCError("prepared work-item read input is not canonical JSON")
+    return decoded
 
 
 def _strict_wire_object(value: Any, name: str, maximum: int) -> dict[str, Any]:
@@ -552,11 +532,25 @@ def _prepared_accepted_form(value: Any) -> str:
     if not isinstance(value, Mapping):
         return "unrecognized"
     if set(value) == {"preparedCallRef"}:
-        return (
-            "canonical_ref"
-            if is_prepared_ref_shape(value["preparedCallRef"])
-            else "unrecognized"
-        )
+        prepared_ref = value["preparedCallRef"]
+        if is_prepared_ref_shape(prepared_ref):
+            return "canonical_ref"
+        if isinstance(prepared_ref, str):
+            try:
+                envelope = _canonical_prepared_wrapper(prepared_ref)
+            except PlaneHostRPCError:
+                return "unrecognized"
+            nested = envelope.get("input")
+            if (
+                set(envelope) == {"action", "operationRef", "input"}
+                and envelope.get("action") == "read"
+                and envelope.get("operationRef") == "operation:work_item.read"
+                and isinstance(nested, Mapping)
+                and set(nested) == {"preparedCallRef"}
+                and is_prepared_ref_shape(nested["preparedCallRef"])
+            ):
+                return "ready_to_call"
+        return "unrecognized"
     if set(value) != {"action", "operationRef", "input"}:
         return "unrecognized"
     if value.get("action") != "read" or value.get("operationRef") != "operation:work_item.read":
@@ -1656,10 +1650,10 @@ class PlaneGatewayHostPort:
                 "VALIDATION_ERROR",
                 "A prepared work-item read is pending; invoke its returned workItemReadCall before another workspace search",
             )
-        if (
-            self._prepared_call_registry.contains_prepared_ref(call.input)
-            and operation_id != "work_item.read"
-        ):
+        # Prepared refs are callable only as the complete read input. Do not
+        # recursively inspect mutation payloads; outcome evidence may carry
+        # opaque refs as ordinary data.
+        if operation_id != "work_item.read" and set(call.input) == {"preparedCallRef"}:
             return self._error(
                 call,
                 "PREPARED_CALL_INVALID",
@@ -1675,6 +1669,8 @@ class PlaneGatewayHostPort:
         prepared_ref: str | None = None
         if operation_id == "work_item.read":
             try:
+                if set(call.input).intersection({"action", "operationRef", "input", "workItemReadCall"}):
+                    raise PreparedCallInvalid("malformed")
                 operation_input = self._normalize_prepared_read_input(call.input)
                 if "preparedCallRef" in operation_input:
                     prepared_ref = operation_input["preparedCallRef"]

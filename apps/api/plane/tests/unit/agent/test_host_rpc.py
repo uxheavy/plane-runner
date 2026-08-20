@@ -1,6 +1,8 @@
 import http.client
 import json
 import socket
+import subprocess
+import sys
 import threading
 import time
 from types import SimpleNamespace
@@ -62,6 +64,65 @@ def _read_line(connection):
     return bytes(data).decode()
 
 
+_PREPARED_BOUNDARY_CHILD = r'''
+import hashlib
+import json
+import socket
+import sys
+
+def call(path, operation_ref, payload):
+    identity = {
+        "protocol": "plane.agent-runtime/v1",
+        "runId": "run:cross-process",
+        "invocationId": "invocation:cross-process",
+        "action": "read",
+        "operationRef": operation_ref,
+        "input": payload,
+    }
+    digest = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    request = {
+        **identity,
+        "correlationId": "correlation:cross-process",
+        "source": "model",
+        "requestRef": "host-request:" + digest,
+        "idempotencyKey": "host-idempotency:" + digest,
+    }
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as channel:
+        channel.settimeout(5)
+        channel.connect(path)
+        channel.sendall(json.dumps(request, sort_keys=True, separators=(",", ":")).encode() + b"\n")
+        response = bytearray()
+        while not response.endswith(b"\n"):
+            chunk = channel.recv(4096)
+            if not chunk:
+                raise RuntimeError(f"host response closed for {operation_ref}")
+            response.extend(chunk)
+    return json.loads(bytes(response[:-1]))
+
+search = call(
+    sys.argv[1],
+    "operation:search_workspace",
+    {"query": "assigned", "limit": 1},
+)
+assert search["status"] == "ok", search
+read_call = search["output"]["result"]["results"][0]["workItemReadCall"]
+encoded_ready_call = json.dumps(read_call, sort_keys=True, separators=(",", ":"))
+read = call(
+    sys.argv[1],
+    "operation:work_item.read",
+    {"preparedCallRef": encoded_ready_call},
+)
+assert read["status"] == "ok", read
+submit = call(
+    sys.argv[1],
+    "operation:agent.outcome.submit",
+    {"preparedCallRef": encoded_ready_call},
+)
+assert submit["status"] == "invalid", submit
+assert submit["errorCode"] == "PREPARED_CALL_INVALID", submit
+'''
+
+
 def test_host_call_derives_and_validates_binding_complete_identity():
     call = _call()
     assert call.request_ref.startswith("host-request:")
@@ -115,6 +176,20 @@ def test_host_result_uses_the_canonical_public_result_ceiling():
                 "action": "read",
                 "operationRef": "operation:work_item.read",
                 "input": {"preparedCallRef": "prepared-call:opaque"},
+            },
+            "ready_to_call",
+        ),
+        (
+            {
+                "preparedCallRef": json.dumps(
+                    {
+                        "action": "read",
+                        "operationRef": "operation:work_item.read",
+                        "input": {"preparedCallRef": "prepared-call:opaque"},
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
             },
             "ready_to_call",
         ),
@@ -237,7 +312,7 @@ def test_prepared_invalid_host_receipt_carries_only_bounded_diagnostic():
     assert "prepared-call:unknown" not in json.dumps(evidence)
 
 
-def test_prepared_wrapper_is_rejected_on_non_read_operation():
+def test_canonical_prepared_ref_is_rejected_on_non_read_operation():
     class FakeHost:
         binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
 
@@ -247,7 +322,7 @@ def test_prepared_wrapper_is_rejected_on_non_read_operation():
     result = PlaneGatewayHostPort(FakeHost()).invoke(
         _call(
             operationRef="operation:work_item.rename",
-            input={"input": {"preparedCallRef": "prepared-call:unknown"}},
+            input={"preparedCallRef": "prepared-call:unknown"},
         )
     )
 
@@ -423,13 +498,116 @@ def test_gateway_host_preserves_valid_search_to_prepared_read_handoff():
     read = port.invoke(
         _call(
             operationRef=read_call["operationRef"],
-            input={"input": read_call["input"]},
+            input=read_call["input"],
         )
     )
 
     assert search.status == "ok"
     assert read.status == "ok"
     assert read.output["result"]["work_item"]["name"] == "assigned"
+
+
+def test_prepared_read_wrapper_is_rejected_without_gateway_call():
+    class FakeHost:
+        binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
+
+        def call_operation(self, *_args, **_kwargs):
+            raise AssertionError("malformed prepared input must not reach the gateway")
+
+    result = PlaneGatewayHostPort(FakeHost()).invoke(
+        _call(
+            operationRef="operation:work_item.read",
+            input={"input": {"preparedCallRef": "prepared-call:unknown"}},
+        )
+    )
+
+    assert result.status == "invalid"
+    assert result.error_code == "PREPARED_CALL_INVALID"
+
+
+def test_outcome_submit_allows_prepared_ref_in_bounded_evidence():
+    received = {}
+
+    class FakeHost:
+        binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
+
+        def call_operation(self, operation_id, input_data, **_kwargs):
+            received["operation_id"] = operation_id
+            received["input"] = input_data
+            return {"ok": True, "result": {"outcome": {"outcomeRef": "outcome:test"}}}
+
+    result = PlaneGatewayHostPort(FakeHost()).invoke(
+        _call(
+            action="mutate",
+            operationRef="operation:agent.outcome.submit",
+            input={
+                "summary": "Prepared handoff evidence is retained.",
+                "artifacts": [],
+                "evidence": [{"preparedCallRef": "prepared-call:opaque"}],
+            },
+        )
+    )
+
+    assert result.status == "ok"
+    assert received == {
+        "operation_id": "agent.outcome.submit",
+        "input": {
+            "summary": "Prepared handoff evidence is retained.",
+            "artifacts": [],
+            "evidence": [{"preparedCallRef": "prepared-call:opaque"}],
+        },
+    }
+
+
+def test_prepared_call_json_wrapper_crosses_process_and_submit_fails_closed(tmp_path):
+    calls = []
+
+    class FakeHost:
+        binding = SimpleNamespace(run_ref="run:cross-process", invocation_ref="invocation:cross-process")
+
+        def call_operation(self, operation_id, input_data, **_kwargs):
+            calls.append((operation_id, input_data))
+            if operation_id == "search_workspace":
+                return {
+                    "ok": True,
+                    "result": {
+                        "results": [
+                            {
+                                "objectType": "work_item",
+                                "workItemReadInput": {
+                                    "project_id": "project:test",
+                                    "issue_id": "issue:test",
+                                },
+                            }
+                        ]
+                    },
+                }
+            assert operation_id == "work_item.read"
+            assert input_data == {
+                "project_id": "project:test",
+                "issue_id": "issue:test",
+            }
+            return {"ok": True, "result": {"work_item": {"name": "assigned"}}}
+
+    port = PlaneGatewayHostPort(FakeHost())
+    server = PlaneHostServer(socket_path=tmp_path / "host.sock", invoke=port.invoke)
+    server.start()
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-c", _PREPARED_BOUNDARY_CHILD, str(server.socket_path)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+    finally:
+        server.close()
+
+    assert completed.returncode == 0, completed.stderr
+    assert [operation_id for operation_id, _input in calls] == [
+        "search_workspace",
+        "work_item.read",
+    ]
 
 
 def test_code_mode_search_projects_opaque_prepared_read_for_typed_callback():

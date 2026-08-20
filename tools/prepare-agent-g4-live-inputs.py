@@ -6,7 +6,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import shutil
+import os
+import stat
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -32,8 +33,29 @@ def authority_window(now: datetime | None = None) -> tuple[str, str]:
 
 
 def _owner_only(path: Path, payload: bytes) -> None:
-    path.write_bytes(payload)
-    path.chmod(0o600)
+    try:
+        descriptor = os.open(
+            path,
+            os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC | os.O_NOFOLLOW,
+            0o600,
+        )
+    except OSError as exc:
+        raise RuntimeError("live input must be an owner-only regular file") from exc
+    try:
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "wb", closefd=False) as output:
+            output.write(payload)
+            output.flush()
+            os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    metadata = path.stat(follow_symlinks=False)
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) != 0o600:
+        raise RuntimeError("live input must be an owner-only regular file")
+
+
+def _copy_owner_only(source: Path, destination: Path) -> None:
+    _owner_only(destination, source.read_bytes())
 
 
 def main() -> int:
@@ -113,8 +135,7 @@ def main() -> int:
     args.run_dir.mkdir(mode=0o700, parents=True, exist_ok=False)
     _owner_only(args.run_dir / "authority.json", json.dumps(authority, indent=2, sort_keys=True).encode() + b"\n")
     _owner_only(args.run_dir / "config.json", json.dumps(config, indent=2, sort_keys=True).encode() + b"\n")
-    shutil.copyfile(args.descriptor, args.run_dir / "descriptor.json")
-    (args.run_dir / "descriptor.json").chmod(0o600)
+    _copy_owner_only(args.descriptor, args.run_dir / "descriptor.json")
     return 0
 
 

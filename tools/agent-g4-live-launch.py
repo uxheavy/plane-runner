@@ -13,7 +13,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 RUN_ROOT = ROOT / "tmp" / "persona-wave-v6"
 DEFAULT_MANIFEST = ROOT / "tools" / "agent-g4-manifest.json"
@@ -54,6 +53,42 @@ def _owner_only_file(path: Path, reason: str) -> None:
         raise ValueError(reason) from exc
     if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) != 0o600:
         raise ValueError(reason)
+
+
+def stage_owner_only_manifest(run_dir: Path, source: Path) -> Path:
+    """Copy one validated manifest into the owner-controlled run directory."""
+
+    destination = run_dir / "manifest.json"
+    try:
+        payload = source.read_bytes()
+        file_descriptor = os.open(
+            destination,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC | os.O_NOFOLLOW,
+            0o600,
+        )
+    except FileExistsError as exc:
+        raise ValueError("launch_manifest_staging_collision") from exc
+    except OSError as exc:
+        raise ValueError("launch_manifest_staging_failed") from exc
+    try:
+        os.fchmod(file_descriptor, 0o600)
+        view = memoryview(payload)
+        while view:
+            written = os.write(file_descriptor, view)
+            if written <= 0:
+                raise OSError("manifest staging made no progress")
+            view = view[written:]
+        os.fsync(file_descriptor)
+    except OSError as exc:
+        try:
+            os.unlink(destination)
+        except FileNotFoundError:
+            pass
+        raise ValueError("launch_manifest_staging_failed") from exc
+    finally:
+        os.close(file_descriptor)
+    _owner_only_file(destination, "launch_staged_manifest_not_owner_only_regular_file")
+    return destination
 
 
 def _checked_in_manifest(path: Path) -> None:
@@ -282,6 +317,7 @@ def launch(
         raise ValueError("launch_candidate_must_be_full_sha")
     manifest = resolve_manifest(manifest)
     paths = validate_run_inputs(run_dir, manifest)
+    paths["manifest"] = stage_owner_only_manifest(paths["run_dir"], manifest)
     _validate_config(paths, candidate)
     descriptor_digest = _validate_descriptor(paths)
     provider_source = validate_provider_source(provider_source)

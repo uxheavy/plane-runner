@@ -10,6 +10,7 @@ import os
 import re
 import signal
 import shutil
+import stat
 import subprocess
 import tarfile
 import sys
@@ -1095,6 +1096,24 @@ class G4ContractTests(unittest.TestCase):
                     with self.assertRaisesRegex(SystemExit, message):
                         _BUILDER.main()
 
+    def test_disposable_manifest_is_written_as_owner_only_regular_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "tmp" / "manifest.json"
+            original_root = _BUILDER.ROOT
+            original_manifest = _BUILDER.DURABLE_MANIFEST
+            _BUILDER.ROOT = Path(directory).resolve()
+            _BUILDER.DURABLE_MANIFEST = _BUILDER.ROOT / "durable-manifest.json"
+            try:
+                _BUILDER.write_disposable_manifest(path, {"schemaVersion": "test/v1"})
+            finally:
+                _BUILDER.ROOT = original_root
+                _BUILDER.DURABLE_MANIFEST = original_manifest
+            metadata = path.stat()
+            self.assertTrue(stat.S_ISREG(metadata.st_mode))
+            self.assertEqual(metadata.st_uid, os.getuid())
+            self.assertEqual(stat.S_IMODE(metadata.st_mode), 0o600)
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8")), {"schemaVersion": "test/v1"})
+
     def test_live_runner_exports_one_failure_object_before_disposable_teardown(self):
         source = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
         cleanup = source[source.index("cleanup()") : source.index("trap cleanup EXIT INT TERM")]
@@ -1192,6 +1211,8 @@ class G4ContractTests(unittest.TestCase):
         )
         self.assertIn("candidate.resolve(strict=True)", runner)
         self.assertIn("resolved.is_relative_to(disposable_root)", runner)
+        self.assertIn("manifest_path_not_owner_only_regular_file", runner)
+        self.assertIn("manifest_path_must_not_be_a_symlink", runner)
         resolution = runner.index('MANIFEST="$(python3 - "${ROOT_DIR}" "${MANIFEST_INPUT}"')
         validation = runner.index("validate_agent_g4_live.py")
         pin_extraction = runner.index('G4_G3_BASELINE="$(python3', validation)
@@ -1208,12 +1229,12 @@ class G4ContractTests(unittest.TestCase):
             'PLANE_G4_LIVE_CAPACITY_LEASE_PATH="${PLANE_G4_LIVE_CAPACITY_LEASE_PATH:-${SHARED_REPOSITORY_ROOT}/tmp/plane-agent-g4-live-capacity}"',
             runner,
         )
-        self.assertLess(
-            runner.index("LIVE_PHASE=credential-bind-preflight"),
-            runner.index("LIVE_PHASE=capacity-lease"),
-        )
-        self.assertLess(runner.index("LIVE_PHASE=capacity-lease"), runner.index("LIVE_PHASE=compose"))
-        self.assertLess(runner.index("LIVE_PHASE=capacity-lease"), runner.index("LIVE_PHASE=api-invocation"))
+        capacity = runner.index("LIVE_PHASE=capacity-lease")
+        self.assertLess(runner.index("RUN_DIR_CREATED=1"), capacity)
+        self.assertLess(capacity, runner.index("LIVE_PHASE=credential-staging"))
+        self.assertLess(capacity, runner.index("LIVE_PHASE=compose"))
+        self.assertLess(capacity, runner.index("LIVE_PHASE=api-invocation"))
+        self.assertIn("live_capacity_lease_acquire || exit $?", runner)
         cleanup = runner[runner.index("cleanup()") : runner.index("trap cleanup EXIT INT TERM")]
         self.assertIn("live_capacity_lease_release", cleanup)
 
@@ -1496,6 +1517,7 @@ class G4ContractTests(unittest.TestCase):
             disposable_manifest["pins"]["runtimeImageTag"] = "plane-agent-runtime:disposable"
             disposable_manifest["pins"]["runtimeImageDigest"] = "sha256:" + "3" * 64
             disposable_path.write_text(json.dumps(disposable_manifest), encoding="utf-8")
+            disposable_path.chmod(0o600)
 
             fake_bin = root / "bin"
             fake_bin.mkdir(mode=0o700)
@@ -1542,6 +1564,7 @@ class G4ContractTests(unittest.TestCase):
             disposable_manifest["pins"]["apiArtifact"]["sourceRevision"] = candidate
             disposable_manifest["pins"]["runtimeImageRevision"] = candidate
             disposable_path.write_text(json.dumps(disposable_manifest), encoding="utf-8")
+            disposable_path.chmod(0o600)
             fake_git.write_text(
                 "#!/bin/sh\n"
                 f"if [ \"$1\" = -C ] && [ \"$3\" = rev-parse ] && [ \"$4\" = --git-common-dir ]; then printf '%s\\n' '{root / '.git'}'; "

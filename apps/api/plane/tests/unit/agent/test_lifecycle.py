@@ -3,10 +3,10 @@
 # See the LICENSE file for details.
 
 import json
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from pathlib import Path
-import threading
 from uuid import uuid4
 
 import pytest
@@ -30,59 +30,60 @@ from plane.agent.lifecycle import (
     finalize_invocation,
     lock_invocation_path,
     propose_outcome,
+    provider_attempts_reconciled,
+    reconcile_outcome_unknown,
+    reconcile_provider_attempts,
     record_input_event,
     record_invocation,
     record_provider_attempt_notice,
-    reconcile_outcome_unknown,
-    reconcile_provider_attempts,
-    provider_attempts_reconciled,
     request_revision,
     review_outcome,
     transition_run,
 )
-from plane.agent.lifecycle.services import _normalise_idempotency
-from plane.agent.runtime.supervisor import request_runtime_cancellation
 from plane.agent.lifecycle.runtime_contract import (
     ARTIFACT_DIRECTORY,
+    RuntimeContractError,
     canonical_json,
     command_fingerprint,
     contract_digests,
     contract_manifest,
     legacy_command_fingerprint,
     namespaced_ref,
-    RuntimeContractError,
     snapshot_digest,
     validate_invocation_envelope,
     validate_run_snapshot,
 )
+from plane.agent.lifecycle.services import _normalise_idempotency
 from plane.agent.runtime import dispatch_invocation
 from plane.agent.runtime.subprocess import _hermes_request_payload
+from plane.agent.runtime.supervisor import request_runtime_cancellation
 from plane.db.models import (
     AgentRole,
     AssignmentContract,
     AssignmentState,
+    FreshAssignmentDecision,
     InputEventKind,
     InvocationState,
     OutcomeState,
     OutcomeSubmission,
+    ProfileVersion,
     Project,
+    ReconciliationState,
     RecoveryIntent,
-    RunLineageReason,
     RunAttempt,
     RunInputEvent,
+    RunLineageReason,
     RunState,
-    TerminalEventKind,
     RunTerminalEvent,
     RuntimeControlState,
-    RuntimeInvocationControl,
     RuntimeInvocation,
+    RuntimeInvocationControl,
     RuntimeProviderAttempt,
     RuntimeProviderAttemptPhase,
     RuntimeReconciliation,
-    ProfileVersion,
+    TerminalEventKind,
 )
 from plane.db.models.operation_gateway import OperationGatewayAudit, OperationGatewayIdempotency
-
 
 AGENT_TEST_HEAD = ("db", "0146_runtime_reconciliation_audit_fields")
 
@@ -1505,7 +1506,7 @@ def test_review_and_decision_notes_are_utf8_bounded_before_state_mutation(assign
 
 
 @pytest.mark.django_db
-def test_failed_and_unknown_runs_require_deliberate_new_run_lineage(assignment, profile):
+def test_failed_and_unknown_runs_require_deliberate_new_run_lineage(assignment, profile, create_user):
     failed_run = create_run(assignment, profile)
     record_invocation(failed_run, idempotency_key="idempotency:failed-invocation")
     transition_run(failed_run, RunState.FAILED)
@@ -1521,12 +1522,29 @@ def test_failed_and_unknown_runs_require_deliberate_new_run_lineage(assignment, 
     )
     assert fresh_run.lineage_of_id == failed_run.id
 
-    record_invocation(fresh_run, idempotency_key="idempotency:unknown-invocation")
+    unknown_invocation = record_invocation(fresh_run, idempotency_key="idempotency:unknown-invocation")
     unknown = transition_run(fresh_run, RunState.OUTCOME_UNKNOWN)
     with pytest.raises(RecoveryIntentRequiredError):
         create_run(assignment, profile)
     with pytest.raises(RecoveryIntentRequiredError):
         create_run(assignment, profile, recovery_of=unknown)
+
+    RuntimeReconciliation.objects.create(
+        workspace=unknown.workspace,
+        project=unknown.project,
+        invocation=unknown_invocation,
+        run=unknown,
+        state=ReconciliationState.RECONCILED,
+        fresh_assignment_decision=FreshAssignmentDecision.SAFE,
+        terminal_event_ref=f"terminal:stale-unknown-{unknown.id}",
+        runtime_exit_ref=f"runtime-exit:stale-unknown-{unknown.id}",
+        evidence={"providerAttempts": 0},
+        idempotency_key="idempotency:safe-unknown-reconciliation",
+        command_fingerprint="command:" + "a" * 64,
+        reconciled_by=create_user,
+        reconciled_at=timezone.now(),
+        created_by=create_user,
+    )
 
     recovered = create_run(
         assignment,

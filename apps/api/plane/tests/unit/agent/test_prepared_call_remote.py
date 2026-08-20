@@ -394,7 +394,7 @@ def test_remote_runtime_preserves_search_prepared_read_envelope(
     assert host_server.failure_evidence["status"] == "invalid"
     assert host_server.failure_evidence["errorCode"] == "PREPARED_CALL_INVALID"
     assert host_server.failure_evidence["preparedCallInvalidReason"] == "unknown"
-    assert "preparedCallRef" not in json.dumps(host_server.failure_evidence, sort_keys=True)
+    assert "prepared-call:" not in json.dumps(host_server.failure_evidence, sort_keys=True)
     assert [call.operation_ref for call in host_calls] == [
         "operation:catalog.describe",
         "operation:catalog.describe",

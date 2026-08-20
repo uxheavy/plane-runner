@@ -7,6 +7,7 @@ import argparse
 import copy
 import hashlib
 import json
+import os
 import shutil
 import stat
 import subprocess
@@ -687,8 +688,30 @@ def write_disposable_manifest(path: Path, manifest: dict[str, object]) -> None:
     resolved.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     if resolved.is_symlink() or (resolved.exists() and not resolved.is_file()):
         raise RuntimeError("disposable manifest output must be a regular file")
-    resolved.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    resolved.chmod(0o600)
+    payload = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    try:
+        descriptor = os.open(
+            resolved,
+            os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC | os.O_NOFOLLOW,
+            0o600,
+        )
+    except OSError as exc:
+        raise RuntimeError("disposable manifest output must be an owner-only regular file") from exc
+    try:
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "wb", closefd=False) as output:
+            output.write(payload)
+            output.flush()
+            os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    metadata = resolved.stat(follow_symlinks=False)
+    if (
+        not stat.S_ISREG(metadata.st_mode)
+        or metadata.st_uid != os.getuid()
+        or stat.S_IMODE(metadata.st_mode) != 0o600
+    ):
+        raise RuntimeError("disposable manifest output must be an owner-only regular file")
 
 
 def build_parser() -> argparse.ArgumentParser:
