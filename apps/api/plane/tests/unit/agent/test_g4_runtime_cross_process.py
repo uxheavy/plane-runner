@@ -121,6 +121,19 @@ def test_remote_rejection_preserves_finite_host_socket_diagnostic():
         "failureClass": "transport_unavailable",
         "socketPhase": "read",
         "socketState": "failed",
+        "preparedCallInvalidReason": "unknown",
+        "shapeDiagnostic": {
+            "schemaVersion": "plane.prepared-call-shape/v1",
+            "acceptedForm": "canonical_ref",
+            "failureClass": "unknown",
+            "shape": {
+                "keyNames": ["preparedCallRef"],
+                "keyNamesTruncated": False,
+                "valueTypes": ["object"],
+                "nestingDepth": 1,
+                "sizeClass": "small",
+            },
+        },
     }
     rejection = {
         "error": "runtime_dispatch_failed",
@@ -135,6 +148,58 @@ def test_remote_rejection_preserves_finite_host_socket_diagnostic():
     assert error is not None
     assert error.public_failure()["hostOperationFailure"] == host_failure
     rejection["hostOperationFailure"] = {**host_failure, "raw": "private socket path"}
+    assert _structured_rejection(json.dumps(rejection, sort_keys=True, separators=(",", ":")).encode()) is None
+
+
+@pytest.mark.parametrize(
+    "tampered_shape",
+    [
+        {
+            "schemaVersion": "plane.prepared-call-shape/v1",
+            "acceptedForm": "canonical_ref",
+            "failureClass": "unknown",
+            "shape": {
+                "keyNames": ["preparedCallRef"] * 17,
+                "keyNamesTruncated": True,
+                "valueTypes": ["object"],
+                "nestingDepth": 1,
+                "sizeClass": "large",
+            },
+        },
+        {
+            "schemaVersion": "plane.prepared-call-shape/v1",
+            "acceptedForm": "canonical_ref",
+            "failureClass": "unknown",
+            "shape": {
+                "keyNames": ["private-secret-value"],
+                "keyNamesTruncated": False,
+                "valueTypes": ["object"],
+                "nestingDepth": 1,
+                "sizeClass": "small",
+            },
+        },
+    ],
+)
+def test_remote_rejection_drops_tampered_or_oversized_prepared_shape(tampered_shape):
+    host_failure = {
+        "operationId": "work_item.read",
+        "attemptRef": "unavailable",
+        "receiptRef": "unavailable",
+        "status": "invalid",
+        "errorCode": "PREPARED_CALL_INVALID",
+        "codeModePhase": "unavailable",
+        "failureClass": "transport_unavailable",
+        "preparedCallInvalidReason": "unknown",
+        "shapeDiagnostic": tampered_shape,
+    }
+    rejection = {
+        "error": "runtime_dispatch_failed",
+        "failureCode": "runtime_process_failed",
+        "failurePhase": "runtime_process",
+        "failureDetail": "process_exit",
+        "hostOperationFailure": host_failure,
+    }
+
     assert _structured_rejection(json.dumps(rejection, sort_keys=True, separators=(",", ":")).encode()) is None
 
 

@@ -146,9 +146,97 @@ _HOST_FAILURE_STATUSES = frozenset({"denied", "conflict", "unavailable", "invali
 _HOST_FAILURE_REQUIRED_FIELDS = frozenset(
     {"operationId", "attemptRef", "receiptRef", "status", "errorCode", "codeModePhase"}
 )
-_HOST_FAILURE_OPTIONAL_FIELDS = frozenset({"failureClass", "socketPhase", "socketState"})
+_HOST_FAILURE_OPTIONAL_FIELDS = frozenset(
+    {
+        "failureClass",
+        "socketPhase",
+        "socketState",
+        "preparedCallInvalidReason",
+        "shapeDiagnostic",
+    }
+)
 _HOST_CODE_MODE_PHASES = frozenset({"host_callback", "unavailable"})
 _HOST_SAFE_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:-@")
+_PREPARED_CALL_INVALID_REASONS = frozenset(
+    {"malformed", "unknown", "digest_mismatch", "binding_mismatch", "consumed"}
+)
+_PREPARED_DIAGNOSTIC_FAILURES = frozenset(
+    {"malformed", "unknown", "digest_mismatch", "binding_mismatch"}
+)
+_PREPARED_DIAGNOSTIC_FORMS = frozenset({"canonical_ref", "ready_to_call", "unrecognized"})
+_PREPARED_DIAGNOSTIC_FIELDS = frozenset(
+    {"schemaVersion", "acceptedForm", "failureClass", "shape"}
+)
+_PREPARED_DIAGNOSTIC_SHAPE_FIELDS = frozenset(
+    {"keyNames", "keyNamesTruncated", "valueTypes", "nestingDepth", "sizeClass"}
+)
+_PREPARED_DIAGNOSTIC_VALUE_TYPES = frozenset(
+    {"null", "boolean", "string", "integer", "number", "object", "array", "unknown"}
+)
+_PREPARED_DIAGNOSTIC_SIZE_CLASSES = frozenset({"small", "medium", "large", "unknown"})
+_PREPARED_DIAGNOSTIC_KEY_LIMIT = 16
+_PREPARED_DIAGNOSTIC_DEPTH_LIMIT = 8
+_PREPARED_DIAGNOSTIC_KEY_CHARS = frozenset(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-"
+)
+_PREPARED_DIAGNOSTIC_SENSITIVE_PARTS = frozenset(
+    {"auth", "credential", "key", "password", "secret", "token"}
+)
+
+
+def _bounded_prepared_shape_diagnostic(value: object) -> dict[str, object] | None:
+    """Independently validate the value-free prepared-call shape contract."""
+
+    if not isinstance(value, Mapping) or set(value) != _PREPARED_DIAGNOSTIC_FIELDS:
+        return None
+    if (
+        value.get("schemaVersion") != "plane.prepared-call-shape/v1"
+        or value.get("acceptedForm") not in _PREPARED_DIAGNOSTIC_FORMS
+        or value.get("failureClass") not in _PREPARED_DIAGNOSTIC_FAILURES
+    ):
+        return None
+    shape = value.get("shape")
+    if not isinstance(shape, Mapping) or set(shape) != _PREPARED_DIAGNOSTIC_SHAPE_FIELDS:
+        return None
+    key_names = shape.get("keyNames")
+    value_types = shape.get("valueTypes")
+    if (
+        not isinstance(key_names, list)
+        or len(key_names) > _PREPARED_DIAGNOSTIC_KEY_LIMIT
+        or any(
+            not isinstance(item, str)
+            or not item
+            or len(item) > 64
+            or any(char not in _PREPARED_DIAGNOSTIC_KEY_CHARS for char in item)
+            or any(part in item.casefold() for part in _PREPARED_DIAGNOSTIC_SENSITIVE_PARTS)
+            for item in key_names
+        )
+        or len(set(key_names)) != len(key_names)
+        or type(shape.get("keyNamesTruncated")) is not bool
+        or not isinstance(value_types, list)
+        or len(value_types) > len(_PREPARED_DIAGNOSTIC_VALUE_TYPES)
+        or any(
+            not isinstance(item, str) or item not in _PREPARED_DIAGNOSTIC_VALUE_TYPES
+            for item in value_types
+        )
+        or len(set(value_types)) != len(value_types)
+        or type(shape.get("nestingDepth")) is not int
+        or not 0 <= shape["nestingDepth"] <= _PREPARED_DIAGNOSTIC_DEPTH_LIMIT
+        or shape.get("sizeClass") not in _PREPARED_DIAGNOSTIC_SIZE_CLASSES
+    ):
+        return None
+    return {
+        "schemaVersion": "plane.prepared-call-shape/v1",
+        "acceptedForm": value["acceptedForm"],
+        "failureClass": value["failureClass"],
+        "shape": {
+            "keyNames": list(key_names),
+            "keyNamesTruncated": shape["keyNamesTruncated"],
+            "valueTypes": list(value_types),
+            "nestingDepth": shape["nestingDepth"],
+            "sizeClass": shape["sizeClass"],
+        },
+    }
 
 
 def _bounded_host_operation_failure(value: Mapping[str, object] | None) -> dict[str, object] | None:
@@ -184,7 +272,19 @@ def _bounded_host_operation_failure(value: Mapping[str, object] | None) -> dict[
         socket_phase not in _HOST_SOCKET_PHASES or socket_state not in _HOST_SOCKET_STATES
     ):
         return None
-    return dict(value)
+    prepared_reason = value.get("preparedCallInvalidReason")
+    if "preparedCallInvalidReason" in value and prepared_reason not in _PREPARED_CALL_INVALID_REASONS:
+        return None
+    shape_diagnostic = value.get("shapeDiagnostic")
+    bounded_shape_diagnostic = None
+    if "shapeDiagnostic" in value:
+        bounded_shape_diagnostic = _bounded_prepared_shape_diagnostic(shape_diagnostic)
+        if bounded_shape_diagnostic is None:
+            return None
+    bounded = dict(value)
+    if bounded_shape_diagnostic is not None:
+        bounded["shapeDiagnostic"] = bounded_shape_diagnostic
+    return bounded
 
 
 class RuntimeDispatchError(ValueError):
