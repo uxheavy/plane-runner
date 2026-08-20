@@ -885,9 +885,14 @@ def _record_continuation_invocation(run, event, suffix, user, trigger):
 
 
 def _bounded_runtime_diagnostics(value):
-    """Project only finite request/response metadata from Hermes Code Mode."""
+    """Project finite request/response/host-callback metadata from Hermes."""
 
-    if not isinstance(value, dict) or set(value) != {"version", "requests", "responses"}:
+    required = {"version", "requests", "responses"}
+    if (
+        not isinstance(value, dict)
+        or not required.issubset(value)
+        or not set(value).issubset(required | {"hostCallbacks"})
+    ):
         return None
     if value["version"] != 1:
         return None
@@ -936,7 +941,33 @@ def _bounded_runtime_diagnostics(value):
                 "toolCall": row["toolCall"],
             }
         )
-    return {"version": 1, "requests": bounded_requests, "responses": bounded_responses}
+    result = {"version": 1, "requests": bounded_requests, "responses": bounded_responses}
+    if "hostCallbacks" in value:
+        callbacks = value["hostCallbacks"]
+        if not isinstance(callbacks, list) or len(callbacks) > 64:
+            return None
+        bounded_callbacks = []
+        for row in callbacks:
+            if not isinstance(row, dict) or set(row) != {"sequence", "phase", "operationRefDigest"}:
+                return None
+            if (
+                type(row["sequence"]) is not int
+                or not 1 <= row["sequence"] <= 256
+                or row["phase"] not in {"before_host_call", "host_return", "model_observation_emit", "adapter_event"}
+                or not isinstance(row["operationRefDigest"], str)
+                or len(row["operationRefDigest"]) != 64
+                or any(char not in "0123456789abcdef" for char in row["operationRefDigest"])
+            ):
+                return None
+            bounded_callbacks.append(
+                {
+                    "sequence": row["sequence"],
+                    "phase": row["phase"],
+                    "operationRefDigest": row["operationRefDigest"],
+                }
+            )
+        result["hostCallbacks"] = bounded_callbacks
+    return result
 
 
 def build_failure_evidence(

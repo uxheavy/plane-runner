@@ -469,12 +469,21 @@ class G4ContractTests(unittest.TestCase):
                 "responses": [
                     {"sequence": 1, "responseClass": "text_response", "toolCall": "none"}
                 ],
+                "hostCallbacks": [
+                    {
+                        "sequence": 1,
+                        "phase": "before_host_call",
+                        "operationRefDigest": "a" * 64,
+                    }
+                ],
             },
         )
         diagnostics = receipt["runtimeEventIngress"]["diagnostics"]
         self.assertEqual(diagnostics["requests"][0]["visibleToolset"], "execute_only")
         self.assertEqual(diagnostics["responses"][0]["responseClass"], "text_response")
+        self.assertEqual(diagnostics["hostCallbacks"][0]["phase"], "before_host_call")
         self.assertNotIn("prompt", json.dumps(diagnostics))
+        self.assertNotIn("operation:", json.dumps(diagnostics))
 
     def test_runtime_diagnostics_validator_rejects_unbounded_payload_fields(self):
         valid = {
@@ -489,12 +498,23 @@ class G4ContractTests(unittest.TestCase):
                 }
             ],
             "responses": [],
+            "hostCallbacks": [
+                {
+                    "sequence": 1,
+                    "phase": "host_return",
+                    "operationRefDigest": "b" * 64,
+                }
+            ],
         }
         _validate_runtime_diagnostics(valid)
         invalid = copy.deepcopy(valid)
         invalid["requests"][0]["prompt"] = "must not be retained"
         with self.assertRaises(ContractError):
             _validate_runtime_diagnostics(invalid)
+        invalid_callback = copy.deepcopy(valid)
+        invalid_callback["hostCallbacks"][0]["operationRef"] = "operation:raw"  # type: ignore[index]
+        with self.assertRaises(ContractError):
+            _validate_runtime_diagnostics(invalid_callback)
 
     def test_runner_setup_error_projection_is_bounded_and_validated(self):
         valid = {

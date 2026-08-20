@@ -1618,7 +1618,12 @@ def _read_bounded_text(path: Path) -> str:
 
 def _validate_runtime_diagnostics(value: Any) -> None:
     diagnostics = _object(value, "evidence_runtime_diagnostics")
-    if set(diagnostics) != {"version", "requests", "responses"} or diagnostics["version"] != 1:
+    required = {"version", "requests", "responses"}
+    if (
+        not required.issubset(diagnostics)
+        or not set(diagnostics).issubset(required | {"hostCallbacks"})
+        or diagnostics["version"] != 1
+    ):
         raise ContractError("evidence_runtime_diagnostics_fields_invalid")
     for key, maximum in (("requests", 32), ("responses", 32)):
         rows = diagnostics[key]
@@ -1643,6 +1648,24 @@ def _validate_runtime_diagnostics(value: Any) -> None:
                 }
             if set(item) != expected or type(item.get("sequence")) is not int or not 1 <= item["sequence"] <= 256 or item["sequence"] <= previous or not valid:
                 raise ContractError("evidence_runtime_diagnostics_row_invalid")
+            previous = item["sequence"]
+    if "hostCallbacks" in diagnostics:
+        callbacks = diagnostics["hostCallbacks"]
+        if not isinstance(callbacks, list) or len(callbacks) > 64:
+            raise ContractError("evidence_runtime_diagnostics_host_callbacks_invalid")
+        previous = 0
+        for row in callbacks:
+            item = _object(row, "evidence_runtime_diagnostics_hostCallbacks")
+            if (
+                set(item) != {"sequence", "phase", "operationRefDigest"}
+                or type(item.get("sequence")) is not int
+                or not 1 <= item["sequence"] <= 256
+                or item["sequence"] <= previous
+                or item.get("phase") not in {"before_host_call", "host_return", "model_observation_emit", "adapter_event"}
+                or not isinstance(item.get("operationRefDigest"), str)
+                or not re.fullmatch(r"[0-9a-f]{64}", item["operationRefDigest"])
+            ):
+                raise ContractError("evidence_runtime_diagnostics_host_callback_row_invalid")
             previous = item["sequence"]
 
 
