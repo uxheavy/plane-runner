@@ -323,6 +323,21 @@ def _exercise_manager_journey(
         and fire.assignment_id is not None,
     }
 
+    # M03/M04 is a complete selected commission.  Do not continue into the
+    # later review/governance cells: an unrelated later-cell exception must not
+    # turn a satisfied cancellation/schedule commission into a generic runner
+    # failure after its last assertion.
+    if selected_route_ids <= {"M03", "M04"}:
+        return {
+            "routes": {
+                route_id: route
+                for route_id, route in (("M03", m03), ("M04", m04))
+                if route_id in selected_route_ids
+            }
+            | {"replay": {"stateMutations": 0}},
+            "readback": _manager_readback(workspace),
+        }
+
     # M05: one outcome takes revision, the next fresh run is accepted.  The
     # producer never performs the evaluator/human decision itself.
     review_assignment = create_assignment(

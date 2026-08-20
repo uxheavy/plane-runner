@@ -74,7 +74,7 @@
       "module": "agent_g4_manager_route",
       "source": "tools/agent_g4_manager_route.py",
       "runtime": "/run/plane-scenario/agent_g4_manager_route.py",
-      "sha256": "7d6d2da3940624360a3bc0b8c0ce1ed82811462c2cbed6e3ae1b4a177996a4d1"
+      "sha256": "98c2f3a7910c1f1ba9b656c524a5f130e00994d986a2d001913123da61aae62d"
     }
   ],
   "liveContract": {

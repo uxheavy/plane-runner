@@ -618,6 +618,19 @@ def test_manager_commission_scopes_fixture_to_declared_route_checks() -> None:
     assert "route_checks is not None" in route[route.index("def build_manager_route_evidence"):]
 
 
+def test_manager_m03_m04_satisfied_route_returns_before_later_cells() -> None:
+    route = (TOOLS / "agent_g4_manager_route.py").read_text(encoding="utf-8")
+    invoke = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+    m03_m04_return = route.index('if selected_route_ids <= {"M03", "M04"}:')
+    m05_start = route.index("# M05:", m03_m04_return)
+
+    assert "return {" in route[m03_m04_return:m05_start]
+    assert '"M03", m03' in route[m03_m04_return:m05_start]
+    assert '"M04", m04' in route[m03_m04_return:m05_start]
+    assert 'scenario_gate["passed"] = not scenario_gate["failures"]' in invoke
+    assert 'if not scenario_gate["passed"]:' in invoke
+
+
 def test_manager_synthetic_fixture_stays_outside_the_production_agent_package() -> None:
     fixture = TOOLS / "agent_g4_manager_route.py"
     production = TOOLS.parent / "apps" / "api" / "plane" / "agent" / "manager_route.py"

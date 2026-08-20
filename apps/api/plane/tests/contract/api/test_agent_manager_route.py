@@ -32,7 +32,10 @@ _ROUTE_SPEC.loader.exec_module(_ROUTE)
 
 
 @pytest.mark.django_db(transaction=True)
-def test_manager_route_uses_persisted_worker_profile_for_every_run(workspace, gateway_project, create_user):
+@pytest.mark.parametrize("route_checks", [None, {"M03", "M04"}], ids=["all-routes", "cancellation-schedule"])
+def test_manager_route_uses_persisted_worker_profile_for_every_run(
+    workspace, gateway_project, create_user, route_checks
+):
     manager = create_actor(
         workspace=workspace,
         project=gateway_project,
@@ -90,6 +93,7 @@ def test_manager_route_uses_persisted_worker_profile_for_every_run(workspace, ga
         hr=hr,
         human_admin=create_user,
         suffix=uuid4().hex[:8],
+        route_checks=route_checks,
     )
 
     assert failures == [], (
@@ -103,4 +107,6 @@ def test_manager_route_uses_persisted_worker_profile_for_every_run(workspace, ga
         if route_id != "replay"
         for value in route.values()
     )
+    expected_route_ids = set(route_checks or {f"M{index:02d}" for index in range(1, 9)}) | {"replay"}
+    assert set(evidence["routes"]) == expected_route_ids
     assert evidence["routes"]["replay"] == {"stateMutations": 0}
