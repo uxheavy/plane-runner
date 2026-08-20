@@ -17,7 +17,7 @@ from plane.agent.lifecycle import (
     transition_run,
 )
 from plane.agent.operations_readback import MAX_OPERATOR_ITEMS
-from plane.db.models import AgentRole, OutcomeSubmission, RunState
+from plane.db.models import AgentRole, OutcomeSubmission, RunState, RuntimeReconciliation
 from plane.db.models.operation_gateway import OperationGatewayAudit, OperationGatewayIdempotency
 
 
@@ -158,6 +158,10 @@ def test_operator_reconciliation_api_is_idempotent_and_conflict_bound(api_key_cl
     assert second.json()["reconciliation"]["id"] == first.json()["reconciliation"]["id"]
     assert first.json()["reconciliation"]["fresh_assignment_decision"] == "unsafe"
     assert conflict.status_code == 409
+    reconciliation = RuntimeReconciliation.objects.get(pk=first.json()["reconciliation"]["id"])
+    assert reconciliation.created_by_id == create_user.id
+    assert reconciliation.updated_by_id is None
+    assert RuntimeReconciliation.objects.filter(invocation=invocation).count() == 1
 
 
 @pytest.mark.contract

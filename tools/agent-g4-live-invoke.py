@@ -2873,7 +2873,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
             "summary": {
                 "counts": {"collected": 1, "passed": 1, "failed": 0, "skipped": 0, "xfail": 0, "deselected": 0},
                 "durationMs": duration_ms,
-                "migrationLeaf": "db.0144_provider_attempt_diagnostics",
+                "migrationLeaf": "db.0146_runtime_reconciliation_audit_fields",
                 "workload": {
                     "invocationRef": str(invocation.invocation_id),
                     "runRef": str(run.id),

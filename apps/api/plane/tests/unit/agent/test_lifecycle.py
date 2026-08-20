@@ -84,7 +84,7 @@ from plane.db.models import (
 from plane.db.models.operation_gateway import OperationGatewayAudit, OperationGatewayIdempotency
 
 
-AGENT_TEST_HEAD = ("db", "0144_provider_attempt_diagnostics")
+AGENT_TEST_HEAD = ("db", "0146_runtime_reconciliation_audit_fields")
 
 
 @pytest.fixture(scope="session")

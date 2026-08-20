@@ -15,7 +15,7 @@ from plane.db.models import AgentRole, InputEventKind, Project, RunInputEvent
 
 PRE_HEAD = ("db", "0134_agent_input_event_sequence")
 HEAD = ("db", "0135_agent_input_durability")
-CURRENT_TEST_HEAD = ("db", "0144_provider_attempt_diagnostics")
+CURRENT_TEST_HEAD = ("db", "0146_runtime_reconciliation_audit_fields")
 KEYED_TRIGGERS = {
     "agent_run_keyed_binding_guard",
     "agent_input_keyed_binding_guard",
