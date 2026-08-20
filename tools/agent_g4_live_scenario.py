@@ -47,6 +47,14 @@ SCENARIO_ROLES: dict[str, Literal["worker", "delegator"]] = {
     "operator": "worker",
 }
 EXPECTED_OUTCOMES = {"success", "denied", "not_observed"}
+_MANAGER_COMMISSION_ROUTES = {
+    "planning-delegation": ("M01", "M02"),
+    "cancellation-schedule": ("M03", "M04"),
+    "evaluation-hr": ("M05", "M06"),
+    "chief-of-staff-terminal-readback": ("M07", "M08"),
+}
+_MANAGER_TERMINAL_PRODUCT_KINDS = {"publication", "outcome_submission", "run_failure", "run_blocker", "run_cancellation", "input_event"}
+_MANAGER_OUTCOME_OPERATIONS = {"agent.outcome.submit", "agent.outcome.publish"}
 
 
 def rename_code_mode_template() -> str:
@@ -681,6 +689,31 @@ def _commissions(value: Any) -> tuple[CommissionSpec, ...]:
     return tuple(result)
 
 
+def _validate_manager_commissions(commissions: tuple[CommissionSpec, ...]) -> None:
+    """Keep the Manager route split explicit, ordered, and terminal."""
+
+    expected_ids = tuple(_MANAGER_COMMISSION_ROUTES)
+    if tuple(commission.commission_id for commission in commissions) != expected_ids:
+        raise ScenarioError("scenario_manager_commission_ids_invalid")
+    for commission in commissions:
+        expected = commission.expected
+        if expected is None:
+            raise ScenarioError(f"scenario_manager_commission_{commission.commission_id}_expected_missing")
+        if any(not ref.startswith("context:") for ref in commission.assignment.context_refs):
+            raise ScenarioError(f"scenario_manager_commission_{commission.commission_id}_context_invalid")
+        operations = expected.get("operationOutcomes", [])
+        if not operations or operations[0].get("operationId") != "search_workspace":
+            raise ScenarioError(f"scenario_manager_commission_{commission.commission_id}_first_operation_invalid")
+        if tuple(expected.get("routeChecks", [])) != _MANAGER_COMMISSION_ROUTES[commission.commission_id]:
+            raise ScenarioError(f"scenario_manager_commission_{commission.commission_id}_routes_invalid")
+        terminal_operations = {row.get("operationId") for row in operations} & _MANAGER_OUTCOME_OPERATIONS
+        terminal_products = {row.get("kind") for row in expected.get("productEvents", [])} & _MANAGER_TERMINAL_PRODUCT_KINDS
+        if not terminal_operations and not terminal_products:
+            raise ScenarioError(f"scenario_manager_commission_{commission.commission_id}_terminal_missing")
+        if "terminal_event" not in expected.get("evidenceKinds", []):
+            raise ScenarioError(f"scenario_manager_commission_{commission.commission_id}_terminal_evidence_missing")
+
+
 def evaluate_expectations(expected: ExpectedPredicates | None, *, operations: list[dict[str, Any]], records: list[dict[str, Any]], product_events: list[dict[str, Any]], evidence_kinds: list[str]) -> dict[str, Any]:
     if expected is None:
         return {"passed": True, "failures": [], "operations": [], "durableRecords": [], "productEvents": [], "evidenceKinds": []}
@@ -782,6 +815,9 @@ def parse_descriptor_bytes(raw: bytes, expected_digest: str) -> ScenarioDescript
         roles = {actor.ref: actor.role for actor in setup.actors}
         if roles.get(setup.lineage.parent_ref) != "delegator":
             raise ScenarioError("scenario_setup_lineage_parent_role_invalid")
+    commissions = _commissions(descriptor.get("commissions"))
+    if scenario_id == "manager" and commissions:
+        _validate_manager_commissions(commissions)
     return ScenarioDescriptor(
         scenario_id=scenario_id,
         actor_role=actor_role,
@@ -792,7 +828,7 @@ def parse_descriptor_bytes(raw: bytes, expected_digest: str) -> ScenarioDescript
         setup=setup,
         controls=_controls(descriptor.get("controls")),
         descriptor_digest=actual_digest,
-        commissions=_commissions(descriptor.get("commissions")),
+        commissions=commissions,
     )
 
 

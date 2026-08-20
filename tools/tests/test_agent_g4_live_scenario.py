@@ -423,12 +423,12 @@ def test_single_manager_descriptor_ignores_per_run_commission_identity() -> None
     raw = path.read_bytes()
     parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
 
-    selected = scenario.select_runtime_descriptor(parsed, "manager-m01-m08-v23-primary-20260818-01")
+    selected = scenario.select_runtime_descriptor(parsed, "planning-delegation")
 
     assert selected.commissions == ()
-    assert selected.selected_commission_id is None
+    assert selected.selected_commission_id == "planning-delegation"
     assert selected.descriptor_digest == parsed.descriptor_digest
-    assert selected.assignment == parsed.assignment
+    assert selected.assignment == parsed.commissions[0].assignment
 
 
 def test_operator_live_descriptor_covers_exact_synthetic_omar_routes() -> None:
@@ -507,11 +507,56 @@ def test_manager_live_descriptor_covers_elena_routes_and_fixed_model_policy() ->
     assert parsed.profile.model_policy.model == "gpt-5.6-luna"
     assert parsed.profile.model_policy.reasoning == "xhigh"
     assert parsed.profile.model_policy.fallback_allowed is False
-    assert parsed.expected["routeChecks"] == [f"M{index:02d}" for index in range(1, 9)]
+    assert parsed.expected is None
+    assert [commission.commission_id for commission in parsed.commissions] == [
+        "planning-delegation",
+        "cancellation-schedule",
+        "evaluation-hr",
+        "chief-of-staff-terminal-readback",
+    ]
+    assert parsed.commissions[0].expected["operationOutcomes"][0] == {
+        "operationId": "search_workspace",
+        "outcome": "success",
+        "count": 1,
+    }
+    assert parsed.commissions[-1].expected["operationOutcomes"][-2:] == [
+        {"operationId": "agent.outcome.submit", "outcome": "success", "count": 1},
+        {"operationId": "agent.outcome.publish", "outcome": "success", "count": 1},
+    ]
     assert parsed.setup.lineage.parent_ref == "actor:primary"
     assert parsed.setup.schedule.timezone == "America/Los_Angeles"
     assert "workflow product" in parsed.prompt
-    validator._validate_scenario_projection(parsed.evidence())
+    for commission in parsed.commissions:
+        validator._validate_scenario_projection(scenario.commission_descriptor(parsed, commission).evidence())
+
+
+def test_manager_commission_requires_prepared_first_operation_and_terminal() -> None:
+    value = json.loads((TOOLS / "agent-g4-manager-v1.json").read_text(encoding="utf-8"))
+    value["commissions"][0]["expected"]["operationOutcomes"][0]["operationId"] = "catalog.search"
+    raw, digest = descriptor_bytes(value)
+    with pytest.raises(scenario.ScenarioError, match="scenario_manager_commission_planning-delegation_first_operation_invalid"):
+        scenario.parse_descriptor_bytes(raw, digest)
+
+    value = json.loads((TOOLS / "agent-g4-manager-v1.json").read_text(encoding="utf-8"))
+    value["commissions"][0]["expected"]["operationOutcomes"] = [
+        {"operationId": "search_workspace", "outcome": "success", "count": 1}
+    ]
+    value["commissions"][0]["expected"]["productEvents"] = []
+    raw, digest = descriptor_bytes(value)
+    with pytest.raises(scenario.ScenarioError, match="scenario_manager_commission_planning-delegation_terminal_missing"):
+        scenario.parse_descriptor_bytes(raw, digest)
+
+
+def test_manager_commission_accepts_explicit_failure_terminal() -> None:
+    value = json.loads((TOOLS / "agent-g4-manager-v1.json").read_text(encoding="utf-8"))
+    expected = value["commissions"][0]["expected"]
+    expected["operationOutcomes"] = [
+        {"operationId": "search_workspace", "outcome": "success", "count": 1}
+    ]
+    expected["productEvents"] = [{"kind": "run_failure", "count": 1}]
+    raw, digest = descriptor_bytes(value)
+    parsed = scenario.parse_descriptor_bytes(raw, digest)
+    assert parsed.commissions[0].expected["productEvents"] == [{"kind": "run_failure", "count": 1}]
 
 
 def test_manager_assignment_context_refs_are_context_scoped_and_lineage_scope_is_separate() -> None:

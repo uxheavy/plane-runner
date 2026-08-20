@@ -520,6 +520,48 @@ class G4ContractTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
 
+    def test_manager_commission_aggregate_is_fail_fast_and_keeps_only_attempted_groups(self):
+        descriptor_path = TOOLS / "agent-g4-manager-v1.json"
+        descriptor_bytes_value = descriptor_path.read_bytes()
+        root_scenario = live_scenario.parse_descriptor_bytes(
+            descriptor_bytes_value,
+            hashlib.sha256(descriptor_bytes_value).hexdigest(),
+        )
+        namespace = invoke_helper_namespace()
+        first = {
+            "status": "passed",
+            "scenario": live_scenario.commission_descriptor(
+                root_scenario, root_scenario.commissions[0]
+            ).evidence(),
+            "providerAttempts": [],
+            "summary": {"workload": {}},
+        }
+        second = {
+            "schemaVersion": "plane-agent-g4/live-failure/v1",
+            "status": "failed",
+            "scenario": live_scenario.commission_descriptor(
+                root_scenario, root_scenario.commissions[1]
+            ).evidence(),
+            "providerAttempts": [],
+            "summary": {"workload": {}},
+        }
+        aggregate = namespace["_aggregate_commission_evidence"](
+            root_scenario,
+            [
+                ("planning-delegation", 0, first),
+                ("cancellation-schedule", 1, second),
+            ],
+        )
+
+        self.assertEqual(aggregate["status"], "failed")
+        self.assertEqual(
+            [row["id"] for row in aggregate["commissionEvidence"]],
+            ["planning-delegation", "cancellation-schedule"],
+        )
+        self.assertIn("commission:cancellation-schedule", aggregate["scenarioGate"]["failures"])
+        self.assertNotIn("evaluation-hr", [row["id"] for row in aggregate["commissionEvidence"]])
+        self.assertNotIn("chief-of-staff-terminal-readback", [row["id"] for row in aggregate["commissionEvidence"]])
+
     def test_terminal_lifecycle_observation_is_strictly_bounded_and_retained(self):
         namespace = invoke_helper_namespace()
         parser = namespace["_bounded_terminal_lifecycle_observation"]
