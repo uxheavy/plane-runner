@@ -103,6 +103,113 @@ def test_host_result_uses_the_canonical_public_result_ceiling():
         )
 
 
+@pytest.mark.parametrize(
+    ("input_value", "accepted_form"),
+    [
+        ({"preparedCallRef": "prepared-call:opaque"}, "canonical_ref"),
+        (
+            {
+                "action": "read",
+                "operationRef": "operation:work_item.read",
+                "input": {"preparedCallRef": "prepared-call:opaque"},
+            },
+            "ready_to_call",
+        ),
+    ],
+)
+def test_prepared_shape_diagnostic_classifies_existing_forms(input_value, accepted_form):
+    diagnostic = host_rpc._prepared_shape_diagnostic(input_value, "malformed")
+
+    assert diagnostic["schemaVersion"] == "plane.prepared-call-shape/v1"
+    assert diagnostic["acceptedForm"] == accepted_form
+    assert diagnostic["failureClass"] == "malformed"
+    assert diagnostic["shape"]["valueTypes"]
+    assert diagnostic["shape"]["sizeClass"] in {"small", "medium", "large"}
+    assert "prepared-call:opaque" not in json.dumps(diagnostic)
+
+
+@pytest.mark.parametrize(
+    ("input_value", "failure_class", "accepted_form"),
+    [
+        ({"preparedCallRef": "prepared-call:unknown"}, "unknown", "canonical_ref"),
+        (
+            {"preparedCallRef": "prepared-call:opaque", "issue_id": "raw-id"},
+            "malformed",
+            "unrecognized",
+        ),
+        ({"preparedCallRef": "prepared-call:opaque"}, "digest_mismatch", "canonical_ref"),
+        ({"preparedCallRef": "prepared-call:opaque"}, "binding_mismatch", "canonical_ref"),
+    ],
+)
+def test_prepared_shape_diagnostic_is_finite_and_redacted(
+    input_value, failure_class, accepted_form
+):
+    diagnostic = host_rpc._prepared_shape_diagnostic(input_value, failure_class)
+    encoded = json.dumps(diagnostic, sort_keys=True)
+
+    assert diagnostic["failureClass"] == failure_class
+    assert diagnostic["acceptedForm"] == accepted_form
+    assert "raw-id" not in encoded
+    assert "prepared-call:opaque" not in encoded
+    assert set(diagnostic) == {"schemaVersion", "acceptedForm", "failureClass", "shape"}
+    assert set(diagnostic["shape"]) == {
+        "keyNames",
+        "keyNamesTruncated",
+        "valueTypes",
+        "nestingDepth",
+        "sizeClass",
+    }
+
+
+def test_prepared_shape_diagnostic_redacts_sensitive_key_names_and_values():
+    diagnostic = host_rpc._prepared_shape_diagnostic(
+        {
+            "api_token": "provider-secret-value",
+            "nested": {"password": "another-secret"},
+        },
+        "malformed",
+    )
+    encoded = json.dumps(diagnostic, sort_keys=True)
+
+    assert "provider-secret-value" not in encoded
+    assert "another-secret" not in encoded
+    assert "api_token" not in encoded
+    assert "password" not in encoded
+    assert diagnostic["shape"]["keyNames"].count("redacted_key") == 2
+
+
+def test_prepared_shape_diagnostic_redacts_id_shaped_key_names():
+    diagnostic = host_rpc._prepared_shape_diagnostic(
+        {"550e8400-e29b-41d4-a716-446655440000": "raw-value"},
+        "malformed",
+    )
+
+    assert diagnostic["shape"]["keyNames"] == ["redacted_key"]
+    assert "raw-value" not in json.dumps(diagnostic)
+
+
+def test_prepared_invalid_host_receipt_carries_only_bounded_diagnostic():
+    class FakeHost:
+        binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
+
+        def call_operation(self, *_args, **_kwargs):
+            raise AssertionError("invalid prepared input must not reach the gateway")
+
+    port = PlaneGatewayHostPort(FakeHost())
+    result = port.invoke(
+        _call(
+            operationRef="operation:work_item.read",
+            input={"preparedCallRef": "prepared-call:unknown"},
+        )
+    )
+
+    assert result.status == "invalid"
+    assert result.error_code == "PREPARED_CALL_INVALID"
+    assert result.output["shapeDiagnostic"]["failureClass"] == "unknown"
+    round_tripped = PlaneHostResult.from_wire(result.to_wire())
+    assert round_tripped.output == result.output
+
+
 def test_host_server_replays_exact_calls_without_reinvoking_the_gateway(tmp_path):
     calls = []
 

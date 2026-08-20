@@ -1278,6 +1278,11 @@ class PlaneGatewayHostPort:
                     call,
                     "PREPARED_CALL_INVALID",
                     "Prepared work-item read reference is invalid",
+                    output={
+                        "shapeDiagnostic": _prepared_shape_diagnostic(
+                            call.input, exc.reason
+                        )
+                    },
                     prepared_call_invalid_reason=exc.reason,
                 )
             except PlaneHostRPCError:
@@ -1285,6 +1290,11 @@ class PlaneGatewayHostPort:
                     call,
                     "PREPARED_CALL_INVALID",
                     "Prepared work-item read reference is invalid",
+                    output={
+                        "shapeDiagnostic": _prepared_shape_diagnostic(
+                            call.input, "malformed"
+                        )
+                    },
                     prepared_call_invalid_reason="malformed",
                 )
         receipt = self._host.call_operation(
@@ -1491,6 +1501,7 @@ class PlaneGatewayHostPort:
         code: str,
         message: str,
         *,
+        output: Any = None,
         prepared_call_invalid_reason: str | None = None,
     ) -> PlaneHostResult:
         return PlaneHostResult(
@@ -1516,7 +1527,7 @@ class PlaneGatewayHostPort:
                 else "unavailable"
             ),
             replayed=False,
-            output=None,
+            output=output,
             error_code=code,
             error_message=message,
             prepared_call_invalid_reason=prepared_call_invalid_reason,
