@@ -110,6 +110,34 @@ def test_remote_rejection_preserves_only_valid_child_diagnostic():
     assert _structured_rejection(json.dumps(rejection, sort_keys=True, separators=(",", ":")).encode()) is None
 
 
+def test_remote_rejection_preserves_finite_host_socket_diagnostic():
+    host_failure = {
+        "operationId": "unavailable",
+        "attemptRef": "unavailable",
+        "receiptRef": "unavailable",
+        "status": "unavailable",
+        "errorCode": "HOST_UNAVAILABLE",
+        "codeModePhase": "unavailable",
+        "failureClass": "transport_unavailable",
+        "socketPhase": "read",
+        "socketState": "failed",
+    }
+    rejection = {
+        "error": "runtime_dispatch_failed",
+        "failureCode": "runtime_process_failed",
+        "failurePhase": "runtime_process",
+        "failureDetail": "process_exit",
+        "hostOperationFailure": host_failure,
+    }
+
+    error = _structured_rejection(json.dumps(rejection, sort_keys=True, separators=(",", ":")).encode())
+
+    assert error is not None
+    assert error.public_failure()["hostOperationFailure"] == host_failure
+    rejection["hostOperationFailure"] = {**host_failure, "raw": "private socket path"}
+    assert _structured_rejection(json.dumps(rejection, sort_keys=True, separators=(",", ":")).encode()) is None
+
+
 def _runtime_environment(tmp_path: Path, source: str, command: str | None = None) -> dict[str, str]:
     module_root = tmp_path / "runtime-module"
     package = module_root / "plane_runtime" / "g1_runtime_image"

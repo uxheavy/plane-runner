@@ -367,6 +367,9 @@ def _is_prepared_call(call: PlaneHostCall) -> bool:
 
 
 _HOST_FAILURE_CLASSES = frozenset({"transport_unavailable", "callback_exception"})
+_HOST_SOCKET_PHASES = frozenset({"accept", "read", "invoke", "serialize", "write"})
+_HOST_SOCKET_STATES = frozenset({"failed", "closed"})
+_HOST_SOCKET_ERROR_CODES = frozenset({"HOST_UNAVAILABLE", "HOST_SOCKET_UNAVAILABLE"})
 _PREPARED_DIAGNOSTIC_FAILURES = frozenset(
     {"malformed", "unknown", "digest_mismatch", "binding_mismatch"}
 )
@@ -661,17 +664,25 @@ class PlaneHostResult:
 
 
 def _host_operation_failure_evidence(
-    call: PlaneHostCall,
+    call: PlaneHostCall | None,
     result: PlaneHostResult | None = None,
     *,
     error_code: str | None = None,
     failure_class: str | None = None,
+    socket_phase: str | None = None,
+    socket_state: str = "failed",
 ) -> dict[str, Any] | None:
     """Project one failed callback into the bounded runner evidence shape."""
 
-    if call.action == "observe":
+    if call is not None and call.action == "observe":
         return None
-    operation_id = call.operation_ref.removeprefix("operation:")
+    if socket_phase is not None and (
+        socket_phase not in _HOST_SOCKET_PHASES
+        or socket_state not in _HOST_SOCKET_STATES
+        or error_code not in _HOST_SOCKET_ERROR_CODES
+    ):
+        return None
+    operation_id = call.operation_ref.removeprefix("operation:") if call is not None else "unavailable"
     output = result.output if result is not None and isinstance(result.output, Mapping) else {}
     resolved_error_code = (
         error_code
@@ -682,7 +693,7 @@ def _host_operation_failure_evidence(
             else None
         )
     )
-    if call.action != "publish" and result is not None and (
+    if call is not None and call.action != "publish" and result is not None and (
         (result.status == "denied" and resolved_error_code == "NOT_AUTHORIZED")
         or (result.status == "invalid" and resolved_error_code == "VALIDATION_ERROR")
     ):
@@ -728,7 +739,7 @@ def _host_operation_failure_evidence(
         "operationId": bounded_operation_id(operation_id),
         "attemptRef": bounded_ref(request_id, "operation-attempt:")
         if request_id is not None
-        else call.request_ref,
+        else call.request_ref if call is not None else "unavailable",
         "receiptRef": bounded_ref(audit_receipt, "audit-receipt:"),
         "status": status,
         "errorCode": bounded_code(
@@ -736,15 +747,18 @@ def _host_operation_failure_evidence(
         ),
         "codeModePhase": (
             "host_callback"
-            if call.action == "code" and call.source == "code"
+            if call is not None and call.action == "code" and call.source == "code"
             else "unavailable"
         ),
     }
     if failure_class in _HOST_FAILURE_CLASSES:
         evidence["failureClass"] = failure_class
-    if result is not None and result.prepared_call_invalid_reason in _PREPARED_CALL_INVALID_REASONS:
+    if socket_phase is not None:
+        evidence["socketPhase"] = socket_phase
+        evidence["socketState"] = socket_state
+    if result is not None and call is not None and result.prepared_call_invalid_reason in _PREPARED_CALL_INVALID_REASONS:
         evidence["preparedCallInvalidReason"] = result.prepared_call_invalid_reason
-    if result is not None and resolved_error_code == "PREPARED_CALL_INVALID":
+    if result is not None and call is not None and resolved_error_code == "PREPARED_CALL_INVALID":
         shape_diagnostic = _bounded_prepared_shape_diagnostic(output.get("shapeDiagnostic"))
         if shape_diagnostic is None:
             shape_diagnostic = _prepared_shape_diagnostic(
@@ -818,17 +832,21 @@ class PlaneHostServer:
 
     def _record_failure(
         self,
-        call: PlaneHostCall,
+        call: PlaneHostCall | None,
         result: PlaneHostResult | None = None,
         *,
         error_code: str | None = None,
         failure_class: str | None = None,
+        socket_phase: str | None = None,
+        socket_state: str = "failed",
     ):
         evidence = _host_operation_failure_evidence(
             call,
             result,
             error_code=error_code,
             failure_class=failure_class,
+            socket_phase=socket_phase,
+            socket_state=socket_state,
         )
         if evidence is None:
             return
@@ -906,6 +924,12 @@ class PlaneHostServer:
             except OSError:
                 if not self._closed.is_set():
                     self._error = PlaneHostRPCError("host listener became unavailable")
+                    self._record_failure(
+                        None,
+                        error_code="HOST_SOCKET_UNAVAILABLE",
+                        failure_class="transport_unavailable",
+                        socket_phase="accept",
+                    )
                 return
             with connection:
                 connection.settimeout(self._timeout_seconds)
@@ -913,37 +937,59 @@ class PlaneHostServer:
                 try:
                     line = self._read_line(connection, carry)
                 except (OSError, PlaneHostRPCError):
+                    self._record_failure(
+                        None,
+                        error_code="HOST_UNAVAILABLE",
+                        failure_class="transport_unavailable",
+                        socket_phase="read",
+                    )
                     continue
                 if line is None:
+                    self._record_failure(
+                        None,
+                        error_code="HOST_UNAVAILABLE",
+                        failure_class="transport_unavailable",
+                        socket_phase="read",
+                        socket_state="closed",
+                    )
                     continue
                 call: PlaneHostCall | None = None
                 try:
                     call = PlaneHostCall.from_wire(line)
-                    result = self._invoke_once(call)
-                    _bounded(result.to_wire(), "host.result", MAX_HOST_RESULT_BYTES)
-                    response = result.to_wire()
-                except PlaneHostRPCError:
-                    if call is not None:
-                        self._record_failure(
-                            call,
-                            error_code="HOST_UNAVAILABLE",
-                            failure_class="transport_unavailable",
-                        )
+                except Exception:
+                    self._record_failure(
+                        None,
+                        error_code="HOST_UNAVAILABLE",
+                        failure_class="transport_unavailable",
+                        socket_phase="read",
+                    )
                     continue
+                phase = "invoke"
+                try:
+                    result = self._invoke_once(call)
+                    phase = "serialize"
+                    response = result.to_wire()
+                    _bounded(response, "host.result", MAX_HOST_RESULT_BYTES)
                 except Exception:
                     # Never expose application/provider diagnostics over the
                     # host socket. The Hermes client observes peer failure.
-                    if call is not None:
-                        self._record_failure(
-                            call,
-                            error_code="HOST_UNAVAILABLE",
-                            failure_class="transport_unavailable",
-                        )
+                    self._record_failure(
+                        call,
+                        error_code="HOST_UNAVAILABLE",
+                        failure_class="transport_unavailable",
+                        socket_phase=phase,
+                    )
                     continue
                 try:
                     encoded = _canonical(response, "host.result") + b"\n"
                     connection.sendall(encoded)
                 except OSError:
+                    self._record_failure(
+                        call,
+                        error_code="HOST_UNAVAILABLE",
+                        failure_class="transport_unavailable",
+                        socket_phase="write",
+                    )
                     continue
 
     def _invoke_once(self, call: PlaneHostCall) -> PlaneHostResult:
@@ -1026,6 +1072,7 @@ class PlaneHostServer:
                 call,
                 error_code="HOST_UNAVAILABLE",
                 failure_class="callback_exception",
+                socket_phase="invoke",
             )
             raise
         except Exception as exc:
@@ -1033,6 +1080,7 @@ class PlaneHostServer:
                 call,
                 error_code="HOST_UNAVAILABLE",
                 failure_class="callback_exception",
+                socket_phase="invoke",
             )
             raise PlaneHostRPCError("host callback is unavailable") from exc
         if result.status not in {"ok", "replayed"}:
@@ -1153,38 +1201,46 @@ class _PlaneHostHTTPHandler(BaseHTTPRequestHandler):
             self._write(413, {"error": "request_too_large"})
             return
         call: PlaneHostCall | None = None
+        phase = "read"
         try:
             raw = self.rfile.read(length)
             call = PlaneHostCall.from_wire(raw)
+            phase = "invoke"
             result = self.server.invoke_once(call)
+            phase = "serialize"
             payload = _canonical(result.to_wire(), "host.result")
             if len(payload) > MAX_HOST_RESULT_BYTES:
                 raise PlaneHostRPCError("host result exceeds the size limit")
         except Exception:
-            if call is not None:
-                self.server.owner._record_failure(
-                    call,
-                    error_code="HOST_UNAVAILABLE",
-                    failure_class="transport_unavailable",
-                )
-            self._write(503, {"error": "host_unavailable"})
+            self.server.owner._record_failure(
+                call,
+                error_code="HOST_UNAVAILABLE",
+                failure_class="callback_exception" if phase == "invoke" else "transport_unavailable",
+                socket_phase=phase,
+            )
+            self._write(503, {"error": "host_unavailable"}, call=call)
             return
-        self._write(200, result.to_wire())
+        self._write(200, result.to_wire(), call=call)
 
-    def _write(self, status: int, value: Mapping[str, Any]) -> None:
-        payload = _canonical(value, "host HTTP response")
-        if len(payload) > MAX_HOST_HTTP_RESPONSE_BYTES:
-            status = 500
-            payload = b'{"error":"response_too_large"}'
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(payload)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
+    def _write(self, status: int, value: Mapping[str, Any], *, call: PlaneHostCall | None = None) -> None:
         try:
+            payload = _canonical(value, "host HTTP response")
+            if len(payload) > MAX_HOST_HTTP_RESPONSE_BYTES:
+                status = 500
+                payload = b'{"error":"response_too_large"}'
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
             self.wfile.write(payload)
         except OSError:
-            pass
+            self.server.owner._record_failure(
+                call,
+                error_code="HOST_UNAVAILABLE",
+                failure_class="transport_unavailable",
+                socket_phase="write",
+            )
 
     def log_message(self, format: str, *args: object) -> None:
         # Request headers, including the per-invocation token, never enter logs.
@@ -1309,17 +1365,21 @@ class PlaneHostHTTPServer:
 
     def _record_failure(
         self,
-        call: PlaneHostCall,
+        call: PlaneHostCall | None,
         result: PlaneHostResult | None = None,
         *,
         error_code: str | None = None,
         failure_class: str | None = None,
+        socket_phase: str | None = None,
+        socket_state: str = "failed",
     ):
         evidence = _host_operation_failure_evidence(
             call,
             result,
             error_code=error_code,
             failure_class=failure_class,
+            socket_phase=socket_phase,
+            socket_state=socket_state,
         )
         if evidence is None:
             return
@@ -1404,6 +1464,7 @@ class PlaneHostHTTPServer:
                 call,
                 error_code="HOST_UNAVAILABLE",
                 failure_class="callback_exception",
+                socket_phase="invoke",
             )
             raise
         except Exception as exc:
@@ -1411,6 +1472,7 @@ class PlaneHostHTTPServer:
                 call,
                 error_code="HOST_UNAVAILABLE",
                 failure_class="callback_exception",
+                socket_phase="invoke",
             )
             raise PlaneHostRPCError("host callback is unavailable") from exc
         if result.status not in {"ok", "replayed"}:

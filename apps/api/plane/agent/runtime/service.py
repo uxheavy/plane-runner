@@ -297,6 +297,7 @@ class RuntimeDispatchExecutor:
         cleanup_error: RuntimeConfigurationError | None = None
         result_frames: tuple[str, ...] = ()
         dispatch_error: BaseException | None = None
+        host_operation_failure: dict[str, object] | None = None
         command = self.configuration.command
         try:
             provider_route = self._configured_provider_route(snapshot)
@@ -401,9 +402,18 @@ class RuntimeDispatchExecutor:
                 if provider_relay.required_audit_failure is not None:
                     cleanup_error = RuntimeConfigurationError("provider attempt evidence was rejected by Plane")
             if server is not None:
+                host_operation_failure = server.failure_evidence
                 server.close()
             if temp_dir is not None:
                 shutil.rmtree(temp_dir, ignore_errors=True)
+        if host_operation_failure is not None and dispatch_error is not None:
+            if isinstance(dispatch_error, RuntimeDispatchError):
+                dispatch_error = dispatch_error.with_host_operation_failure(host_operation_failure)
+            else:
+                dispatch_error = RuntimeDispatchError(
+                    "runtime dispatch failed",
+                    host_operation_failure=host_operation_failure,
+                )
         if cleanup_error is not None:
             if dispatch_error is not None:
                 raise cleanup_error from dispatch_error

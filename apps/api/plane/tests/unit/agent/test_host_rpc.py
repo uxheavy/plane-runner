@@ -2,6 +2,7 @@ import http.client
 import json
 import socket
 import threading
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -278,6 +279,8 @@ def test_http_host_distinguishes_callback_exception_after_successful_search():
         assert evidence["status"] == "unavailable"
         assert evidence["errorCode"] == "HOST_UNAVAILABLE"
         assert evidence["failureClass"] == "callback_exception"
+        assert evidence["socketPhase"] == "invoke"
+        assert evidence["socketState"] == "failed"
         assert "internal callback details" not in json.dumps(evidence)
     finally:
         server.close()
@@ -322,7 +325,40 @@ def test_http_host_classifies_response_boundary_failure_as_transport(monkeypatch
         assert evidence is not None
         assert evidence["errorCode"] == "HOST_UNAVAILABLE"
         assert evidence["failureClass"] == "transport_unavailable"
+        assert evidence["socketPhase"] == "serialize"
+        assert evidence["socketState"] == "failed"
         assert "response details" not in json.dumps(evidence)
+    finally:
+        server.close()
+
+
+def test_unix_host_records_call_less_socket_read_failure_without_raw_details(tmp_path):
+    server = PlaneHostServer(socket_path=tmp_path / "host.sock", invoke=lambda _call: pytest.fail("not invoked"))
+    server.start()
+    client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        client.connect(str(tmp_path / "host.sock"))
+        client.sendall(b"not-canonical-json\n")
+    finally:
+        client.close()
+    for _ in range(50):
+        if server.failure_evidence is not None:
+            break
+        time.sleep(0.01)
+    try:
+        evidence = server.failure_evidence
+        assert evidence == {
+            "operationId": "unavailable",
+            "attemptRef": "unavailable",
+            "receiptRef": "unavailable",
+            "status": "unavailable",
+            "errorCode": "HOST_UNAVAILABLE",
+            "codeModePhase": "unavailable",
+            "failureClass": "transport_unavailable",
+            "socketPhase": "read",
+            "socketState": "failed",
+        }
+        assert "not-canonical-json" not in json.dumps(evidence)
     finally:
         server.close()
 

@@ -139,6 +139,52 @@ _CHILD_FAILURE_CATEGORIES = frozenset(
         "unknown",
     }
 )
+_HOST_FAILURE_CLASSES = frozenset({"transport_unavailable", "callback_exception"})
+_HOST_SOCKET_PHASES = frozenset({"accept", "read", "invoke", "serialize", "write"})
+_HOST_SOCKET_STATES = frozenset({"failed", "closed"})
+_HOST_FAILURE_STATUSES = frozenset({"denied", "conflict", "unavailable", "invalid"})
+_HOST_FAILURE_REQUIRED_FIELDS = frozenset(
+    {"operationId", "attemptRef", "receiptRef", "status", "errorCode", "codeModePhase"}
+)
+_HOST_FAILURE_OPTIONAL_FIELDS = frozenset({"failureClass", "socketPhase", "socketState"})
+_HOST_CODE_MODE_PHASES = frozenset({"host_callback", "unavailable"})
+_HOST_SAFE_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:-@")
+
+
+def _bounded_host_operation_failure(value: Mapping[str, object] | None) -> dict[str, object] | None:
+    """Accept only the finite host diagnostic shape across the runtime seam."""
+
+    if value is None or set(value).difference(_HOST_FAILURE_REQUIRED_FIELDS | _HOST_FAILURE_OPTIONAL_FIELDS):
+        return None
+    if not _HOST_FAILURE_REQUIRED_FIELDS.issubset(value):
+        return None
+    for field in _HOST_FAILURE_REQUIRED_FIELDS:
+        item = value.get(field)
+        if (
+            not isinstance(item, str)
+            or not item
+            or len(item.encode("utf-8")) > 128
+            or any(char not in _HOST_SAFE_CHARS for char in item)
+        ):
+            return None
+    if value["status"] not in _HOST_FAILURE_STATUSES:
+        return None
+    if value["codeModePhase"] not in _HOST_CODE_MODE_PHASES:
+        return None
+    failure_class = value.get("failureClass")
+    if "failureClass" in value and failure_class not in _HOST_FAILURE_CLASSES:
+        return None
+    socket_phase = value.get("socketPhase")
+    socket_state = value.get("socketState")
+    if ("socketPhase" in value) != ("socketState" in value):
+        return None
+    if (socket_phase is None) != (socket_state is None):
+        return None
+    if socket_phase is not None and (
+        socket_phase not in _HOST_SOCKET_PHASES or socket_state not in _HOST_SOCKET_STATES
+    ):
+        return None
+    return dict(value)
 
 
 class RuntimeDispatchError(ValueError):
@@ -153,6 +199,7 @@ class RuntimeDispatchError(ValueError):
         failure_detail: str | None = None,
         failure_subreason: str | None = None,
         child_diagnostic: Mapping[str, object] | None = None,
+        host_operation_failure: Mapping[str, object] | None = None,
     ) -> None:
         super().__init__(message)
         classification_is_valid = (
@@ -186,6 +233,7 @@ class RuntimeDispatchError(ValueError):
             else None
         )
         self.child_diagnostic = self._bounded_child_diagnostic(child_diagnostic)
+        self.host_operation_failure = _bounded_host_operation_failure(host_operation_failure)
 
     @staticmethod
     def _bounded_child_diagnostic(value: Mapping[str, object] | None) -> dict[str, object] | None:
@@ -223,7 +271,22 @@ class RuntimeDispatchError(ValueError):
             failure["failureSubreason"] = self.failure_subreason
         if self.child_diagnostic is not None:
             failure["childDiagnostic"] = dict(self.child_diagnostic)
+        if self.host_operation_failure is not None:
+            failure["hostOperationFailure"] = dict(self.host_operation_failure)
         return failure
+
+    def with_host_operation_failure(self, value: Mapping[str, object]) -> "RuntimeDispatchError":
+        """Carry bounded host evidence without changing the dispatch classification."""
+
+        return RuntimeDispatchError(
+            str(self),
+            failure_code=self.failure_code,
+            failure_phase=self.failure_phase,
+            failure_detail=self.failure_detail,
+            failure_subreason=self.failure_subreason,
+            child_diagnostic=self.child_diagnostic,
+            host_operation_failure=value,
+        )
 
 
 class RuntimeTransport(Protocol):

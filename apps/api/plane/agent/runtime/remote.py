@@ -67,7 +67,7 @@ def _structured_rejection(body: bytes) -> RuntimeDispatchError | None:
         "failurePhase",
         "failureDetail",
     }
-    optional = {"failureSubreason", "childDiagnostic"}
+    optional = {"failureSubreason", "childDiagnostic", "hostOperationFailure"}
     if not isinstance(value, dict) or not required.issubset(value) or set(value).difference(required | optional):
         return None
     if value.get("error") != "runtime_dispatch_failed":
@@ -80,6 +80,9 @@ def _structured_rejection(body: bytes) -> RuntimeDispatchError | None:
         return None
     child_diagnostic = value.get("childDiagnostic")
     if child_diagnostic is not None and not isinstance(child_diagnostic, dict):
+        return None
+    host_operation_failure = value.get("hostOperationFailure")
+    if host_operation_failure is not None and not isinstance(host_operation_failure, dict):
         return None
     if _canonical(value, "runtime rejection") != body:
         return None
@@ -103,8 +106,11 @@ def _structured_rejection(body: bytes) -> RuntimeDispatchError | None:
         failure_detail=fields["failureDetail"],
         failure_subreason=failure_subreason,
         child_diagnostic=child_diagnostic,
+        host_operation_failure=host_operation_failure,
     )
     if child_diagnostic is not None and error.child_diagnostic is None:
+        return None
+    if host_operation_failure is not None and error.host_operation_failure is None:
         return None
     return error
 

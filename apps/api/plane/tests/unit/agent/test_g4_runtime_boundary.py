@@ -21,6 +21,7 @@ from plane.agent.runtime import (
     RuntimeCredentialError,
     RuntimeHealthStatus,
     RuntimeProcessPolicy,
+    RuntimeDispatchError,
     RuntimeSafetyController,
     RuntimeSafetyStopError,
     runtime_transport_kind,
@@ -633,6 +634,54 @@ def test_g4_runtime_service_accepts_the_bound_chatgpt_codex_route_before_child_d
         host_url="http://plane-api:8091",
         host_token="host-token",
     ) == ("completed",)
+
+
+def test_g4_runtime_service_propagates_bounded_host_failure_evidence(monkeypatch, tmp_path):
+    configuration = AgentRuntimeConfiguration.from_environment(_runtime_environment())
+    controller = RuntimeSafetyController(configured=True, stop_file=tmp_path / "stop")
+    controller.mark_ready()
+    executor = RuntimeDispatchExecutor(configuration, controller)
+    evidence = {
+        "operationId": "unavailable",
+        "attemptRef": "unavailable",
+        "receiptRef": "unavailable",
+        "status": "unavailable",
+        "errorCode": "HOST_UNAVAILABLE",
+        "codeModePhase": "unavailable",
+        "failureClass": "transport_unavailable",
+        "socketPhase": "read",
+        "socketState": "failed",
+    }
+    host_server = SimpleNamespace(
+        failure_evidence=evidence,
+        start=lambda: None,
+        close=lambda: None,
+    )
+    monkeypatch.setattr("plane.agent.runtime.service.PlaneHostServer", lambda **_kwargs: host_server)
+    monkeypatch.setattr(
+        "plane.agent.runtime.service._hermes_bootstrap_payload",
+        lambda *_args, **_kwargs: (b"payload", "run:test", "invocation:test", "digest"),
+    )
+
+    def fail_dispatch(**_kwargs):
+        raise RuntimeDispatchError("private child details")
+
+    monkeypatch.setattr(executor._transport, "dispatch_payload", fail_dispatch)
+    with pytest.raises(RuntimeDispatchError) as raised:
+        executor._execute(
+            {"runId": "run:test"},
+            {"invocationId": "invocation:test", "correlationId": "correlation:test"},
+            "digest",
+            credentials={},
+            credential_lease=None,
+            allowance=None,
+            host_url="http://plane-api:8091",
+            host_token="host-token",
+        )
+
+    failure = raised.value.public_failure()
+    assert failure["hostOperationFailure"] == evidence
+    assert "private child details" not in json.dumps(failure)
 
 
 @pytest.mark.parametrize(
