@@ -2706,6 +2706,20 @@ class G4ContractTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
 
+        receipt["failure"]["hostOperationFailure"]["failureClass"] = "callback_exception"
+        receipt["semanticDigest"] = _semantic_digest(receipt)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt, separators=(",", ":")))
+        self.addCleanup(temp.cleanup)
+        self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
+
+        receipt["failure"]["hostOperationFailure"]["failureClass"] = "raw-host-detail"
+        receipt["semanticDigest"] = _semantic_digest(receipt)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt, separators=(",", ":")))
+        self.addCleanup(temp.cleanup)
+        with self.assertRaisesRegex(ContractError, "evidence_host_operation_failure_class_invalid"):
+            validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
+        receipt["failure"]["hostOperationFailure"].pop("failureClass")
+
         receipt["failure"]["hostOperationFailure"]["errorCode"] = "secret-token"
         receipt["semanticDigest"] = _semantic_digest(receipt)
         temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt, separators=(",", ":")))

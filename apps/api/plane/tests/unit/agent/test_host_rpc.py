@@ -210,6 +210,147 @@ def test_prepared_invalid_host_receipt_carries_only_bounded_diagnostic():
     assert round_tripped.output == result.output
 
 
+def test_http_host_distinguishes_callback_exception_after_successful_search():
+    def invoke(call):
+        if call.operation_ref == "operation:work_item.read":
+            raise RuntimeError("internal callback details must stay private")
+        return PlaneHostResult(
+            request_ref=call.request_ref,
+            correlation_id=call.correlation_id,
+            idempotency_key=call.idempotency_key,
+            status="ok",
+            replayed=False,
+            output={"ok": True},
+        )
+
+    server = host_rpc.PlaneHostHTTPServer(
+        bind_host="127.0.0.1",
+        advertised_host="127.0.0.1",
+        port=0,
+        auth_token="host-token",
+        invoke=invoke,
+    )
+    server.start()
+    client = host_rpc.PlaneHostHTTPClient(url=server.url, auth_token="host-token")
+    try:
+        search = client.invoke(
+            _call(
+                operationRef="operation:search_workspace",
+                input={"query": "assigned", "limit": 1},
+            )
+        )
+        assert search.status == "ok"
+        with pytest.raises(PlaneHostRPCError):
+            client.invoke(
+                _call(
+                    operationRef="operation:work_item.read",
+                    input={"project_id": "project:test", "issue_id": "issue:test"},
+                )
+            )
+        evidence = server.failure_evidence
+        assert evidence is not None
+        assert evidence["status"] == "unavailable"
+        assert evidence["errorCode"] == "HOST_UNAVAILABLE"
+        assert evidence["failureClass"] == "callback_exception"
+        assert "internal callback details" not in json.dumps(evidence)
+    finally:
+        server.close()
+
+
+def test_http_host_classifies_response_boundary_failure_as_transport(monkeypatch):
+    result_holder = {"armed": False}
+
+    def invoke(call):
+        result = PlaneHostResult(
+            request_ref=call.request_ref,
+            correlation_id=call.correlation_id,
+            idempotency_key=call.idempotency_key,
+            status="ok",
+            replayed=False,
+            output={"ok": True},
+        )
+        result_holder["armed"] = True
+        return result
+
+    server = host_rpc.PlaneHostHTTPServer(
+        bind_host="127.0.0.1",
+        advertised_host="127.0.0.1",
+        port=0,
+        auth_token="host-token",
+        invoke=invoke,
+    )
+    server.start()
+    client = host_rpc.PlaneHostHTTPClient(url=server.url, auth_token="host-token")
+    original_to_wire = PlaneHostResult.to_wire
+
+    def fail_serialization(self):
+        if result_holder["armed"]:
+            raise RuntimeError("response details must stay private")
+        return original_to_wire(self)
+
+    monkeypatch.setattr(PlaneHostResult, "to_wire", fail_serialization)
+    try:
+        with pytest.raises(PlaneHostRPCError):
+            client.invoke(_call())
+        evidence = server.failure_evidence
+        assert evidence is not None
+        assert evidence["errorCode"] == "HOST_UNAVAILABLE"
+        assert evidence["failureClass"] == "transport_unavailable"
+        assert "response details" not in json.dumps(evidence)
+    finally:
+        server.close()
+
+
+def test_gateway_host_preserves_valid_search_to_prepared_read_handoff():
+    class FakeHost:
+        binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
+
+        def set_prepared_call_registry(self, registry):
+            self.registry = registry
+
+        def call_operation(self, operation_id, input_data, **_kwargs):
+            if operation_id == "search_workspace":
+                return {
+                    "ok": True,
+                    "result": {
+                        "results": [
+                            {
+                                "objectType": "work_item",
+                                "workItemReadInput": {
+                                    "project_id": "project:test",
+                                    "issue_id": "issue:test",
+                                },
+                            }
+                        ]
+                    },
+                }
+            assert operation_id == "work_item.read"
+            assert input_data == {
+                "project_id": "project:test",
+                "issue_id": "issue:test",
+            }
+            return {"ok": True, "result": {"work_item": {"name": "assigned"}}}
+
+    port = PlaneGatewayHostPort(FakeHost())
+    search = port.invoke(
+        _call(
+            operationRef="operation:search_workspace",
+            input={"query": "assigned", "limit": 1},
+        )
+    )
+    read_call = search.output["result"]["results"][0]["workItemReadCall"]
+    read = port.invoke(
+        _call(
+            operationRef=read_call["operationRef"],
+            input=read_call["input"],
+        )
+    )
+
+    assert search.status == "ok"
+    assert read.status == "ok"
+    assert read.output["result"]["work_item"]["name"] == "assigned"
+
+
 def test_host_server_replays_exact_calls_without_reinvoking_the_gateway(tmp_path):
     calls = []
 

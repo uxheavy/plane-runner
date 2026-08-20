@@ -1911,6 +1911,7 @@ def _validate_failure_receipt(
         "errorCode",
         "codeModePhase",
     }
+    host_failure_classes = {"transport_unavailable", "callback_exception"}
     prepared_call_reasons = {
         "unknown",
         "consumed",
@@ -1958,7 +1959,11 @@ def _validate_failure_receipt(
     if "hostOperationFailure" in failure:
         host_failure = _object(failure["hostOperationFailure"], "evidence_host_operation_failure")
         if (
-            set(host_failure).difference(host_failure_fields | host_failure_diagnostic_fields | {"preparedCallInvalidReason"})
+            set(host_failure).difference(
+                host_failure_fields
+                | host_failure_diagnostic_fields
+                | {"preparedCallInvalidReason", "failureClass"}
+            )
             or not host_failure_fields.issubset(host_failure)
         ):
             raise ContractError("evidence_host_operation_failure_fields_invalid")
@@ -1972,6 +1977,8 @@ def _validate_failure_receipt(
         _safe_operation_id(host_failure["operationId"], "evidence_host_operation_failure_operationId")
         for field in ("attemptRef", "receiptRef", "errorCode"):
             _safe_ref(host_failure[field], f"evidence_host_operation_failure_{field}")
+        if "failureClass" in host_failure and host_failure["failureClass"] not in host_failure_classes:
+            raise ContractError("evidence_host_operation_failure_class_invalid")
         if "preparedCallInvalidReason" in host_failure and (
             host_failure["errorCode"] != "PREPARED_CALL_INVALID"
             or host_failure["preparedCallInvalidReason"] not in prepared_call_reasons

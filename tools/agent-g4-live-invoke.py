@@ -1132,7 +1132,10 @@ def build_failure_evidence(
             "malformed",
         }
         diagnostic_fields = {"callbackPhase", "operationRefDigest"}
-        if not isinstance(value, dict) or set(value).difference(required | diagnostic_fields | {"preparedCallInvalidReason"}):
+        failure_classes = {"transport_unavailable", "callback_exception"}
+        if not isinstance(value, dict) or set(value).difference(
+            required | diagnostic_fields | {"preparedCallInvalidReason", "failureClass"}
+        ):
             return None
         if not required.issubset(value):
             return None
@@ -1176,6 +1179,10 @@ def build_failure_evidence(
             "errorCode": error_code,
             "codeModePhase": phase,
         }
+        if "failureClass" in value:
+            if value["failureClass"] not in failure_classes:
+                return None
+            bounded["failureClass"] = value["failureClass"]
         if "preparedCallInvalidReason" in value:
             reason = value["preparedCallInvalidReason"]
             if error_code != "PREPARED_CALL_INVALID" or reason not in prepared_call_reasons:
@@ -1533,6 +1540,7 @@ def _supervisor_failure_reason(output):
         "errorCode",
         "codeModePhase",
     }
+    host_failure_classes = {"transport_unavailable", "callback_exception"}
     prepared_call_reasons = {
         "unknown",
         "consumed",
@@ -1544,7 +1552,9 @@ def _supervisor_failure_reason(output):
 
     def bounded_host_failure(value):
         if not isinstance(value, dict) or set(value).difference(
-            host_failure_fields | host_failure_diagnostic_fields | {"preparedCallInvalidReason"}
+            host_failure_fields
+            | host_failure_diagnostic_fields
+            | {"preparedCallInvalidReason", "failureClass"}
         ) or not host_failure_fields.issubset(value):
             return None
         if value["status"] not in {"denied", "conflict", "unavailable", "invalid"}:
@@ -1562,6 +1572,10 @@ def _supervisor_failure_reason(output):
             bounded[field] = item
         bounded["status"] = value["status"]
         bounded["codeModePhase"] = value["codeModePhase"]
+        if "failureClass" in value:
+            if value["failureClass"] not in host_failure_classes:
+                return None
+            bounded["failureClass"] = value["failureClass"]
         if "preparedCallInvalidReason" in value:
             reason = value["preparedCallInvalidReason"]
             if value["errorCode"] != "PREPARED_CALL_INVALID" or reason not in prepared_call_reasons:

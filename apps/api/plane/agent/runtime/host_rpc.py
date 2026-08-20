@@ -13,6 +13,7 @@ import hmac
 import http.client
 import json
 import os
+import re
 import secrets
 import socket
 import stat
@@ -365,6 +366,125 @@ def _is_prepared_call(call: PlaneHostCall) -> bool:
     return call.operation_ref == "operation:work_item.read" and "preparedCallRef" in call.input
 
 
+_HOST_FAILURE_CLASSES = frozenset({"transport_unavailable", "callback_exception"})
+_PREPARED_DIAGNOSTIC_FAILURES = frozenset(
+    {"malformed", "unknown", "digest_mismatch", "binding_mismatch"}
+)
+_PREPARED_DIAGNOSTIC_FORMS = frozenset(
+    {"canonical_ref", "ready_to_call", "unrecognized"}
+)
+_SHAPE_KEY_ALLOWED = frozenset(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-"
+)
+_SHAPE_KEY_SENSITIVE = frozenset({"auth", "credential", "key", "password", "secret", "token"})
+_SHAPE_KEY_LIMIT = 16
+_SHAPE_NODE_LIMIT = 64
+_SHAPE_DEPTH_LIMIT = 8
+_SHAPE_ID_KEY = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+)
+
+
+def _shape_value_type(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, int):
+        return "integer"
+    if isinstance(value, float):
+        return "number"
+    if isinstance(value, Mapping):
+        return "object"
+    if isinstance(value, list):
+        return "array"
+    return "unknown"
+
+
+def _safe_shape_key(value: Any) -> str:
+    if not isinstance(value, str) or not value or len(value) > 64:
+        return "redacted_key"
+    lowered = value.casefold()
+    if any(part in lowered for part in _SHAPE_KEY_SENSITIVE):
+        return "redacted_key"
+    if any(char not in _SHAPE_KEY_ALLOWED for char in value):
+        return "redacted_key"
+    if _SHAPE_ID_KEY.fullmatch(value) or (
+        len(value) >= 32 and all(char in "0123456789abcdefABCDEF" for char in value)
+    ):
+        return "redacted_key"
+    return value
+
+
+def _prepared_shape_summary(value: Any) -> dict[str, Any]:
+    key_names: set[str] = set()
+    value_types: set[str] = set()
+    node_count = 0
+    max_depth = 0
+
+    def visit(item: Any, depth: int) -> None:
+        nonlocal node_count, max_depth
+        if node_count >= _SHAPE_NODE_LIMIT:
+            return
+        node_count += 1
+        max_depth = max(max_depth, min(depth, _SHAPE_DEPTH_LIMIT))
+        value_types.add(_shape_value_type(item))
+        if isinstance(item, Mapping):
+            for key, child in list(item.items())[:_SHAPE_KEY_LIMIT]:
+                key_names.add(_safe_shape_key(key))
+                visit(child, depth + 1)
+        elif isinstance(item, list):
+            for child in item[:_SHAPE_KEY_LIMIT]:
+                visit(child, depth + 1)
+
+    visit(value, 0)
+    try:
+        size = len(_canonical(value, "prepared-call shape"))
+    except (TypeError, ValueError, OverflowError):
+        size_class = "unknown"
+    else:
+        size_class = "small" if size <= 256 else "medium" if size <= 1024 else "large"
+    ordered_keys = sorted(key_names)
+    return {
+        "keyNames": ordered_keys[:_SHAPE_KEY_LIMIT],
+        "keyNamesTruncated": len(ordered_keys) > _SHAPE_KEY_LIMIT,
+        "valueTypes": sorted(value_types),
+        "nestingDepth": max_depth,
+        "sizeClass": size_class,
+    }
+
+
+def _prepared_accepted_form(value: Any) -> str:
+    if not isinstance(value, Mapping):
+        return "unrecognized"
+    if set(value) == {"preparedCallRef"}:
+        return "canonical_ref"
+    if set(value) != {"action", "operationRef", "input"}:
+        return "unrecognized"
+    if value.get("action") != "read" or value.get("operationRef") != "operation:work_item.read":
+        return "unrecognized"
+    nested = value.get("input")
+    if isinstance(nested, Mapping) and set(nested) == {"preparedCallRef"}:
+        return "ready_to_call"
+    return "unrecognized"
+
+
+def _prepared_shape_diagnostic(value: Any, failure_class: str) -> dict[str, Any]:
+    if failure_class not in _PREPARED_DIAGNOSTIC_FAILURES:
+        failure_class = "malformed"
+    accepted_form = _prepared_accepted_form(value)
+    if accepted_form not in _PREPARED_DIAGNOSTIC_FORMS:
+        accepted_form = "unrecognized"
+    return {
+        "schemaVersion": "plane.prepared-call-shape/v1",
+        "acceptedForm": accepted_form,
+        "failureClass": failure_class,
+        "shape": _prepared_shape_summary(value),
+    }
+
+
 @dataclass(frozen=True)
 class PlaneHostResult:
     """Canonical host response returned to Hermes."""
@@ -468,6 +588,7 @@ def _host_operation_failure_evidence(
     result: PlaneHostResult | None = None,
     *,
     error_code: str | None = None,
+    failure_class: str | None = None,
 ) -> dict[str, str] | None:
     """Project one failed callback into the bounded runner evidence shape."""
 
@@ -542,6 +663,8 @@ def _host_operation_failure_evidence(
             else "unavailable"
         ),
     }
+    if failure_class in _HOST_FAILURE_CLASSES:
+        evidence["failureClass"] = failure_class
     if result is not None and result.prepared_call_invalid_reason in _PREPARED_CALL_INVALID_REASONS:
         evidence["preparedCallInvalidReason"] = result.prepared_call_invalid_reason
     return evidence
@@ -614,8 +737,14 @@ class PlaneHostServer:
         result: PlaneHostResult | None = None,
         *,
         error_code: str | None = None,
+        failure_class: str | None = None,
     ):
-        evidence = _host_operation_failure_evidence(call, result, error_code=error_code)
+        evidence = _host_operation_failure_evidence(
+            call,
+            result,
+            error_code=error_code,
+            failure_class=failure_class,
+        )
         if evidence is None:
             return
         with self._lock:
@@ -702,16 +831,29 @@ class PlaneHostServer:
                     continue
                 if line is None:
                     continue
+                call: PlaneHostCall | None = None
                 try:
                     call = PlaneHostCall.from_wire(line)
                     result = self._invoke_once(call)
                     _bounded(result.to_wire(), "host.result", MAX_HOST_RESULT_BYTES)
                     response = result.to_wire()
                 except PlaneHostRPCError:
+                    if call is not None:
+                        self._record_failure(
+                            call,
+                            error_code="HOST_UNAVAILABLE",
+                            failure_class="transport_unavailable",
+                        )
                     continue
                 except Exception:
                     # Never expose application/provider diagnostics over the
                     # host socket. The Hermes client observes peer failure.
+                    if call is not None:
+                        self._record_failure(
+                            call,
+                            error_code="HOST_UNAVAILABLE",
+                            failure_class="transport_unavailable",
+                        )
                     continue
                 try:
                     encoded = _canonical(response, "host.result") + b"\n"
@@ -790,10 +932,18 @@ class PlaneHostServer:
             ):
                 raise PlaneHostRPCError("host callback result is not bound to the request")
         except PlaneHostRPCError:
-            self._record_failure(call, error_code="HOST_UNAVAILABLE")
+            self._record_failure(
+                call,
+                error_code="HOST_UNAVAILABLE",
+                failure_class="callback_exception",
+            )
             raise
         except Exception as exc:
-            self._record_failure(call, error_code="HOST_UNAVAILABLE")
+            self._record_failure(
+                call,
+                error_code="HOST_UNAVAILABLE",
+                failure_class="callback_exception",
+            )
             raise PlaneHostRPCError("host callback is unavailable") from exc
         if result.status not in {"ok", "replayed"}:
             self._record_failure(call, result)
@@ -912,6 +1062,7 @@ class _PlaneHostHTTPHandler(BaseHTTPRequestHandler):
         if length < 0 or length > MAX_HOST_REQUEST_BYTES:
             self._write(413, {"error": "request_too_large"})
             return
+        call: PlaneHostCall | None = None
         try:
             raw = self.rfile.read(length)
             call = PlaneHostCall.from_wire(raw)
@@ -920,6 +1071,12 @@ class _PlaneHostHTTPHandler(BaseHTTPRequestHandler):
             if len(payload) > MAX_HOST_RESULT_BYTES:
                 raise PlaneHostRPCError("host result exceeds the size limit")
         except Exception:
+            if call is not None:
+                self.server.owner._record_failure(
+                    call,
+                    error_code="HOST_UNAVAILABLE",
+                    failure_class="transport_unavailable",
+                )
             self._write(503, {"error": "host_unavailable"})
             return
         self._write(200, result.to_wire())
@@ -1066,8 +1223,14 @@ class PlaneHostHTTPServer:
         result: PlaneHostResult | None = None,
         *,
         error_code: str | None = None,
+        failure_class: str | None = None,
     ):
-        evidence = _host_operation_failure_evidence(call, result, error_code=error_code)
+        evidence = _host_operation_failure_evidence(
+            call,
+            result,
+            error_code=error_code,
+            failure_class=failure_class,
+        )
         if evidence is None:
             return
         with self._lock:
@@ -1142,10 +1305,18 @@ class PlaneHostHTTPServer:
             ):
                 raise PlaneHostRPCError("host callback result is not bound to the request")
         except PlaneHostRPCError:
-            self._record_failure(call, error_code="HOST_UNAVAILABLE")
+            self._record_failure(
+                call,
+                error_code="HOST_UNAVAILABLE",
+                failure_class="callback_exception",
+            )
             raise
         except Exception as exc:
-            self._record_failure(call, error_code="HOST_UNAVAILABLE")
+            self._record_failure(
+                call,
+                error_code="HOST_UNAVAILABLE",
+                failure_class="callback_exception",
+            )
             raise PlaneHostRPCError("host callback is unavailable") from exc
         if result.status not in {"ok", "replayed"}:
             self._record_failure(call, result)
