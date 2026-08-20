@@ -976,7 +976,7 @@ class G4ContractTests(unittest.TestCase):
         cleanup = source[source.index("cleanup()") : source.index("trap cleanup EXIT INT TERM")]
         result_index = cleanup.index("agent-g4-live-result.py")
         docker_cleanup_index = cleanup.index('docker rm -f "${RUNTIME}"', result_index)
-        compose_down_index = cleanup.index("docker compose", docker_cleanup_index)
+        compose_down_index = cleanup.index("compose_with_selected_env", docker_cleanup_index)
         run_dir_delete_index = cleanup.index('rm -rf -- "${RUN_DIR}"', compose_down_index)
 
         self.assertLess(
@@ -1127,6 +1127,107 @@ class G4ContractTests(unittest.TestCase):
         ):
             with self.subTest(name=name):
                 self.assertIn(f"        -u {name} \\", compose)
+
+    def test_live_runner_quarantines_host_compose_interpolation_overrides(self):
+        runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
+        compose = runner[runner.index("compose_with_selected_env()") : runner.index("G4_HOST_CANDIDATE=")]
+        compose_env = ROOT / "apps" / "api" / ".env.example"
+
+        self.assertIn('docker compose \\\n            --env-file "${COMPOSE_ENV_FILE}"', compose)
+        for name in (
+            "POSTGRES_DB",
+            "POSTGRES_HOST",
+            "POSTGRES_PASSWORD",
+            "POSTGRES_PORT",
+            "POSTGRES_USER",
+            "RABBITMQ_HOST",
+            "RABBITMQ_PASSWORD",
+            "RABBITMQ_PORT",
+            "RABBITMQ_USER",
+            "RABBITMQ_VHOST",
+            "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY",
+            "AWS_S3_BUCKET_NAME",
+        ):
+            self.assertIn(f"-u {name} \\", compose)
+
+        if shutil.which("docker") is None:
+            self.skipTest("Docker is required for the Compose interpolation regression")
+
+        def projection(*, hostile: bool, quarantine: bool) -> str:
+            environment = os.environ.copy()
+            environment["PLANE_TEST_ENV_FILE"] = str(compose_env)
+            if hostile:
+                environment.update(
+                    {
+                        "POSTGRES_DB": "host_override",
+                        "POSTGRES_PASSWORD": "host_override",
+                        "POSTGRES_USER": "host_override",
+                        "RABBITMQ_PASSWORD": "host_override",
+                        "RABBITMQ_USER": "host_override",
+                        "RABBITMQ_VHOST": "host_override",
+                        "AWS_ACCESS_KEY_ID": "host_override",
+                        "AWS_SECRET_ACCESS_KEY": "host_override",
+                        "AWS_S3_BUCKET_NAME": "host_override",
+                    }
+                )
+            if quarantine:
+                for name in (
+                    "POSTGRES_DB",
+                    "POSTGRES_HOST",
+                    "POSTGRES_PASSWORD",
+                    "POSTGRES_PORT",
+                    "POSTGRES_USER",
+                    "DATABASE_MIGRATION_URL",
+                    "DATABASE_RUNTIME_URL",
+                    "DATABASE_URL",
+                    "RABBITMQ_HOST",
+                    "RABBITMQ_PASSWORD",
+                    "RABBITMQ_PORT",
+                    "RABBITMQ_USER",
+                    "RABBITMQ_VHOST",
+                    "AMQP_URL",
+                    "REDIS_HOST",
+                    "REDIS_PORT",
+                    "REDIS_URL",
+                    "AWS_ACCESS_KEY_ID",
+                    "AWS_SECRET_ACCESS_KEY",
+                    "AWS_S3_BUCKET_NAME",
+                ):
+                    environment.pop(name, None)
+            command = ["docker", "compose"]
+            if quarantine:
+                command.extend(("--env-file", str(compose_env)))
+            command.extend(
+                (
+                    "-p",
+                    "agent-g4-compose-contract",
+                    "-f",
+                    str(ROOT / "docker-compose-test.yml"),
+                    "config",
+                    "--format",
+                    "json",
+                )
+            )
+            result = subprocess.run(command, cwd=ROOT, env=environment, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, "Compose config failed")
+            document = json.loads(result.stdout)
+            selected = {}
+            for service_name in ("test-db", "test-mq", "test-minio", "test-redis"):
+                service = document["services"][service_name]
+                selected[service_name] = {
+                    "environment": service.get("environment"),
+                    "healthcheck": service.get("healthcheck"),
+                }
+            return hashlib.sha256(
+                json.dumps(selected, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+
+        baseline = projection(hostile=False, quarantine=True)
+        hostile_without_quarantine = projection(hostile=True, quarantine=False)
+        hostile_with_quarantine = projection(hostile=True, quarantine=True)
+        self.assertNotEqual(baseline, hostile_without_quarantine)
+        self.assertEqual(baseline, hostile_with_quarantine)
 
     def test_live_runner_stages_worker_route_observation_dependency_before_invocation(self):
         runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")

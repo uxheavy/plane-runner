@@ -57,6 +57,38 @@ LIVE_AUTHORITY="${PLANE_G4_LIVE_AUTHORITY:?validated live authority path is requ
 LIVE_CONFIG="${PLANE_G4_LIVE_CONFIG:?validated live config path is required}"
 LIVE_COMMAND="${PLANE_G4_LIVE_COMMAND:?validated live command is required}"
 RUNTIME_CHILD_ENVIRONMENT_JSON='{"HOME":"/tmp","HERMES_HOME":"/tmp/hermes-home","LANG":"C.UTF-8","LC_ALL":"C.UTF-8","PATH":"/usr/local/bin:/usr/bin:/bin","PYTHONPATH":"/tmp:/opt/plane/agent/dependencies:/opt:/opt/hermes","PYTHONSAFEPATH":"1","PYTHONUNBUFFERED":"1"}'
+COMPOSE_ENV_FILE="${ROOT_DIR}/apps/api/.env.example"
+
+# Compose interpolation is a host-side boundary.  Keep the selected test env
+# file authoritative by removing only the interpolation keys from the child
+# environment; service env_file injection remains unchanged.
+compose_with_selected_env() {
+    env \
+        -u POSTGRES_DB \
+        -u POSTGRES_HOST \
+        -u POSTGRES_PASSWORD \
+        -u POSTGRES_PORT \
+        -u POSTGRES_USER \
+        -u DATABASE_MIGRATION_URL \
+        -u DATABASE_RUNTIME_URL \
+        -u DATABASE_URL \
+        -u RABBITMQ_HOST \
+        -u RABBITMQ_PASSWORD \
+        -u RABBITMQ_PORT \
+        -u RABBITMQ_USER \
+        -u RABBITMQ_VHOST \
+        -u AMQP_URL \
+        -u REDIS_HOST \
+        -u REDIS_PORT \
+        -u REDIS_URL \
+        -u AWS_ACCESS_KEY_ID \
+        -u AWS_SECRET_ACCESS_KEY \
+        -u AWS_S3_BUCKET_NAME \
+        PLANE_TEST_ENV_FILE="${COMPOSE_ENV_FILE}" \
+        docker compose \
+            --env-file "${COMPOSE_ENV_FILE}" \
+            "$@"
+}
 G4_HOST_CANDIDATE="$(git -C "${ROOT_DIR}" rev-parse HEAD)"
 G4_EXPECTED_HOST_CANDIDATE="${PLANE_G4_EXPECTED_CANDIDATE:?operator-supplied exact wrapper SHA is required}"
 G4_CANDIDATE="${G4_EXPECTED_HOST_CANDIDATE}"
@@ -460,8 +492,9 @@ cleanup() {
     fi
     docker rm -f "${RUNTIME}" >/dev/null 2>&1 || true
     docker network rm "${EGRESS}" >/dev/null 2>&1 || true
-    PLANE_TEST_ENV_FILE="${ROOT_DIR}/apps/api/.env.example" \
-        docker compose -p "${PROJECT}" -f "${ROOT_DIR}/docker-compose-test.yml" down -v --remove-orphans >/dev/null 2>&1 || true
+    compose_with_selected_env \
+        -p "${PROJECT}" -f "${ROOT_DIR}/docker-compose-test.yml" \
+        down -v --remove-orphans >/dev/null 2>&1 || true
     if [[ "${CREDENTIAL_STATE_VOLUME_CREATED}" -eq 1 ]]; then
         if ! docker volume rm "${CREDENTIAL_STATE_VOLUME}" >/dev/null 2>&1; then
             printf 'event=agent.g4.live-runner status=failed phase=cleanup expected=credential-state-volume-removed actual=volume-removal-failed\n' >&2
@@ -828,8 +861,8 @@ live_capacity_lease_acquire || exit $?
 LIVE_PHASE=compose
 
 live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" \
-    env PLANE_TEST_ENV_FILE="${ROOT_DIR}/apps/api/.env.example" \
-    docker compose -p "${PROJECT}" -f "${ROOT_DIR}/docker-compose-test.yml" \
+    compose_with_selected_env \
+    -p "${PROJECT}" -f "${ROOT_DIR}/docker-compose-test.yml" \
     up -d --wait test-db test-redis test-mq test-minio >/dev/null
 
 live_run_bounded_stderr "${ERROR_FILE}" "${ERROR_DIGEST_FILE}" \

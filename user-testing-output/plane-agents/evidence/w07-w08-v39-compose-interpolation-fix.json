@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "plane-agent-g4/w07-w08-v39-compose-diagnosis/v1",
+  "lane": "W07-W08",
+  "candidate": {
+    "source": "14bd3966fa385f291d01868e75e16621d68ba010",
+    "wrapper": "462b7641ac52dfbca27df89dd94724590e783ed9",
+    "originalStopStderrSha256": "c3b449fbdbfd629a5fcdc0d72b530cf784f3c9f21e85755a9c7c086ca20303f9"
+  },
+  "diagnosis": {
+    "dockerContext": "colima",
+    "dockerServer": "29.5.2",
+    "composeConfig": "passed",
+    "dependencyImages": "present",
+    "dependencyOnlyCompose": "healthy_all_four_services",
+    "dockerBindVisibility": "passed",
+    "classification": "host_compose_interpolation_boundary",
+    "providerAttempts": 0,
+    "productEffects": 0,
+    "rawStderrRetained": false
+  },
+  "interpolationProof": {
+    "baselineProjectionSha256": "087c59c68533af39a0f31460b0672d6fb7fa1c5a88dbe1a5b0a4fa84e58504d9",
+    "hostileWithoutEnvFileProjectionSha256": "1c60408172e8de2b36e81b94fe43536369b905cdebe6280f499fc5b1730d8f11",
+    "hostileWithEnvFileOnlyProjectionSha256": "1c60408172e8de2b36e81b94fe43536369b905cdebe6280f499fc5b1730d8f11",
+    "hostileWithExplicitEnvFileAndQuarantineProjectionSha256": "087c59c68533af39a0f31460b0672d6fb7fa1c5a88dbe1a5b0a4fa84e58504d9",
+    "projectionScope": "dependency environment and healthcheck fields only",
+    "conclusion": "shell precedence defeats env-file alone; quarantined child interpolation is required"
+  },
+  "fix": {
+    "seam": "tools/agent-g4-live.sh existing Compose up/down helper",
+    "explicitEnvFile": true,
+    "hostInterpolationKeysRemoved": 20,
+    "authorizationChanged": false,
+    "providerPathChanged": false,
+    "productSemanticsChanged": false
+  },
+  "verification": {
+    "shellSyntax": "passed",
+    "focusedContractTests": "4 passed",
+    "dependencyCleanup": {
+      "containers": 0,
+      "volumes": 0,
+      "networks": 0,
+      "agentG4LabeledContainers": 0,
+      "agentG4LabeledVolumes": 0,
+      "agentG4LabeledNetworks": 0
+    }
+  },
+  "redaction": {
+    "rawCredentials": false,
+    "rawEnvironmentValues": false,
+    "rawProviderData": false,
+    "rawPromptOrModelOutput": false,
+    "rawStderr": false
+  }
+}
