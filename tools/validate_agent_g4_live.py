@@ -40,7 +40,8 @@ SECRET_FIELD_RE = re.compile(
     r"(?i)(?:password|passwd|secret|token|api[_-]?key|authorization|credential)\s*[\"']?\s*[:=]"
 )
 ROLLBACK_SERVICE_NAMES = ("api", "worker", "beat-worker", "supervisor", "agent-runtime")
-ROLLBACK_MIGRATION = "db.0142_runtime_provider_attempts"
+ROLLBACK_MIGRATION = "db.0146_runtime_reconciliation_audit_fields"
+ROLLBACK_PREVIOUS_MIGRATION = "db.0145_runtime_reconciliation"
 ROLLBACK_OPERATION_CONTRACT = "plane.operation/v1"
 ROLLBACK_RUNTIME_CONTRACT = "plane.agent-runtime/v1"
 PROVIDER_RELAY_PROTOCOL = "plane.agent-runtime/provider-relay/v1"
@@ -492,8 +493,9 @@ def validate_rollback_runbook(runbook_text: str, manifest: dict[str, Any], fixtu
         f"`{previous['services']['api']['imageDigest']}`",
         "python3 tools/agent-g4-rollback-drill.py",
         f"Migration `{ROLLBACK_MIGRATION}`",
-        "keep the database at leaf `0142`",
-        "never reverse to `0141`",
+        "keep the database at leaf `0146`",
+        "retain migration `0145`",
+        "never reverse to `0144`",
     )
     for marker in required:
         if marker not in runbook_text:
@@ -610,6 +612,8 @@ def validate_rollback_fixture(fixture_path: Path, root: Path, manifest: dict[str
 
     strategy = _object(_required(fixture, "strategy", "rollback"), "rollback_strategy")
     _rollback_exact(strategy.get("migration"), ROLLBACK_MIGRATION, "strategy_migration")
+    _rollback_exact(strategy.get("previousMigration"), ROLLBACK_PREVIOUS_MIGRATION, "strategy_previousMigration")
+    _rollback_exact(strategy.get("compatibilityFloor"), ROLLBACK_PREVIOUS_MIGRATION, "strategy_compatibilityFloor")
     _rollback_exact(strategy.get("reverseMigrationAllowed"), False, "strategy_reverseMigrationAllowed")
     runbook_text = (root / _required(manifest, "runbook", "manifest")).read_text(encoding="utf-8")
     validate_rollback_runbook(runbook_text, manifest, fixture)

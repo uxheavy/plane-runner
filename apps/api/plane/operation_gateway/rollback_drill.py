@@ -31,7 +31,7 @@ def run_rollback_drill() -> dict[str, Any]:
         database_path = Path(temp_dir) / "rollback.sqlite3"
         connection = sqlite3.connect(database_path)
         try:
-            _create_schema(connection)
+            _create_schema(connection, pins["current"]["migrationLeaf"])
             _deploy(connection, pins["current"])
             _create_representative_state(connection)
             _switch_to_previous(connection, pins)
@@ -46,8 +46,12 @@ def run_rollback_drill() -> dict[str, Any]:
         "allServicesSwitched": set(readback["deployment"]["services"]) == set(SERVICE_NAMES)
         and readback["deployment"]["allPreviousPins"],
         "contractsCompatible": readback["deployment"]["contractsCompatible"],
-        "migrationStayedForwardOnly": readback["schema"]["migrationLeaf"] == pins["previous"]["migrationLeaf"]
+        "migrationStayedForwardOnly": readback["schema"]["migrationLeaf"] == pins["current"]["migrationLeaf"]
         and readback["schema"]["reverseMigrationAttempted"] == 0,
+        "previousBinariesOperateOnRetainedMigrations": readback["deployment"]["contractsCompatible"]
+        and readback["schema"]["migrationLeaf"] == pins["current"]["migrationLeaf"]
+        and pins["strategy"]["previousMigration"] == pins["strategy"]["compatibilityFloor"]
+        and pins["strategy"]["migration"] == pins["current"]["migrationLeaf"],
         "effectReadBackBeforeReconcile": readback["reconciliation"]["effectCount"] == 1,
         "auditReconciled": readback["state"]["auditRows"] == 3,
         "oneOutcome": readback["state"]["outcomeRows"] == 1,
@@ -70,7 +74,7 @@ def run_rollback_drill() -> dict[str, Any]:
     }
 
 
-def _create_schema(connection: sqlite3.Connection) -> None:
+def _create_schema(connection: sqlite3.Connection, migration_leaf: str) -> None:
     connection.executescript(
         """
         CREATE TABLE deployment (service TEXT PRIMARY KEY, revision TEXT NOT NULL,
@@ -89,9 +93,7 @@ def _create_schema(connection: sqlite3.Connection) -> None:
         CREATE TABLE reconciliation (idempotency_key TEXT PRIMARY KEY, source TEXT NOT NULL);
         """
     )
-    connection.execute(
-        "INSERT INTO schema_state (id, migration_leaf) VALUES (1, 'db.0142_runtime_provider_attempts')"
-    )
+    connection.execute("INSERT INTO schema_state (id, migration_leaf) VALUES (1, ?)", (migration_leaf,))
     connection.commit()
 
 
@@ -137,9 +139,10 @@ def _switch_to_previous(connection: sqlite3.Connection, pins: dict[str, Any]) ->
                 for service, details in previous["services"].items()
             ],
         )
+        # Previous binaries are switched onto the already-migrated database;
+        # rollback never reverses the forward-only 0145/0146 schema.
         connection.execute(
-            "UPDATE schema_state SET migration_leaf = ?, reverse_migration_attempted = 0 WHERE id = 1",
-            (previous["migrationLeaf"],),
+            "UPDATE schema_state SET reverse_migration_attempted = 0 WHERE id = 1"
         )
 
 

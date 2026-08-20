@@ -100,7 +100,7 @@
         "activeQuotaReservations",
         "temporaryDatabaseRemoved"
       ],
-      "sha256": "4ca5bd6b64d4630a77c0bf8e2e1d3200fbee70330f177e33beab4717b77d37e2",
+      "sha256": "032d167cc6948af3ff4f2507163c60b2a09e7aa21764cfd5cf4d7dc997067c95",
       "testPath": "plane/tests/contract/api/test_agent_g4_rollback_drill.py"
     },
     "runtimeService": {

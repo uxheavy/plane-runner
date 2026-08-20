@@ -654,21 +654,22 @@ materialized fixture `current.planeCommit` and its manifest SHA-256 to agree
 before the rollback stage can run. The exact wrapper itself remains an
 external operator input, not candidate-controlled metadata.
 
-Migration `db.0142_runtime_provider_attempts` is additive: it adds the
-non-secret provider-attempt intent/terminal evidence table. Rollback is
-explicitly forward-only: keep the database at leaf `0142`, never reverse to `0141`,
-and run the prior services only after confirming they ignore the
-provider-attempt evidence. The `0142` migration blob is
-`d8d2452445ad96372f917b5819e3ede0c332f560` and its SHA-256 is
-`efed3980eb182d138bf13991fefa709c285451c89300cb81faa2a8a31572f9da`.
-The compatibility floor is `0141` (blob
-`1c6b0e3fb221cccd9ed2631d68cbf10ba5dc399b`), not a downgrade target.
+Migration `db.0146_runtime_reconciliation_audit_fields` is the additive audit
+extension to `db.0145_runtime_reconciliation`. Rollback is explicitly
+forward-only: keep the database at leaf `0146`, retain migration `0145`, never reverse to `0144`,
+and run the prior services only after confirming they
+operate with the retained reconciliation state and ignore the 0146 audit
+fields. The `0146` migration blob is
+`96a5f1cc7064f47812dcbfa63000ab4a0180c526` and its SHA-256 is
+`3683fa478b11cee40a4b109ec2f89f6cb2c5aef4b1c8555a5e4d0991ca01de0b`.
+The compatibility floor is `0145` (blob
+`4755af8136e404b06c21aca2132710dbeda4ed4c`), not a downgrade target.
 
 ### Disposable executable drill
 
 The drill performs current-candidate upgrade, creates a representative
 `outcome_unknown` operation with an already-committed durable effect, switches
-all five service pins/contracts, keeps migration `0142`, reconciles from the
+all five service pins/contracts, keeps migrations `0145` and `0146`, reconciles from the
 effect/audit/outcome state, releases quota, checks idempotent re-run, and
 removes its temporary database. It never connects to Plane or deploys:
 
@@ -677,7 +678,7 @@ python3 tools/agent-g4-rollback-drill.py
 ```
 
 The one-line JSON result must contain `passes:true`, empty `breaches`,
-`externalWrites:false`, `migrationLeaf:"db.0142_runtime_provider_attempts"`,
+`externalWrites:false`, `migrationLeaf:"db.0146_runtime_reconciliation_audit_fields"`,
 three audit rows, one outcome, one idempotency row, zero active quota
 reservations, and `cleanup.temporaryDatabaseRemoved:true`. This is the
 exercised rollback proof; a prose-only rollback is not sufficient.
@@ -710,7 +711,7 @@ docker compose -p plane-g4-load-luna --env-file deployments/cli/community/variab
 ```
 
 `migrate --plan` must show no reverse operation and the database must still
-report leaf `0142`. Read back every affected idempotency record, gateway audit
+report leaf `0146`, with `0145` retained as its compatibility floor. Read back every affected idempotency record, gateway audit
 receipt, durable operation effect/outcome, and quota bucket before permitting
 any continuation. A completed effect may be reconciled exactly once; a missing
 or conflicting effect is a stop/escalation, never a blind replay.
@@ -726,7 +727,7 @@ reservations. Re-run the rollback drill and the relevant gateway/migration
 contract suites before restoring new work.
 
 Abort and escalate immediately if any pin is missing, a digest resolves to a
-mutable tag, services disagree on the contract, `0142` is absent or a reverse
+mutable tag, services disagree on the contract, `0145` or `0146` is absent or a reverse
 plan appears, audit/outcome/provider-attempt readback is incomplete, a durable effect is not
 unique, quota remains active after reconciliation, or runtime enforcement does
 not acknowledge the safety stop. Preserve bounded logs and identifiers only;
