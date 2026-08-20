@@ -15,7 +15,7 @@
     "planeCommit": "3a60056faad84e6361ddb9c205677503517db1d9",
     "migrationLeaf": "db.0142_runtime_provider_attempts",
     "runtime": {
-      "hermesCommit": "6c546d36cf1ff56ff21ec2d3b07e15e0377cef2d",
+      "hermesCommit": "fe02d06368a66a61b0f1886aee3052414bbfa415",
       "mcpGitlink": "c04974ed6624f17b41e63ef8182661929e77e0d3",
       "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889",
       "imageTag": "plane-agent-runtime:hermes-6c546d36-g4-v39-14bd3966",
