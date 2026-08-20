@@ -86,7 +86,9 @@ if os.environ.get("G4_SCENARIO_DESCRIPTOR"):
     _load_scenario_module("agent_g4_worker_route_observations")
     worker_route = _load_scenario_module("agent_g4_worker_route")
     manager_route = _load_scenario_module("agent_g4_manager_route")
+    operator_route = _load_scenario_module("agent_g4_operator_route")
     build_manager_route_evidence = manager_route.build_manager_route_evidence
+    build_operator_route_evidence = operator_route.build_operator_route_evidence
     attempt_actor_substitution = worker_route.attempt_actor_substitution
     build_worker_route_evidence = worker_route.build_worker_route_evidence
     context_state_counts = worker_route.context_state_counts
@@ -813,6 +815,7 @@ def _scenario_readback(
     lineage_assignment=None,
     schedule=None,
     schedule_fire=None,
+    route_evidence=None,
 ):
     if scenario is None or scenario.expected is None:
         return None, None
@@ -867,7 +870,18 @@ def _scenario_readback(
         evidence_kinds.append("publication")
     from agent_g4_live_scenario import evaluate_expectations
     actual = {"operations": list(operations.values()), "records": records, "productEvents": products, "evidenceKinds": evidence_kinds}
-    return actual, evaluate_expectations(scenario.expected, **{"operations": actual["operations"], "records": records, "product_events": products, "evidence_kinds": evidence_kinds})
+    if route_evidence is not None:
+        actual["routeEvidence"] = route_evidence
+    return actual, evaluate_expectations(
+        scenario.expected,
+        **{
+            "operations": actual["operations"],
+            "records": records,
+            "product_events": products,
+            "evidence_kinds": evidence_kinds,
+            "route_evidence": route_evidence,
+        },
+    )
 
 
 def _run_continuation_supervisor(invocation, stdout, stderr):
@@ -1882,6 +1896,44 @@ def _provider_unknown_failure_reason(invocation, provider_attempts, control=None
     )
 
 
+def _successful_primary_replay_gate(
+    *,
+    invocation_state,
+    run_state,
+    primary_invocation_id,
+    observed_invocation_id,
+    primary_idempotency_key,
+    observed_idempotency_key,
+    replay_deltas,
+    semantic_side_effects,
+):
+    """Accept a terminal no-op replay from durable state, not supervisor text."""
+
+    replay_counts = (
+        "providerAttempts",
+        "invocations",
+        "receipts",
+        "audits",
+        "usage",
+        "outcomes",
+        "publications",
+        "terminalEvents",
+    )
+    return (
+        invocation_state == "succeeded"
+        and run_state == "succeeded"
+        and observed_invocation_id == primary_invocation_id
+        and observed_idempotency_key == primary_idempotency_key
+        and isinstance(replay_deltas, dict)
+        and all(
+            type(replay_deltas.get(key)) is int and replay_deltas[key] == 0
+            for key in replay_counts
+        )
+        and type(semantic_side_effects) is int
+        and semantic_side_effects == 0
+    )
+
+
 def _prepare_shared_worker_setup(scenario, provider, provider_relay, suffix, *, cache):
     """Create Maya once; bounded commissions then receive separate run snapshots."""
 
@@ -2311,7 +2363,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
         setup_counters["actors"] = 1 + len(related_actors)
         setup_counters["profiles"] = 1 + len(related_actors)
         actor_role = shared["actor_role"]
-        if scenario is not None and scenario.selected_commission_id == "code-mode-semantic-rename":
+        if scenario is not None and scenario.profile.model_toolset == "code_mode_only":
             from agent_g4_live_scenario import bind_code_mode_runtime_values
 
             scenario = bind_code_mode_runtime_values(
@@ -2587,6 +2639,9 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                 raise RuntimeError("non-S00 persona scenarios require typed expectations")
             if "live_authorization" in scenario.setup.preconditions and not plane_operation_audit:
                 raise RuntimeError("scenario precondition failed: live_authorization")
+            operator_route_evidence = None
+            if scenario.scenario_id == "operator" and "O04" in (scenario.expected or {}).get("routeChecks", ()):
+                operator_route_evidence, _operator_route_failures = build_operator_route_evidence()
             scenario_actual, scenario_gate = _scenario_readback(
                 scenario,
                 plane_operation_audit,
@@ -2596,11 +2651,13 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                 lineage_assignment=lineage_assignment,
                 schedule=schedule,
                 schedule_fire=schedule_fire,
+                route_evidence=operator_route_evidence,
             )
             if not scenario_gate["passed"]:
                 raise RuntimeError("scenario expectations failed: " + ",".join(scenario_gate["failures"]))
 
         before_replay = replay_snapshot()
+        primary_invocation_id = invocation.invocation_id
         primary_invocation_key = invocation.idempotency_key
         replay_stdout = io.StringIO()
         replay_stderr = io.StringIO()
@@ -2619,13 +2676,6 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                 stdout=replay_stdout,
                 stderr=replay_stderr,
             )
-        replay_output = replay_stdout.getvalue()
-        if (
-            f"invocation={invocation.invocation_id}" not in replay_output
-            or (legacy_s00 and "state=succeeded" not in replay_output)
-            or "frames=0" not in replay_output
-        ):
-            raise RuntimeError("successful primary replay did not return the terminal invocation without dispatch")
         after_replay = replay_snapshot()
         if scenario is not None and scenario.scenario_id == "worker":
             context_replay_after = context_state_counts(actor, run)
@@ -2647,13 +2697,23 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
         )
         replay_deltas = {key: after_replay[key] - before_replay[key] for key in replay_counts}
         semantic_side_effects = int(after_replay["semanticState"] != before_replay["semanticState"])
-        if any(value != 0 for value in replay_deltas.values()) or semantic_side_effects:
-            raise RuntimeError("successful primary replay changed durable or semantic state")
         invocation.refresh_from_db()
+        run.refresh_from_db()
+        if not _successful_primary_replay_gate(
+            invocation_state=invocation.state,
+            run_state=run.state,
+            primary_invocation_id=primary_invocation_id,
+            observed_invocation_id=invocation.invocation_id,
+            primary_idempotency_key=primary_invocation_key,
+            observed_idempotency_key=invocation.idempotency_key,
+            replay_deltas=replay_deltas,
+            semantic_side_effects=semantic_side_effects,
+        ):
+            raise RuntimeError("successful primary replay did not preserve durable terminal state")
         replay_evidence = {
             "status": "passed",
             "providerAccess": "disabled",
-            "sameInvocation": f"invocation={invocation.invocation_id}" in replay_output,
+            "sameInvocation": invocation.invocation_id == primary_invocation_id,
             "sameIdempotencyKey": invocation.idempotency_key == primary_invocation_key,
             "new": {
                 "children": replay_deltas["invocations"],
@@ -2661,8 +2721,6 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                 "semanticSideEffects": semantic_side_effects,
             },
         }
-        if not replay_evidence["sameInvocation"] or not replay_evidence["sameIdempotencyKey"]:
-            raise RuntimeError("successful primary replay did not preserve invocation identity")
         (
             provider_attempts,
             terminal,
@@ -3094,7 +3152,7 @@ def _aggregate_commission_evidence(root_scenario, results):
         "productEvents": [],
         "evidenceKinds": ["assignment", "run", "invocation", "audit", "publication", "terminal_event"],
     }
-    if root_scenario.scenario_id == "worker":
+    if root_scenario.scenario_id in {"worker", "operator"}:
         scenario_projection["actual"]["routeEvidence"] = merged_route_evidence
     # The per-commission gates are the authoritative route gates. The aggregate
     # keeps them bounded and makes the shared actor/profile linkage explicit.

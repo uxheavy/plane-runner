@@ -14,8 +14,10 @@ import pytest
 
 TOOLS = Path(__file__).parents[1]
 sys.path.insert(0, str(TOOLS))
+sys.path.insert(0, str(TOOLS.parent / "apps" / "api"))
 
 import agent_g4_live_scenario as scenario  # noqa: E402
+import agent_g4_operator_route as operator_route  # noqa: E402
 import agent_g4_scenario_modules as scenario_modules  # noqa: E402
 import validate_agent_g4_live as validator  # noqa: E402
 
@@ -215,6 +217,30 @@ def test_code_mode_runtime_binding_substitutes_every_placeholder_once() -> None:
     assert 'name: "V36 Code Mode Rename"' in text
 
 
+def test_mutation_commission_uses_bound_code_mode_composition_without_native_read_tools() -> None:
+    raw = (TOOLS / "agent-g4-worker-v6.json").read_bytes()
+    parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
+    mutation = scenario.commission_descriptor(parsed, parsed.commissions[1])
+    bound = scenario.bind_code_mode_runtime_values(
+        mutation,
+        project_id="project-fresh",
+        issue_id="issue-fresh",
+        invocation_id="invocation-fresh",
+        new_name="V60 Code Mode Rename",
+    )
+
+    guidance = tuple(
+        scenario.substitute_code_mode_placeholders(item, bound.runtime_bindings)
+        for item in scenario.model_route_expectations(bound.expected)
+    )
+    assert mutation.profile.model_toolset == "code_mode_only"
+    assert guidance[0].startswith("Route step 1: invoke plane_execute_typescript")
+    assert guidance[1].startswith("Route step 2: invoke plane_publish")
+    assert "{{newName}}" not in "\\n".join(guidance)
+    assert "V60 Code Mode Rename" in "\\n".join(guidance)
+    assert "invoke work_item.read" not in "\\n".join(guidance)
+
+
 def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names() -> None:
     path = TOOLS / "agent-g4-worker-v6.json"
     raw = path.read_bytes()
@@ -252,18 +278,13 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
         "context-governance": ["W05", "W06", "W07", "W08"],
     }
     assert "workItemReadCall.input.preparedCallRef unchanged" in identity.assignment.objective
-    assert "plane_execute_typescript" in mutation.assignment.objective
-    assert "export default async function" in mutation.assignment.objective
-    assert "({host}: {host: any})" in mutation.assignment.objective
-    assert 'host.call_plane_operation("work_item.rename"' in mutation.assignment.objective
-    assert "read.result.project verbatim as input.project_id" in mutation.assignment.objective
-    assert "read.result.id verbatim as input.issue_id" in mutation.assignment.objective
-    assert 'project_id: "<read.result.project>"' in mutation.assignment.objective
-    assert 'issue_id: "<read.result.id>"' in mutation.assignment.objective
-    assert '"idempotency:{{invocationId}}:work_item.rename"' in mutation.assignment.objective
-    assert '"correlation:{{invocationId}}:work_item.read->work_item.rename"' in mutation.assignment.objective
-    assert "W08 readback" in mutation.assignment.objective
-    assert "before agent.outcome.submit" in mutation.assignment.objective
+    assert mutation.model_toolset == "code_mode_only"
+    assert "call plane_execute_typescript exactly once" in mutation.assignment.objective
+    assert "malformed or unknown prepared shape must fail closed" in mutation.assignment.objective
+    mutation_guidance = scenario.model_route_expectations(mutation.expected)
+    assert mutation_guidance[0].startswith("Route step 1: invoke plane_execute_typescript exactly 1 time(s)")
+    assert "Do not invoke search_workspace, work_item.read, work_item.rename, or agent.outcome.submit as model tools" in mutation_guidance[0]
+    assert mutation_guidance[1].startswith("Route step 2: invoke plane_publish exactly 1 time(s)")
     assert "hermes_tools.plane_operation" not in mutation.assignment.objective
     assert "{{projectId}}" not in code_mode.assignment.objective
     assert "{{issueId}}" not in code_mode.assignment.objective
@@ -281,42 +302,7 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert 'host.call_plane_operation("agent.outcome.submit"' in code_mode_guidance[0]
     assert "Do not invoke search_workspace, work_item.read, work_item.rename, or agent.outcome.submit as model tools" in code_mode_guidance[0]
     assert code_mode_guidance[1].startswith("Route step 2: invoke plane_publish exactly 1 time(s)")
-    mutation_route_guidance = scenario.model_route_expectations(mutation.expected)
-    read_guidance = next(
-        item for item in mutation_route_guidance if "invoke work_item.read" in item
-    )
-    assert "workItemReadCall object verbatim" in read_guidance
-    assert "complete tool arguments" in read_guidance
-    assert "action, operationRef" in read_guidance
-    assert "exactly those three top-level tool keys" in read_guidance
-    assert "opaque input.preparedCallRef" in read_guidance
-    assert "keep only preparedCallRef inside input" in read_guidance
-    assert "put the workItemReadCall object inside input" in read_guidance
-    assert "rename operationRef to operation_ref" in read_guidance
-    assert "alter or replay the preparedCallRef" in read_guidance
-    assert "reconstruct project_id or issue_id" in read_guidance
-    assert "Do not wrap it" in read_guidance
-    assert "reconstruct project_id or issue_id from targetRef" in read_guidance
-    assert "workItemReadCall input.preparedCallRef verbatim" in read_guidance
-    assert "do not copy raw workItemReadInput" in read_guidance
-    assert "do not reconstruct, translate, or infer" in read_guidance
-    rename_guidance = next(
-        item for item in mutation_route_guidance if "invoke plane_execute_typescript" in item
-    )
-    assert rename_guidance.startswith("Route step 3: invoke plane_execute_typescript exactly 1 time(s)")
-    assert "restricted Code Mode composition" in rename_guidance
-    assert "not by a native model mutation" in rename_guidance
-    assert "plane_execute_typescript" in rename_guidance
-    assert "export a default async function receiving {host,input}" in rename_guidance
-    assert "({host}: {host: any})" in rename_guidance
-    assert 'host.call_plane_operation("work_item.rename"' in rename_guidance
-    assert "read.result.project verbatim as input.project_id" in rename_guidance
-    assert "read.result.id verbatim as input.issue_id" in rename_guidance
-    assert 'project_id: "<read.result.project>"' in rename_guidance
-    assert 'issue_id: "<read.result.id>"' in rename_guidance
-    assert '"idempotency:{{invocationId}}:work_item.rename"' in rename_guidance
-    assert '"correlation:{{invocationId}}:work_item.read->work_item.rename"' in rename_guidance
-    assert "hermes_tools.plane_operation" not in rename_guidance
+    assert "hermes_tools.plane_operation" not in mutation_guidance[0]
     assert '"subject_user_ref":"{{subjectUserRef}}"' in context.assignment.objective
     assert "private memory" in context.assignment.objective
     assert "exact current invocation run_ref" in parsed.profile.instructions
@@ -588,6 +574,9 @@ def test_operator_o04_credential_lifecycle_does_not_require_prepared_read() -> N
     assert "audit" in o04.expected["evidenceKinds"]
     assert "terminal_event" in o04.expected["evidenceKinds"]
 
+    route_evidence, route_failures = operator_route.build_operator_route_evidence()
+    assert route_failures == []
+    validator._validate_operator_route_evidence(route_evidence, route_checks={"O04"})
     gate = scenario.evaluate_expectations(
         o04.expected,
         operations=[
@@ -598,8 +587,31 @@ def test_operator_o04_credential_lifecycle_does_not_require_prepared_read() -> N
         records=o04.expected["durableRecords"],
         product_events=o04.expected["productEvents"],
         evidence_kinds=o04.expected["evidenceKinds"],
+        route_evidence=route_evidence,
     )
     assert gate["passed"] is True
+    projection = o04.evidence()
+    projection["actual"] = {
+        "operations": [],
+        "records": [],
+        "productEvents": [],
+        "evidenceKinds": [],
+    }
+    with pytest.raises(validator.ContractError, match="evidence_operator_o04_route_evidence_missing"):
+        validator._validate_scenario_projection(projection)
+    missing_route_gate = scenario.evaluate_expectations(
+        o04.expected,
+        operations=[
+            {"operationId": "agent.outcome.evaluate", "outcome": "denied", "count": 1},
+            {"operationId": "agent.outcome.submit", "outcome": "success", "count": 1},
+            {"operationId": "agent.outcome.publish", "outcome": "success", "count": 1},
+        ],
+        records=o04.expected["durableRecords"],
+        product_events=o04.expected["productEvents"],
+        evidence_kinds=o04.expected["evidenceKinds"],
+    )
+    assert missing_route_gate["passed"] is False
+    assert "route:O04" in missing_route_gate["failures"]
     assert [row["operationId"] for row in o06.expected["operationOutcomes"][:2]] == [
         "search_workspace",
         "work_item.read",
@@ -849,6 +861,7 @@ def test_live_invocation_loads_scenario_modules_from_the_owner_only_mount() -> N
     assert 'scenario_module_root = "/run/plane-scenario"' in source
     assert "spec_from_file_location(module_name, module_path)" in source
     assert '_load_scenario_module("agent_g4_manager_route")' in source
+    assert '_load_scenario_module("agent_g4_operator_route")' in source
     assert "scenario_module_root_missing" in source
 
 
@@ -899,11 +912,9 @@ def test_multi_commission_prompt_preserves_the_typed_mutation_route() -> None:
     expected = namespace["_profile_expected_outcomes"](mutation)
 
     assert expected == list(scenario.model_route_expectations(mutation.expected))
-    assert "plane_execute_typescript" in expected[2]
-    assert 'host.call_plane_operation("work_item.rename"' in expected[2]
-    assert expected[3].startswith("Route step 4: invoke agent.outcome.evaluate")
-    assert expected[-2].startswith("Route step 5: invoke agent.outcome.submit")
-    assert expected[-1].startswith("Route step 6: invoke agent.outcome.publish")
+    assert expected[0].startswith("Route step 1: invoke plane_execute_typescript")
+    assert 'host.call_plane_operation("work_item.rename"' in expected[0]
+    assert expected[1].startswith("Route step 2: invoke plane_publish")
 
 
 def test_sequential_commissions_reuse_fixture_preconditions_before_new_run() -> None:
@@ -1228,6 +1239,26 @@ def test_validator_accepts_actual_scenario_gate_and_rejects_failed_gate() -> Non
     gate["passed"] = False
     with pytest.raises(validator.ContractError, match="evidence_scenario_gate_predicate_mismatch"):
         validator._validate_scenario_gate(gate)
+
+
+def test_validator_requires_retained_operator_o04_route_evidence() -> None:
+    value = descriptor_for("operator")
+    value["expected"] = {
+        "operationOutcomes": [],
+        "evidenceKinds": [],
+        "routeChecks": ["O04"],
+    }
+    parsed = scenario.parse_descriptor_bytes(*descriptor_bytes(value))
+    projection = parsed.evidence()
+    projection["actual"] = {"operations": [], "records": [], "productEvents": [], "evidenceKinds": []}
+
+    with pytest.raises(validator.ContractError, match="evidence_operator_o04_route_evidence_missing"):
+        validator._validate_scenario_projection(projection)
+
+    route_evidence, failures = operator_route.build_operator_route_evidence()
+    assert not failures
+    projection["actual"]["routeEvidence"] = route_evidence
+    validator._validate_scenario_projection(projection)
 
 
 def test_revision_binding_is_exclusive_and_fault_selection_is_finite() -> None:

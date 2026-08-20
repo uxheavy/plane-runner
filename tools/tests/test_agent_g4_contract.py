@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import tarfile
 import sys
+import types
 import tempfile
 import unittest
 from pathlib import Path
@@ -54,6 +55,7 @@ from validate_agent_g4_live import (  # noqa: E402
     validate_files,
     validate_evidence,
     _validate_runtime_diagnostics,
+    _validate_operator_route_evidence,
 )
 from summarize_agent_g4 import summarize  # noqa: E402
 
@@ -2309,7 +2311,8 @@ class G4ContractTests(unittest.TestCase):
         self.assertLess(unknown_gate, source.index("before_replay"))
         self.assertLess(source.index("before_replay"), source.index("duration_ms"))
         self.assertIn('PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER={}', source)
-        self.assertIn('"frames=0"', source)
+        self.assertIn("_successful_primary_replay_gate", source)
+        self.assertIn("replay_deltas", source)
         finally_body_calls = [
             node
             for node in ast.walk(main)
@@ -2321,6 +2324,44 @@ class G4ContractTests(unittest.TestCase):
             and call.func.id == "call_command"
         ]
         self.assertEqual(finally_body_calls, [])
+
+    def test_successful_replay_gate_uses_durable_identity_and_zero_delta(self):
+        gate = invoke_helper_namespace()["_successful_primary_replay_gate"]
+        common = {
+            "invocation_state": "succeeded",
+            "run_state": "succeeded",
+            "primary_invocation_id": "invocation:accepted",
+            "observed_invocation_id": "invocation:accepted",
+            "primary_idempotency_key": "idempotency:accepted",
+            "observed_idempotency_key": "idempotency:accepted",
+            "replay_deltas": {
+                "providerAttempts": 0,
+                "invocations": 0,
+                "receipts": 0,
+                "audits": 0,
+                "usage": 0,
+                "outcomes": 0,
+                "publications": 0,
+                "terminalEvents": 0,
+            },
+            "semantic_side_effects": 0,
+        }
+
+        # A terminal no-op may have no supervisor text, but durable identity and
+        # zero-delta readback still prove the provider-disabled replay.
+        self.assertTrue(gate(**common))
+        for change in (
+            {"observed_invocation_id": "invocation:other"},
+            {"observed_idempotency_key": "idempotency:other"},
+            {"invocation_state": "failed"},
+            {"run_state": "failed"},
+            {"semantic_side_effects": 1},
+            {"replay_deltas": {**common["replay_deltas"], "providerAttempts": 1}},
+        ):
+            with self.subTest(change=change):
+                candidate = dict(common)
+                candidate.update(change)
+                self.assertFalse(gate(**candidate))
 
     def test_s00_gate_requires_applied_terminal_and_clean_completed_exit(self):
         source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
@@ -2460,6 +2501,84 @@ class G4ContractTests(unittest.TestCase):
             next(name for name, predicate in result["predicates"].items() if not predicate["passed"]),
             "one_applied_outcome_publication",
         )
+
+    def test_operator_o04_harness_is_single_owner_and_digest_bound(self):
+        source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        self.assertFalse(
+            any(
+                isinstance(node, ast.FunctionDef) and node.name == "_operator_o04_lifecycle_evidence"
+                for node in ast.walk(tree)
+            )
+        )
+        credentials_name = "plane.agent.runtime.credentials"
+        for name in ("plane", "plane.agent", "plane.agent.runtime", credentials_name):
+            sys.modules.pop(name, None)
+        plane = types.ModuleType("plane")
+        plane.__path__ = []
+        agent = types.ModuleType("plane.agent")
+        agent.__path__ = []
+        runtime = types.ModuleType("plane.agent.runtime")
+        runtime.__path__ = []
+        sys.modules.update({"plane": plane, "plane.agent": agent, "plane.agent.runtime": runtime})
+        credentials_spec = importlib.util.spec_from_file_location(
+            credentials_name, ROOT / "apps/api/plane/agent/runtime/credentials.py"
+        )
+        if credentials_spec is None or credentials_spec.loader is None:
+            raise RuntimeError("runtime credentials module could not be loaded")
+        credentials = importlib.util.module_from_spec(credentials_spec)
+        sys.modules[credentials_name] = credentials
+        credentials_spec.loader.exec_module(credentials)
+        import agent_g4_operator_route as operator_route
+
+        evidence, failures = operator_route.build_operator_route_evidence()
+        self.assertEqual(failures, [])
+        route = evidence["routes"]["O04"]
+        self.assertEqual(
+            set(route),
+            {
+                "publicMetadataOnly",
+                "queuedLeaseObserved",
+                "activeLeaseAdmitted",
+                "rotateDispatchDenied",
+                "rotateCallbackDenied",
+                "revokeDispatchDenied",
+                "revokeCallbackDenied",
+                "expiryDispatchDenied",
+                "expiryCallbackDenied",
+            },
+        )
+        self.assertTrue(all(route.values()))
+        _validate_operator_route_evidence(evidence, route_checks={"O04"})
+
+        tampered = copy.deepcopy(evidence)
+        tampered["routes"]["O04"]["expiryCallbackDenied"] = False
+        with self.assertRaisesRegex(ContractError, "evidence_operator_route_failed"):
+            _validate_operator_route_evidence(tampered, route_checks={"O04"})
+
+        digest_tampered = copy.deepcopy(evidence)
+        digest_tampered["routes"]["O04"]["expiryCallbackDenied"] = False
+        digest_tampered["routes"]["O04"]["expiryCallbackDenied"] = True
+        digest_tampered["readback"]["credentialLifecycleDigest"] = "0" * 64
+        with self.assertRaisesRegex(ContractError, "evidence_operator_readback_invalid"):
+            _validate_operator_route_evidence(digest_tampered, route_checks={"O04"})
+
+    def test_operator_o04_projection_rejects_generic_success_without_route_evidence(self):
+        path = TOOLS / "agent-g4-operator-o04-o06-recovery.json"
+        raw = path.read_bytes()
+        parsed = live_scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
+        o04 = live_scenario.select_commission(parsed, "lease-recovery")
+        projection = o04.evidence()
+        projection["actual"] = {
+            "operations": [],
+            "records": [],
+            "productEvents": [],
+            "evidenceKinds": [],
+        }
+        with self.assertRaisesRegex(ContractError, "evidence_operator_o04_route_evidence_missing"):
+            from validate_agent_g4_live import _validate_scenario_projection
+
+            _validate_scenario_projection(projection)
 
     def test_failed_primary_has_one_supervisor_call_and_no_replay_call(self):
         source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")

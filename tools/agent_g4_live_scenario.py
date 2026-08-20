@@ -776,7 +776,15 @@ def _validate_manager_commissions(commissions: tuple[CommissionSpec, ...]) -> No
             raise ScenarioError(f"scenario_manager_commission_{commission.commission_id}_terminal_evidence_missing")
 
 
-def evaluate_expectations(expected: ExpectedPredicates | None, *, operations: list[dict[str, Any]], records: list[dict[str, Any]], product_events: list[dict[str, Any]], evidence_kinds: list[str]) -> dict[str, Any]:
+def evaluate_expectations(
+    expected: ExpectedPredicates | None,
+    *,
+    operations: list[dict[str, Any]],
+    records: list[dict[str, Any]],
+    product_events: list[dict[str, Any]],
+    evidence_kinds: list[str],
+    route_evidence: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     if expected is None:
         return {"passed": True, "failures": [], "operations": [], "durableRecords": [], "productEvents": [], "evidenceKinds": []}
     failures = []
@@ -804,6 +812,11 @@ def evaluate_expectations(expected: ExpectedPredicates | None, *, operations: li
     failures.extend(f"evidence:{row['kind']}" for row in evidence_results if not row["passed"])
     durable_results = compare("durableRecords", records)
     product_results = compare("productEvents", product_events)
+    if "O04" in expected.get("routeChecks", []):
+        routes = route_evidence.get("routes", {}) if isinstance(route_evidence, Mapping) else {}
+        o04 = routes.get("O04") if isinstance(routes, Mapping) else None
+        if not isinstance(o04, Mapping) or not o04 or not all(value is True for value in o04.values()):
+            failures.append("route:O04")
     return {"passed": not failures, "failures": failures[:32], "operations": operation_results, "durableRecords": durable_results, "productEvents": product_results, "evidenceKinds": evidence_results}
 
 

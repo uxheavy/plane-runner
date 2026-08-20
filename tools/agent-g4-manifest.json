@@ -186,7 +186,7 @@
     {
       "module": "agent_g4_live_scenario",
       "runtime": "/run/plane-scenario/agent_g4_live_scenario.py",
-      "sha256": "81fbe8600deb967861b45106428b92ceda48e2d00b2f2d4f58e89a99713e02c5",
+      "sha256": "f265b7a57e9bd244698cfdd08f55a7d8d613b552a63db0d162877dfe9a6ad73b",
       "source": "tools/agent_g4_live_scenario.py"
     },
     {
@@ -204,8 +204,14 @@
     {
       "module": "agent_g4_manager_route",
       "runtime": "/run/plane-scenario/agent_g4_manager_route.py",
-      "sha256": "98c2f3a7910c1f1ba9b656c524a5f130e00994d986a2d001913123da61aae62d",
+      "sha256": "eee602b386cd1438021de86e29bb3675f54f8ff9aa72e1d5861d2a7e1285489c",
       "source": "tools/agent_g4_manager_route.py"
+    },
+    {
+      "module": "agent_g4_operator_route",
+      "runtime": "/run/plane-scenario/agent_g4_operator_route.py",
+      "sha256": "c66011e7bb828ff50677a55779f3449a4fbdbafbcf6530b074ed247940fc80e9",
+      "source": "tools/agent_g4_operator_route.py"
     }
   ],
   "scripts": [

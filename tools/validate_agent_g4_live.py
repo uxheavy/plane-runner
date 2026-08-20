@@ -1248,6 +1248,19 @@ _WORKER_ROUTE_BOOLEAN_FIELDS = {
 }
 _WORKER_ROUTE_IDS = {f"W{index:02d}" for index in range(1, 9)}
 _OPERATOR_ROUTE_IDS = {"O01"} | {f"O{index:02d}" for index in range(3, 11)}
+_OPERATOR_ROUTE_BOOLEAN_FIELDS = {
+    "O04": {
+        "publicMetadataOnly",
+        "queuedLeaseObserved",
+        "activeLeaseAdmitted",
+        "rotateDispatchDenied",
+        "rotateCallbackDenied",
+        "revokeDispatchDenied",
+        "revokeCallbackDenied",
+        "expiryDispatchDenied",
+        "expiryCallbackDenied",
+    },
+}
 _MANAGER_ROUTE_BOOLEAN_FIELDS = {
     "M01": {"dynamicPlan", "noSavedWorkflowProduct"},
     "M02": {"boundedDelegation", "lineagePersisted", "independentChildRun"},
@@ -1360,8 +1373,12 @@ def _validate_scenario_projection(value: Any) -> None:
                 _validate_manager_route_evidence(actual["routeEvidence"], route_checks=route_check_set)
             elif scenario_id == "worker":
                 _validate_worker_route_evidence(actual["routeEvidence"], route_checks=route_check_set)
+            elif scenario_id == "operator":
+                _validate_operator_route_evidence(actual["routeEvidence"], route_checks=route_check_set)
             else:
                 raise ContractError("evidence_non_worker_route_evidence_unsupported")
+        elif scenario_id == "operator" and expected is not None and "O04" in expected.get("routeChecks", []):
+            raise ContractError("evidence_operator_o04_route_evidence_missing")
 
 
 def _validate_worker_route_evidence(value: Any, *, route_checks: set[str] | None = None) -> None:
@@ -1438,6 +1455,36 @@ def _validate_manager_route_evidence(value: Any, *, route_checks: set[str] | Non
         readback["governanceReadbackDigest"]
     ):
         raise ContractError("evidence_manager_readback_digest_invalid")
+
+
+def _validate_operator_route_evidence(value: Any, *, route_checks: set[str] | None = None) -> None:
+    payload = _object(value, "evidence_operator_route_evidence")
+    if set(payload) != {"routes", "readback"}:
+        raise ContractError("evidence_operator_route_evidence_fields_invalid")
+    routes = _object(payload["routes"], "evidence_operator_routes")
+    expected_route_ids = (set(route_checks or ()) & set(_OPERATOR_ROUTE_BOOLEAN_FIELDS))
+    if set(routes) != expected_route_ids | {"replay"}:
+        raise ContractError("evidence_operator_route_ids_invalid")
+    for route_id in expected_route_ids:
+        row = _object(routes[route_id], f"evidence_operator_{route_id}")
+        if set(row) != _OPERATOR_ROUTE_BOOLEAN_FIELDS[route_id] or any(item is not True for item in row.values()):
+            raise ContractError("evidence_operator_route_failed")
+    replay = _object(routes["replay"], "evidence_operator_replay")
+    if set(replay) != {"stateMutations"} or replay["stateMutations"] != 0:
+        raise ContractError("evidence_operator_replay_invalid")
+    readback = _object(payload["readback"], "evidence_operator_readback")
+    if set(readback) != {"credentialLifecycleDigest", "source", "rawValuesRetained"}:
+        raise ContractError("evidence_operator_readback_invalid")
+    digest = readback["credentialLifecycleDigest"]
+    if not isinstance(digest, str) or not HASH_RE.fullmatch(digest):
+        raise ContractError("evidence_operator_readback_invalid")
+    if readback["source"] != "provider-free-runtime-lease-harness/v1" or readback["rawValuesRetained"] is not False:
+        raise ContractError("evidence_operator_readback_invalid")
+    expected_digest = hashlib.sha256(
+        json.dumps(routes["O04"], sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    if digest != expected_digest:
+        raise ContractError("evidence_operator_readback_invalid")
 
 
 def _validate_scenario_gate(value: Any) -> None:

@@ -20,6 +20,7 @@ REQUIRED_MODULES = frozenset(
         "agent_g4_worker_route",
         "agent_g4_worker_route_observations",
         "agent_g4_manager_route",
+        "agent_g4_operator_route",
     }
 )
 
