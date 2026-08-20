@@ -15,8 +15,10 @@ from plane.agent.runtime.host_rpc import (
     PlaneHostResult,
     PlaneHostServer,
     PlaneGatewayHostPort,
+    PreparedCallRegistry,
 )
 from plane.agent.code_mode.contracts import CODE_MODE_EXECUTION_OPERATION, CODE_MODE_SCHEMA_VERSION
+from plane.agent.code_mode.host import CodeModeHostRPC
 from plane.operation_gateway.contracts import MAX_RESULT_BYTES
 
 
@@ -373,6 +375,92 @@ def test_gateway_host_preserves_valid_search_to_prepared_read_handoff():
     assert search.status == "ok"
     assert read.status == "ok"
     assert read.output["result"]["work_item"]["name"] == "assigned"
+
+
+def test_code_mode_search_projects_opaque_prepared_read_for_typed_callback():
+    """Code Mode must consume the exact search handoff without model reserialization."""
+
+    host = object.__new__(CodeModeHostRPC)
+    host._prepared_call_registry = PreparedCallRegistry()
+    host._code_mode_active = False
+    host._record_code_mode_observation = lambda *_args: None
+
+    def fake_call(operation_id, input_data, **_kwargs):
+        if operation_id == "search_workspace":
+            return {
+                "ok": True,
+                "result": {
+                    "results": [
+                        {
+                            "objectType": "work_item",
+                            "workItemReadInput": {
+                                "project_id": "project:test",
+                                "issue_id": "issue:test",
+                            },
+                        }
+                    ]
+                },
+            }
+        if operation_id == "work_item.read":
+            assert input_data == {
+                "preparedCallRef": read_call["input"]["preparedCallRef"]
+            }
+            assert host._prepared_call_registry.resolve(
+                input_data,
+                correlation_id="correlation:read",
+                idempotency_key="idempotency:read",
+            ) == {
+                "project_id": "project:test",
+                "issue_id": "issue:test",
+            }
+            return {"ok": True, "result": {"work_item": {"name": "assigned"}}}
+        assert operation_id == "work_item.rename"
+        assert input_data == {
+            "project_id": "project:test",
+            "issue_id": "issue:test",
+            "name": "renamed",
+        }
+        return {"ok": True, "result": {"work_item": {"name": "renamed"}}}
+
+    host._call_operation = fake_call
+    search = CodeModeHostRPC.call_operation(
+        host,
+        "search_workspace",
+        {"query": "assigned", "limit": 1},
+        idempotency_key="idempotency:search",
+        correlation_id="correlation:search",
+    )
+    item = search["result"]["results"][0]
+    read_call = item["workItemReadCall"]
+
+    assert set(read_call["input"]) == {"preparedCallRef"}
+    assert "workItemReadInput" not in item
+    assert host._prepared_call_registry.resolve(read_call["input"]) == {
+        "project_id": "project:test",
+        "issue_id": "issue:test",
+    }
+
+    read = CodeModeHostRPC.call_operation(
+        host,
+        "work_item.read",
+        read_call["input"],
+        idempotency_key="idempotency:read",
+        correlation_id="correlation:read",
+    )
+    assert read["ok"] is True
+
+    rename = CodeModeHostRPC.call_operation(
+        host,
+        "work_item.rename",
+        {
+            "project_id": "project:test",
+            "issue_id": "issue:test",
+            "name": "renamed",
+        },
+        idempotency_key="idempotency:rename",
+        correlation_id="correlation:rename",
+    )
+    assert rename["ok"] is True
 
 
 def test_host_server_replays_exact_calls_without_reinvoking_the_gateway(tmp_path):

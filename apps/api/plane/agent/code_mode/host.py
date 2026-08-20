@@ -204,6 +204,12 @@ class CodeModeHostRPC:
             workspace_slug=workspace_slug,
         )
         if (
+            operation_id == "search_workspace"
+            and receipt.get("ok")
+            and self._prepared_call_registry is not None
+        ):
+            receipt = self._prepare_search_receipt(receipt)
+        if (
             operation_id == "work_item.read"
             and isinstance(input_data, Mapping)
             and isinstance(input_data.get("preparedCallRef"), str)
@@ -213,6 +219,31 @@ class CodeModeHostRPC:
             self._prepared_call_registry.mark_consumed(input_data["preparedCallRef"])
         self._record_code_mode_observation(operation_id, receipt)
         return receipt
+
+    def _prepare_search_receipt(self, receipt: Mapping[str, Any]) -> Mapping[str, Any]:
+        """Bind Code Mode search results to opaque, invocation-local read calls."""
+
+        result = receipt.get("result")
+        if not isinstance(result, Mapping) or not isinstance(result.get("results"), list):
+            return receipt
+        prepared_results: list[Mapping[str, Any]] = []
+        for item in result["results"]:
+            if not isinstance(item, Mapping) or item.get("objectType") != "work_item":
+                prepared_results.append(item)
+                continue
+            read_input = item.get("workItemReadInput")
+            if not isinstance(read_input, Mapping) or set(read_input) != {"project_id", "issue_id"}:
+                prepared_results.append(item)
+                continue
+            prepared_ref = self._prepared_call_registry.register(read_input)
+            prepared_item = {key: value for key, value in item.items() if key != "workItemReadInput"}
+            prepared_item["workItemReadCall"] = {
+                "action": "read",
+                "operationRef": "operation:work_item.read",
+                "input": {"preparedCallRef": prepared_ref},
+            }
+            prepared_results.append(prepared_item)
+        return {**receipt, "result": {**result, "results": prepared_results}}
 
     def _call_operation(
         self,
