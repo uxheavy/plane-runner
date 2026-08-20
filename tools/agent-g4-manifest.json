@@ -3,7 +3,7 @@
   "candidateBinding": {
     "mode": "exact-single-child",
     "acceptedG3Baseline": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
-    "parentCommit": "3a60056faad84e6361ddb9c205677503517db1d9",
+    "parentCommit": "6af1d0b271d5c1fe47b7fb338cc6729787b70d7c",
     "candidateCommitSource": "git-head-with-exact-parent",
     "expectedCandidateSource": "external-operator-input:PLANE_G4_EXPECTED_CANDIDATE",
     "rejectDescendants": true
@@ -37,17 +37,17 @@
     "apps/api/plane/agent/tools/AGENTS.md"
   ],
   "pins": {
-    "hermesCommit": "89d207909bc9e828881a3bfe8013d83935f78edd",
+    "hermesCommit": "d957cf26b1d389ae1bd66397bfa0ea8fd44e75ce",
     "mcpGitlink": "c04974ed6624f17b41e63ef8182661929e77e0d3",
     "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889",
-    "runtimeImageTag": "plane-agent-runtime:hermes-6c546d36-g4-v39-14bd3966",
-    "runtimeImageDigest": "sha256:8863c6178b9ee9e571caf4600de67fa9efd780d4560e77e2100caa02f00eff30",
-    "runtimeImageRevision": "14bd3966fa385f291d01868e75e16621d68ba010",
+    "runtimeImageTag": "plane-agent-runtime:hermes-d957cf26-g4-v46-6af1d0b2",
+    "runtimeImageDigest": "sha256:c33910c4a6082855ff2e9da70a4a2e426840e7a9beb3caa19ff021fe8d186c21",
+    "runtimeImageRevision": "6af1d0b271d5c1fe47b7fb338cc6729787b70d7c",
     "runtimeContract": "plane.agent-runtime/v1",
     "apiArtifact": {
-      "imageTag": "plane-agent-api:g4-v39-14bd3966",
-      "imageDigest": "sha256:5493898a068a664e38db965d8829dddcd36aee3673efff664a86955a6663bc2a",
-      "sourceRevision": "14bd3966fa385f291d01868e75e16621d68ba010",
+      "imageTag": "plane-agent-api:g4-v46-6af1d0b2",
+      "imageDigest": "sha256:5f04728b32495f6448b4461498d6b8fb5707137c25864d07a13abdae3bb434b5",
+      "sourceRevision": "6af1d0b271d5c1fe47b7fb338cc6729787b70d7c",
       "contract": "plane.operation/v1"
     }
   },
