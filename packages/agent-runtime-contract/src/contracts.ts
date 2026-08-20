@@ -1514,7 +1514,15 @@ function parseSnapshotContent(value: unknown, path: string): RunSnapshotContent 
       ) as ContentDigest,
     };
   });
-  const catalogObject = requireRecord(object.toolCatalog, `${path}.toolCatalog`, ["catalogDigest", "eagerOperations"]);
+  const catalogObject = requireRecord(object.toolCatalog, `${path}.toolCatalog`, [
+    "catalogDigest",
+    "modelToolset",
+    "eagerOperations",
+  ]);
+  if (catalogObject.modelToolset !== "standard" && catalogObject.modelToolset !== "code_mode_only") {
+    throw new ContractParseError(`${path}.toolCatalog.modelToolset`, "must be standard or code_mode_only");
+  }
+  const modelToolset = catalogObject.modelToolset as ToolCatalogSnapshot["modelToolset"];
   if (!Array.isArray(catalogObject.eagerOperations) || catalogObject.eagerOperations.length > MAX_EAGER_OPERATIONS) {
     throw new ContractParseError(
       `${path}.toolCatalog.eagerOperations`,
@@ -1554,7 +1562,7 @@ function parseSnapshotContent(value: unknown, path: string): RunSnapshotContent 
     `${path}.toolCatalog.catalogDigest`,
     parseContentDigest
   ) as ContentDigest;
-  const toolCatalog = { catalogDigest, eagerOperations };
+  const toolCatalog = { catalogDigest, modelToolset, eagerOperations };
   if (!isCanonicalOwnedJsonUtf8ByteLengthAtMost(toolCatalog, MAX_EAGER_PRESENTATION_BYTES)) {
     throw new ContractParseError(
       `${path}.toolCatalog`,

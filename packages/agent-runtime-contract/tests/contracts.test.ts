@@ -466,9 +466,21 @@ describe("parsed plane.agent-runtime/v1 contract boundary", () => {
   });
 
   test("requires the finite model toolset signal", () => {
+    expect(parseRunSnapshotWire(JSON.stringify(snapshot)).toolCatalog.modelToolset).toBe("standard");
+
+    const codeModeContent = {
+      ...snapshot,
+      toolCatalog: { ...snapshot.toolCatalog, modelToolset: "code_mode_only" as const },
+    };
+    const codeModeSnapshot = {
+      ...codeModeContent,
+      contentDigest: computeRunSnapshotContentDigest(codeModeContent),
+    };
+    expect(parseRunSnapshotWire(JSON.stringify(codeModeSnapshot)).toolCatalog.modelToolset).toBe("code_mode_only");
+
     const missing = { ...snapshot, toolCatalog: { ...snapshot.toolCatalog } };
     delete (missing.toolCatalog as { modelToolset?: unknown }).modelToolset;
-    expect(() => parseRunSnapshotWire(JSON.stringify(missing))).toThrow(/required properties/);
+    expect(() => parseRunSnapshotWire(JSON.stringify(missing))).toThrow(/modelToolset.*required/);
 
     expect(() =>
       parseRunSnapshotWire(
