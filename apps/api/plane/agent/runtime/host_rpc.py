@@ -1499,7 +1499,16 @@ class PlaneGatewayHostPort:
             idempotency_key=call.idempotency_key,
             status=(
                 "invalid"
-                if code in {"VALIDATION_ERROR", "SOURCE_TOO_LARGE", "PROTOCOL_ERROR", "PREPARED_CALL_INVALID"}
+                if code in {
+                    "VALIDATION_ERROR",
+                    "SOURCE_TOO_LARGE",
+                    "PROTOCOL_ERROR",
+                    "PREPARED_CALL_INVALID",
+                    # A generated module can fail inside the restricted
+                    # isolate. Keep that bounded model correction result
+                    # distinct from transport, protocol, and host failures.
+                    "CODE_MODE_FAILED",
+                }
                 else "denied"
                 if code in {"BUDGET_EXCEEDED", "CANCELLED", "NOT_AUTHORIZED"}
                 else "denied"

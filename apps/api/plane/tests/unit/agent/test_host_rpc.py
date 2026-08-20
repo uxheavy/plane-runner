@@ -263,3 +263,58 @@ def test_code_mode_observation_limit_is_a_bounded_host_error():
     assert result.status == "unavailable", result
     assert result.error_code == "OBSERVATION_LIMIT"
     assert result.error_message == "Code Mode observation budget is exhausted."
+
+
+def test_model_code_mode_failure_is_recoverable_before_corrected_module():
+    class ModelModuleFailure(RuntimeError):
+        code = "CODE_MODE_FAILED"
+
+    class FakeHost:
+        binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
+
+        def __init__(self):
+            self.calls = 0
+
+        def call_operation(self, *args, **kwargs):
+            return {}
+
+        def execute_typescript(self, request):
+            self.calls += 1
+            if request.source == "malformed-generated-module":
+                raise ModelModuleFailure("generated module failed")
+            return {"result": {"operationId": "work_item.rename"}}
+
+    host = FakeHost()
+    port = PlaneGatewayHostPort(host)
+    first = port.invoke(
+        _call(
+            action="code",
+            operationRef=CODE_MODE_EXECUTION_OPERATION,
+            source="code",
+            input={
+                "schemaVersion": CODE_MODE_SCHEMA_VERSION,
+                "entrypoint": "default",
+                "source": "malformed-generated-module",
+                "input": {},
+            },
+        )
+    )
+    second = port.invoke(
+        _call(
+            action="code",
+            operationRef=CODE_MODE_EXECUTION_OPERATION,
+            source="code",
+            input={
+                "schemaVersion": CODE_MODE_SCHEMA_VERSION,
+                "entrypoint": "default",
+                "source": "export default async function ({host}: {host: any}) { return 1; }",
+                "input": {},
+            },
+        )
+    )
+
+    assert first.status == "invalid"
+    assert first.error_code == "CODE_MODE_FAILED"
+    assert second.status == "ok"
+    assert second.output == {"result": {"operationId": "work_item.rename"}}
+    assert host.calls == 2
