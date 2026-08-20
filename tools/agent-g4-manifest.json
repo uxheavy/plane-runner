@@ -37,7 +37,7 @@
     "apps/api/plane/agent/tools/AGENTS.md"
   ],
   "pins": {
-    "hermesCommit": "ea3d45085c7cc01566389bf818bf86594c231e79",
+    "hermesCommit": "4f3b706873f50cf5012a284bf8fccdc4178abf43",
     "mcpGitlink": "c04974ed6624f17b41e63ef8182661929e77e0d3",
     "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889",
     "runtimeImageTag": "plane-agent-runtime:hermes-ea3d4508-g4-v47-207c07a1",
