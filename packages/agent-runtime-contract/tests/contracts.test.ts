@@ -274,6 +274,53 @@ describe("parsed plane.agent-runtime/v1 contract boundary", () => {
     expect(() => parseRuntimeExit({ ...exits[0], nested: {} })).toThrow(/unknown properties/);
   });
 
+  test("keeps the bounded host diagnostic pair in runtime events without raw failure text", () => {
+    const diagnosticEvent = event({
+      ...appliedFailureBody(),
+      failure: {
+        ...appliedFailureBody().failure,
+        callbackPhase: "host_return",
+        operationRefDigest: "a".repeat(64),
+      },
+    });
+    const parsed = parseRuntimeEvent(diagnosticEvent);
+
+    assertValid("runtime-event", parsed);
+    expect(parsed.body).toMatchObject({
+      failure: {
+        callbackPhase: "host_return",
+        operationRefDigest: "a".repeat(64),
+      },
+    });
+    expect(JSON.stringify(parsed)).not.toContain("rawMessage");
+
+    const invalidDiagnostics = [
+      { callbackPhase: "host_callback", operationRefDigest: "a".repeat(64) },
+      { callbackPhase: "host_return", operationRefDigest: "A".repeat(64) },
+    ];
+    for (const diagnostic of invalidDiagnostics) {
+      const invalid = {
+        ...diagnosticEvent,
+        body: {
+          ...diagnosticEvent.body,
+          failure: { ...diagnosticEvent.body.failure, ...diagnostic },
+        },
+      };
+      expect(validators["runtime-event"](invalid)).toBe(false);
+      expect(() => parseRuntimeEvent(invalid)).toThrow();
+    }
+
+    const rawMessage = {
+      ...diagnosticEvent,
+      body: {
+        ...diagnosticEvent.body,
+        failure: { ...diagnosticEvent.body.failure, rawMessage: "unretained failure text" },
+      },
+    };
+    expect(validators["runtime-event"](rawMessage)).toBe(false);
+    expect(() => parseRuntimeEvent(rawMessage)).toThrow();
+  });
+
   test("accepts serialized contracts and rejects live objects at the public verifier boundary", () => {
     const outcome = event(appliedOutcomeBody());
     const base = {

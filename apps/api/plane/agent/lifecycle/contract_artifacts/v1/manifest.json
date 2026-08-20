@@ -11,7 +11,7 @@
     },
     "runtime-event": {
       "filename": "runtime-event.schema.json",
-      "sha256": "78da5ce9d112b6545ea471e5fcae25ff5dfeb2e5db74a8d5796d0ee026823a27"
+      "sha256": "d0fb1c67a7424f5359f9c09ff7206ef7d3d0d6e90e62b724c4a5e4e4bc13412d"
     },
     "runtime-exit": {
       "filename": "runtime-exit.schema.json",
