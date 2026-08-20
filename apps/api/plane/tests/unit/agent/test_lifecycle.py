@@ -43,16 +43,19 @@ from plane.agent.lifecycle.services import _normalise_idempotency
 from plane.agent.runtime.supervisor import request_runtime_cancellation
 from plane.agent.lifecycle.runtime_contract import (
     ARTIFACT_DIRECTORY,
+    canonical_json,
     command_fingerprint,
     contract_digests,
     contract_manifest,
     legacy_command_fingerprint,
     namespaced_ref,
+    RuntimeContractError,
     snapshot_digest,
     validate_invocation_envelope,
     validate_run_snapshot,
 )
 from plane.agent.runtime import dispatch_invocation
+from plane.agent.runtime.subprocess import _hermes_request_payload
 from plane.db.models import (
     AgentRole,
     AssignmentContract,
@@ -172,6 +175,48 @@ def test_five_plane_records_bind_to_one_actor_and_an_exact_l1_snapshot(assignmen
 @pytest.mark.django_db
 def test_assignment_creator_is_persisted_by_lifecycle(create_user, assignment):
     assert assignment.created_by_id == create_user.id
+
+
+@pytest.mark.django_db(transaction=True)
+def test_code_mode_toolset_survives_stored_snapshot_and_serialized_runtime_payload(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    actor = create_actor(
+        workspace=workspace,
+        project=gateway_project,
+        display_name="Code Mode worker",
+        created_by=create_user,
+    )
+    profile = create_profile(
+        actor,
+        role=AgentRole.WORKER,
+        instructions="Use the bounded Code Mode route.",
+        tool_presentation={"model_toolset": "code_mode_only"},
+        runtime_defaults={"provider": "openai-codex", "model": "gpt-5.6-luna", "adapter": "hermes"},
+        created_by=create_user,
+    )
+    assignment = create_assignment(
+        actor,
+        project=gateway_project,
+        target_ref=f"issue:{gateway_issue.id}",
+        objective="Perform one bounded Code Mode action.",
+        acceptance_criteria=["The action is reviewable."],
+        created_by=create_user,
+    )
+    run = create_run(assignment, profile, created_by=create_user)
+    assert run.snapshot["toolCatalog"]["modelToolset"] == "code_mode_only"
+
+    invocation = record_invocation(run, trigger="initial")
+    payload, _run_id, _invocation_id, _digest = _hermes_request_payload(
+        canonical_json(run.snapshot), canonical_json(invocation.envelope)
+    )
+    projected = json.loads(payload)["run"]
+    assert projected["toolCatalog"]["modelToolset"] == "code_mode_only"
+
+    missing = deepcopy(run.snapshot)
+    del missing["toolCatalog"]["modelToolset"]
+    with pytest.raises(RuntimeContractError, match="modelToolset"):
+        validate_run_snapshot(missing)
 
 
 @pytest.mark.django_db(transaction=True)

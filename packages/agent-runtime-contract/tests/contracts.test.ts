@@ -465,6 +465,21 @@ describe("parsed plane.agent-runtime/v1 contract boundary", () => {
     ).toThrow(/aggregate eager operation presentation|eager operation presentation/);
   });
 
+  test("requires the finite model toolset signal", () => {
+    const missing = { ...snapshot, toolCatalog: { ...snapshot.toolCatalog } };
+    delete (missing.toolCatalog as { modelToolset?: unknown }).modelToolset;
+    expect(() => parseRunSnapshotWire(JSON.stringify(missing))).toThrow(/required properties/);
+
+    expect(() =>
+      parseRunSnapshotWire(
+        JSON.stringify({
+          ...snapshot,
+          toolCatalog: { ...snapshot.toolCatalog, modelToolset: "unknown" },
+        }),
+      ),
+    ).toThrow();
+  });
+
   test("accepts only the canonical genesis and rejects alternate revision-zero states in parser and schema", () => {
     const genesis = createInitialRuntimeDurableState({
       workspaceRef: snapshot.workspaceRef,

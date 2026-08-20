@@ -101,7 +101,7 @@
       "type": "object",
       "additionalProperties": false,
       "x-serializedUtf8ByteMax": 524288,
-      "required": ["catalogDigest", "eagerOperations"],
+      "required": ["catalogDigest", "modelToolset", "eagerOperations"],
       "properties": {
         "catalogDigest": {
           "$ref": "#/$defs/contentDigest"

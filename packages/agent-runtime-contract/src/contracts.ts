@@ -394,6 +394,7 @@ export type EagerOperationPresentation = Readonly<{
 
 export type ToolCatalogSnapshot = Readonly<{
   catalogDigest: ContentDigest;
+  modelToolset: "standard" | "code_mode_only";
   eagerOperations: readonly EagerOperationPresentation[];
 }>;
 

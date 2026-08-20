@@ -3,7 +3,7 @@
   "schemas": {
     "run-snapshot": {
       "filename": "run-snapshot.schema.json",
-      "sha256": "1d04c2a36f07d0e8128c3616e7dcae29af104fe4aa44d71cb1b7f43e55c0869b"
+      "sha256": "5836fdcf333eab9ada37bc7a3078ce5cf33a779dd4fcbadb1c3848d572339d37"
     },
     "invocation-envelope": {
       "filename": "invocation-envelope.schema.json",

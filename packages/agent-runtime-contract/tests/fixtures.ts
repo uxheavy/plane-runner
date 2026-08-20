@@ -103,6 +103,7 @@ export const snapshot: RunSnapshot = createRunSnapshot(
     ],
     toolCatalog: {
       catalogDigest: contentDigest("c"),
+      modelToolset: "standard",
       eagerOperations: [
         {
           operationRef: createOperationRef("search_workspace"),

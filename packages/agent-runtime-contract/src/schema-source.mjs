@@ -384,7 +384,7 @@ const toolCatalog = {
   type: "object",
   additionalProperties: false,
   "x-serializedUtf8ByteMax": MAX_EAGER_PRESENTATION_BYTES,
-  required: ["catalogDigest", "eagerOperations"],
+  required: ["catalogDigest", "modelToolset", "eagerOperations"],
   properties: {
     catalogDigest: ref("contentDigest"),
     modelToolset: { enum: ["standard", "code_mode_only"] },
