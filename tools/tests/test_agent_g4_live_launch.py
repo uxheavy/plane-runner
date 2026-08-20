@@ -255,6 +255,56 @@ def test_launch_uses_wrapper_for_host_and_manifest_source_for_artifact(
     assert environment["PLANE_G4_PROVIDER_SECRET_SOURCE"] == str(provider_source)
 
 
+def test_exact_dry_invocation_binds_provider_source_and_fresh_result_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run_dir = tmp_path / "run"
+    run_dir.mkdir(mode=0o700)
+    provider_source = tmp_path / "provider-source"
+    provider_source.write_bytes(b"opaque-provider-source")
+    provider_source.chmod(0o600)
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text("{}")
+    manifest.chmod(0o600)
+    captured: dict[str, object] = {}
+
+    def fake_launch(run_path, manifest_path, candidate, source_path, commission_id=None):
+        paths = launch.derive_run_paths(run_path)
+        captured.update(
+            {
+                "manifest": manifest_path,
+                "candidate": candidate,
+                "provider_source": source_path,
+                "result": paths["result"],
+            }
+        )
+        assert not paths["result"].exists()
+        return 0
+
+    monkeypatch.setattr(launch, "launch", fake_launch)
+
+    assert launch.main(
+        [
+            "--run-dir",
+            str(run_dir),
+            "--manifest",
+            str(manifest),
+            "--candidate",
+            "a" * 40,
+            "--provider-source",
+            str(provider_source),
+        ]
+    ) == 0
+
+    assert captured == {
+        "manifest": manifest.resolve(),
+        "candidate": "a" * 40,
+        "provider_source": provider_source,
+        "result": run_dir / "result.json",
+    }
+    assert not (run_dir / "result.json").exists()
+
+
 def test_launch_binds_one_validated_commission() -> None:
     paths = launch.derive_run_paths(Path("/tmp/persona-wave-v6/worker"))
     paths["manifest"] = Path("/tmp/persona-wave-v6/manifest.json")

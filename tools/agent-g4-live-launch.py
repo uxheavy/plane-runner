@@ -318,8 +318,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return launch(
-            args.run_dir,
-            args.manifest,
+            args.run_dir.resolve(),
+            args.manifest.resolve() if args.manifest is not None else None,
             args.candidate,
             args.provider_source,
             args.commission_id,
