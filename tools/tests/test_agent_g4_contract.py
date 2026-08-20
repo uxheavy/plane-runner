@@ -2599,6 +2599,38 @@ class G4ContractTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
 
+    def test_failure_receipt_preserves_code_mode_diagnostics_on_transport_unknown(self):
+        manifest, authority, config, receipt = failure_fixture()
+        receipt["providerAttempts"] = [
+            {
+                "sequence": 6,
+                "phase": "outcome_unknown",
+                "upstreamInitiated": True,
+                "statusClass": "transport",
+                "errorCode": "outcome_unknown",
+                "reasonSubreason": "upstream_channel_closed",
+            }
+        ]
+        receipt["runtimeEventIngress"]["diagnostics"] = {
+            "version": 1,
+            "requests": [
+                {
+                    "sequence": 1,
+                    "toolChoice": "required",
+                    "visibleToolset": "execute_only",
+                    "visibleToolCount": 1,
+                    "serialized": True,
+                }
+            ],
+            "responses": [
+                {"sequence": 1, "responseClass": "tool_call", "toolCall": "execute"}
+            ],
+        }
+        receipt["semanticDigest"] = _semantic_digest(receipt)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt, separators=(",", ":")))
+        self.addCleanup(temp.cleanup)
+        self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
+
     def test_failure_receipt_accepts_bounded_runtime_diagnostics(self):
         manifest, authority, config, receipt = failure_fixture()
         receipt["runtimeEventIngress"]["diagnostics"] = {
