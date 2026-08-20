@@ -566,6 +566,46 @@ def test_operator_live_descriptor_covers_exact_synthetic_omar_routes() -> None:
     assert "outcome_unknown" in parsed.prompt
 
 
+def test_operator_o04_credential_lifecycle_does_not_require_prepared_read() -> None:
+    path = TOOLS / "agent-g4-operator-o04-o06-recovery.json"
+    raw = path.read_bytes()
+    parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
+    o04 = scenario.select_commission(parsed, "lease-recovery")
+    o06 = scenario.select_commission(parsed, "failure-recovery")
+
+    assert [row["operationId"] for row in o04.expected["operationOutcomes"]] == [
+        "agent.outcome.evaluate",
+        "agent.outcome.submit",
+        "agent.outcome.publish",
+    ]
+    route_guidance = scenario.model_route_expectations(o04.expected)
+    assert all("search_workspace" not in step for step in route_guidance)
+    assert all("work_item.read" not in step for step in route_guidance)
+    assert all("preparedCallRef" not in step for step in route_guidance)
+    assert "live_authorization" in parsed.setup.preconditions
+    assert "separate_runtime_service" in parsed.setup.preconditions
+    assert o04.expected["routeChecks"] == ["O04"]
+    assert "audit" in o04.expected["evidenceKinds"]
+    assert "terminal_event" in o04.expected["evidenceKinds"]
+
+    gate = scenario.evaluate_expectations(
+        o04.expected,
+        operations=[
+            {"operationId": "agent.outcome.evaluate", "outcome": "denied", "count": 1},
+            {"operationId": "agent.outcome.submit", "outcome": "success", "count": 1},
+            {"operationId": "agent.outcome.publish", "outcome": "success", "count": 1},
+        ],
+        records=o04.expected["durableRecords"],
+        product_events=o04.expected["productEvents"],
+        evidence_kinds=o04.expected["evidenceKinds"],
+    )
+    assert gate["passed"] is True
+    assert [row["operationId"] for row in o06.expected["operationOutcomes"][:2]] == [
+        "search_workspace",
+        "work_item.read",
+    ]
+
+
 def test_operator_route_checks_reject_duplicates() -> None:
     value = descriptor_for("operator")
     value["expected"] = {

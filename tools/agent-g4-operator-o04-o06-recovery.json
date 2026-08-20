@@ -54,16 +54,6 @@
       "expected": {
         "operationOutcomes": [
           {
-            "operationId": "search_workspace",
-            "outcome": "success",
-            "count": 1
-          },
-          {
-            "operationId": "work_item.read",
-            "outcome": "success",
-            "count": 1
-          },
-          {
             "operationId": "agent.outcome.evaluate",
             "outcome": "denied",
             "count": 1
