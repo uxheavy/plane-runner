@@ -2363,6 +2363,62 @@ class G4ContractTests(unittest.TestCase):
                 candidate.update(change)
                 self.assertFalse(gate(**candidate))
 
+    def test_post_primary_failure_is_stage_bound_and_does_not_expose_exception_text(self):
+        namespace = invoke_helper_namespace()
+        reason = namespace["_post_primary_failure_reason"]("route_evidence")
+        self.assertEqual(
+            json.loads(reason),
+            {
+                "failureCode": "runtime_error",
+                "failurePhase": "runtime_supervisor",
+                "failureDetail": "unclassified_exception",
+                "failureSubreason": "post_primary_route_evidence",
+            },
+        )
+        self.assertIsNone(namespace["_post_primary_failure_reason"]("primary"))
+
+        builder = namespace["build_failure_evidence"]
+        before_fix = builder(
+            binding={},
+            failure_phase="api-invocation",
+            error_class="RuntimeError",
+            exit_code=1,
+            run_id="run:post-primary",
+            run_state="succeeded",
+            invocation_id="invocation:post-primary",
+            invocation_state="succeeded",
+            provider_attempts=[],
+            terminal_kind="outcome_submission",
+        )
+        after_fix = builder(
+            binding={},
+            failure_phase="api-invocation",
+            error_class="RuntimeError",
+            exit_code=1,
+            run_id="run:post-primary",
+            run_state="succeeded",
+            invocation_id="invocation:post-primary",
+            invocation_state="succeeded",
+            provider_attempts=[],
+            terminal_kind="outcome_submission",
+            failure_reason=reason,
+        )
+        self.assertEqual(before_fix["failure"]["reasonCode"], "unspecified")
+        self.assertEqual(after_fix["failure"]["reasonCode"], "runtime_error")
+        self.assertEqual(after_fix["failure"]["reasonSubreason"], "post_primary_route_evidence")
+        self.assertNotIn("provider-secret", json.dumps(after_fix["failure"]))
+
+    def test_post_primary_stage_markers_cover_replay_route_and_receipt_in_order(self):
+        source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+        replay = source.index('post_primary_stage = "replay"')
+        route = source.index('post_primary_stage = "route_evidence"')
+        receipt = source.index('post_primary_stage = "receipt"')
+        self.assertLess(replay, source.index("replay_stdout"))
+        self.assertLess(route, source.index("manager_route_evidence, manager_route_failures"))
+        self.assertLess(receipt, source.index("success_receipt"))
+        self.assertLess(replay, route)
+        self.assertLess(route, receipt)
+
     def test_s00_gate_requires_applied_terminal_and_clean_completed_exit(self):
         source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
         tree = ast.parse(source)

@@ -1119,6 +1119,9 @@ def build_failure_evidence(
         "upstream_exception",
         "upstream_channel_closed",
         "upstream_timeout",
+        "post_primary_replay",
+        "post_primary_route_evidence",
+        "post_primary_receipt",
         *_SCENARIO_PREFLIGHT_SUBREASONS,
         "channel_closed_after_upstream",
         "reconciliation_required",
@@ -1934,6 +1937,28 @@ def _successful_primary_replay_gate(
     )
 
 
+def _post_primary_failure_reason(stage):
+    """Classify harness failures after the primary terminal gate without exception text."""
+
+    subreason = {
+        "replay": "post_primary_replay",
+        "route_evidence": "post_primary_route_evidence",
+        "receipt": "post_primary_receipt",
+    }.get(stage)
+    if subreason is None:
+        return None
+    return json.dumps(
+        {
+            "failureCode": "runtime_error",
+            "failurePhase": "runtime_supervisor",
+            "failureDetail": "unclassified_exception",
+            "failureSubreason": subreason,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
 def _prepare_shared_worker_setup(scenario, provider, provider_relay, suffix, *, cache):
     """Create Maya once; bounded commissions then receive separate run snapshots."""
 
@@ -2159,6 +2184,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
     rename_replay_evidence = {"status": "not_evaluated", "semanticDelta": None, "duplicateMutation": None}
     context_replay_delta = {}
     context_replay_before = {}
+    post_primary_stage = None
     setup_cache = setup_cache if setup_cache is not None else {}
     setup_stage = "shared-setup"
     setup_counters = {
@@ -2656,6 +2682,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
             if not scenario_gate["passed"]:
                 raise RuntimeError("scenario expectations failed: " + ",".join(scenario_gate["failures"]))
 
+        post_primary_stage = "replay"
         before_replay = replay_snapshot()
         primary_invocation_id = invocation.invocation_id
         primary_invocation_key = invocation.idempotency_key
@@ -2732,6 +2759,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
             transcript_evidence,
             explicit_publication,
         ) = readback()
+        post_primary_stage = "route_evidence"
         if scenario is not None and scenario.scenario_id == "worker":
             route_evidence, route_failures = build_worker_route_evidence(
                 scenario=scenario,
@@ -2786,6 +2814,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
             )
             if not scenario_gate["passed"]:
                 raise RuntimeError("Manager route expectations failed: " + ",".join(scenario_gate["failures"]))
+        post_primary_stage = "receipt"
         duration_ms = round((time.monotonic() - started) * 1000, 3)
         binding = _binding()
         bounded_readback = build_failure_evidence(
@@ -3037,7 +3066,8 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                 failure_code=control.failure_code if control is not None else None,
                 failure_reason=supervisor_failure_reason
                 or _provider_unknown_failure_reason(invocation, provider_attempts, control)
-                or (control.failure_reason if control is not None else None),
+                or (control.failure_reason if control is not None else None)
+                or _post_primary_failure_reason(post_primary_stage),
                 runtime_exit=(
                     {
                         "kind": exit_evidence.kind,
