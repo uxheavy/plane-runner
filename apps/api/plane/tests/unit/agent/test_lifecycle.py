@@ -1593,8 +1593,9 @@ def test_reconcile_submit_success_without_terminal_result_is_explicitly_unsafe(
 
     assert reconciliation.state == "reconciled"
     assert reconciliation.fresh_assignment_decision == "unsafe"
-    assert reconciliation.outcome_ref == f"outcome-submission:{outcome.id}"
+    assert reconciliation.outcome_ref is None
     assert reconciliation.publication_ref is None
+    assert reconciliation.terminal_event_ref is None
     assert reconciliation.evidence["replay"] is False
     assert reconcile_outcome_unknown(
         run,
@@ -1606,7 +1607,7 @@ def test_reconcile_submit_success_without_terminal_result_is_explicitly_unsafe(
 
 
 @pytest.mark.django_db
-def test_reconcile_rejects_mismatched_successful_publication(assignment, profile, create_user):
+def test_reconcile_mismatched_successful_publication_is_unsafe(assignment, profile, create_user):
     run = create_run(assignment, profile, idempotency_key="idempotency:mismatch-run")
     invocation = record_invocation(run, idempotency_key="idempotency:mismatch-invocation")
     transition_run(run, RunState.OUTCOME_UNKNOWN)
@@ -1614,51 +1615,190 @@ def test_reconcile_rejects_mismatched_successful_publication(assignment, profile
         workspace=run.workspace, project=run.project, run=run, summary="Submitted", artifacts=[], evidence=[]
     )
     other_outcome = f"outcome-submission:{uuid4()}"
-    for operation_id, key, result in (
-        (
-            "agent.outcome.submit",
-            "gateway:mismatch-submit",
-            {"outcome": {"outcomeRef": f"outcome-submission:{outcome.id}"}},
-        ),
-        (
-            "agent.outcome.publish",
-            "gateway:mismatch-publish",
-            {
-                "published": True,
-                "outcome": {"outcomeRef": other_outcome, "productEventRef": "product-event:mismatch"},
-            },
-        ),
-    ):
-        receipt = OperationGatewayIdempotency.objects.create(
-            invocation_id=invocation.pk,
-            operation_id=operation_id,
-            workspace_id=run.workspace_id,
-            workspace_slug=run.workspace.slug,
-            caller_id=create_user.id,
-            idempotency_key=key,
-            correlation_id="correlation:mismatch",
-            request_digest=("b" if operation_id.endswith("submit") else "c") * 64,
-            state=OperationGatewayIdempotency.State.SUCCEEDED,
-            request_input={},
-            result=result,
-        )
+    _reconciliation_gateway_receipt(
+        run,
+        invocation,
+        create_user,
+        operation_id="agent.outcome.submit",
+        idempotency_key="gateway:mismatch-submit",
+        result={"outcome": {"outcomeRef": f"outcome-submission:{outcome.id}"}},
+    )
+    _reconciliation_gateway_receipt(
+        run,
+        invocation,
+        create_user,
+        operation_id="agent.outcome.publish",
+        idempotency_key="gateway:mismatch-publish",
+        result={
+            "published": True,
+            "outcome": {"outcomeRef": other_outcome, "productEventRef": "product-event:mismatch"},
+        },
+    )
+
+    reconciliation = reconcile_outcome_unknown(
+        run,
+        idempotency_key="idempotency:mismatch-decision",
+        operator=create_user,
+    )
+    assert reconciliation.fresh_assignment_decision == "unsafe"
+    assert reconciliation.outcome_ref is None
+    assert reconciliation.publication_ref is None
+    assert reconciliation.terminal_event_ref is None
+
+
+def _reconciliation_outcome_chain(run, invocation):
+    outcome = propose_outcome(
+        run,
+        summary="Submitted outcome",
+        idempotency_key="idempotency:reconcile-outcome",
+    )
+    terminal = RunTerminalEvent.objects.get(invocation=invocation)
+    RuntimeInvocationControl.objects.filter(invocation=invocation).update(
+        state=RuntimeControlState.OUTCOME_UNKNOWN,
+    )
+    return outcome, terminal
+
+
+def _reconciliation_gateway_receipt(
+    run,
+    invocation,
+    create_user,
+    *,
+    operation_id,
+    idempotency_key,
+    result,
+    audit=True,
+    correlation_id=None,
+    request_input=None,
+):
+    request_id = uuid4()
+    audit_id = uuid4() if audit else None
+    receipt = OperationGatewayIdempotency.objects.create(
+        invocation_id=invocation.pk,
+        operation_id=operation_id,
+        workspace_id=run.workspace_id,
+        workspace_slug=run.workspace.slug,
+        caller_id=run.actor.principal_id,
+        idempotency_key=idempotency_key,
+        correlation_id=correlation_id or f"correlation:{run.id}",
+        request_digest="e" * 64,
+        state=OperationGatewayIdempotency.State.SUCCEEDED,
+        request_input=request_input or {"run_ref": run.snapshot["runId"]},
+        result=result,
+        request_id=request_id,
+        audit_receipt=audit_id,
+    )
+    if audit:
         OperationGatewayAudit.objects.create(
+            id=audit_id,
             invocation_id=invocation.pk,
             phase=OperationGatewayAudit.Phase.OUTCOME,
             outcome=OperationGatewayAudit.Outcome.SUCCESS,
-            request_id=receipt.request_id,
+            request_id=request_id,
             operation_id=operation_id,
             workspace_id=run.workspace_id,
             workspace_slug=run.workspace.slug,
-            caller_id=create_user.id,
-            idempotency_key=key,
+            caller_id=run.actor.principal_id,
+            idempotency_key=idempotency_key,
             correlation_id=receipt.correlation_id,
             request_digest=receipt.request_digest,
         )
+    return receipt
 
-    with pytest.raises(IdempotencyConflictError, match="not bound"):
-        reconcile_outcome_unknown(run, idempotency_key="idempotency:mismatch-decision", operator=create_user)
-    assert RuntimeReconciliation.objects.filter(invocation=invocation).count() == 0
+
+@pytest.mark.django_db
+def test_reconcile_binds_only_a_complete_submit_publish_terminal_chain(assignment, profile, create_user):
+    run = create_run(assignment, profile, idempotency_key="idempotency:complete-chain-run")
+    invocation = record_invocation(run, idempotency_key="idempotency:complete-chain-invocation")
+    outcome, terminal = _reconciliation_outcome_chain(run, invocation)
+    outcome_ref = f"outcome-submission:{outcome.id}"
+    _reconciliation_gateway_receipt(
+        run,
+        invocation,
+        create_user,
+        operation_id="agent.outcome.submit",
+        idempotency_key="gateway:complete-submit",
+        result={"outcome": {"outcomeRef": outcome_ref}},
+    )
+    _reconciliation_gateway_receipt(
+        run,
+        invocation,
+        create_user,
+        operation_id="agent.outcome.publish",
+        idempotency_key="gateway:complete-publish",
+        result={
+            "outcome": {
+                "outcomeRef": outcome_ref,
+                "productEventRef": terminal.product_event_ref,
+            }
+        },
+    )
+
+    reconciliation = reconcile_outcome_unknown(
+        run,
+        idempotency_key="idempotency:complete-chain-decision",
+        operator=create_user,
+    )
+
+    assert reconciliation.outcome_ref == outcome_ref
+    assert reconciliation.publication_ref == terminal.product_event_ref
+    assert reconciliation.terminal_event_ref == terminal.product_event_ref
+    assert reconciliation.evidence["submitAudit"] is True
+    assert reconciliation.evidence["publishAudit"] is True
+    assert reconciliation.evidence["publishReceipt"] == "succeeded"
+
+
+@pytest.mark.django_db
+def test_reconcile_missing_submit_never_binds_publication(assignment, profile, create_user):
+    run = create_run(assignment, profile, idempotency_key="idempotency:missing-submit-run")
+    invocation = record_invocation(run, idempotency_key="idempotency:missing-submit-invocation")
+    outcome, terminal = _reconciliation_outcome_chain(run, invocation)
+    outcome_ref = f"outcome-submission:{outcome.id}"
+    _reconciliation_gateway_receipt(
+        run,
+        invocation,
+        create_user,
+        operation_id="agent.outcome.publish",
+        idempotency_key="gateway:missing-submit-publish",
+        result={"outcome": {"productEventRef": terminal.product_event_ref}},
+    )
+
+    reconciliation = reconcile_outcome_unknown(
+        run,
+        idempotency_key="idempotency:missing-submit-decision",
+        operator=create_user,
+    )
+
+    assert reconciliation.outcome_ref is None
+    assert reconciliation.publication_ref is None
+    assert reconciliation.terminal_event_ref is None
+    assert outcome_ref not in reconciliation.evidence.values()
+
+
+@pytest.mark.django_db
+def test_reconcile_missing_publication_never_binds_submit(assignment, profile, create_user):
+    run = create_run(assignment, profile, idempotency_key="idempotency:missing-publication-run")
+    invocation = record_invocation(run, idempotency_key="idempotency:missing-publication-invocation")
+    outcome, _terminal = _reconciliation_outcome_chain(run, invocation)
+    outcome_ref = f"outcome-submission:{outcome.id}"
+    _reconciliation_gateway_receipt(
+        run,
+        invocation,
+        create_user,
+        operation_id="agent.outcome.submit",
+        idempotency_key="gateway:missing-publication-submit",
+        result={"outcome": {"outcomeRef": outcome_ref}},
+    )
+
+    reconciliation = reconcile_outcome_unknown(
+        run,
+        idempotency_key="idempotency:missing-publication-decision",
+        operator=create_user,
+    )
+
+    assert reconciliation.outcome_ref is None
+    assert reconciliation.publication_ref is None
+    assert reconciliation.terminal_event_ref is None
 
 
 @pytest.mark.django_db

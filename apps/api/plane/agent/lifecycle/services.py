@@ -2577,6 +2577,41 @@ def provider_attempts_reconciled(invocation) -> bool:
     return not RuntimeProviderAttempt.objects.filter(invocation=invocation, terminal_at__isnull=True).exists()
 
 
+def _reconciliation_receipt_bound(receipt, *, invocation, run, operation_id):
+    if receipt is None or receipt.state != OperationGatewayIdempotency.State.SUCCEEDED:
+        return False
+    request_input = receipt.request_input if isinstance(receipt.request_input, Mapping) else {}
+    return (
+        receipt.invocation_id == invocation.pk
+        and receipt.operation_id == operation_id
+        and receipt.workspace_id == run.workspace_id
+        and receipt.workspace_slug == run.workspace.slug
+        and receipt.caller_id == run.actor.principal_id
+        and receipt.correlation_id == namespaced_ref("correlation", str(run.id))
+        and request_input.get("run_ref") == run.snapshot.get("runId")
+        and receipt.audit_receipt is not None
+    )
+
+
+def _reconciliation_receipt_audited(receipt, *, invocation, run, operation_id):
+    if not _reconciliation_receipt_bound(receipt, invocation=invocation, run=run, operation_id=operation_id):
+        return False
+    return OperationGatewayAudit.objects.filter(
+        pk=receipt.audit_receipt,
+        invocation_id=invocation.pk,
+        phase=OperationGatewayAudit.Phase.OUTCOME,
+        outcome=OperationGatewayAudit.Outcome.SUCCESS,
+        request_id=receipt.request_id,
+        operation_id=operation_id,
+        workspace_id=run.workspace_id,
+        workspace_slug=run.workspace.slug,
+        caller_id=run.actor.principal_id,
+        idempotency_key=receipt.idempotency_key,
+        correlation_id=namespaced_ref("correlation", str(run.id)),
+        request_digest=receipt.request_digest,
+    ).exists()
+
+
 @transaction.atomic
 def reconcile_outcome_unknown(run, *, idempotency_key, operator):
     """Record a Plane-only decision from durable receipts; never dispatch or replay."""
@@ -2616,53 +2651,57 @@ def reconcile_outcome_unknown(run, *, idempotency_key, operator):
             value = value.get(key)
         return value if isinstance(value, str) and value else None
 
-    outcome_ref = result_ref(submit, "outcome", "outcomeRef")
+    submit_audited = _reconciliation_receipt_audited(
+        submit,
+        invocation=invocation,
+        run=locked_run,
+        operation_id="agent.outcome.submit",
+    )
+    publish_audited = _reconciliation_receipt_audited(
+        publish,
+        invocation=invocation,
+        run=locked_run,
+        operation_id="agent.outcome.publish",
+    )
+    submit_outcome_ref = result_ref(submit, "outcome", "outcomeRef")
     publish_outcome_ref = result_ref(publish, "outcome", "outcomeRef")
-    publication_ref = result_ref(publish, "outcome", "productEventRef")
-    if publish is not None:
-        if publish_outcome_ref != outcome_ref or publication_ref is None:
-            raise IdempotencyConflictError("Outcome publication is not bound to the submitted outcome")
-        publish_audited = OperationGatewayAudit.objects.filter(
-            invocation_id=invocation.pk,
-            request_id=publish.request_id,
-            operation_id="agent.outcome.publish",
-            workspace_id=locked_run.workspace_id,
-            workspace_slug=publish.workspace_slug,
-            caller_id=publish.caller_id,
-            idempotency_key=publish.idempotency_key,
-            correlation_id=publish.correlation_id,
-            request_digest=publish.request_digest,
-            outcome=OperationGatewayAudit.Outcome.SUCCESS,
-        ).exists()
-        if not publish_audited:
-            raise AgentDomainError("Successful outcome publication has no matching success audit")
+    publish_publication_ref = result_ref(publish, "outcome", "productEventRef")
     outcome = None
-    if outcome_ref and outcome_ref.startswith("outcome-submission:"):
+    if submit_outcome_ref and submit_outcome_ref.startswith("outcome-submission:"):
         try:
             outcome = OutcomeSubmission.objects.filter(
-                run=locked_run, pk=outcome_ref.removeprefix("outcome-submission:")
+                run=locked_run, pk=submit_outcome_ref.removeprefix("outcome-submission:")
             ).first()
         except (TypeError, ValueError):
             outcome = None
     terminal = RunTerminalEvent.objects.filter(invocation=invocation, visible=True).first()
     runtime_exit = RuntimeExitEvidence.objects.filter(invocation=invocation).first()
     provider_initiated = RuntimeProviderAttempt.objects.filter(invocation=invocation, upstream_initiated=True).exists()
-    submit_audited = bool(
-        submit
-        and OperationGatewayAudit.objects.filter(
-            invocation_id=invocation.pk,
-            request_id=submit.request_id,
-            operation_id="agent.outcome.submit",
-            outcome=OperationGatewayAudit.Outcome.SUCCESS,
-        ).exists()
+    complete_outcome_chain = bool(
+        submit_audited
+        and publish_audited
+        and submit_outcome_ref
+        and publish_outcome_ref == submit_outcome_ref
+        and publish_publication_ref
+        and outcome is not None
+        and terminal is not None
+        and terminal.workspace_id == locked_run.workspace_id
+        and terminal.project_id == locked_run.project_id
+        and terminal.run_id == locked_run.id
+        and terminal.invocation_id == invocation.id
+        and terminal.kind == TerminalEventKind.OUTCOME_SUBMISSION
+        and terminal.source == TerminalEventSource.RUNTIME
+        and terminal.product_ref == submit_outcome_ref
+        and terminal.product_event_ref == publish_publication_ref
     )
     evidence = {
         "submitReceipt": submit.state if submit else None,
         "submitAudit": submit_audited,
         "publishReceipt": publish.state if publish else None,
-        "outcomeBound": outcome is not None,
-        "publicationBound": publication_ref is not None,
-        "terminalBound": terminal is not None,
+        "publishAudit": publish_audited,
+        "outcomeBound": complete_outcome_chain,
+        "publicationBound": complete_outcome_chain,
+        "terminalBound": complete_outcome_chain,
         "runtimeExitBound": runtime_exit is not None,
         "providerInitiated": provider_initiated,
         "replay": False,
@@ -2686,9 +2725,9 @@ def reconcile_outcome_unknown(run, *, idempotency_key, operator):
         run=locked_run,
         state=ReconciliationState.RECONCILED,
         fresh_assignment_decision=FreshAssignmentDecision.SAFE if fresh_safe else FreshAssignmentDecision.UNSAFE,
-        outcome_ref=outcome_ref if outcome is not None and submit_audited else None,
-        publication_ref=publication_ref,
-        terminal_event_ref=terminal.product_event_ref if terminal else None,
+        outcome_ref=submit_outcome_ref if complete_outcome_chain else None,
+        publication_ref=publish_publication_ref if complete_outcome_chain else None,
+        terminal_event_ref=terminal.product_event_ref if complete_outcome_chain else None,
         runtime_exit_ref=f"runtime-exit:{runtime_exit.id}" if runtime_exit else None,
         evidence=evidence,
         idempotency_key=idempotency_key,
