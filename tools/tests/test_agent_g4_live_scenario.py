@@ -55,6 +55,69 @@ def write_owner_only(path: Path, raw: bytes) -> None:
     path.chmod(0o600)
 
 
+def _run_code_mode_frames(source: str, callback_handler):
+    runner = TOOLS.parent / "apps" / "api" / "plane" / "agent" / "code_mode" / "runner.mjs"
+    help_result = subprocess.run(["node", "--help"], check=False, capture_output=True, text=True)
+    permission_flag = "--permission" if "--permission" in f"{help_result.stdout}\n{help_result.stderr}" else "--experimental-permission"
+    process = subprocess.Popen(
+        [
+            "node",
+            permission_flag,
+            "--no-addons",
+            "--no-global-search-paths",
+            "--experimental-vm-modules",
+            "--disable-proto=throw",
+            f"--allow-fs-read={runner}",
+            "--allow-fs-read=/usr/share/node_modules/typescript",
+            str(runner),
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    assert process.stdin is not None and process.stdout is not None
+    observed = []
+    try:
+        process.stdin.write(
+            json.dumps(
+                {
+                    "type": "run",
+                    "source": source,
+                    "input": {},
+                    "callbacks": {
+                        "search": "search_plane_operations",
+                        "describe": "describe_plane_operation",
+                        "operation": "call_plane_operation",
+                        "spill": "spill_plane_result",
+                    },
+                }
+            )
+            + "\n"
+        )
+        process.stdin.flush()
+        while True:
+            frame = json.loads(process.stdout.readline())
+            if frame["type"] != "callback":
+                return observed, frame
+            observed.append(frame)
+            process.stdin.write(
+                json.dumps(
+                    {
+                        "type": "callback_result",
+                        "id": frame["id"],
+                        "receipt": callback_handler(frame),
+                    }
+                )
+                + "\n"
+            )
+            process.stdin.flush()
+    finally:
+        if process.poll() is None:
+            process.terminate()
+        process.wait(timeout=5)
+
+
 @pytest.mark.parametrize("scenario_id", ["worker", "manager", "operator"])
 def test_supported_persona_descriptors_are_typed_and_bound(scenario_id: str) -> None:
     raw, digest = descriptor_bytes(descriptor_for(scenario_id))
@@ -109,10 +172,12 @@ def test_code_mode_commission_binds_exact_runtime_values_and_hides_native_rename
         {"operationId": "agent.outcome.submit", "outcome": "success", "count": 1},
         {"operationId": "agent.outcome.publish", "outcome": "success", "count": 1},
     ]
-    assert "{{projectId}}" in commission.assignment.objective
-    assert "{{issueId}}" in commission.assignment.objective
-    assert "{{invocationId}}" in commission.assignment.objective
-    assert "{{newName}}" in commission.assignment.objective
+    assert "{{projectId}}" not in commission.assignment.objective
+    assert "{{issueId}}" not in commission.assignment.objective
+    assert "{{invocationId}}" not in commission.assignment.objective
+    assert "{{newName}}" not in commission.assignment.objective
+    assert "preparedCallRef" in commission.assignment.objective
+    assert "submit exactly one bounded outcome" in commission.assignment.objective
 
 
 def test_code_mode_runtime_binding_substitutes_every_placeholder_once() -> None:
@@ -127,15 +192,24 @@ def test_code_mode_runtime_binding_substitutes_every_placeholder_once() -> None:
         new_name="V36 Code Mode Rename",
     )
 
+    route_guidance = scenario.model_route_expectations(bound.expected)
+    route_guidance = tuple(
+        scenario.substitute_code_mode_placeholders(item, bound.runtime_bindings)
+        for item in route_guidance
+    )
     text = "\n".join(
-        [bound.assignment.objective, *bound.assignment.acceptance_criteria, bound.prompt, bound.profile.instructions]
+        [bound.assignment.objective, *bound.assignment.acceptance_criteria, bound.prompt, bound.profile.instructions, *route_guidance]
     )
     assert "{{projectId}}" not in text
     assert "{{issueId}}" not in text
     assert "{{invocationId}}" not in text
     assert "{{newName}}" not in text
-    assert 'project_id: "project-fresh"' in text
-    assert 'issue_id: "issue-fresh"' in text
+    assert 'project_id: workItem.project' in text
+    assert 'issue_id: workItem.id' in text
+    assert "project-fresh" not in text
+    assert "issue-fresh" not in text
+    assert 'idempotency:invocation-fresh:code-mode-search' in text
+    assert 'idempotency:invocation-fresh:code-mode-read' in text
     assert '"idempotency:invocation-fresh:code-mode-rename"' in text
     assert '"correlation:invocation-fresh:code-mode-rename"' in text
     assert 'name: "V36 Code Mode Rename"' in text
@@ -191,12 +265,22 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert "W08 readback" in mutation.assignment.objective
     assert "before agent.outcome.submit" in mutation.assignment.objective
     assert "hermes_tools.plane_operation" not in mutation.assignment.objective
-    assert "{{projectId}}" in code_mode.assignment.objective
-    assert "{{issueId}}" in code_mode.assignment.objective
-    assert "{{invocationId}}" in code_mode.assignment.objective
-    assert "{{newName}}" in code_mode.assignment.objective
-    assert "plane_execute_typescript exactly once" in code_mode.assignment.objective
-    assert "native work_item.rename is not model-visible" in code_mode.assignment.acceptance_criteria[-1]
+    assert "{{projectId}}" not in code_mode.assignment.objective
+    assert "{{issueId}}" not in code_mode.assignment.objective
+    assert "{{invocationId}}" not in code_mode.assignment.objective
+    assert "{{newName}}" not in code_mode.assignment.objective
+    assert "call plane_execute_typescript exactly once" in code_mode.assignment.objective
+    assert "malformed or unknown prepared shape must fail closed" in code_mode.assignment.objective
+    assert "native plane_operation and work_item.rename are not model-visible" in code_mode.assignment.acceptance_criteria[-1]
+    code_mode_guidance = scenario.model_route_expectations(code_mode.expected)
+    assert len(code_mode_guidance) == 2
+    assert code_mode_guidance[0].startswith("Route step 1: invoke plane_execute_typescript exactly 1 time(s)")
+    assert "search_workspace; extract only the returned workItemReadCall.input.preparedCallRef" in code_mode_guidance[0]
+    assert 'host.call_plane_operation("work_item.read", { preparedCallRef }' in code_mode_guidance[0]
+    assert 'host.call_plane_operation("work_item.rename"' in code_mode_guidance[0]
+    assert 'host.call_plane_operation("agent.outcome.submit"' in code_mode_guidance[0]
+    assert "Do not invoke search_workspace, work_item.read, work_item.rename, or agent.outcome.submit as model tools" in code_mode_guidance[0]
+    assert code_mode_guidance[1].startswith("Route step 2: invoke plane_publish exactly 1 time(s)")
     mutation_route_guidance = scenario.model_route_expectations(mutation.expected)
     read_guidance = next(
         item for item in mutation_route_guidance if "invoke work_item.read" in item
@@ -246,135 +330,138 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert "exactly one artifact and exactly one evidence item" in context.assignment.acceptance_criteria[-1]
 
 
-def test_generated_rename_template_executes_one_bound_callback_in_restricted_isolate() -> None:
-    source = scenario.rename_code_mode_template()
-    source = source.replace("<read.result.project>", "project-1")
-    source = source.replace("<read.result.id>", "issue-1")
-    source = source.replace("<bounded new name>", "Renamed by V35")
-    runner = TOOLS.parent / "apps" / "api" / "plane" / "agent" / "code_mode" / "runner.mjs"
-    help_result = subprocess.run(["node", "--help"], check=False, capture_output=True, text=True)
-    permission_flag = "--permission" if "--permission" in f"{help_result.stdout}\n{help_result.stderr}" else "--experimental-permission"
-    process = subprocess.Popen(
-        [
-            "node",
-            permission_flag,
-            "--no-addons",
-            "--no-global-search-paths",
-            "--experimental-vm-modules",
-            "--disable-proto=throw",
-            f"--allow-fs-read={runner}",
-            "--allow-fs-read=/usr/share/node_modules/typescript",
-            str(runner),
-        ],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
+def test_code_mode_composition_executes_opaque_prepared_read_then_one_rename_and_submit() -> None:
+    source = scenario.code_mode_composition_template().replace("{{invocationId}}", "invocation-v59").replace(
+        "{{newName}}", "V59 Code Mode Rename"
     )
-    assert process.stdin is not None
-    assert process.stdout is not None
-    try:
-        process.stdin.write(
-            json.dumps(
-                {
-                    "type": "run",
-                    "source": source,
-                    "input": {},
-                    "callbacks": {
-                        "search": "search_plane_operations",
-                        "describe": "describe_plane_operation",
-                        "operation": "call_plane_operation",
-                        "spill": "spill_plane_result",
-                    },
-                }
-            )
-            + "\n"
-        )
-        process.stdin.flush()
-        callback = json.loads(process.stdout.readline())
-        assert callback["type"] == "callback"
-        assert callback["kind"] == "operation"
-        assert callback["name"] == "call_plane_operation"
-        assert callback["args"] == [
-            "work_item.rename",
-            {"project_id": "project-1", "issue_id": "issue-1", "name": "Renamed by V35"},
-            "idempotency:{{invocationId}}:work_item.rename",
-            "correlation:{{invocationId}}:work_item.read->work_item.rename",
-        ]
-        process.stdin.write(
-            json.dumps(
-                {
-                    "type": "callback_result",
-                    "id": callback["id"],
-                    "receipt": {"ok": True, "operationId": "work_item.rename"},
-                }
-            )
-            + "\n"
-        )
-        process.stdin.flush()
-        result = json.loads(process.stdout.readline())
-        assert result == {"type": "result", "value": {"ok": True, "operationId": "work_item.rename"}}
-    finally:
-        if process.poll() is None:
-            process.terminate()
-        process.wait(timeout=5)
 
+    callback_count = 0
 
-def test_bound_code_mode_commission_module_executes_one_gateway_callback_in_isolate() -> None:
-    raw = (TOOLS / "agent-g4-worker-v6.json").read_bytes()
-    parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
-    bound = scenario.bind_code_mode_runtime_values(
-        scenario.commission_descriptor(parsed, parsed.commissions[2]),
-        project_id="project-36",
-        issue_id="issue-36",
-        invocation_id="invocation-36",
-        new_name="V36 Code Mode",
-    )
-    objective = bound.assignment.objective
-    start = objective.index("export default async function")
-    end = objective.index("}. Do not alter", start) + 1
-    source = objective[start:end]
-    runner = TOOLS.parent / "apps" / "api" / "plane" / "agent" / "code_mode" / "runner.mjs"
-    help_result = subprocess.run(["node", "--help"], check=False, capture_output=True, text=True)
-    permission_flag = "--permission" if "--permission" in f"{help_result.stdout}\n{help_result.stderr}" else "--experimental-permission"
-    process = subprocess.Popen(
-        [
-            "node", permission_flag, "--no-addons", "--no-global-search-paths", "--experimental-vm-modules",
-            "--disable-proto=throw", f"--allow-fs-read={runner}",
-            "--allow-fs-read=/usr/share/node_modules/typescript", str(runner),
-        ], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-    )
-    assert process.stdin is not None and process.stdout is not None
-    try:
-        process.stdin.write(json.dumps({
-            "type": "run", "source": source, "input": {},
-            "callbacks": {
-                "search": "search_plane_operations", "describe": "describe_plane_operation",
-                "operation": "call_plane_operation", "spill": "spill_plane_result",
+    def callback(frame):
+        nonlocal callback_count
+        callback_count += 1
+        if callback_count == 1:
+            assert frame["args"] == [
+                "search_workspace",
+                {"query": "G4 Live Issue", "limit": 1},
+                "idempotency:invocation-v59:code-mode-search",
+                "correlation:invocation-v59:code-mode-search",
+            ]
+            return {
+                "ok": True,
+                "result": {
+                    "results": [
+                        {
+                            "objectType": "work_item",
+                            "workItemReadCall": {
+                                "action": "read",
+                                "operationRef": "operation:work_item.read",
+                                "input": {"preparedCallRef": "prepared-call:opaque"},
+                            },
+                        }
+                    ]
+                },
+            }
+        if callback_count == 2:
+            assert frame["args"] == [
+                "work_item.read",
+                {"preparedCallRef": "prepared-call:opaque"},
+                "idempotency:invocation-v59:code-mode-read",
+                "correlation:invocation-v59:code-mode-read",
+            ]
+            return {"ok": True, "result": {"work_item": {"project": "project-1", "id": "issue-1"}}}
+        if callback_count == 3:
+            assert frame["args"] == [
+                "work_item.rename",
+                {"project_id": "project-1", "issue_id": "issue-1", "name": "V59 Code Mode Rename"},
+                "idempotency:invocation-v59:code-mode-rename",
+                "correlation:invocation-v59:code-mode-rename",
+            ]
+            return {"ok": True, "result": {"work_item": {"name": "V59 Code Mode Rename"}}}
+        assert callback_count == 4
+        assert frame["args"] == [
+            "agent.outcome.submit",
+            {
+                "summary": "Code Mode semantic rename completed.",
+                "artifacts": ["artifact:code-mode-semantic-rename"],
+                "evidence": ["evidence:code-mode-search-read-rename"],
             },
-        }) + "\n")
-        process.stdin.flush()
-        callback = json.loads(process.stdout.readline())
-        assert callback["type"] == "callback"
-        assert callback["name"] == "call_plane_operation"
-        assert callback["args"] == [
-            "work_item.rename",
-            {"project_id": "project-36", "issue_id": "issue-36", "name": "V36 Code Mode"},
-            "idempotency:invocation-36:code-mode-rename",
-            "correlation:invocation-36:code-mode-rename",
+            "idempotency:invocation-v59:code-mode-submit",
+            "correlation:invocation-v59:code-mode-submit",
         ]
-        process.stdin.write(json.dumps({
-            "type": "callback_result", "id": callback["id"],
-            "receipt": {"ok": True, "operationId": "work_item.rename"},
-        }) + "\n")
-        process.stdin.flush()
-        assert json.loads(process.stdout.readline()) == {
-            "type": "result", "value": {"ok": True, "operationId": "work_item.rename"}
+        return {"ok": True, "result": {"outcome": {"outcomeRef": "outcome-submission:one"}}}
+
+    callbacks, result = _run_code_mode_frames(source, callback)
+    assert [frame["args"][0] for frame in callbacks] == [
+        "search_workspace",
+        "work_item.read",
+        "work_item.rename",
+        "agent.outcome.submit",
+    ]
+    assert result["type"] == "result"
+    assert result["value"]["submit"]["result"]["outcome"]["outcomeRef"] == "outcome-submission:one"
+
+
+def test_code_mode_composition_rejects_malformed_prepared_shape_before_read_or_mutation() -> None:
+    source = scenario.code_mode_composition_template()
+    callback_count = 0
+
+    def callback(frame):
+        nonlocal callback_count
+        callback_count += 1
+        assert callback_count == 1
+        assert frame["args"][0] == "search_workspace"
+        return {
+            "ok": True,
+            "result": {
+                "results": [
+                    {
+                        "objectType": "work_item",
+                        "workItemReadCall": {"input": {"project_id": "raw", "issue_id": "raw"}},
+                    }
+                ]
+            },
         }
-    finally:
-        if process.poll() is None:
-            process.terminate()
-        process.wait(timeout=5)
+
+    callbacks, result = _run_code_mode_frames(source, callback)
+    assert [frame["args"][0] for frame in callbacks] == ["search_workspace"]
+    assert result["type"] == "error"
+    assert result["code"] == "CODE_MODE_FAILED"
+    assert "raw" not in json.dumps(result)
+
+
+def test_code_mode_composition_returns_unknown_prepared_failure_without_mutation() -> None:
+    source = scenario.code_mode_composition_template()
+    callback_count = 0
+
+    def callback(frame):
+        nonlocal callback_count
+        callback_count += 1
+        if callback_count == 1:
+            return {
+                "ok": True,
+                "result": {
+                    "results": [
+                        {
+                            "objectType": "work_item",
+                            "workItemReadCall": {
+                                "action": "read",
+                                "operationRef": "operation:work_item.read",
+                                "input": {"preparedCallRef": "prepared-call:unknown"},
+                            },
+                        }
+                    ]
+                },
+            }
+        assert callback_count == 2
+        assert frame["args"][0] == "work_item.read"
+        assert frame["args"][1] == {"preparedCallRef": "prepared-call:unknown"}
+        return {"ok": False, "error": {"code": "PREPARED_CALL_INVALID"}}
+
+    callbacks, result = _run_code_mode_frames(source, callback)
+    assert [frame["args"][0] for frame in callbacks] == ["search_workspace", "work_item.read"]
+    assert result["type"] == "result"
+    assert result["value"]["read"]["error"]["code"] == "PREPARED_CALL_INVALID"
 
 
 def test_select_commission_keeps_source_digest_and_removes_other_commissions() -> None:

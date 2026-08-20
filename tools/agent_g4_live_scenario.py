@@ -58,13 +58,52 @@ _MANAGER_OUTCOME_OPERATIONS = {"agent.outcome.submit", "agent.outcome.publish"}
 
 
 def rename_code_mode_template() -> str:
-    """Return the bounded Code Mode template used by the rename guidance."""
+    """Return the bounded Code Mode template used by the standard rename guidance."""
 
     return (
         'export default async function ({host}: {host: any}) { return await host.call_plane_operation('
         '"work_item.rename", { project_id: "<read.result.project>", issue_id: "<read.result.id>", '
         'name: "<bounded new name>" }, "idempotency:{{invocationId}}:work_item.rename", '
         '"correlation:{{invocationId}}:work_item.read->work_item.rename"); }'
+    )
+
+
+def code_mode_composition_template() -> str:
+    """Return the Worker composition that keeps the prepared read opaque."""
+
+    return (
+        'export default async function ({host,input}: {host: any; input: any}) { '
+        'const search = await host.call_plane_operation('
+        '"search_workspace", { query: "G4 Live Issue", limit: 1 }, '
+        '"idempotency:{{invocationId}}:code-mode-search", '
+        '"correlation:{{invocationId}}:code-mode-search"); '
+        'if (!search?.ok) return { search }; '
+        'const rows = search?.result?.results; '
+        'if (!Array.isArray(rows) || rows.length !== 1 || rows[0]?.objectType !== "work_item") '
+        'throw new Error("prepared read handoff unavailable"); '
+        'const preparedCallRef = rows[0]?.workItemReadCall?.input?.preparedCallRef; '
+        'if (typeof preparedCallRef !== "string" || !preparedCallRef.startsWith("prepared-call:")) '
+        'throw new Error("prepared read handoff unavailable"); '
+        'const read = await host.call_plane_operation('
+        '"work_item.read", { preparedCallRef }, '
+        '"idempotency:{{invocationId}}:code-mode-read", '
+        '"correlation:{{invocationId}}:code-mode-read"); '
+        'if (!read?.ok) return { search, read }; '
+        'const workItem = read?.result?.work_item; '
+        'if (!workItem || typeof workItem.project !== "string" || typeof workItem.id !== "string") '
+        'throw new Error("authorized work item read unavailable"); '
+        'const rename = await host.call_plane_operation('
+        '"work_item.rename", { project_id: workItem.project, issue_id: workItem.id, '
+        'name: "{{newName}}" }, "idempotency:{{invocationId}}:code-mode-rename", '
+        '"correlation:{{invocationId}}:code-mode-rename"); '
+        'if (!rename?.ok) return { search, read, rename }; '
+        'const submit = await host.call_plane_operation('
+        '"agent.outcome.submit", { summary: "Code Mode semantic rename completed.", '
+        'artifacts: ["artifact:code-mode-semantic-rename"], '
+        'evidence: ["evidence:code-mode-search-read-rename"] }, '
+        '"idempotency:{{invocationId}}:code-mode-submit", '
+        '"correlation:{{invocationId}}:code-mode-submit"); '
+        'return { search, read, rename, submit }; }'
     )
 
 
@@ -357,6 +396,29 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
     if expected is None:
         return ()
     outcomes = expected.get("operationOutcomes", [])
+    if tuple(item.get("operationId") for item in outcomes) == (
+        "search_workspace",
+        "work_item.read",
+        "work_item.rename",
+        "agent.outcome.submit",
+        "agent.outcome.publish",
+    ):
+        return (
+            "Route step 1: invoke plane_execute_typescript exactly 1 time(s) and expect success. "
+            "Use one bounded module that performs the complete Worker composition through "
+            "host.call_plane_operation in this exact order: search_workspace; extract only the returned "
+            "workItemReadCall.input.preparedCallRef; work_item.read with exactly "
+            "{preparedCallRef}; work_item.rename using only the authorized read result; and one "
+            "agent.outcome.submit with one artifact and one evidence item. Do not invoke search_workspace, "
+            "work_item.read, work_item.rename, or agent.outcome.submit as model tools, do not reconstruct or "
+            "wrap the opaque ref, and do not expose raw target identifiers. The module must export a default "
+            "async function receiving {host,input}, use only the existing host callback, and fail closed on "
+            f"a malformed or unknown prepared shape. Use this exact bounded module: {code_mode_composition_template()} "
+            "After the composition returns, use its submitted outcomeRef for the explicit publication.",
+            "Route step 2: invoke plane_publish exactly 1 time(s) and expect success. Publish exactly once "
+            "with operationRef operation:agent.outcome.publish, resourceRef set to the returned outcomeRef, "
+            "and bounded content; ordinary final text is transcript evidence only.",
+        )
     rendered: list[str] = []
     for index, item in enumerate(outcomes, start=1):
         operation_id = item["operationId"]
