@@ -1617,7 +1617,7 @@ class G4ContractTests(unittest.TestCase):
         runtime_remove = cleanup.index('docker rm -f "${RUNTIME}"')
         volume_remove = cleanup.index('docker volume rm "${CREDENTIAL_STATE_VOLUME}"')
         provider_volume_remove = cleanup.index('docker volume rm "${PROVIDER_SECRET_VOLUME}"')
-        compose_down = cleanup.index("docker compose")
+        compose_down = cleanup.index("compose_with_selected_env")
         run_dir_delete = cleanup.index('rm -rf -- "${RUN_DIR}"')
         self.assertLess(runtime_remove, volume_remove)
         self.assertLess(compose_down, volume_remove)
@@ -1805,7 +1805,7 @@ class G4ContractTests(unittest.TestCase):
         self.assertNotIn("cat ", preflight)
         self.assertNotIn("print(", preflight)
         self.assertNotIn('--mount type=bind,src="${PROVIDER_SECRET_FILE}"', preflight)
-        self.assertLess(preflight_start, runner.index("docker compose", compose_start))
+        self.assertLess(preflight_start, runner.index("compose_with_selected_env", compose_start))
 
     def test_api_invocation_uses_task_volumes_and_stdin_without_invoke_source_bind_mount(self):
         runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
