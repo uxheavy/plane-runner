@@ -516,6 +516,50 @@ class G4ContractTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             _validate_runtime_diagnostics(invalid_callback)
 
+    def test_code_mode_failure_diagnostic_is_finite_and_preserved(self):
+        builder = invoke_helper_namespace()["build_failure_evidence"]
+        manifest, authority, _, _ = fixture()
+        receipt = builder(
+            binding=exact_binding(manifest, CANDIDATE),
+            authority_id=authority["authorityId"],
+            canary_ids={key: row["id"] for key, row in authority["binding"]["canaries"].items()},
+            failure_phase="runtime-process",
+            error_class="RuntimeError",
+            exit_code=1,
+            run_id="run:code-mode-diagnostic",
+            run_state="failed",
+            invocation_id="invocation:code-mode-diagnostic",
+            invocation_state="failed",
+            provider_attempts=[],
+            terminal_kind="run_failure",
+            failure_reason=(
+                '{"failureCode":"runtime_error","failurePhase":"runtime_process",'
+                '"failureDetail":"process_exit","failureSubreason":"runtime_execution_failed",'
+                '"failureCause":"host_operation_failure",'
+                '"codeModeHostStatus":"invalid","codeModeFailureClass":"code_mode"}'
+            ),
+            runtime_exit={
+                "kind": "failed",
+                "failure": {
+                    "code": "runtime_error",
+                    "retryable": False,
+                    "cause": "host_operation_failure",
+                    "message": "raw host message must not escape",
+                    "callbackPhase": "host_return",
+                    "operationRefDigest": "a" * 64,
+                    "codeModeHostStatus": "invalid",
+                    "codeModeFailureClass": "code_mode",
+                },
+            },
+        )
+        self.assertEqual(
+            receipt["runtimeExit"]["failure"]["codeModeHostStatus"], "invalid"
+        )
+        self.assertEqual(
+            receipt["failure"]["codeModeFailureClass"], "code_mode"
+        )
+        self.assertNotIn("raw host message", json.dumps(receipt))
+
     def test_runner_setup_error_projection_is_bounded_and_validated(self):
         valid = {
             "id": "setup:lineage:IntegrityError",

@@ -2036,6 +2036,8 @@ def _validate_failure_receipt(
                 "providerEventRef",
                 "callbackPhase",
                 "operationRefDigest",
+                "codeModeHostStatus",
+                "codeModeFailureClass",
             }
         )
         or not required_failure_fields.issubset(failure)
@@ -2062,6 +2064,28 @@ def _validate_failure_receipt(
         digest = failure["operationRefDigest"]
         if not isinstance(digest, str) or len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
             raise ContractError("evidence_failure_operation_ref_digest_invalid")
+    code_mode_fields = {"codeModeHostStatus", "codeModeFailureClass"}
+    present_code_mode_fields = code_mode_fields.intersection(failure)
+    if present_code_mode_fields and present_code_mode_fields != code_mode_fields:
+        raise ContractError("evidence_failure_code_mode_diagnostic_fields_invalid")
+    if present_code_mode_fields:
+        if failure["codeModeHostStatus"] not in {
+            "ok",
+            "replayed",
+            "denied",
+            "conflict",
+            "unavailable",
+            "invalid",
+        }:
+            raise ContractError("evidence_failure_code_mode_status_invalid")
+        if failure["codeModeFailureClass"] not in {
+            "code_mode",
+            "callback",
+            "transport",
+            "contract",
+            "unknown",
+        }:
+            raise ContractError("evidence_failure_code_mode_class_invalid")
     if "hostOperationFailure" in failure:
         host_failure = _object(failure["hostOperationFailure"], "evidence_host_operation_failure")
         if (
@@ -2129,7 +2153,12 @@ def _validate_failure_receipt(
         raise ContractError("evidence_runtime_exit_sequence_invalid")
     if runtime_exit["failure"] is not None:
         runtime_failure = _object(runtime_exit["failure"], "evidence_runtime_exit_failure")
-        runtime_failure_diagnostic_fields = {"callbackPhase", "operationRefDigest"}
+        runtime_failure_diagnostic_fields = {
+            "callbackPhase",
+            "operationRefDigest",
+            "codeModeHostStatus",
+            "codeModeFailureClass",
+        }
         if set(runtime_failure).difference({"code", "retryable", "cause"} | runtime_failure_diagnostic_fields) or not {
             "code",
             "retryable",
@@ -2150,6 +2179,28 @@ def _validate_failure_receipt(
             digest = runtime_failure["operationRefDigest"]
             if not isinstance(digest, str) or len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
                 raise ContractError("evidence_runtime_exit_failure_operation_ref_digest_invalid")
+        code_mode_fields = {"codeModeHostStatus", "codeModeFailureClass"}
+        present_code_mode_fields = code_mode_fields.intersection(runtime_failure)
+        if present_code_mode_fields and present_code_mode_fields != code_mode_fields:
+            raise ContractError("evidence_runtime_exit_failure_code_mode_diagnostic_fields_invalid")
+        if present_code_mode_fields:
+            if runtime_failure["codeModeHostStatus"] not in {
+                "ok",
+                "replayed",
+                "denied",
+                "conflict",
+                "unavailable",
+                "invalid",
+            }:
+                raise ContractError("evidence_runtime_exit_failure_code_mode_status_invalid")
+            if runtime_failure["codeModeFailureClass"] not in {
+                "code_mode",
+                "callback",
+                "transport",
+                "contract",
+                "unknown",
+            }:
+                raise ContractError("evidence_runtime_exit_failure_code_mode_class_invalid")
 
     ingress = _object(evidence["runtimeEventIngress"], "evidence_runtime_ingress")
     if set(ingress).difference({"kindCounts", "diagnostics"}) or "kindCounts" not in ingress:

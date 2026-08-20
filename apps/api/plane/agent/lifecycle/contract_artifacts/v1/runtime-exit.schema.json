@@ -203,6 +203,12 @@
           "minLength": 64,
           "maxLength": 64,
           "pattern": "^[a-f0-9]{64}$"
+        },
+        "codeModeHostStatus": {
+          "enum": ["ok", "replayed", "denied", "conflict", "unavailable", "invalid"]
+        },
+        "codeModeFailureClass": {
+          "enum": ["code_mode", "callback", "transport", "contract", "unknown"]
         }
       },
       "allOf": [
@@ -216,6 +222,22 @@
                 "const": "runtime_error"
               }
             }
+          }
+        },
+        {
+          "if": {
+            "required": ["codeModeHostStatus"]
+          },
+          "then": {
+            "required": ["codeModeFailureClass"]
+          }
+        },
+        {
+          "if": {
+            "required": ["codeModeFailureClass"]
+          },
+          "then": {
+            "required": ["codeModeHostStatus"]
           }
         }
       ]

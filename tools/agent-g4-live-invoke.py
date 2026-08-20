@@ -1421,6 +1421,8 @@ def build_failure_evidence(
                 "providerEventRef",
                 "callbackPhase",
                 "operationRefDigest",
+                "codeModeHostStatus",
+                "codeModeFailureClass",
             }
             if base_keys.issubset(candidate) and not set(candidate).difference(
                 base_keys | optional_keys
@@ -1503,6 +1505,14 @@ def build_failure_evidence(
             ):
                 bounded_runtime_exit["failure"]["callbackPhase"] = callback_phase
                 bounded_runtime_exit["failure"]["operationRefDigest"] = operation_ref_digest
+            code_mode_status = runtime_failure.get("codeModeHostStatus")
+            code_mode_failure_class = runtime_failure.get("codeModeFailureClass")
+            if (
+                code_mode_status in {"ok", "replayed", "denied", "conflict", "unavailable", "invalid"}
+                and code_mode_failure_class in {"code_mode", "callback", "transport", "contract", "unknown"}
+            ):
+                bounded_runtime_exit["failure"]["codeModeHostStatus"] = code_mode_status
+                bounded_runtime_exit["failure"]["codeModeFailureClass"] = code_mode_failure_class
 
     bounded_event_kind_counts = {}
     if isinstance(runtime_event_kind_counts, dict):
@@ -1556,6 +1566,14 @@ def build_failure_evidence(
     }
     if bounded_failure_cause is not None:
         bounded_failure["reasonCause"] = bounded_failure_cause
+    code_mode_status = reason.get("codeModeHostStatus")
+    code_mode_failure_class = reason.get("codeModeFailureClass")
+    if (
+        code_mode_status in {"ok", "replayed", "denied", "conflict", "unavailable", "invalid"}
+        and code_mode_failure_class in {"code_mode", "callback", "transport", "contract", "unknown"}
+    ):
+        bounded_failure["codeModeHostStatus"] = code_mode_status
+        bounded_failure["codeModeFailureClass"] = code_mode_failure_class
     bounded_host_failure = bounded_host_operation_failure(reason.get("hostOperationFailure"))
     if bounded_host_failure is not None:
         bounded_failure["hostOperationFailure"] = bounded_host_failure
@@ -1640,6 +1658,8 @@ def _supervisor_failure_reason(output):
         "providerEventRef",
         "callbackPhase",
         "operationRefDigest",
+        "codeModeHostStatus",
+        "codeModeFailureClass",
     }
     required_keys = allowed_keys - {
         "failureSubreason",
@@ -1648,6 +1668,8 @@ def _supervisor_failure_reason(output):
         "providerEventRef",
         "callbackPhase",
         "operationRefDigest",
+        "codeModeHostStatus",
+        "codeModeFailureClass",
     }
     allowed_shapes = {
         frozenset(required_keys),
@@ -1743,14 +1765,18 @@ def _supervisor_failure_reason(output):
         value_keys = frozenset(value)
         diagnostic_refs = value_keys & {"childDiagnostic", "providerAttemptRef", "providerEventRef"}
         top_level_diagnostic_fields = value_keys & host_failure_diagnostic_fields
+        code_mode_fields = value_keys & {"codeModeHostStatus", "codeModeFailureClass"}
+        if code_mode_fields and code_mode_fields != {"codeModeHostStatus", "codeModeFailureClass"}:
+            continue
         if top_level_diagnostic_fields and top_level_diagnostic_fields != host_failure_diagnostic_fields:
             continue
-        if value_keys - diagnostic_refs - top_level_diagnostic_fields not in allowed_shapes:
+        if value_keys - diagnostic_refs - top_level_diagnostic_fields - code_mode_fields not in allowed_shapes:
             if (
                 "hostOperationFailure" not in value
                 or value_keys
                 - diagnostic_refs
                 - top_level_diagnostic_fields
+                - code_mode_fields
                 - {"hostOperationFailure"}
                 not in allowed_shapes
             ):
@@ -1789,6 +1815,22 @@ def _supervisor_failure_reason(output):
                 continue
             digest = value["operationRefDigest"]
             if not isinstance(digest, str) or len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
+                continue
+        if code_mode_fields:
+            if value["codeModeHostStatus"] not in {
+                "ok",
+                "replayed",
+                "denied",
+                "conflict",
+                "unavailable",
+                "invalid",
+            } or value["codeModeFailureClass"] not in {
+                "code_mode",
+                "callback",
+                "transport",
+                "contract",
+                "unknown",
+            }:
                 continue
         for field, prefix in (
             ("providerAttemptRef", "provider-attempt:"),

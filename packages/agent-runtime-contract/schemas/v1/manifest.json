@@ -15,7 +15,7 @@
     },
     "runtime-exit": {
       "filename": "runtime-exit.schema.json",
-      "sha256": "ed127d0ebec8f5d432ce87a6be1a8eb41b31caf808badc27ed23cd0ba9115a24"
+      "sha256": "7b8fcefc9600eb1b4f8f0d4a383587489558b32ac27fa8a5d81bdf3e9443cf0b"
     },
     "runtime-durable-state": {
       "filename": "runtime-durable-state.schema.json",
