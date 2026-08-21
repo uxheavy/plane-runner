@@ -1410,6 +1410,167 @@ def test_code_mode_direct_search_leaves_multiple_prepared_reads_pending():
     assert all(not record["consumed"] for record in host._prepared_call_registry.records.values())
 
 
+def _catalog_latch_host(calls, *, source="code_mode", describe_ok=True):
+    host = object.__new__(CodeModeHostRPC)
+    host.request = SimpleNamespace(source=source)
+    host._code_mode_active = True
+    host._record_code_mode_observation = lambda *_args: None
+
+    def fake_call(operation_id, input_data, **kwargs):
+        calls.append((operation_id, input_data, kwargs))
+        if operation_id == "catalog.search":
+            return {
+                "ok": True,
+                "result": {"operations": [{"operationId": "catalog.describe"}]},
+                "idempotencyKey": kwargs["idempotency_key"],
+                "correlationId": kwargs["correlation_id"],
+                "replayed": False,
+            }
+        if operation_id != "catalog.describe":
+            return {
+                "ok": True,
+                "result": {"accepted": True},
+                "idempotencyKey": kwargs["idempotency_key"],
+                "correlationId": kwargs["correlation_id"],
+                "replayed": False,
+            }
+        return {
+            "ok": describe_ok,
+            "result": {"operation": {"operationId": "catalog.search"}} if describe_ok else {},
+            "idempotencyKey": kwargs["idempotency_key"],
+            "correlationId": kwargs["correlation_id"],
+            "replayed": False,
+        }
+
+    host._call_operation = fake_call
+    return host
+
+
+def test_code_mode_catalog_search_replays_after_successful_search_and_describe():
+    calls = []
+    host = _catalog_latch_host(calls)
+    assert host.request.source == "code_mode"
+
+    first_search = host.call_operation(
+        "catalog.search", {"query": ""}, idempotency_key="search:one", correlation_id="correlation:one"
+    )
+    described = host.call_operation(
+        "catalog.describe",
+        {"operation_id": "catalog.search"},
+        idempotency_key="describe:one",
+        correlation_id="correlation:describe",
+    )
+    repeated_search = host.call_operation(
+        "catalog.search", {"query": ""}, idempotency_key="search:two", correlation_id="correlation:two"
+    )
+
+    assert described["ok"] is True
+    assert repeated_search["replayed"] is True
+    assert repeated_search["result"] == first_search["result"]
+    assert repeated_search["idempotencyKey"] == "search:two"
+    assert repeated_search["correlationId"] == "correlation:two"
+    assert [operation_id for operation_id, _input, _kwargs in calls] == [
+        "catalog.search",
+        "catalog.describe",
+    ]
+
+
+def test_code_mode_catalog_search_before_describe_still_calls_gateway():
+    calls = []
+    host = _catalog_latch_host(calls)
+
+    host.call_operation(
+        "catalog.search", {"query": ""}, idempotency_key="search:one", correlation_id="correlation:one"
+    )
+    repeated_search = host.call_operation(
+        "catalog.search", {"query": ""}, idempotency_key="search:two", correlation_id="correlation:two"
+    )
+
+    assert repeated_search["replayed"] is False
+    assert [operation_id for operation_id, _input, _kwargs in calls] == [
+        "catalog.search",
+        "catalog.search",
+    ]
+
+
+def test_code_mode_catalog_search_does_not_latch_after_failed_describe():
+    calls = []
+    host = _catalog_latch_host(calls, describe_ok=False)
+
+    host.call_operation(
+        "catalog.search", {"query": ""}, idempotency_key="search:one", correlation_id="correlation:one"
+    )
+    host.call_operation(
+        "catalog.describe",
+        {"operation_id": "catalog.search"},
+        idempotency_key="describe:one",
+        correlation_id="correlation:describe",
+    )
+    repeated_search = host.call_operation(
+        "catalog.search", {"query": ""}, idempotency_key="search:two", correlation_id="correlation:two"
+    )
+
+    assert repeated_search["replayed"] is False
+    assert [operation_id for operation_id, _input, _kwargs in calls] == [
+        "catalog.search",
+        "catalog.describe",
+        "catalog.search",
+    ]
+
+
+def test_code_mode_catalog_search_latch_does_not_intercept_other_operations():
+    calls = []
+    host = _catalog_latch_host(calls)
+
+    host.call_operation(
+        "catalog.search", {"query": ""}, idempotency_key="search:one", correlation_id="correlation:one"
+    )
+    host.call_operation(
+        "catalog.describe",
+        {"operation_id": "catalog.search"},
+        idempotency_key="describe:one",
+        correlation_id="correlation:describe",
+    )
+    host.call_operation(
+        "work_item.rename",
+        {"project_id": "project:test", "issue_id": "issue:test", "name": "renamed"},
+        idempotency_key="rename:one",
+        correlation_id="correlation:rename",
+    )
+
+    assert [operation_id for operation_id, _input, _kwargs in calls] == [
+        "catalog.search",
+        "catalog.describe",
+        "work_item.rename",
+    ]
+
+
+def test_code_mode_catalog_search_latch_is_inactive_outside_code_mode():
+    calls = []
+    host = _catalog_latch_host(calls)
+
+    host.call_operation(
+        "catalog.search", {"query": ""}, idempotency_key="search:one", correlation_id="correlation:one"
+    )
+    host.call_operation(
+        "catalog.describe",
+        {"operation_id": "catalog.search"},
+        idempotency_key="describe:one",
+        correlation_id="correlation:describe",
+    )
+    host._code_mode_active = False
+    repeated_search = host.call_operation(
+        "catalog.search", {"query": ""}, idempotency_key="search:two", correlation_id="correlation:two"
+    )
+
+    assert repeated_search["replayed"] is False
+    assert [operation_id for operation_id, _input, _kwargs in calls] == [
+        "catalog.search",
+        "catalog.describe",
+        "catalog.search",
+    ]
+
+
 def test_host_server_replays_exact_calls_without_reinvoking_the_gateway(tmp_path):
     calls = []
 

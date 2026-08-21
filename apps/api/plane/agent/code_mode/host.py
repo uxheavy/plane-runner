@@ -138,6 +138,8 @@ class CodeModeHostRPC:
         self._code_mode_active = False
         self.max_inline_result_bytes = MAX_CODE_MODE_INLINE_RESULT_BYTES
         self._prepared_call_registry: Any | None = None
+        self._catalog_search_receipt: dict[str, Any] | None = None
+        self._catalog_search_describe_completed = False
 
     @classmethod
     def from_invocation(
@@ -231,13 +233,35 @@ class CodeModeHostRPC:
         correlation_id: str,
         workspace_slug: str | None = None,
     ) -> dict[str, Any]:
-        receipt = self._call_operation(
-            operation_id,
-            input_data,
-            idempotency_key=idempotency_key,
-            correlation_id=correlation_id,
-            workspace_slug=workspace_slug,
-        )
+        code_mode_active = getattr(self, "_code_mode_active", False)
+        cached_search = getattr(self, "_catalog_search_receipt", None)
+        if (
+            code_mode_active
+            and operation_id == "catalog.search"
+            and getattr(self, "_catalog_search_describe_completed", False)
+        ):
+            receipt = self._catalog_search_replay(
+                cached_search,
+                idempotency_key=idempotency_key,
+                correlation_id=correlation_id,
+            )
+        else:
+            receipt = self._call_operation(
+                operation_id,
+                input_data,
+                idempotency_key=idempotency_key,
+                correlation_id=correlation_id,
+                workspace_slug=workspace_slug,
+            )
+            if code_mode_active and operation_id == "catalog.search" and receipt.get("ok"):
+                self._catalog_search_receipt = dict(receipt)
+            elif (
+                code_mode_active
+                and operation_id == "catalog.describe"
+                and receipt.get("ok")
+                and cached_search is not None
+            ):
+                self._catalog_search_describe_completed = True
         prepared_read_receipt: Mapping[str, Any] | None = None
         if (
             operation_id == "search_workspace"
@@ -262,6 +286,24 @@ class CodeModeHostRPC:
         if prepared_read_receipt is not None:
             self._record_code_mode_observation("work_item.read", prepared_read_receipt)
         return receipt
+
+    @staticmethod
+    def _catalog_search_replay(
+        receipt: Mapping[str, Any] | None,
+        *,
+        idempotency_key: str,
+        correlation_id: str,
+    ) -> dict[str, Any]:
+        """Replay the bounded successful catalog search without another gateway call."""
+
+        if receipt is None:
+            raise RuntimeError("catalog search replay is not armed")
+        return {
+            **receipt,
+            "idempotencyKey": idempotency_key,
+            "correlationId": correlation_id,
+            "replayed": True,
+        }
 
     def _consume_single_prepared_read(
         self,
