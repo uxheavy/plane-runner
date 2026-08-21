@@ -32,7 +32,11 @@ _ROUTE_SPEC.loader.exec_module(_ROUTE)
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.parametrize("route_checks", [None, {"M03", "M04"}], ids=["all-routes", "cancellation-schedule"])
+@pytest.mark.parametrize(
+    "route_checks",
+    [None, {"M03", "M04"}, {"M05", "M06"}, {"M07", "M08"}],
+    ids=["all-routes", "cancellation-schedule", "review-hr", "chief-readback"],
+)
 def test_manager_route_uses_persisted_worker_profile_for_every_run(
     workspace, gateway_project, create_user, route_checks
 ):
@@ -110,3 +114,18 @@ def test_manager_route_uses_persisted_worker_profile_for_every_run(
     expected_route_ids = set(route_checks or {f"M{index:02d}" for index in range(1, 9)}) | {"replay"}
     assert set(evidence["routes"]) == expected_route_ids
     assert evidence["routes"]["replay"] == {"stateMutations": 0}
+
+
+def test_manager_route_executor_retains_the_first_bounded_predicate_checkpoint():
+    def fail_with_raw_message():
+        raise ValueError("raw manager exception must not become evidence")
+
+    with pytest.raises(ValueError) as captured:
+        _ROUTE._evaluate_manager_route(
+            "M05",
+            (("evaluatorFirst", fail_with_raw_message),),
+        )
+
+    assert captured.value.route_id == "M05"
+    assert captured.value.predicate == "evaluatorFirst"
+    assert str(captured.value) == "raw manager exception must not become evidence"

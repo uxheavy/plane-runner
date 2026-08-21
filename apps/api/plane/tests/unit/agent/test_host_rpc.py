@@ -1065,6 +1065,112 @@ def test_outcome_submit_allows_prepared_ref_in_bounded_evidence():
     }
 
 
+def _publication_receipt(*, replayed=False, **changes):
+    receipt = {
+        "ok": True,
+        "replayed": replayed,
+        "operationId": "agent.outcome.publish",
+        "operationRef": "operation:agent.outcome.publish",
+        "runRef": "run:test",
+        "invocationRef": "invocation:test",
+        "requestId": "request:publish",
+        "gatewayReceipt": "gateway:publish",
+        "auditReceipt": "audit:publish",
+        "result": {
+            "published": True,
+            "outcome": {
+                "outcomeRef": "outcome-submission:test",
+                "productEventRef": "product-event:publish",
+            },
+        },
+    }
+    receipt.update(changes)
+    return receipt
+
+
+def test_outcome_publication_requires_the_same_fresh_bound_receipt_on_both_paths():
+    class FakeHost:
+        binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
+
+        def call_operation(self, _operation_id, _input_data, **_kwargs):
+            return _publication_receipt()
+
+    trusted = PlaneGatewayHostPort(FakeHost()).invoke(
+        _call(
+            action="publish",
+            operationRef="operation:agent.outcome.publish",
+            input={"kind": "outcome", "resourceRef": "outcome-submission:test", "content": "published"},
+        )
+    )
+    generic = PlaneGatewayHostPort(FakeHost()).invoke(
+        _call(
+            action="mutate",
+            operationRef="operation:agent.outcome.publish",
+            input={"outcome_ref": "outcome-submission:test", "content": "published"},
+        )
+    )
+
+    assert trusted.status == generic.status == "ok"
+    assert trusted.publication == generic.publication
+    assert trusted.publication["productRef"] == "outcome-submission:test"
+
+
+@pytest.mark.parametrize(
+    "receipt_override",
+    [
+        {"operationRef": "operation:agent.outcome.submit"},
+        {"runRef": "run:other"},
+        {"result": {"published": False}},
+        {
+            "result": {
+                "published": True,
+                "outcome": {
+                    "outcomeRef": "outcome-submission:other",
+                    "productEventRef": "product-event:publish",
+                },
+            }
+        },
+        {"gatewayReceipt": "x" * 129},
+    ],
+)
+def test_outcome_publication_rejects_tampered_or_oversized_receipts(receipt_override):
+    class FakeHost:
+        binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
+
+        def call_operation(self, _operation_id, _input_data, **_kwargs):
+            return _publication_receipt(**receipt_override)
+
+    for action, input_data in (
+        ("publish", {"kind": "outcome", "resourceRef": "outcome-submission:test", "content": "published"}),
+        ("mutate", {"outcome_ref": "outcome-submission:test", "content": "published"}),
+    ):
+        result = PlaneGatewayHostPort(FakeHost()).invoke(
+            _call(action=action, operationRef="operation:agent.outcome.publish", input=input_data)
+        )
+        assert result.status == "unavailable"
+        assert result.error_code == "OPERATION_UNAVAILABLE"
+        assert result.publication is None
+        assert len(json.dumps(result.output, separators=(",", ":"))) < 1024
+
+
+def test_outcome_publication_replay_is_idempotent_without_a_second_publication():
+    class FakeHost:
+        binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
+
+        def call_operation(self, _operation_id, _input_data, **_kwargs):
+            return _publication_receipt(replayed=True)
+
+    for action, input_data in (
+        ("publish", {"kind": "outcome", "resourceRef": "outcome-submission:test", "content": "published"}),
+        ("mutate", {"outcome_ref": "outcome-submission:test", "content": "published"}),
+    ):
+        result = PlaneGatewayHostPort(FakeHost()).invoke(
+            _call(action=action, operationRef="operation:agent.outcome.publish", input=input_data)
+        )
+        assert result.status == "replayed"
+        assert result.publication is None
+
+
 def test_prepared_call_json_wrapper_crosses_process_and_submit_fails_closed(tmp_path):
     calls = []
 

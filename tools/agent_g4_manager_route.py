@@ -54,6 +54,81 @@ from plane.db.models import (
 
 
 _ROUTE_IDS = tuple(f"M{index:02d}" for index in range(1, 9))
+_ROUTE_PREDICATES = {
+    "M01": ("dynamicPlan", "noSavedWorkflowProduct"),
+    "M02": ("boundedDelegation", "lineagePersisted", "independentChildRun"),
+    "M03": (
+        "queuedDescendantCancelled",
+        "activeDescendantCancelled",
+        "terminalVisible",
+        "lateCallbackDenied",
+    ),
+    "M04": ("nonUtcTimezone", "springForwardSkipped", "fireIdempotent", "normalAssignmentCreated"),
+    "M05": (
+        "evaluatorFirst",
+        "humanDecisionAfterEvaluator",
+        "revisionFreshRun",
+        "priorSnapshotImmutable",
+        "finalAccepted",
+    ),
+    "M06": ("proposalRecorded", "humanApprovalApplied", "selfApprovalDenied", "staleApprovalDenied"),
+    "M07": (
+        "humanApprovalRequired",
+        "chiefProvisioned",
+        "currentMembershipCopied",
+        "noStaleMembershipCopy",
+        "noCrossWorkspaceMembership",
+    ),
+    "M08": (
+        "parentChildLineage",
+        "outcomeAndArtifact",
+        "terminalEventsAgree",
+        "evaluatorAndHumanReadback",
+        "immutablePriorSnapshot",
+    ),
+}
+
+
+class _ManagerRouteCheckpoint:
+    def __init__(self):
+        self.route_id = "M01"
+        self.predicate = "dynamicPlan"
+
+    def before(self, route_id: str, predicate: str) -> None:
+        if route_id not in _ROUTE_PREDICATES or predicate not in _ROUTE_PREDICATES[route_id]:
+            raise ValueError("unknown manager route checkpoint")
+        self.route_id = route_id
+        self.predicate = predicate
+
+    def attach(self, exc: BaseException) -> None:
+        exc.route_id = self.route_id
+        exc.predicate = self.predicate
+
+
+def _evaluate_manager_route(
+    route_id: str,
+    predicates: tuple[tuple[str, object], ...],
+    *,
+    checkpoint: _ManagerRouteCheckpoint | None = None,
+) -> dict[str, bool]:
+    """Evaluate one finite route table while retaining its current checkpoint."""
+
+    expected_predicates = _ROUTE_PREDICATES[route_id]
+    route = {}
+    for predicate, evaluator in predicates:
+        active_checkpoint = checkpoint or _ManagerRouteCheckpoint()
+        active_checkpoint.before(route_id, predicate)
+        try:
+            observed = evaluator()
+        except BaseException as exc:
+            # The supervisor consumes only these bounded attributes.  Preserve
+            # the original exception class while never copying its message.
+            active_checkpoint.attach(exc)
+            raise
+        route[predicate] = observed
+    if tuple(route) != expected_predicates:
+        raise ValueError("incomplete manager route predicate table")
+    return route
 
 
 def _synthetic_human(workspace: Workspace, *, suffix: str, role: int = 10) -> User:
@@ -130,6 +205,7 @@ def _exercise_manager_journey(
     human_admin: User,
     suffix: str,
     route_checks: set[str] | None = None,
+    checkpoint: _ManagerRouteCheckpoint | None = None,
 ) -> dict[str, object]:
     """Create one disposable, provider-free M01-M08 evidence graph."""
 
@@ -141,6 +217,8 @@ def _exercise_manager_journey(
 
     # M01: Elena records a bounded, dynamic plan directly on a normal
     # assignment.  There is deliberately no workflow-definition product.
+    if checkpoint is not None:
+        checkpoint.before("M01", "dynamicPlan")
     plan = create_assignment(
         manager,
         project=project,
@@ -152,13 +230,19 @@ def _exercise_manager_journey(
         budget={"maxDepth": 1, "maxFanOut": 2, "maxUnits": 2},
         created_by=human_admin,
     )
-    m01 = {
-        "dynamicPlan": bool(plan.plan_rationale and plan.lineage_of_id is None),
-        "noSavedWorkflowProduct": True,
-    }
+    m01 = _evaluate_manager_route(
+        "M01",
+        (
+            ("dynamicPlan", lambda: bool(plan.plan_rationale and plan.lineage_of_id is None)),
+            ("noSavedWorkflowProduct", lambda: True),
+        ),
+        checkpoint=checkpoint,
+    )
 
     # M02: a child is bounded by the parent and receives its own run and
     # immutable snapshot under a different Agent actor.
+    if checkpoint is not None:
+        checkpoint.before("M02", "boundedDelegation")
     delegation_parent = create_assignment(
         manager,
         project=project,
@@ -184,16 +268,29 @@ def _exercise_manager_journey(
         created_by=human_admin,
     )
     child_run = create_run(delegated_child, worker.active_profile, created_by=human_admin)
-    m02 = {
-        "boundedDelegation": delegated_child.scope == {"queues": ["manager"]}
-        and delegated_child.budget == {"units": 1},
-        "lineagePersisted": delegated_child.lineage_of_id == delegation_parent.id
-        and delegated_child.root_assignment_id == delegation_parent.id
-        and delegated_child.delegated_by_id == manager.id,
-        "independentChildRun": child_run.assignment_id == delegated_child.id
-        and child_run.actor_id == worker.id
-        and child_run.snapshot["assignment"]["assignmentRef"] == f"assignment:{delegated_child.id}",
-    }
+    m02 = _evaluate_manager_route(
+        "M02",
+        (
+            (
+                "boundedDelegation",
+                lambda: delegated_child.scope == {"queues": ["manager"]}
+                and delegated_child.budget == {"units": 1},
+            ),
+            (
+                "lineagePersisted",
+                lambda: delegated_child.lineage_of_id == delegation_parent.id
+                and delegated_child.root_assignment_id == delegation_parent.id
+                and delegated_child.delegated_by_id == manager.id,
+            ),
+            (
+                "independentChildRun",
+                lambda: child_run.assignment_id == delegated_child.id
+                and child_run.actor_id == worker.id
+                and child_run.snapshot["assignment"]["assignmentRef"] == f"assignment:{delegated_child.id}",
+            ),
+        ),
+        checkpoint=checkpoint,
+    )
 
     # A selected commission owns only its declared route cell.  In
     # particular, M01/M02 must not enter the later M03-M08 fixture transaction:
@@ -214,6 +311,8 @@ def _exercise_manager_journey(
 
     # M03: cancellation reconciles both queued and active descendants.  The
     # outcome callback is attempted after cancellation and must fail closed.
+    if checkpoint is not None:
+        checkpoint.before("M03", "queuedDescendantCancelled")
     cancellation_parent = create_assignment(
         manager,
         project=project,
@@ -274,22 +373,37 @@ def _exercise_manager_journey(
         )
     except InvalidTransitionError:
         late_callback_denied = True
-    m03 = {
-        "queuedDescendantCancelled": queued_child.state == AssignmentState.CANCELLED
-        and queued_run.state == RunState.CANCELLED
-        and queued_run.last_invocation_id is None,
-        "activeDescendantCancelled": active_child.state == AssignmentState.CANCELLED
-        and active_run.state == RunState.CANCELLED
-        and active_invocation.state == "cancelled",
-        "terminalVisible": RunTerminalEvent.objects.filter(
-            invocation=active_invocation, visible=True, kind="run_cancellation"
-        ).count()
-        == 1,
-        "lateCallbackDenied": late_callback_denied,
-    }
+    m03 = _evaluate_manager_route(
+        "M03",
+        (
+            (
+                "queuedDescendantCancelled",
+                lambda: queued_child.state == AssignmentState.CANCELLED
+                and queued_run.state == RunState.CANCELLED
+                and queued_run.last_invocation_id is None,
+            ),
+            (
+                "activeDescendantCancelled",
+                lambda: active_child.state == AssignmentState.CANCELLED
+                and active_run.state == RunState.CANCELLED
+                and active_invocation.state == "cancelled",
+            ),
+            (
+                "terminalVisible",
+                lambda: RunTerminalEvent.objects.filter(
+                    invocation=active_invocation, visible=True, kind="run_cancellation"
+                ).count()
+                == 1,
+            ),
+            ("lateCallbackDenied", lambda: late_callback_denied),
+        ),
+        checkpoint=checkpoint,
+    )
 
     # M04: the spring-forward 02:30 wall-clock minute is skipped exactly once,
     # then fires as a normal assignment in America/Los_Angeles.
+    if checkpoint is not None:
+        checkpoint.before("M04", "nonUtcTimezone")
     schedule_starts = datetime(2026, 3, 8, 8, 0, tzinfo=timezone.utc)
     schedule_fire_at = datetime(2026, 3, 9, 9, 30, tzinfo=timezone.utc)
     schedule = create_schedule(
@@ -310,18 +424,30 @@ def _exercise_manager_journey(
         idempotency_key=fire.idempotency_key,
         created_by=human_admin,
     )
-    m04 = {
-        "nonUtcTimezone": schedule.timezone_name == "America/Los_Angeles",
-        "springForwardSkipped": first_schedule_fire_at == schedule_fire_at
-        and first_schedule_fire_at == next_schedule_fire(
-            schedule.cron_expression, schedule.timezone_name, schedule_starts
+    m04 = _evaluate_manager_route(
+        "M04",
+        (
+            ("nonUtcTimezone", lambda: schedule.timezone_name == "America/Los_Angeles"),
+            (
+                "springForwardSkipped",
+                lambda: first_schedule_fire_at == schedule_fire_at
+                and first_schedule_fire_at == next_schedule_fire(
+                    schedule.cron_expression, schedule.timezone_name, schedule_starts
+                ),
+            ),
+            (
+                "fireIdempotent",
+                lambda: fire.id == fire_replay.id
+                and fire.idempotency_key == fire_replay.idempotency_key
+                and fire.__class__.objects.filter(schedule=schedule, scheduled_for=schedule_fire_at).count() == 1,
+            ),
+            (
+                "normalAssignmentCreated",
+                lambda: fire.state == AgentScheduleFireState.CREATED and fire.assignment_id is not None,
+            ),
         ),
-        "fireIdempotent": fire.id == fire_replay.id
-        and fire.idempotency_key == fire_replay.idempotency_key
-        and fire.__class__.objects.filter(schedule=schedule, scheduled_for=schedule_fire_at).count() == 1,
-        "normalAssignmentCreated": fire.state == AgentScheduleFireState.CREATED
-        and fire.assignment_id is not None,
-    }
+        checkpoint=checkpoint,
+    )
 
     # M03/M04 is a complete selected commission.  Do not continue into the
     # later review/governance cells: an unrelated later-cell exception must not
@@ -340,6 +466,8 @@ def _exercise_manager_journey(
 
     # M05: one outcome takes revision, the next fresh run is accepted.  The
     # producer never performs the evaluator/human decision itself.
+    if checkpoint is not None:
+        checkpoint.before("M05", "evaluatorFirst")
     review_assignment = create_assignment(
         worker,
         project=project,
@@ -406,21 +534,36 @@ def _exercise_manager_journey(
     accepted = accept_outcome(second_review, human_reviewer=human_admin, decision_note="Accept the revision.")
     first_run.refresh_from_db()
     second_run.refresh_from_db()
-    m05 = {
-        "evaluatorFirst": human_before_evaluator_denied and first_review.evaluator_id == evaluator.id,
-        "humanDecisionAfterEvaluator": revised.human_reviewer_id == human_admin.id,
-        "revisionFreshRun": second_run.lineage_of_id == first_run.id
-        and second_run.lineage_reason == "human_revision"
-        and second_run.id != first_run.id,
-        "priorSnapshotImmutable": first_run.snapshot == first_snapshot,
-        "finalAccepted": accepted.state == "accepted"
-        and accepted.human_reviewer_id == human_admin.id
-        and first_invocation.terminal_event.kind == "outcome_submission"
-        and second_invocation.terminal_event.kind == "outcome_submission",
-    }
+    m05 = _evaluate_manager_route(
+        "M05",
+        (
+            (
+                "evaluatorFirst",
+                lambda: human_before_evaluator_denied and first_review.evaluator_id == evaluator.id,
+            ),
+            ("humanDecisionAfterEvaluator", lambda: revised.human_reviewer_id == human_admin.id),
+            (
+                "revisionFreshRun",
+                lambda: second_run.lineage_of_id == first_run.id
+                and second_run.lineage_reason == "human_revision"
+                and second_run.id != first_run.id,
+            ),
+            ("priorSnapshotImmutable", lambda: first_run.snapshot == first_snapshot),
+            (
+                "finalAccepted",
+                lambda: accepted.state == "accepted"
+                and accepted.human_reviewer_id == human_admin.id
+                and first_invocation.terminal_event.kind == "outcome_submission"
+                and second_invocation.terminal_event.kind == "outcome_submission",
+            ),
+        ),
+        checkpoint=checkpoint,
+    )
 
     # M06: the HR bot may propose but cannot approve; changed actor state makes
     # the first human approval stale; a second proposal is approved by a human.
+    if checkpoint is not None:
+        checkpoint.before("M06", "proposalRecorded")
     stale_proposal = propose_hr_change(
         workspace=workspace,
         proposed_by=hr,
@@ -470,13 +613,20 @@ def _exercise_manager_journey(
         approved=True,
         idempotency_key=_idempotency(suffix, "approved-hr-decision"),
     )
-    m06 = {
-        "proposalRecorded": stale_proposal.state == HRProposalState.PROPOSED,
-        "humanApprovalApplied": approved_hire.state == HRProposalState.APPROVED
-        and approved_hire.applied_actor_id is not None,
-        "selfApprovalDenied": self_approval_denied,
-        "staleApprovalDenied": stale_approval_denied,
-    }
+    m06 = _evaluate_manager_route(
+        "M06",
+        (
+            ("proposalRecorded", lambda: stale_proposal.state == HRProposalState.PROPOSED),
+            (
+                "humanApprovalApplied",
+                lambda: approved_hire.state == HRProposalState.APPROVED
+                and approved_hire.applied_actor_id is not None,
+            ),
+            ("selfApprovalDenied", lambda: self_approval_denied),
+            ("staleApprovalDenied", lambda: stale_approval_denied),
+        ),
+        checkpoint=checkpoint,
+    )
 
     # M05/M06 is a complete selected commission.  Stop at its terminal route
     # boundary so later chief-of-staff setup cannot turn satisfied review/HR
@@ -494,6 +644,8 @@ def _exercise_manager_journey(
 
     # M07: chief-of-staff provisioning copies only the subject's live
     # membership at decision time and cannot be approved by the HR bot.
+    if checkpoint is not None:
+        checkpoint.before("M07", "humanApprovalRequired")
     subject = _synthetic_human(workspace, suffix=suffix, role=10)
     chief_proposal = propose_chief_of_staff(
         workspace=workspace,
@@ -522,19 +674,30 @@ def _exercise_manager_journey(
     chief = chief_decision.applied_actor
     subject_member = WorkspaceMember.objects.get(workspace=workspace, member=subject, is_active=True)
     chief_member = WorkspaceMember.objects.get(workspace=workspace, member=chief.principal, is_active=True)
-    m07 = {
-        "humanApprovalRequired": chief_self_denied,
-        "chiefProvisioned": chief is not None
-        and chief.chief_of_staff_for_id == subject.id
-        and chief.active_profile.role == AgentRole.CHIEF_OF_STAFF,
-        "currentMembershipCopied": chief_member.role == subject_member.role,
-        "noStaleMembershipCopy": chief_member.role != 15,
-        "noCrossWorkspaceMembership": WorkspaceMember.objects.filter(member=chief.principal, is_active=True).count()
-        == 1,
-    }
+    m07 = _evaluate_manager_route(
+        "M07",
+        (
+            ("humanApprovalRequired", lambda: chief_self_denied),
+            (
+                "chiefProvisioned",
+                lambda: chief is not None
+                and chief.chief_of_staff_for_id == subject.id
+                and chief.active_profile.role == AgentRole.CHIEF_OF_STAFF,
+            ),
+            ("currentMembershipCopied", lambda: chief_member.role == subject_member.role),
+            ("noStaleMembershipCopy", lambda: chief_member.role != 15),
+            (
+                "noCrossWorkspaceMembership",
+                lambda: WorkspaceMember.objects.filter(member=chief.principal, is_active=True).count() == 1,
+            ),
+        ),
+        checkpoint=checkpoint,
+    )
 
     # M08: read back the whole graph and compare the immutable first snapshot
     # to the stored run after the revised run and governance decisions.
+    if checkpoint is not None:
+        checkpoint.before("M08", "parentChildLineage")
     governance = build_governance_readback(workspace, limit=64)
     all_assignments = AssignmentContract.objects.filter(workspace=workspace)
     all_outcomes = OutcomeSubmission.objects.filter(workspace=workspace)
@@ -556,17 +719,27 @@ def _exercise_manager_journey(
             "terminalEventCount": all_events.count(),
         }
     )
-    m08 = {
-        "parentChildLineage": all_assignments.filter(lineage_of__isnull=False).exists(),
-        "outcomeAndArtifact": bool(all_outcomes.count() >= 2 and artifact_outcomes),
-        "terminalEventsAgree": bool(all_events.exists() and outcome_event_agreement),
-        "evaluatorAndHumanReadback": bool(
-            governance["evaluator_reviews"]
-            and any(outcome.human_reviewer_id is not None for outcome in all_outcomes)
-            and any(proposal.reviewed_by_id is not None for proposal in AgentHRProposal.objects.filter(workspace=workspace))
+    m08 = _evaluate_manager_route(
+        "M08",
+        (
+            ("parentChildLineage", lambda: all_assignments.filter(lineage_of__isnull=False).exists()),
+            ("outcomeAndArtifact", lambda: bool(all_outcomes.count() >= 2 and artifact_outcomes)),
+            ("terminalEventsAgree", lambda: bool(all_events.exists() and outcome_event_agreement)),
+            (
+                "evaluatorAndHumanReadback",
+                lambda: bool(
+                    governance["evaluator_reviews"]
+                    and any(outcome.human_reviewer_id is not None for outcome in all_outcomes)
+                    and any(
+                        proposal.reviewed_by_id is not None
+                        for proposal in AgentHRProposal.objects.filter(workspace=workspace)
+                    )
+                ),
+            ),
+            ("immutablePriorSnapshot", lambda: first_run.snapshot == first_snapshot),
         ),
-        "immutablePriorSnapshot": first_run.snapshot == first_snapshot,
-    }
+        checkpoint=checkpoint,
+    )
 
     routes = {"M01": m01, "M02": m02, "M03": m03, "M04": m04, "M05": m05, "M06": m06, "M07": m07, "M08": m08}
     if route_checks is not None:
@@ -589,7 +762,13 @@ def build_manager_route_evidence(**kwargs) -> tuple[dict[str, object], list[str]
     """Return bounded Manager evidence and deterministic route failures."""
 
     route_checks = kwargs.get("route_checks")
-    evidence = _exercise_manager_journey(**kwargs)
+    checkpoint = _ManagerRouteCheckpoint()
+    kwargs["checkpoint"] = checkpoint
+    try:
+        evidence = _exercise_manager_journey(**kwargs)
+    except BaseException as exc:
+        checkpoint.attach(exc)
+        raise
     routes = evidence["routes"]
     selected_route_ids = set(route_checks) if route_checks is not None else set(_ROUTE_IDS)
     failures = [

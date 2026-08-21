@@ -78,6 +78,32 @@ class PreparedCallInvalid(PlaneHostRPCError):
         super().__init__("prepared work-item read reference is invalid")
 
 
+_PUBLICATION_FAILURE_REASONS = frozenset(
+    {
+        "receipt_not_fresh",
+        "operation_mismatch",
+        "callback_binding_mismatch",
+        "missing_applied_marker",
+        "outcome_binding_mismatch",
+        "receipt_incomplete",
+    }
+)
+_PUBLICATION_REF_ALLOWED = frozenset(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:-"
+)
+MAX_PUBLICATION_REF_BYTES = 128
+
+
+class _PublicationReceiptInvalid(PlaneHostRPCError):
+    """Private bounded classification for an unapplied publication receipt."""
+
+    def __init__(self, reason: str) -> None:
+        if reason not in _PUBLICATION_FAILURE_REASONS:
+            raise ValueError("unsupported publication receipt rejection reason")
+        self.reason = reason
+        super().__init__("outcome publication receipt did not prove an applied publication")
+
+
 class PreparedCallRegistry:
     """Invocation-local prepared-call state shared by model and Code Mode callbacks."""
 
@@ -1739,6 +1765,63 @@ class PlaneHostHTTPServer:
         return result
 
 
+def _publication_ref(value: Any, name: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise _PublicationReceiptInvalid("receipt_incomplete")
+    if len(value.encode("utf-8")) > MAX_PUBLICATION_REF_BYTES:
+        raise _PublicationReceiptInvalid("receipt_incomplete")
+    if any(char not in _PUBLICATION_REF_ALLOWED for char in value):
+        raise _PublicationReceiptInvalid("receipt_incomplete")
+    return value
+
+
+def _applied_outcome_publication_from_receipt(
+    receipt: Mapping[str, Any],
+    *,
+    resource_ref: Any,
+    run_ref: str,
+    invocation_ref: str,
+) -> dict[str, str]:
+    """Project one fresh, complete gateway receipt into an applied publication."""
+
+    if receipt.get("ok") is not True or receipt.get("replayed") is not False:
+        raise _PublicationReceiptInvalid("receipt_not_fresh")
+    if receipt.get("operationId") != "agent.outcome.publish" or receipt.get(
+        "operationRef"
+    ) != "operation:agent.outcome.publish":
+        raise _PublicationReceiptInvalid("operation_mismatch")
+    if receipt.get("runRef") != run_ref or receipt.get("invocationRef") != invocation_ref:
+        raise _PublicationReceiptInvalid("callback_binding_mismatch")
+    result = receipt.get("result")
+    if not isinstance(result, Mapping) or result.get("published") is not True:
+        raise _PublicationReceiptInvalid("missing_applied_marker")
+    outcome = result.get("outcome")
+    if (
+        not isinstance(outcome, Mapping)
+        or not isinstance(resource_ref, str)
+        or outcome.get("outcomeRef") != resource_ref
+    ):
+        raise _PublicationReceiptInvalid("outcome_binding_mismatch")
+    request_id = _publication_ref(receipt.get("requestId"), "requestId")
+    gateway_receipt = _publication_ref(receipt.get("gatewayReceipt"), "gatewayReceipt")
+    audit_receipt = _publication_ref(receipt.get("auditReceipt"), "auditReceipt")
+    product_event_ref = _publication_ref(outcome.get("productEventRef"), "productEventRef")
+    if not product_event_ref.startswith("product-event:"):
+        raise _PublicationReceiptInvalid("receipt_incomplete")
+    return {
+        "action": "applied",
+        "productKind": "outcome_submission",
+        "productRef": resource_ref,
+        "operationAttemptRef": f"operation-attempt:{request_id}",
+        "operationRef": "operation:agent.outcome.publish",
+        "applicationServiceRef": "application-service:agent-lifecycle",
+        "gatewayReceiptRef": f"gateway-receipt:{gateway_receipt}",
+        "receiptRef": f"receipt:{request_id}",
+        "auditReceiptRef": f"audit-receipt:{audit_receipt}",
+        "productEventRef": product_event_ref,
+    }
+
+
 class PlaneGatewayHostPort:
     """Bind host callbacks to one trusted invocation and the live gateway."""
 
@@ -1940,6 +2023,25 @@ class PlaneGatewayHostPort:
         if operation_id == "search_workspace" and receipt.get("ok"):
             receipt = self._prepare_search_receipt(receipt)
         result = self._from_receipt(call, receipt)
+        if operation_id == "agent.outcome.publish" and result.status == "ok":
+            try:
+                publication = _applied_outcome_publication_from_receipt(
+                    receipt,
+                    resource_ref=operation_input.get("outcome_ref"),
+                    run_ref=self._run_ref,
+                    invocation_ref=self._invocation_ref,
+                )
+            except _PublicationReceiptInvalid as exc:
+                return self._publication_receipt_error(call, receipt, exc.reason)
+            result = PlaneHostResult(
+                request_ref=result.request_ref,
+                correlation_id=result.correlation_id,
+                idempotency_key=result.idempotency_key,
+                status=result.status,
+                replayed=result.replayed,
+                output=result.output,
+                publication=publication,
+            )
         if prepared_ref is not None:
             with self._prepared_calls_lock:
                 record = self._prepared_calls.get(prepared_ref)
@@ -2048,26 +2150,19 @@ class PlaneGatewayHostPort:
         result = self._from_receipt(call, receipt)
         if not receipt.get("ok"):
             return result
-        outcome = receipt.get("result", {}).get("outcome", {})
         try:
-            product_event_ref = outcome["productEventRef"]
-            gateway_receipt = receipt["gatewayReceipt"]
-            request_id = receipt["requestId"]
-            audit_receipt = receipt["auditReceipt"]
-            publication = {
-                "action": "applied",
-                "productKind": "outcome_submission",
-                "productRef": resource_ref,
-                "operationAttemptRef": f"operation-attempt:{request_id}",
-                "operationRef": "operation:agent.outcome.publish",
-                "applicationServiceRef": "application-service:agent-lifecycle",
-                "gatewayReceiptRef": f"gateway-receipt:{gateway_receipt}",
-                "receiptRef": f"receipt:{request_id}",
-                "auditReceiptRef": f"audit-receipt:{audit_receipt}",
-                "productEventRef": product_event_ref,
-            }
-        except (KeyError, TypeError):
-            return self._error(call, "OPERATION_UNAVAILABLE", "Outcome publication receipt is incomplete")
+            publication = (
+                None
+                if result.replayed
+                else _applied_outcome_publication_from_receipt(
+                    receipt,
+                    resource_ref=resource_ref,
+                    run_ref=self._run_ref,
+                    invocation_ref=self._invocation_ref,
+                )
+            )
+        except _PublicationReceiptInvalid as exc:
+            return self._publication_receipt_error(call, receipt, exc.reason)
         return PlaneHostResult(
             request_ref=call.request_ref,
             correlation_id=call.correlation_id,
@@ -2078,6 +2173,33 @@ class PlaneGatewayHostPort:
             # A gateway replay carries the original product result for
             # auditability, but it is not a second applied publication.
             publication=None if result.replayed else publication,
+        )
+
+    @staticmethod
+    def _publication_receipt_diagnostic(receipt: Mapping[str, Any], reason: str) -> dict[str, str]:
+        """Keep only bounded receipt metadata when success is not applied proof."""
+
+        def bounded(value: Any) -> str:
+            try:
+                return _publication_ref(value, "diagnostic")
+            except _PublicationReceiptInvalid:
+                return "unavailable"
+
+        return {
+            "publicationFailure": reason,
+            "requestId": bounded(receipt.get("requestId")),
+            "gatewayReceipt": bounded(receipt.get("gatewayReceipt")),
+            "auditReceipt": bounded(receipt.get("auditReceipt")),
+        }
+
+    def _publication_receipt_error(
+        self, call: PlaneHostCall, receipt: Mapping[str, Any], reason: str
+    ) -> PlaneHostResult:
+        return self._error(
+            call,
+            "OPERATION_UNAVAILABLE",
+            "Outcome publication receipt did not prove an applied publication",
+            output=self._publication_receipt_diagnostic(receipt, reason),
         )
 
     @staticmethod
