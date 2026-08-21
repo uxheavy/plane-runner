@@ -59,6 +59,7 @@ _SOURCES = {"model", "code", "runtime"}
 _RESULT_STATUSES = {"ok", "replayed", "denied", "conflict", "unavailable", "invalid"}
 HOST_HTTP_PATH = "/v1/host"
 MAX_HOST_HTTP_RESPONSE_BYTES = MAX_HOST_RESULT_BYTES + 1024
+_ASSIGNMENT_READ_FAILURES = frozenset({"none", "zero", "multiple", "invalid"})
 class PlaneHostRPCError(ValueError):
     """A malformed, unavailable, or rejected Plane host callback."""
 
@@ -450,56 +451,39 @@ def _is_prepared_call(call: PlaneHostCall) -> bool:
 
 
 def _prepared_read_refs_from_search_result(output: Any) -> tuple[str, ...]:
-    """Extract only opaque work-item read refs from one trusted search result."""
-
-    def extract_prepared_ref(value: Any) -> str | None:
-        if isinstance(value, str):
-            candidate = value
-        elif isinstance(value, Mapping) and set(value) == {"preparedCallRef"}:
-            candidate = value["preparedCallRef"]
-        elif isinstance(value, Mapping) and set(value) == {
-            "action",
-            "operationRef",
-            "input",
-        }:
-            nested = value.get("input")
-            if (
-                value.get("action") != "read"
-                or value.get("operationRef") != "operation:work_item.read"
-                or not isinstance(nested, Mapping)
-                or set(nested) != {"preparedCallRef"}
-            ):
-                return None
-            candidate = nested["preparedCallRef"]
-        else:
-            return None
-        if (
-            not isinstance(candidate, str)
-            or not candidate.startswith(PREPARED_CALL_PREFIX)
-            or len(candidate.encode("utf-8")) > MAX_PREPARED_CALL_REF_BYTES
-        ):
-            return None
-        return candidate
-
+    """Extract only the one top-level assignment handoff."""
     if not isinstance(output, Mapping):
         return ()
     result = output.get("result")
     if isinstance(output.get("results"), list):
         result = output
-    if not isinstance(result, Mapping) or not isinstance(result.get("results"), list):
+    if not isinstance(result, Mapping):
         return ()
-    refs: list[str] = []
-    for item in result["results"]:
-        if not isinstance(item, Mapping):
-            continue
-        object_type = item.get("objectType")
-        if object_type is not None and object_type != "work_item":
-            continue
-        prepared_ref = extract_prepared_ref(item.get("workItemReadCall"))
-        if prepared_ref is None:
-            return ()
-        refs.append(prepared_ref)
-    return tuple(refs)
+    prepared_ref = result.get("assignmentWorkItemReadCall")
+    if (
+        not isinstance(prepared_ref, str)
+        or not prepared_ref.startswith(PREPARED_CALL_PREFIX)
+        or len(prepared_ref.encode("utf-8")) > MAX_PREPARED_CALL_REF_BYTES
+    ):
+        return ()
+    return (prepared_ref,)
+
+
+def _assignment_read_decision_requires_followup(output: Any) -> bool:
+    if not isinstance(output, Mapping):
+        return False
+    result = output.get("result")
+    if isinstance(output.get("results"), list):
+        result = output
+    if not isinstance(result, Mapping):
+        return False
+    decision = result.get("assignmentWorkItemReadDecision")
+    return (
+        isinstance(decision, Mapping)
+        and decision.get("schemaVersion") == "plane.assignment-read-handoff/v1"
+        and decision.get("recognizedCount") != 1
+        and decision.get("failureClass") in _ASSIGNMENT_READ_FAILURES
+    )
 
 
 def _prepared_read_refs_from_code_mode_result(output: Any) -> tuple[str, ...]:
@@ -1894,7 +1878,7 @@ class PlaneGatewayHostPort:
                 }.get(code, "Code Mode execution failed in the restricted isolate.")
                 return self._error(call, str(code), message)
             prepared_refs = _prepared_read_refs_from_code_mode_result(output)
-            if prepared_refs:
+            if prepared_refs or _assignment_read_decision_requires_followup(output):
                 with self._prepared_calls_lock:
                     self._prepared_read_handoff_pending = True
             if len(prepared_refs) == 1:
@@ -2056,27 +2040,89 @@ class PlaneGatewayHostPort:
         result = receipt.get("result")
         if not isinstance(result, Mapping) or not isinstance(result.get("results"), list):
             return receipt
+        assignment_target_ref = getattr(
+            getattr(self._host, "binding", None), "assignment_target_ref", ""
+        )
+        target_issue_id = _issue_id_from_assignment_target(assignment_target_ref)
+        matching_inputs: list[Mapping[str, Any]] = []
         prepared_results: list[Mapping[str, Any]] = []
         for item in result["results"]:
             if not isinstance(item, Mapping) or item.get("objectType") != "work_item":
                 prepared_results.append(item)
                 continue
             read_input = item.get("workItemReadInput")
-            if not isinstance(read_input, Mapping) or set(read_input) != {"project_id", "issue_id"}:
-                prepared_results.append(item)
-                continue
-            prepared_ref = self._register_prepared_call(read_input)
-            prepared_item = {key: value for key, value in item.items() if key != "workItemReadInput"}
-            prepared_item["workItemReadCall"] = prepared_ref
+            if (
+                isinstance(read_input, Mapping)
+                and set(read_input) == {"project_id", "issue_id"}
+                and target_issue_id is not None
+                and read_input.get("issue_id") == target_issue_id
+            ):
+                matching_inputs.append(read_input)
+            prepared_item = {
+                key: value
+                for key, value in item.items()
+                if key not in {"workItemReadInput", "workItemReadCall"}
+            }
             prepared_results.append(prepared_item)
-        if any(
-            isinstance(item, Mapping) and "workItemReadCall" in item
-            for item in prepared_results
+
+        recognized_count = min(len(matching_inputs), 2)
+        if len(matching_inputs) == 1:
+            prepared_ref = self._register_prepared_call(matching_inputs[0])
+            prepared_result = {
+                **result,
+                "results": prepared_results,
+                "assignmentWorkItemReadCall": prepared_ref,
+                "assignmentWorkItemReadDecision": {
+                    "schemaVersion": "plane.assignment-read-handoff/v1",
+                    "recognizedCount": 1,
+                    "acceptedForm": "canonical_ref",
+                    "failureClass": "none",
+                    "shape": {"nestingDepth": 0, "sizeClass": "small"},
+                },
+            }
+        else:
+            failure_class = (
+                "invalid"
+                if target_issue_id is None
+                else "multiple"
+                if len(matching_inputs) > 1
+                else "zero"
+            )
+            prepared_result = {
+                **result,
+                "results": prepared_results,
+                "assignmentWorkItemReadDecision": {
+                    "schemaVersion": "plane.assignment-read-handoff/v1",
+                    "recognizedCount": recognized_count,
+                    "acceptedForm": "unrecognized",
+                    "failureClass": failure_class,
+                    "shape": {
+                        "nestingDepth": 0,
+                        "sizeClass": "large" if failure_class in {"multiple", "invalid"} else "small",
+                    },
+                },
+            }
+        if len(matching_inputs) == 1 or _assignment_read_decision_requires_followup(
+            {"result": prepared_result}
         ):
             with self._prepared_calls_lock:
                 self._prepared_read_handoff_pending = True
-        prepared_result = {**result, "results": prepared_results}
         return {**receipt, "result": prepared_result}
+
+
+def _issue_id_from_assignment_target(target_ref: Any) -> str | None:
+    if not isinstance(target_ref, str) or not target_ref.startswith("target:"):
+        return None
+    value = target_ref.removeprefix("target:")
+    if value.startswith("literal-"):
+        try:
+            value = bytes.fromhex(value.removeprefix("literal-")).decode("utf-8")
+        except (ValueError, UnicodeDecodeError):
+            return None
+    if not value.startswith("issue:"):
+        return None
+    issue_id = value.removeprefix("issue:")
+    return issue_id or None
 
     def _prepared_read_handoff_is_pending(self) -> bool:
         with self._prepared_calls_lock:

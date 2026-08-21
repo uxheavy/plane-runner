@@ -87,6 +87,7 @@ class HostBinding:
     run_ref: str
     invocation_ref: str
     catalog_digest: str
+    assignment_target_ref: str = ""
 
 
 @dataclass

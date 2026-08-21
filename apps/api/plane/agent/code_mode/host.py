@@ -787,6 +787,7 @@ class CodeModeHostRPC:
             run_ref=snapshot["runId"],
             invocation_ref=stored_invocation.invocation_id,
             catalog_digest=CATALOG_DIGEST,
+            assignment_target_ref=snapshot["assignment"]["targetRef"],
         )
         if expected_workspace_ref != f"workspace:{stored_run.workspace_id}":
             raise CodeModeBindingError("workspace reference is not bound to the stored run")

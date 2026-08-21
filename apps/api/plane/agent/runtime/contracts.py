@@ -48,6 +48,9 @@ def model_operation_entry(operation: Mapping[str, Any]) -> dict[str, Any]:
     if projected.get("operationId") == "search_workspace":
         result_schema = projected.get("resultSchema")
         if isinstance(result_schema, dict):
+            properties = result_schema.setdefault("properties", {})
+            if isinstance(properties, dict):
+                properties["assignmentWorkItemReadCall"] = _thaw_contract_json(_MODEL_PREPARED_READ_REF)
             results = result_schema.get("properties", {}).get("results")
             if isinstance(results, dict):
                 item_schema = results.get("items")
@@ -55,8 +58,7 @@ def model_operation_entry(operation: Mapping[str, Any]) -> dict[str, Any]:
                     item_properties = item_schema.get("properties")
                     if isinstance(item_properties, dict):
                         item_properties.pop("workItemReadInput", None)
-                        if "workItemReadCall" in item_properties:
-                            item_properties["workItemReadCall"] = _thaw_contract_json(_MODEL_PREPARED_READ_REF)
+                        item_properties.pop("workItemReadCall", None)
     return projected
 
 
