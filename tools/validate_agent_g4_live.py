@@ -2245,14 +2245,12 @@ def _validate_failure_receipt(
         raise ContractError("evidence_runtime_exit_sequence_invalid")
     if runtime_exit["failure"] is not None:
         runtime_failure = _object(runtime_exit["failure"], "evidence_runtime_exit_failure")
-        runtime_failure_diagnostic_fields = {
-            "callbackPhase",
-            "operationRefDigest",
+        host_diagnostic_fields = {"callbackPhase", "operationRefDigest"}
+        runtime_diagnostic_fields = {"runtimePhase", "exceptionClass"}
+        runtime_failure_diagnostic_fields = host_diagnostic_fields | {
             "codeModeHostStatus",
             "codeModeFailureClass",
-            "runtimePhase",
-            "exceptionClass",
-        }
+        } | runtime_diagnostic_fields
         if set(runtime_failure).difference({"code", "retryable", "cause"} | runtime_failure_diagnostic_fields) or not {
             "code",
             "retryable",
@@ -2264,10 +2262,10 @@ def _validate_failure_receipt(
             raise ContractError("evidence_runtime_exit_failure_invalid")
         if "cause" in runtime_failure:
             _safe_ref(runtime_failure["cause"], "evidence_runtime_exit_failure_cause")
-        diagnostic_fields = set(runtime_failure).intersection(runtime_failure_diagnostic_fields)
-        if diagnostic_fields and diagnostic_fields != runtime_failure_diagnostic_fields:
+        present_host_diagnostic_fields = host_diagnostic_fields.intersection(runtime_failure)
+        if present_host_diagnostic_fields and present_host_diagnostic_fields != host_diagnostic_fields:
             raise ContractError("evidence_runtime_exit_failure_diagnostic_fields_invalid")
-        if diagnostic_fields:
+        if present_host_diagnostic_fields:
             if runtime_failure["callbackPhase"] not in {"before_host_call", "host_return", "model_observation_emit", "adapter_event"}:
                 raise ContractError("evidence_runtime_exit_failure_callback_phase_invalid")
             digest = runtime_failure["operationRefDigest"]

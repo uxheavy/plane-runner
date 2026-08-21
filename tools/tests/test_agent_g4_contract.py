@@ -563,6 +563,70 @@ class G4ContractTests(unittest.TestCase):
         )
         self.assertNotIn("raw host message", json.dumps(receipt))
 
+    def test_runtime_exit_diagnostic_pairs_are_independently_optional_and_complete(self):
+        manifest, authority, config, receipt = failure_fixture()
+        authority_info = validate_authority(authority, manifest, CANDIDATE, CANDIDATE, COMMAND)
+        receipt["runtimeExit"] = {
+            "present": True,
+            "kind": "failed",
+            "finalSequence": None,
+            "failure": {
+                "code": "runtime_error",
+                "retryable": False,
+                "cause": "host_operation_failure",
+            },
+        }
+        pairs = (
+            (
+                "host",
+                {"callbackPhase": "host_return", "operationRefDigest": "a" * 64},
+                "evidence_runtime_exit_failure_diagnostic_fields_invalid",
+            ),
+            (
+                "code_mode",
+                {"codeModeHostStatus": "unavailable", "codeModeFailureClass": "transport"},
+                "evidence_runtime_exit_failure_code_mode_diagnostic_fields_invalid",
+            ),
+            (
+                "runtime",
+                {"runtimePhase": "conversation", "exceptionClass": "RuntimeError"},
+                "evidence_runtime_exit_failure_runtime_diagnostic_fields_invalid",
+            ),
+        )
+
+        for mask in range(1 << len(pairs)):
+            candidate = copy.deepcopy(receipt)
+            for bit, (_, fields, _) in enumerate(pairs):
+                if mask & (1 << bit):
+                    candidate["runtimeExit"]["failure"].update(fields)
+            candidate["semanticDigest"] = _semantic_digest(candidate)
+            with self.subTest(mask=mask):
+                self.assertEqual(
+                    validate_evidence(
+                        json.dumps(candidate, separators=(",", ":")),
+                        manifest,
+                        authority_info,
+                        config,
+                        CANDIDATE,
+                    )["passed"],
+                    0,
+                )
+
+        for name, fields, reason in pairs:
+            for missing in fields:
+                candidate = copy.deepcopy(receipt)
+                candidate["runtimeExit"]["failure"].update(fields)
+                candidate["runtimeExit"]["failure"].pop(missing)
+                candidate["semanticDigest"] = _semantic_digest(candidate)
+                with self.subTest(pair=name, missing=missing), self.assertRaisesRegex(ContractError, reason):
+                    validate_evidence(
+                        json.dumps(candidate, separators=(",", ":")),
+                        manifest,
+                        authority_info,
+                        config,
+                        CANDIDATE,
+                    )
+
     def test_runner_setup_error_projection_is_bounded_and_validated(self):
         valid = {
             "id": "setup:lineage:IntegrityError",
@@ -2955,6 +3019,77 @@ class G4ContractTests(unittest.TestCase):
         temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt, separators=(",", ":")))
         self.addCleanup(temp.cleanup)
         self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
+
+    def test_runtime_exit_failure_diagnostic_pairs_validate_independently(self):
+        pair_cases = {
+            "host": {
+                "callbackPhase": "host_return",
+                "operationRefDigest": "a" * 64,
+            },
+            "code_mode": {
+                "codeModeHostStatus": "invalid",
+                "codeModeFailureClass": "code_mode",
+            },
+            "runtime": {
+                "runtimePhase": "conversation",
+                "exceptionClass": "RuntimeError",
+            },
+        }
+        for name, diagnostics in pair_cases.items():
+            manifest, authority, config, receipt = failure_fixture()
+            receipt["runtimeExit"] = {
+                "present": True,
+                "kind": "failed",
+                "finalSequence": None,
+                "failure": {
+                    "code": "runtime_error",
+                    "retryable": False,
+                    **diagnostics,
+                },
+            }
+            receipt["semanticDigest"] = _semantic_digest(receipt)
+            with self.subTest(pair=name):
+                temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt))
+                self.addCleanup(temp.cleanup)
+                self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
+
+        partial_cases = (
+            ({"callbackPhase": "host_return"}, "evidence_runtime_exit_failure_diagnostic_fields_invalid"),
+            ({"codeModeHostStatus": "invalid"}, "evidence_runtime_exit_failure_code_mode_diagnostic_fields_invalid"),
+            ({"runtimePhase": "conversation"}, "evidence_runtime_exit_failure_runtime_diagnostic_fields_invalid"),
+        )
+        for diagnostics, reason in partial_cases:
+            manifest, authority, config, receipt = failure_fixture()
+            receipt["runtimeExit"]["present"] = True
+            receipt["runtimeExit"]["kind"] = "failed"
+            receipt["runtimeExit"]["failure"] = {
+                "code": "runtime_error",
+                "retryable": False,
+                **diagnostics,
+            }
+            receipt["semanticDigest"] = _semantic_digest(receipt)
+            temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt))
+            self.addCleanup(temp.cleanup)
+            with self.subTest(diagnostics=diagnostics), self.assertRaisesRegex(ContractError, reason):
+                validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
+
+        manifest, authority, config, receipt = failure_fixture()
+        receipt["runtimeExit"] = {
+            "present": True,
+            "kind": "failed",
+            "finalSequence": None,
+            "failure": {
+                "code": "runtime_error",
+                "retryable": False,
+                "runtimePhase": "conversation",
+                "exceptionClass": "SecretException",
+            },
+        }
+        receipt["semanticDigest"] = _semantic_digest(receipt)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt))
+        self.addCleanup(temp.cleanup)
+        with self.assertRaisesRegex(ContractError, "evidence_runtime_exit_failure_exception_class_invalid"):
+            validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
 
     def test_failure_receipt_accepts_redacted_work_item_target_digest(self):
         manifest, authority, config, receipt = failure_fixture()
