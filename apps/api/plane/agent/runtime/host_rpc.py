@@ -418,6 +418,57 @@ def _is_prepared_call(call: PlaneHostCall) -> bool:
     return call.operation_ref == "operation:work_item.read" and "preparedCallRef" in call.input
 
 
+def _prepared_read_refs_from_search_result(output: Any) -> tuple[str, ...]:
+    """Extract only opaque work-item read refs from one trusted search result."""
+
+    if not isinstance(output, Mapping):
+        return ()
+    result = output.get("result")
+    if isinstance(output.get("results"), list):
+        result = output
+    if not isinstance(result, Mapping) or not isinstance(result.get("results"), list):
+        return ()
+    refs: list[str] = []
+    for item in result["results"]:
+        if not isinstance(item, Mapping) or item.get("objectType") != "work_item":
+            continue
+        prepared_ref = item.get("workItemReadCall")
+        if (
+            not isinstance(prepared_ref, str)
+            or not prepared_ref.startswith(PREPARED_CALL_PREFIX)
+            or len(prepared_ref.encode("utf-8")) > MAX_PREPARED_CALL_REF_BYTES
+        ):
+            return ()
+        refs.append(prepared_ref)
+    return tuple(refs)
+
+
+def _prepared_read_refs_from_code_mode_result(output: Any) -> tuple[str, ...]:
+    """Find opaque reads produced by Code Mode search and not read in that turn."""
+
+    if not isinstance(output, Mapping) or "preparedReadResult" in output:
+        return ()
+    observations = output.get("observations")
+    if not isinstance(observations, list):
+        return ()
+    search_observed = False
+    read_observed = False
+    for observation in observations:
+        if not isinstance(observation, Mapping):
+            return ()
+        if observation.get("source") != "code" or observation.get("action") != "code":
+            return ()
+        operation_ref = observation.get("operationRef")
+        status = observation.get("status")
+        if operation_ref == "operation:search_workspace" and status in {"ok", "replayed"}:
+            search_observed = True
+        elif operation_ref == "operation:work_item.read" and status in {"ok", "replayed"}:
+            read_observed = True
+    if not search_observed or read_observed:
+        return ()
+    return _prepared_read_refs_from_search_result(output.get("result"))
+
+
 _HOST_FAILURE_CLASSES = frozenset({"transport_unavailable", "callback_exception"})
 _HOST_SOCKET_PHASES = frozenset({"accept", "read", "invoke", "serialize", "write"})
 _HOST_SOCKET_STATES = frozenset({"failed", "closed"})
@@ -1684,6 +1735,32 @@ class PlaneGatewayHostPort:
                     "CODE_MODE_FAILED": "Code Mode execution failed in the restricted isolate.",
                 }.get(code, "Code Mode execution failed in the restricted isolate.")
                 return self._error(call, str(code), message)
+            prepared_refs = _prepared_read_refs_from_code_mode_result(output)
+            if prepared_refs:
+                with self._prepared_calls_lock:
+                    self._prepared_read_handoff_pending = True
+            if len(prepared_refs) == 1:
+                prepared_read_call = PlaneHostCall(
+                    run_id=call.run_id,
+                    invocation_id=call.invocation_id,
+                    correlation_id=call.correlation_id,
+                    action="read",
+                    operation_ref="operation:work_item.read",
+                    input={"preparedCallRef": prepared_refs[0]},
+                    source="model",
+                )
+                prepared_read = self.invoke(prepared_read_call)
+                continuation_output = dict(output) if isinstance(output, Mapping) else {}
+                continuation_output["preparedReadResult"] = prepared_read.to_wire()
+                if prepared_read.status not in {"ok", "replayed"}:
+                    return self._error(
+                        call,
+                        prepared_read.error_code or "PREPARED_CALL_INVALID",
+                        "Prepared work-item read continuation failed",
+                        output=continuation_output,
+                        prepared_call_invalid_reason=prepared_read.prepared_call_invalid_reason,
+                    )
+                output = continuation_output
             return PlaneHostResult(
                 request_ref=call.request_ref,
                 correlation_id=call.correlation_id,

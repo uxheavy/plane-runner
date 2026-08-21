@@ -633,6 +633,178 @@ def test_gateway_host_preserves_valid_search_to_prepared_read_handoff():
     assert read.output["result"]["work_item"]["name"] == "assigned"
 
 
+def test_gateway_host_consumes_one_code_mode_search_ref_before_returning():
+    calls = []
+
+    class FakeHost:
+        binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
+
+        def set_prepared_call_registry(self, registry):
+            self.registry = registry
+
+        def execute_typescript(self, _request):
+            prepared_ref = self.registry.register(
+                {"project_id": "project:test", "issue_id": "issue:test"}
+            )
+            return {
+                "schemaVersion": CODE_MODE_SCHEMA_VERSION,
+                "result": {
+                    "ok": True,
+                    "result": {
+                        "results": [
+                            {"objectType": "work_item", "workItemReadCall": prepared_ref}
+                        ]
+                    },
+                },
+                "observations": [
+                    {
+                        "source": "code",
+                        "action": "code",
+                        "operationRef": "operation:search_workspace",
+                        "status": "ok",
+                    }
+                ],
+            }
+
+        def call_operation(self, operation_id, input_data, **_kwargs):
+            calls.append((operation_id, input_data))
+            assert operation_id == "work_item.read"
+            assert input_data == {"project_id": "project:test", "issue_id": "issue:test"}
+            return {"ok": True, "result": {"work_item": {"name": "assigned"}}}
+
+    result = PlaneGatewayHostPort(FakeHost()).invoke(
+        _call(
+            action="code",
+            operationRef=CODE_MODE_EXECUTION_OPERATION,
+            source="code",
+            input={
+                "schemaVersion": CODE_MODE_SCHEMA_VERSION,
+                "entrypoint": "default",
+                "source": "export default async () => ({})",
+                "input": {},
+            },
+        )
+    )
+
+    assert result.status == "ok"
+    assert [operation_id for operation_id, _input in calls] == ["work_item.read"]
+    assert result.output["preparedReadResult"]["status"] == "ok"
+    assert (
+        result.output["preparedReadResult"]["output"]["result"]["work_item"]["name"]
+        == "assigned"
+    )
+
+
+def test_gateway_host_does_not_guess_ambiguous_or_tampered_code_mode_reads():
+    calls = []
+
+    class FakeHost:
+        binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
+        mode = "ambiguous"
+
+        def set_prepared_call_registry(self, registry):
+            self.registry = registry
+
+        def execute_typescript(self, _request):
+            first = self.registry.register(
+                {"project_id": "project:test", "issue_id": "issue:first"}
+            )
+            second = self.registry.register(
+                {"project_id": "project:test", "issue_id": "issue:second"}
+            )
+            refs = (
+                (first, second)
+                if self.mode == "ambiguous"
+                else ("prepared-call:tampered",)
+            )
+            return {
+                "result": {
+                    "ok": True,
+                    "result": {
+                        "results": [
+                            {"objectType": "work_item", "workItemReadCall": ref}
+                            for ref in refs
+                        ]
+                    },
+                },
+                "observations": [
+                    {
+                        "source": "code",
+                        "action": "code",
+                        "operationRef": "operation:search_workspace",
+                        "status": "ok",
+                    }
+                ],
+            }
+
+        def call_operation(self, *_args, **_kwargs):
+            calls.append(True)
+            raise AssertionError("ambiguous or tampered prepared reads must not be guessed")
+
+    for mode, expected_status in (("ambiguous", "ok"), ("tampered", "invalid")):
+        host = FakeHost()
+        host.mode = mode
+        port = PlaneGatewayHostPort(host)
+        result = port.invoke(
+            _call(
+                action="code",
+                operationRef=CODE_MODE_EXECUTION_OPERATION,
+                source="code",
+                input={
+                    "schemaVersion": CODE_MODE_SCHEMA_VERSION,
+                    "entrypoint": "default",
+                    "source": "export default async () => ({})",
+                    "input": {},
+                },
+            )
+        )
+        assert result.status == expected_status
+        if mode == "tampered":
+            assert result.error_code == "PREPARED_CALL_INVALID"
+        else:
+            blocked = port.invoke(
+                _call(
+                    action="read",
+                    operationRef="operation:search_workspace",
+                    input={"query": "next", "limit": 1},
+                )
+            )
+            assert blocked.status == "invalid"
+            assert blocked.error_code == "VALIDATION_ERROR"
+
+    assert calls == []
+
+
+def test_gateway_host_rejects_cross_invocation_code_mode_continuation():
+    class FakeHost:
+        binding = SimpleNamespace(run_ref="run:trusted", invocation_ref="invocation:trusted")
+
+        def execute_typescript(self, _request):
+            raise AssertionError("cross-invocation code must not execute")
+
+        def call_operation(self, *_args, **_kwargs):
+            raise AssertionError("cross-invocation code must not reach the gateway")
+
+    result = PlaneGatewayHostPort(FakeHost()).invoke(
+        _call(
+            runId="run:other",
+            invocationId="invocation:other",
+            action="code",
+            operationRef=CODE_MODE_EXECUTION_OPERATION,
+            source="code",
+            input={
+                "schemaVersion": CODE_MODE_SCHEMA_VERSION,
+                "entrypoint": "default",
+                "source": "export default async () => ({})",
+                "input": {},
+            },
+        )
+    )
+
+    assert result.status == "denied"
+    assert result.error_code == "CALLBACK_BINDING_INVALID"
+
+
 def test_prepared_read_wrapper_is_rejected_without_gateway_call():
     class FakeHost:
         binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
