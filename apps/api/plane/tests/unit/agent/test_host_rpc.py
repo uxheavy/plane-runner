@@ -234,6 +234,9 @@ def test_prepared_shape_diagnostic_does_not_call_nested_ref_canonical():
 
 def test_code_mode_canonicalizes_only_the_typed_work_item_read_call():
     assert _canonicalize_work_item_read_call(
+        {"preparedCallRef": {"preparedCallRef": "prepared-call:opaque"}}
+    ) == {"preparedCallRef": "prepared-call:opaque"}
+    assert _canonicalize_work_item_read_call(
         {
             "preparedCallRef": {
                 "action": "read",
@@ -244,6 +247,17 @@ def test_code_mode_canonicalizes_only_the_typed_work_item_read_call():
     ) == {"preparedCallRef": "prepared-call:opaque"}
 
     for malformed in (
+        {
+            "preparedCallRef": {
+                "preparedCallRef": "prepared-call:opaque",
+                "extra": True,
+            }
+        },
+        {
+            "preparedCallRef": {
+                "preparedCallRef": {"preparedCallRef": "prepared-call:opaque"}
+            }
+        },
         {
             "preparedCallRef": {
                 "action": "read",
@@ -270,6 +284,33 @@ def test_code_mode_canonicalizes_only_the_typed_work_item_read_call():
     ):
         with pytest.raises(ValueError):
             _canonicalize_work_item_read_call(malformed)
+
+
+def test_code_mode_marks_nested_prepared_read_consumed_at_host_boundary():
+    host = object.__new__(CodeModeHostRPC)
+    host._prepared_call_registry = PreparedCallRegistry()
+    host._code_mode_active = False
+    host._record_code_mode_observation = lambda *_args: None
+    prepared_ref = host._prepared_call_registry.register(
+        {"project_id": "project:test", "issue_id": "issue:test"}
+    )
+
+    host._call_operation = lambda operation_id, input_data, **_kwargs: {
+        "ok": operation_id == "work_item.read"
+        and input_data == {"preparedCallRef": prepared_ref},
+        "result": {"work_item": {"name": "assigned"}},
+    }
+
+    receipt = CodeModeHostRPC.call_operation(
+        host,
+        "work_item.read",
+        {"preparedCallRef": {"preparedCallRef": prepared_ref}},
+        idempotency_key="idempotency:read",
+        correlation_id="correlation:read",
+    )
+
+    assert receipt["ok"] is True
+    assert host._prepared_call_registry.records[prepared_ref]["consumed"] is True
 
 
 def test_model_ready_to_call_wrapper_is_unwrapped_before_gateway():

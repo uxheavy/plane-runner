@@ -68,8 +68,10 @@ class CodeModeObservationError(AgentDomainError):
 def _canonicalize_work_item_read_call(input_data: Mapping[str, Any]) -> Mapping[str, Any]:
     """Canonicalize one typed search result read call before registry resolution."""
 
-    if set(input_data) != {"preparedCallRef"}:
+    if "preparedCallRef" not in input_data:
         return input_data
+    if set(input_data) != {"preparedCallRef"}:
+        raise ValueError("prepared work-item read reference is invalid")
     candidate = input_data["preparedCallRef"]
     if isinstance(candidate, str):
         if not candidate.startswith(PREPARED_CALL_PREFIX) or len(candidate.encode("utf-8")) > MAX_PREPARED_CALL_REF_BYTES:
@@ -78,7 +80,14 @@ def _canonicalize_work_item_read_call(input_data: Mapping[str, Any]) -> Mapping[
     if not isinstance(candidate, Mapping):
         raise ValueError("prepared work-item read reference is invalid")
     if set(candidate) == {"preparedCallRef"}:
-        return input_data
+        prepared_ref = candidate["preparedCallRef"]
+        if (
+            not isinstance(prepared_ref, str)
+            or not prepared_ref.startswith(PREPARED_CALL_PREFIX)
+            or len(prepared_ref.encode("utf-8")) > MAX_PREPARED_CALL_REF_BYTES
+        ):
+            raise ValueError("prepared work-item read reference is invalid")
+        return {"preparedCallRef": prepared_ref}
     if set(candidate) != {"action", "operationRef", "input"}:
         raise ValueError("prepared work-item read call is invalid")
     if candidate["action"] != "read" or candidate["operationRef"] != "operation:work_item.read":
@@ -234,6 +243,17 @@ class CodeModeHostRPC:
         workspace_slug: str | None = None,
     ) -> dict[str, Any]:
         code_mode_active = getattr(self, "_code_mode_active", False)
+        normalized_input = input_data
+        if (
+            operation_id == "work_item.read"
+            and self._prepared_call_registry is not None
+            and isinstance(input_data, Mapping)
+            and "preparedCallRef" in input_data
+        ):
+            try:
+                normalized_input = _canonicalize_work_item_read_call(input_data)
+            except ValueError:
+                normalized_input = input_data
         cached_search = getattr(self, "_catalog_search_receipt", None)
         if (
             code_mode_active
@@ -248,7 +268,7 @@ class CodeModeHostRPC:
         else:
             receipt = self._call_operation(
                 operation_id,
-                input_data,
+                normalized_input,
                 idempotency_key=idempotency_key,
                 correlation_id=correlation_id,
                 workspace_slug=workspace_slug,
@@ -276,12 +296,12 @@ class CodeModeHostRPC:
             )
         if (
             operation_id == "work_item.read"
-            and isinstance(input_data, Mapping)
-            and isinstance(input_data.get("preparedCallRef"), str)
+            and isinstance(normalized_input, Mapping)
+            and isinstance(normalized_input.get("preparedCallRef"), str)
             and receipt.get("ok")
             and self._prepared_call_registry is not None
         ):
-            self._prepared_call_registry.mark_consumed(input_data["preparedCallRef"])
+            self._prepared_call_registry.mark_consumed(normalized_input["preparedCallRef"])
         self._record_code_mode_observation(operation_id, receipt)
         if prepared_read_receipt is not None:
             self._record_code_mode_observation("work_item.read", prepared_read_receipt)
