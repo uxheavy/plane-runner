@@ -1143,6 +1143,106 @@ def test_code_mode_search_projects_opaque_prepared_read_for_typed_callback():
     assert rename["ok"] is True
 
 
+def test_code_mode_direct_search_consumes_one_prepared_read_before_returning():
+    calls = []
+    observations = []
+    host = object.__new__(CodeModeHostRPC)
+    host._prepared_call_registry = PreparedCallRegistry()
+    host._code_mode_active = True
+    host._record_code_mode_observation = lambda operation_id, _receipt: observations.append(operation_id)
+
+    def fake_call(operation_id, input_data, **kwargs):
+        calls.append((operation_id, input_data, kwargs))
+        if operation_id == "search_workspace":
+            return {
+                "ok": True,
+                "result": {
+                    "results": [
+                        {
+                            "objectType": "work_item",
+                            "workItemReadInput": {
+                                "project_id": "project:test",
+                                "issue_id": "issue:test",
+                            },
+                        }
+                    ]
+                },
+            }
+        assert operation_id == "work_item.read"
+        prepared_ref = input_data["preparedCallRef"]
+        assert host._prepared_call_registry.resolve(
+            {"preparedCallRef": prepared_ref},
+            correlation_id=kwargs["correlation_id"],
+            idempotency_key=kwargs["idempotency_key"],
+        ) == {"project_id": "project:test", "issue_id": "issue:test"}
+        return {"ok": True, "result": {"work_item": {"name": "assigned"}}}
+
+    host._call_operation = fake_call
+    search = CodeModeHostRPC.call_operation(
+        host,
+        "search_workspace",
+        {"query": "assigned", "limit": 1},
+        idempotency_key="idempotency:search",
+        correlation_id="correlation:search",
+    )
+
+    assert [operation_id for operation_id, _input, _kwargs in calls] == [
+        "search_workspace",
+        "work_item.read",
+    ]
+    assert search["preparedReadResult"]["ok"] is True
+    assert search["preparedReadResult"]["result"]["work_item"]["name"] == "assigned"
+    assert observations == ["search_workspace", "work_item.read"]
+    assert all(record["consumed"] for record in host._prepared_call_registry.records.values())
+
+
+def test_code_mode_direct_search_leaves_multiple_prepared_reads_pending():
+    calls = []
+    host = object.__new__(CodeModeHostRPC)
+    host._prepared_call_registry = PreparedCallRegistry()
+    host._code_mode_active = False
+    host._record_code_mode_observation = lambda *_args: None
+
+    def fake_call(operation_id, _input_data, **_kwargs):
+        calls.append(operation_id)
+        assert operation_id == "search_workspace"
+        return {
+            "ok": True,
+            "result": {
+                "results": [
+                    {
+                        "objectType": "work_item",
+                        "workItemReadInput": {
+                            "project_id": "project:test",
+                            "issue_id": "issue:first",
+                        },
+                    },
+                    {
+                        "objectType": "work_item",
+                        "workItemReadInput": {
+                            "project_id": "project:test",
+                            "issue_id": "issue:second",
+                        },
+                    },
+                ]
+            },
+        }
+
+    host._call_operation = fake_call
+    search = CodeModeHostRPC.call_operation(
+        host,
+        "search_workspace",
+        {"query": "assigned", "limit": 2},
+        idempotency_key="idempotency:search",
+        correlation_id="correlation:search",
+    )
+
+    assert calls == ["search_workspace"]
+    assert "preparedReadResult" not in search
+    assert len(host._prepared_call_registry.records) == 2
+    assert all(not record["consumed"] for record in host._prepared_call_registry.records.values())
+
+
 def test_host_server_replays_exact_calls_without_reinvoking_the_gateway(tmp_path):
     calls = []
 

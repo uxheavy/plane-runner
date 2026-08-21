@@ -112,6 +112,11 @@ class PreparedCallRegistry:
         with self.lock:
             return any(not record["consumed"] for record in self.records.values())
 
+    def is_unconsumed(self, prepared_ref: str) -> bool:
+        with self.lock:
+            record = self.records.get(prepared_ref)
+            return record is not None and not record["consumed"]
+
     @staticmethod
     def normalize(input_data: Mapping[str, Any]) -> Mapping[str, Any]:
         """Accept one canonical opaque ref or its exact serialized read envelope."""

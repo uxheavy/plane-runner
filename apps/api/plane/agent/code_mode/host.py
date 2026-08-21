@@ -238,12 +238,18 @@ class CodeModeHostRPC:
             correlation_id=correlation_id,
             workspace_slug=workspace_slug,
         )
+        prepared_read_receipt: Mapping[str, Any] | None = None
         if (
             operation_id == "search_workspace"
             and receipt.get("ok")
             and self._prepared_call_registry is not None
         ):
             receipt = self._prepare_search_receipt(receipt)
+            receipt, prepared_read_receipt = self._consume_single_prepared_read(
+                receipt,
+                idempotency_key=idempotency_key,
+                correlation_id=correlation_id,
+            )
         if (
             operation_id == "work_item.read"
             and isinstance(input_data, Mapping)
@@ -253,7 +259,55 @@ class CodeModeHostRPC:
         ):
             self._prepared_call_registry.mark_consumed(input_data["preparedCallRef"])
         self._record_code_mode_observation(operation_id, receipt)
+        if prepared_read_receipt is not None:
+            self._record_code_mode_observation("work_item.read", prepared_read_receipt)
         return receipt
+
+    def _consume_single_prepared_read(
+        self,
+        receipt: Mapping[str, Any],
+        *,
+        idempotency_key: str,
+        correlation_id: str,
+    ) -> tuple[Mapping[str, Any], Mapping[str, Any] | None]:
+        """Consume one trusted direct-search handoff before it crosses Code Mode."""
+
+        prepared_refs = self._prepared_refs_from_search_receipt(receipt)
+        if (
+            len(prepared_refs) != 1
+            or self._prepared_call_registry is None
+            or not self._prepared_call_registry.is_unconsumed(prepared_refs[0])
+        ):
+            return receipt, None
+        prepared_ref = prepared_refs[0]
+        prepared_read = self._call_operation(
+            "work_item.read",
+            {"preparedCallRef": prepared_ref},
+            idempotency_key=idempotency_key,
+            correlation_id=correlation_id,
+        )
+        if prepared_read.get("ok"):
+            self._prepared_call_registry.mark_consumed(prepared_ref)
+        return {**receipt, "preparedReadResult": dict(prepared_read)}, prepared_read
+
+    @staticmethod
+    def _prepared_refs_from_search_receipt(receipt: Mapping[str, Any]) -> tuple[str, ...]:
+        result = receipt.get("result")
+        if not isinstance(result, Mapping) or not isinstance(result.get("results"), list):
+            return ()
+        refs: list[str] = []
+        for item in result["results"]:
+            if not isinstance(item, Mapping) or "workItemReadCall" not in item:
+                continue
+            prepared_ref = item["workItemReadCall"]
+            if (
+                not isinstance(prepared_ref, str)
+                or not prepared_ref.startswith(PREPARED_CALL_PREFIX)
+                or len(prepared_ref.encode("utf-8")) > MAX_PREPARED_CALL_REF_BYTES
+            ):
+                return ()
+            refs.append(prepared_ref)
+        return tuple(refs)
 
     def _prepare_search_receipt(self, receipt: Mapping[str, Any]) -> Mapping[str, Any]:
         """Bind Code Mode search results to opaque, invocation-local read calls."""
