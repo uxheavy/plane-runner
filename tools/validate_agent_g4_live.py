@@ -1292,6 +1292,11 @@ _MANAGER_DIAGNOSTIC_EXCEPTIONS = {
     "LookupError", "OperationalError", "RuntimeError", "TimeoutError", "TypeError",
     "ValidationError", "ValueError", "Unknown",
 }
+_MANAGER_READBACK_EXCEPTION_CLASSES = {
+    "AgentDomainError", "AgentScheduleError", "AttributeError", "IntegrityError", "KeyError",
+    "LookupError", "OperationalError", "RuntimeError", "TimeoutError", "TypeError",
+    "ValidationError", "ValueError", "Unknown",
+}
 
 
 def _validate_manager_route_diagnostic(value: Any) -> None:
@@ -1478,6 +1483,19 @@ def _validate_manager_route_evidence(value: Any, *, route_checks: set[str] | Non
     if set(replay) != {"stateMutations"} or replay["stateMutations"] != 0:
         raise ContractError("evidence_manager_replay_invalid")
     readback = _object(payload["readback"], "evidence_manager_readback")
+    if set(readback) == {"readbackUnavailable"}:
+        if not expected_route_ids <= {"M05", "M06"}:
+            raise ContractError("evidence_manager_readback_unavailable_route_invalid")
+        unavailable = _object(readback["readbackUnavailable"], "evidence_manager_readback_unavailable")
+        if set(unavailable) != {"stage", "predicate", "exceptionClass"}:
+            raise ContractError("evidence_manager_readback_unavailable_fields_invalid")
+        if unavailable["stage"] != "postRouteReadback":
+            raise ContractError("evidence_manager_readback_stage_invalid")
+        if unavailable["predicate"] != "readback":
+            raise ContractError("evidence_manager_readback_predicate_invalid")
+        if unavailable["exceptionClass"] not in _MANAGER_READBACK_EXCEPTION_CLASSES:
+            raise ContractError("evidence_manager_readback_exception_invalid")
+        return
     expected_fields = {
         "assignmentCount",
         "childAssignmentCount",

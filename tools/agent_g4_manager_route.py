@@ -54,6 +54,22 @@ from plane.db.models import (
 
 
 _ROUTE_IDS = tuple(f"M{index:02d}" for index in range(1, 9))
+_READBACK_EXCEPTION_CLASSES = frozenset(
+    {
+        "AgentDomainError",
+        "AgentScheduleError",
+        "AttributeError",
+        "IntegrityError",
+        "KeyError",
+        "LookupError",
+        "OperationalError",
+        "RuntimeError",
+        "TimeoutError",
+        "TypeError",
+        "ValidationError",
+        "ValueError",
+    }
+)
 _ROUTE_PREDICATES = {
     "M01": ("dynamicPlan", "noSavedWorkflowProduct"),
     "M02": ("boundedDelegation", "lineagePersisted", "independentChildRun"),
@@ -191,6 +207,25 @@ def _manager_readback(workspace: Workspace) -> dict[str, object]:
             }
         ),
     }
+
+
+def _post_route_readback(workspace: Workspace) -> dict[str, object]:
+    """Keep a readback failure outside the completed route checkpoint."""
+
+    try:
+        return _manager_readback(workspace)
+    except BaseException as exc:
+        return {
+            "readbackUnavailable": {
+                "stage": "postRouteReadback",
+                "predicate": "readback",
+                "exceptionClass": (
+                    type(exc).__name__
+                    if type(exc).__name__ in _READBACK_EXCEPTION_CLASSES
+                    else "Unknown"
+                ),
+            }
+        }
 
 
 @transaction.atomic
@@ -632,14 +667,17 @@ def _exercise_manager_journey(
     # boundary so later chief-of-staff setup cannot turn satisfied review/HR
     # evidence into a generic runner failure.
     if selected_route_ids <= {"M05", "M06"}:
-        return {
+        route_result = {
             "routes": {
                 route_id: route
                 for route_id, route in (("M05", m05), ("M06", m06))
                 if route_id in selected_route_ids
             }
             | {"replay": {"stateMutations": 0}},
-            "readback": _manager_readback(workspace),
+        }
+        return {
+            **route_result,
+            "readback": _post_route_readback(workspace),
         }
 
     # M07: chief-of-staff provisioning copies only the subject's live

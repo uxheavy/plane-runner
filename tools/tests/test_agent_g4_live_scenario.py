@@ -773,6 +773,20 @@ def test_manager_m05_m06_satisfied_route_returns_before_later_cells() -> None:
     assert '("M06", m06)' in selected
 
 
+def test_manager_m05_m06_readback_failure_is_bounded_after_route_success() -> None:
+    route = (TOOLS / "agent_g4_manager_route.py").read_text(encoding="utf-8")
+    selected_start = route.index('if selected_route_ids <= {"M05", "M06"}:')
+    m07_start = route.index("# M07:", selected_start)
+    selected = route[selected_start:m07_start]
+
+    assert "route_result =" in selected
+    assert '"readback": _post_route_readback(workspace)' in selected
+    assert '"stage": "postRouteReadback"' in route
+    assert '"predicate": "readback"' in route
+    assert '"readbackUnavailable"' in route
+    assert "except BaseException as exc" in route[route.index("def _post_route_readback"):]
+
+
 def test_manager_synthetic_fixture_stays_outside_the_production_agent_package() -> None:
     fixture = TOOLS / "agent_g4_manager_route.py"
     production = TOOLS.parent / "apps" / "api" / "plane" / "agent" / "manager_route.py"

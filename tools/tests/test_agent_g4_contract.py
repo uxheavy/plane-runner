@@ -57,6 +57,7 @@ from validate_agent_g4_live import (  # noqa: E402
     validate_evidence,
     _validate_runtime_diagnostics,
     _validate_manager_route_diagnostic,
+    _validate_manager_route_evidence,
     _validate_operator_route_evidence,
 )
 from summarize_agent_g4 import summarize  # noqa: E402
@@ -2583,6 +2584,40 @@ class G4ContractTests(unittest.TestCase):
                     "exceptionClass": None,
                 }
             )
+        )
+
+    def test_manager_route_readback_unavailable_is_post_route_and_bounded(self):
+        source = (TOOLS / "agent_g4_manager_route.py").read_text(encoding="utf-8")
+        selected = source[source.index('if selected_route_ids <= {"M05", "M06"}:') : source.index("# M07:")]
+        self.assertIn("route_result =", selected)
+        self.assertIn('"readback": _post_route_readback(workspace)', selected)
+        _validate_manager_route_evidence(
+            {
+                "routes": {
+                    "M05": {
+                        "evaluatorFirst": True,
+                        "humanDecisionAfterEvaluator": True,
+                        "revisionFreshRun": True,
+                        "priorSnapshotImmutable": True,
+                        "finalAccepted": True,
+                    },
+                    "M06": {
+                        "proposalRecorded": True,
+                        "humanApprovalApplied": True,
+                        "selfApprovalDenied": True,
+                        "staleApprovalDenied": True,
+                    },
+                    "replay": {"stateMutations": 0},
+                },
+                "readback": {
+                    "readbackUnavailable": {
+                        "stage": "postRouteReadback",
+                        "predicate": "readback",
+                        "exceptionClass": "OperationalError",
+                    }
+                },
+            },
+            route_checks={"M05", "M06"},
         )
 
     def test_manager_route_diagnostics_retain_actual_m07_m08_false_predicates(self):
