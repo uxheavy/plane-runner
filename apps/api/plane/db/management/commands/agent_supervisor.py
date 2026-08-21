@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
+from django.db import OperationalError, close_old_connections
 
 from plane.agent.lifecycle import record_provider_attempt_notice
 from plane.agent.runtime import (
@@ -153,19 +154,33 @@ class Command(BaseCommand):
         parser.add_argument("--model-call-allowance", type=int)
 
     def handle(self, *args, **options):
-        invocation = RuntimeInvocation.objects.filter(invocation_id=options["invocation_ref"]).first()
-        if invocation is None:
-            raise CommandError("invocation-ref does not identify a persisted Plane invocation")
-        runtime_url = getattr(settings, "PLANE_AGENT_RUNTIME_URL", "")
-        shared_secret = getattr(settings, "PLANE_AGENT_RUNTIME_SHARED_SECRET", "")
-        checkout = options.get("runtime_checkout") or getattr(settings, "PLANE_AGENT_RUNTIME_CHECKOUT", None)
-        expected_sha = options.get("runtime_sha") or getattr(settings, "PLANE_AGENT_RUNTIME_SHA", None)
+        invocation = None
         credential_broker = None
         monitor = None
         monitor_stop = threading.Event()
         result = None
         host_operation_failure = None
         try:
+            try:
+                invocation = RuntimeInvocation.objects.filter(invocation_id=options["invocation_ref"]).first()
+            except OperationalError as lookup_error:
+                # A second lookup is only a bounded rebind for terminalization;
+                # runtime dispatch is never retried after an infrastructure error.
+                close_old_connections()
+                try:
+                    invocation = RuntimeInvocation.objects.filter(invocation_id=options["invocation_ref"]).first()
+                except OperationalError:
+                    raise lookup_error
+                if invocation is None:
+                    raise lookup_error
+                terminalize_pre_dispatch_failure(invocation)
+                raise CommandError("agent supervisor invocation lookup failed before runtime dispatch") from None
+            if invocation is None:
+                raise CommandError("invocation-ref does not identify a persisted Plane invocation")
+            runtime_url = getattr(settings, "PLANE_AGENT_RUNTIME_URL", "")
+            shared_secret = getattr(settings, "PLANE_AGENT_RUNTIME_SHARED_SECRET", "")
+            checkout = options.get("runtime_checkout") or getattr(settings, "PLANE_AGENT_RUNTIME_CHECKOUT", None)
+            expected_sha = options.get("runtime_sha") or getattr(settings, "PLANE_AGENT_RUNTIME_SHA", None)
             with _supervisor_setup_stage("runtime_transport"):
                 transport_kind = runtime_transport_kind(runtime_url, shared_secret)
             with _supervisor_setup_stage("runtime_provenance"):
@@ -344,17 +359,21 @@ class Command(BaseCommand):
         except _SupervisorSetupFailure as exc:
             terminalize_pre_dispatch_failure(invocation, exc.failure)
             raise CommandError("agent supervisor setup was rejected") from None
+        except CommandError:
+            raise
         except (ValueError, OSError, RuntimeCredentialError, RuntimeSupervisorError):
-            terminalize_pre_dispatch_failure(invocation)
+            if invocation is not None:
+                terminalize_pre_dispatch_failure(invocation)
             raise CommandError("agent supervisor could not establish a bounded runtime result") from None
         except Exception:
-            terminalize_pre_dispatch_failure(invocation)
+            if invocation is not None:
+                terminalize_pre_dispatch_failure(invocation)
             raise CommandError("agent supervisor setup did not produce a bounded runtime result") from None
         finally:
             monitor_stop.set()
             if monitor is not None:
                 monitor.join(timeout=1)
-            if credential_broker is not None:
+            if credential_broker is not None and invocation is not None:
                 try:
                     credential_broker.revoke_invocation(invocation.invocation_id)
                 except Exception:

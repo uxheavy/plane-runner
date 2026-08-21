@@ -17,10 +17,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
 from django.core.management import CommandError, call_command
+from django.db import OperationalError
 from django.test import override_settings
 from django.utils import timezone
+
+import pytest
 
 from plane.agent.lifecycle import (
     InvalidTransitionError,
@@ -38,6 +40,7 @@ from plane.db.management.commands.agent_supervisor import (
     _supervisor_setup_stage,
     _supervisor_result_output,
 )
+from plane.db.management.commands import agent_supervisor as supervisor_command
 from plane.agent.runtime import (
     AgentRuntimeConfiguration,
     build_gateway_host_port,
@@ -1611,6 +1614,47 @@ def test_command_error_cannot_bypass_setup_terminal_evidence(
     assert not RuntimeProviderAttempt.objects.filter(invocation=invocation).exists()
     assert secret not in str(raised.value)
     assert secret not in control.failure_reason
+
+
+@pytest.mark.django_db(transaction=True)
+def test_transient_invocation_lookup_failure_is_terminalized_before_dispatch(
+    workspace, gateway_project, gateway_issue, create_user, monkeypatch
+):
+    run, invocation = _invocation(
+        workspace,
+        gateway_project,
+        gateway_issue,
+        create_user,
+        suffix="lookup-operational-error",
+    )
+    original_filter = supervisor_command.RuntimeInvocation.objects.filter
+    lookup_calls = 0
+
+    def fail_once(**kwargs):
+        nonlocal lookup_calls
+        lookup_calls += 1
+        if lookup_calls == 1:
+            raise OperationalError("database connection dropped")
+        return original_filter(**kwargs)
+
+    monkeypatch.setattr(supervisor_command.RuntimeInvocation.objects, "filter", fail_once)
+
+    with pytest.raises(CommandError, match="agent supervisor invocation lookup failed before runtime dispatch"):
+        call_command("agent_supervisor", invocation_ref=invocation.invocation_id)
+
+    invocation.refresh_from_db()
+    run.refresh_from_db()
+    control = RuntimeInvocationControl.objects.get(invocation=invocation)
+    terminal = RunTerminalEvent.objects.get(invocation=invocation, visible=True)
+
+    assert lookup_calls == 2
+    assert invocation.state == InvocationState.BLOCKED
+    assert run.state == RunState.BLOCKED
+    assert control.state == RuntimeControlState.OUTCOME_UNKNOWN
+    assert control.lease_owner is None
+    assert terminal.kind == "run_blocker"
+    assert RunTerminalEvent.objects.filter(run=run, visible=True).count() == 1
+    assert not RuntimeProviderAttempt.objects.filter(invocation=invocation).exists()
 
 
 @pytest.mark.parametrize(
