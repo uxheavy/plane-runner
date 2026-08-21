@@ -319,7 +319,11 @@ def _provider_unknown_failure(invocation: RuntimeInvocation) -> dict[str, str] |
     return failure
 
 
-def _runtime_exit_failure_classification(failure: object) -> dict[str, str] | None:
+def _runtime_exit_failure_classification(
+    failure: object,
+    *,
+    provider_attempt_evidence: bool = False,
+) -> dict[str, str] | None:
     """Return a bounded live envelope for a finite child terminal failure."""
 
     if not isinstance(failure, dict):
@@ -331,6 +335,10 @@ def _runtime_exit_failure_classification(failure: object) -> dict[str, str] | No
     bounded = dict(classification)
     cause = failure.get("cause")
     if code == "runtime_error" and cause in _RUNTIME_FAILURE_CAUSES:
+        # A provider-unknown cause is meaningful only after the host recorded
+        # an upstream-initiated attempt for this invocation.
+        if cause == "provider_unknown_failure" and not provider_attempt_evidence:
+            cause = "runtime_unknown_failure"
         bounded["failureCause"] = cause
     bounded.update(_bounded_runtime_host_diagnostic(failure))
     return bounded
@@ -590,7 +598,13 @@ def _finish_exit(invocation: RuntimeInvocation, accepted_frames: int) -> Supervi
         if isinstance(failure, dict)
         else "Runtime invocation failed"
     )
-    failure_classification = _runtime_exit_failure_classification(failure)
+    failure_classification = _runtime_exit_failure_classification(
+        failure,
+        provider_attempt_evidence=RuntimeProviderAttempt.objects.filter(
+            invocation=invocation,
+            upstream_initiated=True,
+        ).exists(),
+    )
     terminal_reason = (
         _serialized_failure(failure_classification)
         if failure_classification is not None

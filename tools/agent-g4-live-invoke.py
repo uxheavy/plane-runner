@@ -1018,6 +1018,18 @@ def build_failure_evidence(
 
     import json
 
+    provider_attempt_evidence = any(
+        isinstance(attempt, dict) and attempt.get("upstreamInitiated") is True
+        for attempt in provider_attempts
+    )
+
+    def bounded_runtime_failure_cause(value):
+        # Do not let a runtime-only claim become provider ambiguity without
+        # the corresponding durable upstream-attempt evidence.
+        if value == "provider_unknown_failure" and not provider_attempt_evidence:
+            return "runtime_unknown_failure"
+        return value
+
     binding_fields = (
         "candidateCommit",
         "g3Baseline",
@@ -1481,7 +1493,7 @@ def build_failure_evidence(
     )
     reason_cause = reason.get("failureCause")
     bounded_failure_cause = (
-        reason_cause
+        bounded_runtime_failure_cause(reason_cause)
         if isinstance(reason_cause, str) and reason_cause in runtime_failure_causes
         else None
     )
@@ -1511,7 +1523,9 @@ def build_failure_evidence(
                 runtime_failure_code == "runtime_error"
                 and runtime_failure_cause in runtime_failure_causes
             ):
-                bounded_runtime_exit["failure"]["cause"] = runtime_failure_cause
+                bounded_runtime_exit["failure"]["cause"] = bounded_runtime_failure_cause(
+                    runtime_failure_cause
+                )
             callback_phase = runtime_failure.get("callbackPhase")
             operation_ref_digest = runtime_failure.get("operationRefDigest")
             if (
@@ -1556,6 +1570,7 @@ def build_failure_evidence(
                 or terminal_reason_value.get("failureDetail")
             )
             if category in terminal_reason_categories:
+                category = bounded_runtime_failure_cause(category)
                 bounded_terminal_reason_category = category
 
     if terminal_kind not in terminal_kinds:

@@ -3536,8 +3536,59 @@ class G4ContractTests(unittest.TestCase):
                     "failure": {"code": "runtime_error", "cause": cause},
                 },
             )
-            self.assertEqual(evidence["failure"]["reasonCause"], cause)
-            self.assertEqual(evidence["runtimeExit"]["failure"]["cause"], cause)
+            expected_cause = (
+                "runtime_unknown_failure"
+                if cause == "provider_unknown_failure"
+                else cause
+            )
+            self.assertEqual(evidence["failure"]["reasonCause"], expected_cause)
+            self.assertEqual(evidence["runtimeExit"]["failure"]["cause"], expected_cause)
+
+    def test_failure_evidence_preserves_provider_unknown_with_attempt_evidence(self):
+        reason = json.dumps(
+            {
+                "failureCode": "runtime_error",
+                "failurePhase": "runtime_process",
+                "failureDetail": "process_exit",
+                "failureSubreason": "runtime_execution_failed",
+                "failureCause": "provider_unknown_failure",
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        evidence = invoke_helper_namespace()["build_failure_evidence"](
+            binding={},
+            failure_phase="runtime-process",
+            error_class="RuntimeError",
+            exit_code=1,
+            run_id="run:provider-causal",
+            run_state="failed",
+            invocation_id="invocation:provider-causal",
+            invocation_state="failed",
+            provider_attempts=[
+                {
+                    "sequence": 1,
+                    "phase": "failed",
+                    "upstreamInitiated": True,
+                    "statusClass": "5xx",
+                    "errorCode": "provider_error",
+                    "reasonSubreason": "upstream_exception",
+                }
+            ],
+            terminal_kind="run_failure",
+            failure_code="runtime_error",
+            failure_reason=reason,
+            runtime_exit={
+                "kind": "failed",
+                "failure": {"code": "runtime_error", "cause": "provider_unknown_failure"},
+            },
+            terminal_code="runtime_error",
+            terminal_reason=reason,
+        )
+
+        self.assertEqual(evidence["failure"]["reasonCause"], "provider_unknown_failure")
+        self.assertEqual(evidence["runtimeExit"]["failure"]["cause"], "provider_unknown_failure")
+        self.assertEqual(evidence["terminal"]["reasonCategory"], "provider_unknown_failure")
 
     def test_failure_evidence_preserves_redacted_work_item_target_digest(self):
         project_id = "11111111-1111-4111-8111-111111111111"
