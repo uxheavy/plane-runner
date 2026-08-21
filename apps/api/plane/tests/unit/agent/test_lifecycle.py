@@ -209,6 +209,7 @@ def test_code_mode_toolset_survives_stored_snapshot_and_serialized_runtime_paylo
     )
     run = create_run(assignment, profile, created_by=create_user)
     assert run.snapshot["toolCatalog"]["modelToolset"] == "code_mode_only"
+    assert run.snapshot["runtimePolicy"]["codeModePhase"] == "post_search"
 
     invocation = record_invocation(run, trigger="initial")
     payload, _run_id, _invocation_id, _digest = _hermes_request_payload(

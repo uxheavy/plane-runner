@@ -705,7 +705,17 @@ def _runtime_policy(profile):
         raise AgentDomainError(str(exc)) from exc
     configured_code_mode_phase = defaults.get("codeModePhase", defaults.get("code_mode_phase"))
     code_mode_phase = configured_code_mode_phase
-    if code_mode_phase is None and model_route["model"].lower().startswith("gpt-5.6"):
+    tool_presentation = getattr(profile, "tool_presentation", {}) or {}
+    model_toolset = (
+        tool_presentation.get("model_toolset")
+        if isinstance(tool_presentation, Mapping)
+        else None
+    )
+    if (
+        code_mode_phase is None
+        and model_toolset == "code_mode_only"
+        and model_route["model"].lower().startswith("gpt-5.6")
+    ):
         code_mode_phase = "post_search"
     policy = {
         "model": {
