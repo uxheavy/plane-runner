@@ -1,4 +1,6 @@
+import ast
 import http.client
+import inspect
 import json
 import socket
 import subprocess
@@ -631,6 +633,93 @@ def test_gateway_host_preserves_valid_search_to_prepared_read_handoff():
     assert search.status == "ok"
     assert read.status == "ok"
     assert read.output["result"]["work_item"]["name"] == "assigned"
+
+
+def test_gateway_host_port_keeps_handoff_helpers_in_the_class():
+    module = ast.parse(inspect.getsource(host_rpc))
+    gateway_class = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.ClassDef) and node.name == "PlaneGatewayHostPort"
+    )
+    class_methods = {
+        node.name
+        for node in gateway_class.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    top_level_functions = {
+        node.name
+        for node in module.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+
+    assert {
+        "_prepared_read_handoff_is_pending",
+        "_register_prepared_call",
+        "_resolve_prepared_read_input",
+        "_normalize_prepared_read_input",
+        "_bind_or_replay_prepared_call",
+        "_publish",
+        "_publication_receipt_diagnostic",
+        "_publication_receipt_error",
+        "_from_receipt",
+        "_error",
+    } <= class_methods
+    assert "_issue_id_from_assignment_target" in top_level_functions
+    assert "_prepared_read_handoff_is_pending" in PlaneGatewayHostPort.__dict__
+
+
+def test_gateway_host_search_workspace_preserves_pending_handoff_decision():
+    calls = []
+
+    class FakeHost:
+        binding = SimpleNamespace(
+            run_ref="run:test",
+            invocation_ref="invocation:test",
+            assignment_target_ref="target:issue:issue:test",
+        )
+
+        def call_operation(self, operation_id, _input_data, **_kwargs):
+            calls.append(operation_id)
+            assert operation_id == "search_workspace"
+            return {
+                "ok": True,
+                "result": {
+                    "results": [
+                        {
+                            "objectType": "work_item",
+                            "workItemReadInput": {
+                                "project_id": "project:test",
+                                "issue_id": "issue:test",
+                            },
+                        }
+                    ]
+                },
+            }
+
+    port = PlaneGatewayHostPort(FakeHost())
+    first = port.invoke(
+        _call(
+            operationRef="operation:search_workspace",
+            input={"query": "assigned", "limit": 1},
+        )
+    )
+    second = port.invoke(
+        _call(
+            operationRef="operation:search_workspace",
+            input={"query": "assigned", "limit": 1},
+            requestRef="host-request:second",
+            idempotencyKey="host-idempotency:second",
+            correlationId="correlation:second",
+        )
+    )
+
+    assert first.status == "ok"
+    assert first.output["result"]["assignmentWorkItemReadDecision"]["acceptedForm"] == "canonical_ref"
+    assert second.status == "invalid"
+    assert second.error_code == "VALIDATION_ERROR"
+    assert "prepared work-item read is pending" in second.error_message
+    assert calls == ["search_workspace"]
 
 
 @pytest.mark.parametrize(

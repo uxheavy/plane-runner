@@ -2110,20 +2110,6 @@ class PlaneGatewayHostPort:
         return {**receipt, "result": prepared_result}
 
 
-def _issue_id_from_assignment_target(target_ref: Any) -> str | None:
-    if not isinstance(target_ref, str) or not target_ref.startswith("target:"):
-        return None
-    value = target_ref.removeprefix("target:")
-    if value.startswith("literal-"):
-        try:
-            value = bytes.fromhex(value.removeprefix("literal-")).decode("utf-8")
-        except (ValueError, UnicodeDecodeError):
-            return None
-    if not value.startswith("issue:"):
-        return None
-    issue_id = value.removeprefix("issue:")
-    return issue_id or None
-
     def _prepared_read_handoff_is_pending(self) -> bool:
         with self._prepared_calls_lock:
             return self._prepared_read_handoff_pending and self._prepared_call_registry.has_unconsumed()
@@ -2333,6 +2319,21 @@ def _issue_id_from_assignment_target(target_ref: Any) -> str | None:
             error_message=message,
             prepared_call_invalid_reason=prepared_call_invalid_reason,
         )
+
+
+def _issue_id_from_assignment_target(target_ref: Any) -> str | None:
+    if not isinstance(target_ref, str) or not target_ref.startswith("target:"):
+        return None
+    value = target_ref.removeprefix("target:")
+    if value.startswith("literal-"):
+        try:
+            value = bytes.fromhex(value.removeprefix("literal-")).decode("utf-8")
+        except (ValueError, UnicodeDecodeError):
+            return None
+    if not value.startswith("issue:"):
+        return None
+    issue_id = value.removeprefix("issue:")
+    return issue_id or None
 
 
 def trusted_host_request(invocation: Any) -> Any:
