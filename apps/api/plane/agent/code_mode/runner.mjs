@@ -56,7 +56,49 @@ const callbackNames = start.callbacks;
 const host = Object.create(null);
 host[callbackNames.search] = (...args) => callback("search", callbackNames.search, args);
 host[callbackNames.describe] = (...args) => callback("describe", callbackNames.describe, args);
-host[callbackNames.operation] = (...args) => callback("operation", callbackNames.operation, args);
+
+const PREPARED_CALL_PREFIX = "prepared-call:";
+const hasExactKeys = (value, expected) => {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const keys = Object.keys(value).sort();
+  return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
+};
+
+const preparedCallRefFromWorkItemReadCall = (value) => {
+  if (typeof value === "string") {
+    if (!value.startsWith(PREPARED_CALL_PREFIX)) throw new Error("prepared work-item read reference is invalid");
+    return value;
+  }
+  if (!hasExactKeys(value, ["action", "input", "operationRef"])) {
+    throw new Error("prepared work-item read call is invalid");
+  }
+  if (value.action !== "read" || value.operationRef !== "operation:work_item.read") {
+    throw new Error("prepared work-item read call is invalid");
+  }
+  if (!hasExactKeys(value.input, ["preparedCallRef"])) {
+    throw new Error("prepared work-item read call is invalid");
+  }
+  const preparedCallRef = value.input.preparedCallRef;
+  if (typeof preparedCallRef !== "string" || !preparedCallRef.startsWith(PREPARED_CALL_PREFIX)) {
+    throw new Error("prepared work-item read reference is invalid");
+  }
+  return preparedCallRef;
+};
+
+const normalizeOperationInput = (operationId, input) => {
+  if (operationId !== "work_item.read") return input;
+  if (!hasExactKeys(input, ["preparedCallRef"])) {
+    throw new Error("prepared work-item read input is invalid");
+  }
+  return { preparedCallRef: preparedCallRefFromWorkItemReadCall(input.preparedCallRef) };
+};
+
+host[callbackNames.operation] = (operationId, input, ...args) =>
+  callback(
+    "operation",
+    callbackNames.operation,
+    [operationId, normalizeOperationInput(operationId, input), ...args],
+  );
 host[callbackNames.spill] = (...args) => callback("spill", callbackNames.spill, args);
 Object.freeze(host);
 
