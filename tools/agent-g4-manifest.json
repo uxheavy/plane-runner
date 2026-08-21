@@ -23,7 +23,7 @@
     "candidateCommitSource": "git-head-with-exact-parent",
     "expectedCandidateSource": "external-operator-input:PLANE_G4_EXPECTED_CANDIDATE",
     "mode": "exact-single-child",
-    "parentCommit": "fe56219778a9dd11ee85357171eaa3229284c65d",
+    "parentCommit": "edf4aeb61c493ace4a0d6cc288db5d1d63b1b03a",
     "rejectDescendants": true
   },
   "cleanup": {
@@ -100,7 +100,7 @@
         "activeQuotaReservations",
         "temporaryDatabaseRemoved"
       ],
-      "sha256": "768e6bf157f4bbc4293619f3d185dfc9ac3a03aad316728486f008a1350da3ca",
+      "sha256": "2be6278b4b561029d5a05475f3f7bfd6f8d62dbb1b273d57fdda771269b34f2f",
       "testPath": "plane/tests/contract/api/test_agent_g4_rollback_drill.py"
     },
     "runtimeService": {
@@ -127,16 +127,16 @@
   "pins": {
     "apiArtifact": {
       "contract": "plane.operation/v1",
-      "imageDigest": "sha256:af9ff17bc2329e67a9e164fa0b1d50b01ad991090c38a9349dd6600c59d39315",
-      "imageTag": "plane-agent-api:g4-v64-fe562197",
-      "sourceRevision": "fe56219778a9dd11ee85357171eaa3229284c65d"
+      "imageDigest": "sha256:c3aedce692436eb094e6345717ac70ed7aac01a15adcb999d43e576b1e0b6ee9",
+      "imageTag": "plane-agent-api:g4-v65-edf4aeb6",
+      "sourceRevision": "edf4aeb61c493ace4a0d6cc288db5d1d63b1b03a"
     },
     "hermesCommit": "d6938038f35027bb818756f19e03ce702889d210",
     "mcpGitlink": "c04974ed6624f17b41e63ef8182661929e77e0d3",
     "runtimeContract": "plane.agent-runtime/v1",
-    "runtimeImageDigest": "sha256:7bd1d586dc0094e3cc729311d43244831acbe2891641bd103fcc15916e203f19",
-    "runtimeImageRevision": "fe56219778a9dd11ee85357171eaa3229284c65d",
-    "runtimeImageTag": "plane-agent-runtime:hermes-d6938038-g4-v64-fe562197",
+    "runtimeImageDigest": "sha256:a8365abf1d8eaffc7aeff274d1dfe3cf9653a5e444d4e962cff0a09656a96c3c",
+    "runtimeImageRevision": "edf4aeb61c493ace4a0d6cc288db5d1d63b1b03a",
+    "runtimeImageTag": "plane-agent-runtime:hermes-d6938038-g4-v65-edf4aeb6",
     "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
   },
   "pytestPaths": [
