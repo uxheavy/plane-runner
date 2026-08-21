@@ -3568,11 +3568,11 @@ class G4ContractTests(unittest.TestCase):
             provider_attempts=[
                 {
                     "sequence": 1,
-                    "phase": "failed",
+                    "phase": "outcome_unknown",
                     "upstreamInitiated": True,
-                    "statusClass": "5xx",
-                    "errorCode": "provider_error",
-                    "reasonSubreason": "upstream_exception",
+                    "statusClass": "unknown",
+                    "errorCode": "outcome_unknown",
+                    "reasonSubreason": "upstream_timeout",
                 }
             ],
             terminal_kind="run_failure",

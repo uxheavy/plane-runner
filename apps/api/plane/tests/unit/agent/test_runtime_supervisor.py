@@ -49,6 +49,7 @@ from plane.agent.runtime import (
     RuntimeHostEndpoint,
 )
 from plane.agent.runtime.supervisor import (
+    _runtime_exit_failure_classification,
     request_runtime_cancellation,
     run_runtime_invocation,
     terminalize_pre_dispatch_failure,
@@ -144,47 +145,6 @@ class CausalRuntimeTransport:
                 "cause": self.cause,
             },
         )
-
-
-class ProviderCausalRuntimeTransport(CausalRuntimeTransport):
-    """Deterministic child that supplies terminal upstream-attempt evidence."""
-
-    def dispatch(self, snapshot_json, envelope_json):
-        envelope = json.loads(envelope_json)
-        invocation = RuntimeInvocation.objects.get(invocation_id=envelope["invocationId"])
-        notice = {
-            "runId": str(invocation.run_id),
-            "invocationId": invocation.invocation_id,
-            "leaseId": "lease:provider-causal",
-            "provider": "deterministic-local",
-            "model": "test-model",
-            "destinationHost": "provider.test",
-            "destinationPath": "/v1/test",
-            "requestId": "request:provider-causal",
-            "idempotencyKey": "provider-attempt:provider-causal",
-            "sequence": 1,
-            "upstreamInitiated": False,
-            "statusClass": "",
-            "errorCode": "",
-        }
-        record_provider_attempt_notice(
-            invocation,
-            {**notice, "phase": RuntimeProviderAttemptPhase.INTENT},
-        )
-        record_provider_attempt_notice(
-            invocation,
-            {
-                **notice,
-                "phase": RuntimeProviderAttemptPhase.FAILED,
-                "upstreamInitiated": True,
-                "statusClass": "5xx",
-                "errorCode": "provider_error",
-                "reasonPhase": "provider_relay",
-                "reasonSubreason": "upstream_exception",
-                "eventRef": "provider-event:" + "b" * 64,
-            },
-        )
-        return super().dispatch(snapshot_json, envelope_json)
 
 
 class BudgetExhaustedRuntimeTransport:
@@ -1365,21 +1325,22 @@ def test_supervisor_preserves_runtime_failure_cause_without_copying_raw_message(
     assert json.loads(output_with_diagnostic.split(" failure=", 1)[1])["hostOperationFailure"] == diagnostic
 
 
-@pytest.mark.django_db(transaction=True)
-def test_supervisor_preserves_provider_unknown_only_with_attempt_evidence(
-    workspace, gateway_project, gateway_issue, create_user
-):
-    _run, invocation = _invocation(
-        workspace, gateway_project, gateway_issue, create_user, suffix="provider-causal"
+def test_provider_unknown_classification_requires_unresolved_attempt_evidence():
+    failure = {"code": "runtime_error", "cause": "provider_unknown_failure"}
+
+    unsupported = _runtime_exit_failure_classification(failure)
+    supported = _runtime_exit_failure_classification(
+        failure,
+        provider_unknown_evidence={
+            "providerAttemptRef": "provider-attempt:42",
+            "providerEventRef": "provider-event:" + "b" * 64,
+        },
     )
-    transport = ProviderCausalRuntimeTransport("provider_unknown_failure")
 
-    result = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
-
-    assert result.failure["failureCause"] == "provider_unknown_failure"
-    assert RuntimeProviderAttempt.objects.filter(
-        invocation=invocation, upstream_initiated=True
-    ).exists()
+    assert unsupported["failureCause"] == "runtime_unknown_failure"
+    assert "providerAttemptRef" not in unsupported
+    assert supported["failureCause"] == "provider_unknown_failure"
+    assert supported["providerAttemptRef"] == "provider-attempt:42"
 
 
 @pytest.mark.django_db(transaction=True)

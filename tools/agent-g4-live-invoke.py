@@ -1018,15 +1018,17 @@ def build_failure_evidence(
 
     import json
 
-    provider_attempt_evidence = any(
-        isinstance(attempt, dict) and attempt.get("upstreamInitiated") is True
+    provider_unknown_evidence = any(
+        isinstance(attempt, dict)
+        and attempt.get("upstreamInitiated") is True
+        and attempt.get("phase") == "outcome_unknown"
         for attempt in provider_attempts
     )
 
     def bounded_runtime_failure_cause(value):
         # Do not let a runtime-only claim become provider ambiguity without
         # the corresponding durable upstream-attempt evidence.
-        if value == "provider_unknown_failure" and not provider_attempt_evidence:
+        if value == "provider_unknown_failure" and not provider_unknown_evidence:
             return "runtime_unknown_failure"
         return value
 

@@ -322,7 +322,7 @@ def _provider_unknown_failure(invocation: RuntimeInvocation) -> dict[str, str] |
 def _runtime_exit_failure_classification(
     failure: object,
     *,
-    provider_attempt_evidence: bool = False,
+    provider_unknown_evidence: dict[str, str] | None = None,
 ) -> dict[str, str] | None:
     """Return a bounded live envelope for a finite child terminal failure."""
 
@@ -335,11 +335,14 @@ def _runtime_exit_failure_classification(
     bounded = dict(classification)
     cause = failure.get("cause")
     if code == "runtime_error" and cause in _RUNTIME_FAILURE_CAUSES:
-        # A provider-unknown cause is meaningful only after the host recorded
-        # an upstream-initiated attempt for this invocation.
-        if cause == "provider_unknown_failure" and not provider_attempt_evidence:
+        # A provider-unknown cause is meaningful only when Plane durably
+        # recorded an unresolved upstream attempt for this invocation. A
+        # completed or failed provider request is not unknown evidence.
+        if cause == "provider_unknown_failure" and provider_unknown_evidence is None:
             cause = "runtime_unknown_failure"
         bounded["failureCause"] = cause
+        if cause == "provider_unknown_failure" and provider_unknown_evidence is not None:
+            bounded.update(provider_unknown_evidence)
     bounded.update(_bounded_runtime_host_diagnostic(failure))
     return bounded
 
@@ -598,12 +601,25 @@ def _finish_exit(invocation: RuntimeInvocation, accepted_frames: int) -> Supervi
         if isinstance(failure, dict)
         else "Runtime invocation failed"
     )
-    failure_classification = _runtime_exit_failure_classification(
-        failure,
-        provider_attempt_evidence=RuntimeProviderAttempt.objects.filter(
+    unknown_attempt = (
+        RuntimeProviderAttempt.objects.filter(
             invocation=invocation,
             upstream_initiated=True,
-        ).exists(),
+            phase=RuntimeProviderAttemptPhase.OUTCOME_UNKNOWN,
+        )
+        .order_by("-sequence")
+        .first()
+    )
+    provider_unknown_evidence = None
+    if unknown_attempt is not None:
+        provider_unknown_evidence = {
+            "providerAttemptRef": f"provider-attempt:{unknown_attempt.id}"
+        }
+        if unknown_attempt.event_ref:
+            provider_unknown_evidence["providerEventRef"] = unknown_attempt.event_ref
+    failure_classification = _runtime_exit_failure_classification(
+        failure,
+        provider_unknown_evidence=provider_unknown_evidence,
     )
     terminal_reason = (
         _serialized_failure(failure_classification)
