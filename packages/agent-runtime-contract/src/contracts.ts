@@ -413,6 +413,7 @@ export type RuntimePolicy = Readonly<{
   maxCodeModeInputBytes?: number;
   maxCodeModeOutputBytes?: number;
   maxCodeModeCalls?: number;
+  codeModePhase?: "none" | "post_search";
 }>;
 
 export type RuntimeBudgetPolicy = Readonly<{
@@ -1651,6 +1652,16 @@ function parseSnapshotContent(value: unknown, path: string): RunSnapshotContent 
               `${path}.runtimePolicy.maxCodeModeCalls`,
               2_147_483_647
             ),
+          }),
+      ...(runtimePolicyObject.codeModePhase === undefined
+        ? {}
+        : {
+            codeModePhase: (() => {
+              if (runtimePolicyObject.codeModePhase !== "none" && runtimePolicyObject.codeModePhase !== "post_search") {
+                throw new ContractParseError(`${path}.runtimePolicy.codeModePhase`, "must equal none or post_search");
+              }
+              return runtimePolicyObject.codeModePhase;
+            })(),
           }),
     },
     totalBudget: parseBudget(object.totalBudget, `${path}.totalBudget`),

@@ -433,6 +433,7 @@ const runtimePolicy = {
     maxCodeModeInputBytes: ref("boundedByteCount"),
     maxCodeModeOutputBytes: ref("boundedByteCount"),
     maxCodeModeCalls: ref("nonNegativeInteger"),
+    codeModePhase: { enum: ["none", "post_search"] },
   },
 };
 

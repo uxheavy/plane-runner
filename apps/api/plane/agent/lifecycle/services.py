@@ -703,6 +703,10 @@ def _runtime_policy(profile):
         )
     except AgentValueError as exc:
         raise AgentDomainError(str(exc)) from exc
+    configured_code_mode_phase = defaults.get("codeModePhase", defaults.get("code_mode_phase"))
+    code_mode_phase = configured_code_mode_phase
+    if code_mode_phase is None and model_route["model"].lower().startswith("gpt-5.6"):
+        code_mode_phase = "post_search"
     policy = {
         "model": {
             "provider": _ensure_non_empty(
@@ -731,6 +735,8 @@ def _runtime_policy(profile):
         ),
         "maxCodeModeCalls": defaults.get("maxCodeModeCalls", defaults.get("max_code_mode_calls", 64)),
     }
+    if code_mode_phase is not None:
+        policy["codeModePhase"] = code_mode_phase
     for field in (
         "maxEventPayloadBytes",
         "maxArtifactBytes",
@@ -742,6 +748,8 @@ def _runtime_policy(profile):
         value = policy[field]
         if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= MAX_BOUNDED_BYTE_COUNT:
             raise AgentDomainError(f"runtime_defaults.{field} is invalid")
+    if "codeModePhase" in policy and policy["codeModePhase"] not in {"none", "post_search"}:
+        raise AgentDomainError("runtime_defaults.codeModePhase is invalid")
     return policy, total_budget
 
 

@@ -280,6 +280,8 @@ PROFILE_RUNTIME_KEYS = {
     "max_code_mode_output_bytes",
     "maxCodeModeCalls",
     "max_code_mode_calls",
+    "codeModePhase",
+    "code_mode_phase",
 }
 
 PLANE_AGENT_DEFAULT_PROVIDER = "plane"

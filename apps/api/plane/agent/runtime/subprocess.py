@@ -61,6 +61,7 @@ _HERMES_RUNTIME_POLICY_FIELDS = frozenset(
         "maxCodeModeInputBytes",
         "maxCodeModeOutputBytes",
         "maxCodeModeCalls",
+        "codeModePhase",
     }
 )
 _HERMES_REQUIRED_RUNTIME_POLICY_FIELDS = frozenset(

@@ -178,6 +178,9 @@
         },
         "maxCodeModeCalls": {
           "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "codeModePhase": {
+          "enum": ["none", "post_search"]
         }
       }
     },

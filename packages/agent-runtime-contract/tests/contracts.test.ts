@@ -1962,6 +1962,30 @@ describe("explicit UTF-8 bounds", () => {
     expect(MAX_SERIALIZED_JSON_BYTES).toBe(UTF8_BYTE_LIMITS.serializedContract);
   });
 
+  test("bounds the optional Code Mode phase projection", () => {
+    const postSearch = {
+      ...snapshot,
+      runtimePolicy: { ...snapshot.runtimePolicy, codeModePhase: "post_search" as const },
+    };
+    expect(
+      parseRunSnapshot({
+        ...postSearch,
+        contentDigest: computeRunSnapshotContentDigest(postSearch),
+      }).runtimePolicy.codeModePhase
+    ).toBe("post_search");
+
+    const invalid = {
+      ...snapshot,
+      runtimePolicy: { ...snapshot.runtimePolicy, codeModePhase: "before_search" },
+    };
+    expect(() =>
+      parseRunSnapshot({
+        ...invalid,
+        contentDigest: computeRunSnapshotContentDigest(invalid),
+      })
+    ).toThrow(/codeModePhase/);
+  });
+
   test("distinguishes ASCII code-unit edges, emoji byte edges, and serialized overhead", () => {
     expect(serializedJsonByteLength("🙂")).toBe(6);
     const eventWithText = (text: string) => {
