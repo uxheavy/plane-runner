@@ -707,10 +707,7 @@ def test_gateway_host_search_workspace_preserves_pending_handoff_decision():
     second = port.invoke(
         _call(
             operationRef="operation:search_workspace",
-            input={"query": "assigned", "limit": 1},
-            requestRef="host-request:second",
-            idempotencyKey="host-idempotency:second",
-            correlationId="correlation:second",
+            input={"query": "second", "limit": 1},
         )
     )
 
