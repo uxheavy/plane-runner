@@ -56,6 +56,7 @@ from validate_agent_g4_live import (  # noqa: E402
     validate_files,
     validate_evidence,
     _validate_runtime_diagnostics,
+    _validate_manager_route_diagnostic,
     _validate_operator_route_evidence,
 )
 from summarize_agent_g4 import summarize  # noqa: E402
@@ -2535,6 +2536,54 @@ class G4ContractTests(unittest.TestCase):
         self.assertEqual(after_fix["failure"]["reasonCode"], "runtime_error")
         self.assertEqual(after_fix["failure"]["reasonSubreason"], "post_primary_route_evidence")
         self.assertNotIn("provider-secret", json.dumps(after_fix["failure"]))
+
+    def test_manager_route_failure_receipt_retains_first_bounded_diagnostic(self):
+        namespace = invoke_helper_namespace()
+        builder = namespace["build_failure_evidence"]
+        diagnostic = {
+            "routeId": "M05",
+            "predicate": "finalAccepted",
+            "observed": False,
+            "exceptionClass": None,
+        }
+        receipt = builder(
+            binding={},
+            failure_phase="api-invocation",
+            error_class="RuntimeError",
+            exit_code=1,
+            run_id="run:manager-route",
+            run_state="succeeded",
+            invocation_id="invocation:manager-route",
+            invocation_state="succeeded",
+            provider_attempts=[],
+            terminal_kind="outcome_submission",
+            failure_reason=namespace["_route_diagnostic_failure_reason"](diagnostic),
+        )
+        self.assertEqual(receipt["failure"]["routeDiagnostic"], diagnostic)
+        _validate_manager_route_diagnostic(receipt["failure"]["routeDiagnostic"])
+        self.assertNotIn("raw-manager-id", json.dumps(receipt))
+
+    def test_manager_route_exception_diagnostic_is_allowlisted(self):
+        namespace = invoke_helper_namespace()
+        self.assertEqual(
+            namespace["_manager_route_failure_diagnostic"]({"M05", "M06"}, exception=ValueError("secret")),
+            {
+                "routeId": "M05",
+                "predicate": "unavailable",
+                "observed": "exception",
+                "exceptionClass": "ValueError",
+            },
+        )
+        self.assertIsNone(
+            namespace["_bounded_manager_route_diagnostic"](
+                {
+                    "routeId": "M05",
+                    "predicate": "raw-id",
+                    "observed": False,
+                    "exceptionClass": None,
+                }
+            )
+        )
 
     def test_post_primary_stage_markers_cover_replay_route_and_receipt_in_order(self):
         source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")

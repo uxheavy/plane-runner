@@ -203,6 +203,81 @@ def _bounded_child_diagnostic(value):
     return dict(value)
 
 
+_MANAGER_ROUTE_DIAGNOSTIC_PREDICATES = {
+    "M05": ("evaluatorFirst", "humanDecisionAfterEvaluator", "revisionFreshRun", "priorSnapshotImmutable", "finalAccepted"),
+    "M06": ("proposalRecorded", "humanApprovalApplied", "selfApprovalDenied", "staleApprovalDenied"),
+}
+_MANAGER_ROUTE_DIAGNOSTIC_EXCEPTIONS = frozenset({
+    "AgentDomainError", "AgentScheduleError", "AttributeError", "IntegrityError", "KeyError",
+    "LookupError", "OperationalError", "RuntimeError", "TimeoutError", "TypeError",
+    "ValidationError", "ValueError", "Unknown",
+})
+
+
+def _bounded_manager_route_diagnostic(value):
+    fields = {"routeId", "predicate", "observed", "exceptionClass"}
+    if not isinstance(value, dict) or set(value) != fields:
+        return None
+    route_id = value["routeId"]
+    predicate = value["predicate"]
+    observed = value["observed"]
+    exception_class = value["exceptionClass"]
+    if route_id not in _MANAGER_ROUTE_DIAGNOSTIC_PREDICATES:
+        return None
+    if predicate != "unavailable" and predicate not in _MANAGER_ROUTE_DIAGNOSTIC_PREDICATES[route_id]:
+        return None
+    if type(observed) is not bool and observed not in {"exception", "non_boolean"}:
+        return None
+    if observed == "exception":
+        if exception_class not in _MANAGER_ROUTE_DIAGNOSTIC_EXCEPTIONS:
+            return None
+    elif exception_class is not None:
+        return None
+    return dict(value)
+
+
+def _manager_route_failure_diagnostic(route_checks, *, route_evidence=None, exception=None):
+    selected = [route_id for route_id in ("M05", "M06") if route_id in set(route_checks or ())]
+    if not selected:
+        return None
+    route_id = selected[0]
+    if exception is not None:
+        exception_class = type(exception).__name__
+        return {
+            "routeId": route_id,
+            "predicate": "unavailable",
+            "observed": "exception",
+            "exceptionClass": exception_class if exception_class in _MANAGER_ROUTE_DIAGNOSTIC_EXCEPTIONS else "Unknown",
+        }
+    routes = route_evidence.get("routes", {}) if isinstance(route_evidence, dict) else {}
+    for route_id in selected:
+        route = routes.get(route_id, {})
+        for predicate in _MANAGER_ROUTE_DIAGNOSTIC_PREDICATES[route_id]:
+            observed = route.get(predicate)
+            if type(observed) is not bool:
+                return {"routeId": route_id, "predicate": predicate, "observed": "non_boolean", "exceptionClass": None}
+            if observed is False:
+                return {"routeId": route_id, "predicate": predicate, "observed": False, "exceptionClass": None}
+    return None
+
+
+def _route_diagnostic_failure_reason(value):
+    diagnostic = _bounded_manager_route_diagnostic(value)
+    if diagnostic is None:
+        return None
+    return json.dumps(
+        {
+            "failureCode": "runtime_error",
+            "failurePhase": "runtime_supervisor",
+            "failureDetail": "unclassified_exception",
+            "failureSubreason": "post_primary_route_evidence",
+            "routeDiagnostic": diagnostic,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
 _RUNTIME_FAILURE_PHASES = frozenset(
     {"agent_initialization", "tool_configuration", "conversation", "unknown"}
 )
@@ -1065,6 +1140,7 @@ def build_failure_evidence(
     runtime_diagnostics=None,
     terminal_lifecycle=None,
     setup_error=None,
+    route_diagnostic=None,
 ):
     """Return one bounded failure object without copying runtime observations."""
 
@@ -1508,6 +1584,7 @@ def build_failure_evidence(
                 "codeModeFailureClass",
                 "runtimePhase",
                 "exceptionClass",
+                "routeDiagnostic",
             }
             if base_keys.issubset(candidate) and not set(candidate).difference(
                 base_keys | optional_keys
@@ -1525,6 +1602,12 @@ def build_failure_evidence(
                         reason.pop("childDiagnostic", None)
                     else:
                         reason["childDiagnostic"] = bounded_child
+                if "routeDiagnostic" in reason:
+                    bounded_route = _bounded_manager_route_diagnostic(reason["routeDiagnostic"])
+                    if bounded_route is None:
+                        reason.pop("routeDiagnostic", None)
+                    else:
+                        reason["routeDiagnostic"] = bounded_route
     reason_code = reason.get("failureCode")
     bounded_failure_code = (
         reason_code
@@ -1674,6 +1757,11 @@ def build_failure_evidence(
     bounded_child = _bounded_child_diagnostic(reason.get("childDiagnostic"))
     if bounded_child is not None:
         bounded_failure["childDiagnostic"] = bounded_child
+    bounded_route = _bounded_manager_route_diagnostic(reason.get("routeDiagnostic"))
+    if bounded_route is None:
+        bounded_route = _bounded_manager_route_diagnostic(route_diagnostic)
+    if bounded_route is not None:
+        bounded_failure["routeDiagnostic"] = bounded_route
     if bounded_host_failure is not None:
         for field in ("callbackPhase", "operationRefDigest"):
             if field in bounded_host_failure:
@@ -2272,6 +2360,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
     context_replay_delta = {}
     context_replay_before = {}
     post_primary_stage = None
+    route_diagnostic = None
     setup_cache = setup_cache if setup_cache is not None else {}
     setup_stage = "shared-setup"
     setup_counters = {
@@ -2876,17 +2965,21 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                 raise RuntimeError("Worker route expectations failed: " + ",".join(scenario_gate["failures"]))
         if scenario is not None and scenario.scenario_id == "manager":
             manager_route_checks = set((scenario.expected or {}).get("routeChecks", ()))
-            manager_route_evidence, manager_route_failures = build_manager_route_evidence(
-                workspace=workspace,
-                project=project,
-                manager=actor,
-                worker=related_actors["actor:worker"],
-                evaluator=related_actors["actor:evaluator"],
-                hr=related_actors["actor:hr"],
-                human_admin=user,
-                suffix=suffix,
-                route_checks=manager_route_checks,
-            )
+            try:
+                manager_route_evidence, manager_route_failures = build_manager_route_evidence(
+                    workspace=workspace,
+                    project=project,
+                    manager=actor,
+                    worker=related_actors["actor:worker"],
+                    evaluator=related_actors["actor:evaluator"],
+                    hr=related_actors["actor:hr"],
+                    human_admin=user,
+                    suffix=suffix,
+                    route_checks=manager_route_checks,
+                )
+            except BaseException as exc:
+                route_diagnostic = _manager_route_failure_diagnostic(manager_route_checks, exception=exc)
+                raise
             scenario_actual["routeEvidence"] = manager_route_evidence
             scenario_gate["failures"].extend(manager_route_failures)
             scenario_gate["passed"] = not scenario_gate["failures"] and all(
@@ -2900,6 +2993,10 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                 for row in rows
             )
             if not scenario_gate["passed"]:
+                route_diagnostic = _manager_route_failure_diagnostic(
+                    manager_route_checks,
+                    route_evidence=manager_route_evidence,
+                )
                 raise RuntimeError("Manager route expectations failed: " + ",".join(scenario_gate["failures"]))
         post_primary_stage = "receipt"
         duration_ms = round((time.monotonic() - started) * 1000, 3)
@@ -3154,6 +3251,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                 failure_reason=supervisor_failure_reason
                 or _provider_unknown_failure_reason(invocation, provider_attempts, control)
                 or (control.failure_reason if control is not None else None)
+                or _route_diagnostic_failure_reason(route_diagnostic)
                 or _post_primary_failure_reason(post_primary_stage),
                 runtime_exit=(
                     {

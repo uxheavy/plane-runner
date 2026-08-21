@@ -1277,6 +1277,36 @@ _MANAGER_ROUTE_BOOLEAN_FIELDS = {
 }
 _MANAGER_ROUTE_IDS = set(_MANAGER_ROUTE_BOOLEAN_FIELDS)
 _SCENARIO_ROUTE_IDS = _WORKER_ROUTE_IDS | _OPERATOR_ROUTE_IDS | _MANAGER_ROUTE_IDS
+_MANAGER_DIAGNOSTIC_PREDICATES = {
+    "M05": {"evaluatorFirst", "humanDecisionAfterEvaluator", "revisionFreshRun", "priorSnapshotImmutable", "finalAccepted"},
+    "M06": {"proposalRecorded", "humanApprovalApplied", "selfApprovalDenied", "staleApprovalDenied"},
+}
+_MANAGER_DIAGNOSTIC_EXCEPTIONS = {
+    "AgentDomainError", "AgentScheduleError", "AttributeError", "IntegrityError", "KeyError",
+    "LookupError", "OperationalError", "RuntimeError", "TimeoutError", "TypeError",
+    "ValidationError", "ValueError", "Unknown",
+}
+
+
+def _validate_manager_route_diagnostic(value: Any) -> None:
+    diagnostic = _object(value, "evidence_manager_route_diagnostic")
+    if set(diagnostic) != {"routeId", "predicate", "observed", "exceptionClass"}:
+        raise ContractError("evidence_manager_route_diagnostic_fields_invalid")
+    route_id = diagnostic["routeId"]
+    predicate = diagnostic["predicate"]
+    observed = diagnostic["observed"]
+    exception_class = diagnostic["exceptionClass"]
+    if route_id not in _MANAGER_DIAGNOSTIC_PREDICATES:
+        raise ContractError("evidence_manager_route_diagnostic_route_invalid")
+    if predicate != "unavailable" and predicate not in _MANAGER_DIAGNOSTIC_PREDICATES[route_id]:
+        raise ContractError("evidence_manager_route_diagnostic_predicate_invalid")
+    if type(observed) is not bool and observed not in {"exception", "non_boolean"}:
+        raise ContractError("evidence_manager_route_diagnostic_observed_invalid")
+    if observed == "exception":
+        if exception_class not in _MANAGER_DIAGNOSTIC_EXCEPTIONS:
+            raise ContractError("evidence_manager_route_diagnostic_exception_invalid")
+    elif exception_class is not None:
+        raise ContractError("evidence_manager_route_diagnostic_exception_invalid")
 
 
 def _validate_scenario_projection(value: Any) -> None:
@@ -2091,6 +2121,7 @@ def _validate_failure_receipt(
                 "codeModeFailureClass",
                 "runtimePhase",
                 "exceptionClass",
+                "routeDiagnostic",
             }
         )
         or not required_failure_fields.issubset(failure)
@@ -2217,6 +2248,9 @@ def _validate_failure_receipt(
             digest = host_failure["operationRefDigest"]
             if not isinstance(digest, str) or len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
                 raise ContractError("evidence_host_operation_failure_operation_ref_digest_invalid")
+
+    if "routeDiagnostic" in failure:
+        _validate_manager_route_diagnostic(failure["routeDiagnostic"])
 
     for name in ("run", "invocation"):
         state = _object(evidence[name], f"evidence_{name}")
