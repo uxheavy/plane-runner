@@ -58,16 +58,33 @@ host[callbackNames.search] = (...args) => callback("search", callbackNames.searc
 host[callbackNames.describe] = (...args) => callback("describe", callbackNames.describe, args);
 
 const PREPARED_CALL_PREFIX = "prepared-call:";
+const MAX_PREPARED_CALL_REF_BYTES = 256;
 const hasExactKeys = (value, expected) => {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
   const keys = Object.keys(value).sort();
   return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
 };
 
+const isPreparedCallRef = (value) =>
+  typeof value === "string" &&
+  value.startsWith(PREPARED_CALL_PREFIX) &&
+  Buffer.byteLength(value, "utf8") <= MAX_PREPARED_CALL_REF_BYTES;
+
 const preparedCallRefFromWorkItemReadCall = (value) => {
   if (typeof value === "string") {
-    if (!value.startsWith(PREPARED_CALL_PREFIX)) throw new Error("prepared work-item read reference is invalid");
+    if (!isPreparedCallRef(value)) throw new Error("prepared work-item read reference is invalid");
     return value;
+  }
+  if (hasExactKeys(value, ["preparedCallRef"])) {
+    const nestedRef = value.preparedCallRef;
+    if (isPreparedCallRef(nestedRef)) return nestedRef;
+    if (
+      hasExactKeys(nestedRef, ["preparedCallRef"]) &&
+      isPreparedCallRef(nestedRef.preparedCallRef)
+    ) {
+      return nestedRef.preparedCallRef;
+    }
+    throw new Error("prepared work-item read reference is invalid");
   }
   if (!hasExactKeys(value, ["action", "input", "operationRef"])) {
     throw new Error("prepared work-item read call is invalid");
@@ -79,7 +96,7 @@ const preparedCallRefFromWorkItemReadCall = (value) => {
     throw new Error("prepared work-item read call is invalid");
   }
   const preparedCallRef = value.input.preparedCallRef;
-  if (typeof preparedCallRef !== "string" || !preparedCallRef.startsWith(PREPARED_CALL_PREFIX)) {
+  if (!isPreparedCallRef(preparedCallRef)) {
     throw new Error("prepared work-item read reference is invalid");
   }
   return preparedCallRef;

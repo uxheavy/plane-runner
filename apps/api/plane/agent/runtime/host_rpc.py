@@ -558,6 +558,12 @@ def _prepared_accepted_form(value: Any) -> str:
         prepared_ref = value["preparedCallRef"]
         if is_prepared_ref_shape(prepared_ref):
             return "canonical_ref"
+        if (
+            isinstance(prepared_ref, Mapping)
+            and set(prepared_ref) == {"preparedCallRef"}
+            and is_prepared_ref_shape(prepared_ref["preparedCallRef"])
+        ):
+            return "canonical_ref"
         if is_ready_to_call_shape(prepared_ref):
             return "ready_to_call"
         if isinstance(prepared_ref, str):
