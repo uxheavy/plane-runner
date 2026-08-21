@@ -105,18 +105,17 @@ search = call(
     {"query": "assigned", "limit": 1},
 )
 assert search["status"] == "ok", search
-read_call = search["output"]["result"]["results"][0]["workItemReadCall"]
-encoded_ready_call = json.dumps(read_call, sort_keys=True, separators=(",", ":"))
+prepared_ref = search["output"]["result"]["results"][0]["workItemReadCall"]
 read = call(
     sys.argv[1],
     "operation:work_item.read",
-    {"preparedCallRef": encoded_ready_call},
+    {"preparedCallRef": prepared_ref},
 )
 assert read["status"] == "ok", read
 submit = call(
     sys.argv[1],
     "operation:agent.outcome.submit",
-    {"preparedCallRef": encoded_ready_call},
+    {"preparedCallRef": prepared_ref},
 )
 assert submit["status"] == "invalid", submit
 assert submit["errorCode"] == "PREPARED_CALL_INVALID", submit
@@ -494,11 +493,11 @@ def test_gateway_host_preserves_valid_search_to_prepared_read_handoff():
             input={"query": "assigned", "limit": 1},
         )
     )
-    read_call = search.output["result"]["results"][0]["workItemReadCall"]
+    prepared_ref = search.output["result"]["results"][0]["workItemReadCall"]
     read = port.invoke(
         _call(
-            operationRef=read_call["operationRef"],
-            input=read_call["input"],
+            operationRef="operation:work_item.read",
+            input={"preparedCallRef": prepared_ref},
         )
     )
 
@@ -636,7 +635,7 @@ def test_code_mode_search_projects_opaque_prepared_read_for_typed_callback():
             }
         if operation_id == "work_item.read":
             assert input_data == {
-                "preparedCallRef": read_call["input"]["preparedCallRef"]
+                "preparedCallRef": prepared_ref
             }
             assert host._prepared_call_registry.resolve(
                 input_data,
@@ -664,11 +663,12 @@ def test_code_mode_search_projects_opaque_prepared_read_for_typed_callback():
         correlation_id="correlation:search",
     )
     item = search["result"]["results"][0]
-    read_call = item["workItemReadCall"]
+    prepared_ref = item["workItemReadCall"]
 
-    assert set(read_call["input"]) == {"preparedCallRef"}
+    assert isinstance(prepared_ref, str)
+    assert prepared_ref.startswith("prepared-call:")
     assert "workItemReadInput" not in item
-    assert host._prepared_call_registry.resolve(read_call["input"]) == {
+    assert host._prepared_call_registry.resolve({"preparedCallRef": prepared_ref}) == {
         "project_id": "project:test",
         "issue_id": "issue:test",
     }
@@ -676,7 +676,7 @@ def test_code_mode_search_projects_opaque_prepared_read_for_typed_callback():
     read = CodeModeHostRPC.call_operation(
         host,
         "work_item.read",
-        read_call["input"],
+        {"preparedCallRef": prepared_ref},
         idempotency_key="idempotency:read",
         correlation_id="correlation:read",
     )

@@ -20,6 +20,11 @@ _MODEL_PREPARED_READ_INPUT = {
         }
     },
 }
+_MODEL_PREPARED_READ_REF = {
+    "type": "string",
+    "minLength": len(PREPARED_CALL_PREFIX),
+    "maxLength": MAX_PREPARED_CALL_REF_BYTES,
+}
 
 
 def _thaw_contract_json(value: Any) -> Any:
@@ -50,11 +55,8 @@ def model_operation_entry(operation: Mapping[str, Any]) -> dict[str, Any]:
                     item_properties = item_schema.get("properties")
                     if isinstance(item_properties, dict):
                         item_properties.pop("workItemReadInput", None)
-                        read_call = item_properties.get("workItemReadCall")
-                        if isinstance(read_call, dict):
-                            read_call_properties = read_call.get("properties")
-                            if isinstance(read_call_properties, dict):
-                                read_call_properties["input"] = _thaw_contract_json(_MODEL_PREPARED_READ_INPUT)
+                        if "workItemReadCall" in item_properties:
+                            item_properties["workItemReadCall"] = _thaw_contract_json(_MODEL_PREPARED_READ_REF)
     return projected
 
 

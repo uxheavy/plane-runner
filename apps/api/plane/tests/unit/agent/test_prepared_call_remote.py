@@ -93,11 +93,12 @@ describe = host(
 assert describe["status"] == "ok", describe
 described_schema = describe["output"]["operation"]["resultSchema"]
 assert "workItemReadInput" not in described_schema["properties"]["results"]["items"]["properties"], describe
-described_read_input = described_schema["properties"]["results"]["items"]["properties"]["workItemReadCall"][
-    "properties"
-]["input"]
-assert described_read_input["required"] == ["preparedCallRef"], describe
-assert set(described_read_input["properties"]) == {"preparedCallRef"}, describe
+described_read_ref = described_schema["properties"]["results"]["items"]["properties"]["workItemReadCall"]
+assert described_read_ref == {
+    "type": "string",
+    "minLength": len("prepared-call:"),
+    "maxLength": 256,
+}, describe
 read_describe = host(
     socket_path,
     run_id,
@@ -111,13 +112,19 @@ assert read_describe["output"]["operation"]["inputSchema"] == eager_read["inputS
 search = host(socket_path, run_id, invocation_id, correlation_id, "operation:search_workspace", {"query": "Gateway Issue", "limit": 1})
 assert search["status"] == "ok", search
 item = next(item for item in search["output"]["result"]["results"] if item["objectType"] == "work_item")
-read_call = item["workItemReadCall"]
-assert set(read_call) == {"action", "operationRef", "input"}
-assert set(read_call["input"]) == {"preparedCallRef"}
+prepared_ref = item["workItemReadCall"]
+assert isinstance(prepared_ref, str) and prepared_ref.startswith("prepared-call:")
 assert "workItemReadInput" not in item
 
 def prepared_read(invocation_ref):
-    return host(socket_path, run_id, invocation_ref, correlation_id, read_call["operationRef"], read_call["input"])
+    return host(
+        socket_path,
+        run_id,
+        invocation_ref,
+        correlation_id,
+        "operation:work_item.read",
+        {"preparedCallRef": prepared_ref},
+    )
 
 first = prepared_read(invocation_id)
 assert first["status"] == "ok", first
@@ -125,8 +132,8 @@ replay = prepared_read(invocation_id)
 assert replay["status"] == "replayed", replay
 altered = host(
     socket_path, run_id, invocation_id, correlation_id,
-    read_call["operationRef"],
-    {"preparedCallRef": read_call["input"]["preparedCallRef"] + "-tampered"},
+    "operation:work_item.read",
+    {"preparedCallRef": prepared_ref + "-tampered"},
 )
 assert altered["status"] == "invalid" and altered["errorCode"] == "PREPARED_CALL_INVALID", altered
 cross = prepared_read("invocation:cross")
@@ -142,10 +149,14 @@ code = host(
         "entrypoint": "default",
         "source": "export default async function ({host, input}) { const result = await host.call_plane_operation('work_item.read', {preparedCallRef: input.preparedCallRef}, input.idempotencyKey, input.correlationId); if (!result.ok) throw new Error('prepared read failed'); return result; }",
             "input": {
-                "preparedCallRef": read_call["input"]["preparedCallRef"],
+                "preparedCallRef": prepared_ref,
                 "correlationId": correlation_id,
                 "idempotencyKey": host_idempotency(
-                    run_id, invocation_id, "read", read_call["operationRef"], read_call["input"]
+                    run_id,
+                    invocation_id,
+                    "read",
+                    "operation:work_item.read",
+                    {"preparedCallRef": prepared_ref},
                 ),
             },
     },
@@ -230,7 +241,7 @@ search = host(
 )
 assert search["status"] == "ok", search
 item = next(item for item in search["output"]["result"]["results"] if item["objectType"] == "work_item")
-read_input = item["workItemReadCall"]["input"]
+read_ref = item["workItemReadCall"]
 code = host(
     socket_path,
     run_id,
@@ -250,7 +261,7 @@ code = host(
                 throw new Error("forced post-read diagnostic");
             }
         """,
-        "input": {"operationId": operation_id, "preparedCallRef": read_input["preparedCallRef"]},
+        "input": {"operationId": operation_id, "preparedCallRef": read_ref},
     },
     action="code",
     source="code",
@@ -619,11 +630,11 @@ def test_prepared_port_replay_is_cached_before_gateway(
         input_data={"query": "Gateway Issue", "limit": 1},
     ))
     item = next(item for item in search.output["result"]["results"] if item["objectType"] == "work_item")
-    read_call = item["workItemReadCall"]
+    prepared_ref = item["workItemReadCall"]
     read = _port_call(
         invocation,
-        operation_ref=read_call["operationRef"],
-        input_data=read_call["input"],
+        operation_ref="operation:work_item.read",
+        input_data={"preparedCallRef": prepared_ref},
     )
     first = port.invoke(read)
     assert first.status == "ok", first
@@ -636,8 +647,8 @@ def test_prepared_port_replay_is_cached_before_gateway(
 
     altered_correlation = port.invoke(_port_call(
         invocation,
-        operation_ref=read_call["operationRef"],
-        input_data=read_call["input"],
+        operation_ref="operation:work_item.read",
+        input_data={"preparedCallRef": prepared_ref},
         correlation_id="correlation:altered",
     ))
     assert altered_correlation.status == "invalid"
@@ -670,7 +681,7 @@ def test_search_requires_consuming_prepared_read_before_searching_again(
     assert "prepared work-item read" in repeated_search.error_message.lower()
     assert OperationGatewayIdempotency.objects.filter(operation_id="search_workspace").count() == 1
 
-    read_call = next(
+    prepared_ref = next(
         item["workItemReadCall"]
         for item in search.output["result"]["results"]
         if item.get("workItemReadCall")
@@ -678,8 +689,8 @@ def test_search_requires_consuming_prepared_read_before_searching_again(
     read = port.invoke(
         _port_call(
             invocation,
-            operation_ref=read_call["operationRef"],
-            input_data=read_call["input"],
+            operation_ref="operation:work_item.read",
+            input_data={"preparedCallRef": prepared_ref},
         )
     )
     assert read.status == "ok", read

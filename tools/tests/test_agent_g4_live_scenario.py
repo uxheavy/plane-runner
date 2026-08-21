@@ -277,7 +277,7 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
         "code-mode-semantic-rename": ["W03", "W04", "W07", "W08"],
         "context-governance": ["W05", "W06", "W07", "W08"],
     }
-    assert "workItemReadCall.input.preparedCallRef unchanged" in identity.assignment.objective
+    assert "bare opaque workItemReadCall string unchanged" in identity.assignment.objective
     assert mutation.model_toolset == "code_mode_only"
     assert "call plane_execute_typescript exactly once" in mutation.assignment.objective
     assert "malformed or unknown prepared shape must fail closed" in mutation.assignment.objective
@@ -296,7 +296,7 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     code_mode_guidance = scenario.model_route_expectations(code_mode.expected)
     assert len(code_mode_guidance) == 2
     assert code_mode_guidance[0].startswith("Route step 1: invoke plane_execute_typescript exactly 1 time(s)")
-    assert "search_workspace; extract only the returned workItemReadCall.input.preparedCallRef" in code_mode_guidance[0]
+    assert "search_workspace; extract only the returned workItemReadCall" in code_mode_guidance[0]
     assert 'host.call_plane_operation("work_item.read", { preparedCallRef }' in code_mode_guidance[0]
     assert 'host.call_plane_operation("work_item.rename"' in code_mode_guidance[0]
     assert 'host.call_plane_operation("agent.outcome.submit"' in code_mode_guidance[0]
@@ -339,11 +339,7 @@ def test_code_mode_composition_executes_opaque_prepared_read_then_one_rename_and
                     "results": [
                         {
                             "objectType": "work_item",
-                            "workItemReadCall": {
-                                "action": "read",
-                                "operationRef": "operation:work_item.read",
-                                "input": {"preparedCallRef": "prepared-call:opaque"},
-                            },
+                            "workItemReadCall": "prepared-call:opaque",
                         }
                     ]
                 },
@@ -430,11 +426,7 @@ def test_code_mode_composition_returns_unknown_prepared_failure_without_mutation
                     "results": [
                         {
                             "objectType": "work_item",
-                            "workItemReadCall": {
-                                "action": "read",
-                                "operationRef": "operation:work_item.read",
-                                "input": {"preparedCallRef": "prepared-call:unknown"},
-                            },
+                            "workItemReadCall": "prepared-call:unknown",
                         }
                     ]
                 },

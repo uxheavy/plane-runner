@@ -81,7 +81,7 @@ def code_mode_composition_template() -> str:
         'const rows = search?.result?.results; '
         'if (!Array.isArray(rows) || rows.length !== 1 || rows[0]?.objectType !== "work_item") '
         'throw new Error("prepared read handoff unavailable"); '
-        'const preparedCallRef = rows[0]?.workItemReadCall?.input?.preparedCallRef; '
+        'const preparedCallRef = rows[0]?.workItemReadCall; '
         'if (typeof preparedCallRef !== "string" || !preparedCallRef.startsWith("prepared-call:")) '
         'throw new Error("prepared read handoff unavailable"); '
         'const read = await host.call_plane_operation('
@@ -407,7 +407,7 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
             "Route step 1: invoke plane_execute_typescript exactly 1 time(s) and expect success. "
             "Use one bounded module that performs the complete Worker composition through "
             "host.call_plane_operation in this exact order: search_workspace; extract only the returned "
-            "workItemReadCall.input.preparedCallRef; work_item.read with exactly "
+            "workItemReadCall; work_item.read with exactly "
             "{preparedCallRef}; work_item.rename using only the authorized read result; and one "
             "agent.outcome.submit with one artifact and one evidence item. Do not invoke search_workspace, "
             "work_item.read, work_item.rename, or agent.outcome.submit as model tools, do not reconstruct or "
@@ -439,11 +439,10 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
             and outcomes[index - 2].get("operationId") == "search_workspace"
         ):
             guidance += (
-                " Use the preceding search_workspace response's workItemReadCall input.preparedCallRef verbatim "
-                "as this call's complete input; use its workItemReadCall object verbatim as the complete tool "
-                "arguments. This ready-to-call object already contains action, operationRef, and the opaque "
-                "input.preparedCallRef. Emit exactly those three top-level tool keys; keep only preparedCallRef "
-                "inside input. Do not wrap it, put the workItemReadCall object inside input, do not copy raw "
+                " Use the preceding search_workspace response's workItemReadCall opaque string verbatim as "
+                "input.preparedCallRef. Emit exactly the read operation's three top-level tool keys; keep only "
+                "preparedCallRef inside input. Do not pass the workItemReadCall string as the complete tool "
+                "arguments, wrap it, put a result object inside preparedCallRef, do not copy raw "
                 "workItemReadInput, rename operationRef to operation_ref, alter or replay the preparedCallRef, "
                 "do not reconstruct, translate, or infer project_id or issue_id from targetRef, ref, key, title, or "
                 "workspaceRef. Do not reconstruct project_id or issue_id from targetRef, ref, key, title, or "

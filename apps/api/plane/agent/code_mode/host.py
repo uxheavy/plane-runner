@@ -237,11 +237,7 @@ class CodeModeHostRPC:
                 continue
             prepared_ref = self._prepared_call_registry.register(read_input)
             prepared_item = {key: value for key, value in item.items() if key != "workItemReadInput"}
-            prepared_item["workItemReadCall"] = {
-                "action": "read",
-                "operationRef": "operation:work_item.read",
-                "input": {"preparedCallRef": prepared_ref},
-            }
+            prepared_item["workItemReadCall"] = prepared_ref
             prepared_results.append(prepared_item)
         return {**receipt, "result": {**result, "results": prepared_results}}
 

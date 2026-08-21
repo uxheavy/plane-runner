@@ -222,8 +222,8 @@ def _model_catalog_operation(operation: Mapping[str, Any]) -> dict[str, Any]:
     """Project the host-only prepared-call form of a catalog description.
 
     The canonical gateway descriptor remains raw-ID compatible for direct API
-    callers.  The model-facing host boundary instead exposes the opaque,
-    invocation-local envelope that the host creates from search results.
+    callers. The model-facing host boundary instead exposes the bare opaque
+    invocation-local reference that the host creates from search results.
     """
 
     return model_operation_entry(operation)
@@ -1737,11 +1737,7 @@ class PlaneGatewayHostPort:
                 continue
             prepared_ref = self._register_prepared_call(read_input)
             prepared_item = {key: value for key, value in item.items() if key != "workItemReadInput"}
-            prepared_item["workItemReadCall"] = {
-                "action": "read",
-                "operationRef": "operation:work_item.read",
-                "input": {"preparedCallRef": prepared_ref},
-            }
+            prepared_item["workItemReadCall"] = prepared_ref
             prepared_results.append(prepared_item)
         if any(
             isinstance(item, Mapping) and "workItemReadCall" in item

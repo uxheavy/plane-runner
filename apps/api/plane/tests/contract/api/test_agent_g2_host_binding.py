@@ -634,13 +634,8 @@ def test_code_mode_search_to_read_preserves_target_and_denies_cross_project(
         )
         assert search.status == "ok", search
         result = next(item for item in search.output["result"]["results"] if item["objectType"] == "work_item")
-        read_call = result["workItemReadCall"]
-        assert read_call == {
-            "action": "read",
-            "operationRef": "operation:work_item.read",
-            "input": {"preparedCallRef": read_call["input"]["preparedCallRef"]},
-        }
-        prepared_ref = read_call["input"]["preparedCallRef"]
+        prepared_ref = result["workItemReadCall"]
+        assert isinstance(prepared_ref, str)
         read_input = {
             "project_id": str(gateway_project.id),
             "issue_id": str(gateway_issue.id),
@@ -707,16 +702,16 @@ def test_code_mode_search_to_read_preserves_target_and_denies_cross_project(
         ).exists()
 
         # Exercise the exact model-facing workItemReadCall through the real
-        # host wire parser and gateway. The native tool accepts the envelope's
+        # host wire parser and gateway. The native tool accepts the opaque
         # ref input, resolves it to the canonical target, and forwards only
         # that target to work_item.read.
         bound_read = _round_trip(
             server.socket_path,
             _call(
                 **common,
-                action=read_call["action"],
-                operation_ref=read_call["operationRef"],
-                input=read_call["input"],
+                action="read",
+                operation_ref="operation:work_item.read",
+                input={"preparedCallRef": prepared_ref},
             ),
         )
         assert bound_read.status == "ok", bound_read
@@ -804,7 +799,7 @@ def test_code_mode_search_to_read_preserves_target_and_denies_cross_project(
         live_auth_item = next(
             item for item in live_auth_search.output["result"]["results"] if item["objectType"] == "work_item"
         )
-        live_auth_ref = live_auth_item["workItemReadCall"]["input"]["preparedCallRef"]
+        live_auth_ref = live_auth_item["workItemReadCall"]
         ProjectMember.objects.filter(project=gateway_project, member=actor.principal).update(is_active=False)
         live_auth_denial = _round_trip(
             server.socket_path,
