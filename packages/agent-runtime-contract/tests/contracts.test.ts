@@ -321,6 +321,44 @@ describe("parsed plane.agent-runtime/v1 contract boundary", () => {
     expect(() => parseRuntimeEvent(rawMessage)).toThrow();
   });
 
+  test("keeps the optional runtime diagnostic pair in exits and rejects partial or unknown values", () => {
+    const failedExit = exits.find(
+      (exit): exit is Extract<(typeof exits)[number], { kind: "failed" }> => exit.kind === "failed"
+    );
+    if (failedExit === undefined) throw new Error("fixture must include a failed runtime exit");
+
+    const diagnosticExit = {
+      ...failedExit,
+      failure: {
+        ...failedExit.failure,
+        runtimePhase: "conversation",
+        exceptionClass: "RuntimeError",
+      },
+    };
+    const parsed = parseRuntimeExit(diagnosticExit);
+
+    assertValid("runtime-exit", parsed);
+    expect(parsed.failure).toMatchObject({ runtimePhase: "conversation", exceptionClass: "RuntimeError" });
+    expect(JSON.stringify(parsed)).not.toContain("raw");
+    expect(failedExit.failure).not.toHaveProperty("runtimePhase");
+
+    const invalidDiagnostics = [
+      { runtimePhase: "conversation" },
+      { exceptionClass: "RuntimeError" },
+      { runtimePhase: "not-a-phase", exceptionClass: "RuntimeError" },
+      { runtimePhase: "conversation", exceptionClass: "SecretException" },
+      { runtimePhase: "conversation", exceptionClass: "RuntimeError", rawPath: "/tmp/secret" },
+    ];
+    for (const diagnostic of invalidDiagnostics) {
+      const invalid = {
+        ...diagnosticExit,
+        failure: { ...diagnosticExit.failure, ...diagnostic },
+      };
+      expect(validators["runtime-exit"](invalid)).toBe(false);
+      expect(() => parseRuntimeExit(invalid)).toThrow();
+    }
+  });
+
   test("accepts serialized contracts and rejects live objects at the public verifier boundary", () => {
     const outcome = event(appliedOutcomeBody());
     const base = {
@@ -487,8 +525,8 @@ describe("parsed plane.agent-runtime/v1 contract boundary", () => {
         JSON.stringify({
           ...snapshot,
           toolCatalog: { ...snapshot.toolCatalog, modelToolset: "unknown" },
-        }),
-      ),
+        })
+      )
     ).toThrow();
   });
 

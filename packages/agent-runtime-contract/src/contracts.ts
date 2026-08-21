@@ -1236,13 +1236,38 @@ function parseArtifact(value: unknown, path: string): ArtifactReference {
 }
 
 function parseRuntimeFailure(value: unknown, path: string): RuntimeFailure {
-  const object = requireRecord(value, path, ["code", "message", "retryable"], ["cause", "callbackPhase", "operationRefDigest"]);
+  const object = requireRecord(
+    value,
+    path,
+    ["code", "message", "retryable"],
+    [
+      "cause",
+      "callbackPhase",
+      "operationRefDigest",
+      "codeModeHostStatus",
+      "codeModeFailureClass",
+      "runtimePhase",
+      "exceptionClass",
+    ]
+  );
   const codes = ["runtime_error", "lease_expired", "invalid_continuation", "budget_exhausted", "cancelled"] as const;
   const causes = [
     "host_operation_failure",
     "cancellation_monitor_failure",
     "invalid_usage_accounting",
     "static_configuration_failure",
+    "dependency_failure",
+    "permission_failure",
+    "resource_failure",
+    "timeout_failure",
+    "provider_client_failure",
+    "runtime_unknown_failure",
+    "provider_auth_failure",
+    "provider_entitlement_failure",
+    "provider_rate_limit",
+    "provider_request_failure",
+    "provider_transport_failure",
+    "provider_unknown_failure",
   ] as const;
   if (!codes.includes(object.code as (typeof codes)[number])) {
     throw new ContractParseError(`${path}.code`, "is not a supported runtime failure code");
@@ -1267,11 +1292,79 @@ function parseRuntimeFailure(value: unknown, path: string): RuntimeFailure {
   if (hasCallbackPhase && !callbackPhases.includes(object.callbackPhase as (typeof callbackPhases)[number])) {
     throw new ContractParseError(`${path}.callbackPhase`, "is not a supported host callback phase");
   }
-  if (hasOperationRefDigest && (
-    typeof object.operationRefDigest !== "string"
-    || !/^[a-f0-9]{64}$/.test(object.operationRefDigest)
-  )) {
+  if (
+    hasOperationRefDigest &&
+    (typeof object.operationRefDigest !== "string" || !/^[a-f0-9]{64}$/.test(object.operationRefDigest))
+  ) {
     throw new ContractParseError(`${path}.operationRefDigest`, "must be a lowercase SHA-256 hex digest");
+  }
+  const codeModeHostStatuses = ["ok", "replayed", "denied", "conflict", "unavailable", "invalid"] as const;
+  const codeModeFailureClasses = ["code_mode", "callback", "transport", "contract", "unknown"] as const;
+  const hasCodeModeHostStatus = object.codeModeHostStatus !== undefined;
+  const hasCodeModeFailureClass = object.codeModeFailureClass !== undefined;
+  if (hasCodeModeHostStatus !== hasCodeModeFailureClass) {
+    throw new ContractParseError(path, "Code Mode diagnostic fields must be provided together");
+  }
+  if (
+    hasCodeModeHostStatus &&
+    !codeModeHostStatuses.includes(object.codeModeHostStatus as (typeof codeModeHostStatuses)[number])
+  ) {
+    throw new ContractParseError(`${path}.codeModeHostStatus`, "is not a supported Code Mode host status");
+  }
+  if (
+    hasCodeModeFailureClass &&
+    !codeModeFailureClasses.includes(object.codeModeFailureClass as (typeof codeModeFailureClasses)[number])
+  ) {
+    throw new ContractParseError(`${path}.codeModeFailureClass`, "is not a supported Code Mode failure class");
+  }
+  const runtimeFailurePhases = ["agent_initialization", "tool_configuration", "conversation", "unknown"] as const;
+  const runtimeFailureExceptionClasses = [
+    "ModuleNotFoundError",
+    "ImportError",
+    "PermissionError",
+    "MemoryError",
+    "TimeoutError",
+    "OSError",
+    "RuntimeError",
+    "ValueError",
+    "TypeError",
+    "KeyError",
+    "AttributeError",
+    "APIConnectionError",
+    "APIError",
+    "APIResponseValidationError",
+    "APIStatusError",
+    "APITimeoutError",
+    "AuthenticationError",
+    "BadRequestError",
+    "ConflictError",
+    "InternalServerError",
+    "NotFoundError",
+    "PermissionDeniedError",
+    "RateLimitError",
+    "UnprocessableEntityError",
+    "ConnectTimeout",
+    "PoolTimeout",
+    "ReadTimeout",
+    "WriteTimeout",
+    "Unknown",
+  ] as const;
+  const hasRuntimeFailurePhase = object.runtimePhase !== undefined;
+  const hasRuntimeFailureExceptionClass = object.exceptionClass !== undefined;
+  if (hasRuntimeFailurePhase !== hasRuntimeFailureExceptionClass) {
+    throw new ContractParseError(path, "runtime diagnostic fields must be provided together");
+  }
+  if (
+    hasRuntimeFailurePhase &&
+    !runtimeFailurePhases.includes(object.runtimePhase as (typeof runtimeFailurePhases)[number])
+  ) {
+    throw new ContractParseError(`${path}.runtimePhase`, "is not a supported runtime failure phase");
+  }
+  if (
+    hasRuntimeFailureExceptionClass &&
+    !runtimeFailureExceptionClasses.includes(object.exceptionClass as (typeof runtimeFailureExceptionClasses)[number])
+  ) {
+    throw new ContractParseError(`${path}.exceptionClass`, "is not a supported runtime failure exception class");
   }
   return {
     code: object.code,
@@ -1282,6 +1375,18 @@ function parseRuntimeFailure(value: unknown, path: string): RuntimeFailure {
       ? {
           callbackPhase: object.callbackPhase as RuntimeFailure["callbackPhase"],
           operationRefDigest: object.operationRefDigest as RuntimeFailure["operationRefDigest"],
+        }
+      : {}),
+    ...(hasCodeModeHostStatus
+      ? {
+          codeModeHostStatus: object.codeModeHostStatus as RuntimeFailure["codeModeHostStatus"],
+          codeModeFailureClass: object.codeModeFailureClass as RuntimeFailure["codeModeFailureClass"],
+        }
+      : {}),
+    ...(hasRuntimeFailurePhase
+      ? {
+          runtimePhase: object.runtimePhase as RuntimeFailure["runtimePhase"],
+          exceptionClass: object.exceptionClass as RuntimeFailure["exceptionClass"],
         }
       : {}),
   } as RuntimeFailure;
@@ -2074,9 +2179,54 @@ export type RuntimeFailure = Readonly<{
     | "host_operation_failure"
     | "cancellation_monitor_failure"
     | "invalid_usage_accounting"
-    | "static_configuration_failure";
+    | "static_configuration_failure"
+    | "dependency_failure"
+    | "permission_failure"
+    | "resource_failure"
+    | "timeout_failure"
+    | "provider_client_failure"
+    | "runtime_unknown_failure"
+    | "provider_auth_failure"
+    | "provider_entitlement_failure"
+    | "provider_rate_limit"
+    | "provider_request_failure"
+    | "provider_transport_failure"
+    | "provider_unknown_failure";
   callbackPhase?: "before_host_call" | "host_return" | "model_observation_emit" | "adapter_event";
   operationRefDigest?: string;
+  codeModeHostStatus?: "ok" | "replayed" | "denied" | "conflict" | "unavailable" | "invalid";
+  codeModeFailureClass?: "code_mode" | "callback" | "transport" | "contract" | "unknown";
+  runtimePhase?: "agent_initialization" | "tool_configuration" | "conversation" | "unknown";
+  exceptionClass?:
+    | "ModuleNotFoundError"
+    | "ImportError"
+    | "PermissionError"
+    | "MemoryError"
+    | "TimeoutError"
+    | "OSError"
+    | "RuntimeError"
+    | "ValueError"
+    | "TypeError"
+    | "KeyError"
+    | "AttributeError"
+    | "APIConnectionError"
+    | "APIError"
+    | "APIResponseValidationError"
+    | "APIStatusError"
+    | "APITimeoutError"
+    | "AuthenticationError"
+    | "BadRequestError"
+    | "ConflictError"
+    | "InternalServerError"
+    | "NotFoundError"
+    | "PermissionDeniedError"
+    | "RateLimitError"
+    | "UnprocessableEntityError"
+    | "ConnectTimeout"
+    | "PoolTimeout"
+    | "ReadTimeout"
+    | "WriteTimeout"
+    | "Unknown";
 }>;
 
 export type RuntimeUsage = Readonly<{

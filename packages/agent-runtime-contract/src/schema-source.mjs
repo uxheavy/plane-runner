@@ -100,6 +100,18 @@ const definitions = {
           "cancellation_monitor_failure",
           "invalid_usage_accounting",
           "static_configuration_failure",
+          "dependency_failure",
+          "permission_failure",
+          "resource_failure",
+          "timeout_failure",
+          "provider_client_failure",
+          "runtime_unknown_failure",
+          "provider_auth_failure",
+          "provider_entitlement_failure",
+          "provider_rate_limit",
+          "provider_request_failure",
+          "provider_transport_failure",
+          "provider_unknown_failure",
         ],
       },
       callbackPhase: {
@@ -111,12 +123,74 @@ const definitions = {
         maxLength: 64,
         pattern: "^[a-f0-9]{64}$",
       },
+      codeModeHostStatus: {
+        enum: ["ok", "replayed", "denied", "conflict", "unavailable", "invalid"],
+      },
+      codeModeFailureClass: {
+        enum: ["code_mode", "callback", "transport", "contract", "unknown"],
+      },
+      runtimePhase: {
+        enum: ["agent_initialization", "tool_configuration", "conversation", "unknown"],
+      },
+      exceptionClass: {
+        enum: [
+          "ModuleNotFoundError",
+          "ImportError",
+          "PermissionError",
+          "MemoryError",
+          "TimeoutError",
+          "OSError",
+          "RuntimeError",
+          "ValueError",
+          "TypeError",
+          "KeyError",
+          "AttributeError",
+          "APIConnectionError",
+          "APIError",
+          "APIResponseValidationError",
+          "APIStatusError",
+          "APITimeoutError",
+          "AuthenticationError",
+          "BadRequestError",
+          "ConflictError",
+          "InternalServerError",
+          "NotFoundError",
+          "PermissionDeniedError",
+          "RateLimitError",
+          "UnprocessableEntityError",
+          "ConnectTimeout",
+          "PoolTimeout",
+          "ReadTimeout",
+          "WriteTimeout",
+          "Unknown",
+        ],
+      },
     },
     allOf: [
       {
         if: { required: ["cause"] },
         // oxlint-disable-next-line unicorn/no-thenable -- `then` is a required JSON Schema keyword.
         then: { properties: { code: { const: "runtime_error" } } },
+      },
+      {
+        if: { required: ["codeModeHostStatus"] },
+        // oxlint-disable-next-line unicorn/no-thenable -- `then` is a required JSON Schema keyword.
+        then: { required: ["codeModeFailureClass"] },
+      },
+      {
+        if: { required: ["codeModeFailureClass"] },
+        // oxlint-disable-next-line unicorn/no-thenable -- `then` is a required JSON Schema keyword.
+        then: { required: ["codeModeHostStatus"] },
+      },
+      {
+        if: { required: ["runtimePhase"] },
+        // oxlint-disable-next-line unicorn/no-thenable -- `then` is a required JSON Schema keyword.
+        then: { required: ["exceptionClass"] },
+      },
+      {
+        if: { required: ["exceptionClass"] },
+        // oxlint-disable-next-line unicorn/no-thenable -- `then` is a required JSON Schema keyword.
+        then: { required: ["runtimePhase"] },
       },
     ],
   },
