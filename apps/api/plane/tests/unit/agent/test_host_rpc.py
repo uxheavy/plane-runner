@@ -524,6 +524,72 @@ def test_prepared_read_wrapper_is_rejected_without_gateway_call():
     assert result.error_code == "PREPARED_CALL_INVALID"
 
 
+def test_prepared_read_rejects_non_read_action_before_gateway():
+    class FakeHost:
+        binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
+
+        def call_operation(self, *_args, **_kwargs):
+            raise AssertionError("non-read prepared input must not reach the gateway")
+
+    result = PlaneGatewayHostPort(FakeHost()).invoke(
+        _call(
+            action="mutate",
+            operationRef="operation:work_item.read",
+            input={"preparedCallRef": "prepared-call:opaque"},
+        )
+    )
+
+    assert result.status == "invalid"
+    assert result.error_code == "VALIDATION_ERROR"
+
+
+def test_nested_prepared_read_ref_is_rejected_before_gateway():
+    class FakeHost:
+        binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
+
+        def call_operation(self, *_args, **_kwargs):
+            raise AssertionError("nested prepared input must not reach the gateway")
+
+    result = PlaneGatewayHostPort(FakeHost()).invoke(
+        _call(
+            operationRef="operation:work_item.read",
+            input={"preparedCallRef": {"preparedCallRef": "prepared-call:opaque"}},
+        )
+    )
+
+    assert result.status == "invalid"
+    assert result.error_code == "PREPARED_CALL_INVALID"
+
+
+def test_outcome_submit_nested_prepared_ref_evidence_is_not_interpreted():
+    received = {}
+
+    class FakeHost:
+        binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
+
+        def call_operation(self, operation_id, input_data, **_kwargs):
+            received["operation_id"] = operation_id
+            received["input"] = input_data
+            return {"ok": True, "result": {"outcome": {"outcomeRef": "outcome:test"}}}
+
+    evidence = {"preparedCallRef": {"preparedCallRef": "prepared-call:opaque"}}
+    result = PlaneGatewayHostPort(FakeHost()).invoke(
+        _call(
+            action="mutate",
+            operationRef="operation:agent.outcome.submit",
+            input={
+                "summary": "Nested prepared evidence is ordinary data.",
+                "artifacts": [],
+                "evidence": [evidence],
+            },
+        )
+    )
+
+    assert result.status == "ok"
+    assert received["operation_id"] == "agent.outcome.submit"
+    assert received["input"]["evidence"] == [evidence]
+
+
 def test_outcome_submit_allows_prepared_ref_in_bounded_evidence():
     received = {}
 

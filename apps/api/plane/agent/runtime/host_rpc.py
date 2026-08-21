@@ -1650,6 +1650,8 @@ class PlaneGatewayHostPort:
                 "VALIDATION_ERROR",
                 "A prepared work-item read is pending; invoke its returned workItemReadCall before another workspace search",
             )
+        if operation_id == "work_item.read" and call.action != "read":
+            return self._error(call, "VALIDATION_ERROR", "Work-item reads must use the read action")
         # Prepared refs are callable only as the complete read input. Do not
         # recursively inspect mutation payloads; outcome evidence may carry
         # opaque refs as ordinary data.
