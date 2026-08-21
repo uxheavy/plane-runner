@@ -1652,7 +1652,9 @@ def test_transient_invocation_lookup_failure_is_terminalized_before_dispatch(
     assert run.state == RunState.BLOCKED
     assert control.state == RuntimeControlState.OUTCOME_UNKNOWN
     assert control.lease_owner is None
+    assert control.lease_expires_at is None
     assert terminal.kind == "run_blocker"
+    assert "database connection dropped" not in terminal.reason
     assert RunTerminalEvent.objects.filter(run=run, visible=True).count() == 1
     assert not RuntimeProviderAttempt.objects.filter(invocation=invocation).exists()
 
