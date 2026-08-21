@@ -505,6 +505,26 @@ def _prepared_read_refs_from_code_mode_result(output: Any) -> tuple[str, ...]:
 def _without_consumed_prepared_read_from_code_mode_result(
     output: Mapping[str, Any], prepared_ref: str
 ) -> dict[str, Any]:
+    def is_consumed_presented_call(value: Any) -> bool:
+        if isinstance(value, str):
+            return value == prepared_ref
+        if isinstance(value, Mapping) and set(value) == {"preparedCallRef"}:
+            return value.get("preparedCallRef") == prepared_ref
+        if isinstance(value, Mapping) and set(value) == {
+            "action",
+            "operationRef",
+            "input",
+        }:
+            nested = value.get("input")
+            return (
+                value.get("action") == "read"
+                and value.get("operationRef") == "operation:work_item.read"
+                and isinstance(nested, Mapping)
+                and set(nested) == {"preparedCallRef"}
+                and nested.get("preparedCallRef") == prepared_ref
+            )
+        return False
+
     receipt = output.get("result")
     if not isinstance(receipt, Mapping):
         return dict(output)
@@ -517,7 +537,7 @@ def _without_consumed_prepared_read_from_code_mode_result(
             for key, value in item.items()
             if key != "workItemReadCall"
         }
-        if isinstance(item, Mapping) and item.get("workItemReadCall") == prepared_ref
+        if isinstance(item, Mapping) and is_consumed_presented_call(item.get("workItemReadCall"))
         else item
         for item in result["results"]
     ]
