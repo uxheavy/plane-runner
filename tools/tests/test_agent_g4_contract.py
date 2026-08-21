@@ -3899,6 +3899,8 @@ class G4ContractTests(unittest.TestCase):
                 '"failureDetail":"process_exit",'
                 '"failureSubreason":"runtime_execution_failed",'
                 '"failureCause":"host_operation_failure",'
+                '"runtimePhase":"conversation",'
+                '"exceptionClass":"RuntimeError",'
                 '"hostOperationFailure":{'
                 '"operationId":"plane.code-mode.execute@1",'
                 '"attemptRef":"operation-attempt:request:worker",'
@@ -3913,6 +3915,8 @@ class G4ContractTests(unittest.TestCase):
                     "code": "runtime_error",
                     "retryable": False,
                     "cause": "host_operation_failure",
+                    "runtimePhase": "conversation",
+                    "exceptionClass": "RuntimeError",
                     "message": "raw host message must not escape",
                 },
             },
@@ -3935,6 +3939,8 @@ class G4ContractTests(unittest.TestCase):
                     "code": "runtime_error",
                     "retryable": False,
                     "cause": "host_operation_failure",
+                    "runtimePhase": "conversation",
+                    "exceptionClass": "RuntimeError",
                 },
             },
         )
@@ -3950,6 +3956,8 @@ class G4ContractTests(unittest.TestCase):
             runtime_failure["failure"]["reasonCause"],
             "host_operation_failure",
         )
+        self.assertEqual(runtime_failure["failure"]["runtimePhase"], "conversation")
+        self.assertEqual(runtime_failure["failure"]["exceptionClass"], "RuntimeError")
         self.assertEqual(
             runtime_failure["failure"]["hostOperationFailure"],
             {

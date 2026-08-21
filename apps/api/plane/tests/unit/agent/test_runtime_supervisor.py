@@ -1343,6 +1343,29 @@ def test_provider_unknown_classification_requires_unresolved_attempt_evidence():
     assert supported["providerAttemptRef"] == "provider-attempt:42"
 
 
+def test_runtime_exit_classification_preserves_allowlisted_adapter_diagnostics():
+    failure = {
+        "code": "runtime_error",
+        "cause": "runtime_unknown_failure",
+        "runtimePhase": "conversation",
+        "exceptionClass": "RuntimeError",
+    }
+
+    classified = _runtime_exit_failure_classification(failure)
+
+    assert classified["runtimePhase"] == "conversation"
+    assert classified["exceptionClass"] == "RuntimeError"
+    assert _runtime_exit_failure_classification(
+        {**failure, "exceptionClass": "SecretException"}
+    ) == {
+        "failureCode": "runtime_error",
+        "failurePhase": "runtime_process",
+        "failureDetail": "process_exit",
+        "failureSubreason": "runtime_execution_failed",
+        "failureCause": "runtime_unknown_failure",
+    }
+
+
 @pytest.mark.django_db(transaction=True)
 def test_supervisor_preserves_missing_outcome_failure_through_terminal_output(
     workspace, gateway_project, gateway_issue, create_user

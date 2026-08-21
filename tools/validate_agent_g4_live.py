@@ -2089,6 +2089,8 @@ def _validate_failure_receipt(
                 "operationRefDigest",
                 "codeModeHostStatus",
                 "codeModeFailureClass",
+                "runtimePhase",
+                "exceptionClass",
             }
         )
         or not required_failure_fields.issubset(failure)
@@ -2137,6 +2139,45 @@ def _validate_failure_receipt(
             "unknown",
         }:
             raise ContractError("evidence_failure_code_mode_class_invalid")
+    runtime_diagnostic_fields = {"runtimePhase", "exceptionClass"}
+    present_runtime_diagnostic_fields = runtime_diagnostic_fields.intersection(failure)
+    if present_runtime_diagnostic_fields and present_runtime_diagnostic_fields != runtime_diagnostic_fields:
+        raise ContractError("evidence_failure_runtime_diagnostic_fields_invalid")
+    if present_runtime_diagnostic_fields:
+        if failure["runtimePhase"] not in {"agent_initialization", "tool_configuration", "conversation", "unknown"}:
+            raise ContractError("evidence_failure_runtime_phase_invalid")
+        if failure["exceptionClass"] not in {
+            "ModuleNotFoundError",
+            "ImportError",
+            "PermissionError",
+            "MemoryError",
+            "TimeoutError",
+            "OSError",
+            "RuntimeError",
+            "ValueError",
+            "TypeError",
+            "KeyError",
+            "AttributeError",
+            "APIConnectionError",
+            "APIError",
+            "APIResponseValidationError",
+            "APIStatusError",
+            "APITimeoutError",
+            "AuthenticationError",
+            "BadRequestError",
+            "ConflictError",
+            "InternalServerError",
+            "NotFoundError",
+            "PermissionDeniedError",
+            "RateLimitError",
+            "UnprocessableEntityError",
+            "ConnectTimeout",
+            "PoolTimeout",
+            "ReadTimeout",
+            "WriteTimeout",
+            "Unknown",
+        }:
+            raise ContractError("evidence_failure_exception_class_invalid")
     if "hostOperationFailure" in failure:
         host_failure = _object(failure["hostOperationFailure"], "evidence_host_operation_failure")
         if (
@@ -2209,6 +2250,8 @@ def _validate_failure_receipt(
             "operationRefDigest",
             "codeModeHostStatus",
             "codeModeFailureClass",
+            "runtimePhase",
+            "exceptionClass",
         }
         if set(runtime_failure).difference({"code", "retryable", "cause"} | runtime_failure_diagnostic_fields) or not {
             "code",
@@ -2252,6 +2295,44 @@ def _validate_failure_receipt(
                 "unknown",
             }:
                 raise ContractError("evidence_runtime_exit_failure_code_mode_class_invalid")
+        present_runtime_diagnostic_fields = runtime_diagnostic_fields.intersection(runtime_failure)
+        if present_runtime_diagnostic_fields and present_runtime_diagnostic_fields != runtime_diagnostic_fields:
+            raise ContractError("evidence_runtime_exit_failure_runtime_diagnostic_fields_invalid")
+        if present_runtime_diagnostic_fields:
+            if runtime_failure["runtimePhase"] not in {"agent_initialization", "tool_configuration", "conversation", "unknown"}:
+                raise ContractError("evidence_runtime_exit_failure_runtime_phase_invalid")
+            if runtime_failure["exceptionClass"] not in {
+                "ModuleNotFoundError",
+                "ImportError",
+                "PermissionError",
+                "MemoryError",
+                "TimeoutError",
+                "OSError",
+                "RuntimeError",
+                "ValueError",
+                "TypeError",
+                "KeyError",
+                "AttributeError",
+                "APIConnectionError",
+                "APIError",
+                "APIResponseValidationError",
+                "APIStatusError",
+                "APITimeoutError",
+                "AuthenticationError",
+                "BadRequestError",
+                "ConflictError",
+                "InternalServerError",
+                "NotFoundError",
+                "PermissionDeniedError",
+                "RateLimitError",
+                "UnprocessableEntityError",
+                "ConnectTimeout",
+                "PoolTimeout",
+                "ReadTimeout",
+                "WriteTimeout",
+                "Unknown",
+            }:
+                raise ContractError("evidence_runtime_exit_failure_exception_class_invalid")
 
     ingress = _object(evidence["runtimeEventIngress"], "evidence_runtime_ingress")
     if set(ingress).difference({"kindCounts", "diagnostics"}) or "kindCounts" not in ingress:

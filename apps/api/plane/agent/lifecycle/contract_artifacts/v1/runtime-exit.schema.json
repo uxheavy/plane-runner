@@ -209,6 +209,42 @@
         },
         "codeModeFailureClass": {
           "enum": ["code_mode", "callback", "transport", "contract", "unknown"]
+        },
+        "runtimePhase": {
+          "enum": ["agent_initialization", "tool_configuration", "conversation", "unknown"]
+        },
+        "exceptionClass": {
+          "enum": [
+            "ModuleNotFoundError",
+            "ImportError",
+            "PermissionError",
+            "MemoryError",
+            "TimeoutError",
+            "OSError",
+            "RuntimeError",
+            "ValueError",
+            "TypeError",
+            "KeyError",
+            "AttributeError",
+            "APIConnectionError",
+            "APIError",
+            "APIResponseValidationError",
+            "APIStatusError",
+            "APITimeoutError",
+            "AuthenticationError",
+            "BadRequestError",
+            "ConflictError",
+            "InternalServerError",
+            "NotFoundError",
+            "PermissionDeniedError",
+            "RateLimitError",
+            "UnprocessableEntityError",
+            "ConnectTimeout",
+            "PoolTimeout",
+            "ReadTimeout",
+            "WriteTimeout",
+            "Unknown"
+          ]
         }
       },
       "allOf": [
@@ -238,6 +274,22 @@
           },
           "then": {
             "required": ["codeModeHostStatus"]
+          }
+        },
+        {
+          "if": {
+            "required": ["runtimePhase"]
+          },
+          "then": {
+            "required": ["exceptionClass"]
+          }
+        },
+        {
+          "if": {
+            "required": ["exceptionClass"]
+          },
+          "then": {
+            "required": ["runtimePhase"]
           }
         }
       ]

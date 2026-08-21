@@ -123,6 +123,42 @@ _RUNTIME_FAILURE_CAUSES = frozenset(
 _RUNTIME_CALLBACK_PHASES = frozenset(
     {"before_host_call", "host_return", "model_observation_emit", "adapter_event"}
 )
+_RUNTIME_FAILURE_PHASES = frozenset(
+    {"agent_initialization", "tool_configuration", "conversation", "unknown"}
+)
+_RUNTIME_FAILURE_EXCEPTION_CLASSES = frozenset(
+    {
+        "ModuleNotFoundError",
+        "ImportError",
+        "PermissionError",
+        "MemoryError",
+        "TimeoutError",
+        "OSError",
+        "RuntimeError",
+        "ValueError",
+        "TypeError",
+        "KeyError",
+        "AttributeError",
+        "APIConnectionError",
+        "APIError",
+        "APIResponseValidationError",
+        "APIStatusError",
+        "APITimeoutError",
+        "AuthenticationError",
+        "BadRequestError",
+        "ConflictError",
+        "InternalServerError",
+        "NotFoundError",
+        "PermissionDeniedError",
+        "RateLimitError",
+        "UnprocessableEntityError",
+        "ConnectTimeout",
+        "PoolTimeout",
+        "ReadTimeout",
+        "WriteTimeout",
+        "Unknown",
+    }
+)
 
 
 def _bounded_runtime_host_diagnostic(failure: object) -> dict[str, str]:
@@ -138,6 +174,16 @@ def _bounded_runtime_host_diagnostic(failure: object) -> dict[str, str]:
     ):
         return {}
     return {"callbackPhase": phase, "operationRefDigest": operation_ref_digest}
+
+
+def _bounded_runtime_failure_diagnostic(failure: object) -> dict[str, str]:
+    if not isinstance(failure, dict):
+        return {}
+    phase = failure.get("runtimePhase")
+    exception_class = failure.get("exceptionClass")
+    if phase not in _RUNTIME_FAILURE_PHASES or exception_class not in _RUNTIME_FAILURE_EXCEPTION_CLASSES:
+        return {}
+    return {"runtimePhase": phase, "exceptionClass": exception_class}
 
 
 @dataclass(frozen=True)
@@ -344,6 +390,7 @@ def _runtime_exit_failure_classification(
         if cause == "provider_unknown_failure" and provider_unknown_evidence is not None:
             bounded.update(provider_unknown_evidence)
     bounded.update(_bounded_runtime_host_diagnostic(failure))
+    bounded.update(_bounded_runtime_failure_diagnostic(failure))
     return bounded
 
 

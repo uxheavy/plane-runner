@@ -203,6 +203,58 @@ def _bounded_child_diagnostic(value):
     return dict(value)
 
 
+_RUNTIME_FAILURE_PHASES = frozenset(
+    {"agent_initialization", "tool_configuration", "conversation", "unknown"}
+)
+_RUNTIME_FAILURE_EXCEPTION_CLASSES = frozenset(
+    {
+        "ModuleNotFoundError",
+        "ImportError",
+        "PermissionError",
+        "MemoryError",
+        "TimeoutError",
+        "OSError",
+        "RuntimeError",
+        "ValueError",
+        "TypeError",
+        "KeyError",
+        "AttributeError",
+        "APIConnectionError",
+        "APIError",
+        "APIResponseValidationError",
+        "APIStatusError",
+        "APITimeoutError",
+        "AuthenticationError",
+        "BadRequestError",
+        "ConflictError",
+        "InternalServerError",
+        "NotFoundError",
+        "PermissionDeniedError",
+        "RateLimitError",
+        "UnprocessableEntityError",
+        "ConnectTimeout",
+        "PoolTimeout",
+        "ReadTimeout",
+        "WriteTimeout",
+        "Unknown",
+    }
+)
+
+
+def _bounded_runtime_failure_diagnostic(value):
+    if not isinstance(value, dict):
+        return None
+    if (
+        value.get("runtimePhase") not in _RUNTIME_FAILURE_PHASES
+        or value.get("exceptionClass") not in _RUNTIME_FAILURE_EXCEPTION_CLASSES
+    ):
+        return None
+    return {
+        "runtimePhase": value["runtimePhase"],
+        "exceptionClass": value["exceptionClass"],
+    }
+
+
 _PREPARED_DIAGNOSTIC_FORMS = frozenset(
     {"canonical_ref", "ready_to_call", "unrecognized"}
 )
@@ -1454,6 +1506,8 @@ def build_failure_evidence(
                 "operationRefDigest",
                 "codeModeHostStatus",
                 "codeModeFailureClass",
+                "runtimePhase",
+                "exceptionClass",
             }
             if base_keys.issubset(candidate) and not set(candidate).difference(
                 base_keys | optional_keys
@@ -1546,6 +1600,9 @@ def build_failure_evidence(
             ):
                 bounded_runtime_exit["failure"]["codeModeHostStatus"] = code_mode_status
                 bounded_runtime_exit["failure"]["codeModeFailureClass"] = code_mode_failure_class
+            runtime_diagnostic = _bounded_runtime_failure_diagnostic(runtime_failure)
+            if runtime_diagnostic is not None:
+                bounded_runtime_exit["failure"].update(runtime_diagnostic)
 
     bounded_event_kind_counts = {}
     if isinstance(runtime_event_kind_counts, dict):
@@ -1600,6 +1657,9 @@ def build_failure_evidence(
     }
     if bounded_failure_cause is not None:
         bounded_failure["reasonCause"] = bounded_failure_cause
+    runtime_diagnostic = _bounded_runtime_failure_diagnostic(reason)
+    if runtime_diagnostic is not None:
+        bounded_failure.update(runtime_diagnostic)
     code_mode_status = reason.get("codeModeHostStatus")
     code_mode_failure_class = reason.get("codeModeFailureClass")
     if (
@@ -1694,6 +1754,8 @@ def _supervisor_failure_reason(output):
         "operationRefDigest",
         "codeModeHostStatus",
         "codeModeFailureClass",
+        "runtimePhase",
+        "exceptionClass",
     }
     required_keys = allowed_keys - {
         "failureSubreason",
@@ -1704,6 +1766,8 @@ def _supervisor_failure_reason(output):
         "operationRefDigest",
         "codeModeHostStatus",
         "codeModeFailureClass",
+        "runtimePhase",
+        "exceptionClass",
     }
     allowed_shapes = {
         frozenset(required_keys),
@@ -1800,17 +1864,21 @@ def _supervisor_failure_reason(output):
         diagnostic_refs = value_keys & {"childDiagnostic", "providerAttemptRef", "providerEventRef"}
         top_level_diagnostic_fields = value_keys & host_failure_diagnostic_fields
         code_mode_fields = value_keys & {"codeModeHostStatus", "codeModeFailureClass"}
+        runtime_diagnostic_fields = value_keys & {"runtimePhase", "exceptionClass"}
         if code_mode_fields and code_mode_fields != {"codeModeHostStatus", "codeModeFailureClass"}:
+            continue
+        if runtime_diagnostic_fields and runtime_diagnostic_fields != {"runtimePhase", "exceptionClass"}:
             continue
         if top_level_diagnostic_fields and top_level_diagnostic_fields != host_failure_diagnostic_fields:
             continue
-        if value_keys - diagnostic_refs - top_level_diagnostic_fields - code_mode_fields not in allowed_shapes:
+        if value_keys - diagnostic_refs - top_level_diagnostic_fields - code_mode_fields - runtime_diagnostic_fields not in allowed_shapes:
             if (
                 "hostOperationFailure" not in value
                 or value_keys
                 - diagnostic_refs
                 - top_level_diagnostic_fields
                 - code_mode_fields
+                - runtime_diagnostic_fields
                 - {"hostOperationFailure"}
                 not in allowed_shapes
             ):
@@ -1866,6 +1934,8 @@ def _supervisor_failure_reason(output):
                 "unknown",
             }:
                 continue
+        if runtime_diagnostic_fields and _bounded_runtime_failure_diagnostic(value) is None:
+            continue
         for field, prefix in (
             ("providerAttemptRef", "provider-attempt:"),
             ("providerEventRef", "provider-event:"),
