@@ -170,6 +170,65 @@ class LiveResultPersistenceTests(unittest.TestCase):
             self.assertEqual(refused.returncode, 2)
             self.assertIn(b"reason=missing_module_invalid", refused.stderr)
 
+    def test_runner_failure_receipt_retains_allowlisted_boundary_projection(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            destination = root / "boundary.result"
+            result = self._run_helper(
+                destination,
+                root / "missing-evidence.json",
+                "--status",
+                "1",
+                "--error-class",
+                "FileNotFoundError",
+                "--missing-path-class",
+                "scenario_module_artifact",
+                "--child-phase",
+                "scenario_import",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                json.loads(result.stdout)["missingPathClass"],
+                "scenario_module_artifact",
+            )
+            self.assertEqual(json.loads(result.stdout)["childPhase"], "scenario_import")
+            self.assertNotIn(b"/run/plane-scenario", result.stdout)
+
+            refused = self._run_helper(
+                root / "refused.result",
+                root / "missing-evidence.json",
+                "--status",
+                "1",
+                "--missing-path-class",
+                "/private/secret",
+            )
+            self.assertEqual(refused.returncode, 2)
+            self.assertIn(b"reason=missing_path_class_invalid", refused.stderr)
+
+            refused_phase = self._run_helper(
+                root / "refused-phase.result",
+                root / "missing-evidence.json",
+                "--status",
+                "1",
+                "--child-phase",
+                "/private/secret",
+            )
+            self.assertEqual(refused_phase.returncode, 2)
+            self.assertIn(b"reason=child_phase_invalid", refused_phase.stderr)
+
+            mismatched = self._run_helper(
+                root / "mismatched.result",
+                root / "missing-evidence.json",
+                "--status",
+                "1",
+                "--missing-path-class",
+                "secret_mount",
+                "--child-phase",
+                "runtime_start",
+            )
+            self.assertEqual(mismatched.returncode, 2)
+            self.assertIn(b"reason=child_phase_mismatch", mismatched.stderr)
+
     def test_result_is_owner_only_and_survives_run_directory_deletion(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

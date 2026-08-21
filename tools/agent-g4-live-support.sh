@@ -169,6 +169,53 @@ DOCKER_REASONS = {
     "docker_container_start_failed",
     "docker_precontainer_failure",
 }
+MISSING_PATH_CLASSES = {
+    "api_startup": "api_startup",
+    "scenario_module_artifact": "scenario_import",
+    "runtime_executable": "runtime_start",
+    "secret_mount": "secret_bind",
+    "child_process": "child_process",
+    "unclassified": "unknown",
+}
+
+
+def classify_missing_path(text: str, error_class: str) -> tuple[str, str]:
+    """Return only a proven finite child-boundary classification."""
+
+    lowered = text.lower()
+    path_failure = error_class in {"FileNotFoundError", "ModuleNotFoundError"} or any(
+        marker in lowered for marker in ("no such file or directory", "executable file not found")
+    )
+    if not path_failure:
+        return MISSING_PATH_CLASSES["unclassified"], "unknown"
+
+    if any(marker in lowered for marker in ("/run/secrets/", "plane-agent-runtime-secret", "provider_credentials", "credential")):
+        return "secret_mount", MISSING_PATH_CLASSES["secret_mount"]
+    if any(
+        marker in lowered
+        for marker in (
+            "/run/plane-scenario/",
+            "scenario_module",
+            "agent_g4_worker_route",
+            "agent_g4_manager_route",
+            "agent_g4_operator_route",
+        )
+    ):
+        return "scenario_module_artifact", MISSING_PATH_CLASSES["scenario_module_artifact"]
+    if any(
+        marker in lowered
+        for marker in (
+            "plane_runtime.g1_runtime_image.bootstrap",
+            "runtime executable",
+            "executable file not found",
+        )
+    ):
+        return "runtime_executable", MISSING_PATH_CLASSES["runtime_executable"]
+    if any(marker in lowered for marker in ("manage.py", "django", "plane.settings", "agent-g4-live-invoke.py")):
+        return "api_startup", MISSING_PATH_CLASSES["api_startup"]
+    if any(marker in lowered for marker in ("subprocess", "child process", "popen", "os.exec")):
+        return "child_process", MISSING_PATH_CLASSES["child_process"]
+    return MISSING_PATH_CLASSES["unclassified"], "unknown"
 
 
 def write_owner_only(path: str, payload: bytes) -> None:
@@ -249,6 +296,7 @@ for line in text.splitlines():
         sort_keys=True,
     )
     break
+missing_path_class, child_phase = classify_missing_path(text, error_class)
 lowered = text.lower()
 if "read-only file system" in lowered and ("mountpoint" in lowered or "mount" in lowered):
     reason = "docker_mount_target_read_only"
@@ -276,6 +324,8 @@ write_owner_only(
     (
         f"error_class={error_class}\n"
         f"reason_category={reason}\n"
+        f"missing_path_class={missing_path_class}\n"
+        f"child_phase={child_phase}\n"
         + (f"missing_module={missing_module}\n" if missing_module else "")
         + (f"setup_error={setup_error}\n" if setup_error is not None else "")
     ).encode("ascii"),

@@ -2436,7 +2436,7 @@ def validate_evidence(
         raise ContractError("evidence_must_be_one_json_object")
     if evidence.get("schemaVersion") == "plane-agent-g4/live-runner-failure/v1":
         required = {"schemaVersion", "status", "phase", "errorClass", "exitCode", "reasonCategory", "stderrSha256"}
-        optional = {"missingModule", "setupError"}
+        optional = {"missingModule", "missingPathClass", "childPhase", "setupError"}
         if set(evidence).difference(required | optional):
             raise ContractError("runner_failure_receipt_fields_invalid")
         _exact(evidence["status"], "failed", "runner_failure_receipt_status")
@@ -2491,6 +2491,38 @@ def validate_evidence(
             or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]{0,127}", evidence["missingModule"])
         ):
             raise ContractError("runner_failure_receipt_missing_module_invalid")
+        boundary_fields = {"missingPathClass", "childPhase"}.intersection(evidence)
+        if boundary_fields and boundary_fields != {"missingPathClass", "childPhase"}:
+            raise ContractError("runner_failure_receipt_boundary_fields_invalid")
+        if "missingPathClass" in evidence and evidence["missingPathClass"] not in {
+            "api_startup",
+            "scenario_module_artifact",
+            "runtime_executable",
+            "secret_mount",
+            "child_process",
+            "unclassified",
+        }:
+            raise ContractError("runner_failure_receipt_missing_path_class_invalid")
+        if "childPhase" in evidence and evidence["childPhase"] not in {
+            "api_startup",
+            "scenario_import",
+            "runtime_start",
+            "secret_bind",
+            "child_process",
+            "unknown",
+        }:
+            raise ContractError("runner_failure_receipt_child_phase_invalid")
+        if "missingPathClass" in evidence and "childPhase" in evidence:
+            expected_phase = {
+                "api_startup": "api_startup",
+                "scenario_module_artifact": "scenario_import",
+                "runtime_executable": "runtime_start",
+                "secret_mount": "secret_bind",
+                "child_process": "child_process",
+                "unclassified": "unknown",
+            }[evidence["missingPathClass"]]
+            if evidence["childPhase"] != expected_phase:
+                raise ContractError("runner_failure_receipt_child_phase_mismatch")
         if "setupError" in evidence:
             _validate_setup_error(evidence["setupError"])
         return {

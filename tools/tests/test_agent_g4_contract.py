@@ -595,6 +595,47 @@ class G4ContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "runner_failure_setup_error_invalid"):
             _validate_setup_error({**valid, "id": "setup:lineage:/private/secret"})
 
+    def test_runner_failure_boundary_projection_is_finite_and_rejects_raw_values(self):
+        valid = json.dumps(
+            {
+                "schemaVersion": "plane-agent-g4/live-runner-failure/v1",
+                "status": "failed",
+                "phase": "api-invocation",
+                "errorClass": "FileNotFoundError",
+                "exitCode": 1,
+                "reasonCategory": "unavailable",
+                "stderrSha256": "0" * 64,
+                "missingPathClass": "scenario_module_artifact",
+                "childPhase": "scenario_import",
+            },
+            separators=(",", ":"),
+        )
+        self.assertEqual(validate_evidence(valid, {}, {}, {}, CANDIDATE)["passed"], 0)
+        with self.assertRaisesRegex(ContractError, "runner_failure_receipt_missing_path_class_invalid"):
+            validate_evidence(
+                valid.replace("scenario_module_artifact", "/private/secret"),
+                {},
+                {},
+                {},
+                CANDIDATE,
+            )
+        with self.assertRaisesRegex(ContractError, "runner_failure_receipt_child_phase_invalid"):
+            validate_evidence(
+                valid.replace("scenario_import", "/private/secret"),
+                {},
+                {},
+                {},
+                CANDIDATE,
+            )
+        with self.assertRaisesRegex(ContractError, "runner_failure_receipt_child_phase_mismatch"):
+            validate_evidence(
+                valid.replace("scenario_import", "runtime_start"),
+                {},
+                {},
+                {},
+                CANDIDATE,
+            )
+
     def test_failed_multi_commission_aggregate_retains_bounded_failure_envelope(self):
         manifest, authority, config, success_text = fixture()
         namespace = invoke_helper_namespace()

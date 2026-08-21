@@ -346,6 +346,57 @@ for line in text.splitlines():
 PY
 }
 
+safe_missing_path_class() {
+    python3 - "${ERROR_FILE}" <<'PY'
+from pathlib import Path
+import sys
+
+allowed = {
+    "api_startup",
+    "scenario_module_artifact",
+    "runtime_executable",
+    "secret_mount",
+    "child_process",
+    "unclassified",
+}
+try:
+    text = Path(sys.argv[1]).read_bytes()[:8192].decode("ascii", errors="strict")
+except (OSError, UnicodeDecodeError):
+    print("unclassified")
+else:
+    value = "unclassified"
+    for line in text.splitlines():
+        if line.startswith("missing_path_class="):
+            candidate = line.split("=", 1)[1]
+            if candidate in allowed:
+                value = candidate
+            break
+    print(value)
+PY
+}
+
+safe_child_phase() {
+    python3 - "${ERROR_FILE}" <<'PY'
+from pathlib import Path
+import sys
+
+allowed = {"api_startup", "scenario_import", "runtime_start", "secret_bind", "child_process", "unknown"}
+try:
+    text = Path(sys.argv[1]).read_bytes()[:8192].decode("ascii", errors="strict")
+except (OSError, UnicodeDecodeError):
+    print("unknown")
+else:
+    value = "unknown"
+    for line in text.splitlines():
+        if line.startswith("child_phase="):
+            candidate = line.split("=", 1)[1]
+            if candidate in allowed:
+                value = candidate
+            break
+    print(value)
+PY
+}
+
 safe_setup_error() {
     python3 - "${ERROR_FILE}" <<'PY'
 import json
@@ -481,6 +532,8 @@ cleanup() {
     local reason_category=unavailable
     local error_class=unavailable
     local missing_module=
+    local missing_path_class=unclassified
+    local child_phase=unknown
     local stderr_sha256
     local setup_error
     stderr_sha256="$(live_stderr_sha256 "${ERROR_DIGEST_FILE}")"
@@ -491,6 +544,8 @@ cleanup() {
         fi
         error_class="$(safe_error_class)"
         missing_module="$(safe_missing_module)"
+        missing_path_class="$(safe_missing_path_class)"
+        child_phase="$(safe_child_phase)"
     fi
     if [[ -n "${RESULT_FILE}" ]] && ! python3 "${ROOT_DIR}/tools/agent-g4-live-result.py" \
         --destination "${RESULT_FILE}" \
@@ -499,6 +554,8 @@ cleanup() {
         --phase "${LIVE_PHASE}" \
         --error-class "${error_class}" \
         --missing-module "${missing_module}" \
+        --missing-path-class "${missing_path_class}" \
+        --child-phase "${child_phase}" \
         --reason-category "${reason_category}" \
         --stderr-sha256 "${stderr_sha256}" \
         --setup-error "${setup_error}" >/dev/null; then

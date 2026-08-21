@@ -270,6 +270,7 @@ def test_bounded_stderr_digest_is_stable_and_redacts_secrets(tmp_path: Path) -> 
         assert result.stdout.strip().splitlines()[-1] == expected_digest
         assert error_file.read_text(encoding="utf-8") == (
             "error_class=RuntimeError\nreason_category=docker_precontainer_failure\n"
+            "missing_path_class=unclassified\nchild_phase=unknown\n"
         )
         outputs.append(result.stdout)
 
@@ -294,9 +295,54 @@ def test_bounded_stderr_retains_only_a_valid_missing_module_identifier(tmp_path:
     assert error_file.read_text(encoding="ascii") == (
         "error_class=ModuleNotFoundError\n"
         "reason_category=docker_precontainer_failure\n"
+        "missing_path_class=unclassified\n"
+        "child_phase=unknown\n"
         "missing_module=plane_runtime.bridge_v2\n"
     )
     assert "must-not-persist" not in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("marker", "missing_path_class", "child_phase"),
+    (
+        ("FileNotFoundError: [Errno 2] No such file: /run/plane-scenario/agent_g4_manager_route.py", "scenario_module_artifact", "scenario_import"),
+        ("ModuleNotFoundError: No module named 'agent_g4_manager_route'", "scenario_module_artifact", "scenario_import"),
+        ("FileNotFoundError: [Errno 2] No such file: plane_runtime.g1_runtime_image.bootstrap", "runtime_executable", "runtime_start"),
+        ("FileNotFoundError: [Errno 2] No such file: /run/secrets/plane_agent_provider_credentials", "secret_mount", "secret_bind"),
+        ("FileNotFoundError: [Errno 2] No such file: /workspace/apps/api/manage.py", "api_startup", "api_startup"),
+        ("FileNotFoundError: [Errno 2] No such file: /tmp/child-worker", "unclassified", "unknown"),
+    ),
+)
+def test_bounded_stderr_classifies_only_allowlisted_missing_boundaries(
+    tmp_path: Path, marker: str, missing_path_class: str, child_phase: str
+) -> None:
+    error_file = tmp_path / "error.log"
+    digest_file = tmp_path / "digest.sha256"
+    command = f"printf %s {shlex.quote(marker)} >&2; exit 1"
+    result = run_support(
+        tmp_path / "lease",
+        f'live_run_bounded_stderr "{error_file}" "{digest_file}" bash -c {shlex.quote(command)}',
+    )
+    assert result.returncode == 1
+    bounded = error_file.read_text(encoding="ascii")
+    assert f"missing_path_class={missing_path_class}\n" in bounded
+    assert f"child_phase={child_phase}\n" in bounded
+    assert marker not in bounded
+
+
+def test_bounded_stderr_keeps_boundary_projection_free_of_paths_and_secrets(tmp_path: Path) -> None:
+    error_file = tmp_path / "error.log"
+    digest_file = tmp_path / "digest.sha256"
+    raw_stderr = "FileNotFoundError: /run/secrets/provider-token provider_token=do-not-retain\n"
+    command = f"printf %s {shlex.quote(raw_stderr)} >&2; exit 1"
+    result = run_support(
+        tmp_path / "lease",
+        f'live_run_bounded_stderr "{error_file}" "{digest_file}" bash -c {shlex.quote(command)}; cat "{error_file}"',
+    )
+    assert result.returncode == 0, result.stderr
+    assert "missing_path_class=secret_mount" in result.stdout
+    assert "/run/secrets/provider-token" not in result.stdout
+    assert "do-not-retain" not in result.stdout
 
 
 def test_bounded_stderr_extracts_only_validated_setup_error_marker(tmp_path: Path) -> None:

@@ -64,6 +64,30 @@ SENSITIVE_FIELD_RE = re.compile(
 )
 STDERR_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 MODULE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]{0,127}$")
+MISSING_PATH_CLASSES = {
+    "api_startup",
+    "scenario_module_artifact",
+    "runtime_executable",
+    "secret_mount",
+    "child_process",
+    "unclassified",
+}
+CHILD_PHASES = {
+    "api_startup",
+    "scenario_import",
+    "runtime_start",
+    "secret_bind",
+    "child_process",
+    "unknown",
+}
+BOUNDARY_PHASES = {
+    "api_startup": "api_startup",
+    "scenario_module_artifact": "scenario_import",
+    "runtime_executable": "runtime_start",
+    "secret_mount": "secret_bind",
+    "child_process": "child_process",
+    "unclassified": "unknown",
+}
 SETUP_ERROR_STAGES = {
     "shared-setup",
     "assignment",
@@ -160,6 +184,8 @@ def _bounded_failure_line(
     reason_category: str,
     stderr_sha256: str = EMPTY_STDERR_SHA256,
     missing_module: str = "",
+    missing_path_class: str = "unclassified",
+    child_phase: str = "unknown",
 ) -> bytes:
     if phase not in FAILURE_PHASES:
         raise ResultPersistenceError("failure_phase_invalid")
@@ -176,10 +202,18 @@ def _bounded_failure_line(
         raise ResultPersistenceError("stderr_sha256_invalid")
     if missing_module and (error_class != "ModuleNotFoundError" or not MODULE_NAME_RE.fullmatch(missing_module)):
         raise ResultPersistenceError("missing_module_invalid")
+    if missing_path_class not in MISSING_PATH_CLASSES:
+        raise ResultPersistenceError("missing_path_class_invalid")
+    if child_phase not in CHILD_PHASES:
+        raise ResultPersistenceError("child_phase_invalid")
+    if BOUNDARY_PHASES[missing_path_class] != child_phase:
+        raise ResultPersistenceError("child_phase_mismatch")
     module_detail = f" missing_module={missing_module}" if missing_module else ""
+    path_detail = f" missing_path_class={missing_path_class} child_phase={child_phase}"
     return (
         f"event=agent.g4.live-runner.failure phase={phase} error_class={error_class} "
-        f"exit_code={exit_code} reason_category={reason_category} stderr_sha256={stderr_sha256}{module_detail}\n"
+        f"exit_code={exit_code} reason_category={reason_category} stderr_sha256={stderr_sha256}"
+        f"{path_detail}{module_detail}\n"
     ).encode("ascii")
 
 
@@ -222,6 +256,8 @@ def _runner_failure_receipt(
     reason_category: str,
     stderr_sha256: str = EMPTY_STDERR_SHA256,
     missing_module: str = "",
+    missing_path_class: str = "unclassified",
+    child_phase: str = "unknown",
     setup_error: str | None = None,
 ) -> bytes:
     _bounded_failure_line(
@@ -231,6 +267,8 @@ def _runner_failure_receipt(
         reason_category=reason_category,
         stderr_sha256=stderr_sha256,
         missing_module=missing_module,
+        missing_path_class=missing_path_class,
+        child_phase=child_phase,
     )
     receipt = {
             "schemaVersion": RUNNER_FAILURE_SCHEMA,
@@ -243,6 +281,10 @@ def _runner_failure_receipt(
     }
     if missing_module:
         receipt["missingModule"] = missing_module
+    if missing_path_class != "unclassified":
+        receipt["missingPathClass"] = missing_path_class
+    if child_phase != "unknown":
+        receipt["childPhase"] = child_phase
     bounded_setup_error = _validated_setup_error(setup_error)
     if bounded_setup_error is not None:
         receipt["setupError"] = bounded_setup_error
@@ -358,6 +400,8 @@ def persist_result(
     reason_category: str = "unavailable",
     stderr_sha256: str = EMPTY_STDERR_SHA256,
     missing_module: str = "",
+    missing_path_class: str = "unclassified",
+    child_phase: str = "unknown",
     setup_error: str | None = None,
 ) -> bytes:
     """Publish exactly one schema-controlled JSON receipt."""
@@ -373,6 +417,8 @@ def persist_result(
             reason_category=reason_category,
             stderr_sha256=stderr_sha256,
             missing_module=missing_module,
+            missing_path_class=missing_path_class,
+            child_phase=child_phase,
         )
     if evidence_payload:
         payload = evidence_payload
@@ -384,6 +430,8 @@ def persist_result(
             reason_category=reason_category,
             stderr_sha256=stderr_sha256,
             missing_module=missing_module,
+            missing_path_class=missing_path_class,
+            child_phase=child_phase,
             setup_error=setup_error,
         )
     else:
@@ -407,6 +455,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--reason-category", default="unavailable")
     parser.add_argument("--stderr-sha256", default=EMPTY_STDERR_SHA256)
     parser.add_argument("--missing-module", default="")
+    parser.add_argument("--missing-path-class", default="unclassified")
+    parser.add_argument("--child-phase", default="unknown")
     parser.add_argument("--setup-error", default="")
     return parser.parse_args(argv)
 
@@ -423,6 +473,8 @@ def main(argv: list[str] | None = None) -> int:
             reason_category=args.reason_category,
             stderr_sha256=args.stderr_sha256,
             missing_module=args.missing_module,
+            missing_path_class=args.missing_path_class,
+            child_phase=args.child_phase,
             setup_error=args.setup_error,
         )
     except ResultPersistenceError as exc:
@@ -437,6 +489,8 @@ def main(argv: list[str] | None = None) -> int:
                 reason_category=args.reason_category,
                 stderr_sha256=args.stderr_sha256,
                 missing_module=args.missing_module,
+                missing_path_class=args.missing_path_class,
+                child_phase=args.child_phase,
             )
         )
     sys.stdout.buffer.write(payload)
