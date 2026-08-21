@@ -21,7 +21,7 @@ from plane.agent.runtime.host_rpc import (
     PreparedCallRegistry,
 )
 from plane.agent.code_mode.contracts import CODE_MODE_EXECUTION_OPERATION, CODE_MODE_SCHEMA_VERSION
-from plane.agent.code_mode.host import CodeModeHostRPC
+from plane.agent.code_mode.host import CodeModeHostRPC, _canonicalize_work_item_read_call
 from plane.operation_gateway.contracts import MAX_RESULT_BYTES
 
 
@@ -228,6 +228,46 @@ def test_prepared_shape_diagnostic_does_not_call_nested_ref_canonical():
     assert diagnostic["shape"]["valueTypes"] == ["object", "string"]
     assert diagnostic["shape"]["nestingDepth"] == 3
     assert "prepared-call:opaque" not in json.dumps(diagnostic)
+
+
+def test_code_mode_canonicalizes_only_the_typed_work_item_read_call():
+    assert _canonicalize_work_item_read_call(
+        {
+            "preparedCallRef": {
+                "action": "read",
+                "operationRef": "operation:work_item.read",
+                "input": {"preparedCallRef": "prepared-call:opaque"},
+            }
+        }
+    ) == {"preparedCallRef": "prepared-call:opaque"}
+
+    for malformed in (
+        {
+            "preparedCallRef": {
+                "action": "read",
+                "operationRef": "operation:work_item.read",
+                "input": {"preparedCallRef": "prepared-call:opaque"},
+                "extra": True,
+            }
+        },
+        {
+            "preparedCallRef": {
+                "action": "mutate",
+                "operationRef": "operation:work_item.read",
+                "input": {"preparedCallRef": "prepared-call:opaque"},
+            }
+        },
+        {
+            "preparedCallRef": {
+                "action": "read",
+                "operationRef": "operation:work_item.read",
+                "input": {"preparedCallRef": {"preparedCallRef": "prepared-call:opaque"}},
+            }
+        },
+        {"preparedCallRef": "prepared-call:" + ("x" * 256)},
+    ):
+        with pytest.raises(ValueError):
+            _canonicalize_work_item_read_call(malformed)
 
 
 def test_model_ready_to_call_wrapper_is_unwrapped_before_gateway():

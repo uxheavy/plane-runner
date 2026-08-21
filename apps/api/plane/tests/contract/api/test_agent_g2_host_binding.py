@@ -646,6 +646,44 @@ def test_code_mode_search_to_read_preserves_target_and_denies_cross_project(
         assert "project_id" not in search_wire
         assert "issue_id" not in search_wire
 
+        code_mode_search_read = _round_trip(
+            server.socket_path,
+            _code_call(
+                **common,
+                source="""
+                    export default async function ({host}: {host: any}) {
+                        const search = await host.call_plane_operation(
+                            "search_workspace",
+                            {query: "G2 Gateway Issue", limit: 1},
+                            "idempotency:g2-code-search",
+                            "correlation:g2-code-search"
+                        );
+                        const item = search.result.results.find(
+                            (entry: any) => entry.objectType === "work_item"
+                        );
+                        return await host.call_plane_operation(
+                            "work_item.read",
+                            {
+                                preparedCallRef: {
+                                    action: "read",
+                                    operationRef: "operation:work_item.read",
+                                    input: {preparedCallRef: item.workItemReadCall}
+                                }
+                            },
+                            "idempotency:g2-code-read",
+                            "correlation:g2-code-read"
+                        );
+                    }
+                """,
+            ),
+        )
+        assert code_mode_search_read.status == "ok", code_mode_search_read
+        assert code_mode_search_read.output["result"]["result"]["work_item"]["id"] == str(gateway_issue.id)
+        assert [item["operationRef"] for item in code_mode_search_read.output["observations"]] == [
+            "operation:search_workspace",
+            "operation:work_item.read",
+        ]
+
         wrong_ref = _round_trip(
             server.socket_path,
             _call(

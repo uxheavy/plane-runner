@@ -24,7 +24,11 @@ from plane.agent.lifecycle.runtime_contract import (
     validate_invocation_envelope,
     validate_run_snapshot,
 )
-from plane.agent.runtime.contracts import model_operation_entry
+from plane.agent.runtime.contracts import (
+    MAX_PREPARED_CALL_REF_BYTES,
+    PREPARED_CALL_PREFIX,
+    model_operation_entry,
+)
 from plane.agent.runtime.dispatch import RuntimeDispatchError, _dispatch_binding
 from plane.db.models import (
     InvocationState,
@@ -59,6 +63,37 @@ class CodeModeObservationError(AgentDomainError):
     """The bounded callback observation receipt cannot be extended safely."""
 
     code = "OBSERVATION_LIMIT"
+
+
+def _canonicalize_work_item_read_call(input_data: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Canonicalize one typed search result read call before registry resolution."""
+
+    if set(input_data) != {"preparedCallRef"}:
+        return input_data
+    candidate = input_data["preparedCallRef"]
+    if isinstance(candidate, str):
+        if not candidate.startswith(PREPARED_CALL_PREFIX) or len(candidate.encode("utf-8")) > MAX_PREPARED_CALL_REF_BYTES:
+            raise ValueError("prepared work-item read reference is invalid")
+        return {"preparedCallRef": candidate}
+    if not isinstance(candidate, Mapping):
+        raise ValueError("prepared work-item read reference is invalid")
+    if set(candidate) == {"preparedCallRef"}:
+        return input_data
+    if set(candidate) != {"action", "operationRef", "input"}:
+        raise ValueError("prepared work-item read call is invalid")
+    if candidate["action"] != "read" or candidate["operationRef"] != "operation:work_item.read":
+        raise ValueError("prepared work-item read call is invalid")
+    nested = candidate["input"]
+    if not isinstance(nested, Mapping) or set(nested) != {"preparedCallRef"}:
+        raise ValueError("prepared work-item read call is invalid")
+    prepared_ref = nested["preparedCallRef"]
+    if (
+        not isinstance(prepared_ref, str)
+        or not prepared_ref.startswith(PREPARED_CALL_PREFIX)
+        or len(prepared_ref.encode("utf-8")) > MAX_PREPARED_CALL_REF_BYTES
+    ):
+        raise ValueError("prepared work-item read reference is invalid")
+    return {"preparedCallRef": prepared_ref}
 
 
 class CodeModeHostRPC:
@@ -270,8 +305,9 @@ class CodeModeHostRPC:
             and "preparedCallRef" in raw["input"]
         ):
             try:
+                canonical_input = _canonicalize_work_item_read_call(raw["input"])
                 raw["input"] = self._prepared_call_registry.resolve(
-                    raw["input"],
+                    canonical_input,
                     correlation_id=correlation_id,
                     idempotency_key=idempotency_key,
                 )
