@@ -288,6 +288,7 @@ class CodeModeHostRPC:
         )
         if prepared_read.get("ok"):
             self._prepared_call_registry.mark_consumed(prepared_ref)
+            receipt = self._without_consumed_prepared_read(receipt, prepared_ref)
         return {**receipt, "preparedReadResult": dict(prepared_read)}, prepared_read
 
     @staticmethod
@@ -308,6 +309,25 @@ class CodeModeHostRPC:
                 return ()
             refs.append(prepared_ref)
         return tuple(refs)
+
+    @staticmethod
+    def _without_consumed_prepared_read(
+        receipt: Mapping[str, Any], prepared_ref: str
+    ) -> Mapping[str, Any]:
+        result = receipt.get("result")
+        if not isinstance(result, Mapping) or not isinstance(result.get("results"), list):
+            return receipt
+        results = [
+            {
+                key: value
+                for key, value in item.items()
+                if key != "workItemReadCall"
+            }
+            if isinstance(item, Mapping) and item.get("workItemReadCall") == prepared_ref
+            else item
+            for item in result["results"]
+        ]
+        return {**receipt, "result": {**result, "results": results}}
 
     def _prepare_search_receipt(self, receipt: Mapping[str, Any]) -> Mapping[str, Any]:
         """Bind Code Mode search results to opaque, invocation-local read calls."""

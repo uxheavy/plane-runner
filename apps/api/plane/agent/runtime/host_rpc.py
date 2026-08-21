@@ -502,6 +502,28 @@ def _prepared_read_refs_from_code_mode_result(output: Any) -> tuple[str, ...]:
     return _prepared_read_refs_from_search_result(output.get("result"))
 
 
+def _without_consumed_prepared_read_from_code_mode_result(
+    output: Mapping[str, Any], prepared_ref: str
+) -> dict[str, Any]:
+    receipt = output.get("result")
+    if not isinstance(receipt, Mapping):
+        return dict(output)
+    result = receipt.get("result")
+    if not isinstance(result, Mapping) or not isinstance(result.get("results"), list):
+        return dict(output)
+    results = [
+        {
+            key: value
+            for key, value in item.items()
+            if key != "workItemReadCall"
+        }
+        if isinstance(item, Mapping) and item.get("workItemReadCall") == prepared_ref
+        else item
+        for item in result["results"]
+    ]
+    return {**output, "result": {**receipt, "result": {**result, "results": results}}}
+
+
 _HOST_FAILURE_CLASSES = frozenset({"transport_unavailable", "callback_exception"})
 _HOST_SOCKET_PHASES = frozenset({"accept", "read", "invoke", "serialize", "write"})
 _HOST_SOCKET_STATES = frozenset({"failed", "closed"})
@@ -1784,6 +1806,10 @@ class PlaneGatewayHostPort:
                 )
                 prepared_read = self.invoke(prepared_read_call)
                 continuation_output = dict(output) if isinstance(output, Mapping) else {}
+                if prepared_read.status in {"ok", "replayed"}:
+                    continuation_output = _without_consumed_prepared_read_from_code_mode_result(
+                        continuation_output, prepared_refs[0]
+                    )
                 continuation_output["preparedReadResult"] = prepared_read.to_wire()
                 if prepared_read.status not in {"ok", "replayed"}:
                     return self._error(

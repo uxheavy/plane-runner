@@ -700,11 +700,71 @@ def test_gateway_host_consumes_one_code_mode_search_ref_before_returning(present
 
     assert result.status == "ok"
     assert [operation_id for operation_id, _input in calls] == ["work_item.read"]
+    assert "workItemReadCall" not in result.output["result"]["result"]["results"][0]
     assert result.output["preparedReadResult"]["status"] == "ok"
     assert (
         result.output["preparedReadResult"]["output"]["result"]["work_item"]["name"]
         == "assigned"
     )
+
+
+def test_gateway_host_keeps_failed_automatic_prepared_read_pending():
+    prepared_refs = []
+
+    class FakeHost:
+        binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
+
+        def set_prepared_call_registry(self, registry):
+            self.registry = registry
+
+        def execute_typescript(self, _request):
+            prepared_ref = self.registry.register(
+                {"project_id": "project:test", "issue_id": "issue:test"}
+            )
+            prepared_refs.append(prepared_ref)
+            return {
+                "result": {
+                    "ok": True,
+                    "result": {
+                        "results": [
+                            {"objectType": "work_item", "workItemReadCall": prepared_ref}
+                        ]
+                    },
+                },
+                "observations": [
+                    {
+                        "source": "code",
+                        "action": "code",
+                        "operationRef": "operation:search_workspace",
+                        "status": "ok",
+                    }
+                ],
+            }
+
+        def call_operation(self, operation_id, _input_data, **_kwargs):
+            assert operation_id == "work_item.read"
+            return {"ok": False, "error": {"code": "PREPARED_CALL_INVALID"}}
+
+    port = PlaneGatewayHostPort(FakeHost())
+    result = port.invoke(
+        _call(
+            action="code",
+            operationRef=CODE_MODE_EXECUTION_OPERATION,
+            source="code",
+            input={
+                "schemaVersion": CODE_MODE_SCHEMA_VERSION,
+                "entrypoint": "default",
+                "source": "export default async () => ({})",
+                "input": {},
+            },
+        )
+    )
+
+    assert result.status == "invalid"
+    assert result.prepared_call_invalid_reason is None
+    assert result.output["preparedReadResult"]["status"] == "invalid"
+    assert result.output["result"]["result"]["results"][0]["workItemReadCall"] == prepared_refs[0]
+    assert port._prepared_read_handoff_is_pending() is True
 
 
 def test_gateway_host_does_not_guess_ambiguous_or_tampered_code_mode_reads():
@@ -1190,6 +1250,7 @@ def test_code_mode_direct_search_consumes_one_prepared_read_before_returning():
         "search_workspace",
         "work_item.read",
     ]
+    assert "workItemReadCall" not in search["result"]["results"][0]
     assert search["preparedReadResult"]["ok"] is True
     assert search["preparedReadResult"]["result"]["work_item"]["name"] == "assigned"
     assert observations == ["search_workspace", "work_item.read"]
