@@ -131,12 +131,12 @@
       "imageTag": "plane-agent-api:g4-v75-10ab47d5",
       "sourceRevision": "10ab47d5de04fdd26a18a0379792b9aa6d7adce8"
     },
-    "hermesCommit": "83d912bacbe1e822d8d6cc5a9b8860c56f039ff0",
+    "hermesCommit": "47dd462f1b620e2d121504a8b41245a4d24b481f",
     "mcpGitlink": "c04974ed6624f17b41e63ef8182661929e77e0d3",
     "runtimeContract": "plane.agent-runtime/v1",
-    "runtimeImageDigest": "sha256:629ccbc52ddb85a545103b965ce2af65ccd3c6aeee54dcae338498a473723bb2",
+    "runtimeImageDigest": "sha256:95c32c11d98cf16a4429761a8ef01e822128d9b8b8e049b6fc37a0276f966e9e",
     "runtimeImageRevision": "10ab47d5de04fdd26a18a0379792b9aa6d7adce8",
-    "runtimeImageTag": "plane-agent-runtime:hermes-83d912ba-v79-10ab47d5",
+    "runtimeImageTag": "plane-agent-runtime:hermes-47dd462f-v78-10ab47d5",
     "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
   },
   "pytestPaths": [
