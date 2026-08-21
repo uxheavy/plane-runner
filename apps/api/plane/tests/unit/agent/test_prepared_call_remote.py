@@ -123,7 +123,13 @@ def prepared_read(invocation_ref):
         invocation_ref,
         correlation_id,
         "operation:work_item.read",
-        {"preparedCallRef": prepared_ref},
+        {
+            "preparedCallRef": {
+                "action": "read",
+                "operationRef": "operation:work_item.read",
+                "input": {"preparedCallRef": prepared_ref},
+            }
+        },
     )
 
 first = prepared_read(invocation_id)

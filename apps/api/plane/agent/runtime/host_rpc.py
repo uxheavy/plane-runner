@@ -533,12 +533,33 @@ def _prepared_accepted_form(value: Any) -> str:
             return False
         return True
 
+    def is_ready_to_call_shape(candidate: Any) -> bool:
+        if not isinstance(candidate, Mapping) or set(candidate) != {
+            "action",
+            "operationRef",
+            "input",
+        }:
+            return False
+        if (
+            candidate.get("action") != "read"
+            or candidate.get("operationRef") != "operation:work_item.read"
+        ):
+            return False
+        nested = candidate.get("input")
+        return (
+            isinstance(nested, Mapping)
+            and set(nested) == {"preparedCallRef"}
+            and is_prepared_ref_shape(nested["preparedCallRef"])
+        )
+
     if not isinstance(value, Mapping):
         return "unrecognized"
     if set(value) == {"preparedCallRef"}:
         prepared_ref = value["preparedCallRef"]
         if is_prepared_ref_shape(prepared_ref):
             return "canonical_ref"
+        if is_ready_to_call_shape(prepared_ref):
+            return "ready_to_call"
         if isinstance(prepared_ref, str):
             try:
                 envelope = _canonical_prepared_wrapper(prepared_ref)
@@ -567,6 +588,44 @@ def _prepared_accepted_form(value: Any) -> str:
     ):
         return "ready_to_call"
     return "unrecognized"
+
+
+def _normalize_model_prepared_read_input(input_data: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Unwrap exactly one model-facing ready-to-call read envelope.
+
+    The Plane host registry deliberately accepts only its canonical opaque
+    reference shape. The model-facing adapter may receive the historical
+    ready-to-call envelope nested under ``preparedCallRef``; normalize that
+    one shape before handing the input to the strict registry.
+    """
+
+    if "preparedCallRef" not in input_data:
+        return input_data
+    if set(input_data) != {"preparedCallRef"}:
+        raise PreparedCallInvalid("malformed")
+    prepared_ref = input_data["preparedCallRef"]
+    if not isinstance(prepared_ref, Mapping):
+        return input_data
+    if set(prepared_ref) == {"preparedCallRef"}:
+        return input_data
+    if set(prepared_ref) != {"action", "operationRef", "input"}:
+        raise PreparedCallInvalid("malformed")
+    if (
+        prepared_ref.get("action") != "read"
+        or prepared_ref.get("operationRef") != "operation:work_item.read"
+    ):
+        raise PreparedCallInvalid("malformed")
+    nested = prepared_ref.get("input")
+    if not isinstance(nested, Mapping) or set(nested) != {"preparedCallRef"}:
+        raise PreparedCallInvalid("malformed")
+    canonical_ref = nested["preparedCallRef"]
+    if not isinstance(canonical_ref, str) or not canonical_ref.startswith(PREPARED_CALL_PREFIX):
+        raise PreparedCallInvalid("malformed")
+    try:
+        _text(canonical_ref, "host.preparedCallRef", MAX_PREPARED_CALL_REF_BYTES)
+    except PlaneHostRPCError as exc:
+        raise PreparedCallInvalid("malformed") from exc
+    return {"preparedCallRef": canonical_ref}
 
 
 def _prepared_shape_diagnostic(value: Any, failure_class: str) -> dict[str, Any]:
@@ -1677,7 +1736,8 @@ class PlaneGatewayHostPort:
             try:
                 if set(call.input).intersection({"action", "operationRef", "input", "workItemReadCall"}):
                     raise PreparedCallInvalid("malformed")
-                operation_input = self._normalize_prepared_read_input(call.input)
+                operation_input = _normalize_model_prepared_read_input(call.input)
+                operation_input = self._normalize_prepared_read_input(operation_input)
                 if "preparedCallRef" in operation_input:
                     prepared_ref = operation_input["preparedCallRef"]
                 operation_input = self._resolve_prepared_read_input(operation_input)

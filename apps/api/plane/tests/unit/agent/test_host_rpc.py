@@ -109,7 +109,13 @@ prepared_ref = search["output"]["result"]["results"][0]["workItemReadCall"]
 read = call(
     sys.argv[1],
     "operation:work_item.read",
-    {"preparedCallRef": {"preparedCallRef": prepared_ref}},
+    {
+        "preparedCallRef": {
+            "action": "read",
+            "operationRef": "operation:work_item.read",
+            "input": {"preparedCallRef": prepared_ref},
+        }
+    },
 )
 assert read["status"] == "ok", read
 submit = call(
@@ -217,9 +223,90 @@ def test_prepared_shape_diagnostic_does_not_call_nested_ref_canonical():
         "malformed",
     )
 
-    assert diagnostic["acceptedForm"] == "unrecognized"
+    assert diagnostic["acceptedForm"] == "ready_to_call"
     assert diagnostic["failureClass"] == "malformed"
+    assert diagnostic["shape"]["valueTypes"] == ["object", "string"]
+    assert diagnostic["shape"]["nestingDepth"] == 3
     assert "prepared-call:opaque" not in json.dumps(diagnostic)
+
+
+def test_model_ready_to_call_wrapper_is_unwrapped_before_gateway():
+    received = {}
+
+    class FakeHost:
+        binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
+
+        def call_operation(self, operation_id, input_data, **_kwargs):
+            received["operation_id"] = operation_id
+            received["input"] = input_data
+            return {"ok": True, "result": {"work_item": {"name": "assigned"}}}
+
+    port = PlaneGatewayHostPort(FakeHost())
+    prepared_ref = port._prepared_call_registry.register(
+        {"project_id": "project:test", "issue_id": "issue:test"}
+    )
+    result = port.invoke(
+        _call(
+            operationRef="operation:work_item.read",
+            input={
+                "preparedCallRef": {
+                    "action": "read",
+                    "operationRef": "operation:work_item.read",
+                    "input": {"preparedCallRef": prepared_ref},
+                }
+            },
+        )
+    )
+
+    assert result.status == "ok"
+    assert received == {
+        "operation_id": "work_item.read",
+        "input": {"project_id": "project:test", "issue_id": "issue:test"},
+    }
+
+
+@pytest.mark.parametrize(
+    "prepared_input",
+    [
+        {
+            "preparedCallRef": {
+                "action": "mutate",
+                "operationRef": "operation:work_item.read",
+                "input": {"preparedCallRef": "prepared-call:opaque"},
+            }
+        },
+        {
+            "preparedCallRef": {
+                "action": "read",
+                "operationRef": "operation:work_item.read",
+                "input": {"preparedCallRef": "prepared-call:opaque"},
+                "extra": True,
+            }
+        },
+        {
+            "preparedCallRef": {
+                "action": "read",
+                "operationRef": "operation:work_item.read",
+                "input": {"preparedCallRef": {"preparedCallRef": "prepared-call:opaque"}},
+            }
+        },
+    ],
+)
+def test_model_prepared_wrapper_rejects_wrong_extra_or_deep_shapes_before_gateway(prepared_input):
+    class FakeHost:
+        binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
+
+        def call_operation(self, *_args, **_kwargs):
+            raise AssertionError("invalid model wrapper must not reach the gateway")
+
+    result = PlaneGatewayHostPort(FakeHost()).invoke(
+        _call(operationRef="operation:work_item.read", input=prepared_input)
+    )
+
+    assert result.status == "invalid"
+    assert result.error_code == "PREPARED_CALL_INVALID"
+    assert result.output["shapeDiagnostic"]["acceptedForm"] == "unrecognized"
+    assert "prepared-call:opaque" not in json.dumps(result.output)
 
 
 @pytest.mark.parametrize(

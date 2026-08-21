@@ -141,6 +141,13 @@ def test_prepared_call_accepts_only_the_canonical_ref_shape():
     "malformed_input",
     [
         lambda ref: {"preparedCallRef": {"preparedCallRef": {"preparedCallRef": ref}}},
+        lambda ref: {
+            "preparedCallRef": {
+                "action": "read",
+                "operationRef": "operation:work_item.read",
+                "input": {"preparedCallRef": ref},
+            }
+        },
         lambda ref: {"preparedCallRef": ref, "extra": "x"},
         lambda ref: {"preparedCallRef": "not-a-prepared-call"},
     ],
