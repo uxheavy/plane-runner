@@ -628,7 +628,11 @@ def test_unix_host_records_call_less_socket_read_failure_without_raw_details(tmp
 
 def test_gateway_host_preserves_valid_search_to_prepared_read_handoff():
     class FakeHost:
-        binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
+        binding = SimpleNamespace(
+            run_ref="run:test",
+            invocation_ref="invocation:test",
+            assignment_target_ref="target:issue:issue:test",
+        )
 
         def set_prepared_call_registry(self, registry):
             self.registry = registry
@@ -664,6 +668,8 @@ def test_gateway_host_preserves_valid_search_to_prepared_read_handoff():
         )
     )
     prepared_ref = search.output["result"]["results"][0]["workItemReadCall"]
+    assert prepared_ref == search.output["result"]["assignmentWorkItemReadCall"]
+    assert "workItemReadInput" not in json.dumps(search.output)
     read = port.invoke(
         _call(
             operationRef="operation:work_item.read",

@@ -47,7 +47,7 @@ ENVELOPE = json.dumps(
 
 def test_hermes_request_projects_verified_plane_contract_digests_without_mutating_plane_records(monkeypatch):
     expected_digests = runtime_contract.contract_digests()
-    assert expected_digests["runSnapshot"] == "308101c6a2c9f56e7deb5c6a07c8bc74b59831b92cbbb5b07c5a7eefc21f4947"
+    assert expected_digests["runSnapshot"] == "0e72f04579f8cebd00b7afee1885d0ff68ee04ee30dfd7ff3e74e9ca05cddaed"
     digest_calls = []
 
     def verified_contract_digests():
@@ -69,6 +69,7 @@ def test_hermes_request_projects_verified_plane_contract_digests_without_mutatin
             "maxCodeModeInputBytes": 4096,
             "maxCodeModeOutputBytes": 4096,
             "maxCodeModeCalls": 4,
+            "codeModePhase": "post_search",
         },
         "contractDigests": {"runSnapshot": "plane-authority"},
         "contentDigest": "snapshot:plane-authority",
@@ -93,6 +94,7 @@ def test_hermes_request_projects_verified_plane_contract_digests_without_mutatin
         "maxCodeModeInputBytes",
         "maxCodeModeOutputBytes",
         "maxCodeModeCalls",
+        "codeModePhase",
     }
     assert digest_calls == [True]
     assert projected["contractDigests"] == expected_digests

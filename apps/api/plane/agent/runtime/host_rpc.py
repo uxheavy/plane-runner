@@ -2046,6 +2046,7 @@ class PlaneGatewayHostPort:
         target_issue_id = _issue_id_from_assignment_target(assignment_target_ref)
         matching_inputs: list[Mapping[str, Any]] = []
         prepared_results: list[Mapping[str, Any]] = []
+        matching_result_indexes: list[int] = []
         for item in result["results"]:
             if not isinstance(item, Mapping) or item.get("objectType") != "work_item":
                 prepared_results.append(item)
@@ -2058,6 +2059,7 @@ class PlaneGatewayHostPort:
                 and read_input.get("issue_id") == target_issue_id
             ):
                 matching_inputs.append(read_input)
+                matching_result_indexes.append(len(prepared_results))
             prepared_item = {
                 key: value
                 for key, value in item.items()
@@ -2068,6 +2070,10 @@ class PlaneGatewayHostPort:
         recognized_count = min(len(matching_inputs), 2)
         if len(matching_inputs) == 1:
             prepared_ref = self._register_prepared_call(matching_inputs[0])
+            prepared_results[matching_result_indexes[0]] = {
+                **prepared_results[matching_result_indexes[0]],
+                "workItemReadCall": prepared_ref,
+            }
             prepared_result = {
                 **result,
                 "results": prepared_results,

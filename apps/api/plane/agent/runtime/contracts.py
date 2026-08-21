@@ -58,7 +58,9 @@ def model_operation_entry(operation: Mapping[str, Any]) -> dict[str, Any]:
                     item_properties = item_schema.get("properties")
                     if isinstance(item_properties, dict):
                         item_properties.pop("workItemReadInput", None)
-                        item_properties.pop("workItemReadCall", None)
+                        item_properties["workItemReadCall"] = _thaw_contract_json(
+                            _MODEL_PREPARED_READ_REF
+                        )
     return projected
 
 
