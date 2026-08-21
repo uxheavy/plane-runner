@@ -2585,6 +2585,52 @@ class G4ContractTests(unittest.TestCase):
             )
         )
 
+    def test_manager_route_diagnostics_retain_actual_m07_m08_false_predicates(self):
+        namespace = invoke_helper_namespace()
+        for route_id, predicates, failing in (
+            (
+                "M07",
+                ("humanApprovalRequired", "chiefProvisioned", "currentMembershipCopied", "noStaleMembershipCopy", "noCrossWorkspaceMembership"),
+                "currentMembershipCopied",
+            ),
+            (
+                "M08",
+                ("parentChildLineage", "outcomeAndArtifact", "terminalEventsAgree", "evaluatorAndHumanReadback", "immutablePriorSnapshot"),
+                "immutablePriorSnapshot",
+            ),
+        ):
+            route = {predicate: predicate != failing for predicate in predicates}
+            diagnostic = namespace["_manager_route_failure_diagnostic"](
+                {"M05", route_id}, route_evidence={"routes": {route_id: route}}
+            )
+            self.assertEqual(
+                diagnostic,
+                {"routeId": route_id, "predicate": failing, "observed": False, "exceptionClass": None},
+            )
+            _validate_manager_route_diagnostic(diagnostic)
+            exception = ValueError("raw exception text")
+            exception.route_id = route_id
+            exception.predicate = failing
+            exception_diagnostic = namespace["_manager_route_failure_diagnostic"](
+                {route_id}, exception=exception
+            )
+            self.assertEqual(
+                exception_diagnostic,
+                {"routeId": route_id, "predicate": failing, "observed": "exception", "exceptionClass": "ValueError"},
+            )
+            _validate_manager_route_diagnostic(exception_diagnostic)
+
+    def test_manager_route_diagnostics_reject_tampered_raw_and_oversize_values(self):
+        namespace = invoke_helper_namespace()
+        for diagnostic in (
+            {"routeId": "M07", "predicate": "chiefProvisioned", "observed": "raw-id", "exceptionClass": None},
+            {"routeId": "M08", "predicate": "immutablePriorSnapshot", "observed": False, "exceptionClass": "x" * 512},
+            {"routeId": "M08", "predicate": "x" * 512, "observed": False, "exceptionClass": None},
+        ):
+            self.assertIsNone(namespace["_bounded_manager_route_diagnostic"](diagnostic))
+            with self.assertRaises(ContractError):
+                _validate_manager_route_diagnostic(diagnostic)
+
     def test_post_primary_stage_markers_cover_replay_route_and_receipt_in_order(self):
         source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
         replay = source.index('post_primary_stage = "replay"')

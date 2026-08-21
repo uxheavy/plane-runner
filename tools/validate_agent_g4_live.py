@@ -1278,8 +1278,14 @@ _MANAGER_ROUTE_BOOLEAN_FIELDS = {
 _MANAGER_ROUTE_IDS = set(_MANAGER_ROUTE_BOOLEAN_FIELDS)
 _SCENARIO_ROUTE_IDS = _WORKER_ROUTE_IDS | _OPERATOR_ROUTE_IDS | _MANAGER_ROUTE_IDS
 _MANAGER_DIAGNOSTIC_PREDICATES = {
+    "M01": {"dynamicPlan", "noSavedWorkflowProduct"},
+    "M02": {"boundedDelegation", "lineagePersisted", "independentChildRun"},
+    "M03": {"queuedDescendantCancelled", "activeDescendantCancelled", "terminalVisible", "lateCallbackDenied"},
+    "M04": {"nonUtcTimezone", "springForwardSkipped", "fireIdempotent", "normalAssignmentCreated"},
     "M05": {"evaluatorFirst", "humanDecisionAfterEvaluator", "revisionFreshRun", "priorSnapshotImmutable", "finalAccepted"},
     "M06": {"proposalRecorded", "humanApprovalApplied", "selfApprovalDenied", "staleApprovalDenied"},
+    "M07": {"humanApprovalRequired", "chiefProvisioned", "currentMembershipCopied", "noStaleMembershipCopy", "noCrossWorkspaceMembership"},
+    "M08": {"parentChildLineage", "outcomeAndArtifact", "terminalEventsAgree", "evaluatorAndHumanReadback", "immutablePriorSnapshot"},
 }
 _MANAGER_DIAGNOSTIC_EXCEPTIONS = {
     "AgentDomainError", "AgentScheduleError", "AttributeError", "IntegrityError", "KeyError",

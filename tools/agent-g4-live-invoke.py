@@ -204,8 +204,14 @@ def _bounded_child_diagnostic(value):
 
 
 _MANAGER_ROUTE_DIAGNOSTIC_PREDICATES = {
+    "M01": ("dynamicPlan", "noSavedWorkflowProduct"),
+    "M02": ("boundedDelegation", "lineagePersisted", "independentChildRun"),
+    "M03": ("queuedDescendantCancelled", "activeDescendantCancelled", "terminalVisible", "lateCallbackDenied"),
+    "M04": ("nonUtcTimezone", "springForwardSkipped", "fireIdempotent", "normalAssignmentCreated"),
     "M05": ("evaluatorFirst", "humanDecisionAfterEvaluator", "revisionFreshRun", "priorSnapshotImmutable", "finalAccepted"),
     "M06": ("proposalRecorded", "humanApprovalApplied", "selfApprovalDenied", "staleApprovalDenied"),
+    "M07": ("humanApprovalRequired", "chiefProvisioned", "currentMembershipCopied", "noStaleMembershipCopy", "noCrossWorkspaceMembership"),
+    "M08": ("parentChildLineage", "outcomeAndArtifact", "terminalEventsAgree", "evaluatorAndHumanReadback", "immutablePriorSnapshot"),
 }
 _MANAGER_ROUTE_DIAGNOSTIC_EXCEPTIONS = frozenset({
     "AgentDomainError", "AgentScheduleError", "AttributeError", "IntegrityError", "KeyError",
@@ -236,21 +242,33 @@ def _bounded_manager_route_diagnostic(value):
     return dict(value)
 
 
-def _manager_route_failure_diagnostic(route_checks, *, route_evidence=None, exception=None):
-    selected = [route_id for route_id in ("M05", "M06") if route_id in set(route_checks or ())]
+def _manager_route_failure_diagnostic(
+    route_checks,
+    *,
+    route_evidence=None,
+    exception=None,
+    failing_route_id=None,
+    failing_predicate=None,
+):
+    selected = [route_id for route_id in _MANAGER_ROUTE_DIAGNOSTIC_PREDICATES if route_id in set(route_checks or ())]
     if not selected:
         return None
-    route_id = selected[0]
     if exception is not None:
+        route_id = failing_route_id or getattr(exception, "route_id", None) or selected[0]
+        predicate = failing_predicate or getattr(exception, "predicate", None) or "unavailable"
+        if route_id not in selected:
+            return None
         exception_class = type(exception).__name__
         return {
             "routeId": route_id,
-            "predicate": "unavailable",
+            "predicate": predicate,
             "observed": "exception",
             "exceptionClass": exception_class if exception_class in _MANAGER_ROUTE_DIAGNOSTIC_EXCEPTIONS else "Unknown",
         }
     routes = route_evidence.get("routes", {}) if isinstance(route_evidence, dict) else {}
     for route_id in selected:
+        if route_id not in routes:
+            continue
         route = routes.get(route_id, {})
         for predicate in _MANAGER_ROUTE_DIAGNOSTIC_PREDICATES[route_id]:
             observed = route.get(predicate)
