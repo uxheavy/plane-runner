@@ -121,6 +121,10 @@ class PreparedCallRegistry:
         if set(input_data) != {"preparedCallRef"}:
             raise PreparedCallInvalid("malformed")
         prepared_ref = input_data["preparedCallRef"]
+        if isinstance(prepared_ref, Mapping):
+            if set(prepared_ref) != {"preparedCallRef"}:
+                raise PreparedCallInvalid("malformed")
+            prepared_ref = prepared_ref["preparedCallRef"]
         if not isinstance(prepared_ref, str):
             raise PreparedCallInvalid("malformed")
         if not prepared_ref.startswith(PREPARED_CALL_PREFIX):

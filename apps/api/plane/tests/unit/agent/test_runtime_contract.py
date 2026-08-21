@@ -128,6 +128,9 @@ def test_prepared_call_accepts_only_the_canonical_ref_shape():
     prepared_ref = registry.register({"project_id": "project:test", "issue_id": "issue:test"})
 
     assert registry.normalize({"preparedCallRef": prepared_ref}) == {"preparedCallRef": prepared_ref}
+    assert registry.normalize({"preparedCallRef": {"preparedCallRef": prepared_ref}}) == {
+        "preparedCallRef": prepared_ref
+    }
     assert registry.resolve({"preparedCallRef": prepared_ref}) == {
         "project_id": "project:test",
         "issue_id": "issue:test",
@@ -137,7 +140,7 @@ def test_prepared_call_accepts_only_the_canonical_ref_shape():
 @pytest.mark.parametrize(
     "malformed_input",
     [
-        lambda ref: {"preparedCallRef": {"preparedCallRef": ref}},
+        lambda ref: {"preparedCallRef": {"preparedCallRef": {"preparedCallRef": ref}}},
         lambda ref: {"preparedCallRef": ref, "extra": "x"},
         lambda ref: {"preparedCallRef": "not-a-prepared-call"},
     ],

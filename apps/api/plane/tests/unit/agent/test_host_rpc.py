@@ -109,7 +109,7 @@ prepared_ref = search["output"]["result"]["results"][0]["workItemReadCall"]
 read = call(
     sys.argv[1],
     "operation:work_item.read",
-    {"preparedCallRef": prepared_ref},
+    {"preparedCallRef": {"preparedCallRef": prepared_ref}},
 )
 assert read["status"] == "ok", read
 submit = call(
@@ -543,7 +543,7 @@ def test_prepared_read_rejects_non_read_action_before_gateway():
     assert result.error_code == "VALIDATION_ERROR"
 
 
-def test_nested_prepared_read_ref_is_rejected_before_gateway():
+def test_deeper_prepared_read_ref_is_rejected_before_gateway():
     class FakeHost:
         binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
 
@@ -553,7 +553,11 @@ def test_nested_prepared_read_ref_is_rejected_before_gateway():
     result = PlaneGatewayHostPort(FakeHost()).invoke(
         _call(
             operationRef="operation:work_item.read",
-            input={"preparedCallRef": {"preparedCallRef": "prepared-call:opaque"}},
+            input={
+                "preparedCallRef": {
+                    "preparedCallRef": {"preparedCallRef": "prepared-call:opaque"}
+                }
+            },
         )
     )
 
