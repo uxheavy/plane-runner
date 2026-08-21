@@ -421,6 +421,35 @@ def _is_prepared_call(call: PlaneHostCall) -> bool:
 def _prepared_read_refs_from_search_result(output: Any) -> tuple[str, ...]:
     """Extract only opaque work-item read refs from one trusted search result."""
 
+    def extract_prepared_ref(value: Any) -> str | None:
+        if isinstance(value, str):
+            candidate = value
+        elif isinstance(value, Mapping) and set(value) == {"preparedCallRef"}:
+            candidate = value["preparedCallRef"]
+        elif isinstance(value, Mapping) and set(value) == {
+            "action",
+            "operationRef",
+            "input",
+        }:
+            nested = value.get("input")
+            if (
+                value.get("action") != "read"
+                or value.get("operationRef") != "operation:work_item.read"
+                or not isinstance(nested, Mapping)
+                or set(nested) != {"preparedCallRef"}
+            ):
+                return None
+            candidate = nested["preparedCallRef"]
+        else:
+            return None
+        if (
+            not isinstance(candidate, str)
+            or not candidate.startswith(PREPARED_CALL_PREFIX)
+            or len(candidate.encode("utf-8")) > MAX_PREPARED_CALL_REF_BYTES
+        ):
+            return None
+        return candidate
+
     if not isinstance(output, Mapping):
         return ()
     result = output.get("result")
@@ -430,14 +459,13 @@ def _prepared_read_refs_from_search_result(output: Any) -> tuple[str, ...]:
         return ()
     refs: list[str] = []
     for item in result["results"]:
-        if not isinstance(item, Mapping) or item.get("objectType") != "work_item":
+        if not isinstance(item, Mapping):
             continue
-        prepared_ref = item.get("workItemReadCall")
-        if (
-            not isinstance(prepared_ref, str)
-            or not prepared_ref.startswith(PREPARED_CALL_PREFIX)
-            or len(prepared_ref.encode("utf-8")) > MAX_PREPARED_CALL_REF_BYTES
-        ):
+        object_type = item.get("objectType")
+        if object_type is not None and object_type != "work_item":
+            continue
+        prepared_ref = extract_prepared_ref(item.get("workItemReadCall"))
+        if prepared_ref is None:
             return ()
         refs.append(prepared_ref)
     return tuple(refs)

@@ -633,7 +633,19 @@ def test_gateway_host_preserves_valid_search_to_prepared_read_handoff():
     assert read.output["result"]["work_item"]["name"] == "assigned"
 
 
-def test_gateway_host_consumes_one_code_mode_search_ref_before_returning():
+@pytest.mark.parametrize(
+    "presented_call",
+    [
+        lambda ref: ref,
+        lambda ref: {"preparedCallRef": ref},
+        lambda ref: {
+            "action": "read",
+            "operationRef": "operation:work_item.read",
+            "input": {"preparedCallRef": ref},
+        },
+    ],
+)
+def test_gateway_host_consumes_one_code_mode_search_ref_before_returning(presented_call):
     calls = []
 
     class FakeHost:
@@ -652,7 +664,7 @@ def test_gateway_host_consumes_one_code_mode_search_ref_before_returning():
                     "ok": True,
                     "result": {
                         "results": [
-                            {"objectType": "work_item", "workItemReadCall": prepared_ref}
+                            {"workItemReadCall": presented_call(prepared_ref)}
                         ]
                     },
                 },
@@ -772,6 +784,72 @@ def test_gateway_host_does_not_guess_ambiguous_or_tampered_code_mode_reads():
             assert blocked.status == "invalid"
             assert blocked.error_code == "VALIDATION_ERROR"
 
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    "presented_call",
+    [
+        {"preparedCallRef": "prepared-call:unknown", "extra": True},
+        {
+            "action": "write",
+            "operationRef": "operation:work_item.read",
+            "input": {"preparedCallRef": "prepared-call:unknown"},
+        },
+        {"input": {"preparedCallRef": "prepared-call:unknown"}},
+        "prepared-call:" + ("x" * (host_rpc.MAX_PREPARED_CALL_REF_BYTES + 1)),
+    ],
+)
+def test_gateway_host_rejects_malformed_code_mode_prepared_read_shapes(presented_call):
+    calls = []
+
+    class FakeHost:
+        binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
+
+        def set_prepared_call_registry(self, registry):
+            self.registry = registry
+
+        def execute_typescript(self, _request):
+            return {
+                "result": {
+                    "ok": True,
+                    "result": {
+                        "results": [
+                            {"workItemReadCall": presented_call},
+                            {"objectType": "project", "workItemReadCall": "prepared-call:ignored"},
+                        ]
+                    },
+                },
+                "observations": [
+                    {
+                        "source": "code",
+                        "action": "code",
+                        "operationRef": "operation:search_workspace",
+                        "status": "ok",
+                    }
+                ],
+            }
+
+        def call_operation(self, *_args, **_kwargs):
+            calls.append(True)
+            raise AssertionError("malformed prepared reads must not reach the gateway")
+
+    result = PlaneGatewayHostPort(FakeHost()).invoke(
+        _call(
+            action="code",
+            operationRef=CODE_MODE_EXECUTION_OPERATION,
+            source="code",
+            input={
+                "schemaVersion": CODE_MODE_SCHEMA_VERSION,
+                "entrypoint": "default",
+                "source": "export default async () => ({})",
+                "input": {},
+            },
+        )
+    )
+
+    assert result.status == "ok"
+    assert "preparedReadResult" not in result.output
     assert calls == []
 
 
