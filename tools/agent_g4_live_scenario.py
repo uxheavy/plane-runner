@@ -449,6 +449,16 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
                 "workspaceRef. Do not reconstruct project_id or issue_id from targetRef, ref, key, title, or "
                 "workspaceRef."
             )
+        if (
+            operation_id == "search_workspace"
+            and index < len(outcomes)
+            and outcomes[index].get("operationId") == "work_item.read"
+        ):
+            guidance += (
+                ' Use exactly {"query":"G4 Live Issue","limit":1} as input for the single bounded search; '
+                "require one work-item result with a usable workItemReadCall, then advance without searching "
+                "again."
+            )
         if operation_id == "work_item.rename":
             model_action = "plane_execute_typescript"
             action_detail = " to perform work_item.rename"

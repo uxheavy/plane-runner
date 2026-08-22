@@ -540,6 +540,12 @@ def test_operator_live_descriptor_covers_exact_synthetic_omar_routes() -> None:
     )
     for commission in parsed.commissions:
         validator._validate_scenario_projection(scenario.commission_descriptor(parsed, commission).evidence())
+    route_guidance = scenario.model_route_expectations(parsed.commissions[0].expected)
+    assert route_guidance[2].startswith("Route step 3: invoke search_workspace exactly 1 time(s) and expect success.")
+    assert 'Use exactly {"query":"G4 Live Issue","limit":1} as input' in route_guidance[2]
+    assert "workItemReadCall" in route_guidance[2]
+    assert "input.preparedCallRef" in route_guidance[3]
+    assert "Do not pass the workItemReadCall string as the complete tool arguments" in route_guidance[3]
     assert "Tool presentation is descriptive only" in parsed.profile.instructions
     assert "outcome_unknown" in parsed.prompt
 
