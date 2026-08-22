@@ -2244,6 +2244,7 @@ def _prepare_shared_worker_setup(scenario, provider, provider_relay, suffix, *, 
     profile_model_defaults = {}
     profile_expected_outcomes = None
     profile_display_name = None
+    profile_tool_presentation = None
     if scenario is not None:
         actor_role = scenario_agent_roles[scenario.actor_role]
         profile_instructions = scenario.profile.instructions
@@ -2255,6 +2256,7 @@ def _prepare_shared_worker_setup(scenario, provider, provider_relay, suffix, *, 
         }
         profile_display_name = scenario.profile.name
         profile_expected_outcomes = _profile_expected_outcomes(scenario)
+        profile_tool_presentation = _profile_tool_presentation(scenario)
         profile_instructions = profile_instructions.replace("{{subjectUserRef}}", f"user:{user.id}")
         profile_persona = profile_persona.replace("{{subjectUserRef}}", f"user:{user.id}")
     profile = create_profile(
@@ -2264,14 +2266,7 @@ def _prepare_shared_worker_setup(scenario, provider, provider_relay, suffix, *, 
         display_name=profile_display_name,
         persona=profile_persona,
         model_defaults=profile_model_defaults,
-        tool_presentation=(
-            {
-                "eager_operations": list(scenario.profile.tool_presentation),
-                "model_toolset": scenario.profile.model_toolset,
-            }
-            if scenario is not None and scenario.profile.tool_presentation
-            else None
-        ),
+        tool_presentation=profile_tool_presentation,
         runtime_defaults={
             "provider": provider["name"],
             "model": scenario.profile.model_policy.model if scenario is not None else provider["model"],
@@ -2359,6 +2354,24 @@ def _profile_expected_outcomes(scenario):
     if scenario.runtime_bindings:
         rendered = tuple(substitute_code_mode_placeholders(item, scenario.runtime_bindings) for item in rendered)
     return list(rendered)
+
+
+def _profile_tool_presentation(scenario):
+    from agent_g4_live_scenario import standard_route
+
+    route = standard_route(scenario.expected) if scenario.profile.model_toolset == "standard" else None
+    eager_operations = list(scenario.profile.tool_presentation)
+    if route is not None:
+        for step in route["steps"]:
+            operation_id = step["operationRef"].removeprefix("operation:")
+            if operation_id not in eager_operations:
+                eager_operations.append(operation_id)
+    if not eager_operations and route is None:
+        return None
+    presentation = {"eager_operations": eager_operations, "model_toolset": scenario.profile.model_toolset}
+    if route is not None:
+        presentation["standard_route"] = route
+    return presentation
 
 
 def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:

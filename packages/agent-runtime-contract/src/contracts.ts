@@ -392,10 +392,23 @@ export type EagerOperationPresentation = Readonly<{
   disclosure: "eager";
 }>;
 
+export type StandardRouteStep = Readonly<{
+  operationRef: OperationRef;
+  optional?: true;
+  expectedStatus?: "denied";
+  expectedErrorCode?: "NOT_AUTHORIZED";
+}>;
+
+export type StandardRoute = Readonly<{
+  schemaVersion: "plane.standard-route/v1";
+  steps: readonly StandardRouteStep[];
+}>;
+
 export type ToolCatalogSnapshot = Readonly<{
   catalogDigest: ContentDigest;
   modelToolset: "standard" | "code_mode_only";
   eagerOperations: readonly EagerOperationPresentation[];
+  standardRoute?: StandardRoute;
 }>;
 
 export type RuntimeModelRoute = Readonly<{
@@ -1624,6 +1637,7 @@ function parseSnapshotContent(value: unknown, path: string): RunSnapshotContent 
     "catalogDigest",
     "modelToolset",
     "eagerOperations",
+    "standardRoute",
   ]);
   if (catalogObject.modelToolset !== "standard" && catalogObject.modelToolset !== "code_mode_only") {
     throw new ContractParseError(`${path}.toolCatalog.modelToolset`, "must be standard or code_mode_only");
@@ -1668,7 +1682,49 @@ function parseSnapshotContent(value: unknown, path: string): RunSnapshotContent 
     `${path}.toolCatalog.catalogDigest`,
     parseContentDigest
   ) as ContentDigest;
-  const toolCatalog = { catalogDigest, modelToolset, eagerOperations };
+  let standardRoute: StandardRoute | undefined;
+  if (catalogObject.standardRoute !== undefined) {
+    const routeObject = requireRecord(catalogObject.standardRoute, `${path}.toolCatalog.standardRoute`, [
+      "schemaVersion",
+      "steps",
+    ]);
+    if (routeObject.schemaVersion !== "plane.standard-route/v1") {
+      throw new ContractParseError(`${path}.toolCatalog.standardRoute`, "is unsupported");
+    }
+    if (!Array.isArray(routeObject.steps) || routeObject.steps.length < 1 || routeObject.steps.length > 7) {
+      throw new ContractParseError(`${path}.toolCatalog.standardRoute.steps`, "must contain 1..7 items");
+    }
+    standardRoute = {
+      schemaVersion: "plane.standard-route/v1",
+      steps: routeObject.steps.map((item, index) => {
+        const step = requireRecord(item, `${path}.toolCatalog.standardRoute.steps[${index}]`, [
+          "operationRef",
+          "optional",
+          "expectedStatus",
+          "expectedErrorCode",
+        ]);
+        if (step.optional !== undefined && step.optional !== true) {
+          throw new ContractParseError(`${path}.toolCatalog.standardRoute.steps[${index}].optional`, "must be true");
+        }
+        if (step.optional === true && step.operationRef !== "operation:work_item.read") {
+          throw new ContractParseError(`${path}.toolCatalog.standardRoute.steps[${index}].optional`, "is reserved for prepared work_item.read");
+        }
+        if (step.expectedStatus !== undefined && step.expectedStatus !== "denied") {
+          throw new ContractParseError(`${path}.toolCatalog.standardRoute.steps[${index}].expectedStatus`, "is unsupported");
+        }
+        if (step.expectedErrorCode !== undefined && step.expectedErrorCode !== "NOT_AUTHORIZED") {
+          throw new ContractParseError(`${path}.toolCatalog.standardRoute.steps[${index}].expectedErrorCode`, "is unsupported");
+        }
+        return {
+          operationRef: parseRef(step.operationRef, `${path}.toolCatalog.standardRoute.steps[${index}].operationRef`, parseOperationRef),
+          ...(step.optional === true ? { optional: true as const } : {}),
+          ...(step.expectedStatus === "denied" ? { expectedStatus: "denied" as const } : {}),
+          ...(step.expectedErrorCode === "NOT_AUTHORIZED" ? { expectedErrorCode: "NOT_AUTHORIZED" as const } : {}),
+        };
+      }),
+    };
+  }
+  const toolCatalog = standardRoute ? { catalogDigest, modelToolset, eagerOperations, standardRoute } : { catalogDigest, modelToolset, eagerOperations };
   if (!isCanonicalOwnedJsonUtf8ByteLengthAtMost(toolCatalog, MAX_EAGER_PRESENTATION_BYTES)) {
     throw new ContractParseError(
       `${path}.toolCatalog`,

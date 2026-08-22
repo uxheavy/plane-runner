@@ -51,7 +51,7 @@
           { "operationId": "catalog.describe", "outcome": "success", "count": 1 },
           { "operationId": "search_workspace", "outcome": "success", "count": 1 },
           { "operationId": "work_item.read", "outcome": "success", "count": 1 },
-          { "operationId": "agent.outcome.evaluate", "outcome": "denied", "count": 1 },
+          { "operationId": "agent.outcome.evaluate", "outcome": "denied", "errorCode": "NOT_AUTHORIZED", "count": 1 },
           { "operationId": "agent.outcome.submit", "outcome": "success", "count": 1 },
           { "operationId": "agent.outcome.publish", "outcome": "success", "count": 1 }
         ],

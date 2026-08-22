@@ -309,6 +309,8 @@ PROFILE_TOOL_KEYS = {
     "catalogDigest",
     "catalog_digest",
     "model_toolset",
+    "standardRoute",
+    "standard_route",
 }
 
 

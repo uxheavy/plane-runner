@@ -1053,6 +1053,36 @@ def test_expected_operations_render_as_ordered_model_route_outcomes() -> None:
     )
 
 
+def test_standard_route_maps_typed_delivery_outcomes_without_persona_names() -> None:
+    expected = {"operationOutcomes": [
+        {"operationId": "search_workspace", "outcome": "success"},
+        {"operationId": "work_item.read", "outcome": "success"},
+        {"operationId": "agent.outcome.evaluate", "outcome": "denied", "errorCode": "NOT_AUTHORIZED"},
+        {"operationId": "agent.outcome.submit", "outcome": "success"},
+        {"operationId": "agent.outcome.publish", "outcome": "success"},
+    ]}
+    route = scenario.standard_route(expected)
+    assert route == {
+        "schemaVersion": "plane.standard-route/v1",
+        "steps": [
+            {"operationRef": "operation:search_workspace"},
+            {"operationRef": "operation:work_item.read"},
+            {"operationRef": "operation:agent.outcome.evaluate", "expectedStatus": "denied", "expectedErrorCode": "NOT_AUTHORIZED"},
+            {"operationRef": "operation:agent.outcome.submit"},
+            {"operationRef": "operation:agent.outcome.publish"},
+        ],
+    }
+    assert "routeId" not in route
+    assert scenario.standard_route({"operationOutcomes": [{"operationId": "agent.outcome.submit", "outcome": "success", "count": 2}]}) is None
+    manager = scenario.standard_route({"operationOutcomes": [
+        {"operationId": "search_workspace", "outcome": "success"},
+        {"operationId": "agent.outcome.submit", "outcome": "success"},
+        {"operationId": "agent.outcome.publish", "outcome": "success"},
+    ]})
+    assert manager["steps"][1] == {"operationRef": "operation:work_item.read", "optional": True}
+    assert scenario.standard_route({"operationOutcomes": [{"operationId": "x", "outcome": "denied"}]}) is None
+
+
 def test_rename_route_always_exposes_the_exact_code_mode_callback() -> None:
     guidance = scenario.model_route_expectations(
         {

@@ -129,6 +129,7 @@ class ExpectedOperation(TypedDict, total=False):
     operationId: str
     outcome: Literal["success", "denied", "not_observed"]
     count: int
+    errorCode: str
 
 
 class ExpectedPredicates(TypedDict, total=False):
@@ -471,6 +472,35 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
     return tuple(rendered)
 
 
+def standard_route(expected: ExpectedPredicates | None) -> dict[str, Any] | None:
+    """Map typed delivery outcomes directly to a bounded linear presentation."""
+
+    if expected is None:
+        return None
+    steps = []
+    operations = expected.get("operationOutcomes", [])
+    for index, item in enumerate(operations):
+        if item.get("count", 1) != 1 or not isinstance(item.get("operationId"), str):
+            return None
+        step = {"operationRef": f"operation:{item['operationId']}"}
+        if item.get("outcome") == "denied":
+            if item.get("errorCode") != "NOT_AUTHORIZED":
+                return None
+            step.update(expectedStatus="denied", expectedErrorCode="NOT_AUTHORIZED")
+        elif item.get("outcome") != "success":
+            return None
+        steps.append(step)
+        if (
+            item.get("operationId") == "search_workspace"
+            and index + 1 < len(operations)
+            and operations[index + 1].get("operationId") == "agent.outcome.submit"
+        ):
+            steps.append({"operationRef": "operation:work_item.read", "optional": True})
+    if not steps or len(steps) > 7:
+        return None
+    return {"schemaVersion": "plane.standard-route/v1", "steps": steps}
+
+
 def _pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
@@ -663,7 +693,7 @@ def _expected(value: Any) -> ExpectedPredicates | None:
     parsed_operations: list[ExpectedOperation] = []
     for index, item in enumerate(operations):
         row = _object(item, f"expected_operation_{index}")
-        if set(row).difference({"operationId", "outcome", "count"}) or not {"operationId", "outcome"}.issubset(row):
+        if set(row).difference({"operationId", "outcome", "count", "errorCode"}) or not {"operationId", "outcome"}.issubset(row):
             raise ScenarioError(f"scenario_expected_operation_{index}_fields_invalid")
         operation_id = _ref(row["operationId"], f"expected_operation_{index}_id", 128)
         outcome = row["outcome"]
@@ -674,6 +704,10 @@ def _expected(value: Any) -> ExpectedPredicates | None:
             raise ScenarioError(f"scenario_expected_operation_{index}_count_invalid")
         if "count" in row:
             parsed["count"] = row["count"]
+        if "errorCode" in row:
+            if row["errorCode"] != "NOT_AUTHORIZED":
+                raise ScenarioError(f"scenario_expected_operation_{index}_error_code_invalid")
+            parsed["errorCode"] = row["errorCode"]
         parsed_operations.append(parsed)
     evidence = _optional_string_list(expected["evidenceKinds"], "expected_evidence", MAX_EXPECTED_EVIDENCE, 128)
     if any(kind not in _EVIDENCE_KINDS for kind in evidence):

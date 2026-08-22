@@ -76,6 +76,7 @@
           {
             "operationId": "agent.outcome.evaluate",
             "outcome": "denied",
+            "errorCode": "NOT_AUTHORIZED",
             "count": 1
           },
           {
@@ -168,6 +169,7 @@
           {
             "operationId": "agent.outcome.evaluate",
             "outcome": "denied",
+            "errorCode": "NOT_AUTHORIZED",
             "count": 1
           },
           {
@@ -255,6 +257,7 @@
           {
             "operationId": "agent.outcome.evaluate",
             "outcome": "denied",
+            "errorCode": "NOT_AUTHORIZED",
             "count": 1
           },
           {
@@ -343,6 +346,7 @@
           {
             "operationId": "agent.outcome.evaluate",
             "outcome": "denied",
+            "errorCode": "NOT_AUTHORIZED",
             "count": 1
           },
           {
