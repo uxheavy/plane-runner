@@ -174,6 +174,22 @@ def test_invocation_scoped_socket_routes_gateway_and_explicit_outcome(
         assert read_result.status == "ok"
         assert read_result.output["result"]["work_item"]["id"] == str(gateway_issue.id)
 
+        evaluate = _round_trip(
+            server.socket_path,
+            _call(
+                **common,
+                action="mutate",
+                operation_ref="operation:agent.outcome.evaluate",
+                input={
+                    "outcome_ref": "outcome-submission:not-authorized",
+                    "evaluator_ref": "agent-actor:spoofed",
+                    "verdict": "revision_requested",
+                },
+            ),
+        )
+        assert evaluate.status == "denied"
+        assert evaluate.error_code == "NOT_AUTHORIZED"
+
         mutate = _call(
             **common,
             action="mutate",

@@ -434,6 +434,8 @@ class CodeModeHostRPC:
             # model-supplied run_ref is redundant payload and is normalized
             # rather than allowed to redirect or poison this bound callback.
             raw["input"] = {**raw["input"], "run_ref": self.binding.run_ref}
+        if operation_id == "agent.outcome.evaluate" and isinstance(raw["input"], Mapping):
+            raw["input"] = {**raw["input"], "evaluator_ref": self.binding.actor_ref}
         if (
             operation_id == "work_item.read"
             and self._prepared_call_registry is not None

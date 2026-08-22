@@ -313,6 +313,32 @@ def test_code_mode_marks_nested_prepared_read_consumed_at_host_boundary():
     assert host._prepared_call_registry.records[prepared_ref]["consumed"] is True
 
 
+def test_code_mode_binds_evaluator_ref_for_outcome_evaluate():
+    captured = {}
+    host = object.__new__(CodeModeHostRPC)
+    host.binding = SimpleNamespace(workspace_slug="workspace:test", actor_ref="agent-actor:trusted")
+    host._prepared_call_registry = None
+    host._preflight = lambda raw: captured.update(raw) or {"preflight": True}
+
+    result = host._call_operation(
+        "agent.outcome.evaluate",
+        {
+            "outcome_ref": "outcome-submission:not-authorized",
+            "evaluator_ref": "agent-actor:spoofed",
+            "verdict": "revision_requested",
+        },
+        idempotency_key="idempotency:evaluate",
+        correlation_id="correlation:evaluate",
+    )
+
+    assert result == {"preflight": True}
+    assert captured["input"] == {
+        "outcome_ref": "outcome-submission:not-authorized",
+        "evaluator_ref": "agent-actor:trusted",
+        "verdict": "revision_requested",
+    }
+
+
 def test_model_ready_to_call_wrapper_is_unwrapped_before_gateway():
     received = {}
 

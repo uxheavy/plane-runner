@@ -475,6 +475,16 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
             )
         if operation_id == "agent.context.read":
             guidance += " This one response is the complete subject-bound projection; do not request it again."
+        if (
+            operation_id == "agent.outcome.evaluate"
+            and item.get("outcome") == "denied"
+            and item.get("errorCode") == "NOT_AUTHORIZED"
+        ):
+            guidance += (
+                ' Emit exactly {"outcome_ref":"outcome-submission:not-authorized",'
+                '"verdict":"revision_requested"} as input; omit evaluator_ref because the trusted '
+                "Plane host binds it to the current actor."
+            )
         rendered.append(
             f"Route step {index}: invoke {model_action} exactly {item.get('count', 1)} time(s){action_detail} and expect "
             f"{item['outcome']}.{guidance}"
