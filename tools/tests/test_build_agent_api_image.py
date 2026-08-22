@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,23 @@ def test_source_hashes_are_committed_and_complete() -> None:
 
     assert set(hashes) == set(builder.SOURCE_FILES)
     assert all(len(value) == 64 for value in hashes.values())
+
+
+def test_stale_runtime_contract_binding_is_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    package_directory = tmp_path / "package"
+    api_directory = tmp_path / "api"
+    for directory in (package_directory, api_directory):
+        directory.mkdir()
+        for source in builder.RUNTIME_CONTRACT_DIRECTORIES[0].glob("*.json"):
+            (directory / source.name).write_bytes(source.read_bytes())
+    manifest = package_directory / "manifest.json"
+    value = manifest.read_text(encoding="utf-8")
+    value = value.replace(json.loads(value)["schemas"]["run-snapshot"]["sha256"], "0" * 64)
+    manifest.write_text(value, encoding="utf-8")
+    monkeypatch.setattr(builder, "RUNTIME_CONTRACT_DIRECTORIES", (package_directory, api_directory))
+
+    with pytest.raises(RuntimeError, match="schema digest mismatch"):
+        builder.verify_runtime_contract_artifacts()
 
 
 def test_dirty_checkout_is_rejected_before_candidate_resolution(monkeypatch: pytest.MonkeyPatch) -> None:

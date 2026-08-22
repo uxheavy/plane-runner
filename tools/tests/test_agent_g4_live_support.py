@@ -302,6 +302,23 @@ def test_bounded_stderr_retains_only_a_valid_missing_module_identifier(tmp_path:
     assert "must-not-persist" not in result.stdout
 
 
+def test_bounded_stderr_classifies_runtime_contract_failure_without_provider_details(tmp_path: Path) -> None:
+    error_file = tmp_path / "error.log"
+    digest_file = tmp_path / "digest.sha256"
+    raw_stderr = "RuntimeContractError: /run/secrets/provider-token provider_token=must-not-persist\n"
+    command = f"printf %s {shlex.quote(raw_stderr)} >&2; exit 125"
+    result = run_support(
+        tmp_path / "lease",
+        f'live_run_bounded_stderr "{error_file}" "{digest_file}" bash -c {shlex.quote(command)}; cat "{error_file}"',
+    )
+    assert result.returncode == 0, result.stderr
+    bounded = error_file.read_text(encoding="ascii")
+    assert "error_class=RuntimeContractError\n" in bounded
+    assert "reason_category=runtime_contract_failure\n" in bounded
+    assert "/run/secrets/provider-token" not in result.stdout
+    assert "provider_token=must-not-persist" not in result.stdout
+
+
 @pytest.mark.parametrize(
     ("marker", "missing_path_class", "child_phase"),
     (

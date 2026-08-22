@@ -52,9 +52,6 @@
           "items": {
             "$ref": "#/$defs/boundedText"
           }
-        },
-        "standardRoute": {
-          "$ref": "#/$defs/standardRoute"
         }
       }
     },
@@ -137,6 +134,9 @@
               }
             }
           }
+        },
+        "standardRoute": {
+          "$ref": "#/$defs/standardRoute"
         }
       }
     },
@@ -254,30 +254,6 @@
       "maxLength": 256,
       "x-utf8ByteMax": 256
     },
-    "standardRoute": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["schemaVersion", "steps"],
-      "properties": {
-        "schemaVersion": {"const": "plane.standard-route/v1"},
-        "steps": {
-          "type": "array",
-          "minItems": 1,
-          "maxItems": 7,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["operationRef"],
-            "properties": {
-              "operationRef": {"$ref": "#/$defs/operationRef"},
-              "optional": {"const": true},
-              "expectedStatus": {"const": "denied"},
-              "expectedErrorCode": {"const": "NOT_AUTHORIZED"}
-            }
-          }
-        }
-      }
-    },
     "contentDigest": {
       "type": "string",
       "minLength": 72,
@@ -345,6 +321,40 @@
         },
         "durationMs": {
           "$ref": "#/$defs/nonNegativeInteger"
+        }
+      }
+    },
+    "standardRoute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "steps"],
+      "properties": {
+        "schemaVersion": {
+          "const": "plane.standard-route/v1"
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 7,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["operationRef"],
+            "properties": {
+              "operationRef": {
+                "$ref": "#/$defs/operationRef"
+              },
+              "optional": {
+                "const": true
+              },
+              "expectedStatus": {
+                "const": "denied"
+              },
+              "expectedErrorCode": {
+                "const": "NOT_AUTHORIZED"
+              }
+            }
+          }
         }
       }
     },

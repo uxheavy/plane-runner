@@ -73,6 +73,30 @@ const definitions = {
   boundedText: stringWithBytes(byteConstraints.boundedText),
   boundedPrompt: stringWithBytes(byteConstraints.boundedPrompt),
   boundedToken: stringWithBytes(byteConstraints.boundedToken),
+  standardRoute: {
+    type: "object",
+    additionalProperties: false,
+    required: ["schemaVersion", "steps"],
+    properties: {
+      schemaVersion: { const: "plane.standard-route/v1" },
+      steps: {
+        type: "array",
+        minItems: 1,
+        maxItems: 7,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["operationRef"],
+          properties: {
+            operationRef: ref("operationRef"),
+            optional: { const: true },
+            expectedStatus: { const: "denied" },
+            expectedErrorCode: { const: "NOT_AUTHORIZED" },
+          },
+        },
+      },
+    },
+  },
   timestamp: stringWithBytes(byteConstraints.timestamp),
   nonNegativeInteger: {
     type: "integer",
@@ -482,6 +506,7 @@ const toolCatalog = {
         },
       },
     },
+    standardRoute: ref("standardRoute"),
   },
 };
 

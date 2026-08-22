@@ -2066,6 +2066,7 @@ _FAILURE_ERROR_CLASSES = {
     "ModuleNotFoundError",
     "OperationalError",
     "PermissionError",
+    "RuntimeContractError",
     "RuntimeError",
     "TimeoutError",
     "unspecified",
@@ -2537,6 +2538,7 @@ def validate_evidence(
             "docker_image_unavailable",
             "docker_container_start_failed",
             "docker_precontainer_failure",
+            "runtime_contract_failure",
         }:
             raise ContractError("runner_failure_receipt_reason_category_invalid")
         if not isinstance(evidence["stderrSha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", evidence["stderrSha256"]):

@@ -32,6 +32,17 @@ SOURCE_FILES = {
     "PLANE_API_CREDENTIALS_SHA256": "apps/api/plane/agent/runtime/credentials.py",
     "PLANE_API_CREDENTIAL_RESOLVER_SHA256": "apps/api/bin/plane-agent-runtime-credential-resolver",
 }
+RUNTIME_CONTRACT_DIRECTORIES = (
+    ROOT / "packages/agent-runtime-contract/schemas/v1",
+    ROOT / "apps/api/plane/agent/lifecycle/contract_artifacts/v1",
+)
+RUNTIME_CONTRACT_SCHEMA_NAMES = (
+    "run-snapshot",
+    "invocation-envelope",
+    "runtime-event",
+    "runtime-exit",
+    "runtime-durable-state",
+)
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 HASH_RE = re.compile(r"^[0-9a-f]{64}$")
 
@@ -88,6 +99,7 @@ def source_hashes(candidate: str) -> dict[str, str]:
     """Hash the exact committed source and prove the build context matches it."""
 
     _git_sha(candidate, "candidate")
+    verify_runtime_contract_artifacts()
     result: dict[str, str] = {}
     for argument, relative in SOURCE_FILES.items():
         path = ROOT / relative
@@ -106,6 +118,37 @@ def source_hashes(candidate: str) -> dict[str, str]:
             raise RuntimeError(f"API source does not match candidate HEAD: {relative}")
         result[argument] = expected
     return result
+
+
+def verify_runtime_contract_artifacts() -> None:
+    """Reject generated runtime-contract bindings that do not match their bytes."""
+
+    reference_manifest: bytes | None = None
+    for directory in RUNTIME_CONTRACT_DIRECTORIES:
+        manifest_path = directory / "manifest.json"
+        try:
+            manifest_bytes = manifest_path.read_bytes()
+            manifest = json.loads(manifest_bytes)
+        except (OSError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f"runtime contract manifest is unavailable or invalid: {manifest_path}") from exc
+        schemas = manifest.get("schemas") if isinstance(manifest, dict) else None
+        if not isinstance(schemas, dict) or set(schemas) != set(RUNTIME_CONTRACT_SCHEMA_NAMES):
+            raise RuntimeError(f"runtime contract manifest schema set is invalid: {manifest_path}")
+        if reference_manifest is None:
+            reference_manifest = manifest_bytes
+        elif manifest_bytes != reference_manifest:
+            raise RuntimeError(f"runtime contract manifests differ: {manifest_path}")
+        for name in RUNTIME_CONTRACT_SCHEMA_NAMES:
+            entry = schemas.get(name)
+            schema_path = directory / f"{name}.schema.json"
+            if not isinstance(entry, dict) or entry.get("filename") != schema_path.name:
+                raise RuntimeError(f"runtime contract manifest entry is invalid: {schema_path}")
+            try:
+                actual_digest = _sha256(schema_path.read_bytes())
+            except OSError as exc:
+                raise RuntimeError(f"runtime contract schema is unavailable: {schema_path}") from exc
+            if entry.get("sha256") != actual_digest:
+                raise RuntimeError(f"runtime contract schema digest mismatch: {schema_path}")
 
 
 def verify_dockerfile_contract() -> None:

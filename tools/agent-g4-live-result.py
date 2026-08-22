@@ -44,6 +44,7 @@ ERROR_CLASSES = {
     "ModuleNotFoundError",
     "OperationalError",
     "PermissionError",
+    "RuntimeContractError",
     "RuntimeError",
     "TimeoutError",
     "unavailable",
@@ -58,6 +59,7 @@ DOCKER_REASON_CATEGORIES = {
     "docker_image_unavailable",
     "docker_container_start_failed",
     "docker_precontainer_failure",
+    "runtime_contract_failure",
 }
 SENSITIVE_FIELD_RE = re.compile(
     rb"(?i)(?:password|passwd|secret|token|api[_-]?key|authorization|credential)\s*[\"']?\s*[:=]"

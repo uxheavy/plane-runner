@@ -150,6 +150,7 @@ MAX_SAMPLE_BYTES = 8192
 ERROR_CLASSES = (
     "ImproperlyConfigured",
     "CommandError",
+    "RuntimeContractError",
     "RuntimeError",
     "OperationalError",
     "ConnectionError",
@@ -168,6 +169,7 @@ DOCKER_REASONS = {
     "docker_image_unavailable",
     "docker_container_start_failed",
     "docker_precontainer_failure",
+    "runtime_contract_failure",
 }
 MISSING_PATH_CLASSES = {
     "api_startup": "api_startup",
@@ -298,7 +300,9 @@ for line in text.splitlines():
     break
 missing_path_class, child_phase = classify_missing_path(text, error_class)
 lowered = text.lower()
-if "read-only file system" in lowered and ("mountpoint" in lowered or "mount" in lowered):
+if error_class == "RuntimeContractError":
+    reason = "runtime_contract_failure"
+elif "read-only file system" in lowered and ("mountpoint" in lowered or "mount" in lowered):
     reason = "docker_mount_target_read_only"
 elif "invalid mount config" in lowered or "invalid mount specification" in lowered:
     reason = "docker_mount_invalid"

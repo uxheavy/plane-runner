@@ -359,10 +359,10 @@ def test_manifest_bytes_are_the_contract_source_of_truth():
         "runtime-durable-state",
     }
     assert contract_digests() == {
-        "runSnapshot": "308101c6a2c9f56e7deb5c6a07c8bc74b59831b92cbbb5b07c5a7eefc21f4947",
+        "runSnapshot": "74fd69e7d6741948d6d3c7046a5f07571bbe7f0907e31bbec8acd18b249710d9",
         "invocationEnvelope": "b7a15d74406f1624cdb7cd95b42edfd1ffee596abe57e4f00ed60e2e23ded995",
-        "runtimeEvent": "78da5ce9d112b6545ea471e5fcae25ff5dfeb2e5db74a8d5796d0ee026823a27",
-        "runtimeExit": "86b5acaa14271b1c5f0f0fadc30f48bc5cd24ac8db0ff03ba8a91d02bceecf65",
+        "runtimeEvent": "449fb3b27e9b2f1d1580f6ea01f58aba2b251dcae4a0ea164c3f75f5566ee706",
+        "runtimeExit": "f596e131d3d1bf94c52352fa2156d6dedf4c793f1b31d3fbd6b7a478f4401df9",
         "runtimeDurableState": "444c944ec8a5054f33c8662470529a1f4565d42ff06138438beceeef7967a0da",
     }
 

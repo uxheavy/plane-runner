@@ -303,6 +303,7 @@ import sys
 allowed = (
     "ImproperlyConfigured",
     "CommandError",
+    "RuntimeContractError",
     "RuntimeError",
     "OperationalError",
     "ConnectionError",
@@ -463,6 +464,7 @@ for line in text.splitlines():
             "docker_image_unavailable",
             "docker_container_start_failed",
             "docker_precontainer_failure",
+            "runtime_contract_failure",
         }:
             print(category)
             raise SystemExit(0)
