@@ -19,6 +19,7 @@ from plane.agent.lifecycle import (
     transition_run,
 )
 from plane.agent.runtime.host_rpc import (
+    MAX_HOST_RESULT_BYTES,
     PlaneHostCall,
     PlaneHostResult,
     PlaneHostServer,
@@ -188,6 +189,8 @@ def test_invocation_scoped_socket_routes_gateway_and_explicit_outcome(
         gateway_issue.refresh_from_db()
         assert gateway_issue.name == "G2 renamed"
 
+        large_summary = "s" * 4096
+        large_evidence = ["e" * 60 for _ in range(62)]
         submit = _round_trip(
             server.socket_path,
             _call(
@@ -196,13 +199,15 @@ def test_invocation_scoped_socket_routes_gateway_and_explicit_outcome(
                 operation_ref="operation:agent.outcome.submit",
                 input={
                     "run_ref": "run:substitution",
-                    "summary": "The work item was renamed through the Plane gateway.",
+                    "summary": large_summary,
                     "artifacts": ["artifact:g2-rename"],
-                    "evidence": ["evidence:g2-gateway-audit"],
+                    "evidence": large_evidence,
                 },
             ),
         )
         assert submit.status == "ok", submit
+        assert len(json.dumps(submit.to_wire(), separators=(",", ":")).encode()) <= MAX_HOST_RESULT_BYTES
+        assert set(submit.output["result"]["outcome"]) == {"outcomeRef", "state", "productEventRef"}
         outcome_ref = submit.output["result"]["outcome"]["outcomeRef"]
         publish = _round_trip(
             server.socket_path,
@@ -245,15 +250,20 @@ def test_invocation_scoped_socket_routes_gateway_and_explicit_outcome(
                 action="mutate",
                 operation_ref="operation:agent.outcome.submit",
                 input={
-                    "summary": "The work item was renamed through the Plane gateway.",
+                    "summary": large_summary,
                     "artifacts": ["artifact:g2-rename"],
-                    "evidence": ["evidence:g2-gateway-audit"],
+                    "evidence": large_evidence,
                 },
             ),
         )
         assert exact_duplicate_submit.status == "replayed"
         assert exact_duplicate_submit.replayed is True
         assert exact_duplicate_submit.error_code is None
+        assert (
+            len(json.dumps(exact_duplicate_submit.to_wire(), separators=(",", ":")).encode())
+            <= MAX_HOST_RESULT_BYTES
+        )
+        assert exact_duplicate_submit.output["result"]["outcome"] == submit.output["result"]["outcome"]
 
         duplicate_submit = _round_trip(
             server.socket_path,
@@ -365,7 +375,10 @@ def test_invocation_scoped_socket_routes_gateway_and_explicit_outcome(
     run.refresh_from_db()
     invocation.refresh_from_db()
     assert OutcomeSubmission.objects.filter(run=run).count() == 1
-    assert OutcomeSubmission.objects.get(run=run).run_id == run.id
+    outcome = OutcomeSubmission.objects.get(run=run)
+    assert outcome.run_id == run.id
+    assert outcome.summary == large_summary
+    assert outcome.evidence == large_evidence
     assert RunTerminalEvent.objects.filter(run=run, visible=True).count() == 1
     assert OperationGatewayAudit.objects.filter(operation_id="work_item.rename").count() == 2
     assert OperationGatewayAudit.objects.filter(operation_id="agent.outcome.submit").count() >= 2

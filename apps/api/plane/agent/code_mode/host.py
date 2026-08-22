@@ -548,9 +548,6 @@ class CodeModeHostRPC:
         outcome_result = {
             "outcomeRef": f"outcome-submission:{outcome.id}",
             "state": outcome.state,
-            "summary": outcome.summary,
-            "artifacts": outcome.artifacts,
-            "evidence": outcome.evidence,
         }
         if terminal is not None:
             outcome_result["productEventRef"] = terminal.product_event_ref

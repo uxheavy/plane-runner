@@ -1039,9 +1039,6 @@ class OperationGateway:
                         "outcome": {
                             "outcomeRef": f"outcome-submission:{outcome.id}",
                             "state": outcome.state,
-                            "summary": outcome.summary,
-                            "artifacts": outcome.artifacts,
-                            "evidence": outcome.evidence,
                             "productEventRef": run.terminal_events.get(
                                 invocation__invocation_id=run.last_invocation_id
                             ).product_event_ref,
