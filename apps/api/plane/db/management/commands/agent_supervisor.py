@@ -32,6 +32,7 @@ from plane.agent.runtime import (
     validate_runtime_command,
 )
 from plane.agent.runtime.credentials import credential_failure_subreason
+from plane.agent.runtime.contracts import runtime_budget_seconds
 from plane.agent.runtime.provenance import RuntimeProvenanceError, preflight_runtime_provenance
 from plane.db.models import RuntimeInvocation
 from plane.operation_gateway.gateway import OperationGateway
@@ -145,7 +146,6 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--invocation-ref", required=True)
         parser.add_argument("--worker-id", default="plane-agent-worker")
-        parser.add_argument("--lease-seconds", type=int, default=300)
         parser.add_argument("--runtime-command", nargs="+")
         parser.add_argument("--runtime-cwd")
         parser.add_argument("--runtime-checkout")
@@ -177,6 +177,8 @@ class Command(BaseCommand):
                 raise CommandError("agent supervisor invocation lookup failed before runtime dispatch") from None
             if invocation is None:
                 raise CommandError("invocation-ref does not identify a persisted Plane invocation")
+            with _supervisor_setup_stage("runtime_budget"):
+                invocation_budget_seconds = runtime_budget_seconds(invocation.envelope)
             runtime_url = getattr(settings, "PLANE_AGENT_RUNTIME_URL", "")
             shared_secret = getattr(settings, "PLANE_AGENT_RUNTIME_SHARED_SECRET", "")
             checkout = options.get("runtime_checkout") or getattr(settings, "PLANE_AGENT_RUNTIME_CHECKOUT", None)
@@ -232,6 +234,7 @@ class Command(BaseCommand):
                 )
                 credential_broker = RuntimeCredentialBroker(
                     credential_source,
+                    ttl_seconds=invocation_budget_seconds,
                     state_file=credential_state_file,
                 )
 
@@ -328,7 +331,7 @@ class Command(BaseCommand):
                         runtime_url=runtime_url,
                         shared_secret=shared_secret,
                         dispatch_path=getattr(settings, "PLANE_AGENT_RUNTIME_DISPATCH_PATH", "/v1/runtime/dispatch"),
-                        timeout_seconds=getattr(settings, "PLANE_AGENT_RUNTIME_TIMEOUT_SECONDS", 300.0),
+                        timeout_seconds=invocation_budget_seconds,
                         max_request_bytes=getattr(settings, "PLANE_AGENT_RUNTIME_MAX_REQUEST_BYTES", 256 * 1024),
                         max_response_bytes=getattr(settings, "PLANE_AGENT_RUNTIME_MAX_RESPONSE_BYTES", 512 * 1024),
                         host_endpoint_factory=host_endpoint,
@@ -343,6 +346,7 @@ class Command(BaseCommand):
                         or checkout,
                         ledger_path=Path(ledger_path),
                         gateway=OperationGateway(),
+                        timeout_seconds=invocation_budget_seconds,
                         bootstrap_command=True,
                         model_call_allowance=options.get("model_call_allowance"),
                         environment=dict(runtime_environment),
@@ -353,7 +357,6 @@ class Command(BaseCommand):
                 invocation,
                 transport=transport,
                 worker_id=options["worker_id"],
-                lease_seconds=options["lease_seconds"],
             )
             host_operation_failure = host_operation_failure or getattr(transport, "host_operation_failure", None)
         except _SupervisorSetupFailure as exc:

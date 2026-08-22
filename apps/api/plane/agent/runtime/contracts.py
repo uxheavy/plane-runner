@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from datetime import datetime, timezone
 import json
+import math
 from typing import Any, Protocol
 
 
@@ -72,6 +74,7 @@ RUNTIME_PROCESS_TIMEOUT = "runtime_process_timeout"
 RUNTIME_PROCESS_CANCELLED = "runtime_process_cancelled"
 RUNTIME_PROCESS_OUTPUT_INVALID = "runtime_process_output_invalid"
 RUNTIME_SUPERVISOR_PRE_DISPATCH_FAILURE = "runtime_supervisor_pre_dispatch_failure"
+RUNTIME_BUDGET_MAX_SECONDS = 3600
 
 _FAILURE_CODES = frozenset(
     {
@@ -119,6 +122,60 @@ _FAILURE_SUBREASONS = frozenset(
         "runtime_configuration_rejected",
     }
 )
+
+
+def runtime_budget_seconds(
+    invocation: Mapping[str, object],
+    *,
+    fallback_seconds: float | None = None,
+    now: datetime | None = None,
+) -> float:
+    """Project the Plane-owned remaining duration budget into local limits.
+
+    The invocation envelope is the authority for one dispatch.  A fallback is
+    retained only for dependency-light transport tests that intentionally use
+    an abbreviated envelope; production dispatches always carry durationMs.
+    """
+
+    remaining = invocation.get("remainingBudget")
+    budget_seconds: float | None = None
+    if isinstance(remaining, Mapping) and "durationMs" in remaining:
+        duration_ms = remaining.get("durationMs")
+        if isinstance(duration_ms, bool) or not isinstance(duration_ms, int) or duration_ms < 0:
+            raise ValueError("runtime invocation duration budget is invalid")
+        budget_seconds = duration_ms / 1000
+
+    lease_remaining: float | None = None
+    lease = invocation.get("lease")
+    if isinstance(lease, Mapping) and "expiresAt" in lease:
+        expires_at = lease.get("expiresAt")
+        if not isinstance(expires_at, str):
+            raise ValueError("runtime invocation lease expiry is invalid")
+        try:
+            expires = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("runtime invocation lease expiry is invalid") from exc
+        if expires.tzinfo is None:
+            raise ValueError("runtime invocation lease expiry must be timezone-aware")
+        current = now or datetime.now(timezone.utc)
+        if current.tzinfo is None:
+            raise ValueError("runtime budget clock must be timezone-aware")
+        lease_remaining = (expires - current).total_seconds()
+
+    if budget_seconds is not None and lease_remaining is not None:
+        seconds = min(budget_seconds, lease_remaining)
+    elif budget_seconds is not None:
+        seconds = budget_seconds
+    elif lease_remaining is not None:
+        seconds = lease_remaining
+    elif fallback_seconds is not None:
+        seconds = float(fallback_seconds)
+    else:
+        raise ValueError("runtime invocation duration budget is required")
+
+    if not math.isfinite(seconds) or seconds <= 0 or seconds > RUNTIME_BUDGET_MAX_SECONDS:
+        raise ValueError("runtime invocation duration budget is outside its allowed range")
+    return seconds
 _CHILD_EXCEPTION_CLASSES = frozenset(
     {
         "ModuleNotFoundError",
@@ -493,9 +550,11 @@ __all__ = [
     "RUNTIME_PROCESS_FAILED",
     "RUNTIME_PROCESS_OUTPUT_INVALID",
     "RUNTIME_PROCESS_TIMEOUT",
+    "RUNTIME_BUDGET_MAX_SECONDS",
     "RUNTIME_SUPERVISOR_PRE_DISPATCH_FAILURE",
     "RUNTIME_TRANSPORT_PRE_DISPATCH_FAILURE",
     "RuntimeDispatchError",
     "RuntimeTransport",
     "model_operation_entry",
+    "runtime_budget_seconds",
 ]

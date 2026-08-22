@@ -23,6 +23,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .contracts import RUNTIME_BUDGET_MAX_SECONDS
+
 try:
     import fcntl
 except ImportError:  # pragma: no cover - Windows has no supported production runtime
@@ -403,7 +405,7 @@ class RuntimeCredentialBroker:
             raise TypeError("credential source must be callable or a mapping")
         if isinstance(ttl_seconds, bool) or not isinstance(ttl_seconds, (int, float)):
             raise ValueError("credential lease TTL must be numeric")
-        if ttl_seconds <= 0 or ttl_seconds > 3600:
+        if ttl_seconds <= 0 or ttl_seconds > RUNTIME_BUDGET_MAX_SECONDS:
             raise ValueError("credential lease TTL is outside its allowed range")
         self._source = source
         self._ttl_seconds = float(ttl_seconds)

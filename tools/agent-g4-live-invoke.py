@@ -1032,7 +1032,7 @@ def _scenario_readback(
 def _run_continuation_supervisor(invocation, stdout, stderr):
     call_command(
         "agent_supervisor", invocation_ref=invocation.invocation_id, worker_id="g4-live-configured-worker",
-        lease_seconds=300, model_call_allowance=16, stdout=stdout, stderr=stderr,
+        model_call_allowance=16, stdout=stdout, stderr=stderr,
     )
 
 
@@ -2727,7 +2727,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
         with runtime_settings:
             call_command(
                 "agent_supervisor", invocation_ref=invocation.invocation_id, worker_id="g4-live-configured-worker",
-                lease_seconds=300, model_call_allowance=0 if scenario is not None and scenario.controls.fault == "budget_exhausted" else 16,
+                model_call_allowance=0 if scenario is not None and scenario.controls.fault == "budget_exhausted" else 16,
                 stdout=stdout, stderr=stderr,
             )
         supervisor_failure_reason = _supervisor_failure_reason(stdout.getvalue())
@@ -2892,7 +2892,6 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                 "agent_supervisor",
                 invocation_ref=invocation.invocation_id,
                 worker_id="g4-live-configured-worker",
-                lease_seconds=300,
                 model_call_allowance=16,
                 stdout=replay_stdout,
                 stderr=replay_stderr,

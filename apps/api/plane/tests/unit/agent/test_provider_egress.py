@@ -19,6 +19,7 @@ from plane.agent.runtime import service as runtime_service
 from plane.agent.runtime import (
     AgentRuntimeConfiguration,
     PlaneHostResult,
+    RuntimeDispatchError,
     RuntimeConfigurationError,
     RuntimeCredentialBroker,
     RuntimeSafetyController,
@@ -1203,6 +1204,163 @@ def test_runtime_service_passes_invocation_relay_to_child_without_provider_secre
     assert frames == ('{"status":"completed"}',)
     assert len(upstream.calls) == 1
     assert upstream.calls[0][1] == credentials
+    assert callback_phases == ["intent", "started", "completed"]
+
+
+def test_runtime_budget_keeps_progressing_provider_request_inside_local_deadline(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(provider_egress, "_RELAY_DRAIN_TIMEOUT_SECONDS", 0.05)
+    state_file = tmp_path / "revocations.json"
+    broker = RuntimeCredentialBroker(
+        {"provider": {"api_key": "parent-provider-secret"}},
+        ttl_seconds=60,
+        state_file=state_file,
+    )
+    lease, credentials = broker.issue(
+        agent_ref="agent:relay", credential_ref="provider", invocation_ref=INVOCATION_ID
+    )
+    configuration = AgentRuntimeConfiguration.from_environment(
+        {
+            "PLANE_AGENT_RUNTIME_URL": "http://agent-runtime:8080",
+            "PLANE_AGENT_RUNTIME_SECRET": "r" * 40,
+            "PLANE_AGENT_RUNTIME_PROVIDER": PROVIDER,
+            "PLANE_AGENT_RUNTIME_PROVIDER_HOST": HOST,
+            "PLANE_AGENT_RUNTIME_PROVIDER_MODELS": MODEL,
+            "PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE": str(state_file),
+        }
+    )
+    controller = RuntimeSafetyController(configured=True, stop_file=tmp_path / "stop")
+    controller.mark_ready()
+    executor = RuntimeDispatchExecutor(configuration, controller)
+    callback_phases: list[str] = []
+
+    class FixtureHostClient:
+        def __init__(self, *, url: str, auth_token: str):
+            assert url == "http://plane-host.invalid"
+            assert auth_token == "host-token"
+
+        def invoke(self, call):
+            callback_phases.append(call.input["phase"])
+            return PlaneHostResult(
+                request_ref=call.request_ref,
+                correlation_id=call.correlation_id,
+                idempotency_key=call.idempotency_key,
+                status="ok",
+                replayed=False,
+            )
+
+    monkeypatch.setattr(runtime_service, "PlaneHostHTTPClient", FixtureHostClient)
+    body_started = threading.Event()
+    audits: list[ProviderRelayAudit] = []
+
+    def upstream(_request, _credentials, _cancelled):
+        def body_chunks():
+            body_started.set()
+            time.sleep(0.15)
+            yield b"data: response.completed\n\n"
+
+        return ProviderResponse(
+            status_code=200,
+            headers={"content-type": "text/event-stream"},
+            body_chunks=body_chunks(),
+        )
+
+    original_open = executor.open_provider_relay
+
+    def open_with_fixture(**kwargs):
+        return original_open(upstream=upstream, audit=audits.append, **kwargs)
+
+    executor.open_provider_relay = open_with_fixture  # type: ignore[method-assign]
+    child = textwrap.dedent(
+        """
+        import json
+        import socket
+        import sys
+
+        socket_path = sys.argv[sys.argv.index('--provider-relay-socket') + 1]
+        dispatch = json.loads(sys.stdin.buffer.readline())
+        credentials = json.loads(sys.stdin.buffer.readline())['credentials']
+        request = json.loads(sys.stdin.buffer.readline())
+        body = b'{"model":"grok-4","messages":[]}'
+        wire = (
+            b'POST /v1/chat/completions HTTP/1.1\\r\\n'
+            b'Host: plane-provider-relay.invalid\\r\\n'
+            b'Authorization: Bearer ' + credentials['relayToken'].encode() + b'\\r\\n'
+            b'Content-Type: application/json\\r\\n'
+            + ('Content-Length: ' + str(len(body)) + '\\r\\n').encode()
+            + b'Accept: text/event-stream\\r\\n'
+            + b'X-Request-ID: request:deadline\\r\\n'
+            + b'X-Plane-Relay-Invocation: invocation:relay\\r\\n'
+            + b'X-Plane-Relay-Provider: xai\\r\\n'
+            + b'X-Plane-Relay-Model: grok-4\\r\\n'
+            + b'X-Plane-Relay-Run: run:relay\\r\\n\\r\\n'
+            + body
+        )
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as channel:
+            channel.settimeout(2)
+            channel.connect(socket_path)
+            channel.sendall(wire)
+            while channel.recv(4096):
+                pass
+        print('{"status":"completed"}', flush=True)
+        """
+    )
+    from plane.agent.runtime.subprocess import RuntimeProcessPolicy, SubprocessRuntimeTransport
+
+    executor._transport = SubprocessRuntimeTransport(
+        command=(sys.executable, "-c", child),
+        environment=dict(os.environ),
+        ledger_path=tmp_path / "ledger.sqlite",
+        timeout_seconds=0.05,
+        process_policy=RuntimeProcessPolicy(enforce_kernel_policy=False),
+    )
+    executor.configuration = replace(configuration, command=(sys.executable, "-c", child))
+    snapshot = {
+        "actorRef": "actor:relay",
+        "runId": RUN_ID,
+        "workspaceRef": "workspace:relay",
+        "runtimePolicy": {
+            "model": {"provider": PROVIDER, "model": MODEL},
+            "adapter": "openai-compatible",
+            "isolation": "process",
+            "maxEventPayloadBytes": 8192,
+            "maxArtifactBytes": 8192,
+            "maxReceiptBytes": 8192,
+            "maxCodeModeInputBytes": 4096,
+            "maxCodeModeOutputBytes": 4096,
+            "maxCodeModeCalls": 4,
+        },
+    }
+    invocation = {
+        "correlationId": "correlation:relay",
+        "invocationId": INVOCATION_ID,
+        "runId": RUN_ID,
+        "remainingBudget": {"inputTokens": 1, "outputTokens": 1, "durationMs": 300},
+    }
+    caught: RuntimeDispatchError | None = None
+    frames: tuple[str, ...] | None = None
+    try:
+        frames = executor._execute(
+            snapshot,
+            invocation,
+            "test-digest",
+            credentials=credentials,
+            credential_lease=lease.public_metadata(),
+            allowance=1,
+            host_url="http://plane-host.invalid",
+            host_token="host-token",
+        )
+    except RuntimeDispatchError as exc:
+        caught = exc
+
+    assert body_started.is_set(), "event=provider_request_started expected=true actual=false"
+    assert caught is None, (
+        "event=runtime_budget_repro operation=provider_request risk=late_local_kill "
+        f"expected=completed actual={caught.public_failure() if caught else 'unknown'}"
+    )
+    assert frames == ('{"status":"completed"}',)
+    assert [audit.phase for audit in audits] == ["intent", "started", "completed"]
     assert callback_phases == ["intent", "started", "completed"]
 
 

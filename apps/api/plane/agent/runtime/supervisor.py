@@ -9,6 +9,7 @@ evidence; only the lifecycle service creates a visible terminal event.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -48,7 +49,13 @@ from plane.db.models import (
 )
 
 from .dispatch import RuntimeIngressError, dispatch_invocation, ingest_runtime_frame
-from .contracts import RUNTIME_SUPERVISOR_PRE_DISPATCH_FAILURE, RuntimeDispatchError
+from .contracts import (
+    RUNTIME_PROCESS_CANCELLED,
+    RUNTIME_PROCESS_TIMEOUT,
+    RUNTIME_SUPERVISOR_PRE_DISPATCH_FAILURE,
+    RuntimeDispatchError,
+    runtime_budget_seconds,
+)
 
 
 DEFAULT_LEASE_SECONDS = 300
@@ -407,12 +414,23 @@ def _terminalize_dispatch_failure(
     ).exists()
     bounded_failure = known_dispatch_failure and not upstream_attempt_exists
     if upstream_attempt_exists:
-        reason = _provider_unknown_failure(invocation) or {
+        provider_reason = _provider_unknown_failure(invocation) or {
             "failureCode": "outcome_unknown",
             "failurePhase": "provider_relay",
             "failureDetail": "upstream_result_unavailable",
             "failureSubreason": "reconciliation_required",
         }
+        if reason.get("failureCode") in {RUNTIME_PROCESS_TIMEOUT, RUNTIME_PROCESS_CANCELLED}:
+            # Preserve a trusted local deadline/cancellation classification. The
+            # initiated provider attempt still forces outcome_unknown state, but
+            # relay cleanup must not erase why the runtime stopped.
+            preserved_reason = dict(reason)
+            for field in ("providerAttemptRef", "providerEventRef"):
+                if field in provider_reason:
+                    preserved_reason[field] = provider_reason[field]
+            reason = preserved_reason
+        else:
+            reason = provider_reason
     else:
         reason = dict(reason)
     return _terminalize(
@@ -699,12 +717,17 @@ def run_runtime_invocation(
     *,
     transport: Any,
     worker_id: str = "plane-agent-worker",
-    lease_seconds: int = DEFAULT_LEASE_SECONDS,
+    lease_seconds: int | None = None,
 ) -> SupervisorResult:
     """Claim, dispatch, ingest, reconcile, and lifecycle-finish one invocation."""
 
     if transport is None or not callable(getattr(transport, "dispatch", None)):
         raise RuntimeSupervisorError("a serialized runtime transport is required")
+    if lease_seconds is None:
+        try:
+            lease_seconds = math.ceil(runtime_budget_seconds(invocation.envelope))
+        except (TypeError, ValueError) as exc:
+            raise RuntimeSupervisorError("runtime invocation duration budget is invalid") from exc
     claim = _claim(invocation, worker_id, lease_seconds)
     if claim is None:
         stored = RuntimeInvocation.objects.get(pk=invocation.pk)

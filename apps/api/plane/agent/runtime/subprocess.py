@@ -16,6 +16,7 @@ import ctypes
 import errno
 import hashlib
 import json
+import math
 import os
 import platform
 import re
@@ -30,15 +31,17 @@ import threading
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
 from .config import RuntimeConfigurationError, validate_runtime_command
 from .contracts import (
     RUNTIME_CONFIGURATION_PRE_DISPATCH_FAILURE,
+    RUNTIME_BUDGET_MAX_SECONDS,
     RuntimeDispatchError,
     RuntimeTransport,
+    runtime_budget_seconds,
 )
 from .provider_egress import ProviderRelayDescriptor, ProviderRelayPolicy, _relay_bootstrap_payload
 
@@ -146,7 +149,7 @@ class RuntimeProcessPolicy:
         if not isinstance(self.enforce_kernel_policy, bool):
             raise ValueError("runtime child kernel policy flag must be boolean")
         for name, value, maximum in (
-            ("cpu_seconds", self.cpu_seconds, 3600),
+            ("cpu_seconds", self.cpu_seconds, RUNTIME_BUDGET_MAX_SECONDS),
             ("memory_bytes", self.memory_bytes, 2 * 1024 * 1024 * 1024),
             ("pids_limit", self.pids_limit, 4096),
         ):
@@ -969,26 +972,30 @@ class SubprocessRuntimeTransport(RuntimeTransport):
         command: Sequence[str] | None = None,
         is_cancelled: Callable[[], bool] | None = None,
         environment: Mapping[str, str] | None = None,
+        timeout_seconds: float | None = None,
+        process_policy: RuntimeProcessPolicy | None = None,
     ) -> tuple[str, ...]:
         process_command = tuple(command or self._command)
         cancellation_callback = self._is_cancelled if is_cancelled is None else is_cancelled
+        effective_timeout_seconds = self._timeout_seconds if timeout_seconds is None else float(timeout_seconds)
+        effective_process_policy = self._process_policy if process_policy is None else process_policy
         child_preexec = None
-        if self._process_policy.enforce_kernel_policy:
+        if effective_process_policy.enforce_kernel_policy:
             process_command = (
                 sys.executable,
                 "-m",
                 "plane.agent.runtime.launcher",
                 "--cpu-seconds",
-                str(self._process_policy.cpu_seconds),
+                str(effective_process_policy.cpu_seconds),
                 "--memory-bytes",
-                str(self._process_policy.memory_bytes),
+                str(effective_process_policy.memory_bytes),
                 "--pids-limit",
-                str(self._process_policy.pids_limit),
+                str(effective_process_policy.pids_limit),
                 "--",
                 *process_command,
             )
         else:
-            child_preexec = self._process_policy.preexec_fn()
+            child_preexec = effective_process_policy.preexec_fn()
         popen_options: dict[str, Any] = {
             "cwd": self._cwd,
             "env": dict(self._environment if environment is None else environment),
@@ -1044,7 +1051,7 @@ class SubprocessRuntimeTransport(RuntimeTransport):
         for thread in threads:
             thread.start()
 
-        deadline = time.monotonic() + self._timeout_seconds
+        deadline = time.monotonic() + effective_timeout_seconds
         timed_out = False
         cancellation_requested = False
         forced_cancellation = False
@@ -1165,6 +1172,8 @@ class SubprocessRuntimeTransport(RuntimeTransport):
         request_digest: str,
         command: Sequence[str] | None = None,
         is_cancelled: Callable[[], bool] | None = None,
+        timeout_seconds: float | None = None,
+        process_policy: RuntimeProcessPolicy | None = None,
     ) -> tuple[str, ...]:
         """Execute one already-framed request behind the same durable ledger."""
 
@@ -1185,6 +1194,8 @@ class SubprocessRuntimeTransport(RuntimeTransport):
                     command=command,
                     is_cancelled=cancellation_callback,
                     environment=child_environment,
+                    timeout_seconds=timeout_seconds,
+                    process_policy=process_policy,
                 )
         except Exception:
             try:
@@ -1243,6 +1254,9 @@ class HostBoundSubprocessRuntimeTransport(SubprocessRuntimeTransport):
     def dispatch(self, snapshot_json: str, envelope_json: str) -> tuple[str, ...]:
         self._host_operation_failure = None
         payload, run_id, invocation_id, request_digest = _hermes_request_payload(snapshot_json, envelope_json)
+        invocation_value = _canonical_object(envelope_json, "runtime invocation")
+        budget_seconds = runtime_budget_seconds(invocation_value, fallback_seconds=self._timeout_seconds)
+        process_policy = replace(self._process_policy, cpu_seconds=math.ceil(budget_seconds))
         if len(payload) > self._max_input_bytes:
             raise RuntimeDispatchError("runtime request exceeds the process input bound")
 
@@ -1302,7 +1316,13 @@ class HostBoundSubprocessRuntimeTransport(SubprocessRuntimeTransport):
             server.start()
             command = (*self._command, "--plane-host-socket", str(socket_path))
             with self._invocation_environment() as child_environment:
-                frames = self._run_process(payload, command=command, environment=child_environment)
+                frames = self._run_process(
+                    payload,
+                    command=command,
+                    environment=child_environment,
+                    timeout_seconds=budget_seconds,
+                    process_policy=process_policy,
+                )
         except Exception:
             if ledger_claimed:
                 try:

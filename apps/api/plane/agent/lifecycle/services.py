@@ -107,8 +107,6 @@ class TerminalEventRequiredError(AgentDomainError):
     """Raised when an invocation would finish without a visible Plane event."""
 
 
-_RUNTIME_LEASE_TTL = timedelta(minutes=5)
-
 MAX_DELEGATION_DEPTH = 8
 MAX_DELEGATION_FAN_OUT = 64
 MAX_DELEGATION_BUDGET = 2**63 - 1
@@ -2167,6 +2165,8 @@ def record_invocation(
         _ensure_runtime_control(conflicting_invocation, created_by=created_by)
         return conflicting_invocation
     remaining = _remaining_budget(run)
+    lease_duration_ms = remaining["durationMs"]
+    lease_expires_at = timezone.now() + timedelta(milliseconds=lease_duration_ms)
     envelope = {
         "protocol": PROTOCOL,
         "workspaceRef": run.snapshot["workspaceRef"],
@@ -2179,8 +2179,8 @@ def record_invocation(
         "remainingBudget": remaining,
         "lease": {
             "leaseId": namespaced_ref("lease", str(uuid4())),
-            "expiresAt": _iso_timestamp(timezone.now() + _RUNTIME_LEASE_TTL),
-            "renewAfterMs": 30_000,
+            "expiresAt": _iso_timestamp(lease_expires_at),
+            "renewAfterMs": min(30_000, lease_duration_ms),
         },
         "cancellationRef": namespaced_ref("cancellation", str(uuid4())),
         "causationRef": namespaced_ref("causation", str(uuid4())),

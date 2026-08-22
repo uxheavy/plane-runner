@@ -5,6 +5,7 @@ import sys
 import tempfile
 import textwrap
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -20,6 +21,7 @@ from plane.agent.runtime import (
     RuntimeDispatchError,
     SubprocessRuntimeTransport,
 )
+from plane.agent.runtime.contracts import runtime_budget_seconds
 from plane.agent.runtime.host_rpc import _host_operation_failure_evidence
 from plane.agent.runtime.subprocess import (
     _HERMES_CREDENTIAL_PROTOCOL,
@@ -43,6 +45,22 @@ ENVELOPE = json.dumps(
     sort_keys=True,
     separators=(",", ":"),
 )
+
+
+def test_runtime_budget_uses_exact_plane_lease_without_rounding():
+    now = datetime(2026, 8, 22, 12, 0, tzinfo=timezone.utc)
+    invocation = {
+        "remainingBudget": {"durationMs": 300},
+        "lease": {"expiresAt": (now + timedelta(milliseconds=250)).isoformat().replace("+00:00", "Z")},
+    }
+
+    assert runtime_budget_seconds(invocation, now=now) == 0.25
+
+    with pytest.raises(ValueError, match="outside its allowed range"):
+        runtime_budget_seconds(
+            {"remainingBudget": {"durationMs": 300}, "lease": {"expiresAt": "2026-08-22T11:59:59Z"}},
+            now=now,
+        )
 
 
 def test_hermes_request_projects_verified_plane_contract_digests_without_mutating_plane_records(monkeypatch):

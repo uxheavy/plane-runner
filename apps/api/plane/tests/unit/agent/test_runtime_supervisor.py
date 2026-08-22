@@ -1728,7 +1728,7 @@ def test_supervisor_persists_bounded_pre_dispatch_subreason(
 
 
 @pytest.mark.django_db(transaction=True)
-def test_known_process_failure_with_initiated_attempt_remains_outcome_unknown(
+def test_local_deadline_with_initiated_attempt_remains_unknown_but_preserves_timeout(
     workspace, gateway_project, gateway_issue, create_user
 ):
     run, invocation = _invocation(workspace, gateway_project, gateway_issue, create_user, suffix="initiated")
@@ -1756,7 +1756,11 @@ def test_known_process_failure_with_initiated_attempt_remains_outcome_unknown(
         }
     )
     record_provider_attempt_notice(invocation, provider_attempt)
-    transport = KnownDispatchFailureTransport()
+    transport = KnownDispatchFailureTransport(
+        failure_code="runtime_process_timeout",
+        failure_phase="runtime_process",
+        failure_detail="process_timeout",
+    )
 
     result = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
     second = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
@@ -1773,10 +1777,9 @@ def test_known_process_failure_with_initiated_attempt_remains_outcome_unknown(
     assert attempt.phase == RuntimeProviderAttemptPhase.OUTCOME_UNKNOWN
     assert attempt.upstream_initiated is True
     assert result.failure == {
-        "failureCode": "outcome_unknown",
-        "failurePhase": "provider_relay",
-        "failureDetail": "upstream_result_unavailable",
-        "failureSubreason": "reconciliation_required",
+        "failureCode": "runtime_process_timeout",
+        "failurePhase": "runtime_process",
+        "failureDetail": "process_timeout",
         "providerAttemptRef": f"provider-attempt:{attempt.id}",
     }
     assert json.loads(terminal.reason) == result.failure
@@ -2122,7 +2125,6 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
                 "agent_supervisor",
                 invocation_ref=invocation.invocation_id,
                 worker_id="worker:g2-real",
-                lease_seconds=300,
                 runtime_command=list(command),
                 runtime_cwd=checkout,
                 runtime_checkout=checkout,

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Mapping
 from urllib.parse import urlsplit
 
+from .contracts import RUNTIME_BUDGET_MAX_SECONDS
 from .provider_egress import GPT56_MODEL_RE, ProviderRelayPolicy, provider_wire
 
 
@@ -446,11 +447,13 @@ class AgentRuntimeConfiguration:
             credential_resolver=_validate_credential_resolver(
                 source.get("PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER", "")
             ),
-            timeout_seconds=_positive_float(source, "PLANE_AGENT_RUNTIME_TIMEOUT_SECONDS", 300.0, 3600.0),
+            timeout_seconds=_positive_float(
+                source, "PLANE_AGENT_RUNTIME_TIMEOUT_SECONDS", 300.0, RUNTIME_BUDGET_MAX_SECONDS
+            ),
             max_request_bytes=max_request_bytes,
             max_response_bytes=max_response_bytes,
             max_concurrent_invocations=_positive_int(source, "PLANE_AGENT_RUNTIME_MAX_CONCURRENT_INVOCATIONS", 1, 32),
-            cpu_seconds=_positive_int(source, "PLANE_AGENT_RUNTIME_CPU_SECONDS", 300, 3600),
+            cpu_seconds=_positive_int(source, "PLANE_AGENT_RUNTIME_CPU_SECONDS", 300, RUNTIME_BUDGET_MAX_SECONDS),
             memory_bytes=_positive_int(
                 source,
                 "PLANE_AGENT_RUNTIME_MEMORY_BYTES",

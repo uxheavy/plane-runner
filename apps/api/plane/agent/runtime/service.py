@@ -5,6 +5,7 @@ from __future__ import annotations
 import hmac
 import hashlib
 import json
+import math
 import os
 import shutil
 import signal
@@ -12,7 +13,7 @@ import sys
 import threading
 import tempfile
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable
@@ -21,6 +22,7 @@ from .config import AgentRuntimeConfiguration, RuntimeConfigurationError
 from .contracts import (
     RUNTIME_CONFIGURATION_PRE_DISPATCH_FAILURE,
     RuntimeDispatchError,
+    runtime_budget_seconds,
 )
 from .health import RuntimeHealthStatus, RuntimeSafetyController, RuntimeSafetyStopError
 from .host_rpc import PlaneHostCall, PlaneHostHTTPClient, PlaneHostServer
@@ -140,6 +142,12 @@ class RuntimeDispatchExecutor:
         )
         child_environment.setdefault("PLANE_AGENT_RUNTIME_DISABLE_VFORK", "1")
         child_environment.setdefault("REDIS_URL", "redis://127.0.0.1:6379/0")
+        self._process_policy = RuntimeProcessPolicy(
+            cpu_seconds=configuration.cpu_seconds,
+            memory_bytes=configuration.memory_bytes,
+            pids_limit=configuration.pids_limit,
+            enforce_kernel_policy=True,
+        )
         self._transport = SubprocessRuntimeTransport(
             command=configuration.command,
             ledger_path=configuration.ledger_path,
@@ -148,12 +156,7 @@ class RuntimeDispatchExecutor:
             max_input_bytes=configuration.max_request_bytes,
             max_output_bytes=configuration.max_response_bytes,
             is_cancelled=lambda: controller.health().safety_stop,
-            process_policy=RuntimeProcessPolicy(
-                cpu_seconds=configuration.cpu_seconds,
-                memory_bytes=configuration.memory_bytes,
-                pids_limit=configuration.pids_limit,
-                enforce_kernel_policy=True,
-            ),
+            process_policy=self._process_policy,
         )
 
     def open_provider_relay(
@@ -300,6 +303,11 @@ class RuntimeDispatchExecutor:
         host_operation_failure: dict[str, object] | None = None
         command = self.configuration.command
         try:
+            budget_seconds = runtime_budget_seconds(
+                invocation,
+                fallback_seconds=self.configuration.timeout_seconds,
+            )
+            process_policy = replace(self._process_policy, cpu_seconds=math.ceil(budget_seconds))
             provider_route = self._configured_provider_route(snapshot)
             if provider_route is not None:
                 if credential_lease is None:
@@ -391,6 +399,8 @@ class RuntimeDispatchExecutor:
                     request_digest=digest,
                     command=command,
                     is_cancelled=is_cancelled,
+                    timeout_seconds=budget_seconds,
+                    process_policy=process_policy,
                 )
             except BaseException as exc:
                 dispatch_error = exc

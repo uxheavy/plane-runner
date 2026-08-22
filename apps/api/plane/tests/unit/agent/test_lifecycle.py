@@ -6,6 +6,7 @@ import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
+from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -260,6 +261,9 @@ def test_profile_defaults_resolve_into_an_immutable_snapshot_and_exact_envelope_
     assert run.snapshot["totalBudget"] == {"inputTokens": 12, "outputTokens": 8, "durationMs": 5000}
     assert invocation.envelope["runSnapshotDigest"] == run.snapshot["contentDigest"]
     assert invocation.envelope["remainingBudget"] == run.snapshot["totalBudget"]
+    lease_expires_at = datetime.fromisoformat(invocation.envelope["lease"]["expiresAt"].replace("Z", "+00:00"))
+    assert 4.0 < (lease_expires_at - timezone.now()).total_seconds() <= 5.0
+    assert invocation.envelope["lease"]["renewAfterMs"] == 5000
 
     class CaptureTransport:
         def __init__(self):
