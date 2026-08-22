@@ -177,7 +177,7 @@ def _digest(value: object) -> str:
 def _manager_readback(workspace: Workspace) -> dict[str, object]:
     """Return the bounded readback required by the selected route cell."""
 
-    governance = build_governance_readback(workspace, limit=64)
+    governance = build_governance_readback(workspace, limit=4)
     all_assignments = AssignmentContract.objects.filter(workspace=workspace)
     all_outcomes = OutcomeSubmission.objects.filter(workspace=workspace)
     all_events = RunTerminalEvent.objects.filter(workspace=workspace, visible=True)
@@ -736,7 +736,7 @@ def _exercise_manager_journey(
     # to the stored run after the revised run and governance decisions.
     if checkpoint is not None:
         checkpoint.before("M08", "parentChildLineage")
-    governance = build_governance_readback(workspace, limit=64)
+    governance = build_governance_readback(workspace, limit=4)
     all_assignments = AssignmentContract.objects.filter(workspace=workspace)
     all_outcomes = OutcomeSubmission.objects.filter(workspace=workspace)
     all_events = RunTerminalEvent.objects.filter(workspace=workspace, visible=True)

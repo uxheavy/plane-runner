@@ -22,6 +22,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "RuntimeLeaseBusy": ("supervisor", "RuntimeLeaseBusy"),
     "RuntimeSupervisorError": ("supervisor", "RuntimeSupervisorError"),
     "SupervisorResult": ("supervisor", "SupervisorResult"),
+    "bounded_database_failure": ("supervisor", "bounded_database_failure"),
     "request_runtime_cancellation": ("supervisor", "request_runtime_cancellation"),
     "run_runtime_invocation": ("supervisor", "run_runtime_invocation"),
     "terminalize_pre_dispatch_failure": ("supervisor", "terminalize_pre_dispatch_failure"),

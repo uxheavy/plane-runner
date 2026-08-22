@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
 
-from django.db import transaction
+from django.db import OperationalError, transaction
 from django.utils import timezone
 
 from plane.agent.lifecycle import (
@@ -85,6 +85,39 @@ class SupervisorResult:
     terminal_kind: str | None
     accepted_frames: int
     failure: dict[str, object] | None = None
+    durable: bool = True
+
+
+_DATABASE_FAILURE_SUBSTAGES = frozenset(
+    {"invocation_lookup", "runtime_dispatch", "runtime_readback", "terminalization"}
+)
+_DATABASE_FAILURE_CLASSES = frozenset({"operational_error"})
+
+
+def bounded_database_failure(substage: str) -> dict[str, object]:
+    """Return the finite Plane-owned diagnostic for a database boundary fault."""
+
+    if substage not in _DATABASE_FAILURE_SUBSTAGES:
+        raise ValueError("database failure substage is not allowlisted")
+    return {
+        "failureCode": RUNTIME_SUPERVISOR_PRE_DISPATCH_FAILURE,
+        "failurePhase": "runtime_supervisor",
+        "failureDetail": "unclassified_exception",
+        "failureSubstage": substage,
+        "databaseClass": "operational_error",
+        "reconciliationRequired": True,
+    }
+
+
+def _undurable_database_failure(invocation_id: Any) -> SupervisorResult:
+    return SupervisorResult(
+        str(invocation_id),
+        "unknown",
+        None,
+        0,
+        bounded_database_failure("terminalization"),
+        durable=False,
+    )
 
 
 _FAILURE_CLASSIFICATIONS: dict[str, dict[str, str]] = {
@@ -287,7 +320,7 @@ def _set_failure(control: RuntimeInvocationControl, *, code: str, reason: str, u
         control.outcome_unknown_at = control.outcome_unknown_at or timezone.now()
 
 
-def _terminalize(
+def _terminalize_db(
     invocation_id: Any,
     *,
     kind: str,
@@ -330,6 +363,18 @@ def _terminalize(
         )
         invocation.refresh_from_db()
         return SupervisorResult(invocation.invocation_id, invocation.state, terminal.kind, 0, failure)
+
+
+def _terminalize(
+    invocation_id: Any,
+    **kwargs: Any,
+) -> SupervisorResult:
+    """Terminalize once, retaining bounded supervisor evidence on DB failure."""
+
+    try:
+        return _terminalize_db(invocation_id, **kwargs)
+    except OperationalError:
+        return _undurable_database_failure(invocation_id)
 
 
 def _release(invocation_id: Any, *, state: str | None = None) -> None:
@@ -407,7 +452,10 @@ def _terminalize_dispatch_failure(
     *,
     known_dispatch_failure: bool = False,
 ) -> SupervisorResult:
-    reconcile_provider_attempts(invocation)
+    try:
+        reconcile_provider_attempts(invocation)
+    except OperationalError:
+        return terminalize_pre_dispatch_failure(invocation, bounded_database_failure("runtime_dispatch"))
     upstream_attempt_exists = RuntimeProviderAttempt.objects.filter(
         invocation=invocation,
         upstream_initiated=True,
@@ -455,10 +503,36 @@ def terminalize_pre_dispatch_failure(
     external work happened from a missing provider-attempt row.
     """
 
+    try:
+        return _terminalize_pre_dispatch_failure(invocation, failure)
+    except OperationalError:
+        return _undurable_database_failure(invocation.invocation_id)
+
+
+def _terminalize_pre_dispatch_failure(
+    invocation: RuntimeInvocation,
+    failure: dict[str, str] | None = None,
+) -> SupervisorResult:
     existing = RunTerminalEvent.objects.filter(invocation=invocation).first()
     if existing is not None:
         invocation.refresh_from_db()
         return SupervisorResult(invocation.invocation_id, invocation.state, existing.kind, 0)
+
+    is_database_failure = (
+        isinstance(failure, dict)
+        and failure.get("failureSubstage") in _DATABASE_FAILURE_SUBSTAGES
+        and failure.get("databaseClass") in _DATABASE_FAILURE_CLASSES
+        and failure == bounded_database_failure(failure["failureSubstage"])
+    )
+    if is_database_failure:
+        return _terminalize(
+            invocation.pk,
+            kind="run_blocker",
+            reason=_serialized_failure(failure),
+            code="outcome_unknown",
+            outcome_unknown=True,
+            failure=dict(failure),
+        )
 
     if failure is None:
         return _terminalize(
@@ -728,13 +802,22 @@ def run_runtime_invocation(
             lease_seconds = math.ceil(runtime_budget_seconds(invocation.envelope))
         except (TypeError, ValueError) as exc:
             raise RuntimeSupervisorError("runtime invocation duration budget is invalid") from exc
-    claim = _claim(invocation, worker_id, lease_seconds)
+    try:
+        claim = _claim(invocation, worker_id, lease_seconds)
+    except OperationalError:
+        return terminalize_pre_dispatch_failure(invocation, bounded_database_failure("invocation_lookup"))
     if claim is None:
-        stored = RuntimeInvocation.objects.get(pk=invocation.pk)
-        terminal = RunTerminalEvent.objects.filter(invocation=stored).first()
+        try:
+            stored = RuntimeInvocation.objects.get(pk=invocation.pk)
+            terminal = RunTerminalEvent.objects.filter(invocation=stored).first()
+        except OperationalError:
+            return terminalize_pre_dispatch_failure(invocation, bounded_database_failure("runtime_readback"))
         return SupervisorResult(stored.invocation_id, stored.state, terminal.kind if terminal else None, 0)
     if claim.outcome_unknown:
-        reconcile_provider_attempts(claim.invocation)
+        try:
+            reconcile_provider_attempts(claim.invocation)
+        except OperationalError:
+            return terminalize_pre_dispatch_failure(claim.invocation, bounded_database_failure("runtime_readback"))
         return _terminalize(
             claim.invocation.pk,
             kind="run_blocker",
@@ -742,7 +825,11 @@ def run_runtime_invocation(
             code="outcome_unknown",
             outcome_unknown=True,
         )
-    if runtime_invocation_cancellation_requested(claim.invocation.pk):
+    try:
+        cancellation_requested = runtime_invocation_cancellation_requested(claim.invocation.pk)
+    except OperationalError:
+        return terminalize_pre_dispatch_failure(claim.invocation, bounded_database_failure("runtime_readback"))
+    if cancellation_requested:
         return _terminalize(
             claim.invocation.pk,
             kind="run_cancellation",
@@ -751,8 +838,10 @@ def run_runtime_invocation(
         )
 
     accepted_frames = 0
+    stage = "runtime_dispatch"
     try:
         frames = dispatch_invocation(claim.invocation, transport)
+        stage = "runtime_readback"
         for frame in frames:
             ingest_runtime_frame(claim.invocation, frame)
             accepted_frames += 1
@@ -761,6 +850,8 @@ def run_runtime_invocation(
     except RuntimeIngressError as exc:
         try:
             _reconcile_accepted_usage(claim.invocation)
+        except OperationalError:
+            return terminalize_pre_dispatch_failure(claim.invocation, bounded_database_failure("runtime_readback"))
         except AgentDomainError as usage_error:
             return _terminalize(
                 claim.invocation.pk,
@@ -775,14 +866,21 @@ def run_runtime_invocation(
             code="malformed_runtime_evidence",
         )
     except RuntimeDispatchError as exc:
-        return _terminalize_dispatch_failure(
-            claim.invocation,
-            exc.public_failure(),
-            known_dispatch_failure=exc.has_allowlisted_failure,
-        )
+        try:
+            return _terminalize_dispatch_failure(
+                claim.invocation,
+                exc.public_failure(),
+                known_dispatch_failure=exc.has_allowlisted_failure,
+            )
+        except OperationalError:
+            return terminalize_pre_dispatch_failure(claim.invocation, bounded_database_failure(stage))
+    except OperationalError:
+        return terminalize_pre_dispatch_failure(claim.invocation, bounded_database_failure(stage))
     except Exception:
         try:
             _reconcile_accepted_usage(claim.invocation)
+        except OperationalError:
+            return terminalize_pre_dispatch_failure(claim.invocation, bounded_database_failure("runtime_readback"))
         except AgentDomainError as usage_error:
             return _terminalize(
                 claim.invocation.pk,
@@ -812,6 +910,7 @@ __all__ = [
     "RuntimeLeaseBusy",
     "RuntimeSupervisorError",
     "SupervisorResult",
+    "bounded_database_failure",
     "_provider_unknown_failure",
     "request_runtime_cancellation",
     "run_runtime_invocation",

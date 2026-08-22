@@ -9,7 +9,7 @@ import json
 from copy import deepcopy
 from typing import Any
 
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, OperationalError, transaction
 
 from plane.agent.lifecycle.runtime_contract import (
     RuntimeContractError,
@@ -85,6 +85,8 @@ def dispatch_invocation(invocation: RuntimeInvocation, transport: RuntimeTranspo
             raise RuntimeDispatchError("runtime transport returned one frame instead of a frame iterable")
         frames = tuple(raw_frames)
     except Exception as exc:
+        if isinstance(exc, OperationalError):
+            raise
         if isinstance(exc, RuntimeDispatchError):
             raise
         raise RuntimeDispatchError("runtime transport dispatch failed") from exc

@@ -2,6 +2,7 @@
 
 import json
 import hashlib
+import io
 import os
 import re
 import socket
@@ -57,6 +58,7 @@ from plane.agent.runtime.supervisor import (
     run_runtime_invocation,
     terminalize_pre_dispatch_failure,
 )
+from plane.agent.runtime import supervisor as runtime_supervisor
 from plane.operation_gateway.gateway import OperationGateway
 from plane.db.models import (
     AgentActor,
@@ -376,6 +378,15 @@ class GenericExceptionRuntimeTransport:
     def dispatch(self, snapshot_json, envelope_json):
         self.calls += 1
         raise RuntimeError("provider-secret=must-not-leak")
+
+
+class DatabaseFailureRuntimeTransport:
+    def __init__(self):
+        self.calls = 0
+
+    def dispatch(self, snapshot_json, envelope_json):
+        self.calls += 1
+        raise OperationalError("database credentials and SQL must not escape")
 
 
 @pytest.mark.parametrize(
@@ -1491,6 +1502,105 @@ def test_supervisor_generic_exception_is_outcome_unknown_and_not_replayed(
 
 
 @pytest.mark.django_db(transaction=True)
+def test_database_failure_at_dispatch_is_reconciliation_required_and_bounded(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    run, invocation = _invocation(workspace, gateway_project, gateway_issue, create_user, suffix="db-dispatch")
+    transport = DatabaseFailureRuntimeTransport()
+
+    result = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
+
+    control = RuntimeInvocationControl.objects.get(invocation=invocation)
+    terminal = RunTerminalEvent.objects.get(invocation=invocation, visible=True)
+    expected = {
+        "failureCode": "runtime_supervisor_pre_dispatch_failure",
+        "failurePhase": "runtime_supervisor",
+        "failureDetail": "unclassified_exception",
+        "failureSubstage": "runtime_dispatch",
+        "databaseClass": "operational_error",
+        "reconciliationRequired": True,
+    }
+    assert result.state == InvocationState.BLOCKED
+    assert result.failure == expected
+    assert control.state == RuntimeControlState.OUTCOME_UNKNOWN
+    assert json.loads(control.failure_reason) == expected
+    assert json.loads(terminal.reason) == expected
+    assert "database credentials" not in control.failure_reason
+    assert transport.calls == 1
+
+
+@pytest.mark.django_db(transaction=True)
+def test_database_failure_at_readback_is_reconciliation_required_and_bounded(
+    workspace, gateway_project, gateway_issue, create_user, monkeypatch
+):
+    run, invocation = _invocation(workspace, gateway_project, gateway_issue, create_user, suffix="db-readback")
+    transport = FailingRuntimeTransport()
+
+    def fail_readback(*args, **kwargs):
+        raise OperationalError("database readback SQL must not escape")
+
+    monkeypatch.setattr(runtime_supervisor, "_finish_exit", fail_readback)
+
+    result = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
+
+    control = RuntimeInvocationControl.objects.get(invocation=invocation)
+    terminal = RunTerminalEvent.objects.get(invocation=invocation, visible=True)
+    reason = json.loads(control.failure_reason)
+    assert result.state == InvocationState.BLOCKED
+    assert reason["failureSubstage"] == "runtime_readback"
+    assert reason["databaseClass"] == "operational_error"
+    assert reason["reconciliationRequired"] is True
+    assert json.loads(terminal.reason) == reason
+
+
+@pytest.mark.django_db(transaction=True)
+def test_database_failure_at_claim_is_reconciliation_required_and_bounded(
+    workspace, gateway_project, gateway_issue, create_user, monkeypatch
+):
+    run, invocation = _invocation(workspace, gateway_project, gateway_issue, create_user, suffix="db-lookup")
+
+    def fail_claim(*args, **kwargs):
+        raise OperationalError("database lookup SQL must not escape")
+
+    monkeypatch.setattr(runtime_supervisor, "_claim", fail_claim)
+
+    result = run_runtime_invocation(invocation, transport=FailingRuntimeTransport(), worker_id="worker:test")
+
+    control = RuntimeInvocationControl.objects.get(invocation=invocation)
+    reason = json.loads(control.failure_reason)
+    assert result.state == InvocationState.BLOCKED
+    assert reason["failureSubstage"] == "invocation_lookup"
+    assert reason["databaseClass"] == "operational_error"
+    assert control.state == RuntimeControlState.OUTCOME_UNKNOWN
+
+
+@pytest.mark.django_db(transaction=True)
+def test_terminalization_database_failure_returns_explicit_undurable_supervisor_evidence(
+    workspace, gateway_project, gateway_issue, create_user, monkeypatch
+):
+    run, invocation = _invocation(workspace, gateway_project, gateway_issue, create_user, suffix="db-terminal")
+
+    def fail_terminalization(*args, **kwargs):
+        raise OperationalError("database terminalization SQL must not escape")
+
+    monkeypatch.setattr(runtime_supervisor, "_terminalize_db", fail_terminalization)
+
+    result = terminalize_pre_dispatch_failure(invocation, runtime_supervisor.bounded_database_failure("runtime_dispatch"))
+
+    assert result.durable is False
+    assert result.failure == {
+        "failureCode": "runtime_supervisor_pre_dispatch_failure",
+        "failurePhase": "runtime_supervisor",
+        "failureDetail": "unclassified_exception",
+        "failureSubstage": "terminalization",
+        "databaseClass": "operational_error",
+        "reconciliationRequired": True,
+    }
+    invocation.refresh_from_db()
+    assert invocation.state == InvocationState.RUNNING
+
+
+@pytest.mark.django_db(transaction=True)
 def test_pre_dispatch_setup_failure_is_terminalized_once_without_provider_attempt(
     workspace, gateway_project, gateway_issue, create_user
 ):
@@ -1654,9 +1764,47 @@ def test_transient_invocation_lookup_failure_is_terminalized_before_dispatch(
     assert control.lease_owner is None
     assert control.lease_expires_at is None
     assert terminal.kind == "run_blocker"
+    assert json.loads(control.failure_reason) == {
+        "failureCode": "runtime_supervisor_pre_dispatch_failure",
+        "failurePhase": "runtime_supervisor",
+        "failureDetail": "unclassified_exception",
+        "failureSubstage": "invocation_lookup",
+        "databaseClass": "operational_error",
+        "reconciliationRequired": True,
+    }
+    assert json.loads(terminal.reason) == json.loads(control.failure_reason)
     assert "database connection dropped" not in terminal.reason
     assert RunTerminalEvent.objects.filter(run=run, visible=True).count() == 1
     assert not RuntimeProviderAttempt.objects.filter(invocation=invocation).exists()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_repeated_invocation_lookup_failure_emits_reconciliation_evidence_without_success(
+    workspace, gateway_project, gateway_issue, create_user, monkeypatch
+):
+    _run, invocation = _invocation(
+        workspace,
+        gateway_project,
+        gateway_issue,
+        create_user,
+        suffix="lookup-operational-error-repeated",
+    )
+    output = io.StringIO()
+
+    def fail_lookup(**kwargs):
+        raise OperationalError("database SQL and credentials must not escape")
+
+    monkeypatch.setattr(supervisor_command.RuntimeInvocation.objects, "filter", fail_lookup)
+
+    with pytest.raises(CommandError, match="agent supervisor database failure requires reconciliation"):
+        call_command("agent_supervisor", invocation_ref=invocation.invocation_id, stdout=output)
+
+    invocation.refresh_from_db()
+    assert invocation.state == InvocationState.RUNNING
+    assert "state=unknown" in output.getvalue()
+    assert '"failureSubstage":"invocation_lookup"' in output.getvalue()
+    assert '"databaseClass":"operational_error"' in output.getvalue()
+    assert "database SQL and credentials" not in output.getvalue()
 
 
 @pytest.mark.parametrize(

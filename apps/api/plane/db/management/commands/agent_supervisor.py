@@ -25,6 +25,8 @@ from plane.agent.runtime import (
     RuntimeDispatchError,
     RuntimeHostEndpoint,
     RuntimeSupervisorError,
+    SupervisorResult,
+    bounded_database_failure,
     build_gateway_host_port,
     run_runtime_invocation,
     runtime_transport_kind,
@@ -170,10 +172,25 @@ class Command(BaseCommand):
                 try:
                     invocation = RuntimeInvocation.objects.filter(invocation_id=options["invocation_ref"]).first()
                 except OperationalError:
-                    raise lookup_error
+                    result = SupervisorResult(
+                        options["invocation_ref"],
+                        "unknown",
+                        None,
+                        0,
+                        bounded_database_failure("invocation_lookup"),
+                        durable=False,
+                    )
+                    self.stdout.write(_supervisor_result_output(result))
+                    raise CommandError("agent supervisor database failure requires reconciliation") from None
                 if invocation is None:
                     raise lookup_error
-                terminalize_pre_dispatch_failure(invocation)
+                result = terminalize_pre_dispatch_failure(
+                    invocation,
+                    bounded_database_failure("invocation_lookup"),
+                )
+                if not result.durable:
+                    self.stdout.write(_supervisor_result_output(result))
+                    raise CommandError("agent supervisor database failure requires reconciliation") from None
                 raise CommandError("agent supervisor invocation lookup failed before runtime dispatch") from None
             if invocation is None:
                 raise CommandError("invocation-ref does not identify a persisted Plane invocation")
@@ -360,17 +377,47 @@ class Command(BaseCommand):
             )
             host_operation_failure = host_operation_failure or getattr(transport, "host_operation_failure", None)
         except _SupervisorSetupFailure as exc:
-            terminalize_pre_dispatch_failure(invocation, exc.failure)
+            result = terminalize_pre_dispatch_failure(invocation, exc.failure)
+            if not result.durable:
+                self.stdout.write(_supervisor_result_output(result))
+                raise CommandError("agent supervisor database failure requires reconciliation") from None
             raise CommandError("agent supervisor setup was rejected") from None
         except CommandError:
             raise
+        except OperationalError:
+            if invocation is not None:
+                result = terminalize_pre_dispatch_failure(
+                    invocation,
+                    bounded_database_failure("runtime_readback"),
+                )
+                if not result.durable:
+                    self.stdout.write(_supervisor_result_output(result))
+                    raise CommandError("agent supervisor database failure requires reconciliation") from None
+            else:
+                result = SupervisorResult(
+                    options["invocation_ref"],
+                    "unknown",
+                    None,
+                    0,
+                    bounded_database_failure("invocation_lookup"),
+                    durable=False,
+                )
+                self.stdout.write(_supervisor_result_output(result))
+                raise CommandError("agent supervisor database failure requires reconciliation") from None
+            raise CommandError("agent supervisor could not establish a bounded runtime result") from None
         except (ValueError, OSError, RuntimeCredentialError, RuntimeSupervisorError):
             if invocation is not None:
-                terminalize_pre_dispatch_failure(invocation)
+                result = terminalize_pre_dispatch_failure(invocation)
+                if not result.durable:
+                    self.stdout.write(_supervisor_result_output(result))
+                    raise CommandError("agent supervisor database failure requires reconciliation") from None
             raise CommandError("agent supervisor could not establish a bounded runtime result") from None
         except Exception:
             if invocation is not None:
-                terminalize_pre_dispatch_failure(invocation)
+                result = terminalize_pre_dispatch_failure(invocation)
+                if not result.durable:
+                    self.stdout.write(_supervisor_result_output(result))
+                    raise CommandError("agent supervisor database failure requires reconciliation") from None
             raise CommandError("agent supervisor setup did not produce a bounded runtime result") from None
         finally:
             monitor_stop.set()
@@ -382,6 +429,9 @@ class Command(BaseCommand):
                 except Exception:
                     if result is not None:
                         raise CommandError("agent supervisor credential cleanup failed") from None
+        if result is not None and not result.durable:
+            self.stdout.write(_supervisor_result_output(result, host_operation_failure=host_operation_failure))
+            raise CommandError("agent supervisor database failure requires reconciliation") from None
         self.stdout.write(
             self.style.SUCCESS(
                 _supervisor_result_output(result, host_operation_failure=host_operation_failure)

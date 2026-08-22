@@ -2588,6 +2588,8 @@ class G4ContractTests(unittest.TestCase):
 
     def test_manager_route_readback_unavailable_is_post_route_and_bounded(self):
         source = (TOOLS / "agent_g4_manager_route.py").read_text(encoding="utf-8")
+        self.assertEqual(source.count("build_governance_readback(workspace, limit=4)"), 2)
+        self.assertNotIn("build_governance_readback(workspace, limit=64)", source)
         selected = source[source.index('if selected_route_ids <= {"M05", "M06"}:') : source.index("# M07:")]
         self.assertIn("route_result =", selected)
         self.assertIn('"readback": _post_route_readback(workspace)', selected)
@@ -4307,6 +4309,23 @@ class G4ContractTests(unittest.TestCase):
         self.assertEqual(
             json.loads(parsed_reason),
             bounded_reason,
+        )
+        database_reason = {
+            "failureCode": "runtime_supervisor_pre_dispatch_failure",
+            "failurePhase": "runtime_supervisor",
+            "failureDetail": "unclassified_exception",
+            "failureSubstage": "runtime_readback",
+            "databaseClass": "operational_error",
+            "reconciliationRequired": True,
+        }
+        self.assertEqual(
+            json.loads(
+                namespace["_supervisor_failure_reason"](
+                    "state=unknown failure="
+                    + json.dumps(database_reason, sort_keys=True, separators=(",", ":"))
+                )
+            ),
+            database_reason,
         )
         causal_reason = {
             "failureCode": "runtime_error",

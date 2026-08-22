@@ -1862,6 +1862,9 @@ def _supervisor_failure_reason(output):
         "codeModeFailureClass",
         "runtimePhase",
         "exceptionClass",
+        "failureSubstage",
+        "databaseClass",
+        "reconciliationRequired",
     }
     required_keys = allowed_keys - {
         "failureSubreason",
@@ -1874,6 +1877,9 @@ def _supervisor_failure_reason(output):
         "codeModeFailureClass",
         "runtimePhase",
         "exceptionClass",
+        "failureSubstage",
+        "databaseClass",
+        "reconciliationRequired",
     }
     allowed_shapes = {
         frozenset(required_keys),
@@ -1971,13 +1977,24 @@ def _supervisor_failure_reason(output):
         top_level_diagnostic_fields = value_keys & host_failure_diagnostic_fields
         code_mode_fields = value_keys & {"codeModeHostStatus", "codeModeFailureClass"}
         runtime_diagnostic_fields = value_keys & {"runtimePhase", "exceptionClass"}
+        database_diagnostic_fields = value_keys & {
+            "failureSubstage",
+            "databaseClass",
+            "reconciliationRequired",
+        }
         if code_mode_fields and code_mode_fields != {"codeModeHostStatus", "codeModeFailureClass"}:
             continue
         if runtime_diagnostic_fields and runtime_diagnostic_fields != {"runtimePhase", "exceptionClass"}:
             continue
+        if database_diagnostic_fields and database_diagnostic_fields != {
+            "failureSubstage",
+            "databaseClass",
+            "reconciliationRequired",
+        }:
+            continue
         if top_level_diagnostic_fields and top_level_diagnostic_fields != host_failure_diagnostic_fields:
             continue
-        if value_keys - diagnostic_refs - top_level_diagnostic_fields - code_mode_fields - runtime_diagnostic_fields not in allowed_shapes:
+        if value_keys - diagnostic_refs - top_level_diagnostic_fields - code_mode_fields - runtime_diagnostic_fields - database_diagnostic_fields not in allowed_shapes:
             if (
                 "hostOperationFailure" not in value
                 or value_keys
@@ -1985,6 +2002,7 @@ def _supervisor_failure_reason(output):
                 - top_level_diagnostic_fields
                 - code_mode_fields
                 - runtime_diagnostic_fields
+                - database_diagnostic_fields
                 - {"hostOperationFailure"}
                 not in allowed_shapes
             ):
@@ -2041,6 +2059,13 @@ def _supervisor_failure_reason(output):
             }:
                 continue
         if runtime_diagnostic_fields and _bounded_runtime_failure_diagnostic(value) is None:
+            continue
+        if database_diagnostic_fields and (
+            value["failureSubstage"]
+            not in {"invocation_lookup", "runtime_dispatch", "runtime_readback", "terminalization"}
+            or value["databaseClass"] != "operational_error"
+            or value["reconciliationRequired"] is not True
+        ):
             continue
         for field, prefix in (
             ("providerAttemptRef", "provider-attempt:"),
