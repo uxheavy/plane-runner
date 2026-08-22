@@ -1883,6 +1883,12 @@ class PlaneHostHTTPServer:
         with self._lock:
             return dict(self._failure_evidence) if self._failure_evidence is not None else None
 
+    @property
+    def prepared_handoff_trace(self) -> dict[str, Any] | None:
+        target = getattr(self._invoke, "__self__", None)
+        trace = getattr(target, "prepared_handoff_trace", None)
+        return trace if isinstance(trace, Mapping) else None
+
     def _record_failure(
         self,
         call: PlaneHostCall | None,
@@ -1900,6 +1906,7 @@ class PlaneHostHTTPServer:
             failure_class=failure_class,
             socket_phase=socket_phase,
             socket_state=socket_state,
+            prepared_handoff=self.prepared_handoff_trace,
         )
         if evidence is None:
             return

@@ -549,6 +549,55 @@ def test_http_host_distinguishes_callback_exception_after_successful_search():
         server.close()
 
 
+def test_http_host_failure_retains_prepared_handoff_owner_stage():
+    call = _call(
+        operationRef="operation:work_item.read",
+        input={"preparedCallRef": "prepared-call:unknown"},
+    )
+    result = PlaneHostResult(
+        request_ref=call.request_ref,
+        correlation_id=call.correlation_id,
+        idempotency_key=call.idempotency_key,
+        status="invalid",
+        replayed=False,
+        error_code="PREPARED_CALL_INVALID",
+        error_message="prepared work-item read reference is invalid",
+        prepared_call_invalid_reason="unknown",
+    )
+    trace = {
+        "schemaVersion": "plane.prepared-handoff/v1",
+        "events": [
+            {
+                "stage": "runtime_auto_read",
+                "form": "canonical_ref",
+                "preparedRefDigest": "a" * 64,
+                "registryState": "consumed",
+                "reason": "unknown",
+                "operationRefDigest": "b" * 64,
+            }
+        ],
+    }
+
+    class TraceOwner:
+        prepared_handoff_trace = trace
+
+        def invoke(self, _call):
+            return result
+
+    owner = TraceOwner()
+    server = host_rpc.PlaneHostHTTPServer(
+        bind_host="127.0.0.1",
+        advertised_host="127.0.0.1",
+        port=0,
+        auth_token="host-token",
+        invoke=owner.invoke,
+    )
+
+    assert server._invoke_once(call) == result
+    assert server.failure_evidence["errorCode"] == "PREPARED_CALL_INVALID"
+    assert server.failure_evidence["preparedHandoff"] == trace
+
+
 def test_http_host_classifies_response_boundary_failure_as_transport(monkeypatch):
     result_holder = {"armed": False}
 
