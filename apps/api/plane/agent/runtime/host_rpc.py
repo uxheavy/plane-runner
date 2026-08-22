@@ -32,7 +32,12 @@ from plane.agent.code_mode.contracts import (
     CodeModeExecutionRequest,
 )
 
-from .contracts import MAX_PREPARED_CALL_REF_BYTES, PREPARED_CALL_PREFIX, model_operation_entry
+from .contracts import (
+    MAX_PREPARED_CALL_REF_BYTES,
+    PREPARED_CALL_PREFIX,
+    _bounded_prepared_handoff,
+    model_operation_entry,
+)
 
 HOST_PROTOCOL = "plane.agent-runtime/v1"
 PLANE_DISCOVERY_OPERATION = "plane.operations.discover@1"
@@ -68,6 +73,28 @@ _PREPARED_CALL_INVALID_REASONS = frozenset(
     {"unknown", "consumed", "binding_mismatch", "digest_mismatch", "malformed"}
 )
 
+_PREPARED_HANDOFF_STAGES = frozenset(
+    {
+        "register",
+        "runtime_auto_read",
+        "hermes_model_read",
+        "host_normalize",
+        "registry_resolve",
+        "registry_consume",
+    }
+)
+_PREPARED_HANDOFF_FORMS = frozenset(
+    {"canonical_ref", "malformed", "nested_wrapper", "json_string", "ready_envelope", "absent"}
+)
+_PREPARED_HANDOFF_REGISTRY_STATES = frozenset({"absent", "unconsumed", "consumed"})
+_PREPARED_HANDOFF_REASONS = frozenset(
+    {"none", "unknown", "malformed", "binding_mismatch", "digest_mismatch", "consumed"}
+)
+_PREPARED_HANDOFF_EVENT_FIELDS = frozenset(
+    {"stage", "form", "preparedRefDigest", "registryState", "reason", "operationRefDigest"}
+)
+_PREPARED_HANDOFF_MAX_EVENTS = len(_PREPARED_HANDOFF_STAGES)
+
 
 class PreparedCallInvalid(PlaneHostRPCError):
     """Private bounded classification for one rejected prepared call."""
@@ -77,6 +104,115 @@ class PreparedCallInvalid(PlaneHostRPCError):
             raise ValueError("unsupported prepared-call rejection reason")
         self.reason = reason
         super().__init__("prepared work-item read reference is invalid")
+
+
+def _sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _prepared_handoff_form(value: Any) -> str:
+    """Classify only the finite wrapper shapes used by the prepared handoff."""
+
+    if not isinstance(value, Mapping) or "preparedCallRef" not in value:
+        return "absent"
+    if set(value) != {"preparedCallRef"}:
+        return "malformed"
+    candidate = value["preparedCallRef"]
+    if isinstance(candidate, str):
+        if candidate.startswith(PREPARED_CALL_PREFIX):
+            return "canonical_ref"
+        try:
+            envelope = _canonical_prepared_wrapper(candidate)
+        except PlaneHostRPCError:
+            return "malformed" if candidate.lstrip().startswith(("{", "[")) else "malformed"
+        return (
+            "ready_envelope"
+            if set(envelope) == {"action", "operationRef", "input"}
+            else "json_string"
+        )
+    if isinstance(candidate, Mapping):
+        if set(candidate) == {"preparedCallRef"}:
+            return "nested_wrapper"
+        if set(candidate) == {"action", "operationRef", "input"}:
+            return "ready_envelope"
+    return "malformed"
+
+
+class PreparedHandoffTrace:
+    """Bounded, invocation-local observations for one opaque prepared handoff."""
+
+    def __init__(self) -> None:
+        self._events: list[dict[str, str]] = []
+        self._lock = threading.RLock()
+
+    @staticmethod
+    def _digest(value: Any) -> str:
+        if not isinstance(value, str):
+            return _sha256_text("<absent>")
+        return _sha256_text(value)
+
+    @staticmethod
+    def _operation_digest(operation_ref: Any) -> str:
+        return _sha256_text(operation_ref if isinstance(operation_ref, str) else "<absent>")
+
+    def record(
+        self,
+        stage: str,
+        *,
+        form: str,
+        prepared_ref: Any = None,
+        registry_state: str,
+        reason: str = "none",
+        operation_ref: Any = "operation:work_item.read",
+    ) -> None:
+        if stage not in _PREPARED_HANDOFF_STAGES:
+            return
+        if form not in _PREPARED_HANDOFF_FORMS:
+            form = "malformed"
+        if registry_state not in _PREPARED_HANDOFF_REGISTRY_STATES:
+            registry_state = "absent"
+        if reason not in _PREPARED_HANDOFF_REASONS:
+            reason = "unknown"
+        with self._lock:
+            if any(event["stage"] == stage for event in self._events):
+                return
+            if len(self._events) >= _PREPARED_HANDOFF_MAX_EVENTS:
+                return
+            self._events.append(
+                {
+                    "stage": stage,
+                    "form": form,
+                    "preparedRefDigest": self._digest(prepared_ref),
+                    "registryState": registry_state,
+                    "reason": reason,
+                    "operationRefDigest": self._operation_digest(operation_ref),
+                }
+            )
+
+    def snapshot(self) -> dict[str, Any] | None:
+        with self._lock:
+            if not self._events:
+                return None
+            value = {
+                "schemaVersion": "plane.prepared-handoff/v1",
+                "events": [dict(event) for event in self._events],
+            }
+        try:
+            if len(_canonical(value, "prepared handoff trace")) > 4096:
+                return None
+        except PlaneHostRPCError:
+            return None
+        return value
+
+    def is_closed(self) -> bool:
+        with self._lock:
+            by_stage = {event["stage"]: event for event in self._events}
+            required = {"register", "runtime_auto_read", "registry_resolve", "registry_consume"}
+            if not required.issubset(by_stage):
+                return False
+            prepared_digests = {by_stage[stage]["preparedRefDigest"] for stage in required}
+            operation_digests = {by_stage[stage]["operationRefDigest"] for stage in required}
+            return len(prepared_digests) == 1 and len(operation_digests) == 1
 
 
 _PUBLICATION_FAILURE_REASONS = frozenset(
@@ -111,6 +247,7 @@ class PreparedCallRegistry:
     def __init__(self) -> None:
         self.records: dict[str, dict[str, Any]] = {}
         self.lock = threading.RLock()
+        self.trace = PreparedHandoffTrace()
 
     def register(self, read_input: Mapping[str, Any]) -> str:
         canonical_input = dict(read_input)
@@ -127,6 +264,12 @@ class PreparedCallRegistry:
                 "result": None,
                 "consumed": False,
             }
+        self.trace.record(
+            "register",
+            form="canonical_ref",
+            prepared_ref=prepared_ref,
+            registry_state="unconsumed",
+        )
         return prepared_ref
 
     def mark_consumed(self, prepared_ref: str) -> None:
@@ -134,6 +277,13 @@ class PreparedCallRegistry:
             record = self.records.get(prepared_ref)
             if record is not None:
                 record["consumed"] = True
+        if record is not None:
+            self.trace.record(
+                "registry_consume",
+                form="canonical_ref",
+                prepared_ref=prepared_ref,
+                registry_state="consumed",
+            )
 
     def has_unconsumed(self) -> bool:
         with self.lock:
@@ -145,7 +295,7 @@ class PreparedCallRegistry:
             return record is not None and not record["consumed"]
 
     @staticmethod
-    def normalize(input_data: Mapping[str, Any]) -> Mapping[str, Any]:
+    def _normalize(input_data: Mapping[str, Any]) -> Mapping[str, Any]:
         """Accept one canonical opaque ref or its exact serialized read envelope."""
 
         if "preparedCallRef" not in input_data:
@@ -180,6 +330,38 @@ class PreparedCallRegistry:
             raise PreparedCallInvalid("malformed") from exc
         return {"preparedCallRef": prepared_ref}
 
+    def normalize(self, input_data: Mapping[str, Any]) -> Mapping[str, Any]:
+        form = _prepared_handoff_form(input_data)
+        prepared_ref = input_data.get("preparedCallRef") if isinstance(input_data, Mapping) else None
+        if isinstance(prepared_ref, str) and prepared_ref.startswith(PREPARED_CALL_PREFIX):
+            registry_state = "consumed" if not self.is_unconsumed(prepared_ref) else "unconsumed"
+        elif isinstance(prepared_ref, Mapping):
+            nested_ref = prepared_ref.get("preparedCallRef")
+            registry_state = (
+                "consumed"
+                if isinstance(nested_ref, str) and not self.is_unconsumed(nested_ref)
+                else "unconsumed"
+                if isinstance(nested_ref, str)
+                else "absent"
+            )
+        else:
+            registry_state = "absent"
+        if form != "absent":
+            self.trace.record(
+                "host_normalize",
+                form=form,
+                prepared_ref=(
+                    prepared_ref
+                    if isinstance(prepared_ref, str)
+                    else prepared_ref.get("preparedCallRef")
+                    if isinstance(prepared_ref, Mapping)
+                    else None
+                ),
+                registry_state=registry_state,
+                reason="none",
+            )
+        return self._normalize(input_data)
+
     def resolve(
         self,
         input_data: Mapping[str, Any],
@@ -195,14 +377,37 @@ class PreparedCallRegistry:
             record = self.records.get(prepared_ref)
             prepared_input = record.get("input") if record is not None else None
             if prepared_input is None or record is None:
+                self.trace.record(
+                    "registry_resolve",
+                    form="canonical_ref",
+                    prepared_ref=prepared_ref,
+                    registry_state="absent",
+                    reason="unknown",
+                    operation_ref="operation:work_item.read",
+                )
                 raise PreparedCallInvalid("unknown")
             parts = prepared_ref.split(":", 2)
             if len(parts) != 3 or not hmac.compare_digest(
                 parts[1], hashlib.sha256(_canonical(prepared_input, "prepared work-item read input")).hexdigest()
             ):
+                self.trace.record(
+                    "registry_resolve",
+                    form="canonical_ref",
+                    prepared_ref=prepared_ref,
+                    registry_state="consumed" if record["consumed"] else "unconsumed",
+                    reason="digest_mismatch",
+                    operation_ref="operation:work_item.read",
+                )
                 raise PreparedCallInvalid("digest_mismatch")
             if correlation_id is not None or idempotency_key is not None:
                 if not isinstance(correlation_id, str) or not isinstance(idempotency_key, str):
+                    self.trace.record(
+                        "registry_resolve",
+                        form="canonical_ref",
+                        prepared_ref=prepared_ref,
+                        registry_state="consumed" if record["consumed"] else "unconsumed",
+                        reason="malformed",
+                    )
                     raise PreparedCallInvalid("malformed")
                 bound_correlation = record["correlation_id"]
                 bound_idempotency = record["idempotency_key"]
@@ -210,8 +415,44 @@ class PreparedCallRegistry:
                     record["correlation_id"] = correlation_id
                     record["idempotency_key"] = idempotency_key
                 elif bound_correlation != correlation_id or bound_idempotency != idempotency_key:
-                    raise PreparedCallInvalid("consumed" if record["consumed"] else "binding_mismatch")
+                    reason = "consumed" if record["consumed"] else "binding_mismatch"
+                    self.trace.record(
+                        "registry_resolve",
+                        form="canonical_ref",
+                        prepared_ref=prepared_ref,
+                        registry_state="consumed" if record["consumed"] else "unconsumed",
+                        reason=reason,
+                    )
+                    raise PreparedCallInvalid(reason)
+            self.trace.record(
+                "registry_resolve",
+                form="canonical_ref",
+                prepared_ref=prepared_ref,
+                registry_state="consumed" if record["consumed"] else "unconsumed",
+                reason="consumed" if record["consumed"] else "none",
+                operation_ref="operation:work_item.read",
+            )
             return prepared_input
+
+    def record_runtime_auto_read(self, prepared_ref: str) -> None:
+        self.trace.record(
+            "runtime_auto_read",
+            form="canonical_ref",
+            prepared_ref=prepared_ref,
+            registry_state="consumed" if not self.is_unconsumed(prepared_ref) else "unconsumed",
+        )
+
+    def record_hermes_model_read(self, input_data: Mapping[str, Any]) -> None:
+        prepared_ref = input_data.get("preparedCallRef") if isinstance(input_data, Mapping) else None
+        if not isinstance(prepared_ref, str):
+            return
+        self.trace.record(
+            "hermes_model_read",
+            form=_prepared_handoff_form(input_data),
+            prepared_ref=prepared_ref,
+            registry_state="consumed" if not self.is_unconsumed(prepared_ref) else "unconsumed",
+            reason="consumed" if not self.is_unconsumed(prepared_ref) else "none",
+        )
 
 
 def _canonical(value: Any, name: str) -> bytes:
@@ -938,6 +1179,7 @@ def _host_operation_failure_evidence(
     failure_class: str | None = None,
     socket_phase: str | None = None,
     socket_state: str = "failed",
+    prepared_handoff: Mapping[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Project one failed callback into the bounded runner evidence shape."""
 
@@ -1033,6 +1275,10 @@ def _host_operation_failure_evidence(
                 result.prepared_call_invalid_reason or "malformed",
             )
         evidence["shapeDiagnostic"] = shape_diagnostic
+    if prepared_handoff is not None:
+        bounded_handoff = _bounded_prepared_handoff(prepared_handoff)
+        if bounded_handoff is not None:
+            evidence["preparedHandoff"] = bounded_handoff
     return evidence
 
 
@@ -1097,6 +1343,12 @@ class PlaneHostServer:
         with self._lock:
             return dict(self._failure_evidence) if self._failure_evidence is not None else None
 
+    @property
+    def prepared_handoff_trace(self) -> dict[str, Any] | None:
+        target = getattr(self._invoke, "__self__", None)
+        trace = getattr(target, "prepared_handoff_trace", None)
+        return trace if isinstance(trace, Mapping) else None
+
     def _record_failure(
         self,
         call: PlaneHostCall | None,
@@ -1114,6 +1366,7 @@ class PlaneHostServer:
             failure_class=failure_class,
             socket_phase=socket_phase,
             socket_state=socket_state,
+            prepared_handoff=self.prepared_handoff_trace,
         )
         if evidence is None:
             return
@@ -1823,14 +2076,26 @@ class PlaneGatewayHostPort:
         self._prepared_call_registry = PreparedCallRegistry()
         self._prepared_calls = self._prepared_call_registry.records
         self._prepared_calls_lock = self._prepared_call_registry.lock
+        self._prepared_read_auto_depth = 0
         setter = getattr(host, "set_prepared_call_registry", None)
         if callable(setter):
             setter(self._prepared_call_registry)
         self._prepared_read_handoff_pending = False
 
+    @property
+    def prepared_handoff_trace(self) -> dict[str, Any] | None:
+        return self._prepared_call_registry.trace.snapshot()
+
     def invoke(self, call: PlaneHostCall) -> PlaneHostResult:
         if call.run_id != self._run_ref or call.invocation_id != self._invocation_ref:
             return self._error(call, "CALLBACK_BINDING_INVALID", "Host callback is not bound to this invocation")
+        if (
+            call.operation_ref == "operation:work_item.read"
+            and call.action == "read"
+            and self._prepared_read_auto_depth == 0
+            and "preparedCallRef" in call.input
+        ):
+            self._prepared_call_registry.record_hermes_model_read(call.input)
         if call.action == "observe":
             if call.operation_ref != "runtime.provider_attempt" or self._provider_attempt_recorder is None:
                 return self._error(call, "OPERATION_UNAVAILABLE", "Provider attempt observation is unavailable")
@@ -1891,7 +2156,12 @@ class PlaneGatewayHostPort:
                     input={"preparedCallRef": prepared_refs[0]},
                     source="model",
                 )
-                prepared_read = self.invoke(prepared_read_call)
+                self._prepared_call_registry.record_runtime_auto_read(prepared_refs[0])
+                self._prepared_read_auto_depth += 1
+                try:
+                    prepared_read = self.invoke(prepared_read_call)
+                finally:
+                    self._prepared_read_auto_depth -= 1
                 continuation_output = dict(output) if isinstance(output, Mapping) else {}
                 if prepared_read.status in {"ok", "replayed"}:
                     continuation_output = _without_consumed_prepared_read_from_code_mode_result(

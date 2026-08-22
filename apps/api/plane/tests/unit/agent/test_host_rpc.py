@@ -1919,3 +1919,81 @@ def test_model_code_mode_failure_is_recoverable_before_corrected_module():
     assert second.status == "ok"
     assert second.output == {"result": {"operationId": "work_item.rename"}}
     assert host.calls == 2
+
+
+def test_v96_prepared_handoff_trace_closes_with_one_digest_per_stage():
+    registry = PreparedCallRegistry()
+    prepared_ref = registry.register({"project_id": "project:test", "issue_id": "issue:test"})
+    registry.record_runtime_auto_read(prepared_ref)
+    assert registry.resolve({"preparedCallRef": prepared_ref}) == {
+        "project_id": "project:test",
+        "issue_id": "issue:test",
+    }
+    registry.mark_consumed(prepared_ref)
+    registry.record_hermes_model_read({"preparedCallRef": prepared_ref})
+
+    trace = registry.trace.snapshot()
+    assert trace is not None
+    assert registry.trace.is_closed()
+    assert [event["stage"] for event in trace["events"]] == [
+        "register",
+        "runtime_auto_read",
+        "host_normalize",
+        "registry_resolve",
+        "registry_consume",
+        "hermes_model_read",
+    ]
+    assert len({event["preparedRefDigest"] for event in trace["events"]}) == 1
+    assert len({event["operationRefDigest"] for event in trace["events"]}) == 1
+    assert trace["events"][-1]["registryState"] == "consumed"
+    assert trace["events"][-1]["reason"] == "consumed"
+    assert prepared_ref not in json.dumps(trace)
+
+
+def test_v96_prepared_handoff_trace_captures_digest_divergence_and_missing_closure_stage():
+    registry = PreparedCallRegistry()
+    prepared_ref = registry.register({"project_id": "project:test", "issue_id": "issue:test"})
+    registry.records[prepared_ref]["input"] = {"project_id": "project:other", "issue_id": "issue:other"}
+
+    with pytest.raises(host_rpc.PreparedCallInvalid) as captured:
+        registry.resolve({"preparedCallRef": prepared_ref})
+
+    assert captured.value.reason == "digest_mismatch"
+    trace = registry.trace.snapshot()
+    assert trace is not None
+    assert trace["events"][-1]["stage"] == "registry_resolve"
+    assert trace["events"][-1]["reason"] == "digest_mismatch"
+    assert not registry.trace.is_closed()
+
+
+def test_v96_prepared_handoff_trace_validator_rejects_raw_ids_duplicates_and_oversize():
+    registry = PreparedCallRegistry()
+    prepared_ref = registry.register({"project_id": "project:test", "issue_id": "issue:test"})
+    trace = registry.trace.snapshot()
+    assert trace is not None
+    assert host_rpc._bounded_prepared_handoff(trace) == trace
+    assert host_rpc._bounded_prepared_handoff({**trace, "rawRef": prepared_ref}) is None
+    duplicate = {**trace, "events": [trace["events"][0], trace["events"][0]]}
+    assert host_rpc._bounded_prepared_handoff(duplicate) is None
+    oversized = {
+        "schemaVersion": "plane.prepared-handoff/v1",
+        "events": [{**trace["events"][0], "preparedRefDigest": "f" * 65}],
+    }
+    assert host_rpc._bounded_prepared_handoff(oversized) is None
+
+
+def test_v96_prepared_handoff_forms_are_fixed_and_non_recursive():
+    prepared_ref = "prepared-call:opaque"
+    ready = {
+        "action": "read",
+        "operationRef": "operation:work_item.read",
+        "input": {"preparedCallRef": prepared_ref},
+    }
+    assert host_rpc._prepared_handoff_form({}) == "absent"
+    assert host_rpc._prepared_handoff_form({"preparedCallRef": prepared_ref}) == "canonical_ref"
+    assert host_rpc._prepared_handoff_form({"preparedCallRef": {"preparedCallRef": prepared_ref}}) == "nested_wrapper"
+    assert host_rpc._prepared_handoff_form({"preparedCallRef": ready}) == "ready_envelope"
+    assert host_rpc._prepared_handoff_form(
+        {"preparedCallRef": json.dumps({"preparedCallRef": prepared_ref}, separators=(",", ":"))}
+    ) == "json_string"
+    assert host_rpc._prepared_handoff_form({"preparedCallRef": {"unexpected": prepared_ref}}) == "malformed"

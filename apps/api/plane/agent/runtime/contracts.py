@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+import json
 from typing import Any, Protocol
 
 
@@ -159,6 +160,7 @@ _HOST_FAILURE_OPTIONAL_FIELDS = frozenset(
         "socketState",
         "preparedCallInvalidReason",
         "shapeDiagnostic",
+        "preparedHandoff",
     }
 )
 _HOST_CODE_MODE_PHASES = frozenset({"host_callback", "unavailable"})
@@ -188,6 +190,31 @@ _PREPARED_DIAGNOSTIC_KEY_CHARS = frozenset(
 _PREPARED_DIAGNOSTIC_SENSITIVE_PARTS = frozenset(
     {"auth", "credential", "key", "password", "secret", "token"}
 )
+_PREPARED_HANDOFF_STAGES = frozenset(
+    {
+        "register",
+        "runtime_auto_read",
+        "hermes_model_read",
+        "host_normalize",
+        "registry_resolve",
+        "registry_consume",
+    }
+)
+_PREPARED_HANDOFF_FORMS = frozenset(
+    {"canonical_ref", "malformed", "nested_wrapper", "json_string", "ready_envelope", "absent"}
+)
+_PREPARED_HANDOFF_REGISTRY_STATES = frozenset({"absent", "unconsumed", "consumed"})
+_PREPARED_HANDOFF_REASONS = frozenset(
+    {"none", "unknown", "malformed", "binding_mismatch", "digest_mismatch", "consumed"}
+)
+_PREPARED_HANDOFF_MAX_EVENTS = 6
+_PREPARED_HANDOFF_EVENT_FIELDS = frozenset(
+    {"stage", "form", "preparedRefDigest", "registryState", "reason", "operationRefDigest"}
+)
+
+
+def _canonical(value: Any) -> bytes:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
 
 
 def _bounded_prepared_shape_diagnostic(value: object) -> dict[str, object] | None:
@@ -245,6 +272,57 @@ def _bounded_prepared_shape_diagnostic(value: object) -> dict[str, object] | Non
     }
 
 
+def _bounded_prepared_handoff(value: object) -> dict[str, object] | None:
+    """Accept only the finite digest-and-enum prepared handoff trace."""
+
+    if not isinstance(value, Mapping) or set(value) != {"schemaVersion", "events"}:
+        return None
+    events = value.get("events")
+    if value.get("schemaVersion") != "plane.prepared-handoff/v1" or not isinstance(events, list):
+        return None
+    if not 1 <= len(events) <= _PREPARED_HANDOFF_MAX_EVENTS:
+        return None
+    seen: set[str] = set()
+    bounded_events: list[dict[str, object]] = []
+    for event in events:
+        if not isinstance(event, Mapping) or set(event) != _PREPARED_HANDOFF_EVENT_FIELDS:
+            return None
+        prepared_digest = event.get("preparedRefDigest")
+        operation_digest = event.get("operationRefDigest")
+        if (
+            event.get("stage") not in _PREPARED_HANDOFF_STAGES
+            or event["stage"] in seen
+            or event.get("form") not in _PREPARED_HANDOFF_FORMS
+            or event.get("registryState") not in _PREPARED_HANDOFF_REGISTRY_STATES
+            or event.get("reason") not in _PREPARED_HANDOFF_REASONS
+            or not isinstance(prepared_digest, str)
+            or not isinstance(operation_digest, str)
+            or len(prepared_digest) != 64
+            or len(operation_digest) != 64
+            or any(char not in "0123456789abcdef" for char in prepared_digest)
+            or any(char not in "0123456789abcdef" for char in operation_digest)
+        ):
+            return None
+        seen.add(event["stage"])
+        bounded_events.append(
+            {
+                "stage": event["stage"],
+                "form": event["form"],
+                "preparedRefDigest": prepared_digest,
+                "registryState": event["registryState"],
+                "reason": event["reason"],
+                "operationRefDigest": operation_digest,
+            }
+        )
+    bounded = {"schemaVersion": "plane.prepared-handoff/v1", "events": bounded_events}
+    try:
+        if len(_canonical(bounded)) > 4096:
+            return None
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return bounded
+
+
 def _bounded_host_operation_failure(value: Mapping[str, object] | None) -> dict[str, object] | None:
     """Accept only the finite host diagnostic shape across the runtime seam."""
 
@@ -290,6 +368,11 @@ def _bounded_host_operation_failure(value: Mapping[str, object] | None) -> dict[
     bounded = dict(value)
     if bounded_shape_diagnostic is not None:
         bounded["shapeDiagnostic"] = bounded_shape_diagnostic
+    if "preparedHandoff" in value:
+        bounded_prepared_handoff = _bounded_prepared_handoff(value["preparedHandoff"])
+        if bounded_prepared_handoff is None:
+            return None
+        bounded["preparedHandoff"] = bounded_prepared_handoff
     return bounded
 
 

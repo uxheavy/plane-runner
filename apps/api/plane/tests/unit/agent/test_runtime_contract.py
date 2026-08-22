@@ -2,6 +2,7 @@ import copy
 
 import pytest
 
+import plane.agent.runtime.contracts as runtime_contracts
 from plane.agent.lifecycle.runtime_contract import (
     RuntimeContractError,
     content_digest,
@@ -302,6 +303,85 @@ def test_host_server_retains_bounded_first_operation_failure_context(tmp_path):
         "errorCode": "OPERATION_UNAVAILABLE",
         "codeModePhase": "host_callback",
     }
+
+
+def test_v96_prepared_handoff_survives_the_existing_host_failure_container():
+    trace = {
+        "schemaVersion": "plane.prepared-handoff/v1",
+        "events": [
+            {
+                "stage": "register",
+                "form": "canonical_ref",
+                "preparedRefDigest": "a" * 64,
+                "registryState": "unconsumed",
+                "reason": "none",
+                "operationRefDigest": "b" * 64,
+            }
+        ],
+    }
+    value = {
+        "operationId": "work_item.read",
+        "attemptRef": "operation-attempt:test",
+        "receiptRef": "unavailable",
+        "status": "invalid",
+        "errorCode": "PREPARED_CALL_INVALID",
+        "codeModePhase": "unavailable",
+        "preparedHandoff": trace,
+    }
+
+    bounded = runtime_contracts._bounded_host_operation_failure(value)
+    assert bounded is not None
+    assert bounded["preparedHandoff"] == trace
+    assert runtime_contracts._bounded_host_operation_failure(
+        {**value, "preparedHandoff": {**trace, "events": trace["events"] * 2}}
+    ) is None
+
+
+def test_v96_prepared_handoff_is_attached_by_the_existing_server_failure_path(tmp_path):
+    call = PlaneHostCall(
+        run_id="run:test",
+        invocation_id="invocation:test",
+        correlation_id="correlation:test",
+        action="read",
+        operation_ref="operation:work_item.read",
+        input={"preparedCallRef": "prepared-call:opaque"},
+        source="model",
+    )
+    result = PlaneHostResult(
+        request_ref=call.request_ref,
+        correlation_id=call.correlation_id,
+        idempotency_key=call.idempotency_key,
+        status="invalid",
+        replayed=False,
+        error_code="PREPARED_CALL_INVALID",
+        error_message="prepared work-item read reference is invalid",
+        prepared_call_invalid_reason="consumed",
+    )
+    trace = {
+        "schemaVersion": "plane.prepared-handoff/v1",
+        "events": [
+            {
+                "stage": "registry_consume",
+                "form": "canonical_ref",
+                "preparedRefDigest": "a" * 64,
+                "registryState": "consumed",
+                "reason": "consumed",
+                "operationRefDigest": "b" * 64,
+            }
+        ],
+    }
+
+    class TraceOwner:
+        prepared_handoff_trace = trace
+
+        def invoke(self, _call):
+            return result
+
+    owner = TraceOwner()
+    server = PlaneHostServer(socket_path=tmp_path / "host.sock", invoke=owner.invoke)
+
+    assert server._invoke_once(call) == result
+    assert server.failure_evidence["preparedHandoff"] == trace
 
 
 def test_host_server_does_not_promote_expected_evaluator_denial_to_runtime_failure(tmp_path):
