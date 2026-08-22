@@ -20,7 +20,7 @@
   ],
   "candidateBinding": {
     "acceptedG3Baseline": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
-    "candidateCommitSource": "git-head-with-exact-parent",
+    "candidateCommitSource": "builder-exact-git-revision",
     "expectedCandidateSource": "external-operator-input:PLANE_G4_EXPECTED_CANDIDATE",
     "mode": "exact-single-child",
     "parentCommit": "c88e711c3dff9e8f9d0244b7e4eca48224778089",
@@ -39,6 +39,39 @@
     "tools/agent-g4-live-config.schema.json",
     "tools/agent-g4-live-evidence.schema.json"
   ],
+  "disposableBinding": {
+    "apiSourceRevision": "c88e711c3dff9e8f9d0244b7e4eca48224778089",
+    "candidateCommit": "c88e711c3dff9e8f9d0244b7e4eca48224778089",
+    "hermesCommit": "17a4efebb48b0fa44c9d242dfdca43025c2a851d",
+    "hermesDonorDigest": "",
+    "hermesDonorImage": "",
+    "hermesRemote": "github.com/uxheavy/hermes-agent",
+    "hermesSourceKind": "git-checkout",
+    "hermesTreeDigest": "1a2696cef695878d1502dec89bd325cf6be5fb8ed2be63562db401b7c2109bd3",
+    "mode": "exact-api-runtime-candidate",
+    "runtimeFiles": {
+      "apps/api/plane/agent/code_mode/__init__.py": "925b17ae5c8edb8cea9bca121032e3a4c7613fa73ec1da458cdef43924263f52",
+      "apps/api/plane/agent/code_mode/contracts.py": "bd2f235c047f7473a2a35bb5bb911c96ff9bbf207e0579ad3dbb919cb75918d5",
+      "apps/api/plane/agent/runtime/AGENTS.md": "84354961fdeab07d76af801b6492c20a7094e6274722de9c3280adaccacc3d46",
+      "apps/api/plane/agent/runtime/__init__.py": "ea9a7852586a16c763014bb7a274b061ad87cfbc1599536c3cee7487cadb5806",
+      "apps/api/plane/agent/runtime/config.py": "02de4c66078e96c6048b11181ecdff8c2201b7d6c77dd820570581e99d25e27e",
+      "apps/api/plane/agent/runtime/contracts.py": "b83594c6c961aedc842eb5bc9b1828058012bcc7503bc86e5c8ccdc487d65d80",
+      "apps/api/plane/agent/runtime/credentials.py": "1748b8e49076054ab6ddee8743db3d25d5e0c8a621a74f940eefe602adcd3e18",
+      "apps/api/plane/agent/runtime/dispatch.py": "678ca70810670b468a99bc4a63a7f23a1cb6bc2d47cc1e68db8a3c0b4d422f7b",
+      "apps/api/plane/agent/runtime/health.py": "5ce2d83729f179b7cc1e98041ceaea1f28db76d5e429903d11ab33f104fbf9af",
+      "apps/api/plane/agent/runtime/host_rpc.py": "df5840673da6785f33d9a5baf88484ed124eb3bd9742d3371e2f211d2358c595",
+      "apps/api/plane/agent/runtime/launcher.py": "2f8f78a489c76e86b3ab3cd490c3f8ac5811596a304f04d6021392feb4870144",
+      "apps/api/plane/agent/runtime/provenance.py": "61eb3a04b7a5ab526ecb69bb7ba6a1a76a1b19e9cc001d2ef4bf3ee9eca28377",
+      "apps/api/plane/agent/runtime/provider_egress.py": "3da1d142c41c28d0892f3507c59020e0a4b21631665b87630d831deefbc219db",
+      "apps/api/plane/agent/runtime/remote.py": "7911b73f956b073614ada0133871189dbb0e080aa23f7dd1aef3ff6c900fd568",
+      "apps/api/plane/agent/runtime/service.py": "fb9d2aa72a6530eacc5bb233ab0aa9819da21cc3698f9f0bab459d5e0228dd3b",
+      "apps/api/plane/agent/runtime/sitecustomize.py": "d3f84241c888d307725ebc2f1e84eacc364d6e1843a4ea8fc8c160f6efe624aa",
+      "apps/api/plane/agent/runtime/subprocess.py": "11cb0d03f003426a854b1309e4fb61ecb04f56a124f7a67269981b5add832bc7",
+      "apps/api/plane/agent/runtime/supervisor.py": "77ceaef2611a730ef9f3196fe1cd7f71622bb986eafe8dd68bd62eb2eace18f2"
+    },
+    "runtimeRevision": "c88e711c3dff9e8f9d0244b7e4eca48224778089",
+    "runtimeSourceDigest": "5d5d997a50f4f0cf5669fa614ff0d25d8b25c0fbb14b12f5b9edd1007c05ba35"
+  },
   "liveContract": {
     "authoritySchema": "tools/agent-g4-live-authority.schema.json",
     "bindingFields": [
@@ -100,7 +133,7 @@
         "activeQuotaReservations",
         "temporaryDatabaseRemoved"
       ],
-      "sha256": "c539f91a9f28445a0b3ca188656a07948fd50db7a215f3c12b05d71ed91444c6",
+      "sha256": "f19fa731396b4322bdd5dc80c51540375dfb395a47f75cf0e032dee78bb17a86",
       "testPath": "plane/tests/contract/api/test_agent_g4_rollback_drill.py"
     },
     "runtimeService": {
