@@ -12,57 +12,57 @@
     "compatibilityRule": "The previous API, worker, beat, supervisor, and runtime contract operate with 0145 reconciliation state retained and ignore the additive 0146 audit fields; the database remains at 0146 and reconciliation reads durable effect, audit, outcome, quota, and provider-attempt state before any replay."
   },
   "current": {
-    "planeCommit": "c88e711c3dff9e8f9d0244b7e4eca48224778089",
+    "planeCommit": "8669127778e4e56612935c0e2ad97e25a125b275",
     "migrationLeaf": "db.0146_runtime_reconciliation_audit_fields",
     "runtime": {
-      "hermesCommit": "17a4efebb48b0fa44c9d242dfdca43025c2a851d",
+      "hermesCommit": "6b9f56995b828183653d5831d16f4ea3b33e32e2",
       "mcpGitlink": "c04974ed6624f17b41e63ef8182661929e77e0d3",
       "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889",
-      "imageTag": "plane-agent-runtime:hermes-17a4efeb-v99-c88e711c3",
-      "imageDigest": "sha256:b2c0659f7dea02a32d3121d41c5f696ddb107c3f20e103e857dca7d274250379",
-      "runtimeRevision": "c88e711c3dff9e8f9d0244b7e4eca48224778089",
+      "imageTag": "plane-agent-runtime:hermes-6b9f5699-v101-86691277",
+      "imageDigest": "sha256:66588bb018301a92d173675fd50a0695663bf9cb6a665dfb07df2b25f3e9ec48",
+      "runtimeRevision": "8669127778e4e56612935c0e2ad97e25a125b275",
       "contract": "plane.agent-runtime/v1"
     },
     "apiArtifact": {
-      "imageTag": "plane-agent-api:g4-v99-c88e711c3",
-      "imageDigest": "sha256:70a14888264ae85602b40b591f3f7e84e2992b3f1d81de4a8de1599eee33b62f",
-      "sourceRevision": "c88e711c3dff9e8f9d0244b7e4eca48224778089",
+      "imageTag": "plane-agent-api:g4-v100-86691277",
+      "imageDigest": "sha256:706a7390a57b18e0eacec5fa2c568116e95608b12ce101eeeebe367f233a81da",
+      "sourceRevision": "8669127778e4e56612935c0e2ad97e25a125b275",
       "contract": "plane.operation/v1"
     },
     "services": {
       "api": {
-        "revision": "c88e711c3dff9e8f9d0244b7e4eca48224778089",
-        "imageDigest": "sha256:70a14888264ae85602b40b591f3f7e84e2992b3f1d81de4a8de1599eee33b62f",
+        "revision": "8669127778e4e56612935c0e2ad97e25a125b275",
+        "imageDigest": "sha256:706a7390a57b18e0eacec5fa2c568116e95608b12ce101eeeebe367f233a81da",
         "artifactKind": "api",
-        "artifactSourceRevision": "c88e711c3dff9e8f9d0244b7e4eca48224778089",
+        "artifactSourceRevision": "8669127778e4e56612935c0e2ad97e25a125b275",
         "contract": "plane.operation/v1"
       },
       "worker": {
-        "revision": "c88e711c3dff9e8f9d0244b7e4eca48224778089",
-        "imageDigest": "sha256:70a14888264ae85602b40b591f3f7e84e2992b3f1d81de4a8de1599eee33b62f",
+        "revision": "8669127778e4e56612935c0e2ad97e25a125b275",
+        "imageDigest": "sha256:706a7390a57b18e0eacec5fa2c568116e95608b12ce101eeeebe367f233a81da",
         "artifactKind": "api",
-        "artifactSourceRevision": "c88e711c3dff9e8f9d0244b7e4eca48224778089",
+        "artifactSourceRevision": "8669127778e4e56612935c0e2ad97e25a125b275",
         "contract": "plane.operation/v1"
       },
       "beat-worker": {
-        "revision": "c88e711c3dff9e8f9d0244b7e4eca48224778089",
-        "imageDigest": "sha256:70a14888264ae85602b40b591f3f7e84e2992b3f1d81de4a8de1599eee33b62f",
+        "revision": "8669127778e4e56612935c0e2ad97e25a125b275",
+        "imageDigest": "sha256:706a7390a57b18e0eacec5fa2c568116e95608b12ce101eeeebe367f233a81da",
         "artifactKind": "api",
-        "artifactSourceRevision": "c88e711c3dff9e8f9d0244b7e4eca48224778089",
+        "artifactSourceRevision": "8669127778e4e56612935c0e2ad97e25a125b275",
         "contract": "plane.operation/v1"
       },
       "supervisor": {
-        "revision": "c88e711c3dff9e8f9d0244b7e4eca48224778089",
-        "imageDigest": "sha256:70a14888264ae85602b40b591f3f7e84e2992b3f1d81de4a8de1599eee33b62f",
+        "revision": "8669127778e4e56612935c0e2ad97e25a125b275",
+        "imageDigest": "sha256:706a7390a57b18e0eacec5fa2c568116e95608b12ce101eeeebe367f233a81da",
         "artifactKind": "api",
-        "artifactSourceRevision": "c88e711c3dff9e8f9d0244b7e4eca48224778089",
+        "artifactSourceRevision": "8669127778e4e56612935c0e2ad97e25a125b275",
         "contract": "plane.agent-runtime/v1"
       },
       "agent-runtime": {
-        "revision": "c88e711c3dff9e8f9d0244b7e4eca48224778089",
-        "imageDigest": "sha256:b2c0659f7dea02a32d3121d41c5f696ddb107c3f20e103e857dca7d274250379",
+        "revision": "8669127778e4e56612935c0e2ad97e25a125b275",
+        "imageDigest": "sha256:66588bb018301a92d173675fd50a0695663bf9cb6a665dfb07df2b25f3e9ec48",
         "artifactKind": "runtime",
-        "artifactSourceRevision": "c88e711c3dff9e8f9d0244b7e4eca48224778089",
+        "artifactSourceRevision": "8669127778e4e56612935c0e2ad97e25a125b275",
         "contract": "plane.agent-runtime/v1"
       }
     }
