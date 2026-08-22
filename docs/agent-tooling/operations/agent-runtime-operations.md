@@ -213,7 +213,9 @@ pinned in the manifest below. Until a separately authorized live run proves
 it, provider/model calls remain unperformed and live G4/G5 remain incomplete.
 
 The live runner reads `PLANE_G4_LIVE_MANIFEST` when set and otherwise uses
-`tools/agent-g4-manifest.json`. A disposable exact-candidate API artifact
+`tools/agent-g4-manifest.json`; the versioned V96 binding is
+`tools/agent-g4-v96-manifest.json`. The operator supplies the final wrapper
+through `PLANE_G4_EXPECTED_CANDIDATE`. A disposable exact-candidate API artifact
 manifest must be a regular file under the repository-owned `tmp/` directory;
 the runner canonicalizes and validates that path before reading credentials or
 starting Docker. Authority/config binding, artifact and runtime pins, and the
@@ -536,52 +538,46 @@ docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose
 
 `apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` is the pin
 manifest. The current Plane deployable service candidate is the exact source
-`259640fa82e26677bb90cede99e7296af9c4540f`; the final candidate is
-exactly one metadata wrapper child of that source. The previously accepted V94
-candidate is the same Plane source commit `259640fa82e26677bb90cede99e7296af9c4540f`.
-Its immutable API artifact is
-`plane-agent-api:g4-v94-259640fa` at
-`sha256:f088e3d329b1a799f79059142eee065946431793c9cf0b3695c5f16f633c1774`,
-and its V94 runtime artifact is
-`plane-agent-runtime:hermes-08f01813-v94-259640fa` at
-`sha256:742a0ab3450315c849e0e5b00f87dc1d09566470bbb90610e2318583b7e8548b`.
-The API is source-bound to `259640fa82e26677bb90cede99e7296af9c4540f`; the
-runtime remains source-bound to `259640fa82e26677bb90cede99e7296af9c4540f`,
-with runtime contract `plane.agent-runtime/v1` and API contract
-`plane.operation/v1`.
-
-The V95 runtime binding carries Hermes commit
-`32423e8fe6051163f66fcde81906351ed697fff5` from the `uxheavy` checkout, MCP gitlink
-`c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK gitlink
-`7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The runtime image tag is
-`plane-agent-runtime:hermes-32423e8f-v95-259640fa`, and the runtime image digest is
-`sha256:67171336386a0a281475632c7d06cbddb111634e5d40f2a822660bc21d2113c2`.
-The runtime revision is
-`259640fa82e26677bb90cede99e7296af9c4540f`. The Plane service revision above is
-the current executable artifact revision; the runtime image/runtimeRevision source is
-`259640fa82e26677bb90cede99e7296af9c4540f`. The API image tag is
-`plane-agent-api:g4-v94-259640fa` and the API image digest is
+`4f8b30091aab2d9ace4602e481f4e26944c4b476`; the final candidate is exactly one
+metadata wrapper child of that source. The previously accepted V95 candidate
+source is `259640fa82e26677bb90cede99e7296af9c4540f`. Its immutable API artifact
+is `plane-agent-api:g4-v94-259640fa` at
 `sha256:f088e3d329b1a799f79059142eee065946431793c9cf0b3695c5f16f633c1774`.
-The API source revision is
-`259640fa82e26677bb90cede99e7296af9c4540f`; the API contract is
-`plane.operation/v1`. The V95 runtime was built once from the clean Hermes
-checkout at `32423e8fe6051163f66fcde81906351ed697fff5`, with Hermes tree digest
-`74ecfcfb2edb0e018c038069eb4ba34a40c6683e690a7571921b9a620305bb5d` and Plane
+Its immutable runtime artifact is
+`plane-agent-runtime:hermes-32423e8f-v95-259640fa` at
+`sha256:67171336386a0a281475632c7d06cbddb111634e5d40f2a822660bc21d2113c2`.
+The API and runtime source bindings for V96 are
+`4f8b30091aab2d9ace4602e481f4e26944c4b476`, with runtime contract
+`plane.agent-runtime/v1` and API contract `plane.operation/v1`.
+
+The V96 runtime binding carries Hermes commit
+`5b9ed92a574858d31043ab4641caa8c839cedb0a` from the `uxheavy` checkout, MCP
+gitlink `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK gitlink
+`7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The runtime image tag is
+`plane-agent-runtime:hermes-5b9ed92a-v96-4f8b3009`, and the runtime image digest
+is `sha256:99245f2a49be6216c334a71a7b3947930a3773d69bd3849c6fbc3a8bd8f92508`.
+The runtime revision is `4f8b30091aab2d9ace4602e481f4e26944c4b476`. The API
+image tag is `plane-agent-api:g4-v96-4f8b3009` and the API image digest is
+`sha256:04c1bd0620835af5c2df0baab402dce025ab14e3e25745151f5db29c87e2f32b`.
+The API source revision is `4f8b30091aab2d9ace4602e481f4e26944c4b476`; the
+V96 build completed externally from the clean Hermes checkout at
+`5b9ed92a574858d31043ab4641caa8c839cedb0a`, with Hermes tree digest
+`bbbc95c510e30720ffe353a058d09e6b942f47e4c4a39d99654a6ab35f7bda0c` and Plane
 runtime source digest
-`85031d81be2a6f37def0f66cf654d5c1b2df9aa28bfeafb3cdbe656c3ba9e501`. The prior
-V94 exact-image focused toolset, G1, and Code Mode checks pass against its immutable
-runtime image; V95 provider-free focused checks are recorded with this receipt. No provider-backed or live
-acceptance is claimed.
+`c8bc214d7ab39f187927ff855ef27c4121809b5608cd6ea51d9f6e28b82304fa`. No
+provider-backed or live acceptance is claimed.
 
 G3, G4, and the live helper execute the image-contained `/workspace/apps/api`
 tree; they do not bind-mount a newer host API source tree. API, worker,
 `beat-worker`, supervisor, and `agent-runtime` each use the corresponding
 current artifact revision and image digest in the manifest. The `previous`
-rollback section independently retains the last known-good V94 service
+rollback section independently retains the last known-good V95 service
 revisions and digests.
 The previous services use immutable image digest
 `sha256:f088e3d329b1a799f79059142eee065946431793c9cf0b3695c5f16f633c1774`,
-the image pin recorded by the accepted V94 release. The rollback reasserts
+the API image pin recorded by the accepted V95 release, and runtime digest
+`sha256:67171336386a0a281475632c7d06cbddb111634e5d40f2a822660bc21d2113c2`.
+The rollback reasserts
 these immutable pins rather than accepting a mutable tag.
 
 ### Pre-live verifier lifecycle incident
