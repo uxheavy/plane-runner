@@ -630,6 +630,7 @@ def test_provider_attempt_intent_precedes_upstream_and_upstream_failure_is_unkno
         "reasonCode": "outcome_unknown",
         "reasonPhase": "provider_relay",
         "reasonSubreason": "upstream_exception",
+        "statusClass": "transport",
     }
     assert [audit.phase for audit in audits] == ["intent", "started", "outcome_unknown", "terminal"]
     assert audits[0].upstream_called is False
@@ -657,7 +658,11 @@ def test_provider_http_status_family_survives_bounded_relay_audit(tmp_path, stat
         server.close()
 
     assert response[0] == 403
-    assert json.loads(response[2]) == {"error": "provider_error"}
+    assert json.loads(response[2]) == {
+        "error": "provider_error",
+        "reasonSubreason": "upstream_unavailable" if status_code == 500 else "request_rejected",
+        "statusClass": status_class,
+    }
     assert [audit.phase for audit in audits] == ["intent", "started", "failed"]
     assert audits[-1].status_class == status_class
     assert audits[-1].error_code == "provider_error"
@@ -692,7 +697,11 @@ def test_provider_http_reason_subreason_survives_bounded_relay_audit(
         server.close()
 
     assert response[0] == 403
-    assert json.loads(response[2]) == {"error": "provider_error"}
+    assert json.loads(response[2]) == {
+        "error": "provider_error",
+        "reasonSubreason": reason_subreason,
+        "statusClass": "5xx" if status_code == 500 else "4xx",
+    }
     assert [audit.phase for audit in audits] == ["intent", "started", "failed"]
     assert audits[-1].status_class == ("5xx" if status_code == 500 else "4xx")
     assert audits[-1].reason_subreason == reason_subreason
