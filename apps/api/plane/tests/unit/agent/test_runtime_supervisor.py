@@ -1282,6 +1282,7 @@ def test_supervisor_preserves_finite_runtime_error_failure_through_terminal_outp
         "resource_failure",
         "timeout_failure",
         "provider_client_failure",
+        "relay_session_failure",
         "runtime_unknown_failure",
         "provider_auth_failure",
         "provider_entitlement_failure",
@@ -1366,9 +1367,13 @@ def test_runtime_exit_classification_preserves_allowlisted_adapter_diagnostics()
     }
 
     classified = _runtime_exit_failure_classification(failure)
+    relay_classified = _runtime_exit_failure_classification(
+        {**failure, "cause": "relay_session_failure"}
+    )
 
     assert classified["runtimePhase"] == "conversation"
     assert classified["exceptionClass"] == "RuntimeError"
+    assert relay_classified["failureCause"] == "relay_session_failure"
     assert _runtime_exit_failure_classification(
         {**failure, "exceptionClass": "SecretException"}
     ) == {

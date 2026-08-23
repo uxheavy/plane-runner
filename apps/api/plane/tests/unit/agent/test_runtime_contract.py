@@ -242,6 +242,7 @@ def test_runtime_exit_failure_cause_is_finite_and_runtime_error_only():
         "resource_failure",
         "timeout_failure",
         "provider_client_failure",
+        "relay_session_failure",
         "runtime_unknown_failure",
         "provider_auth_failure",
         "provider_entitlement_failure",
