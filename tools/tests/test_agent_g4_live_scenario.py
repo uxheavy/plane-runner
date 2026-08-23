@@ -1055,11 +1055,28 @@ def test_expected_operations_render_as_ordered_model_route_outcomes() -> None:
         "Route step 1: invoke catalog.search exactly 1 time(s) and expect success. After this route call returns, advance immediately to the next route step; do not invoke this operation again for confirmation, inspection, refresh, or retry.",
         "Route step 2: invoke catalog.describe exactly 1 time(s) and expect success. After this route call returns, advance immediately to the next route step; do not invoke this operation again for confirmation, inspection, refresh, or retry. Use the next route operation's exact operationId as input.operation_id; never use operationRef or an operation: prefix.",
         "Route step 3: invoke agent.context.read exactly 1 time(s) and expect success. After this route call returns, advance immediately to the next route step; do not invoke this operation again for confirmation, inspection, refresh, or retry. This one response is the complete subject-bound projection; do not request it again.",
-        "Route step 4: invoke agent.outcome.evaluate exactly 1 time(s) and expect denied. "
-        "After this route call returns, advance immediately to the next route step; do not invoke this "
-        "operation again for confirmation, inspection, refresh, or retry. Emit exactly "
+        "Route step 4: invoke agent.outcome.evaluate exactly 1 time(s) and expect denied. After this route call returns, advance immediately to the next route step; do not invoke this operation again for confirmation, inspection, refresh, or retry.",
+    )
+
+
+def test_not_authorized_outcome_renders_exact_canary_guidance() -> None:
+    guidance = scenario.model_route_expectations(
+        {
+            "operationOutcomes": [
+                {
+                    "operationId": "agent.outcome.evaluate",
+                    "outcome": "denied",
+                    "errorCode": "NOT_AUTHORIZED",
+                }
+            ]
+        }
+    )
+    assert guidance == (
+        'Route step 1: invoke agent.outcome.evaluate exactly 1 time(s) and expect denied. '
+        'After this route call returns, advance immediately to the next route step; do not invoke this '
+        'operation again for confirmation, inspection, refresh, or retry. Emit exactly '
         '{"outcome_ref":"outcome-submission:not-authorized","verdict":"revision_requested"} as input; '
-        "omit evaluator_ref because the trusted Plane host binds it to the current actor.",
+        'omit evaluator_ref because the trusted Plane host binds it to the current actor.',
     )
 
 
