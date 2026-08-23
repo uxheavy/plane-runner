@@ -147,15 +147,6 @@ class RuntimeSafetyController:
                 self._reason = reason
             return self._snapshot_locked()
 
-    def mark_dependency_failure(self, reason: str = "runtime dependency is unavailable") -> RuntimeHealthStatus:
-        if not isinstance(reason, str) or not reason.strip() or len(reason.encode("utf-8")) > 512:
-            raise ValueError("dependency failure reason must be bounded and non-empty")
-        with self._lock:
-            self._dependency_ok = False
-            self._state = "dependency_failure"
-            self._reason = reason.strip()
-            return self._snapshot_locked()
-
     def health(self) -> RuntimeHealthStatus:
         with self._lock:
             self._refresh_dependency_locked()

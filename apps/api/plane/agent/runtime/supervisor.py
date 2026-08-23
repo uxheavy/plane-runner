@@ -58,7 +58,6 @@ from .contracts import (
 )
 
 
-DEFAULT_LEASE_SECONDS = 300
 _INVOCATION_TERMINAL_STATES = frozenset(
     {
         InvocationState.SUCCEEDED,
@@ -914,7 +913,6 @@ def run_runtime_invocation(
 
 
 __all__ = [
-    "DEFAULT_LEASE_SECONDS",
     "RuntimeLeaseBusy",
     "RuntimeSupervisorError",
     "SupervisorResult",

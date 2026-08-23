@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Mapping, Protocol
+from typing import Any, Mapping
 
 from django.db import transaction
 
@@ -94,55 +94,7 @@ class AgentAdminExtensionCommand:
                 raise ValueError("reviewer and operator identities must come from the authenticated caller")
 
 
-class AgentAdminExtensionSerializerPort(Protocol):
-    """L7 serializer seam: return only typed, redacted operator projections."""
-
-    resource_name: str
-
-    def serialize(self, value: Any) -> Mapping[str, Any]: ...
-
-
-class AgentAdminExtensionPort(Protocol):
-    """Registration contract for later L6/L7 admin resources.
-
-    Extensions contribute read-only, already-authorized projections. They do
-    not receive a request, database handle, credential, or permission hook.
-    """
-
-    resource_name: str
-
-    def read(self, *, workspace_id: str, resource_id: str) -> Mapping[str, Any] | None: ...
-
-
-class AgentAdminExtensionServicePort(AgentAdminExtensionPort, Protocol):
-    """Service seam for the bounded L7 actions listed above."""
-
-    def execute(self, command: AgentAdminExtensionCommand) -> Mapping[str, Any]: ...
-
-
-@dataclass(frozen=True)
-class RegisteredAgentAdminExtension:
-    resource_name: str
-    port: AgentAdminExtensionPort
-
-
-_extensions: dict[str, RegisteredAgentAdminExtension] = {}
 _MISSING = object()
-
-
-def register_agent_admin_extension(port: AgentAdminExtensionPort) -> RegisteredAgentAdminExtension:
-    """Register one replaceable readback port without changing this core."""
-
-    resource_name = port.resource_name.strip()
-    if not resource_name or resource_name in _extensions:
-        raise ValueError("Agent admin extension names must be unique and non-empty")
-    registration = RegisteredAgentAdminExtension(resource_name=resource_name, port=port)
-    _extensions[resource_name] = registration
-    return registration
-
-
-def agent_admin_extension(resource_name: str) -> RegisteredAgentAdminExtension | None:
-    return _extensions.get(resource_name)
 
 
 def validate_credential_ref(value: str | None) -> str | None:

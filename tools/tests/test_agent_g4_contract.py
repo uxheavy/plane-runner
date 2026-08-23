@@ -2197,30 +2197,6 @@ class G4ContractTests(unittest.TestCase):
         self.assertNotIn(marker, runtime)
         self.assertNotIn(marker, api)
 
-    def test_live_runner_classifies_bounded_docker_mount_failures_without_raw_diagnostics(self):
-        runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
-        function = runner[runner.index("safe_docker_failure_reason()") : runner.index("\ncleanup()")]
-        with tempfile.TemporaryDirectory() as directory:
-            error_file = Path(directory) / "docker-error.log"
-            raw_path = "/private/secret/provider-source"
-            raw_secret = "synthetic-provider-secret-value"
-            error_file.write_text(
-                "docker: Error response from daemon: failed to create task for container: "
-                "error mounting %s: create mountpoint read-only file system %s\n" % (raw_path, raw_secret),
-                encoding="utf-8",
-            )
-            result = run_bounded_process(
-                ["bash", "-c", function + '\nERROR_FILE="$1"\nsafe_docker_failure_reason', "classifier", str(error_file)],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), "docker_mount_target_read_only")
-        self.assertNotIn(raw_path, result.stdout + result.stderr)
-        self.assertNotIn(raw_secret, result.stdout + result.stderr)
-
     def test_live_runner_cleanup_removes_staged_secret_and_exact_invocation_directory(self):
         runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
         cleanup = runner[runner.index("cleanup()") : runner.index("trap cleanup EXIT INT TERM")]
@@ -4447,8 +4423,6 @@ class G4ContractTests(unittest.TestCase):
         runtime_service = (ROOT / "apps/api/plane/agent/runtime/service.py").read_text(encoding="utf-8")
         vfork_adapter = (ROOT / "apps/api/plane/agent/runtime/sitecustomize.py").read_text(encoding="utf-8")
         live_runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
-        budget_probe = (TOOLS / "agent-g4-wave0u-probe.py").read_text(encoding="utf-8")
-        bootstrap_probe = (TOOLS / "agent-g4-ut014-real-bootstrap.py").read_text(encoding="utf-8")
         self.assertIn('"/v1/runtime/dispatch"', source)
         self.assertIn("dispatch_http=passed full_chain=passed", source)
         self.assertIn("PINNED_HERMES_RUN_AGENT_PATH = \"/opt/hermes/run_agent.py\"", source)
@@ -4491,11 +4465,6 @@ class G4ContractTests(unittest.TestCase):
             runtime_service,
         )
         self.assertIn('"PYTHONPATH":"/tmp:/opt/plane/agent/dependencies:/opt:/opt/hermes"', live_runner)
-        self.assertIn("'PYTHONPATH': '/tmp:/opt/plane/agent/dependencies:/opt:/opt/hermes'", budget_probe)
-        self.assertIn(
-            '"PYTHONPATH": "/opt/plane:/opt/plane/agent/dependencies:/opt:/opt/hermes"',
-            bootstrap_probe,
-        )
         self.assertIn("_HERMES_CODE_MODE_CLONE_FLAGS = _SIGCHLD", runtime_policy)
         self.assertNotIn("_HERMES_BOOTSTRAP_CLONE_FLAGS", runtime_policy)
         self.assertIn("_HERMES_RPC_SOCKET_MODE = 0o600", runtime_policy)
@@ -5203,7 +5172,7 @@ class G4ContractTests(unittest.TestCase):
         self.assertNotIn("path == \".env\"", script)
         self.assertNotIn("path == \".git\"", script)
         self.assertNotIn('CANDIDATE_PARENT_COMMIT="8a7371208079a7c25ab391e433785c3e67803d72"', script)
-        self.assertIn('["candidateBinding"]["parentCommit"]', script)
+        self.assertIn("manifest_pin candidateBinding.parentCommit", script)
         self.assertIn("validate_rollback_fixture", script)
 
 

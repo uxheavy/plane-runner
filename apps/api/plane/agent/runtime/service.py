@@ -112,12 +112,6 @@ class RuntimeProviderRelay:
         self.server.close()
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    def __enter__(self) -> "RuntimeProviderRelay":
-        return self
-
-    def __exit__(self, _type: object, _value: object, _traceback: object) -> None:
-        self.close()
-
 
 class RuntimeDispatchExecutor:
     """Execute authenticated dispatches without importing Plane application code."""

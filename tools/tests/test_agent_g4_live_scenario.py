@@ -827,8 +827,7 @@ def test_manager_setup_failure_receipt_has_bounded_stage_marker_and_counters() -
         '"lineageAssignments": 0',
     ):
         assert marker in invoke
-    assert 'safe_setup_error()' in runner
-    assert '--setup-error "${setup_error}"' in runner
+    assert '--diagnostic "${ERROR_FILE}"' in runner
     assert 'parser.add_argument("--setup-error", default="")' in result
     assert 'receipt["setupError"] = bounded_setup_error' in result
 

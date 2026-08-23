@@ -413,9 +413,6 @@ def deliver_webhook_target(
                 hashlib.sha256,
             ).hexdigest()
             headers["X-Plane-Signature"] = signature
-    except ObjectDoesNotExist as error:
-        result = WebhookDeliveryResult("failed", False, error=str(error))
-        return result
     except Exception as error:
         result = WebhookDeliveryResult("failed", False, error=str(error))
         # No request was attempted, so this is a deterministic pre-send

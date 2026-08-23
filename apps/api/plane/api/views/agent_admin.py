@@ -163,6 +163,21 @@ class AgentAdminAPIView(BaseAPIView):
         )
 
 
+def _gateway_readback(receipt, *, limit=100):
+    audit = OperationGatewayAudit.objects.filter(
+        workspace_id=receipt.workspace_id,
+        workspace_slug=receipt.workspace_slug,
+        request_id=receipt.request_id,
+        invocation_id=receipt.invocation_id,
+        caller_id=receipt.caller_id,
+        operation_id=receipt.operation_id,
+        idempotency_key=receipt.idempotency_key,
+        correlation_id=receipt.correlation_id,
+        request_digest=receipt.request_digest,
+    ).order_by("created_at", "id")[:limit]
+    return GatewayReadbackSerializer({"receipt": receipt, "audit": audit}).data
+
+
 class AgentActorAdminListCreateAPIEndpoint(AgentAdminAPIView):
     def get(self, request, slug):
         queryset = AgentActor.objects.filter(workspace__slug=slug).select_related("active_profile", "project")
@@ -448,40 +463,15 @@ class AgentGatewayReadbackListAPIEndpoint(AgentAdminAPIView):
             queryset=queryset,
             default_per_page=50,
             max_per_page=100,
-            on_results=lambda receipts: [self._readback(receipt, limit=limit) for receipt in receipts],
+            on_results=lambda receipts: [_gateway_readback(receipt, limit=limit) for receipt in receipts],
         )
-
-    def _readback(self, receipt, *, limit=100):
-        audit = OperationGatewayAudit.objects.filter(
-            workspace_id=receipt.workspace_id,
-            workspace_slug=receipt.workspace_slug,
-            request_id=receipt.request_id,
-            invocation_id=receipt.invocation_id,
-            caller_id=receipt.caller_id,
-            operation_id=receipt.operation_id,
-            idempotency_key=receipt.idempotency_key,
-            correlation_id=receipt.correlation_id,
-            request_digest=receipt.request_digest,
-        ).order_by("created_at", "id")[:limit]
-        return GatewayReadbackSerializer({"receipt": receipt, "audit": audit}).data
 
 
 class AgentGatewayReadbackDetailAPIEndpoint(AgentAdminAPIView):
     def get(self, request, slug, pk):
         limit = self.get_per_page(request, default_per_page=50, max_per_page=100)
         receipt = get_object_or_404(OperationGatewayIdempotency, workspace_slug=slug, pk=pk)
-        audit = OperationGatewayAudit.objects.filter(
-            workspace_id=receipt.workspace_id,
-            workspace_slug=receipt.workspace_slug,
-            request_id=receipt.request_id,
-            invocation_id=receipt.invocation_id,
-            caller_id=receipt.caller_id,
-            operation_id=receipt.operation_id,
-            idempotency_key=receipt.idempotency_key,
-            correlation_id=receipt.correlation_id,
-            request_digest=receipt.request_digest,
-        ).order_by("created_at", "id")[:limit]
-        return Response(GatewayReadbackSerializer({"receipt": receipt, "audit": audit}).data)
+        return Response(_gateway_readback(receipt, limit=limit))
 
 
 class AgentGovernanceReadbackAPIEndpoint(AgentAdminAPIView):

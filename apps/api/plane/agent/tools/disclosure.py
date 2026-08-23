@@ -228,12 +228,3 @@ def _bounded_eager_catalog(
             f"eager operation presentation exceeds {MAX_EAGER_PRESENTATION_BYTES} canonical JSON bytes"
         )
     return catalog
-
-
-def progressive_operation_ids(eager_catalog: Mapping[str, Any]) -> tuple[str, ...]:
-    eager_refs = {
-        str(item.get("operationRef", "")).removeprefix("operation:")
-        for item in eager_catalog.get("eagerOperations", [])
-        if isinstance(item, Mapping)
-    }
-    return tuple(operation_id for operation_id in OPERATION_CATALOG if operation_id not in eager_refs)

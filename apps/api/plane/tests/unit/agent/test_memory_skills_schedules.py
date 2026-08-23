@@ -34,14 +34,12 @@ from plane.agent.memory import (
 )
 from plane.agent.schedules import (
     AgentScheduleError,
-    cancel_schedule,
     create_schedule,
     fire_due_schedules,
     fire_schedule,
     next_schedule_fire,
     parse_cron_expression,
-    pause_schedule,
-    resume_schedule,
+    transition_schedule,
 )
 from plane.agent.skills import (
     capture_skill_candidate,
@@ -643,11 +641,11 @@ def test_schedule_timezone_idempotency_normal_assignment_and_retry(actor, profil
     schedule.refresh_from_db()
     assert schedule.next_fire_at == datetime(2026, 8, 6, 16, 0, tzinfo=timezone.utc)
 
-    paused = pause_schedule(schedule)
+    paused = transition_schedule(schedule, AgentScheduleState.PAUSED)
     with pytest.raises(AgentScheduleError, match="paused"):
         fire_schedule(schedule, scheduled_for=schedule.next_fire_at, now=start)
     assert paused.__class__.objects.get(pk=schedule.pk).fires.count() == 1
-    resumed = resume_schedule(paused)
+    resumed = transition_schedule(paused, AgentScheduleState.ENABLED)
     retried = fire_schedule(schedule, scheduled_for=resumed.next_fire_at, now=start + timedelta(seconds=1))
     assert retried.state == AgentScheduleFireState.CREATED
     assert retried.assignment is not None
@@ -667,8 +665,8 @@ def test_schedule_control_state_is_idempotent_and_blocks_new_fires(actor, profil
     )
     scheduled_for = schedule.next_fire_at
 
-    paused = pause_schedule(schedule)
-    assert pause_schedule(paused).id == paused.id
+    paused = transition_schedule(schedule, AgentScheduleState.PAUSED)
+    assert transition_schedule(paused, AgentScheduleState.PAUSED).id == paused.id
     paused.refresh_from_db()
     assert paused.state == AgentScheduleState.PAUSED
     assert paused.next_fire_at == scheduled_for
@@ -677,13 +675,13 @@ def test_schedule_control_state_is_idempotent_and_blocks_new_fires(actor, profil
         fire_schedule(paused, scheduled_for=scheduled_for, created_by=create_user)
     assert paused.fires.count() == 0
 
-    resumed = resume_schedule(paused)
-    assert resume_schedule(resumed).id == resumed.id
+    resumed = transition_schedule(paused, AgentScheduleState.ENABLED)
+    assert transition_schedule(resumed, AgentScheduleState.ENABLED).id == resumed.id
     fire = fire_schedule(resumed, scheduled_for=scheduled_for, created_by=create_user)
     assert fire.state == AgentScheduleFireState.CREATED
 
-    cancelled = cancel_schedule(resumed)
-    assert cancel_schedule(cancelled).id == cancelled.id
+    cancelled = transition_schedule(resumed, AgentScheduleState.DISABLED)
+    assert transition_schedule(cancelled, AgentScheduleState.DISABLED).id == cancelled.id
     cancelled.refresh_from_db()
     assert cancelled.state == AgentScheduleState.DISABLED
     assert cancelled.next_fire_at is None
@@ -691,7 +689,7 @@ def test_schedule_control_state_is_idempotent_and_blocks_new_fires(actor, profil
         fire_schedule(cancelled, scheduled_for=scheduled_for + timedelta(minutes=5), created_by=create_user)
     assert cancelled.fires.count() == 1
     with pytest.raises(AgentScheduleError, match="terminal"):
-        resume_schedule(cancelled)
+        transition_schedule(cancelled, AgentScheduleState.ENABLED)
 
 
 def test_standard_cron_weekday_dom_dow_and_dst_semantics():

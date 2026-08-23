@@ -6,7 +6,7 @@ import runtimeDurableStateSchema from "../schemas/v1/runtime-durable-state.schem
 import runtimeEventSchema from "../schemas/v1/runtime-event.schema.json" with { type: "json" };
 import runtimeExitSchema from "../schemas/v1/runtime-exit.schema.json" with { type: "json" };
 import { PLANE_AGENT_RUNTIME_PROTOCOL, type ContractJsonInput } from "./contracts";
-import { utf8ByteLengthAtMost } from "./internal-utf8-utils";
+import { utf8ByteLengthAtMost, utf8ByteLengthUpTo } from "./internal-utf8-utils";
 
 const MAX_SERIALIZED_JSON_BYTES = 1_048_576;
 const MAX_DEPTH = 64;
@@ -220,24 +220,6 @@ function cheapRootCheck(name: RuntimeSchemaName, value: unknown): boolean {
   return requiredProperties[name].every((key) => Object.hasOwn(value, key));
 }
 
-const utf8Bytes = (value: string): number => {
-  let bytes = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    const codeUnit = value.charCodeAt(index);
-    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff && value.charCodeAt(index + 1) >= 0xdc00) {
-      bytes += 4;
-      index += 1;
-    } else if (codeUnit <= 0x7f) {
-      bytes += 1;
-    } else if (codeUnit <= 0x7ff) {
-      bytes += 2;
-    } else {
-      bytes += 3;
-    }
-  }
-  return bytes;
-};
-
 function boundedJsonByteLength(value: unknown): number | undefined {
   type Frame = { value: object; keys: string[]; index: number; array: boolean };
   const stack: Frame[] = [];
@@ -258,7 +240,7 @@ function boundedJsonByteLength(value: unknown): number | undefined {
       return;
     }
     if (typeof candidate === "string") {
-      add(utf8Bytes(JSON.stringify(candidate)));
+      add(utf8ByteLengthUpTo(JSON.stringify(candidate)));
       return;
     }
     if (typeof candidate === "boolean") {
@@ -266,7 +248,7 @@ function boundedJsonByteLength(value: unknown): number | undefined {
       return;
     }
     if (typeof candidate === "number" && Number.isFinite(candidate)) {
-      add(utf8Bytes(JSON.stringify(candidate)));
+      add(utf8ByteLengthUpTo(JSON.stringify(candidate)));
       return;
     }
     if (candidate === null || typeof candidate !== "object") throw new Error();
@@ -302,7 +284,7 @@ function boundedJsonByteLength(value: unknown): number | undefined {
     if (frame.index > 0) add(1);
     const key = frame.keys[frame.index];
     frame.index += 1;
-    if (!frame.array) add(utf8Bytes(JSON.stringify(key)) + 1);
+    if (!frame.array) add(utf8ByteLengthUpTo(JSON.stringify(key)) + 1);
     const child = (frame.value as Record<string, unknown>)[key];
     push(child, stack.length);
   }

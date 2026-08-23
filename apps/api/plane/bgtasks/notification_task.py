@@ -189,8 +189,6 @@ def create_mention_notification(project, notification_comment, issue, actor_id, 
 
 
 def _effect_key(publication_key, effect, receiver_id, activity_id):
-    if not publication_key:
-        return None
     return f"{publication_key}:{effect}:{receiver_id}:{activity_id}"
 
 

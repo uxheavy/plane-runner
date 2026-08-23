@@ -1,13 +1,6 @@
 # Dedicated Plane Agent runtime image. Hermes source is staged by
 # tools/build-agent-runtime-image.py either from a clean uxheavy checkout or
 # from a verified sealed donor image; no application source is mounted at runtime.
-ARG HERMES_COMMIT
-ARG HERMES_SOURCE_KIND
-ARG HERMES_DONOR_IMAGE
-ARG HERMES_DONOR_DIGEST
-ARG HERMES_TREE_SHA256
-ARG PLANE_REVISION
-ARG PLANE_RUNTIME_SOURCE_SHA256
 FROM company-runner-upstream-runtime:a8e53b6ac7b8@sha256:4c0d9f4dee14a4b2f59bc997baf557066f4394c4adcb285905aaa5838ed5ad39 AS runtime_base
 
 # The sealed upstream runner predates Hermes' Codex Responses adapter. Keep

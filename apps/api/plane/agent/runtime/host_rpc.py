@@ -1806,10 +1806,6 @@ class PlaneHostHTTPServer:
             raise PlaneHostRPCError("host advertised address is invalid")
         if isinstance(port, bool) or not isinstance(port, int) or not 0 <= port <= 65535:
             raise PlaneHostRPCError("host port is invalid")
-        if port == 0:
-            # Ephemeral ports are useful for local tests; production passes a
-            # fixed internal-only port from Compose.
-            pass
         if isinstance(max_calls, bool) or not isinstance(max_calls, int) or max_calls <= 0:
             raise PlaneHostRPCError("max_calls must be a positive integer")
         if (

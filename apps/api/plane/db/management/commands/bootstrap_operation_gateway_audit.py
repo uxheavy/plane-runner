@@ -53,20 +53,17 @@ class Command(BaseCommand):
                 cursor,
                 role=governance_role,
                 create_sql=f"CREATE ROLE {self._quote(governance_role)} NOLOGIN NOINHERIT",
-                current_user=current_user,
                 can_create_roles=can_create_roles,
             )
             cursor.execute(f"ALTER ROLE {self._quote(governance_role)} NOLOGIN NOINHERIT")
             self._ensure_migration_role(
                 cursor,
                 role=migration_role,
-                current_user=current_user,
                 can_create_roles=can_create_roles,
             )
             self._ensure_runtime_role(
                 cursor,
                 role=runtime_role,
-                current_user=current_user,
                 can_create_roles=can_create_roles,
             )
 
@@ -166,7 +163,7 @@ class Command(BaseCommand):
             raise CommandError("The current PostgreSQL role does not exist")
         return row
 
-    def _ensure_role(self, cursor, *, role, create_sql, current_user, can_create_roles):
+    def _ensure_role(self, cursor, *, role, create_sql, can_create_roles):
         cursor.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", [role])
         if cursor.fetchone() is not None:
             return
@@ -174,7 +171,7 @@ class Command(BaseCommand):
             raise CommandError(f"Missing {role} role and migration authority cannot create roles")
         cursor.execute(create_sql)
 
-    def _ensure_migration_role(self, cursor, *, role, current_user, can_create_roles):
+    def _ensure_migration_role(self, cursor, *, role, can_create_roles):
         cursor.execute(
             "SELECT rolsuper, rolcreaterole, rolcreatedb, rolbypassrls, rolcanlogin, rolinherit "
             "FROM pg_roles WHERE rolname = %s",
@@ -207,7 +204,7 @@ class Command(BaseCommand):
                     f"ALTER ROLE {self._quote(role)} LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS"
                 )
 
-    def _ensure_runtime_role(self, cursor, *, role, current_user, can_create_roles):
+    def _ensure_runtime_role(self, cursor, *, role, can_create_roles):
         cursor.execute(
             "SELECT rolsuper, rolcreaterole, rolcreatedb, rolbypassrls, rolcanlogin, rolinherit "
             "FROM pg_roles WHERE rolname = %s",

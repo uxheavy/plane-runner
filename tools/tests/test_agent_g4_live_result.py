@@ -109,6 +109,34 @@ class LiveResultPersistenceTests(unittest.TestCase):
             )
             self.assertEqual(result.stdout, destination.read_bytes())
 
+    def test_runner_reads_the_sanitized_diagnostic_file_once(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            diagnostic = root / "sanitized-error.log"
+            diagnostic.write_text(
+                "error_class=ModuleNotFoundError\n"
+                "reason_category=docker_precontainer_failure\n"
+                "missing_path_class=unclassified\n"
+                "child_phase=unknown\n"
+                "missing_module=plane_runtime.bridge_v2\n",
+                encoding="ascii",
+            )
+            diagnostic.chmod(0o600)
+            result = self._run_helper(
+                root / "diagnostic.result",
+                root / "missing-evidence.json",
+                "--status",
+                "1",
+                "--phase",
+                "compose",
+                "--diagnostic",
+                str(diagnostic),
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            receipt = json.loads(result.stdout)
+            self.assertEqual(receipt["errorClass"], "ModuleNotFoundError")
+            self.assertEqual(receipt["missingModule"], "plane_runtime.bridge_v2")
+
     def test_runner_failure_receipt_keeps_phase_exit_class_and_stderr_digest_bounded(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -419,7 +447,7 @@ class LiveResultPersistenceTests(unittest.TestCase):
         self.assertLess(docker_cleanup, run_directory_cleanup)
         self.assertIn('cat "${RESULT_FILE}"', cleanup)
         self.assertNotIn('rm -f -- "${RESULT_FILE}"', cleanup)
-        self.assertNotIn('ERROR_FILE}', cleanup[publish:docker_cleanup])
+        self.assertIn('--diagnostic "${ERROR_FILE}"', cleanup[publish:docker_cleanup])
 
     def test_runner_validates_fresh_non_symlink_result_path_and_uses_atomic_primitives(self):
         runner = RUNNER_PATH.read_text(encoding="utf-8")

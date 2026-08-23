@@ -300,7 +300,6 @@ OPERATION_CATALOG: dict[str, OperationDescriptor] = {
         max_result_bytes=4096,
         result_key="work_item",
         handler="work_item_rename",
-        reconciliation="read_after_write",
     ),
     "work_item_attachment.list": _descriptor(
         "work_item_attachment.list",

@@ -18,7 +18,6 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "RemoteRuntimeTransport": ("remote", "RemoteRuntimeTransport"),
     "RuntimeHostEndpoint": ("remote", "RuntimeHostEndpoint"),
     "RUNTIME_DISPATCH_PROTOCOL": ("remote", "RUNTIME_DISPATCH_PROTOCOL"),
-    "DEFAULT_LEASE_SECONDS": ("supervisor", "DEFAULT_LEASE_SECONDS"),
     "RuntimeLeaseBusy": ("supervisor", "RuntimeLeaseBusy"),
     "RuntimeSupervisorError": ("supervisor", "RuntimeSupervisorError"),
     "SupervisorResult": ("supervisor", "SupervisorResult"),

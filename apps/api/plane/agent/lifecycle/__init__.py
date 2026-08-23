@@ -26,7 +26,6 @@ from .services import (
     propose_hr_change,
     record_input_event,
     record_invocation,
-    record_code_mode_usage,
     code_mode_reserved_totals,
     code_mode_usage_totals,
     reap_code_mode_reservations,
@@ -39,7 +38,6 @@ from .services import (
     reserve_code_mode_usage,
     request_revision,
     review_outcome,
-    transition_assignment,
     transition_run,
 )
 
@@ -65,7 +63,6 @@ __all__ = [
     "propose_hr_change",
     "record_input_event",
     "record_invocation",
-    "record_code_mode_usage",
     "code_mode_reserved_totals",
     "code_mode_usage_totals",
     "reap_code_mode_reservations",
@@ -78,6 +75,5 @@ __all__ = [
     "reserve_code_mode_usage",
     "request_revision",
     "review_outcome",
-    "transition_assignment",
     "transition_run",
 ]

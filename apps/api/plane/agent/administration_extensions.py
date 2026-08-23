@@ -16,9 +16,7 @@ from plane.agent.administration import (
     AGENT_ADMIN_L7_ACTIONS,
     AgentAdminExtensionCommand,
     AgentAdminExtensionError,
-    agent_admin_extension,
     redact_admin_value,
-    register_agent_admin_extension,
 )
 from plane.agent.lifecycle import (
     accept_outcome,
@@ -325,16 +323,7 @@ class PlaneAgentAdministrationExtension:
     def execute(self, command: AgentAdminExtensionCommand) -> Mapping[str, Any]:
         workspace = _scoped_workspace(command)
         payload = dict(command.payload)
-        if command.action == "delegation.lineage.read":
-            _assert_binding(command)
-            return (
-                self.read(
-                    workspace_id=str(workspace.id),
-                    resource_id=str(payload.get("resource_id") or RESOURCE_ALL),
-                )
-                or {}
-            )
-        if command.action == "hr.proposal.read":
+        if command.action in {"delegation.lineage.read", "hr.proposal.read"}:
             _assert_binding(command)
             return (
                 self.read(
@@ -433,10 +422,7 @@ class PlaneAgentAdministrationExtension:
 
 
 def plane_agent_admin_extension() -> PlaneAgentAdministrationExtension:
-    existing = agent_admin_extension(RESOURCE_NAME)
-    if existing is not None:
-        return existing.port  # type: ignore[return-value]
-    return register_agent_admin_extension(PlaneAgentAdministrationExtension()).port  # type: ignore[return-value]
+    return PlaneAgentAdministrationExtension()
 
 
 __all__ = [

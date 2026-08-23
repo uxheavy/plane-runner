@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from collections import Counter
 from datetime import datetime
-from typing import Any, Mapping, Protocol
+from typing import Any, Mapping
 from uuid import UUID
 
 from django.conf import settings
@@ -57,31 +57,11 @@ MAX_FAILURES = 8
 MAX_REASON_BYTES = 512
 
 
-class RuntimeOperatorAdapter(Protocol):
-    """The T1-owned runtime seam consumed by this readback projection.
-
-    ``health_readback`` must return an already bounded, redacted mapping. The
-    control method must be idempotent for the supplied key and delegate the
-    actual stop to the runtime owner.
-    """
-
-    def health_readback(self, *, workspace_id: str, limit: int) -> Mapping[str, Any]: ...
-
-    def request_safety_stop(
-        self,
-        *,
-        workspace_id: str,
-        invocation_id: str,
-        reason: str,
-        idempotency_key: str,
-    ) -> Mapping[str, Any]: ...
-
-
 class RuntimeOperatorAdapterUnavailable(RuntimeError):
     """Raised when T1's runtime-owned operator seam is not installed yet."""
 
 
-def _runtime_operator_adapter() -> RuntimeOperatorAdapter:
+def _runtime_operator_adapter():
     """Resolve T1's runtime hooks without importing runtime implementation details."""
 
     try:
@@ -97,26 +77,7 @@ def _runtime_operator_adapter() -> RuntimeOperatorAdapter:
     if not callable(health_readback) or not callable(request_safety_stop):
         raise RuntimeOperatorAdapterUnavailable("runtime operator health and safety-stop hooks are external_required")
 
-    class _Adapter:
-        def health_readback(self, *, workspace_id: str, limit: int) -> Mapping[str, Any]:
-            return health_readback(workspace_id=workspace_id, limit=limit)
-
-        def request_safety_stop(
-            self,
-            *,
-            workspace_id: str,
-            invocation_id: str,
-            reason: str,
-            idempotency_key: str,
-        ) -> Mapping[str, Any]:
-            return request_safety_stop(
-                workspace_id=workspace_id,
-                invocation_id=invocation_id,
-                reason=reason,
-                idempotency_key=idempotency_key,
-            )
-
-    return _Adapter()
+    return runtime
 
 
 def _safe_text(value: Any, *, max_bytes: int = MAX_REASON_BYTES) -> str:
@@ -149,8 +110,8 @@ def _bounded_projection(value: Mapping[str, Any], *, label: str) -> dict[str, An
 
 def _runtime_health(*, workspace_id: str, limit: int) -> dict[str, Any]:
     try:
-        adapter = _runtime_operator_adapter()
-        value = adapter.health_readback(workspace_id=workspace_id, limit=limit)
+        runtime = _runtime_operator_adapter()
+        value = runtime.operator_health_readback(workspace_id=workspace_id, limit=limit)
         if not isinstance(value, Mapping):
             raise ValueError("runtime operator health hook must return an object")
         return _bounded_projection(value, label="runtime health")
@@ -660,8 +621,8 @@ def build_safety_stop_command(
         "recorded": True,
     }
     try:
-        adapter = _runtime_operator_adapter()
-        runtime_result = adapter.request_safety_stop(
+        runtime = _runtime_operator_adapter()
+        runtime_result = runtime.request_operator_safety_stop(
             workspace_id=str(workspace.id),
             invocation_id=invocation_id,
             reason=_safe_text(reason, max_bytes=MAX_REASON_BYTES),
@@ -736,7 +697,6 @@ __all__ = [
     "CANARY_SCHEMA_VERSION",
     "MAX_OPERATOR_ITEMS",
     "OPERATOR_SCHEMA_VERSION",
-    "RuntimeOperatorAdapter",
     "RuntimeOperatorAdapterUnavailable",
     "build_canary_readback",
     "build_correlation_readback",

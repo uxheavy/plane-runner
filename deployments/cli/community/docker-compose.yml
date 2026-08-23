@@ -308,9 +308,8 @@ services:
       plane-redis:
         condition: service_started
 
-  provisioner:
+  x-provisioner-service: &provisioner-service
     image: makeplane/plane-backend:${APP_RELEASE:-stable}
-    command: ./bin/docker-entrypoint-provisioner.sh --phase=before-migrate
     deploy:
       replicas: 1
       restart_policy:
@@ -319,20 +318,16 @@ services:
       - logs_provisioner:/code/plane/logs
     environment:
       <<: [*app-env, *provisioner-db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
+
+  provisioner:
+    <<: *provisioner-service
+    command: ./bin/docker-entrypoint-provisioner.sh --phase=before-migrate
     depends_on:
       - plane-db
 
   provisioner-final:
-    image: makeplane/plane-backend:${APP_RELEASE:-stable}
+    <<: *provisioner-service
     command: ./bin/docker-entrypoint-provisioner.sh --phase=after-migrate
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: on-failure
-    volumes:
-      - logs_provisioner:/code/plane/logs
-    environment:
-      <<: [*app-env, *provisioner-db-env, *redis-env, *minio-env, *aws-s3-env, *proxy-env]
     depends_on:
       migrator:
         condition: service_completed_successfully

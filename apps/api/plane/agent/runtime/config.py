@@ -468,34 +468,6 @@ class AgentRuntimeConfiguration:
             provider_policy=provider_policy,
         )
 
-    def public_summary(self) -> dict[str, object]:
-        """Return bounded non-secret configuration for health/readiness evidence."""
-
-        return {
-            "protocol": RUNTIME_PROTOCOL,
-            "url": self.url,
-            "healthPath": self.health_path,
-            "dispatchPath": self.dispatch_path,
-            "safetyStopFileConfigured": bool(self.safety_stop_file),
-            "ledgerPathConfigured": bool(self.ledger_path),
-            "commandConfigured": bool(self.command),
-            "childEnvironmentEntries": len(self.child_environment),
-            "credentialResolverConfigured": bool(self.credential_resolver),
-            "credentialStateFileConfigured": bool(self.credential_state_file),
-            "providerEgressConfigured": self.provider_policy is not None,
-            "providerEgressTransport": "AF_UNIX" if self.provider_policy is not None else None,
-            "timeoutSeconds": self.timeout_seconds,
-            "maxRequestBytes": self.max_request_bytes,
-            "maxResponseBytes": self.max_response_bytes,
-            "maxConcurrentInvocations": self.max_concurrent_invocations,
-            "cpuSeconds": self.cpu_seconds,
-            "memoryBytes": self.memory_bytes,
-            "pidsLimit": self.pids_limit,
-            "networkPolicy": self.network_policy,
-            "filesystemPolicy": self.filesystem_policy,
-            "processPolicy": self.process_policy,
-        }
-
 
 @dataclass(frozen=True)
 class ValidatedAgentRuntimeBoundary:

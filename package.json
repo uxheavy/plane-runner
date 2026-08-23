@@ -28,7 +28,6 @@
     "verify:chat-context": "./packages/chat-context/verify-release.sh"
   },
   "devDependencies": {
-    "ajv": "catalog:",
     "husky": "catalog:",
     "lint-staged": "catalog:",
     "oxfmt": "catalog:",

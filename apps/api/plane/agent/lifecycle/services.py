@@ -177,10 +177,6 @@ def _command_id(value):
     return str(getattr(value, "pk", value))
 
 
-def _command_fingerprint(operation, binding):
-    return command_fingerprint(operation, binding)
-
-
 def _is_legacy_fingerprint(value):
     return isinstance(value, str) and value.startswith("legacy1:")
 
@@ -964,7 +960,7 @@ def _delegation_fingerprint(
     budget,
     delegated_by,
 ):
-    return _command_fingerprint(
+    return command_fingerprint(
         "delegate_assignment",
         {
             "parentAssignmentId": _command_id(parent),
@@ -1434,7 +1430,7 @@ def propose_hr_change(
         "expectedState": expected,
         "rationale": rationale,
     }
-    fingerprint = _command_fingerprint("propose_hr_change", binding)
+    fingerprint = command_fingerprint("propose_hr_change", binding)
     _lock_idempotency_key(key)
     existing = AgentHRProposal.all_objects.filter(idempotency_key=key).first()
     if existing is not None:
@@ -1607,22 +1603,6 @@ def propose_chief_of_staff(*, workspace, human, proposed_by, idempotency_key, ra
     )
 
 
-@transaction.atomic
-def transition_assignment(assignment, target, *, outcome=None):
-    locked = AssignmentContract.objects.select_for_update().get(pk=assignment.pk)
-    target = _state(target, AssignmentState, "assignment state")
-    if target in {AssignmentState.COMPLETED, AssignmentState.REVISION}:
-        if outcome is None:
-            raise InvalidTransitionError("Assignment review transitions require an outcome submission")
-        locked_outcome = OutcomeSubmission.objects.select_for_update().select_related("run").get(pk=outcome.pk)
-        if locked_outcome.run.assignment_id != locked.id:
-            raise InvalidTransitionError("Assignment review outcome belongs to another assignment")
-        expected = OutcomeState.ACCEPTED if target == AssignmentState.COMPLETED else OutcomeState.REVISION_REQUESTED
-        if locked_outcome.state != expected:
-            raise InvalidTransitionError("Assignment review transition does not match the outcome decision")
-    return _transition_assignment_locked(locked, target)
-
-
 def _cancel_run_without_invocation_locked(run):
     """Cancel a queued run before it ever became a runtime dispatch."""
 
@@ -1727,7 +1707,7 @@ def create_run(
     creation_fingerprint = None
     if idempotency_key is not None:
         creation_key = _normalise_idempotency(idempotency_key, "run idempotency_key")
-        creation_fingerprint = _command_fingerprint(
+        creation_fingerprint = command_fingerprint(
             "create_run",
             {
                 "assignmentId": _command_id(locked_assignment),
@@ -1931,7 +1911,7 @@ def record_input_event(
         existing = RunInputEvent.all_objects.select_for_update().filter(idempotency_key=key).first()
         if existing is not None:
             replay_pending_ref = pending_ref or existing.pending_input_ref
-            event_fingerprint = _command_fingerprint(
+            event_fingerprint = command_fingerprint(
                 "record_input_event",
                 {
                     "runId": _command_id(run),
@@ -1969,7 +1949,7 @@ def record_input_event(
     if RunInputEvent.all_objects.filter(run=run, pending_input_ref=pending_ref).exists():
         raise IdempotencyConflictError("The pending input question has already been answered")
     event_fingerprint = (
-        _command_fingerprint(
+        command_fingerprint(
             "record_input_event",
             {
                 "runId": _command_id(run),
@@ -2107,7 +2087,7 @@ def record_invocation(
         trigger_binding = _as_dict(trigger_binding, "invocation trigger")
     usage_value = _usage(usage)
     usage_delta = {field: usage_value.get(field, 0) for field in ("inputTokens", "outputTokens", "durationMs")}
-    invocation_fingerprint = _command_fingerprint(
+    invocation_fingerprint = command_fingerprint(
         "record_invocation",
         {
             "runId": _command_id(run),
@@ -2961,14 +2941,6 @@ def reconcile_code_mode_usage(run, invocation, reservation, **usage):
     return locked_run
 
 
-@transaction.atomic
-def record_code_mode_usage(run, invocation, **usage):
-    """Compatibility wrapper that reserves and reconciles one exact usage delta."""
-
-    locked_run, reservation = reserve_code_mode_usage(run, invocation, **usage)
-    return reconcile_code_mode_usage(locked_run, invocation, reservation, **usage)
-
-
 def code_mode_usage_totals(run):
     """Derive persisted Code Mode counters from immutable Plane usage facts."""
 
@@ -3082,7 +3054,7 @@ def _create_terminal_event_locked(
         else None
     )
     reason_value = _ensure_non_empty(reason, "terminal reason") if reason else ""
-    terminal_fingerprint = _command_fingerprint(
+    terminal_fingerprint = command_fingerprint(
         "record_terminal_event",
         {
             "invocationId": _command_id(invocation),
@@ -3256,7 +3228,7 @@ def propose_outcome(run, *, summary, artifacts=None, evidence=None, idempotency_
     key = _normalise_idempotency(idempotency_key, "outcome idempotency_key") if idempotency_key is not None else None
     outcome_fingerprint = None
     if key is not None:
-        outcome_fingerprint = _command_fingerprint(
+        outcome_fingerprint = command_fingerprint(
             "propose_outcome",
             {
                 "runId": _command_id(run),
@@ -3391,7 +3363,7 @@ def review_outcome(
         idempotency_key or f"idempotency:evaluator-{locked.id}",
         "evaluator review idempotency_key",
     )
-    review_fingerprint = _command_fingerprint(
+    review_fingerprint = command_fingerprint(
         "review_outcome",
         {
             "outcomeId": _command_id(locked),

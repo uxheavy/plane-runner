@@ -480,9 +480,7 @@ class ResourceSpec:
     permission_class: type
     scope: str = "project"
     order_by: Any = frozenset({"created_at", "updated_at", "name"})
-    default_order: str = "-created_at"
     list_filter: str | None = None
-    list_result_key: str | None = None
 
 
 class ResourceOperation:
@@ -575,7 +573,7 @@ class ResourceOperation:
         if self.action == "list":
             queryset = self._queryset(workspace, data)
             page = _bounded_page(
-                queryset, data, default_order=self.spec.default_order, allowed_order=self.spec.order_by
+                queryset, data, default_order="-created_at", allowed_order=self.spec.order_by
             )
             page["results"] = [self._serialize(instance, data) for instance in page["results"]]
             return 200, page, None
@@ -876,10 +874,7 @@ def _work_item_body(data: dict[str, Any]) -> dict[str, Any]:
         },
     )
     stripped = body.pop("description_stripped", None)
-    if body.get("type_id") is None:
-        body.pop("type", None)
-    else:
-        body.pop("type", None)
+    body.pop("type", None)
     if body.get("description_html") is None and stripped is not None:
         from html import escape
 
@@ -2102,10 +2097,6 @@ class AgentGovernanceOperation:
                 ).exists()
             )
         return bool(WorkspaceMember.objects.filter(workspace=workspace, member=request.user, is_active=True).exists())
-
-    @staticmethod
-    def _record_ref(record: Any, prefix: str) -> str:
-        return namespaced_ref(prefix, str(record.id))
 
     @staticmethod
     def _assignment_payload(assignment: AssignmentContract) -> dict[str, Any]:

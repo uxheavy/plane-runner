@@ -63,37 +63,6 @@ def reset_operation_gateway_api_key_throttle_cache():
         cache.delete_pattern("api_key:*")
 
 
-@pytest.fixture
-def gateway_project(db, workspace, create_user):
-    project = Project.objects.create(
-        name="Gateway Project",
-        identifier="GW",
-        workspace=workspace,
-        created_by=create_user,
-    )
-    ProjectMember.objects.create(project=project, member=create_user, role=20, is_active=True)
-    State.objects.create(
-        name="Backlog",
-        color="#000000",
-        group="backlog",
-        default=True,
-        project=project,
-        workspace=workspace,
-        created_by=create_user,
-    )
-    return project
-
-
-@pytest.fixture
-def gateway_issue(db, gateway_project, workspace, create_user):
-    return Issue.objects.create(
-        name="Gateway Issue",
-        project=gateway_project,
-        workspace=workspace,
-        created_by=create_user,
-    )
-
-
 def gateway_body(workspace, project, issue, *, operation_id, key, input_data, **extra):
     return {
         "schema_version": "plane.operation/v1",

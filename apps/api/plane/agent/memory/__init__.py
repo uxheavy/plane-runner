@@ -1,6 +1,6 @@
 """Plane-owned Agent memory and context projections."""
 
-from .contracts import AgentContextProjection, ContextAuthorizationPort, DenySubjectContext, MemoryProjectionPort
+from .contracts import AgentContextProjection, ContextAuthorizationPort, DenySubjectContext
 from .projections import (
     ProjectedMemory,
     parse_memory_markdown,
@@ -27,7 +27,6 @@ __all__ = [
     "AgentMemoryError",
     "ContextAuthorizationPort",
     "DenySubjectContext",
-    "MemoryProjectionPort",
     "ProjectedMemory",
     "apply_memory_retention",
     "assemble_agent_context",

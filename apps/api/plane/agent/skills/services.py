@@ -24,7 +24,7 @@ from plane.db.models import (
 )
 
 from plane.agent.memory.contracts import ContextAuthorizationPort, DenySubjectContext
-from plane.agent.memory.services import AgentMemoryError, _ensure_gardener, _ensure_human_reviewer, _scope_actor
+from plane.agent.memory.services import AgentMemoryError, _ensure_gardener, _ensure_human_reviewer, _scope_actor, _text
 
 from .projections import normalize_skill_files, project_skill_package, skill_package_digest
 
@@ -38,15 +38,11 @@ _SKILL_VISIBILITY_PRECEDENCE = {
 
 
 def _skill_key(value: Any) -> str:
-    if not isinstance(value, str) or not value.strip() or len(value.encode("utf-8")) > 255:
-        raise AgentMemoryError("skill key must be a non-empty string within 255 UTF-8 bytes")
-    return value
+    return _text(value, "skill key", 255)
 
 
 def _rationale(value: Any) -> str:
-    if not isinstance(value, str) or not value.strip() or len(value.encode("utf-8")) > 65_536:
-        raise AgentMemoryError("rollback rationale must be a non-empty string within 65536 UTF-8 bytes")
-    return value
+    return _text(value, "rollback rationale")
 
 
 def _visibility(visibility: str, subject_user) -> None:

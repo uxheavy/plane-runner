@@ -533,14 +533,6 @@ class RuntimeCredentialBroker:
             )
             return generation
 
-    def get_lease(self, lease_id: str) -> CredentialLease:
-        self._validate_lease_id(lease_id)
-        with self._lock:
-            lease = self._leases.get(lease_id)
-            if lease is None:
-                raise RuntimeCredentialError("credential lease is unknown")
-            return lease
-
     def _active_lease(self, lease_id: str) -> CredentialLease:
         lease = self._leases.get(lease_id)
         if lease is None:

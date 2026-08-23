@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from plane.agent.code_mode.contracts import CodeModeBudget
 from plane.agent.code_mode.isolate import CodeModeIsolateRunner
-from plane.agent.tools.catalog import code_mode_callback_names
+from plane.operation_gateway.catalog import code_mode_callback_names
 
 from .test_production_runtime_configuration import _boot_settings, _settings_environment
 

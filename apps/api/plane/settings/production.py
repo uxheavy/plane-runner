@@ -197,18 +197,20 @@ def _reject_migration_environment_leakage():
         )
 
 
+_REQUIRED_POSTGRES_ENV = (
+    "PGHOST",
+    "PGDATABASE",
+    "POSTGRES_PORT",
+    "POSTGRES_DB",
+    "POSTGRES_USER",
+    "POSTGRES_PASSWORD",
+)
+
+
 def _validate_production_database_boundary():
     if PLANE_DB_PROVISIONER_MODE:
         provisioner_url = os.environ.get("DATABASE_PROVISIONER_URL")
-        required_provisioner_env = (
-            "DATABASE_PROVISIONER_URL",
-            "PGHOST",
-            "PGDATABASE",
-            "POSTGRES_PORT",
-            "POSTGRES_DB",
-            "POSTGRES_USER",
-            "POSTGRES_PASSWORD",
-        )
+        required_provisioner_env = ("DATABASE_PROVISIONER_URL", *_REQUIRED_POSTGRES_ENV)
         missing = [name for name in required_provisioner_env if not os.environ.get(name)]
         if missing:
             raise ImproperlyConfigured("Production provisioner mode requires " + ", ".join(missing))
@@ -226,15 +228,7 @@ def _validate_production_database_boundary():
 
     if PLANE_DB_MIGRATION_MODE:
         migration_url = os.environ.get("DATABASE_MIGRATION_URL")
-        required_migration_env = (
-            "DATABASE_MIGRATION_URL",
-            "PGHOST",
-            "PGDATABASE",
-            "POSTGRES_PORT",
-            "POSTGRES_DB",
-            "POSTGRES_USER",
-            "POSTGRES_PASSWORD",
-        )
+        required_migration_env = ("DATABASE_MIGRATION_URL", *_REQUIRED_POSTGRES_ENV)
         missing = [name for name in required_migration_env if not os.environ.get(name)]
         if missing:
             raise ImproperlyConfigured("Production migration mode requires " + ", ".join(missing))

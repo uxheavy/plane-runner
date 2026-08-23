@@ -597,9 +597,6 @@ importers:
 
   .:
     devDependencies:
-      ajv:
-        specifier: 'catalog:'
-        version: 8.18.0
       husky:
         specifier: 'catalog:'
         version: 9.1.7

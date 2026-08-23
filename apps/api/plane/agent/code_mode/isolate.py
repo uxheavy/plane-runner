@@ -245,7 +245,7 @@ class CodeModeIsolateRunner:
                 )
             if kind == "spill" and len(args) == 1:
                 return host.spill_result(args[0])
-        except (TypeError, ValueError, AgentProtocolError) as exc:
+        except (TypeError, ValueError) as exc:
             raise CodeModeIsolateError("CALLBACK_FAILED", "Code Mode callback failed closed") from exc
         except Exception as exc:
             code = getattr(exc, "code", None)
@@ -308,7 +308,3 @@ class CodeModeIsolateRunner:
                     resource.setrlimit(resource_kind, (limit, limit))
 
         return apply_limits
-
-
-class AgentProtocolError(ValueError):
-    """Reserved for typed host protocol validation failures."""

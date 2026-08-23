@@ -6,16 +6,15 @@ import pytest
 
 from plane.agent.code_mode.contracts import CodeModeBudget
 from plane.agent.code_mode.isolate import CodeModeIsolateError, CodeModeIsolateRunner
-from plane.agent.tools.catalog import (
+from plane.operation_gateway.catalog import (
     CATALOG_DIGEST,
+    OPERATION_CATALOG,
     code_mode_callback_names,
     catalog_search,
     describe_operation,
     operation_catalog_snapshot,
 )
-from plane.agent.tools.disclosure import MAX_EAGER_OPERATIONS, compose_tool_catalog, progressive_operation_ids
-from plane.agent.tools.native import NativeToolAdapter
-from plane.operation_gateway.catalog import OPERATION_CATALOG
+from plane.agent.tools.disclosure import MAX_EAGER_OPERATIONS, compose_tool_catalog
 
 
 def _profile(**presentation):
@@ -24,40 +23,6 @@ def _profile(**presentation):
 
 def _assignment(objective="Rename the assigned work item"):
     return SimpleNamespace(target_ref="target:issue-1", objective=objective)
-
-
-def _success(operation_id, *, replayed=False):
-    return {
-        "ok": True,
-        "schema_version": "plane.operation/v1",
-        "operation_id": operation_id,
-        "request_id": "request:1",
-        "caller": {"type": "user", "id": "user-1"},
-        "workspace": {"slug": "workspace"},
-        "idempotency": {"key": "idempotency:1", "replayed": replayed},
-        "correlation_id": "correlation:1",
-        "audit_receipt": "audit-receipt:1",
-        "result": {"items": []},
-    }
-
-
-class RecordingGateway:
-    def __init__(self):
-        self.calls = []
-        self.invalid_requests = []
-
-    def execute(self, request, envelope):
-        self.calls.append((request, envelope))
-        return _success(envelope["operation_id"]), 200
-
-    def record_invalid_request(self, request, raw_data, *, code, status_code=None):
-        self.invalid_requests.append((request, raw_data, code, status_code))
-        response = _success(raw_data["operation_id"])
-        response["ok"] = False
-        response.pop("result", None)
-        response["audit_receipt"] = "audit-receipt:rejection"
-        response["error"] = {"code": code, "message": code, "retryable": False}
-        return response, status_code or 400
 
 
 def test_catalog_digest_and_discovery_are_complete_and_stable():
@@ -137,14 +102,9 @@ def test_explicit_eager_route_does_not_readd_assignment_matching_operations():
     eager_refs = [entry["operationRef"] for entry in catalog["eagerOperations"]]
 
     assert eager_refs == ["operation:search_workspace", "operation:work_item.read"]
-    assert "work_item.rename" in progressive_operation_ids(catalog)
-
-
-def test_progressive_disclosure_excludes_eager_prefixed_operation_refs():
-    progressive = progressive_operation_ids({"eagerOperations": [{"operationRef": "operation:work_item.rename"}]})
-
-    assert "work_item.rename" not in progressive
-    assert set(progressive) == set(OPERATION_CATALOG) - {"work_item.rename"}
+    assert "work_item.rename" in set(OPERATION_CATALOG).difference(
+        {ref.removeprefix("operation:") for ref in eager_refs}
+    )
 
 
 def test_disclosure_is_presentation_only_and_assignment_driven():
@@ -163,51 +123,8 @@ def test_assignment_disclosure_is_bounded_and_remaining_operations_stay_progress
     catalog = compose_tool_catalog(_profile(), _assignment("Produce one reviewable outcome."))
 
     assert len(catalog["eagerOperations"]) == MAX_EAGER_OPERATIONS
-    assert len(progressive_operation_ids(catalog)) == len(OPERATION_CATALOG) - MAX_EAGER_OPERATIONS
-
-
-def test_native_adapter_requires_trusted_actor_ref_before_gateway_execution():
-    gateway = RecordingGateway()
-    request = SimpleNamespace(user=SimpleNamespace(id="user-1"))
-    adapter = NativeToolAdapter(
-        request=request,
-        workspace_slug="workspace",
-        actor_ref="actor:actor-1",
-        gateway=gateway,
-    )
-
-    receipt, status = adapter.invoke(
-        "work_item.rename",
-        {"project_id": "project-1", "issue_id": "issue-1", "name": "Renamed"},
-        idempotency_key="idempotency:native-1",
-        correlation_id="correlation:native-1",
-    )
-
-    assert status == 403
-    assert receipt["error"]["code"] == "CALLBACK_BINDING_INVALID"
-    assert gateway.calls == []
-
-
-def test_native_adapter_routes_semantic_operation_through_gateway():
-    gateway = RecordingGateway()
-    request = SimpleNamespace(user=SimpleNamespace(id="user-1"), agent_actor_ref="actor:actor-1")
-    adapter = NativeToolAdapter(
-        request=request,
-        workspace_slug="workspace",
-        actor_ref="actor:actor-1",
-        gateway=gateway,
-    )
-
-    receipt, status = adapter.invoke(
-        "work_item.rename",
-        {"project_id": "project-1", "issue_id": "issue-1", "name": "Renamed"},
-        idempotency_key="idempotency:native-1",
-        correlation_id="correlation:native-1",
-    )
-
-    assert status == 200
-    assert receipt["ok"] is True
-    assert gateway.calls[0][1]["operation_id"] == "work_item.rename"
+    eager_ids = {entry["operationRef"].removeprefix("operation:") for entry in catalog["eagerOperations"]}
+    assert len(set(OPERATION_CATALOG) - eager_ids) == len(OPERATION_CATALOG) - MAX_EAGER_OPERATIONS
 
 
 class FakeIsolateHost:

@@ -14,42 +14,9 @@ from plane.db.models import (
     Project,
     ProjectMember,
     ProjectPage,
-    State,
     User,
     WorkspaceMember,
 )
-
-
-@pytest.fixture
-def gateway_project(db, workspace, create_user):
-    project = Project.objects.create(
-        name="Gateway Project",
-        identifier="AGW",
-        workspace=workspace,
-        created_by=create_user,
-    )
-    ProjectMember.objects.create(project=project, member=create_user, role=20, is_active=True)
-    State.objects.create(
-        name="Backlog",
-        color="#000000",
-        group="backlog",
-        default=True,
-        project=project,
-        workspace=workspace,
-        created_by=create_user,
-    )
-    return project
-
-
-@pytest.fixture
-def gateway_issue(db, gateway_project, workspace, create_user):
-    return Issue.objects.create(
-        name="Gateway Issue",
-        project=gateway_project,
-        workspace=workspace,
-        created_by=create_user,
-    )
-
 
 def _body(workspace, operation_id, key, input_data):
     return {

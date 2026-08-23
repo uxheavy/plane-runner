@@ -171,28 +171,6 @@ class CodeModeHostRPC:
             sandbox=sandbox,
         )
 
-    @classmethod
-    def from_run(
-        cls,
-        *,
-        gateway: OperationGateway,
-        request: Any,
-        run: RunAttempt,
-        invocation: RuntimeInvocation,
-        is_cancelled: Callable[[], bool],
-        sandbox: SandboxPolicy | None = None,
-    ) -> "CodeModeHostRPC":
-        """Compatibility constructor that still requires the persisted invocation."""
-
-        return cls(
-            gateway=gateway,
-            request=request,
-            run=run,
-            invocation=invocation,
-            is_cancelled=is_cancelled,
-            sandbox=sandbox,
-        )
-
     @staticmethod
     def callback_surface() -> dict[str, str]:
         """Return callback names from the canonical operation catalog."""

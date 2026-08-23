@@ -13,13 +13,7 @@
 
 ## Public core module
 
-```ts
-interface SemanticContextPicker {
-  register(element: Element, target: SemanticTarget): () => void;
-  select(request: SelectionRequest): Promise<SelectionResult>;
-  dispose(): void;
-}
-```
+The public picker contracts are canonical in [`packages/chat-context/src/contracts.ts`](../../../packages/chat-context/src/contracts.ts), including `SemanticContextPicker` and its options.
 
 | Operation         | Responsibility                                           | Excludes                                        |
 | ----------------- | -------------------------------------------------------- | ----------------------------------------------- |
@@ -34,47 +28,7 @@ private Implementations of the core Module.
 
 ## Plane reference contract
 
-```ts
-type EntityReferenceV1 = {
-  kind: "entity";
-  workspaceSlug: string;
-  projectId: string;
-  entityType: "work_item" | "project" | "cycle" | "module" | "page" | "view";
-  entityId: string;
-};
-
-type WorkItemContextField =
-  | "name"
-  | "description"
-  | "state"
-  | "priority"
-  | "assignees"
-  | "labels"
-  | "start_date"
-  | "target_date"
-  | "estimate"
-  | "cycle"
-  | "module";
-
-type SemanticReferenceV1 =
-  | EntityReferenceV1
-  | {
-      kind: "field";
-      entity: EntityReferenceV1 & { entityType: "work_item" };
-      fieldKey: WorkItemContextField;
-    }
-  | {
-      kind: "editor_block";
-      document: EntityReferenceV1 & { entityType: "page" | "work_item" };
-      blockId: string;
-    }
-  | {
-      kind: "editor_range";
-      document: EntityReferenceV1 & { entityType: "page" | "work_item" };
-      start: { blockId: string; offset: number };
-      end: { blockId: string; offset: number };
-    };
-```
+The reference contracts and explicit field allowlists are canonical in [`packages/chat-context/src/contracts.ts`](../../../packages/chat-context/src/contracts.ts): `EntityReferenceV1`, `WorkItemContextField`, and `SemanticReferenceV1`.
 
 Field keys are explicit allowlists grouped by entity type, never arbitrary property
 paths. Other entity field unions are added with their adapters. Editor blocks use
@@ -84,55 +38,7 @@ offsets relative to each block's content. See the
 
 ## Selection contract
 
-```ts
-type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
-
-type SemanticTarget = {
-  reference: SemanticReferenceV1;
-  parent?: SemanticReferenceV1;
-};
-
-type SelectionRequest = {
-  operation: "preview" | "capture";
-  area:
-    | { kind: "point"; clientX: number; clientY: number }
-    | { kind: "region"; left: number; top: number; right: number; bottom: number };
-  ancestorOffset?: number;
-  signal?: AbortSignal;
-};
-
-type ContextCandidateV1 = {
-  schemaVersion: 1;
-  reference: SemanticReferenceV1;
-  label: string;
-  selectableAncestors: SemanticReferenceV1[];
-};
-
-type ContextItemV1 = {
-  reference: SemanticReferenceV1;
-  observed: {
-    source: "client_store" | "client_live";
-    value: JsonValue;
-    observedAt: string;
-    entityVersion?: string;
-  };
-  location: { url: string };
-};
-
-type SemanticContextBundleV1 = {
-  schemaVersion: 1;
-  selectionKind: "point" | "region";
-  items: ContextItemV1[];
-  warnings: SelectionFailureV1[];
-};
-
-type SemanticContextBundle = SemanticContextBundleV1;
-
-type SelectionResult =
-  | { ok: true; operation: "preview"; candidates: ContextCandidateV1[] }
-  | { ok: true; operation: "capture"; context: SemanticContextBundle }
-  | { ok: false; failure: SelectionFailureV1 };
-```
+Selection requests, results, and context envelopes are canonical in [`packages/chat-context/src/contracts.ts`](../../../packages/chat-context/src/contracts.ts): `JsonValue`, `SemanticTarget`, `SelectionRequest`, `ContextCandidateV1`, `ContextItemV1`, `SemanticContextBundleV1`, and `SelectionResult`.
 
 Preview does not expose values. Capture returns only JSON-safe data. Input and
 output types are separate even when their fields overlap.
@@ -182,15 +88,7 @@ or persistent storage. See the
 
 ## Failure contract
 
-```ts
-type SelectionFailureV1 = {
-  schemaVersion: 1;
-  code: "NO_TARGET" | "TARGET_GONE" | "UNSUPPORTED" | "VALUE_UNAVAILABLE" | "ABORTED" | "TOO_MANY_TARGETS";
-  message: string;
-  reference?: SemanticReferenceV1;
-  retryable: boolean;
-};
-```
+`SelectionFailureV1` and `SelectionFailureCode` are canonical in [`packages/chat-context/src/contracts.ts`](../../../packages/chat-context/src/contracts.ts); the table below records their behavioral meaning.
 
 Every reference carries project scope. For a project entity, `projectId` equals `entityId`.
 

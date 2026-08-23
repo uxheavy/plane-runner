@@ -109,10 +109,7 @@ class APITokenLogMiddleware:
     @staticmethod
     def _safe_request_id(request):
         value = request.META.get("HTTP_X_REQUEST_ID") or request.META.get("HTTP_X_CORRELATION_ID")
-        if value is None:
-            return None
-        value = str(value)
-        return value[:128]
+        return str(value)[:128] if value is not None else None
 
     def _safe_decode_body(self, content):
         """

@@ -78,7 +78,6 @@ def test_g4_runtime_configuration_rejects_credential_shaped_child_environment_an
         _runtime_environment(PLANE_AGENT_RUNTIME_CREDENTIAL_RESOLVER="command:/run/secrets/resolve-runtime-credential")
     )
     assert configuration.credential_resolver.endswith("resolve-runtime-credential")
-    assert configuration.public_summary()["credentialResolverConfigured"] is True
     with pytest.raises(RuntimeConfigurationError, match="not accepted"):
         AgentRuntimeConfiguration.from_environment(
             _runtime_environment(PLANE_AGENT_RUNTIME_CREDENTIALS_JSON='{"api_key":"never-in-settings"}')

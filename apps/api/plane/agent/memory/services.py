@@ -498,5 +498,4 @@ def assemble_agent_context(
         memory_markdown=project_memory_markdown(private_pairs),
         user_markdown=project_user_markdown(user_pairs),
         skill_packages=project_visible_skill_packages(actor, subject_user=subject_user, authorization=authorization),
-        memory_entries=tuple(private_entries),
     )

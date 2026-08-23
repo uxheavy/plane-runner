@@ -27,12 +27,6 @@ fi
 export DATABASE_URL="${DATABASE_MIGRATION_URL}"
 export PLANE_DB_MIGRATION_MODE=1
 
-if [ "$#" -gt 0 ]; then
-  python manage.py wait_for_db "$@"
-  python manage.py verify_operation_gateway_migration_boundary "$@"
-  python manage.py migrate "$@"
-else
-  python manage.py wait_for_db
-  python manage.py verify_operation_gateway_migration_boundary
-  python manage.py migrate
-fi
+python manage.py wait_for_db "$@"
+python manage.py verify_operation_gateway_migration_boundary "$@"
+python manage.py migrate "$@"

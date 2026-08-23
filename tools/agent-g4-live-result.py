@@ -15,6 +15,7 @@ from pathlib import Path
 
 MAX_EVIDENCE_BYTES = 16 * 1024
 MAX_RESULT_BYTES = 20 * 1024
+MAX_DIAGNOSTIC_BYTES = 8 * 1024
 EMPTY_STDERR_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 EVIDENCE_SCHEMAS = {
     "plane-agent-g4/live-evidence/v1",
@@ -132,6 +133,55 @@ class ResultPersistenceError(ValueError):
     def __init__(self, reason: str):
         self.reason = reason
         super().__init__(reason)
+
+
+def _read_runner_diagnostic(path: Path) -> dict[str, str]:
+    """Read the sanitized runner metadata once; never consume raw stderr."""
+
+    try:
+        file_descriptor = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+    except FileNotFoundError:
+        return {}
+    except OSError:
+        raise ResultPersistenceError("diagnostic_unavailable") from None
+    try:
+        metadata = os.fstat(file_descriptor)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_uid != os.getuid()
+            or stat.S_IMODE(metadata.st_mode) != 0o600
+            or metadata.st_size > MAX_DIAGNOSTIC_BYTES
+        ):
+            raise ResultPersistenceError("diagnostic_invalid")
+        payload = os.read(file_descriptor, MAX_DIAGNOSTIC_BYTES + 1)
+    except ResultPersistenceError:
+        raise
+    except OSError:
+        raise ResultPersistenceError("diagnostic_unavailable") from None
+    finally:
+        os.close(file_descriptor)
+    if len(payload) > MAX_DIAGNOSTIC_BYTES:
+        raise ResultPersistenceError("diagnostic_oversized")
+    try:
+        text = payload.decode("ascii")
+    except UnicodeDecodeError:
+        raise ResultPersistenceError("diagnostic_invalid") from None
+    allowed = {
+        "error_class",
+        "reason_category",
+        "missing_module",
+        "missing_path_class",
+        "child_phase",
+        "setup_error",
+    }
+    result: dict[str, str] = {}
+    for line in text.splitlines():
+        key, separator, value = line.partition("=")
+        if separator and key in allowed:
+            if key in result:
+                raise ResultPersistenceError("diagnostic_invalid")
+            result[key] = value
+    return result
 
 
 def _read_schema_controlled_evidence(path: Path, *, required: bool) -> bytes:
@@ -405,6 +455,7 @@ def persist_result(
     missing_path_class: str = "unclassified",
     child_phase: str = "unknown",
     setup_error: str | None = None,
+    diagnostic: Path | None = None,
 ) -> bytes:
     """Publish exactly one schema-controlled JSON receipt."""
 
@@ -412,6 +463,14 @@ def persist_result(
         raise ResultPersistenceError("exit_code_invalid")
     evidence_payload = _read_schema_controlled_evidence(evidence, required=status == 0)
     if status != 0:
+        if diagnostic is not None:
+            parsed = _read_runner_diagnostic(diagnostic)
+            error_class = parsed.get("error_class", error_class)
+            reason_category = parsed.get("reason_category", reason_category)
+            missing_module = parsed.get("missing_module", missing_module)
+            missing_path_class = parsed.get("missing_path_class", missing_path_class)
+            child_phase = parsed.get("child_phase", child_phase)
+            setup_error = parsed.get("setup_error", setup_error)
         _bounded_failure_line(
             phase=phase,
             error_class=error_class,
@@ -460,24 +519,36 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--missing-path-class", default="unclassified")
     parser.add_argument("--child-phase", default="unknown")
     parser.add_argument("--setup-error", default="")
+    parser.add_argument("--diagnostic", type=Path)
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     try:
+        diagnostic = (
+            _read_runner_diagnostic(args.diagnostic)
+            if args.status != 0 and args.diagnostic is not None
+            else {}
+        )
+        error_class = diagnostic.get("error_class", args.error_class)
+        reason_category = diagnostic.get("reason_category", args.reason_category)
+        missing_module = diagnostic.get("missing_module", args.missing_module)
+        missing_path_class = diagnostic.get("missing_path_class", args.missing_path_class)
+        child_phase = diagnostic.get("child_phase", args.child_phase)
+        setup_error = diagnostic.get("setup_error", args.setup_error)
         payload = persist_result(
             args.destination,
             args.evidence,
             status=args.status,
             phase=args.phase,
-            error_class=args.error_class,
-            reason_category=args.reason_category,
+            error_class=error_class,
+            reason_category=reason_category,
             stderr_sha256=args.stderr_sha256,
-            missing_module=args.missing_module,
-            missing_path_class=args.missing_path_class,
-            child_phase=args.child_phase,
-            setup_error=args.setup_error,
+            missing_module=missing_module,
+            missing_path_class=missing_path_class,
+            child_phase=child_phase,
+            setup_error=setup_error,
         )
     except ResultPersistenceError as exc:
         print(f"event=agent.g4.live-runner.result status=failed reason={exc.reason}", file=sys.stderr)
@@ -486,13 +557,13 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.buffer.write(
             _bounded_failure_line(
                 phase=args.phase,
-                error_class=args.error_class,
+                error_class=error_class,
                 exit_code=args.status,
-                reason_category=args.reason_category,
+                reason_category=reason_category,
                 stderr_sha256=args.stderr_sha256,
-                missing_module=args.missing_module,
-                missing_path_class=args.missing_path_class,
-                child_phase=args.child_phase,
+                missing_module=missing_module,
+                missing_path_class=missing_path_class,
+                child_phase=child_phase,
             )
         )
     sys.stdout.buffer.write(payload)

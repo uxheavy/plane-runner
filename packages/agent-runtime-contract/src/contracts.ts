@@ -487,7 +487,7 @@ function parseManifestEntry(value: unknown, name: ContractSchemaName) {
 }
 
 function parseContractManifestObject(value: unknown): ContractManifest {
-  const object = requireRecord(parseOwnedJson(value, "ContractManifest"), "ContractManifest", ["protocol", "schemas"]);
+  const object = requireRecord(value, "ContractManifest", ["protocol", "schemas"]);
   if (object.protocol !== PLANE_AGENT_RUNTIME_PROTOCOL) {
     throw new ContractParseError("ContractManifest", "invalid contract manifest");
   }
@@ -987,10 +987,6 @@ class ContractParseError extends TypeError {
     this.path = safePath;
     Object.freeze(this);
   }
-}
-
-function parseOwnedJson(value: unknown, _path: string): unknown {
-  return value;
 }
 
 function requireRecord(value: unknown, path: string, required: readonly string[], optional: readonly string[] = []) {
@@ -1832,7 +1828,7 @@ function parseSnapshotContent(value: unknown, path: string): RunSnapshotContent 
 }
 
 function parseRunSnapshotObject(value: unknown): RunSnapshot {
-  const raw = parseOwnedJson(value, "RunSnapshot");
+  const raw = value;
   const object = requireRecord(raw, "RunSnapshot", [
     "protocol",
     "workspaceRef",
@@ -1868,7 +1864,7 @@ export function parseRunSnapshot(value: ContractJsonInput): RunSnapshot {
 }
 
 function parseInvocationEnvelopeObject(value: unknown): InvocationEnvelope {
-  const raw = parseOwnedJson(value, "InvocationEnvelope");
+  const raw = value;
   const object = requireRecord(
     raw,
     "InvocationEnvelope",
@@ -2000,7 +1996,7 @@ export function parseInvocationEnvelope(value: ContractJsonInput): InvocationEnv
 }
 
 function parseRuntimeEventObject(value: unknown): RuntimeEvent {
-  const raw = parseOwnedJson(value, "RuntimeEvent");
+  const raw = value;
   const object = requireRecord(raw, "RuntimeEvent", [
     "protocol",
     "trust",
@@ -2043,7 +2039,7 @@ export function parseRuntimeEvent(value: ContractJsonInput): RuntimeEvent {
 }
 
 function parseRuntimeExitObject(value: unknown): RuntimeExit {
-  const raw = parseOwnedJson(value, "RuntimeExit");
+  const raw = value;
   const object = requireRecord(
     raw,
     "RuntimeExit",
@@ -3710,7 +3706,7 @@ function validateRuntimeDurableStateConsistency(state: RuntimeDurableStateShape,
 }
 
 function parseRuntimeDurableStateObject(value: unknown): RuntimeDurableState {
-  const raw = parseOwnedJson(value, "RuntimeDurableState");
+  const raw = value;
   const object = requireRecord(
     raw,
     "RuntimeDurableState",

@@ -247,8 +247,6 @@ def create_schedule(
     actor = AgentActor.objects.get(pk=actor.pk)
     if not actor.is_active:
         raise AgentScheduleError("Inactive Agent actors cannot own enabled schedules")
-    _get_zone(timezone_name)
-    parse_cron_expression(cron_expression)
     starts_at = starts_at or timezone.now()
     if starts_at.tzinfo is None or starts_at.utcoffset() is None:
         raise AgentScheduleError("starts_at must be an aware datetime")
@@ -295,20 +293,6 @@ def transition_schedule(schedule: AgentSchedule, target: str) -> AgentSchedule:
         update_fields.append("next_fire_at")
     locked_schedule.save(update_fields=update_fields)
     return locked_schedule
-
-
-def pause_schedule(schedule: AgentSchedule) -> AgentSchedule:
-    return transition_schedule(schedule, AgentScheduleState.PAUSED)
-
-
-def resume_schedule(schedule: AgentSchedule) -> AgentSchedule:
-    return transition_schedule(schedule, AgentScheduleState.ENABLED)
-
-
-def cancel_schedule(schedule: AgentSchedule) -> AgentSchedule:
-    """Permanently cancel a schedule without cancelling its normal assignments."""
-
-    return transition_schedule(schedule, AgentScheduleState.DISABLED)
 
 
 def _fire_key(schedule: AgentSchedule, scheduled_for: datetime, idempotency_key: str | None) -> str:

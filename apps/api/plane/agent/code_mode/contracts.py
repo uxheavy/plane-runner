@@ -144,6 +144,3 @@ class SandboxPolicy:
         ):
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0 or value > maximum:
                 raise ValueError(f"Code Mode {name} bound is invalid")
-
-
-CallbackKind = Literal["search", "describe", "operation", "spill"]

@@ -152,28 +152,19 @@ class ProviderRelayOutcomeUnknownError(ProviderRelayError):
 class ProviderWire:
     """The typed provider wire contract shared by runtime config and relay."""
 
-    provider: str
     host: str
     path: str
-    base_path: str
-    api_mode: str
     credential_name: str = "api_key"
 
 
 _PROVIDER_WIRES = {
     "openai-codex": ProviderWire(
-        provider="openai-codex",
         host="chatgpt.com",
         path="/backend-api/codex/responses",
-        base_path="/backend-api/codex",
-        api_mode="codex_responses",
     ),
     "xai": ProviderWire(
-        provider="xai",
         host="api.x.ai",
         path="/v1/chat/completions",
-        base_path="/v1",
-        api_mode="chat_completions",
     ),
 }
 
@@ -206,18 +197,6 @@ class ProviderRelayPolicy:
     max_chunk_bytes: int = _DEFAULT_CHUNK_BYTES
     max_calls: int = 16
     max_concurrent_requests: int = 2
-
-    @property
-    def wire(self) -> ProviderWire | None:
-        return provider_wire(self.provider)
-
-    @property
-    def api_mode(self) -> str | None:
-        return self.wire.api_mode if self.wire is not None else None
-
-    @property
-    def base_path(self) -> str | None:
-        return self.wire.base_path if self.wire is not None else None
 
     def __post_init__(self) -> None:
         _bounded_text(self.provider, "provider", _MAX_PROVIDER_BYTES)
@@ -410,12 +389,6 @@ class _RelayHTTPServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServe
 
 class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
     server: _RelayHTTPServer
-
-    def log_request(self, *_args: object, **_kwargs: object) -> None:
-        return
-
-    def log_error(self, *_args: object, **_kwargs: object) -> None:
-        return
 
     def setup(self) -> None:
         super().setup()
@@ -1063,25 +1036,6 @@ class ProviderRelayServer:
             )
         except Exception:
             pass
-
-    def _record(self, request: ProviderRequest, outcome: str, reason: str, upstream_called: bool) -> None:
-        if self._audit is None:
-            return
-        try:
-            self._audit(
-                ProviderRelayAudit(
-                    run_id=self.binding.run_id,
-                    invocation_id=self.binding.invocation_id,
-                    provider=request.provider,
-                    model=request.model,
-                    outcome=outcome,
-                    reason=_safe_reason(reason),
-                    upstream_called=upstream_called,
-                )
-            )
-        except Exception:
-            pass
-
 
 class PinnedProviderHTTPSClient:
     """The trusted-parent HTTPS adapter for one exact provider route."""

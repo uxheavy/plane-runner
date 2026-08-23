@@ -36,45 +36,14 @@ RUNTIME_IMAGE_TAG="$(manifest_pin pins.runtimeImageTag)"
 RUNTIME_IMAGE_DIGEST="$(manifest_pin pins.runtimeImageDigest)"
 RUNTIME_IMAGE_REVISION="$(manifest_pin pins.runtimeImageRevision)"
 RUNTIME_CONTRACT="$(manifest_pin pins.runtimeContract)"
-API_TEST_IMAGE_TAG="$(python3 - "${MANIFEST}" <<'PY'
-import json
-import sys
-
-print(json.load(open(sys.argv[1], encoding="utf-8"))["pins"]["apiArtifact"]["imageTag"])
-PY
-)"
-API_TEST_IMAGE_DIGEST="$(python3 - "${MANIFEST}" <<'PY'
-import json
-import sys
-
-print(json.load(open(sys.argv[1], encoding="utf-8"))["pins"]["apiArtifact"]["imageDigest"])
-PY
-)"
-API_SOURCE_REVISION="$(python3 - "${MANIFEST}" <<'PY'
-import json
-import sys
-
-print(json.load(open(sys.argv[1], encoding="utf-8"))["pins"]["apiArtifact"]["sourceRevision"])
-PY
-)"
-API_CONTRACT="$(python3 - "${MANIFEST}" <<'PY'
-import json
-import sys
-
-print(json.load(open(sys.argv[1], encoding="utf-8"))["pins"]["apiArtifact"]["contract"])
-PY
-)"
+API_TEST_IMAGE_TAG="$(manifest_pin pins.apiArtifact.imageTag)"
+API_TEST_IMAGE_DIGEST="$(manifest_pin pins.apiArtifact.imageDigest)"
+API_SOURCE_REVISION="$(manifest_pin pins.apiArtifact.sourceRevision)"
+API_CONTRACT="$(manifest_pin pins.apiArtifact.contract)"
 API_TEST_IMAGE="${PLANE_API_TEST_IMAGE:-${API_TEST_IMAGE_TAG}}"
 RUNTIME_IMAGE="${PLANE_G4_RUNTIME_IMAGE:-${RUNTIME_IMAGE_TAG}}"
 MODE="${PLANE_G4_MODE:-offline}"
-CANDIDATE_PARENT_COMMIT="$(python3 - "${MANIFEST}" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], encoding="utf-8") as handle:
-    print(json.load(handle)["candidateBinding"]["parentCommit"])
-PY
-)"
+CANDIDATE_PARENT_COMMIT="$(manifest_pin candidateBinding.parentCommit)"
 CURRENT_STEP="preflight"
 CANDIDATE_COMMIT=""
 STAGE_COUNT=0
@@ -737,6 +706,9 @@ raise SystemExit(0 if result["passes"] else 1)
 }
 
 g4_runtime_contracts() {
+    python3 -m pytest -q \
+        "${ROOT_DIR}/tools/tests/test_agent_g4_live_scenario.py" \
+        "${ROOT_DIR}/tools/tests/test_agent_g4_live_support.py"
     setup_g4_stack || return 1
     g4_pytest plane/tests/unit/agent/test_g4_runtime_boundary.py
 }

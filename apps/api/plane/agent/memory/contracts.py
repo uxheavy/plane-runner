@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from plane.db.models import AgentActor, AgentMemoryEntry
+from plane.db.models import AgentActor
 
 
 class ContextAuthorizationPort(Protocol):
@@ -35,11 +35,3 @@ class AgentContextProjection:
     memory_markdown: str
     user_markdown: str
     skill_packages: dict[str, dict[str, str]]
-    memory_entries: tuple[AgentMemoryEntry, ...]
-
-
-class MemoryProjectionPort(Protocol):
-    """L4/L5 adapter seam for materializing Plane-owned context."""
-
-    def project(self, *, actor: AgentActor, subject_user_id: str | None = None) -> AgentContextProjection:
-        """Return deterministic context files for one authorized runtime."""

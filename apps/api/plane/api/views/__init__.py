@@ -72,25 +72,3 @@ from .user import UserEndpoint
 from .invite import WorkspaceInvitationsViewset
 
 from .sticky import StickyViewSet
-
-from .agent_admin import (
-    AgentActorAdminDetailAPIEndpoint,
-    AgentActorAdminListCreateAPIEndpoint,
-    AgentAssignmentAdminDetailAPIEndpoint,
-    AgentAssignmentAdminListCreateAPIEndpoint,
-    AgentAssignmentCancelAPIEndpoint,
-    AgentAssignmentDispatchAPIEndpoint,
-    AgentGatewayReadbackDetailAPIEndpoint,
-    AgentGatewayReadbackListAPIEndpoint,
-    AgentOutcomeAcceptAPIEndpoint,
-    AgentOutcomeAdminCreateAPIEndpoint,
-    AgentOutcomeAdminDetailAPIEndpoint,
-    AgentOutcomeRevisionAPIEndpoint,
-    AgentOutcomeReviewAPIEndpoint,
-    AgentProfileVersionAdminListCreateAPIEndpoint,
-    AgentProfileVersionAdminDetailAPIEndpoint,
-    AgentRunAdminDetailAPIEndpoint,
-    AgentRunCancelAPIEndpoint,
-    AgentRunInputEventAdminListCreateAPIEndpoint,
-    AgentRunInvocationAdminListCreateAPIEndpoint,
-)

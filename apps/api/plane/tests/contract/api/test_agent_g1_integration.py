@@ -25,7 +25,8 @@ from plane.agent.lifecycle import (
     propose_outcome,
     record_invocation,
 )
-from plane.agent.code_mode import CodeModeHostRPC, CodeModeIsolateRunner
+from plane.agent.code_mode.host import CodeModeHostRPC
+from plane.agent.code_mode.isolate import CodeModeIsolateRunner
 from plane.agent.lifecycle.runtime_contract import validate_invocation_envelope
 from plane.agent.runtime import RuntimeIngressError, dispatch_invocation, ingest_runtime_frame
 from plane.db.models import (

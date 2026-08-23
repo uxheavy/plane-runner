@@ -33,18 +33,17 @@ def reconcile_publications() -> int:
     """Requeue each missing/failed/expired intent independently."""
 
     now = timezone.now()
-    publication_ids = OperationGatewayPublication.objects.filter(
-        state__in=(
-            OperationGatewayPublication.State.PENDING,
-            OperationGatewayPublication.State.RETRYABLE,
-        )
-    ).values_list("id", flat=True)
-    publication_ids = list(publication_ids) + list(
+    publication_ids = list(
         OperationGatewayPublication.objects.filter(
-            state=OperationGatewayPublication.State.RUNNING,
-        )
-        .filter(Q(lease_until__lt=now) | Q(lease_until__isnull=True))
-        .values_list("id", flat=True)
+            Q(
+                state__in=(
+                    OperationGatewayPublication.State.PENDING,
+                    OperationGatewayPublication.State.RETRYABLE,
+                )
+            )
+            | Q(state=OperationGatewayPublication.State.RUNNING, lease_until__lt=now)
+            | Q(state=OperationGatewayPublication.State.RUNNING, lease_until__isnull=True)
+        ).values_list("id", flat=True)
     )
     for publication_id in publication_ids:
         dispatch_publication.delay(str(publication_id))
