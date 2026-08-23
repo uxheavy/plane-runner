@@ -1635,6 +1635,42 @@ def test_pre_dispatch_setup_failure_is_terminalized_once_without_provider_attemp
 
 
 @pytest.mark.django_db(transaction=True)
+def test_pre_dispatch_child_diagnostic_reaches_failure_evidence(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    _run, invocation = _invocation(
+        workspace,
+        gateway_project,
+        gateway_issue,
+        create_user,
+        suffix="child-diagnostic",
+    )
+    child_diagnostic = {
+        "exceptionClass": "ModuleNotFoundError",
+        "module": "plane_runtime",
+        "category": "module_not_found",
+        "stderrSha256": "a" * 64,
+        "stderrBytes": 128,
+        "termination": "exit",
+        "exitCode": 1,
+    }
+    failure = {
+        "failureCode": "runtime_process_failed",
+        "failurePhase": "runtime_process",
+        "failureDetail": "process_exit",
+        "childDiagnostic": child_diagnostic,
+    }
+
+    result = terminalize_pre_dispatch_failure(invocation, failure)
+
+    control = RuntimeInvocationControl.objects.get(invocation=invocation)
+    terminal = RunTerminalEvent.objects.get(invocation=invocation, visible=True)
+    assert result.failure == failure
+    assert json.loads(control.failure_reason) == failure
+    assert json.loads(terminal.reason) == failure
+
+
+@pytest.mark.django_db(transaction=True)
 def test_unclassified_pre_dispatch_setup_failure_remains_outcome_unknown(
     workspace, gateway_project, gateway_issue, create_user
 ):

@@ -493,7 +493,7 @@ def _terminalize_dispatch_failure(
 
 def terminalize_pre_dispatch_failure(
     invocation: RuntimeInvocation,
-    failure: dict[str, str] | None = None,
+    failure: dict[str, object] | None = None,
 ) -> SupervisorResult:
     """Persist one bounded result when setup fails before runtime dispatch.
 
@@ -511,7 +511,7 @@ def terminalize_pre_dispatch_failure(
 
 def _terminalize_pre_dispatch_failure(
     invocation: RuntimeInvocation,
-    failure: dict[str, str] | None = None,
+    failure: dict[str, object] | None = None,
 ) -> SupervisorResult:
     existing = RunTerminalEvent.objects.filter(invocation=invocation).first()
     if existing is not None:
@@ -543,12 +543,16 @@ def _terminalize_pre_dispatch_failure(
             outcome_unknown=True,
         )
 
+    child_diagnostic = failure.get("childDiagnostic")
+    host_operation_failure = failure.get("hostOperationFailure")
     dispatch_error = RuntimeDispatchError(
         "runtime supervisor setup rejected dispatch",
         failure_code=failure.get("failureCode"),
         failure_phase=failure.get("failurePhase"),
         failure_detail=failure.get("failureDetail"),
         failure_subreason=failure.get("failureSubreason"),
+        child_diagnostic=child_diagnostic if isinstance(child_diagnostic, dict) else None,
+        host_operation_failure=host_operation_failure if isinstance(host_operation_failure, dict) else None,
     )
     if not dispatch_error.has_allowlisted_failure:
         return terminalize_pre_dispatch_failure(invocation)
