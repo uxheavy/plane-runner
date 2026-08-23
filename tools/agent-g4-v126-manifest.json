@@ -100,7 +100,7 @@
         "activeQuotaReservations",
         "temporaryDatabaseRemoved"
       ],
-      "sha256": "38f237fcf8e1bbb2fdbb06cb4e4af3f18a9e4e843c2b94151ea0fa7f1a137aa3",
+      "sha256": "f7c5a3bcf00612fb61fa26ee771767e1ccf2710184ef26a7c7feeb7903e5de1a",
       "testPath": "plane/tests/contract/api/test_agent_g4_rollback_drill.py"
     },
     "runtimeService": {
@@ -131,12 +131,12 @@
       "imageTag": "plane-agent-api:g4-v126-d10f37fe",
       "sourceRevision": "d10f37fe3cc6d2bc71ebeeb768ff71e30fdb65cb"
     },
-    "hermesCommit": "16a7d503aa4ef1c37da7db38434ddc5bee291fd5",
+    "hermesCommit": "665b5f2493c4a45d3abdc197aa4fd17ab5da5477",
     "mcpGitlink": "c04974ed6624f17b41e63ef8182661929e77e0d3",
     "runtimeContract": "plane.agent-runtime/v1",
-    "runtimeImageDigest": "sha256:f78d002d60a44c5b3102bc65b04cde0b1196b90e349e2c806b09f2f8aa0f91a8",
+    "runtimeImageDigest": "sha256:6449a66a72ac477297430f88311b73ae8af88d61e9ec5bfcff86438e0ca1dc7e",
     "runtimeImageRevision": "d10f37fe3cc6d2bc71ebeeb768ff71e30fdb65cb",
-    "runtimeImageTag": "plane-agent-runtime:hermes-16a7d503-v128-d10f37fe",
+    "runtimeImageTag": "plane-agent-runtime:hermes-665b5f24-v126-d10f37fe",
     "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
   },
   "pytestPaths": [

@@ -538,26 +538,26 @@ docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose
 
 `apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` is the pin
 manifest. The current Plane deployable service candidate is the exact source
-`d6bacac71937e3f5d34d00ff534f0bf962e6c572`, whose sole parent is the exact Plane
-source `97172d6678bf9843357958ff928e16abe470afd3`; the final candidate is
+`d10f37fe3cc6d2bc71ebeeb768ff71e30fdb65cb`, whose sole parent is the exact Plane
+source `d6bacac71937e3f5d34d00ff534f0bf962e6c572`; the final candidate is
 exactly one metadata wrapper child of that source. The previously accepted G3 candidate
 remains the rollback floor, and the candidate is Plane commit
 `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
 
-The V125 release carries Hermes commit
-`665b5f2493c4a45d3abdc197aa4fd17ab5da5477` from the `uxheavy` checkout, MCP
+The V128 release carries Hermes commit
+`16a7d503aa4ef1c37da7db38434ddc5bee291fd5` from the `uxheavy` checkout, MCP
 gitlink `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK gitlink
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The runtime image tag is
-`plane-agent-runtime:hermes-665b5f24-v125-d6bacac7`, and the runtime image digest
-is `sha256:7bf3efcadeaed784e20ef4fa92fa7f1d3ba534e9c3ffbb3854513fbb2d40a277`.
-The runtime revision is `d6bacac71937e3f5d34d00ff534f0bf962e6c572`. The API
-image tag is `plane-agent-api:g4-v124-d6bacac7` and the API image digest is
-`sha256:85550ed7ff9fb5c55fd6e414e8a7525218e05fcc75a915a8eeb044f07046320a`.
-The API source revision is `d6bacac71937e3f5d34d00ff534f0bf962e6c572`. The
+`plane-agent-runtime:hermes-16a7d503-v128-d10f37fe`, and the runtime image digest
+is `sha256:f78d002d60a44c5b3102bc65b04cde0b1196b90e349e2c806b09f2f8aa0f91a8`.
+The runtime revision is `d10f37fe3cc6d2bc71ebeeb768ff71e30fdb65cb`. The API
+image tag is `plane-agent-api:g4-v126-d10f37fe` and the API image digest is
+`sha256:d9fe979be61339d6ab3e6a69a0a38b5ef2268b298f0a88b06318c46394150af9`.
+The API source revision is `d10f37fe3cc6d2bc71ebeeb768ff71e30fdb65cb`. The
 Hermes tree digest is
 `3826315d690ec679e04d5d6608b5cb501b94e0c8a7e37d1077c78a1376537611`, and the
 Plane runtime source digest is
-`170beaab5bdf570812698682522f02b9fecda97915a2971317adf93a7c97b3c6`. No
+`e10368d59d3216c9d27ec3a7e253f7d63591c27b69139d2cc2841d2991fabe54`. No
 provider-backed or live acceptance is claimed.
 The Hermes commit `f2ad9bf255a5dde368cf8465127f90b6a6f20c4f`, MCP gitlink
 `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK gitlink
