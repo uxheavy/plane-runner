@@ -298,7 +298,7 @@ def _provider_policy_from_environment(
             max_request_bytes=_positive_int(
                 source,
                 "PLANE_AGENT_RUNTIME_PROVIDER_MAX_REQUEST_BYTES",
-                1024 * 1024,
+                2 * 1024 * 1024,
                 2 * 1024 * 1024,
             ),
             max_response_bytes=max_response_bytes,
