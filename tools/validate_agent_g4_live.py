@@ -898,9 +898,17 @@ _LIVE_ATTEMPT_PHASES = {"intent", "started", "completed", "failed", "outcome_unk
 _LIVE_ATTEMPT_STATUS_CLASSES = {"", "not_sent", "unknown", "error", "2xx", "4xx", "5xx", "transport"}
 _LIVE_ATTEMPT_ERROR_CODES = {
     "",
+    "budget_exhausted",
+    "cancelled",
+    "credential_payload",
+    "denied",
+    "lease_invalid",
     "pre_send_failure",
     "outcome_unknown",
+    "oversize",
     "provider_error",
+    "redirect_denied",
+    "replay",
     "runtime_error",
     "upstream_error",
     "unspecified",

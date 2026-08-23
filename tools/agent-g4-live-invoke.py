@@ -1221,7 +1221,22 @@ def build_failure_evidence(
     }
     attempt_phases = {"intent", "started", "completed", "failed", "outcome_unknown"}
     status_classes = {"", "not_sent", "unknown", "error", "2xx", "4xx", "5xx", "transport"}
-    error_codes = {"", "pre_send_failure", "outcome_unknown", "provider_error", "runtime_error", "upstream_error"}
+    error_codes = {
+        "",
+        "budget_exhausted",
+        "cancelled",
+        "credential_payload",
+        "denied",
+        "lease_invalid",
+        "outcome_unknown",
+        "oversize",
+        "pre_send_failure",
+        "provider_error",
+        "redirect_denied",
+        "replay",
+        "runtime_error",
+        "upstream_error",
+    }
     terminal_kinds = {"none", "outcome_submission", "run_failure", "run_blocker", "run_cancellation"}
     failure_codes = {
         "runtime_transport_pre_dispatch_failure",

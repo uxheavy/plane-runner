@@ -3064,9 +3064,8 @@ class G4ContractTests(unittest.TestCase):
                 "sequence": 1,
                 "phase": "failed",
                 "upstreamInitiated": True,
-                "statusClass": "4xx",
-                "errorCode": "provider_error",
-                "reasonSubreason": "auth",
+                "statusClass": "error",
+                "errorCode": "lease_invalid",
             }
         ]
         receipt["semanticDigest"] = _semantic_digest(receipt)
@@ -3693,6 +3692,31 @@ class G4ContractTests(unittest.TestCase):
                 }
             ],
         )
+
+    def test_failure_evidence_preserves_known_provider_relay_error_code(self):
+        evidence = invoke_helper_namespace()["build_failure_evidence"](
+            binding={},
+            failure_phase="api-invocation",
+            error_class="RuntimeError",
+            exit_code=1,
+            run_id="run:relay-error",
+            run_state="failed",
+            invocation_id="invocation:relay-error",
+            invocation_state="failed",
+            provider_attempts=[
+                {
+                    "sequence": 1,
+                    "phase": "failed",
+                    "upstreamInitiated": True,
+                    "statusClass": "error",
+                    "errorCode": "lease_invalid",
+                }
+            ],
+            terminal_kind="run_failure",
+            failure_code="runtime_error",
+        )
+
+        self.assertEqual(evidence["providerAttempts"][0]["errorCode"], "lease_invalid")
 
     def test_failure_evidence_preserves_bounded_transport_status(self):
         evidence = invoke_helper_namespace()["build_failure_evidence"](
