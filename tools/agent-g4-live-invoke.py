@@ -40,7 +40,6 @@ from plane.agent.runtime.supervisor import _provider_unknown_failure
 from plane.agent.runtime.supervisor import request_runtime_cancellation
 from plane.agent.schedules.services import create_schedule, fire_schedule
 from plane.db.models import (
-    AgentRole,
     AgentScheduleFireState,
     Issue,
     IssueAssignee,
@@ -2178,8 +2177,19 @@ def _post_primary_failure_reason(stage):
     )
 
 
+_SCENARIO_AGENT_ROLES = {
+    "worker": "worker",
+    "delegator": "delegator",
+    "gardener": "gardener",
+    "chief_of_staff": "chief_of_staff",
+    "hr": "hr",
+    "evaluator": "evaluator",
+    "custom": "custom",
+}
+
+
 def _prepare_shared_worker_setup(scenario, provider, provider_relay, suffix, *, cache):
-    """Create Maya once; bounded commissions then receive separate run snapshots."""
+    """Create stable workspace and actors; commissions own profiles and runs."""
 
     if cache.get("setup") is not None:
         return cache["setup"]
@@ -2224,59 +2234,6 @@ def _prepare_shared_worker_setup(scenario, provider, provider_relay, suffix, *, 
                 model=scenario.profile.model_policy.model,
             )
         )
-    scenario_agent_roles = {
-        "worker": AgentRole.WORKER,
-        "delegator": AgentRole.DELEGATOR,
-        "gardener": AgentRole.GARDENER,
-        "chief_of_staff": AgentRole.CHIEF_OF_STAFF,
-        "hr": AgentRole.HR,
-        "evaluator": AgentRole.EVALUATOR,
-        "custom": AgentRole.CUSTOM,
-    }
-    actor_role = AgentRole.WORKER
-    profile_instructions = (
-        "Complete this one live G4 chain check through Plane tools. First discover and read the assigned issue "
-        "using a permitted operation. Then deliberately attempt agent.outcome.evaluate as this worker so the "
-        "authorization canary is denied. Finally call agent.outcome.submit and then agent.outcome.publish with "
-        "a minimal structural summary. Do not stop at ordinary assistant text: the explicit submit and publish "
-        "product operations are required terminal evidence. Do not use Code Mode or external tools."
-    )
-    profile_persona = ""
-    profile_model_defaults = {}
-    profile_expected_outcomes = None
-    profile_display_name = None
-    profile_tool_presentation = None
-    if scenario is not None:
-        actor_role = scenario_agent_roles[scenario.actor_role]
-        profile_instructions = scenario.profile.instructions
-        profile_persona = scenario.prompt
-        profile_model_defaults = {
-            "provider": scenario.profile.model_policy.provider,
-            "model": scenario.profile.model_policy.model,
-            "reasoning_effort": scenario.profile.model_policy.reasoning,
-        }
-        profile_display_name = scenario.profile.name
-        profile_expected_outcomes = _profile_expected_outcomes(scenario)
-        profile_tool_presentation = _profile_tool_presentation(scenario)
-        profile_instructions = profile_instructions.replace("{{subjectUserRef}}", f"user:{user.id}")
-        profile_persona = profile_persona.replace("{{subjectUserRef}}", f"user:{user.id}")
-    profile = create_profile(
-        actor,
-        role=actor_role,
-        instructions=profile_instructions,
-        display_name=profile_display_name,
-        persona=profile_persona,
-        model_defaults=profile_model_defaults,
-        tool_presentation=profile_tool_presentation,
-        runtime_defaults={
-            "provider": provider["name"],
-            "model": scenario.profile.model_policy.model if scenario is not None else provider["model"],
-            "adapter": "hermes",
-        },
-        expected_outcomes=profile_expected_outcomes,
-        context_refs=[*(scenario.assignment.context_refs if scenario is not None else ()), f"context:user-{user.id}"],
-        created_by=user,
-    )
     related_actors = {}
     if scenario is not None:
         for setup_actor in scenario.setup.actors:
@@ -2294,7 +2251,7 @@ def _prepare_shared_worker_setup(scenario, provider, provider_relay, suffix, *, 
             related_actors[setup_actor.ref] = related
             create_profile(
                 related,
-                role=scenario_agent_roles[setup_actor.role],
+                role=_SCENARIO_AGENT_ROLES[setup_actor.role],
                 instructions=f"Operate as bounded scenario actor {setup_actor.ref}.",
                 display_name=setup_actor.display_name,
                 runtime_defaults={"provider": provider["name"], "model": scenario.profile.model_policy.model, "adapter": "hermes"},
@@ -2306,10 +2263,8 @@ def _prepare_shared_worker_setup(scenario, provider, provider_relay, suffix, *, 
         "project": project,
         "issue": issue,
         "actor": actor,
-        "profile": profile,
         "context_facts": context_facts,
         "related_actors": related_actors,
-        "actor_role": actor_role,
         "setup_suffix": suffix,
     }
     cache["setup"] = setup
@@ -2373,6 +2328,62 @@ def _profile_tool_presentation(scenario):
     if route is not None:
         presentation["standard_route"] = route
     return presentation
+
+
+def _create_commission_profile(shared, scenario, provider):
+    user = shared["user"]
+    actor = shared["actor"]
+    profile_instructions = (
+        "Complete this one live G4 chain check through Plane tools. First discover and read the assigned issue "
+        "using a permitted operation. Then deliberately attempt agent.outcome.evaluate as this worker so the "
+        "authorization canary is denied. Finally call agent.outcome.submit and then agent.outcome.publish with "
+        "a minimal structural summary. Do not stop at ordinary assistant text: the explicit submit and publish "
+        "product operations are required terminal evidence. Do not use Code Mode or external tools."
+    )
+    actor_role = "worker"
+    profile_persona = ""
+    profile_model_defaults = {}
+    profile_expected_outcomes = None
+    profile_display_name = None
+    profile_tool_presentation = None
+    if scenario is not None:
+        actor_role = _SCENARIO_AGENT_ROLES[scenario.actor_role]
+        profile_instructions = scenario.profile.instructions
+        profile_persona = scenario.prompt
+        profile_model_defaults = {
+            "provider": scenario.profile.model_policy.provider,
+            "model": scenario.profile.model_policy.model,
+            "reasoning_effort": scenario.profile.model_policy.reasoning,
+        }
+        profile_display_name = scenario.profile.name
+        profile_expected_outcomes = _profile_expected_outcomes(scenario)
+        profile_tool_presentation = (
+            {
+                "eager_operations": list(scenario.profile.tool_presentation),
+                "model_toolset": scenario.profile.model_toolset,
+            }
+            if scenario.profile.model_toolset == "code_mode_only"
+            else _profile_tool_presentation(scenario)
+        )
+        profile_instructions = profile_instructions.replace("{{subjectUserRef}}", f"user:{user.id}")
+        profile_persona = profile_persona.replace("{{subjectUserRef}}", f"user:{user.id}")
+    return create_profile(
+        actor,
+        role=actor_role,
+        instructions=profile_instructions,
+        display_name=profile_display_name,
+        persona=profile_persona,
+        model_defaults=profile_model_defaults,
+        tool_presentation=profile_tool_presentation,
+        runtime_defaults={
+            "provider": provider["name"],
+            "model": scenario.profile.model_policy.model if scenario is not None else provider["model"],
+            "adapter": "hermes",
+        },
+        expected_outcomes=profile_expected_outcomes,
+        context_refs=[*(scenario.assignment.context_refs if scenario is not None else ()), f"context:user-{user.id}"],
+        created_by=user,
+    )
 
 
 def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
@@ -2616,12 +2627,10 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
         project = shared["project"]
         issue = shared["issue"]
         actor = shared["actor"]
-        profile = shared["profile"]
         context_facts = shared["context_facts"]
         related_actors = dict(shared["related_actors"])
         setup_counters["actors"] = 1 + len(related_actors)
-        setup_counters["profiles"] = 1 + len(related_actors)
-        actor_role = shared["actor_role"]
+        setup_counters["profiles"] = len(related_actors)
         if scenario is not None and scenario.profile.model_toolset == "code_mode_only":
             from agent_g4_live_scenario import bind_code_mode_runtime_values
 
@@ -2632,31 +2641,8 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                 invocation_id=str(planned_invocation_id),
                 new_name=f"V36 Code Mode {suffix}",
             )
-            profile = create_profile(
-                actor,
-                role=actor_role,
-                instructions=scenario.profile.instructions,
-                display_name=scenario.profile.name,
-                persona=scenario.prompt,
-                model_defaults={
-                    "provider": scenario.profile.model_policy.provider,
-                    "model": scenario.profile.model_policy.model,
-                    "reasoning_effort": scenario.profile.model_policy.reasoning,
-                },
-                tool_presentation={
-                    "eager_operations": list(scenario.profile.tool_presentation),
-                    "model_toolset": scenario.profile.model_toolset,
-                },
-                runtime_defaults={
-                    "provider": provider["name"],
-                    "model": scenario.profile.model_policy.model,
-                    "adapter": "hermes",
-                },
-                expected_outcomes=_profile_expected_outcomes(scenario),
-                context_refs=[*scenario.assignment.context_refs, f"context:user-{user.id}"],
-                created_by=user,
-            )
-            setup_counters["profiles"] += 1
+        profile = _create_commission_profile(shared, scenario, provider)
+        setup_counters["profiles"] += 1
         assignment_target_ref = f"issue:{issue.id}"
         assignment_objective = "Perform one live provider-backed read, authorization canary, and explicit published outcome."
         assignment_acceptance_criteria = [

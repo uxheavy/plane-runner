@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import os
+import sys
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
 
-from plane.agent.lifecycle import create_actor, create_profile
+from plane.agent.lifecycle import create_actor, create_assignment, create_profile, create_run
 from plane.db.models import AgentRole
 
 
@@ -29,6 +31,18 @@ _ROUTE_SPEC = importlib.util.spec_from_file_location("agent_g4_manager_route", _
 assert _ROUTE_SPEC is not None and _ROUTE_SPEC.loader is not None
 _ROUTE = importlib.util.module_from_spec(_ROUTE_SPEC)
 _ROUTE_SPEC.loader.exec_module(_ROUTE)
+
+_TOOLS_PATH = _ROUTE_PATH.parent
+sys.path.insert(0, str(_TOOLS_PATH))
+import agent_g4_live_scenario as _SCENARIO  # noqa: E402
+
+_INVOKE_SPEC = importlib.util.spec_from_file_location(
+    "agent_g4_live_invoke_profile_test", _TOOLS_PATH / "agent-g4-live-invoke.py"
+)
+assert _INVOKE_SPEC is not None and _INVOKE_SPEC.loader is not None
+_INVOKE = importlib.util.module_from_spec(_INVOKE_SPEC)
+sys.modules[_INVOKE_SPEC.name] = _INVOKE
+_INVOKE_SPEC.loader.exec_module(_INVOKE)
 
 
 @pytest.mark.django_db(transaction=True)
@@ -129,3 +143,58 @@ def test_manager_route_executor_retains_the_first_bounded_predicate_checkpoint()
     assert captured.value.route_id == "M05"
     assert captured.value.predicate == "evaluatorFirst"
     assert str(captured.value) == "raw manager exception must not become evidence"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_multi_commission_setup_reuses_actors_but_binds_each_profile_snapshot(create_user):
+    descriptor_path = _TOOLS_PATH / "agent-g4-manager-v1.json"
+    raw = descriptor_path.read_bytes()
+    descriptor = _SCENARIO.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
+    first = _SCENARIO.commission_descriptor(descriptor, descriptor.commissions[0])
+    second = _SCENARIO.commission_descriptor(descriptor, descriptor.commissions[1])
+    provider = {"name": "openai-codex", "model": "gpt-5.6-luna"}
+    suffix = uuid4().hex[:12]
+    cache = {}
+
+    shared = _INVOKE._prepare_shared_worker_setup(first, provider, {}, suffix, cache=cache)
+    assert _INVOKE._prepare_shared_worker_setup(second, provider, {}, suffix, cache=cache) is shared
+    assert not {"profile", "assignment", "run", "invocation"}.intersection(shared)
+
+    first_profile = _INVOKE._create_commission_profile(shared, first, provider)
+    first_assignment = create_assignment(
+        shared["actor"],
+        project=shared["project"],
+        target_ref=f"issue:{shared['issue'].id}",
+        objective=first.assignment.objective,
+        acceptance_criteria=list(first.assignment.acceptance_criteria),
+        context_refs=list(first.assignment.context_refs),
+        created_by=shared["user"],
+    )
+    first_run = create_run(first_assignment, first_profile, created_by=shared["user"])
+
+    second_profile = _INVOKE._create_commission_profile(shared, second, provider)
+    second_assignment = create_assignment(
+        shared["actor"],
+        project=shared["project"],
+        target_ref=f"issue:{shared['issue'].id}",
+        objective=second.assignment.objective,
+        acceptance_criteria=list(second.assignment.acceptance_criteria),
+        context_refs=list(second.assignment.context_refs),
+        created_by=shared["user"],
+    )
+    second_run = create_run(second_assignment, second_profile, created_by=shared["user"])
+
+    assert shared["workspace"].id == first_run.workspace_id == second_run.workspace_id
+    assert shared["actor"].id == first_run.actor_id == second_run.actor_id
+    assert first_profile.id != second_profile.id
+    assert first_run.profile_version_id == first_profile.id
+    assert second_run.profile_version_id == second_profile.id
+    assert first_run.snapshot["profile"]["profileRef"] == f"profile-version:{first_profile.id}"
+    assert second_run.snapshot["profile"]["profileRef"] == f"profile-version:{second_profile.id}"
+    assert first_run.snapshot["assignment"]["assignmentRef"] == f"assignment:{first_assignment.id}"
+    assert second_run.snapshot["assignment"]["assignmentRef"] == f"assignment:{second_assignment.id}"
+    assert first_run.snapshot["contentDigest"] == first_run.snapshot_content_digest
+    assert second_run.snapshot["contentDigest"] == second_run.snapshot_content_digest
+    assert first_run.snapshot_content_digest != second_run.snapshot_content_digest
+    assert first_profile.expected_outcomes == _INVOKE._profile_expected_outcomes(first)
+    assert second_profile.expected_outcomes == _INVOKE._profile_expected_outcomes(second)
