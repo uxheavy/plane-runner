@@ -1089,6 +1089,8 @@ def test_runtime_service_opens_relay_with_existing_lease_and_closes_it(tmp_path)
             "PLANE_AGENT_RUNTIME_CREDENTIAL_STATE_FILE": str(state_file),
         }
     )
+    assert configuration.provider_policy is not None
+    assert configuration.provider_policy.max_request_bytes == 1024 * 1024
     controller = RuntimeSafetyController(configured=True, stop_file=tmp_path / "stop")
     controller.mark_ready()
     executor = RuntimeDispatchExecutor(configuration, controller)

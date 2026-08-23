@@ -295,7 +295,12 @@ def _provider_policy_from_environment(
             models=models,
             credential_name=credential_name,
             timeout_seconds=_positive_float(source, "PLANE_AGENT_RUNTIME_PROVIDER_TIMEOUT_SECONDS", 30.0, 300.0),
-            max_request_bytes=max_request_bytes,
+            max_request_bytes=_positive_int(
+                source,
+                "PLANE_AGENT_RUNTIME_PROVIDER_MAX_REQUEST_BYTES",
+                1024 * 1024,
+                2 * 1024 * 1024,
+            ),
             max_response_bytes=max_response_bytes,
             max_chunk_bytes=_positive_int(
                 source, "PLANE_AGENT_RUNTIME_PROVIDER_MAX_CHUNK_BYTES", 64 * 1024, 2 * 1024 * 1024
