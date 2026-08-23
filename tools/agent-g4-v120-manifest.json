@@ -23,7 +23,7 @@
     "candidateCommitSource": "git-head-with-exact-parent",
     "expectedCandidateSource": "external-operator-input:PLANE_G4_EXPECTED_CANDIDATE",
     "mode": "exact-single-child",
-    "parentCommit": "d6bacac71937e3f5d34d00ff534f0bf962e6c572",
+    "parentCommit": "868a29fa8b443fdf047413d6f80410893f5e46de",
     "rejectDescendants": true
   },
   "cleanup": {
@@ -100,7 +100,7 @@
         "activeQuotaReservations",
         "temporaryDatabaseRemoved"
       ],
-      "sha256": "2d1a8c61e88f56444cb6bf3ff0c072b81c6542bb7b9bdc440772bac381ec2f58",
+      "sha256": "44d982d644b4d00255637899fa0b4f9c097d5cc13d8e8369bba7c60bb9b4f09d",
       "testPath": "plane/tests/contract/api/test_agent_g4_rollback_drill.py"
     },
     "runtimeService": {
@@ -111,7 +111,7 @@
         "plane_runtime.g1_runtime_image.bootstrap",
         "PLANE_G2_HERMES_CHECKOUT"
       ],
-      "sha256": "3dafc983c6d457b129b80ab37eb56509416735ebf89d36e099d5de7aff508768",
+      "sha256": "4d55441c7c4b84c8374c760b803c956a89c3f9ff2a11528c97b8e0b32f9064cd",
       "testName": "test_pinned_hermes_runs_through_http_service_launcher_and_bound_host_socket",
       "testPath": "plane/tests/unit/agent/test_runtime_supervisor.py"
     }
@@ -127,16 +127,16 @@
   "pins": {
     "apiArtifact": {
       "contract": "plane.operation/v1",
-      "imageDigest": "sha256:85550ed7ff9fb5c55fd6e414e8a7525218e05fcc75a915a8eeb044f07046320a",
-      "imageTag": "plane-agent-api:g4-v124-d6bacac7",
-      "sourceRevision": "d6bacac71937e3f5d34d00ff534f0bf962e6c572"
+      "imageDigest": "sha256:7403aed25eb5e76bcc3efb4303afb905a8ab45249b47ed7e9860c2094f5d8e4b",
+      "imageTag": "plane-agent-api:g4-v119-868a29fa",
+      "sourceRevision": "868a29fa8b443fdf047413d6f80410893f5e46de"
     },
-    "hermesCommit": "665b5f2493c4a45d3abdc197aa4fd17ab5da5477",
+    "hermesCommit": "aa96db7760c314eb879fa5a5c0609e74f610880d",
     "mcpGitlink": "c04974ed6624f17b41e63ef8182661929e77e0d3",
     "runtimeContract": "plane.agent-runtime/v1",
-    "runtimeImageDigest": "sha256:7bf3efcadeaed784e20ef4fa92fa7f1d3ba534e9c3ffbb3854513fbb2d40a277",
-    "runtimeImageRevision": "d6bacac71937e3f5d34d00ff534f0bf962e6c572",
-    "runtimeImageTag": "plane-agent-runtime:hermes-665b5f24-v125-d6bacac7",
+    "runtimeImageDigest": "sha256:28154b0688170598abd76d80e95416a1af175724604a7e2e7ce9f3883da4edc4",
+    "runtimeImageRevision": "868a29fa8b443fdf047413d6f80410893f5e46de",
+    "runtimeImageTag": "plane-agent-runtime:hermes-aa96db77-v120-868a29fa",
     "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
   },
   "pytestPaths": [

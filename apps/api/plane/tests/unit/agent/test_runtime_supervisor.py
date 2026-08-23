@@ -1273,6 +1273,64 @@ def test_supervisor_preserves_finite_runtime_error_failure_through_terminal_outp
     assert transport.calls == 1
 
 
+@pytest.mark.django_db(transaction=True)
+def test_supervisor_persists_only_bounded_child_diagnostic_in_terminal_failure(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    _run, invocation = _invocation(workspace, gateway_project, gateway_issue, create_user, suffix="child-exit")
+    child_diagnostic = {
+        "exceptionClass": "ModuleNotFoundError",
+        "module": "plane_runtime",
+        "category": "module_not_found",
+        "stderrSha256": "a" * 64,
+        "stderrBytes": 128,
+        "termination": "exit",
+        "exitCode": 1,
+    }
+
+    class ChildExitRuntimeTransport:
+        calls = 0
+
+        def dispatch(self, snapshot_json, envelope_json):
+            self.calls += 1
+            return _runtime_frames(
+                json.loads(snapshot_json),
+                json.loads(envelope_json),
+                failure={
+                    "code": "runtime_error",
+                    "message": "raw child stderr must not escape",
+                    "retryable": False,
+                    "cause": "runtime_unknown_failure",
+                    "childDiagnostic": child_diagnostic,
+                },
+            )
+
+    transport = ChildExitRuntimeTransport()
+    result = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
+    expected = {
+        "failureCode": "runtime_error",
+        "failurePhase": "runtime_process",
+        "failureDetail": "process_exit",
+        "failureSubreason": "runtime_execution_failed",
+        "failureCause": "runtime_unknown_failure",
+        "childDiagnostic": child_diagnostic,
+    }
+    control = RuntimeInvocationControl.objects.get(invocation=invocation)
+    terminal = RunTerminalEvent.objects.get(invocation=invocation, visible=True)
+    assert result.failure == expected
+    assert json.loads(control.failure_reason) == expected
+    assert json.loads(terminal.reason) == expected
+    for tampered in (
+        {**child_diagnostic, "stderr": "raw stderr"},
+        {**child_diagnostic, "stderrBytes": "128"},
+    ):
+        classified = _runtime_exit_failure_classification(
+            {"code": "runtime_error", "childDiagnostic": tampered}
+        )
+        assert classified is not None
+        assert "childDiagnostic" not in classified
+
+
 @pytest.mark.parametrize(
     "cause",
     [

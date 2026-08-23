@@ -422,7 +422,7 @@ def _runtime_exit_failure_classification(
     failure: object,
     *,
     provider_unknown_evidence: dict[str, str] | None = None,
-) -> dict[str, str] | None:
+) -> dict[str, object] | None:
     """Return a bounded live envelope for a finite child terminal failure."""
 
     if not isinstance(failure, dict):
@@ -442,6 +442,9 @@ def _runtime_exit_failure_classification(
         bounded["failureCause"] = cause
         if cause == "provider_unknown_failure" and provider_unknown_evidence is not None:
             bounded.update(provider_unknown_evidence)
+    child_diagnostic = RuntimeDispatchError._bounded_child_diagnostic(failure.get("childDiagnostic"))
+    if child_diagnostic is not None:
+        bounded["childDiagnostic"] = child_diagnostic
     bounded.update(_bounded_runtime_host_diagnostic(failure))
     bounded.update(_bounded_runtime_failure_diagnostic(failure))
     return bounded

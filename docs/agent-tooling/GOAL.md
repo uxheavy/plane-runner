@@ -322,6 +322,8 @@ It must not become a product issue, persona route, phase gate, completion
 percentage item, or reason to wait for a separate review. Record only the
 workflow change and the successful retry evidence needed to prevent recurrence.
 
+- All delegated tasks default to FAST_MODE: GPT-5.6 Luna High, hard timebox, the smallest decisive check, and no broad archaeology or repeated gates; safety, auth, and `outcome_unknown` invariants remain unchanged.
+
 Workflow-only obstacles are not findings and carry zero delivery weight. They
 do not consume a provider retry, create a blocker status, trigger a reviewer,
 reduce the reported completion percentage, or justify spawning a separate
