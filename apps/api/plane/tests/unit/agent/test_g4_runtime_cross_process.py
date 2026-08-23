@@ -293,6 +293,46 @@ def test_g4_service_and_remote_preserve_unclassified_failure_without_leaking_raw
         thread.join(timeout=2)
 
 
+def test_g4_service_and_remote_preserve_bounded_child_diagnostic_on_generic_failure(tmp_path):
+    diagnostic = {
+        "exceptionClass": "PythonException",
+        "module": "hermes",
+        "category": "python_traceback",
+        "stderrSha256": "b" * 64,
+        "stderrBytes": 321,
+        "termination": "exit",
+        "exitCode": 1,
+    }
+    failure = RuntimeError("Traceback: private stderr token-value")
+    failure.child_diagnostic = diagnostic
+    configuration = _configuration(tmp_path)
+    controller = RuntimeSafetyController(configured=True, stop_file=tmp_path / "safety-stop")
+    controller.mark_ready()
+    server = _RuntimeHTTPServer(
+        ("127.0.0.1", 0),
+        controller,
+        configuration,
+        executor=SimpleNamespace(dispatch=_FailingRuntimeExecutor(failure).dispatch),
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    snapshot_json, invocation_json = _dispatch_body("generic-child-diagnostic")
+    try:
+        with pytest.raises(RuntimeDispatchError) as raised:
+            RemoteRuntimeTransport(
+                runtime_url=f"http://127.0.0.1:{server.server_port}",
+                shared_secret=configuration.shared_secret,
+            ).dispatch(snapshot_json, invocation_json)
+        error = raised.value
+        assert error.public_failure()["childDiagnostic"] == diagnostic
+        assert "token-value" not in json.dumps(error.public_failure(), sort_keys=True)
+        assert "token-value" not in str(error)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
 def test_g4_remote_classifies_pinned_pre_subreason_runtime_rejection_with_safe_subreason():
     class LegacyRejectionHandler(BaseHTTPRequestHandler):
         def do_POST(self):  # noqa: N802

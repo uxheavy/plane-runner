@@ -422,6 +422,7 @@ class RuntimeDispatchExecutor:
             else:
                 dispatch_error = RuntimeDispatchError(
                     "runtime dispatch failed",
+                    child_diagnostic=getattr(dispatch_error, "child_diagnostic", None),
                     host_operation_failure=host_operation_failure,
                 )
         if cleanup_error is not None:
@@ -570,14 +571,20 @@ class _RuntimeHTTPHandler(BaseHTTPRequestHandler):
                 {"error": "runtime_dispatch_failed", **exc.public_failure()},
             )
             return
-        except Exception:
+        except Exception as exc:
             # Exception text, credentials, paths, and transcripts never cross
             # this boundary. The classification is the only durable detail.
+            child_diagnostic = getattr(exc, "child_diagnostic", None)
+            if not isinstance(child_diagnostic, dict):
+                child_diagnostic = None
             self._write_json(
                 HTTPStatus.CONFLICT,
                 {
                     "error": "runtime_dispatch_failed",
-                    **RuntimeDispatchError("runtime dispatch failed").public_failure(),
+                    **RuntimeDispatchError(
+                        "runtime dispatch failed",
+                        child_diagnostic=child_diagnostic,
+                    ).public_failure(),
                 },
             )
             return
