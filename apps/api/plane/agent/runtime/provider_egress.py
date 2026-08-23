@@ -899,6 +899,12 @@ class ProviderRelayServer:
         error: ProviderRelayError | None = None,
     ) -> None:
         payload: dict[str, object] = {"error": code}
+        status_class = getattr(error, "status_class", "")
+        reason_subreason = getattr(error, "reason_subreason", "")
+        if status_class in _PROVIDER_ERROR_STATUS_CLASSES - {""}:
+            payload["statusClass"] = status_class
+        if reason_subreason in _PROVIDER_ERROR_REASON_SUBREASONS - {""}:
+            payload["reasonSubreason"] = reason_subreason
         if isinstance(error, ProviderRelayOutcomeUnknownError):
             payload.update(
                 {

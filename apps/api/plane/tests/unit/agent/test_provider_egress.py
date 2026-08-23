@@ -315,10 +315,19 @@ def test_pinned_provider_successful_2xx_response_crosses_client_and_relay(monkey
     assert audits[-1].status_class == "2xx"
 
 
-def test_pinned_provider_http_error_reaches_bounded_relay_audit(monkeypatch, tmp_path):
+@pytest.mark.parametrize(
+    ("status_code", "status_class", "reason_subreason"),
+    ((400, "4xx", "request_rejected"), (500, "5xx", "upstream_unavailable")),
+)
+def test_pinned_provider_http_error_reaches_bounded_relay_audit(
+    monkeypatch, tmp_path, status_code: int, status_class: str, reason_subreason: str
+):
     policy, _request = _pinned_request()
     connection = _FixtureHTTPSConnection(
-        response=_FixtureHTTPSResponse(429, body=b"provider body must not persist"),
+        response=_FixtureHTTPSResponse(
+            status_code,
+            body=b"provider body; status text; https://secret.invalid/provider; provider-secret",
+        ),
     )
     monkeypatch.setattr(provider_egress.http.client, "HTTPSConnection", lambda *_args, **_kwargs: connection)
     audits: list[ProviderRelayAudit] = []
@@ -331,12 +340,18 @@ def test_pinned_provider_http_error_reaches_bounded_relay_audit(monkeypatch, tmp
         server.close()
 
     assert response[0] == 403
-    assert json.loads(response[2]) == {"error": "provider_error"}
+    assert json.loads(response[2]) == {
+        "error": "provider_error",
+        "reasonSubreason": reason_subreason,
+        "statusClass": status_class,
+    }
     assert [audit.phase for audit in audits] == ["intent", "started", "failed"]
-    assert audits[-1].status_class == "4xx"
+    assert audits[-1].status_class == status_class
+    assert audits[-1].reason_subreason == reason_subreason
     assert audits[-1].error_code == "provider_error"
-    assert b"provider body must not persist" not in response[2]
-    assert "provider body must not persist" not in repr(audits)
+    secrets = ("provider body", "status text", "https://secret.invalid", "provider-secret")
+    assert all(secret.encode() not in response[2] for secret in secrets)
+    assert all(secret not in repr(audits) for secret in secrets)
 
 
 def test_permitted_provider_request_uses_invocation_af_unix_relay_and_streams_without_child_credential(tmp_path):
