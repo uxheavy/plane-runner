@@ -342,12 +342,47 @@ describe("parsed plane.agent-runtime/v1 contract boundary", () => {
     expect(JSON.stringify(parsed)).not.toContain("raw");
     expect(failedExit.failure).not.toHaveProperty("runtimePhase");
 
+    const childDiagnostics = [
+      {
+        exceptionClass: "PythonException",
+        module: "hermes",
+        category: "python_traceback",
+        stderrSha256: "a".repeat(64),
+        stderrBytes: 128,
+        termination: "exit",
+        exitCode: 1,
+      },
+      {
+        exceptionModule: "builtins",
+        exceptionClass: "RuntimeError",
+        runtimePhase: "conversation",
+        originToken: "run_conversation",
+      },
+    ] as const;
+    for (const childDiagnostic of childDiagnostics) {
+      const childExit = {
+        ...failedExit,
+        failure: { ...failedExit.failure, childDiagnostic },
+      };
+      const parsedChildExit = parseRuntimeExit(childExit);
+      assertValid("runtime-exit", parsedChildExit);
+      expect(parsedChildExit.failure).toHaveProperty("childDiagnostic", childDiagnostic);
+    }
+
     const invalidDiagnostics = [
       { runtimePhase: "conversation" },
       { exceptionClass: "RuntimeError" },
       { runtimePhase: "not-a-phase", exceptionClass: "RuntimeError" },
       { runtimePhase: "conversation", exceptionClass: "SecretException" },
       { runtimePhase: "conversation", exceptionClass: "RuntimeError", rawPath: "/tmp/secret" },
+      {
+        childDiagnostic: {
+          exceptionModule: "builtins",
+          exceptionClass: "RuntimeError",
+          runtimePhase: "conversation",
+          originToken: "secret-token",
+        },
+      },
     ];
     for (const diagnostic of invalidDiagnostics) {
       const invalid = {

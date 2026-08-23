@@ -176,12 +176,63 @@ _CHILD_DIAGNOSTIC_CATEGORIES = frozenset(
         "unknown",
     }
 )
+_HERMES_CHILD_DIAGNOSTIC_FIELDS = frozenset(
+    {"exceptionModule", "exceptionClass", "runtimePhase", "originToken"}
+)
+_HERMES_CHILD_EXCEPTION_MODULES = frozenset({"Unknown", "builtins", "httpx", "openai"})
+_HERMES_CHILD_ORIGIN_TOKENS = frozenset(
+    {"agent_factory", "tool_configuration", "run_conversation", "unknown"}
+)
+_HERMES_CHILD_EXCEPTION_CLASSES = frozenset(
+    {
+        "ModuleNotFoundError",
+        "ImportError",
+        "PermissionError",
+        "MemoryError",
+        "TimeoutError",
+        "OSError",
+        "RuntimeError",
+        "ValueError",
+        "TypeError",
+        "KeyError",
+        "AttributeError",
+        "APIConnectionError",
+        "APIError",
+        "APIResponseValidationError",
+        "APIStatusError",
+        "APITimeoutError",
+        "AuthenticationError",
+        "BadRequestError",
+        "ConflictError",
+        "InternalServerError",
+        "NotFoundError",
+        "PermissionDeniedError",
+        "RateLimitError",
+        "UnprocessableEntityError",
+        "ConnectTimeout",
+        "PoolTimeout",
+        "ReadTimeout",
+        "WriteTimeout",
+        "Unknown",
+    }
+)
 
 
 def _bounded_child_diagnostic(value):
     """Preserve only the finite runtime child-failure contract."""
 
-    if not isinstance(value, dict) or set(value) != _CHILD_DIAGNOSTIC_FIELDS:
+    if not isinstance(value, dict):
+        return None
+    if set(value) == _HERMES_CHILD_DIAGNOSTIC_FIELDS:
+        if (
+            value.get("exceptionModule") not in _HERMES_CHILD_EXCEPTION_MODULES
+            or value.get("exceptionClass") not in _HERMES_CHILD_EXCEPTION_CLASSES
+            or value.get("runtimePhase") not in _RUNTIME_FAILURE_PHASES
+            or value.get("originToken") not in _HERMES_CHILD_ORIGIN_TOKENS
+        ):
+            return None
+        return dict(value)
+    if set(value) != _CHILD_DIAGNOSTIC_FIELDS:
         return None
     if (
         value.get("exceptionClass") not in _CHILD_DIAGNOSTIC_EXCEPTION_CLASSES
@@ -1719,6 +1770,9 @@ def build_failure_evidence(
             runtime_diagnostic = _bounded_runtime_failure_diagnostic(runtime_failure)
             if runtime_diagnostic is not None:
                 bounded_runtime_exit["failure"].update(runtime_diagnostic)
+            child_diagnostic = _bounded_child_diagnostic(runtime_failure.get("childDiagnostic"))
+            if child_diagnostic is not None:
+                bounded_runtime_exit["failure"]["childDiagnostic"] = child_diagnostic
 
     bounded_event_kind_counts = {}
     if isinstance(runtime_event_kind_counts, dict):

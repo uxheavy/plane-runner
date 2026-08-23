@@ -56,6 +56,7 @@ from validate_agent_g4_live import (  # noqa: E402
     validate_files,
     validate_evidence,
     _validate_runtime_diagnostics,
+    _validate_child_diagnostic,
     _validate_manager_route_diagnostic,
     _validate_manager_route_evidence,
     _validate_operator_route_evidence,
@@ -4435,6 +4436,43 @@ class G4ContractTests(unittest.TestCase):
             "state=failed failure=" + json.dumps(reason, sort_keys=True, separators=(",", ":"))
         )
         self.assertEqual(json.loads(parsed)["childDiagnostic"], diagnostic)
+
+        hermes_diagnostic = {
+            "exceptionModule": "builtins",
+            "exceptionClass": "RuntimeError",
+            "runtimePhase": "conversation",
+            "originToken": "run_conversation",
+        }
+        self.assertEqual(namespace["_bounded_child_diagnostic"](hermes_diagnostic), hermes_diagnostic)
+        _validate_child_diagnostic(hermes_diagnostic, "test_child_diagnostic")
+        hermes_reason = {**reason, "childDiagnostic": hermes_diagnostic}
+        hermes_evidence = namespace["build_failure_evidence"](
+            binding={},
+            failure_phase="api-invocation",
+            error_class="RuntimeError",
+            exit_code=1,
+            run_id=None,
+            run_state="failed",
+            invocation_id=None,
+            invocation_state="failed",
+            provider_attempts=[],
+            terminal_kind="run_failure",
+            terminal_code="runtime_error",
+            terminal_reason=json.dumps(hermes_reason, sort_keys=True, separators=(",", ":")),
+            failure_code="runtime_process_failed",
+            failure_reason=json.dumps(hermes_reason, sort_keys=True, separators=(",", ":")),
+            runtime_exit={
+                "kind": "failed",
+                "finalSequence": 0,
+                "failure": {
+                    "code": "runtime_error",
+                    "retryable": False,
+                    "childDiagnostic": hermes_diagnostic,
+                },
+            },
+        )
+        self.assertEqual(hermes_evidence["failure"]["childDiagnostic"], hermes_diagnostic)
+        self.assertEqual(hermes_evidence["runtimeExit"]["failure"]["childDiagnostic"], hermes_diagnostic)
 
     def test_provider_attempt_reconciliation_leaves_completed_attempt_completed(self):
         source = (ROOT / "apps/api/plane/tests/unit/agent/test_lifecycle.py").read_text(encoding="utf-8")

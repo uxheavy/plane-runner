@@ -266,6 +266,51 @@ def test_runtime_exit_failure_cause_is_finite_and_runtime_error_only():
         validate_runtime_exit(invalid_code)
 
 
+def test_runtime_exit_accepts_bounded_legacy_and_hermes_child_diagnostics():
+    base = _exit()
+    base.update(
+        {
+            "kind": "failed",
+            "failure": {
+                "code": "runtime_error",
+                "message": "bounded failure",
+                "retryable": False,
+            },
+        }
+    )
+    diagnostics = (
+        {
+            "exceptionClass": "PythonException",
+            "module": "hermes",
+            "category": "python_traceback",
+            "stderrSha256": "a" * 64,
+            "stderrBytes": 128,
+            "termination": "exit",
+            "exitCode": 1,
+        },
+        {
+            "exceptionModule": "builtins",
+            "exceptionClass": "RuntimeError",
+            "runtimePhase": "conversation",
+            "originToken": "run_conversation",
+        },
+    )
+    for diagnostic in diagnostics:
+        candidate = copy.deepcopy(base)
+        candidate["failure"]["childDiagnostic"] = diagnostic
+        assert validate_runtime_exit(candidate)["failure"]["childDiagnostic"] == diagnostic
+
+    invalid = copy.deepcopy(base)
+    invalid["failure"]["childDiagnostic"] = {
+        "exceptionModule": "builtins",
+        "exceptionClass": "RuntimeError",
+        "runtimePhase": "conversation",
+        "originToken": "secret-token",
+    }
+    with pytest.raises(RuntimeContractError):
+        validate_runtime_exit(invalid)
+
+
 def test_host_server_retains_bounded_first_operation_failure_context(tmp_path):
     call = PlaneHostCall(
         run_id="run:test",

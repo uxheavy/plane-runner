@@ -140,6 +140,120 @@ class ContractError(ValueError):
     """A safe, user-actionable contract failure."""
 
 
+_CHILD_DIAGNOSTIC_FIELDS = frozenset(
+    {
+        "exceptionClass",
+        "module",
+        "category",
+        "stderrSha256",
+        "stderrBytes",
+        "termination",
+        "exitCode",
+    }
+)
+_HERMES_CHILD_DIAGNOSTIC_FIELDS = frozenset(
+    {"exceptionModule", "exceptionClass", "runtimePhase", "originToken"}
+)
+_CHILD_EXCEPTION_CLASSES = frozenset(
+    {
+        "ModuleNotFoundError",
+        "ImportError",
+        "PermissionError",
+        "OSError",
+        "MemoryError",
+        "TimeoutError",
+        "PythonException",
+        "Signal",
+        "Unknown",
+    }
+)
+_CHILD_MODULES = frozenset({"plane", "plane_runtime", "run_agent", "openai", "hermes", "dependency", "unknown"})
+_CHILD_CATEGORIES = frozenset(
+    {
+        "module_not_found",
+        "import_error",
+        "permission_denied",
+        "os_eperm",
+        "memory_exhausted",
+        "timeout",
+        "python_traceback",
+        "signal",
+        "unknown",
+    }
+)
+_HERMES_CHILD_EXCEPTION_MODULES = frozenset({"Unknown", "builtins", "httpx", "openai"})
+_HERMES_CHILD_EXCEPTION_CLASSES = frozenset(
+    {
+        "ModuleNotFoundError",
+        "ImportError",
+        "PermissionError",
+        "MemoryError",
+        "TimeoutError",
+        "OSError",
+        "RuntimeError",
+        "ValueError",
+        "TypeError",
+        "KeyError",
+        "AttributeError",
+        "APIConnectionError",
+        "APIError",
+        "APIResponseValidationError",
+        "APIStatusError",
+        "APITimeoutError",
+        "AuthenticationError",
+        "BadRequestError",
+        "ConflictError",
+        "InternalServerError",
+        "NotFoundError",
+        "PermissionDeniedError",
+        "RateLimitError",
+        "UnprocessableEntityError",
+        "ConnectTimeout",
+        "PoolTimeout",
+        "ReadTimeout",
+        "WriteTimeout",
+        "Unknown",
+    }
+)
+_RUNTIME_FAILURE_PHASES = frozenset(
+    {"agent_initialization", "tool_configuration", "conversation", "unknown"}
+)
+_HERMES_CHILD_ORIGIN_TOKENS = frozenset(
+    {"agent_factory", "tool_configuration", "run_conversation", "unknown"}
+)
+
+
+def _validate_child_diagnostic(value: Any, name: str) -> None:
+    if not isinstance(value, dict):
+        raise ContractError(f"{name}_invalid")
+    fields = set(value)
+    if fields == _CHILD_DIAGNOSTIC_FIELDS:
+        if (
+            value["exceptionClass"] not in _CHILD_EXCEPTION_CLASSES
+            or value["module"] not in _CHILD_MODULES
+            or value["category"] not in _CHILD_CATEGORIES
+            or not isinstance(value["stderrSha256"], str)
+            or not re.fullmatch(r"[a-f0-9]{64}", value["stderrSha256"])
+            or type(value["stderrBytes"]) is not int
+            or not 0 <= value["stderrBytes"] <= 65536
+            or value["termination"] not in {"exit", "signal"}
+            or type(value["exitCode"]) is not int
+            or not -255 <= value["exitCode"] <= 255
+        ):
+            raise ContractError(f"{name}_invalid")
+        return
+    if fields == _HERMES_CHILD_DIAGNOSTIC_FIELDS:
+        if (
+            value["exceptionModule"] not in _HERMES_CHILD_EXCEPTION_MODULES
+            or value["exceptionClass"] not in _HERMES_CHILD_EXCEPTION_CLASSES
+            or value["runtimePhase"] not in _RUNTIME_FAILURE_PHASES
+            or value["originToken"] not in _HERMES_CHILD_ORIGIN_TOKENS
+        ):
+            raise ContractError(f"{name}_invalid")
+        return
+    raise ContractError(f"{name}_fields_invalid")
+
+
 def _object(value: Any, name: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ContractError(f"{name}_must_be_object")
@@ -2154,6 +2268,7 @@ def _validate_failure_receipt(
                 "codeModeFailureClass",
                 "runtimePhase",
                 "exceptionClass",
+                "childDiagnostic",
                 "routeDiagnostic",
             }
         )
@@ -2242,6 +2357,8 @@ def _validate_failure_receipt(
             "Unknown",
         }:
             raise ContractError("evidence_failure_exception_class_invalid")
+    if "childDiagnostic" in failure:
+        _validate_child_diagnostic(failure["childDiagnostic"], "evidence_failure_child_diagnostic")
     if "hostOperationFailure" in failure:
         host_failure = _object(failure["hostOperationFailure"], "evidence_host_operation_failure")
         if (
@@ -2317,7 +2434,7 @@ def _validate_failure_receipt(
         runtime_failure_diagnostic_fields = host_diagnostic_fields | {
             "codeModeHostStatus",
             "codeModeFailureClass",
-        } | runtime_diagnostic_fields
+        } | runtime_diagnostic_fields | {"childDiagnostic"}
         if set(runtime_failure).difference({"code", "retryable", "cause"} | runtime_failure_diagnostic_fields) or not {
             "code",
             "retryable",
@@ -2398,6 +2515,11 @@ def _validate_failure_receipt(
                 "Unknown",
             }:
                 raise ContractError("evidence_runtime_exit_failure_exception_class_invalid")
+        if "childDiagnostic" in runtime_failure:
+            _validate_child_diagnostic(
+                runtime_failure["childDiagnostic"],
+                "evidence_runtime_exit_failure_child_diagnostic",
+            )
 
     ingress = _object(evidence["runtimeEventIngress"], "evidence_runtime_ingress")
     if set(ingress).difference({"kindCounts", "diagnostics"}) or "kindCounts" not in ingress:

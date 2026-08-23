@@ -1257,6 +1257,7 @@ function parseRuntimeFailure(value: unknown, path: string): RuntimeFailure {
       "codeModeFailureClass",
       "runtimePhase",
       "exceptionClass",
+      "childDiagnostic",
     ]
   );
   const codes = ["runtime_error", "lease_expired", "invalid_continuation", "budget_exhausted", "cancelled"] as const;
@@ -1375,6 +1376,112 @@ function parseRuntimeFailure(value: unknown, path: string): RuntimeFailure {
   ) {
     throw new ContractParseError(`${path}.exceptionClass`, "is not a supported runtime failure exception class");
   }
+  let childDiagnostic: RuntimeFailure["childDiagnostic"];
+  if (object.childDiagnostic !== undefined) {
+    const child = requireRecord(
+      object.childDiagnostic,
+      `${path}.childDiagnostic`,
+      [],
+      [
+        "exceptionClass",
+        "module",
+        "category",
+        "stderrSha256",
+        "stderrBytes",
+        "termination",
+        "exitCode",
+        "exceptionModule",
+        "runtimePhase",
+        "originToken",
+      ]
+    );
+    const childFields = new Set(Object.keys(child));
+    const legacyChildFields = [
+      "exceptionClass",
+      "module",
+      "category",
+      "stderrSha256",
+      "stderrBytes",
+      "termination",
+      "exitCode",
+    ] as const;
+    const hermesChildFields = ["exceptionModule", "exceptionClass", "runtimePhase", "originToken"] as const;
+    const hasFields = (fields: readonly string[]) =>
+      fields.length === childFields.size && fields.every((field) => childFields.has(field));
+    if (hasFields(legacyChildFields)) {
+      const childExceptionClasses = [
+        "ModuleNotFoundError",
+        "ImportError",
+        "PermissionError",
+        "OSError",
+        "MemoryError",
+        "TimeoutError",
+        "PythonException",
+        "Signal",
+        "Unknown",
+      ] as const;
+      const childModules = ["plane", "plane_runtime", "run_agent", "openai", "hermes", "dependency", "unknown"];
+      const childCategories = [
+        "module_not_found",
+        "import_error",
+        "permission_denied",
+        "os_eperm",
+        "memory_exhausted",
+        "timeout",
+        "python_traceback",
+        "signal",
+        "unknown",
+      ];
+      if (
+        !childExceptionClasses.includes(child.exceptionClass as (typeof childExceptionClasses)[number]) ||
+        !childModules.includes(child.module as string) ||
+        !childCategories.includes(child.category as string) ||
+        typeof child.stderrSha256 !== "string" ||
+        !/^[a-f0-9]{64}$/.test(child.stderrSha256) ||
+        typeof child.stderrBytes !== "number" ||
+        !Number.isInteger(child.stderrBytes) ||
+        child.stderrBytes < 0 ||
+        child.stderrBytes > 65536 ||
+        (child.termination !== "exit" && child.termination !== "signal") ||
+        typeof child.exitCode !== "number" ||
+        !Number.isInteger(child.exitCode) ||
+        child.exitCode < -255 ||
+        child.exitCode > 255
+      ) {
+        throw new ContractParseError(`${path}.childDiagnostic`, "contains an invalid subprocess diagnostic");
+      }
+      childDiagnostic = {
+        exceptionClass: child.exceptionClass as string,
+        module: child.module as string,
+        category: child.category as string,
+        stderrSha256: child.stderrSha256,
+        stderrBytes: child.stderrBytes,
+        termination: child.termination,
+        exitCode: child.exitCode,
+      } as RuntimeFailure["childDiagnostic"];
+    } else if (hasFields(hermesChildFields)) {
+      const childExceptionModules = ["Unknown", "builtins", "httpx", "openai"];
+      const childOriginTokens = ["agent_factory", "tool_configuration", "run_conversation", "unknown"];
+      if (
+        !childExceptionModules.includes(child.exceptionModule as string) ||
+        !runtimeFailureExceptionClasses.includes(
+          child.exceptionClass as (typeof runtimeFailureExceptionClasses)[number]
+        ) ||
+        !runtimeFailurePhases.includes(child.runtimePhase as (typeof runtimeFailurePhases)[number]) ||
+        !childOriginTokens.includes(child.originToken as string)
+      ) {
+        throw new ContractParseError(`${path}.childDiagnostic`, "contains an invalid Hermes diagnostic");
+      }
+      childDiagnostic = {
+        exceptionModule: child.exceptionModule as string,
+        exceptionClass: child.exceptionClass as string,
+        runtimePhase: child.runtimePhase as string,
+        originToken: child.originToken as string,
+      } as RuntimeFailure["childDiagnostic"];
+    } else {
+      throw new ContractParseError(`${path}.childDiagnostic`, "contains an unsupported diagnostic shape");
+    }
+  }
   return {
     code: object.code,
     message: parseBoundedText(object.message, `${path}.message`),
@@ -1398,6 +1505,7 @@ function parseRuntimeFailure(value: unknown, path: string): RuntimeFailure {
           exceptionClass: object.exceptionClass as RuntimeFailure["exceptionClass"],
         }
       : {}),
+    ...(childDiagnostic === undefined ? {} : { childDiagnostic }),
   } as RuntimeFailure;
 }
 
@@ -2279,6 +2387,69 @@ export type RuntimeFailure = Readonly<{
     | "ReadTimeout"
     | "WriteTimeout"
     | "Unknown";
+  childDiagnostic?:
+    | Readonly<{
+        exceptionClass:
+          | "ModuleNotFoundError"
+          | "ImportError"
+          | "PermissionError"
+          | "OSError"
+          | "MemoryError"
+          | "TimeoutError"
+          | "PythonException"
+          | "Signal"
+          | "Unknown";
+        module: "plane" | "plane_runtime" | "run_agent" | "openai" | "hermes" | "dependency" | "unknown";
+        category:
+          | "module_not_found"
+          | "import_error"
+          | "permission_denied"
+          | "os_eperm"
+          | "memory_exhausted"
+          | "timeout"
+          | "python_traceback"
+          | "signal"
+          | "unknown";
+        stderrSha256: string;
+        stderrBytes: number;
+        termination: "exit" | "signal";
+        exitCode: number;
+      }>
+    | Readonly<{
+        exceptionModule: "Unknown" | "builtins" | "httpx" | "openai";
+        exceptionClass:
+          | "ModuleNotFoundError"
+          | "ImportError"
+          | "PermissionError"
+          | "MemoryError"
+          | "TimeoutError"
+          | "OSError"
+          | "RuntimeError"
+          | "ValueError"
+          | "TypeError"
+          | "KeyError"
+          | "AttributeError"
+          | "APIConnectionError"
+          | "APIError"
+          | "APIResponseValidationError"
+          | "APIStatusError"
+          | "APITimeoutError"
+          | "AuthenticationError"
+          | "BadRequestError"
+          | "ConflictError"
+          | "InternalServerError"
+          | "NotFoundError"
+          | "PermissionDeniedError"
+          | "RateLimitError"
+          | "UnprocessableEntityError"
+          | "ConnectTimeout"
+          | "PoolTimeout"
+          | "ReadTimeout"
+          | "WriteTimeout"
+          | "Unknown";
+        runtimePhase: "agent_initialization" | "tool_configuration" | "conversation" | "unknown";
+        originToken: "agent_factory" | "tool_configuration" | "run_conversation" | "unknown";
+      }>;
 }>;
 
 export type RuntimeUsage = Readonly<{

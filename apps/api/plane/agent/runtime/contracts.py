@@ -203,6 +203,49 @@ _CHILD_FAILURE_CATEGORIES = frozenset(
         "unknown",
     }
 )
+_HERMES_CHILD_DIAGNOSTIC_FIELDS = frozenset(
+    {"exceptionModule", "exceptionClass", "runtimePhase", "originToken"}
+)
+_HERMES_CHILD_EXCEPTION_MODULES = frozenset({"Unknown", "builtins", "httpx", "openai"})
+_HERMES_CHILD_EXCEPTION_CLASSES = frozenset(
+    {
+        "ModuleNotFoundError",
+        "ImportError",
+        "PermissionError",
+        "MemoryError",
+        "TimeoutError",
+        "OSError",
+        "RuntimeError",
+        "ValueError",
+        "TypeError",
+        "KeyError",
+        "AttributeError",
+        "APIConnectionError",
+        "APIError",
+        "APIResponseValidationError",
+        "APIStatusError",
+        "APITimeoutError",
+        "AuthenticationError",
+        "BadRequestError",
+        "ConflictError",
+        "InternalServerError",
+        "NotFoundError",
+        "PermissionDeniedError",
+        "RateLimitError",
+        "UnprocessableEntityError",
+        "ConnectTimeout",
+        "PoolTimeout",
+        "ReadTimeout",
+        "WriteTimeout",
+        "Unknown",
+    }
+)
+_HERMES_CHILD_RUNTIME_PHASES = frozenset(
+    {"agent_initialization", "tool_configuration", "conversation", "unknown"}
+)
+_HERMES_CHILD_ORIGIN_TOKENS = frozenset(
+    {"agent_factory", "tool_configuration", "run_conversation", "unknown"}
+)
 _HOST_FAILURE_CLASSES = frozenset({"transport_unavailable", "callback_exception"})
 _HOST_SOCKET_PHASES = frozenset({"accept", "read", "invoke", "serialize", "write"})
 _HOST_SOCKET_STATES = frozenset({"failed", "closed"})
@@ -483,7 +526,18 @@ class RuntimeDispatchError(ValueError):
 
     @staticmethod
     def _bounded_child_diagnostic(value: Mapping[str, object] | None) -> dict[str, object] | None:
-        if value is None or set(value) != {
+        if value is None:
+            return None
+        if set(value) == _HERMES_CHILD_DIAGNOSTIC_FIELDS:
+            if (
+                value.get("exceptionModule") not in _HERMES_CHILD_EXCEPTION_MODULES
+                or value.get("exceptionClass") not in _HERMES_CHILD_EXCEPTION_CLASSES
+                or value.get("runtimePhase") not in _HERMES_CHILD_RUNTIME_PHASES
+                or value.get("originToken") not in _HERMES_CHILD_ORIGIN_TOKENS
+            ):
+                return None
+            return dict(value)
+        if set(value) != {
             "exceptionClass", "module", "category", "stderrSha256", "stderrBytes", "termination", "exitCode"
         }:
             return None
