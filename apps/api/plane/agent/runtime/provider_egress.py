@@ -818,7 +818,7 @@ class ProviderRelayServer:
                 raise ProviderRelayError("provider response is invalid")
             if 300 <= response.status_code < 400:
                 raise ProviderRelayError("provider redirect is not permitted")
-            if response.status_code != 200:
+            if not 200 <= response.status_code < 300:
                 status_class = self._status_class(response.status_code)
                 if status_class in {"4xx", "5xx"}:
                     raise _ProviderRelayHTTPStatusError(
@@ -1082,7 +1082,7 @@ class PinnedProviderHTTPSClient:
             if 300 <= response.status < 400:
                 connection.close()
                 raise ProviderRelayError("provider redirect is not permitted")
-            if response.status != 200:
+            if not 200 <= response.status < 300:
                 status_class = ProviderRelayServer._status_class(response.status)
                 connection.close()
                 if status_class in {"4xx", "5xx"}:
@@ -1108,7 +1108,7 @@ class PinnedProviderHTTPSClient:
                 finally:
                     connection.close()
 
-            return ProviderResponse(status_code=200, headers=headers, body_chunks=chunks())
+            return ProviderResponse(status_code=response.status, headers=headers, body_chunks=chunks())
         except ProviderRelayError:
             raise
         except TimeoutError as exc:

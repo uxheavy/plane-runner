@@ -287,16 +287,32 @@ def test_pinned_provider_transport_failure_remains_bounded_outcome_unknown(monke
     assert connection.closed is True
 
 
-def test_pinned_provider_successful_2xx_response_still_streams(monkeypatch):
+def test_pinned_provider_successful_2xx_response_crosses_client_and_relay(monkeypatch, tmp_path):
     policy, request = _pinned_request()
-    connection = _FixtureHTTPSConnection(response=_FixtureHTTPSResponse(200, body=b"data: ok\n\n"))
-    monkeypatch.setattr(provider_egress.http.client, "HTTPSConnection", lambda *_args, **_kwargs: connection)
+    monkeypatch.setattr(
+        provider_egress.http.client,
+        "HTTPSConnection",
+        lambda *_args, **_kwargs: _FixtureHTTPSConnection(
+            response=_FixtureHTTPSResponse(201, body=b"data: ok\n\n")
+        ),
+    )
 
     response = PinnedProviderHTTPSClient(policy)(request, {"api_key": "provider-secret"}, lambda: False)
 
-    assert response.status_code == 200
+    assert response.status_code == 201
     assert tuple(response.body_chunks) == (b"data: ok\n\n",)
-    assert connection.closed is True
+
+    audits: list[ProviderRelayAudit] = []
+    server = _server(tmp_path, upstream=PinnedProviderHTTPSClient(policy), audit=audits.append)
+    try:
+        server.start()
+        relay_response = _round_trip(server, request_id="request:pinned-relay-2xx")
+    finally:
+        server.close()
+
+    assert relay_response[0] == 200
+    assert relay_response[2] == b"data: ok\n\n"
+    assert audits[-1].status_class == "2xx"
 
 
 def test_pinned_provider_http_error_reaches_bounded_relay_audit(monkeypatch, tmp_path):
