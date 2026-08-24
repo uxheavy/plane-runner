@@ -310,7 +310,7 @@ def _provider_policy_from_environment(source: Mapping[str, str]) -> ProviderRela
             ),
             max_calls=_positive_int(source, "PLANE_AGENT_RUNTIME_PROVIDER_MAX_CALLS", 16, 256),
             max_concurrent_requests=_positive_int(
-                source, "PLANE_AGENT_RUNTIME_PROVIDER_MAX_CONCURRENT_REQUESTS", 2, 32
+                source, "PLANE_AGENT_RUNTIME_PROVIDER_MAX_CONCURRENT_REQUESTS", 1, 32
             ),
         )
     except ValueError as exc:
