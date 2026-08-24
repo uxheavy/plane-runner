@@ -1865,7 +1865,14 @@ def _validate_runtime_diagnostics(value: Any) -> None:
             if key == "requests":
                 expected = {"sequence", "toolChoice", "visibleToolset", "visibleToolCount", "serialized"}
                 valid = (
-                    item.get("toolChoice") in {"required", "auto", "absent"}
+                    item.get("toolChoice") in {
+                        "required",
+                        "auto",
+                        "absent",
+                        "plane_operation",
+                        "plane_publish",
+                        "plane_execute_typescript",
+                    }
                     and item.get("visibleToolset") in {"execute_only", "execute_and_publish", "other", "empty"}
                     and type(item.get("visibleToolCount")) is int
                     and 0 <= item.get("visibleToolCount") <= 64
