@@ -189,7 +189,7 @@ def classify_missing_path(text: str, error_class: str) -> tuple[str, str]:
         marker in lowered for marker in ("no such file or directory", "executable file not found")
     )
     if not path_failure:
-        return MISSING_PATH_CLASSES["unclassified"], "unknown"
+        return "unclassified", MISSING_PATH_CLASSES["unclassified"]
 
     if any(marker in lowered for marker in ("/run/secrets/", "plane-agent-runtime-secret", "provider_credentials", "credential")):
         return "secret_mount", MISSING_PATH_CLASSES["secret_mount"]
@@ -217,7 +217,7 @@ def classify_missing_path(text: str, error_class: str) -> tuple[str, str]:
         return "api_startup", MISSING_PATH_CLASSES["api_startup"]
     if any(marker in lowered for marker in ("subprocess", "child process", "popen", "os.exec")):
         return "child_process", MISSING_PATH_CLASSES["child_process"]
-    return MISSING_PATH_CLASSES["unclassified"], "unknown"
+    return "unclassified", MISSING_PATH_CLASSES["unclassified"]
 
 
 def write_owner_only(path: str, payload: bytes) -> None:
