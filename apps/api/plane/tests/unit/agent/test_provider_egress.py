@@ -505,7 +505,7 @@ def test_provider_relay_mid_stream_upstream_close_is_outcome_unknown(tmp_path):
 
     def upstream(_request, _credentials, _cancelled):
         def chunks():
-            yield b"data: partial\n\n"
+            yield b"event: response.output_text.delta\n\ndata: partial\n\n"
             raise OSError("fixture upstream closed")
 
         return ProviderResponse(
@@ -533,6 +533,50 @@ def test_provider_relay_mid_stream_upstream_close_is_outcome_unknown(tmp_path):
     assert b"0\r\n\r\n" not in received
     assert [audit.phase for audit in audits] == ["intent", "started", "outcome_unknown", "terminal"]
     assert audits[-1].error_code == "outcome_unknown"
+
+
+def test_provider_relay_terminal_event_then_upstream_close_completes_without_retaining_content(tmp_path):
+    terminal_seen = threading.Event()
+    audits: list[ProviderRelayAudit] = []
+
+    def upstream(_request, _credentials, _cancelled):
+        def chunks():
+            yield b"event: response.completed\n\ndata: retained-provider-content\n\n"
+            raise OSError("upstream closed after terminal event")
+
+        return ProviderResponse(
+            status_code=200,
+            headers={"content-type": "text/event-stream"},
+            body_chunks=chunks(),
+        )
+
+    def record_audit(audit: ProviderRelayAudit) -> None:
+        audits.append(audit)
+        if audit.phase == "completed":
+            assert terminal_seen.is_set()
+
+    server = _server(tmp_path, upstream=upstream, audit=record_audit)
+    try:
+        server.start()
+        wire = _request_wire(server, "request:terminal-then-close")
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as channel:
+            channel.settimeout(2)
+            channel.connect(str(server.descriptor.socket_path))
+            channel.sendall(wire)
+            received = bytearray()
+            while b"0\r\n\r\n" not in received:
+                received.extend(channel.recv(65536))
+            terminal_seen.set()
+            while channel.recv(65536):
+                pass
+    finally:
+        server.close()
+
+    assert b"event: response.completed" in received
+    assert b"retained-provider-content" in received
+    assert b"HTTP/1.1 403 Forbidden" not in received
+    assert [audit.phase for audit in audits] == ["intent", "started", "completed"]
+    assert "retained-provider-content" not in repr(audits)
 
 
 def test_provider_relay_close_drains_handler_before_closing_active_channel(tmp_path):

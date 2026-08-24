@@ -93,6 +93,11 @@ _PROVIDER_ERROR_REASON_SUBREASONS = frozenset(
         "channel_closed_after_upstream",
     }
 )
+_TERMINAL_SSE_EVENT_NAMES = frozenset(
+    {b"response.completed", b"response.incomplete", b"response.failed"}
+)
+_SSE_EVENT_FIELD = b"event:"
+_MAX_SSE_EVENT_NAME_BYTES = max(map(len, _TERMINAL_SSE_EVENT_NAMES)) + 16
 
 
 def _chatgpt_account_id(access_token: str) -> str | None:
@@ -310,6 +315,43 @@ class ProviderResponse:
     status_code: int
     headers: Mapping[str, str]
     body_chunks: Iterable[bytes]
+
+
+class _SSETerminalDetector:
+    """Track only bounded SSE event metadata, never response content."""
+
+    def __init__(self) -> None:
+        self.seen = False
+        self._line_start = True
+        self._prefix_index = 0
+        self._event_field = True
+        self._event_name = bytearray()
+
+    def feed(self, chunk: bytes) -> None:
+        for byte in chunk:
+            if byte in {10, 13}:
+                if self._event_field and bytes(self._event_name).strip() in _TERMINAL_SSE_EVENT_NAMES:
+                    self.seen = True
+                self._line_start = True
+                self._prefix_index = 0
+                self._event_field = True
+                self._event_name.clear()
+                continue
+            if self._line_start:
+                self._line_start = False
+            if not self._event_field:
+                continue
+            if self._prefix_index < len(_SSE_EVENT_FIELD):
+                if byte != _SSE_EVENT_FIELD[self._prefix_index]:
+                    self._event_field = False
+                else:
+                    self._prefix_index += 1
+                continue
+            if len(self._event_name) >= _MAX_SSE_EVENT_NAME_BYTES:
+                self._event_field = False
+                self._event_name.clear()
+            else:
+                self._event_name.append(byte)
 
 
 @dataclass(frozen=True)
@@ -897,6 +939,7 @@ class ProviderRelayServer:
         channel.write(("\r\n".join(header_lines) + "\r\n\r\n").encode("ascii"))
         channel.flush()
         total = 0
+        terminal = _SSETerminalDetector()
         try:
             body_iterator = iter(response.body_chunks)
         except ProviderRelayError:
@@ -916,10 +959,16 @@ class ProviderRelayServer:
                 except ProviderRelayError:
                     raise
                 except TimeoutError as exc:
+                    if terminal.seen:
+                        break
                     raise ProviderRelayOutcomeUnknownError(reason_subreason="upstream_timeout") from exc
                 except OSError as exc:
+                    if terminal.seen:
+                        break
                     raise ProviderRelayOutcomeUnknownError(reason_subreason="upstream_channel_closed") from exc
                 except Exception as exc:
+                    if terminal.seen:
+                        break
                     raise ProviderRelayOutcomeUnknownError(reason_subreason="upstream_exception") from exc
                 self._validate_lease_and_cancellation()
                 if not isinstance(chunk, bytes) or len(chunk) > self.policy.max_chunk_bytes:
@@ -927,6 +976,7 @@ class ProviderRelayServer:
                 total += len(chunk)
                 if total > self.policy.max_response_bytes:
                     raise ProviderRelayError("provider response is oversized")
+                terminal.feed(chunk)
                 for offset in range(0, len(chunk), self.policy.max_chunk_bytes):
                     part = chunk[offset : offset + self.policy.max_chunk_bytes]
                     channel.write(f"{len(part):x}\r\n".encode("ascii"))
