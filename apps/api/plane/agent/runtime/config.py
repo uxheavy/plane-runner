@@ -236,9 +236,7 @@ def _validate_credential_resolver(value: object) -> str:
     return raw
 
 
-def _provider_policy_from_environment(
-    source: Mapping[str, str], *, max_request_bytes: int, max_response_bytes: int
-) -> ProviderRelayPolicy | None:
+def _provider_policy_from_environment(source: Mapping[str, str]) -> ProviderRelayPolicy | None:
     """Parse the trusted-parent provider route; never parse provider secrets."""
 
     provider = source.get("PLANE_AGENT_RUNTIME_PROVIDER", "")
@@ -301,7 +299,12 @@ def _provider_policy_from_environment(
                 2 * 1024 * 1024,
                 2 * 1024 * 1024,
             ),
-            max_response_bytes=max_response_bytes,
+            max_response_bytes=_positive_int(
+                source,
+                "PLANE_AGENT_RUNTIME_PROVIDER_MAX_RESPONSE_BYTES",
+                2 * 1024 * 1024,
+                16 * 1024 * 1024,
+            ),
             max_chunk_bytes=_positive_int(
                 source, "PLANE_AGENT_RUNTIME_PROVIDER_MAX_CHUNK_BYTES", 64 * 1024, 2 * 1024 * 1024
             ),
@@ -437,9 +440,7 @@ class AgentRuntimeConfiguration:
         max_response_bytes = _positive_int(
             source, "PLANE_AGENT_RUNTIME_MAX_RESPONSE_BYTES", 512 * 1024, 2 * 1024 * 1024
         )
-        provider_policy = _provider_policy_from_environment(
-            source, max_request_bytes=max_request_bytes, max_response_bytes=max_response_bytes
-        )
+        provider_policy = _provider_policy_from_environment(source)
         return cls(
             url=url,
             shared_secret=shared_secret,
