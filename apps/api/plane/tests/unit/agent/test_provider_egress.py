@@ -323,7 +323,9 @@ def test_pinned_codex_provider_forwards_chatgpt_account_header(monkeypatch):
 
     PinnedProviderHTTPSClient(policy)(request, {"api_key": token}, lambda: False)
 
-    assert connection.request_headers["ChatGPT-Account-Id"] == "synthetic-account"
+    assert connection.request_headers["originator"] == "codex_cli_rs"
+    assert connection.request_headers["User-Agent"].startswith("codex_cli_rs/")
+    assert connection.request_headers["ChatGPT-Account-ID"] == "synthetic-account"
 
 
 def test_pinned_provider_successful_2xx_response_crosses_client_and_relay(monkeypatch, tmp_path):

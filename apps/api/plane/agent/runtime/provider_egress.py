@@ -1110,9 +1110,11 @@ class PinnedProviderHTTPSClient:
                 "Authorization": f"Bearer {api_key}",
             }
             if self.policy.provider == "openai-codex":
+                headers["User-Agent"] = "codex_cli_rs/0.0.0 (Plane Agent)"
+                headers["originator"] = "codex_cli_rs"
                 account_id = _chatgpt_account_id(api_key)
                 if account_id is not None:
-                    headers["ChatGPT-Account-Id"] = account_id
+                    headers["ChatGPT-Account-ID"] = account_id
             connection.request(
                 self.policy.method,
                 self.policy.path,
