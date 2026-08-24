@@ -5027,6 +5027,8 @@ class G4ContractTests(unittest.TestCase):
         source = (TOOLS / "verify-agent-g4.sh").read_text(encoding="utf-8")
         self.assertIn('manifest_pin() {', source)
         self.assertIn('HERMES_COMMIT="$(manifest_pin pins.hermesCommit)"', source)
+        self.assertIn('MCP_COMMIT="$(manifest_pin pins.mcpGitlink)"', source)
+        self.assertIn('SDK_COMMIT="$(manifest_pin pins.sdkGitlink)"', source)
         self.assertIn('RUNTIME_IMAGE_DIGEST="$(manifest_pin pins.runtimeImageDigest)"', source)
         self.assertIn('value = json.load(open(sys.argv[1], encoding="utf-8"))', source)
         self.assertNotIn('json.loads(open(sys.argv[1]', source)

@@ -14,8 +14,6 @@ fi
 MANIFEST="${ROOT_DIR}/tools/agent-g4-manifest.json"
 G3_BASE_COMMIT="7c9d35f4c324865c27c84da5016be2c84e460bcc"
 G3_HERMES_COMMIT="114eabf9d807b659e36d767e4de46ca056297ccb"
-MCP_COMMIT="c04974ed6624f17b41e63ef8182661929e77e0d3"
-SDK_COMMIT="7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
 EXPECTED_CANDIDATE="${PLANE_G4_EXPECTED_CANDIDATE:-}"
 
 manifest_pin() {
@@ -32,6 +30,8 @@ PY
 }
 
 HERMES_COMMIT="$(manifest_pin pins.hermesCommit)"
+MCP_COMMIT="$(manifest_pin pins.mcpGitlink)"
+SDK_COMMIT="$(manifest_pin pins.sdkGitlink)"
 RUNTIME_IMAGE_TAG="$(manifest_pin pins.runtimeImageTag)"
 RUNTIME_IMAGE_DIGEST="$(manifest_pin pins.runtimeImageDigest)"
 RUNTIME_IMAGE_REVISION="$(manifest_pin pins.runtimeImageRevision)"
