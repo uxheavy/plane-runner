@@ -14,7 +14,7 @@ from typing import Any
 
 from plane.agent.lifecycle.runtime_contract import canonical_json
 
-from .contracts import MAX_CODE_MODE_INLINE_RESULT_BYTES, MAX_CODE_MODE_SOURCE_BYTES
+from .contracts import CODE_MODE_ERROR_CLASSES, MAX_CODE_MODE_INLINE_RESULT_BYTES, MAX_CODE_MODE_SOURCE_BYTES
 
 
 MAX_PROTOCOL_LINE_BYTES = 1_048_576
@@ -25,9 +25,10 @@ _TYPESCRIPT_MODULE_DIR = "/usr/share/node_modules/typescript"
 class CodeModeIsolateError(RuntimeError):
     """A child isolate or closed host protocol failed closed."""
 
-    def __init__(self, code: str, message: str):
+    def __init__(self, code: str, message: str, *, error_class: str | None = None):
         super().__init__(message)
         self.code = code
+        self.error_class = error_class if isinstance(error_class, str) and error_class in CODE_MODE_ERROR_CLASSES else None
 
 
 class CodeModeIsolateRunner:
@@ -182,29 +183,67 @@ class CodeModeIsolateRunner:
             events = selector.select(0.05)
             if not events:
                 if process.poll() is not None:
-                    raise CodeModeIsolateError("CODE_MODE_FAILED", "Code Mode child exited without a result")
+                    raise CodeModeIsolateError(
+                        "CODE_MODE_FAILED",
+                        "Code Mode child exited without a result",
+                        error_class="child_exit_no_result",
+                    )
                 continue
             raw = process.stdout.readline(MAX_PROTOCOL_LINE_BYTES + 1)
             if not raw:
-                raise CodeModeIsolateError("CODE_MODE_FAILED", "Code Mode child closed the host protocol")
+                raise CodeModeIsolateError(
+                    "CODE_MODE_FAILED",
+                    "Code Mode child closed the host protocol",
+                    error_class="child_exit_no_result",
+                )
             if len(raw) > MAX_PROTOCOL_LINE_BYTES or not raw.endswith(b"\n"):
-                raise CodeModeIsolateError("PROTOCOL_ERROR", "Code Mode protocol frame is oversized")
+                raise CodeModeIsolateError(
+                    "PROTOCOL_ERROR",
+                    "Code Mode protocol frame is oversized",
+                    error_class="callback_or_protocol",
+                )
             try:
                 frame = json.loads(raw)
             except (TypeError, ValueError) as exc:
-                raise CodeModeIsolateError("PROTOCOL_ERROR", "Code Mode protocol frame is invalid JSON") from exc
+                raise CodeModeIsolateError(
+                    "PROTOCOL_ERROR",
+                    "Code Mode protocol frame is invalid JSON",
+                    error_class="callback_or_protocol",
+                ) from exc
             if not isinstance(frame, dict):
-                raise CodeModeIsolateError("PROTOCOL_ERROR", "Code Mode protocol frame is not an object")
+                raise CodeModeIsolateError(
+                    "PROTOCOL_ERROR",
+                    "Code Mode protocol frame is not an object",
+                    error_class="callback_or_protocol",
+                )
             if frame.get("type") == "result":
                 return frame.get("value")
             if frame.get("type") == "error":
+                error_class = frame.get("errorClass")
+                if not isinstance(error_class, str) or error_class not in CODE_MODE_ERROR_CLASSES:
+                    error_class = "execution_runtime" if frame.get("code") == "CODE_MODE_FAILED" else None
                 raise CodeModeIsolateError(
                     str(frame.get("code", "CODE_MODE_FAILED")),
-                    str(frame.get("message", "Code Mode failed")),
+                    "Code Mode execution failed in the restricted isolate.",
+                    error_class=error_class,
                 )
             if frame.get("type") != "callback":
-                raise CodeModeIsolateError("PROTOCOL_ERROR", "Unknown Code Mode protocol frame")
-            receipt = self._dispatch_callback(host, frame)
+                raise CodeModeIsolateError(
+                    "PROTOCOL_ERROR",
+                    "Unknown Code Mode protocol frame",
+                    error_class="callback_or_protocol",
+                )
+            try:
+                receipt = self._dispatch_callback(host, frame)
+            except CodeModeIsolateError:
+                raise
+            except Exception as exc:
+                code = getattr(exc, "code", "CALLBACK_FAILED")
+                raise CodeModeIsolateError(
+                    str(code),
+                    "Code Mode callback failed closed",
+                    error_class="callback_or_protocol",
+                ) from exc
             self._write(process, {"type": "callback_result", "id": frame.get("id"), "receipt": receipt})
 
     @staticmethod
@@ -213,10 +252,18 @@ class CodeModeIsolateRunner:
         kind = frame.get("kind")
         args = frame.get("args")
         if not isinstance(callback_id, str) or not isinstance(args, list):
-            raise CodeModeIsolateError("PROTOCOL_ERROR", "Code Mode callback is malformed")
+            raise CodeModeIsolateError(
+                "PROTOCOL_ERROR",
+                "Code Mode callback is malformed",
+                error_class="callback_or_protocol",
+            )
         callback_names = host.callback_surface()
         if frame.get("name") != callback_names.get(kind):
-            raise CodeModeIsolateError("PROTOCOL_ERROR", "Code Mode callback name is not catalog-bound")
+            raise CodeModeIsolateError(
+                "PROTOCOL_ERROR",
+                "Code Mode callback name is not catalog-bound",
+                error_class="callback_or_protocol",
+            )
         try:
             if kind == "operation" and len(args) == 4:
                 operation_id, input_data, idempotency_key, correlation_id = args
@@ -250,9 +297,17 @@ class CodeModeIsolateRunner:
         except Exception as exc:
             code = getattr(exc, "code", None)
             if isinstance(code, str) and code:
-                raise CodeModeIsolateError(code, "Code Mode callback failed closed") from exc
+                raise CodeModeIsolateError(
+                    code,
+                    "Code Mode callback failed closed",
+                    error_class="callback_or_protocol",
+                ) from exc
             raise
-        raise CodeModeIsolateError("PROTOCOL_ERROR", "Code Mode callback arguments are invalid")
+        raise CodeModeIsolateError(
+            "PROTOCOL_ERROR",
+            "Code Mode callback arguments are invalid",
+            error_class="callback_or_protocol",
+        )
 
     @staticmethod
     def _write(process, frame: dict[str, Any]) -> None:
@@ -260,11 +315,19 @@ class CodeModeIsolateRunner:
         try:
             encoded = json.dumps(frame, separators=(",", ":"), ensure_ascii=False).encode("utf-8") + b"\n"
             if len(encoded) > MAX_PROTOCOL_LINE_BYTES:
-                raise CodeModeIsolateError("PROTOCOL_ERROR", "Code Mode protocol frame is oversized")
+                raise CodeModeIsolateError(
+                    "PROTOCOL_ERROR",
+                    "Code Mode protocol frame is oversized",
+                    error_class="callback_or_protocol",
+                )
             process.stdin.write(encoded)
             process.stdin.flush()
         except (BrokenPipeError, OSError) as exc:
-            raise CodeModeIsolateError("PROTOCOL_ERROR", "Code Mode host protocol closed") from exc
+            raise CodeModeIsolateError(
+                "PROTOCOL_ERROR",
+                "Code Mode host protocol closed",
+                error_class="callback_or_protocol",
+            ) from exc
 
     @staticmethod
     def _terminate(process) -> None:

@@ -179,6 +179,15 @@ _CHILD_DIAGNOSTIC_CATEGORIES = frozenset(
 _HERMES_CHILD_DIAGNOSTIC_FIELDS = frozenset(
     {"exceptionModule", "exceptionClass", "runtimePhase", "originToken"}
 )
+_CODE_MODE_ERROR_CLASSES = frozenset(
+    {
+        "module_parse_or_load",
+        "default_export_missing",
+        "callback_or_protocol",
+        "execution_runtime",
+        "child_exit_no_result",
+    }
+)
 _HERMES_CHILD_EXCEPTION_MODULES = frozenset({"Unknown", "builtins", "httpx", "openai"})
 _HERMES_CHILD_ORIGIN_TOKENS = frozenset(
     {"agent_factory", "tool_configuration", "run_conversation", "unknown"}
@@ -1100,7 +1109,9 @@ def _bounded_runtime_diagnostics(value):
     if (
         not isinstance(value, dict)
         or not required.issubset(value)
-        or not set(value).issubset(required | {"hostCallbacks"})
+        or not set(value).issubset(
+            required | {"hostCallbacks", "codeModeSourceDigest", "codeModeErrorClass"}
+        )
     ):
         return None
     if value["version"] != 1:
@@ -1175,6 +1186,18 @@ def _bounded_runtime_diagnostics(value):
             bounded_response["publishArgumentShape"] = row["publishArgumentShape"]
         bounded_responses.append(bounded_response)
     result = {"version": 1, "requests": bounded_requests, "responses": bounded_responses}
+    if "codeModeSourceDigest" in value:
+        digest = value["codeModeSourceDigest"]
+        if not isinstance(digest, str) or len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
+            return None
+        result["codeModeSourceDigest"] = digest
+    if "codeModeErrorClass" in value:
+        if (
+            not isinstance(value["codeModeErrorClass"], str)
+            or value["codeModeErrorClass"] not in _CODE_MODE_ERROR_CLASSES
+        ):
+            return None
+        result["codeModeErrorClass"] = value["codeModeErrorClass"]
     if "hostCallbacks" in value:
         callbacks = value["hostCallbacks"]
         if not isinstance(callbacks, list) or len(callbacks) > 64:
@@ -1541,7 +1564,7 @@ def build_failure_evidence(
         if not isinstance(value, dict) or set(value).difference(
             required
             | diagnostic_fields
-            | {"preparedCallInvalidReason", "failureClass", "shapeDiagnostic"}
+            | {"preparedCallInvalidReason", "failureClass", "shapeDiagnostic", "codeModeErrorClass"}
         ):
             return None
         if not required.issubset(value):
@@ -1590,6 +1613,13 @@ def build_failure_evidence(
             if value["failureClass"] not in failure_classes:
                 return None
             bounded["failureClass"] = value["failureClass"]
+        if "codeModeErrorClass" in value:
+            if (
+                not isinstance(value["codeModeErrorClass"], str)
+                or value["codeModeErrorClass"] not in _CODE_MODE_ERROR_CLASSES
+            ):
+                return None
+            bounded["codeModeErrorClass"] = value["codeModeErrorClass"]
         if "preparedCallInvalidReason" in value:
             reason = value["preparedCallInvalidReason"]
             if error_code != "PREPARED_CALL_INVALID" or reason not in prepared_call_reasons:
@@ -2026,7 +2056,7 @@ def _supervisor_failure_reason(output):
         if not isinstance(value, dict) or set(value).difference(
             host_failure_fields
             | host_failure_diagnostic_fields
-            | {"preparedCallInvalidReason", "failureClass", "shapeDiagnostic"}
+            | {"preparedCallInvalidReason", "failureClass", "shapeDiagnostic", "codeModeErrorClass"}
         ) or not host_failure_fields.issubset(value):
             return None
         if value["status"] not in {"denied", "conflict", "unavailable", "invalid"}:
@@ -2048,6 +2078,13 @@ def _supervisor_failure_reason(output):
             if value["failureClass"] not in host_failure_classes:
                 return None
             bounded["failureClass"] = value["failureClass"]
+        if "codeModeErrorClass" in value:
+            if (
+                not isinstance(value["codeModeErrorClass"], str)
+                or value["codeModeErrorClass"] not in _CODE_MODE_ERROR_CLASSES
+            ):
+                return None
+            bounded["codeModeErrorClass"] = value["codeModeErrorClass"]
         if "preparedCallInvalidReason" in value:
             reason = value["preparedCallInvalidReason"]
             if value["errorCode"] != "PREPARED_CALL_INVALID" or reason not in prepared_call_reasons:

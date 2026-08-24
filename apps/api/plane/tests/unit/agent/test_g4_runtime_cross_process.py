@@ -118,6 +118,7 @@ def test_remote_rejection_preserves_finite_host_socket_diagnostic():
         "status": "unavailable",
         "errorCode": "HOST_UNAVAILABLE",
         "codeModePhase": "unavailable",
+        "codeModeErrorClass": "child_exit_no_result",
         "failureClass": "transport_unavailable",
         "socketPhase": "read",
         "socketState": "failed",
@@ -148,6 +149,10 @@ def test_remote_rejection_preserves_finite_host_socket_diagnostic():
     assert error is not None
     assert error.public_failure()["hostOperationFailure"] == host_failure
     rejection["hostOperationFailure"] = {**host_failure, "raw": "private socket path"}
+    assert _structured_rejection(json.dumps(rejection, sort_keys=True, separators=(",", ":")).encode()) is None
+    rejection["hostOperationFailure"] = {**host_failure, "codeModeErrorClass": "private"}
+    assert _structured_rejection(json.dumps(rejection, sort_keys=True, separators=(",", ":")).encode()) is None
+    rejection["hostOperationFailure"] = {**host_failure, "codeModeErrorClass": []}
     assert _structured_rejection(json.dumps(rejection, sort_keys=True, separators=(",", ":")).encode()) is None
 
 

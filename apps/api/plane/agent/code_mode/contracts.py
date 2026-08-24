@@ -10,6 +10,15 @@ from typing import Literal
 
 CODE_MODE_SCHEMA_VERSION = "plane.code-mode/v1"
 CODE_MODE_EXECUTION_OPERATION = "plane.code-mode.execute@1"
+CODE_MODE_ERROR_CLASSES = frozenset(
+    {
+        "module_parse_or_load",
+        "default_export_missing",
+        "callback_or_protocol",
+        "execution_runtime",
+        "child_exit_no_result",
+    }
+)
 MAX_CODE_MODE_SOURCE_BYTES = 4 * 1024
 MAX_CODE_MODE_INLINE_RESULT_BYTES = 2 * 1024
 MAX_CODE_MODE_OBSERVATIONS = 32

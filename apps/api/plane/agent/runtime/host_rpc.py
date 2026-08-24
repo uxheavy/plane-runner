@@ -28,6 +28,7 @@ from typing import Any, Callable, Mapping
 
 from plane.agent.code_mode.contracts import (
     CODE_MODE_EXECUTION_OPERATION,
+    CODE_MODE_ERROR_CLASSES,
     CodeModeExecutionError,
     CodeModeExecutionRequest,
 )
@@ -1073,6 +1074,10 @@ def _bounded_prepared_shape_diagnostic(value: Any) -> dict[str, Any] | None:
     }
 
 
+def _bounded_code_mode_error_class(value: Any) -> str | None:
+    return value if isinstance(value, str) and value in CODE_MODE_ERROR_CLASSES else None
+
+
 @dataclass(frozen=True)
 class PlaneHostResult:
     """Canonical host response returned to Hermes."""
@@ -1279,6 +1284,9 @@ def _host_operation_failure_evidence(
         bounded_handoff = _bounded_prepared_handoff(prepared_handoff)
         if bounded_handoff is not None:
             evidence["preparedHandoff"] = bounded_handoff
+    code_mode_error_class = _bounded_code_mode_error_class(output.get("codeModeErrorClass"))
+    if code_mode_error_class is not None:
+        evidence["codeModeErrorClass"] = code_mode_error_class
     return evidence
 
 
@@ -2132,6 +2140,7 @@ class PlaneGatewayHostPort:
                 return self._error(call, "VALIDATION_ERROR", "Code Mode execution input is invalid")
             except Exception as exc:
                 code = getattr(exc, "code", "CODE_MODE_FAILED")
+                code_mode_error_class = _bounded_code_mode_error_class(getattr(exc, "error_class", None))
                 message = {
                     "CANCELLED": "Code Mode was cancelled.",
                     "BUDGET_EXCEEDED": "Code Mode budget is exhausted.",
@@ -2144,7 +2153,12 @@ class PlaneGatewayHostPort:
                     "OBSERVATION_LIMIT": "Code Mode observation budget is exhausted.",
                     "CODE_MODE_FAILED": "Code Mode execution failed in the restricted isolate.",
                 }.get(code, "Code Mode execution failed in the restricted isolate.")
-                return self._error(call, str(code), message)
+                output = (
+                    {"codeModeErrorClass": code_mode_error_class}
+                    if code_mode_error_class is not None
+                    else None
+                )
+                return self._error(call, str(code), message, output=output)
             prepared_refs = _prepared_read_refs_from_code_mode_result(output)
             if prepared_refs or _assignment_read_decision_requires_followup(output):
                 with self._prepared_calls_lock:

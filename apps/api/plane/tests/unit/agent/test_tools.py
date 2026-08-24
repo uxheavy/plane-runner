@@ -282,6 +282,24 @@ def test_code_mode_child_preserves_bounded_callback_error_codes():
         )
 
     assert raised.value.code == "OBSERVATION_LIMIT"
+    assert raised.value.error_class == "callback_or_protocol"
+
+
+@pytest.mark.parametrize(
+    ("source", "error_class"),
+    (
+        ("export default (", "module_parse_or_load"),
+        ("export const value = 1", "default_export_missing"),
+        ("export default () => { throw new Error('private') }", "execution_runtime"),
+    ),
+)
+def test_code_mode_child_reports_only_finite_error_class(source, error_class):
+    with pytest.raises(CodeModeIsolateError) as raised:
+        CodeModeIsolateRunner().run(FakeIsolateHost(), source, {})
+
+    assert raised.value.code == "CODE_MODE_FAILED"
+    assert raised.value.error_class == error_class
+    assert "private" not in str(raised.value)
 
 
 def test_code_mode_child_stops_on_cancellation():

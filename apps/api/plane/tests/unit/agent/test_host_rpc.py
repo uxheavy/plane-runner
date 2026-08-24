@@ -1944,6 +1944,7 @@ def test_code_mode_observation_limit_is_a_bounded_host_error():
 def test_model_code_mode_failure_is_recoverable_before_corrected_module():
     class ModelModuleFailure(RuntimeError):
         code = "CODE_MODE_FAILED"
+        error_class = "default_export_missing"
 
     class FakeHost:
         binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
@@ -1991,6 +1992,13 @@ def test_model_code_mode_failure_is_recoverable_before_corrected_module():
 
     assert first.status == "invalid"
     assert first.error_code == "CODE_MODE_FAILED"
+    assert first.output == {"codeModeErrorClass": "default_export_missing"}
+    evidence = host_rpc._host_operation_failure_evidence(
+        _call(action="code", operationRef=CODE_MODE_EXECUTION_OPERATION, source="code"),
+        first,
+    )
+    assert evidence["codeModeErrorClass"] == "default_export_missing"
+    assert "generated module failed" not in json.dumps(evidence)
     assert second.status == "ok"
     assert second.output == {"result": {"operationId": "work_item.rename"}}
     assert host.calls == 2

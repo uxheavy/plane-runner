@@ -255,6 +255,7 @@ _HOST_FAILURE_REQUIRED_FIELDS = frozenset(
 )
 _HOST_FAILURE_OPTIONAL_FIELDS = frozenset(
     {
+        "codeModeErrorClass",
         "failureClass",
         "socketPhase",
         "socketState",
@@ -264,6 +265,15 @@ _HOST_FAILURE_OPTIONAL_FIELDS = frozenset(
     }
 )
 _HOST_CODE_MODE_PHASES = frozenset({"host_callback", "unavailable"})
+_CODE_MODE_ERROR_CLASSES = frozenset(
+    {
+        "module_parse_or_load",
+        "default_export_missing",
+        "callback_or_protocol",
+        "execution_runtime",
+        "child_exit_no_result",
+    }
+)
 _HOST_SAFE_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:-@")
 _PREPARED_CALL_INVALID_REASONS = frozenset(
     {"malformed", "unknown", "digest_mismatch", "binding_mismatch", "consumed"}
@@ -445,6 +455,14 @@ def _bounded_host_operation_failure(value: Mapping[str, object] | None) -> dict[
         return None
     failure_class = value.get("failureClass")
     if "failureClass" in value and failure_class not in _HOST_FAILURE_CLASSES:
+        return None
+    if (
+        "codeModeErrorClass" in value
+        and (
+            not isinstance(value["codeModeErrorClass"], str)
+            or value["codeModeErrorClass"] not in _CODE_MODE_ERROR_CLASSES
+        )
+    ):
         return None
     socket_phase = value.get("socketPhase")
     socket_state = value.get("socketState")

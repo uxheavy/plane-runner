@@ -579,6 +579,22 @@ class G4ContractTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             _validate_runtime_diagnostics(invalid)
 
+    def test_runtime_diagnostics_preserve_bounded_code_mode_failure_context(self):
+        bounded = invoke_helper_namespace()["_bounded_runtime_diagnostics"]
+        valid = {
+            "version": 1,
+            "requests": [],
+            "responses": [],
+            "codeModeSourceDigest": "a" * 64,
+            "codeModeErrorClass": "child_exit_no_result",
+        }
+        self.assertEqual(bounded(valid), valid)
+        _validate_runtime_diagnostics(valid)
+        self.assertIsNone(bounded({**valid, "codeModeSourceDigest": "secret"}))
+        self.assertIsNone(bounded({**valid, "codeModeErrorClass": []}))
+        with self.assertRaises(ContractError):
+            _validate_runtime_diagnostics({**valid, "codeModeErrorClass": "raw-message"})
+
     def test_runtime_diagnostics_preserve_established_named_tool_choices(self):
         bounded = invoke_helper_namespace()["_bounded_runtime_diagnostics"]
         for tool_choice in ("plane_operation", "plane_publish", "plane_execute_typescript"):
@@ -3398,6 +3414,22 @@ class G4ContractTests(unittest.TestCase):
         temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt, separators=(",", ":")))
         self.addCleanup(temp.cleanup)
         self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
+
+        receipt["failure"]["hostOperationFailure"]["codeModeErrorClass"] = "default_export_missing"
+        receipt["semanticDigest"] = _semantic_digest(receipt)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt, separators=(",", ":")))
+        self.addCleanup(temp.cleanup)
+        self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
+        receipt["failure"]["hostOperationFailure"]["codeModeErrorClass"] = "raw-message"
+        receipt["semanticDigest"] = _semantic_digest(receipt)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt, separators=(",", ":")))
+        self.addCleanup(temp.cleanup)
+        with self.assertRaisesRegex(
+            ContractError,
+            "evidence_host_operation_failure_code_mode_error_class_invalid",
+        ):
+            validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
+        receipt["failure"]["hostOperationFailure"].pop("codeModeErrorClass")
 
         receipt["failure"]["hostOperationFailure"]["failureClass"] = "raw-host-detail"
         receipt["semanticDigest"] = _semantic_digest(receipt)

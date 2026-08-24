@@ -154,6 +154,15 @@ _CHILD_DIAGNOSTIC_FIELDS = frozenset(
 _HERMES_CHILD_DIAGNOSTIC_FIELDS = frozenset(
     {"exceptionModule", "exceptionClass", "runtimePhase", "originToken"}
 )
+_CODE_MODE_ERROR_CLASSES = frozenset(
+    {
+        "module_parse_or_load",
+        "default_export_missing",
+        "callback_or_protocol",
+        "execution_runtime",
+        "child_exit_no_result",
+    }
+)
 _CHILD_EXCEPTION_CLASSES = frozenset(
     {
         "ModuleNotFoundError",
@@ -1851,7 +1860,9 @@ def _validate_runtime_diagnostics(value: Any) -> None:
     required = {"version", "requests", "responses"}
     if (
         not required.issubset(diagnostics)
-        or not set(diagnostics).issubset(required | {"hostCallbacks"})
+        or not set(diagnostics).issubset(
+            required | {"hostCallbacks", "codeModeSourceDigest", "codeModeErrorClass"}
+        )
         or diagnostics["version"] != 1
     ):
         raise ContractError("evidence_runtime_diagnostics_fields_invalid")
@@ -1899,6 +1910,19 @@ def _validate_runtime_diagnostics(value: Any) -> None:
             if set(item) != expected or type(item.get("sequence")) is not int or not 1 <= item["sequence"] <= 256 or item["sequence"] <= previous or not valid:
                 raise ContractError("evidence_runtime_diagnostics_row_invalid")
             previous = item["sequence"]
+    if "codeModeSourceDigest" in diagnostics and (
+        not isinstance(diagnostics["codeModeSourceDigest"], str)
+        or not re.fullmatch(r"[0-9a-f]{64}", diagnostics["codeModeSourceDigest"])
+    ):
+        raise ContractError("evidence_runtime_diagnostics_code_mode_source_digest_invalid")
+    if (
+        "codeModeErrorClass" in diagnostics
+        and (
+            not isinstance(diagnostics["codeModeErrorClass"], str)
+            or diagnostics["codeModeErrorClass"] not in _CODE_MODE_ERROR_CLASSES
+        )
+    ):
+        raise ContractError("evidence_runtime_diagnostics_code_mode_error_class_invalid")
     if "hostCallbacks" in diagnostics:
         callbacks = diagnostics["hostCallbacks"]
         if not isinstance(callbacks, list) or len(callbacks) > 64:
@@ -2388,7 +2412,7 @@ def _validate_failure_receipt(
             set(host_failure).difference(
                 host_failure_fields
                 | host_failure_diagnostic_fields
-                | {"preparedCallInvalidReason", "failureClass", "shapeDiagnostic"}
+                | {"preparedCallInvalidReason", "failureClass", "shapeDiagnostic", "codeModeErrorClass"}
             )
             or not host_failure_fields.issubset(host_failure)
         ):
@@ -2405,6 +2429,14 @@ def _validate_failure_receipt(
             _safe_ref(host_failure[field], f"evidence_host_operation_failure_{field}")
         if "failureClass" in host_failure and host_failure["failureClass"] not in host_failure_classes:
             raise ContractError("evidence_host_operation_failure_class_invalid")
+        if (
+            "codeModeErrorClass" in host_failure
+            and (
+                not isinstance(host_failure["codeModeErrorClass"], str)
+                or host_failure["codeModeErrorClass"] not in _CODE_MODE_ERROR_CLASSES
+            )
+        ):
+            raise ContractError("evidence_host_operation_failure_code_mode_error_class_invalid")
         if "preparedCallInvalidReason" in host_failure and (
             host_failure["errorCode"] != "PREPARED_CALL_INVALID"
             or host_failure["preparedCallInvalidReason"] not in prepared_call_reasons

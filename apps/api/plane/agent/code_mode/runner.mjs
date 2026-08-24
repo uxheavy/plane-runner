@@ -4,13 +4,24 @@ import * as vm from "node:vm";
 
 const require = nodeModule.createRequire(import.meta.url);
 const TYPESCRIPT_MODULE = "/usr/share/node_modules/typescript/lib/typescript.js";
+const CODE_MODE_ERROR_CLASSES = new Set([
+  "module_parse_or_load",
+  "default_export_missing",
+  "callback_or_protocol",
+  "execution_runtime",
+  "child_exit_no_result",
+]);
 
 const write = (frame) => {
   process.stdout.write(`${JSON.stringify(frame)}\n`);
 };
 
-const fail = (code, message) => {
-  write({ type: "error", code, message });
+const fail = (code, errorClass) => {
+  write({
+    type: "error",
+    code,
+    ...(CODE_MODE_ERROR_CLASSES.has(errorClass) ? { errorClass } : {}),
+  });
   process.exitCode = 1;
 };
 
@@ -39,13 +50,17 @@ const callback = (kind, name, args) => {
       try {
         const frame = JSON.parse(line);
         if (frame?.type !== "callback_result" || frame.id !== id) {
-          reject(new Error("callback response is not bound to the request"));
+          const error = new Error("callback response is not bound to the request");
+          error.codeModeErrorClass = "callback_or_protocol";
+          reject(error);
           return;
         }
         lines.removeListener("line", onLine);
         resolve(frame.receipt);
       } catch {
-        reject(new Error("callback response is not valid JSON"));
+        const error = new Error("callback response is not valid JSON");
+        error.codeModeErrorClass = "callback_or_protocol";
+        reject(error);
       }
     };
     lines.on("line", onLine);
@@ -61,7 +76,7 @@ const PREPARED_CALL_PREFIX = "prepared-call:";
 const MAX_PREPARED_CALL_REF_BYTES = 256;
 const hasExactKeys = (value, expected) => {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
-  const keys = Object.keys(value).sort();
+  const keys = Object.keys(value).toSorted();
   return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
 };
 
@@ -110,12 +125,18 @@ const normalizeOperationInput = (operationId, input) => {
   return { preparedCallRef: preparedCallRefFromWorkItemReadCall(input.preparedCallRef) };
 };
 
-host[callbackNames.operation] = (operationId, input, ...args) =>
-  callback(
-    "operation",
-    callbackNames.operation,
-    [operationId, normalizeOperationInput(operationId, input), ...args],
-  );
+host[callbackNames.operation] = (operationId, input, ...args) => {
+  try {
+    return callback(
+      "operation",
+      callbackNames.operation,
+      [operationId, normalizeOperationInput(operationId, input), ...args],
+    );
+  } catch (error) {
+    if (error && typeof error === "object") error.codeModeErrorClass = "callback_or_protocol";
+    throw error;
+  }
+};
 host[callbackNames.spill] = (...args) => callback("spill", callbackNames.spill, args);
 Object.freeze(host);
 
@@ -132,6 +153,7 @@ const stripTypes = (value) => {
   }).outputText;
 };
 
+let phase = "module_parse_or_load";
 try {
   const context = vm.createContext(Object.create(null), {
     codeGeneration: { strings: false, wasm: false },
@@ -147,10 +169,16 @@ try {
   await module.evaluate();
   const entry = module.namespace.default;
   if (typeof entry !== "function") {
-    throw new Error("Code Mode source must export a default function");
+    const error = new Error("Code Mode source must export a default function");
+    error.codeModeErrorClass = "default_export_missing";
+    throw error;
   }
+  phase = "execution_runtime";
   const value = await entry(Object.freeze({ host, input: Object.freeze(start.input) }));
   write({ type: "result", value });
 } catch (error) {
-  fail("CODE_MODE_FAILED", error instanceof Error ? error.message : "Code Mode failed");
+  const errorClass = CODE_MODE_ERROR_CLASSES.has(error?.codeModeErrorClass)
+    ? error.codeModeErrorClass
+    : phase;
+  fail("CODE_MODE_FAILED", errorClass);
 }
