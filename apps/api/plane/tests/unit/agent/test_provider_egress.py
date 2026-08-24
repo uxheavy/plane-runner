@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import socket
@@ -152,8 +153,12 @@ class _FixtureHTTPSConnection:
         self.response = response
         self.failure = failure
         self.closed = False
+        self.request_headers: dict[str, str] = {}
 
-    def request(self, *_args: object, **_kwargs: object) -> None:
+    def request(self, *_args: object, **kwargs: object) -> None:
+        headers = kwargs.get("headers")
+        if isinstance(headers, dict):
+            self.request_headers = dict(headers)
         if self.failure is not None:
             raise self.failure
 
@@ -285,6 +290,40 @@ def test_pinned_provider_transport_failure_remains_bounded_outcome_unknown(monke
     assert "TLS/socket detail must not persist" not in repr(error)
     assert "provider-secret" not in repr(error)
     assert connection.closed is True
+
+
+def test_pinned_codex_provider_forwards_chatgpt_account_header(monkeypatch):
+    policy = ProviderRelayPolicy(
+        provider="openai-codex",
+        host="chatgpt.com",
+        path="/backend-api/codex/responses",
+        models=("gpt-5.6-luna",),
+    )
+    header = base64.urlsafe_b64encode(json.dumps({"alg": "none"}).encode()).rstrip(b"=")
+    payload = base64.urlsafe_b64encode(
+        json.dumps({"https://api.openai.com/auth": {"chatgpt_account_id": "synthetic-account"}}).encode()
+    ).rstrip(b"=")
+    token = b".".join((header, payload, b"signature")).decode()
+    request = ProviderRequest(
+        provider="openai-codex",
+        model="gpt-5.6-luna",
+        method="POST",
+        host="chatgpt.com",
+        path="/backend-api/codex/responses",
+        headers={"accept": "application/json"},
+        body=_body("gpt-5.6-luna"),
+        request_id="request:codex-account",
+    )
+    connection = _FixtureHTTPSConnection(response=_FixtureHTTPSResponse(200, body=b"ok"))
+    monkeypatch.setattr(
+        provider_egress.http.client,
+        "HTTPSConnection",
+        lambda *_args, **_kwargs: connection,
+    )
+
+    PinnedProviderHTTPSClient(policy)(request, {"api_key": token}, lambda: False)
+
+    assert connection.request_headers["ChatGPT-Account-Id"] == "synthetic-account"
 
 
 def test_pinned_provider_successful_2xx_response_crosses_client_and_relay(monkeypatch, tmp_path):

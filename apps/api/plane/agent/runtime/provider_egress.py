@@ -8,6 +8,7 @@ trusted-parent relay only; Hermes owns the child HTTP-client construction.
 
 from __future__ import annotations
 
+import base64
 import hmac
 import http.client
 import json
@@ -92,6 +93,31 @@ _PROVIDER_ERROR_REASON_SUBREASONS = frozenset(
         "channel_closed_after_upstream",
     }
 )
+
+
+def _chatgpt_account_id(access_token: str) -> str | None:
+    """Extract the bounded ChatGPT account header value from a JWT token."""
+
+    try:
+        parts = access_token.split(".")
+        if len(parts) != 3:
+            return None
+        payload = base64.urlsafe_b64decode(parts[1] + "=" * (-len(parts[1]) % 4))
+        claims = json.loads(payload)
+        auth_claims = (
+            claims.get("https://api.openai.com/auth", {}) if isinstance(claims, dict) else {}
+        )
+        account_id = auth_claims.get("chatgpt_account_id") if isinstance(auth_claims, dict) else None
+    except (TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if (
+        not isinstance(account_id, str)
+        or not account_id
+        or len(account_id.encode("utf-8")) > _MAX_REQUEST_ID_BYTES
+        or any(ord(char) < 0x20 or ord(char) == 0x7F for char in account_id)
+    ):
+        return None
+    return account_id
 
 
 class ProviderRelayError(ValueError):
@@ -1078,15 +1104,20 @@ class PinnedProviderHTTPSClient:
             context=self._context,
         )
         try:
+            headers = {
+                "Accept": request.headers.get("accept", "application/json"),
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            }
+            if self.policy.provider == "openai-codex":
+                account_id = _chatgpt_account_id(api_key)
+                if account_id is not None:
+                    headers["ChatGPT-Account-Id"] = account_id
             connection.request(
                 self.policy.method,
                 self.policy.path,
                 body=request.body,
-                headers={
-                    "Accept": request.headers.get("accept", "application/json"),
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {api_key}",
-                },
+                headers=headers,
             )
             response = connection.getresponse()
             headers = {
