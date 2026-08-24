@@ -566,6 +566,33 @@ class G4ContractTests(unittest.TestCase):
         invalid["requests"][0]["toolChoice"] = "arbitrary_tool"
         self.assertIsNone(bounded(invalid))
 
+    def test_runtime_diagnostics_readback_decodes_inline_text_payload(self):
+        parser = invoke_helper_namespace()["_bounded_runtime_diagnostics_from_payload"]
+        diagnostics = {
+            "kind": "runtime_diagnostics",
+            "version": 1,
+            "requests": [
+                {
+                    "sequence": 1,
+                    "toolChoice": "plane_execute_typescript",
+                    "visibleToolset": "execute_only",
+                    "visibleToolCount": 1,
+                    "serialized": True,
+                }
+            ],
+            "responses": [],
+        }
+        payload = {
+            "kind": "inline_text",
+            "contentType": "text/plain",
+            "text": json.dumps(diagnostics, separators=(",", ":")),
+        }
+        parsed = parser(payload)
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed["requests"][0]["toolChoice"], "plane_execute_typescript")
+        self.assertIsNone(parser({**payload, "contentType": "application/json"}))
+        self.assertIsNone(parser({**payload, "text": "not-json"}))
+
     def test_code_mode_failure_diagnostic_is_finite_and_preserved(self):
         builder = invoke_helper_namespace()["build_failure_evidence"]
         manifest, authority, _, _ = fixture()

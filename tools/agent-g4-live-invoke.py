@@ -1186,6 +1186,27 @@ def _bounded_runtime_diagnostics(value):
     return result
 
 
+def _bounded_runtime_diagnostics_from_payload(payload):
+    """Decode the accepted inline diagnostic event and apply the finite projection."""
+
+    if (
+        not isinstance(payload, dict)
+        or payload.get("kind") != "inline_text"
+        or payload.get("contentType") != "text/plain"
+    ):
+        return None
+    text = payload.get("text")
+    if not isinstance(text, str) or len(text.encode("utf-8")) > 4096:
+        return None
+    try:
+        decoded = json.loads(text)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(decoded, dict) or decoded.get("kind") != "runtime_diagnostics":
+        return None
+    return _bounded_runtime_diagnostics({key: value for key, value in decoded.items() if key != "kind"})
+
+
 def build_failure_evidence(
     *,
     binding,
@@ -2566,12 +2587,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                 if terminal_lifecycle is not None and terminal_lifecycle != candidate_lifecycle:
                     raise RuntimeError("multiple terminal lifecycle observations disagree")
                 terminal_lifecycle = candidate_lifecycle
-            payload_diagnostics = (
-                {key: value for key, value in payload.items() if key != "kind"}
-                if isinstance(payload, dict) and payload.get("kind") == "runtime_diagnostics"
-                else None
-            )
-            candidate_diagnostics = _bounded_runtime_diagnostics(payload_diagnostics)
+            candidate_diagnostics = _bounded_runtime_diagnostics_from_payload(payload)
             if candidate_diagnostics is not None:
                 if runtime_diagnostics is not None and runtime_diagnostics != candidate_diagnostics:
                     raise RuntimeError("multiple runtime diagnostics disagree")
