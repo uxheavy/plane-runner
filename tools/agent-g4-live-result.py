@@ -533,6 +533,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         error_class = diagnostic.get("error_class", args.error_class)
         reason_category = diagnostic.get("reason_category", args.reason_category)
+        if args.status != 125 and args.phase not in {"compose", "audit-bootstrap-pre-migrate"}:
+            reason_category = "unavailable"
         missing_module = diagnostic.get("missing_module", args.missing_module)
         missing_path_class = diagnostic.get("missing_path_class", args.missing_path_class)
         child_phase = diagnostic.get("child_phase", args.child_phase)

@@ -418,6 +418,33 @@ class LiveResultPersistenceTests(unittest.TestCase):
             self.assertIn(b"reason_category=docker_precontainer_failure", result.stderr)
             self.assertNotIn(b"docker_precontainer_failure", destination.read_bytes())
 
+    def test_api_exit_one_discards_docker_classifier_reason(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evidence = self._evidence(root, schema="plane-agent-g4/live-failure/v1")
+            diagnostic = root / "diagnostic.log"
+            diagnostic.write_text(
+                "error_class=RuntimeError\n"
+                "reason_category=docker_precontainer_failure\n"
+                "missing_path_class=unclassified\n"
+                "child_phase=unknown\n",
+                encoding="ascii",
+            )
+            diagnostic.chmod(0o600)
+            destination = root / "api.result"
+            result = self._run_helper(
+                destination,
+                evidence,
+                "--status",
+                "1",
+                "--phase",
+                "api-invocation",
+                "--diagnostic",
+                str(diagnostic),
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(b"reason_category=unavailable", result.stderr)
+
     def test_pre_migrate_audit_bootstrap_exit_one_preserves_allowlisted_docker_reason(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
