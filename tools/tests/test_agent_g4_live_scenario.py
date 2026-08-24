@@ -194,7 +194,7 @@ def test_code_mode_commission_binds_exact_runtime_values_and_hides_native_rename
 def test_code_mode_runtime_binding_substitutes_every_placeholder_once() -> None:
     raw = (TOOLS / "agent-g4-worker-v6.json").read_bytes()
     parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
-    commission = scenario.commission_descriptor(parsed, parsed.commissions[2])
+    commission = scenario.select_commission(parsed, "code-mode-semantic-rename")
     bound = scenario.bind_code_mode_runtime_values(
         commission,
         project_id="project-fresh",
