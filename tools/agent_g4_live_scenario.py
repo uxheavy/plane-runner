@@ -55,6 +55,10 @@ _MANAGER_COMMISSION_ROUTES = {
 }
 _MANAGER_TERMINAL_PRODUCT_KINDS = {"publication", "outcome_submission", "run_failure", "run_blocker", "run_cancellation", "input_event"}
 _MANAGER_OUTCOME_OPERATIONS = {"agent.outcome.submit", "agent.outcome.publish"}
+_PUBLICATION_GUIDANCE = (
+    "Invoke plane_publish with exactly {content:'<bounded publication summary>'}; "
+    "never pass outcomeRef, operationRef, or resourceRef because runtime binds successful submit internally."
+)
 
 
 def rename_code_mode_template() -> str:
@@ -442,10 +446,9 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
             "wrap the opaque ref, and do not expose raw target identifiers. The module must export a default "
             "async function receiving {host,input}, use only the existing host callback, and fail closed on "
             f"a malformed or unknown prepared shape. Use this exact bounded module: {code_mode_composition_template()} "
-            "After the composition returns, use its submitted outcomeRef for the explicit publication.",
-            "Route step 2: invoke plane_publish exactly 1 time(s) and expect success. Publish exactly once "
-            "with operationRef operation:agent.outcome.publish, resourceRef set to the returned outcomeRef, "
-            "and bounded content; ordinary final text is transcript evidence only.",
+            "After the composition returns, advance immediately to the explicit publication call below.",
+            "Route step 2: invoke plane_publish exactly 1 time(s) and expect success. Publish exactly once; "
+            f"{_PUBLICATION_GUIDANCE} ordinary final text is transcript evidence only.",
         )
     rendered: list[str] = []
     for index, item in enumerate(outcomes, start=1):
@@ -511,6 +514,9 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
             )
         if operation_id == "agent.context.read":
             guidance += " This one response is the complete subject-bound projection; do not request it again."
+        if operation_id == "agent.outcome.publish":
+            model_action = "plane_publish"
+            guidance += f" {_PUBLICATION_GUIDANCE}"
         if (
             operation_id == "agent.outcome.evaluate"
             and item.get("outcome") == "denied"

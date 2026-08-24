@@ -250,6 +250,9 @@ def test_code_mode_commission_uses_bound_composition_without_native_read_tools()
     assert "{{newName}}" not in "\\n".join(guidance)
     assert "V60 Code Mode Rename" in "\\n".join(guidance)
     assert "invoke work_item.read" not in "\\n".join(guidance)
+    assert "Invoke plane_publish with exactly {content:'<bounded publication summary>'}" in guidance[1]
+    assert "never pass outcomeRef, operationRef, or resourceRef" in guidance[1]
+    assert "returned outcomeRef" not in "\\n".join(guidance)
 
 
 def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names() -> None:
@@ -316,6 +319,8 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert "bounded TypeScript module exporting a default async function receiving {host,input}" in parsed.profile.instructions
     assert "host.call_plane_operation(operationId, input, idempotencyKey, correlationId)" in parsed.profile.instructions
     assert "hermes_tools.plane_operation" not in parsed.profile.instructions
+    assert "invoke plane_publish exactly once with exactly {content:'<bounded publication summary>'}" in parsed.profile.instructions
+    assert "using only the returned outcomeRef" not in parsed.profile.instructions
     assert "exactly one artifact and exactly one evidence item" in context.assignment.objective
     assert "exactly one artifact and exactly one evidence item" in context.assignment.acceptance_criteria[-1]
 
@@ -1087,6 +1092,34 @@ def test_expected_operations_render_as_ordered_model_route_outcomes() -> None:
         "Route step 3: invoke agent.context.read exactly 1 time(s) and expect success. After this route call returns, advance immediately to the next route step; do not invoke this operation again for confirmation, inspection, refresh, or retry. This one response is the complete subject-bound projection; do not request it again.",
         "Route step 4: invoke agent.outcome.evaluate exactly 1 time(s) and expect denied. After this route call returns, advance immediately to the next route step; do not invoke this operation again for confirmation, inspection, refresh, or retry.",
     )
+
+
+@pytest.mark.parametrize(
+    ("descriptor_name", "commission_id"),
+    [
+        ("agent-g4-worker-v6.json", "identity-discovery"),
+        ("agent-g4-manager-v1.json", "planning-delegation"),
+        ("agent-g4-operator-v6.json", "presentation-and-sdk-identity"),
+    ],
+)
+def test_persona_terminal_publication_guidance_uses_content_only_plane_publish(
+    descriptor_name: str, commission_id: str
+) -> None:
+    raw = (TOOLS / descriptor_name).read_bytes()
+    parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
+    selected = scenario.select_commission(parsed, commission_id)
+
+    publication = [
+        step
+        for step in scenario.model_route_expectations(selected.expected)
+        if "plane_publish exactly 1 time(s)" in step
+    ]
+
+    assert len(publication) == 1
+    assert "Invoke plane_publish with exactly {content:'<bounded publication summary>'}" in publication[0]
+    assert "never pass outcomeRef, operationRef, or resourceRef" in publication[0]
+    assert "operationRef operation:agent.outcome.publish" not in publication[0]
+    assert "resourceRef set to the returned outcomeRef" not in publication[0]
 
 
 def test_not_authorized_outcome_renders_exact_canary_guidance() -> None:
