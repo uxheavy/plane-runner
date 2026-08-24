@@ -296,10 +296,12 @@ Each runtime invocation has its own lease and disposable process/container. Plan
 
 The primary verifier is a backend-first dogfood campaign, not another repeated
 gate-script replay. Three persistent personas use the same native Plane Agent
-product/runtime mode with different Plane-owned profiles and roles. All model
-execution uses the GPT-5.6 family: GPT-5.6 Luna for Plane Agent journeys and
-Luna xhigh for routine diagnosis and implementation; one GPT-5.6 Sol Medium
-review occurs only after the complete final wave and production verifier pass.
+product/runtime mode with different Plane-owned profiles and roles. Every
+implementation, debugging, preparation, build, and review thread uses GPT-5.6
+Luna by default (xhigh where the lane requires it). GPT-5.6 Sol Medium is never
+the default and may be used only once, when explicitly justified, for one
+high-stakes cross-judge/final review after the final matrix and production
+verifier pass.
 
 The target is an isolated local Plane stack and disposable workspace. Personas
 act through real assignments, Plane APIs and CLI commands, the separate Hermes
@@ -512,15 +514,12 @@ Each phase has one accountable lane. A lane may run in parallel with the lanes l
 
 ## Worker and review protocol
 
-- Use Luna xhigh workers for implementation lanes and bounded verification work.
-- Use Arena only when an implementation has multiple plausible, high-impact designs whose choice could materially change an architecture, trust boundary, or durable contract. Routine root-cause fixes, generated-contract synchronization, builds, tests, integrations, and evidence updates proceed directly with GPT-5.6 Luna workers. When Arena is warranted, use isolated candidates, a gradeable rubric, one compact synthesis note, and archive its tasks after integration. Sol Medium remains reserved for the consolidated reviews below.
+- Use GPT-5.6 Luna xhigh workers for implementation, debugging, preparation, builds, bounded verification, and review work.
+- Use Arena only when an implementation has multiple plausible, high-impact designs whose choice could materially change an architecture, trust boundary, or durable contract. Routine root-cause fixes, generated-contract synchronization, builds, tests, integrations, and evidence updates proceed directly with GPT-5.6 Luna workers. When Arena is warranted, use isolated candidates, a gradeable rubric, one compact synthesis note, and archive its tasks after integration. Sol Medium remains reserved for the one explicitly justified final review below.
 - Delegate implementation and review through separate Codex tasks owned and routed by the coordinator. Workers and reviewers must not create nested subagents or an alternate delegation tree.
 - Let Luna iterate within its lane until the complete lane verifier is green and the coordinator judges its commit and evidence ready for integration. Luna owns routine remediation, mechanical follow-ups, environment reruns, and documentation/status corrections without a Sol review.
 - The coordinator may accept and integrate a lane after inspecting its scope, verifier output, requirement evidence, unresolved risks, and exact commit. A lane does not receive a standalone Sol review by default.
-- Use Sol Medium only for consolidated, independently verifiable system gates: the combined G2 real-Agent slice, the combined G3 non-UI breadth candidate, and the G4 functional production candidate after the minimal final matrix passes. Batch all dogfood fixes and compatible seams before that review. Rollout review belongs to a separate authorized goal.
-- A standalone pre-gate Sol review is exceptional. Use one only when a security- or authority-critical boundary cannot reasonably wait for its consolidated gate and the unresolved decision blocks further integration. The coordinator must record why the exception was necessary.
-- One Sol reviewer owns each consolidated gate from initial assessment through closure. Return all findings as one batch to Luna workers, accumulate every remediation, rerun the complete gate verifier, and request one closure review from the same reviewer. Do not request review for individual fixes, commits, or partial finding sets.
-- Limit a normal consolidated gate to two Sol passes: one full assessment and one closure pass. If closure still fails, Luna and the coordinator must finish the entire remaining finding set and produce fresh complete evidence before the same reviewer is asked again; repeated reviewer polling is forbidden.
+- GPT-5.6 Sol Medium is never a default worker or reviewer. Use it at most once, only when the coordinator explicitly records a high-stakes cross-judge/final-review justification after the final matrix and production verifier pass. Do not use Sol for individual fixes, commits, partial finding sets, or repeated closure passes.
 - Archive each implementation task after its accepted commit and evidence have been integrated into a consolidated candidate. Preserve the handoff in the parent task; do not maintain a second narrative worklog for routine progress.
 - Every future task packet must list its applicable ADRs by number, title, and path, along with the lane's objective, files/surfaces, dependencies, verifier, stop condition, and expected evidence.
 - Every implementation handoff must include an original-design reuse map naming the established owners extended, any new internal module, and its deletion-test result.
