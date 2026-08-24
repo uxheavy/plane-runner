@@ -609,6 +609,7 @@ def test_provider_relay_configuration_and_public_lease_metadata_are_parent_only(
     assert configuration.provider_policy.host == "api.x.ai"
     assert configuration.provider_policy.models == ("grok-4", "grok-4-mini")
     assert configuration.provider_policy.path == "/v1/chat/completions"
+    assert configuration.provider_policy.timeout_seconds == 300.0
 
     now = [100.0]
     broker = RuntimeCredentialBroker(

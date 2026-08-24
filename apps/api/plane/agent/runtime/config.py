@@ -292,7 +292,7 @@ def _provider_policy_from_environment(source: Mapping[str, str]) -> ProviderRela
             path=path,
             models=models,
             credential_name=credential_name,
-            timeout_seconds=_positive_float(source, "PLANE_AGENT_RUNTIME_PROVIDER_TIMEOUT_SECONDS", 30.0, 300.0),
+            timeout_seconds=_positive_float(source, "PLANE_AGENT_RUNTIME_PROVIDER_TIMEOUT_SECONDS", 300.0, 300.0),
             max_request_bytes=_positive_int(
                 source,
                 "PLANE_AGENT_RUNTIME_PROVIDER_MAX_REQUEST_BYTES",
