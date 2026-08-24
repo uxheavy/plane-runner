@@ -412,6 +412,29 @@ have not already been proved by the first final journey. The smoke may be the
 first bounded segment of that journey and must not become a second assignment
 or duplicate journey. Stop at the first genuine product or provider failure.
 
+### Current evidence checkpoint (2026-08-24)
+
+The cleaned Agent-era source references are now published and remotely
+reachable. The current Plane source is `b655d4ca92c63433d3f44b69cfbb6b2485178579`;
+its external gitlinks are plane-mcp `d65df7c94bcd41a3c7795c40c1227e2199889d71`
+and the Plane Python SDK `4403116b3601a29d7a2c507c8bef1db768574142`. The
+corresponding cleaned Hermes Agent pin is
+`283fabf72c0a9c48f231596e6639b65994b5c105`. These pins are provenance inputs,
+not evidence that the live matrix has passed.
+
+The V53 current-candidate live matrix is **0/3**: Worker, Manager, and Operator
+have no passing current-candidate journey. The V54 diagnostic observed the
+correct required tool and search callback through `before_host_call`, followed
+by `upstream_channel_closed`; no product fix was proven. The attempted offline
+verifier is **0/1**: it stopped at stale configured MCP preflight, before the
+functional stages. G0–G3 remain closed; G4 remains open.
+
+Pause live reruns until provider/preflight state is stable. The next acceptance
+unit is exactly three consolidated current-candidate persona journeys—Worker,
+Manager, and Operator—followed by one production-candidate verifier. Preserve
+the existing no-fallback, no-blind-replay, same-candidate evidence rules. Do
+not create another duplicate final wave; no ADR changed at this checkpoint.
+
 #### Failure handling and completion
 
 A failed journey returns to its original code owner. Run the affected
@@ -438,6 +461,10 @@ product defects never do; they return to the fix loop.
 ## Gates
 
 G0 is complete under the lightweight condition above. Later gates are implementation and delivery checkpoints, not documentation seals:
+
+Current status is G0–G3 **closed** and G4 **open**; the checkpoint above is the
+authoritative current evidence summary, while the historical rows below remain
+unchanged evidence.
 
 | Gate                                 | Exit condition                                                                                                                                                                                                                                                                                                                    |
 | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
