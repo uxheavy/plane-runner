@@ -25,6 +25,10 @@ from typing import Any
 
 from .contracts import RUNTIME_BUDGET_MAX_SECONDS
 
+
+RUNTIME_CREDENTIAL_LEASE_GRACE_SECONDS = 1.0
+RUNTIME_CREDENTIAL_LEASE_MAX_SECONDS = RUNTIME_BUDGET_MAX_SECONDS + RUNTIME_CREDENTIAL_LEASE_GRACE_SECONDS
+
 try:
     import fcntl
 except ImportError:  # pragma: no cover - Windows has no supported production runtime
@@ -405,7 +409,7 @@ class RuntimeCredentialBroker:
             raise TypeError("credential source must be callable or a mapping")
         if isinstance(ttl_seconds, bool) or not isinstance(ttl_seconds, (int, float)):
             raise ValueError("credential lease TTL must be numeric")
-        if ttl_seconds <= 0 or ttl_seconds > RUNTIME_BUDGET_MAX_SECONDS:
+        if ttl_seconds <= 0 or ttl_seconds > RUNTIME_CREDENTIAL_LEASE_MAX_SECONDS:
             raise ValueError("credential lease TTL is outside its allowed range")
         self._source = source
         self._ttl_seconds = float(ttl_seconds)
@@ -757,6 +761,8 @@ def validate_credential_lease_metadata(
 __all__ = [
     "CommandCredentialResolver",
     "CredentialLease",
+    "RUNTIME_CREDENTIAL_LEASE_GRACE_SECONDS",
+    "RUNTIME_CREDENTIAL_LEASE_MAX_SECONDS",
     "RuntimeCredentialBroker",
     "RuntimeCredentialError",
     "credential_failure_subreason",

@@ -27,6 +27,10 @@ from plane.agent.runtime import (
     runtime_transport_kind,
     validate_credential_lease_metadata,
 )
+from plane.agent.runtime.credentials import (
+    RUNTIME_CREDENTIAL_LEASE_GRACE_SECONDS,
+    RUNTIME_CREDENTIAL_LEASE_MAX_SECONDS,
+)
 from plane.agent.runtime.config import runtime_settings_from_environment
 from plane.agent.runtime import credentials as runtime_credentials
 from plane.agent.runtime.provider_egress import ProviderRelayError
@@ -499,6 +503,51 @@ def test_g4_runtime_credential_operator_state_invalidates_active_leases_across_p
     now[0] = expiring.expires_at
     with pytest.raises(RuntimeCredentialError, match="expired"):
         broker.resolve(expiring.lease_id, agent_ref="agent-1", invocation_ref="invocation-3")
+
+
+def test_g4_runtime_credential_lease_outlives_runtime_deadline_only_by_grace(tmp_path):
+    now = [100.0]
+    runtime_budget_seconds = 60.0
+    state_file = tmp_path / "credential-revocations.json"
+    broker = RuntimeCredentialBroker(
+        {"provider": {"TOKEN": "disposable-token"}},
+        ttl_seconds=runtime_budget_seconds + RUNTIME_CREDENTIAL_LEASE_GRACE_SECONDS,
+        clock=lambda: now[0],
+        state_file=state_file,
+    )
+    expiring, _ = broker.issue(agent_ref="agent-1", credential_ref="provider", invocation_ref="invocation-1")
+    revoked, _ = broker.issue(agent_ref="agent-1", credential_ref="provider", invocation_ref="invocation-2")
+    assert expiring.expires_at == 161.0
+    with pytest.raises(ValueError, match="outside its allowed range"):
+        RuntimeCredentialBroker(
+            {"provider": {"TOKEN": "disposable-token"}},
+            ttl_seconds=RUNTIME_CREDENTIAL_LEASE_MAX_SECONDS + 0.001,
+        )
+
+    now[0] += runtime_budget_seconds
+    validate_credential_lease_metadata(
+        expiring.public_metadata(),
+        invocation_ref="invocation-1",
+        state_file=state_file,
+        clock=lambda: now[0],
+    )
+    broker.revoke_invocation("invocation-2")
+    with pytest.raises(RuntimeCredentialError, match="revoked"):
+        validate_credential_lease_metadata(
+            revoked.public_metadata(),
+            invocation_ref="invocation-2",
+            state_file=state_file,
+            clock=lambda: now[0],
+        )
+
+    now[0] += RUNTIME_CREDENTIAL_LEASE_GRACE_SECONDS
+    with pytest.raises(RuntimeCredentialError, match="expired"):
+        validate_credential_lease_metadata(
+            expiring.public_metadata(),
+            invocation_ref="invocation-1",
+            state_file=state_file,
+            clock=lambda: now[0],
+        )
 
 
 def test_g4_runtime_process_observes_plane_revocation_from_shared_state_file(tmp_path):

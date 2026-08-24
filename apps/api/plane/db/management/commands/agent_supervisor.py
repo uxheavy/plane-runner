@@ -33,7 +33,10 @@ from plane.agent.runtime import (
     terminalize_pre_dispatch_failure,
     validate_runtime_command,
 )
-from plane.agent.runtime.credentials import credential_failure_subreason
+from plane.agent.runtime.credentials import (
+    RUNTIME_CREDENTIAL_LEASE_GRACE_SECONDS,
+    credential_failure_subreason,
+)
 from plane.agent.runtime.contracts import runtime_budget_seconds
 from plane.agent.runtime.provenance import RuntimeProvenanceError, preflight_runtime_provenance
 from plane.db.models import RuntimeInvocation
@@ -251,7 +254,7 @@ class Command(BaseCommand):
                 )
                 credential_broker = RuntimeCredentialBroker(
                     credential_source,
-                    ttl_seconds=invocation_budget_seconds,
+                    ttl_seconds=invocation_budget_seconds + RUNTIME_CREDENTIAL_LEASE_GRACE_SECONDS,
                     state_file=credential_state_file,
                 )
 
