@@ -522,6 +522,40 @@ class G4ContractTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             _validate_runtime_diagnostics(invalid_callback)
 
+    def test_runtime_diagnostics_validator_bounds_publish_argument_shape(self):
+        shapes = (
+            "malformed_json",
+            "non_object",
+            "minimal_outcome",
+            "content_only_outcome",
+            "exact_redundant_outcome",
+            "partial_or_unknown_outcome",
+            "conversation",
+            "missing_required",
+        )
+        for shape in shapes:
+            valid = {
+                "version": 1,
+                "requests": [],
+                "responses": [
+                    {
+                        "sequence": 1,
+                        "responseClass": "tool_call",
+                        "toolCall": "publish",
+                        "publishArgumentShape": shape,
+                    }
+                ],
+            }
+            _validate_runtime_diagnostics(valid)
+        invalid_shape = copy.deepcopy(valid)
+        invalid_shape["responses"][0]["publishArgumentShape"] = "unknown"
+        with self.assertRaises(ContractError):
+            _validate_runtime_diagnostics(invalid_shape)
+        non_publish = copy.deepcopy(valid)
+        non_publish["responses"][0]["toolCall"] = "execute"
+        with self.assertRaises(ContractError):
+            _validate_runtime_diagnostics(non_publish)
+
     def test_runtime_diagnostics_validator_accepts_established_named_tool_choices(self):
         valid = {
             "version": 1,

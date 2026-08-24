@@ -1880,9 +1880,22 @@ def _validate_runtime_diagnostics(value: Any) -> None:
                 )
             else:
                 expected = {"sequence", "responseClass", "toolCall"}
+                if item.get("toolCall") == "publish" and "publishArgumentShape" in item:
+                    expected.add("publishArgumentShape")
                 valid = item.get("responseClass") in {"tool_call", "text_response"} and item.get("toolCall") in {
                     "execute", "publish", "other", "none", "multiple"
                 }
+                if "publishArgumentShape" in item:
+                    valid = valid and item["publishArgumentShape"] in {
+                        "malformed_json",
+                        "non_object",
+                        "minimal_outcome",
+                        "content_only_outcome",
+                        "exact_redundant_outcome",
+                        "partial_or_unknown_outcome",
+                        "conversation",
+                        "missing_required",
+                    }
             if set(item) != expected or type(item.get("sequence")) is not int or not 1 <= item["sequence"] <= 256 or item["sequence"] <= previous or not valid:
                 raise ContractError("evidence_runtime_diagnostics_row_invalid")
             previous = item["sequence"]
