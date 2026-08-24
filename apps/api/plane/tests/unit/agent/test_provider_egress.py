@@ -122,6 +122,24 @@ def _round_trip(
     return status, response_headers, response_body
 
 
+def _request_wire(server: ProviderRelayServer, request_id: str) -> bytes:
+    body = _body()
+    return (
+        f"POST {PATH} HTTP/1.1\r\n"
+        f"Host: {PROVIDER_RELAY_HOST}\r\n"
+        f"Authorization: Bearer {server.descriptor.token}\r\n"
+        "Content-Type: application/json\r\n"
+        "Accept: text/event-stream\r\n"
+        f"Content-Length: {len(body)}\r\n"
+        "Connection: close\r\n"
+        f"X-Request-ID: {request_id}\r\n"
+        f"X-Plane-Relay-Invocation: {INVOCATION_ID}\r\n"
+        f"X-Plane-Relay-Provider: {PROVIDER}\r\n"
+        f"X-Plane-Relay-Model: {MODEL}\r\n"
+        f"X-Plane-Relay-Run: {RUN_ID}\r\n\r\n"
+    ).encode() + body
+
+
 @dataclass
 class _FixtureUpstream:
     response: ProviderResponse
@@ -310,7 +328,11 @@ def test_pinned_codex_provider_forwards_chatgpt_account_header(monkeypatch):
         method="POST",
         host="chatgpt.com",
         path="/backend-api/codex/responses",
-        headers={"accept": "application/json"},
+        headers={
+            "accept": "application/json",
+            "session_id": "invocation:cache-scope",
+            "x-client-request-id": "request:cache-scope",
+        },
         body=_body("gpt-5.6-luna"),
         request_id="request:codex-account",
     )
@@ -326,6 +348,8 @@ def test_pinned_codex_provider_forwards_chatgpt_account_header(monkeypatch):
     assert connection.request_headers["originator"] == "codex_cli_rs"
     assert connection.request_headers["User-Agent"].startswith("codex_cli_rs/")
     assert connection.request_headers["ChatGPT-Account-ID"] == "synthetic-account"
+    assert connection.request_headers["session_id"] == "invocation:cache-scope"
+    assert connection.request_headers["x-client-request-id"] == "request:cache-scope"
 
 
 def test_pinned_provider_successful_2xx_response_crosses_client_and_relay(monkeypatch, tmp_path):
@@ -424,15 +448,16 @@ def test_permitted_provider_request_uses_invocation_af_unix_relay_and_streams_wi
     assert "provider-secret" not in repr(audits)
 
 
-def test_provider_relay_buffers_complete_upstream_before_child_early_close(tmp_path, monkeypatch):
-    response_consumed = threading.Event()
-    completed_audit = threading.Event()
+def test_provider_relay_streams_first_chunk_before_upstream_release_and_audits_after_terminal(tmp_path):
+    release_upstream = threading.Event()
+    terminal_seen = threading.Event()
     audits: list[ProviderRelayAudit] = []
 
     def upstream(_request, _credentials, _cancelled):
         def chunks():
+            yield b"data: first\n\n"
+            assert release_upstream.wait(2)
             yield b"data: response.completed\n\n"
-            response_consumed.set()
 
         return ProviderResponse(
             status_code=200,
@@ -443,13 +468,8 @@ def test_provider_relay_buffers_complete_upstream_before_child_early_close(tmp_p
     def record_audit(audit: ProviderRelayAudit) -> None:
         audits.append(audit)
         if audit.phase == "completed":
-            completed_audit.set()
+            assert terminal_seen.is_set()
 
-    def child_closed(_relay, _channel, _request_id, _response):
-        assert response_consumed.is_set()
-        raise BrokenPipeError("child closed after terminal SSE event")
-
-    monkeypatch.setattr(provider_egress.ProviderRelayServer, "_write_http_response", child_closed)
     server = _server(
         tmp_path,
         upstream=upstream,
@@ -457,14 +477,62 @@ def test_provider_relay_buffers_complete_upstream_before_child_early_close(tmp_p
     )
     try:
         server.start()
-        with pytest.raises((ValueError, OSError)):
-            _round_trip(server, request_id="request:child-early-close")
-        assert completed_audit.wait(2)
+        wire = _request_wire(server, "request:stream-before-release")
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as channel:
+            channel.settimeout(2)
+            channel.connect(str(server.descriptor.socket_path))
+            channel.sendall(wire)
+            received = bytearray()
+            while b"data: first\n\n" not in received:
+                received.extend(channel.recv(65536))
+            assert not release_upstream.is_set()
+            release_upstream.set()
+            while b"0\r\n\r\n" not in received:
+                received.extend(channel.recv(65536))
+            terminal_seen.set()
+            while channel.recv(65536):
+                pass
     finally:
+        release_upstream.set()
         server.close()
 
     assert [audit.phase for audit in audits] == ["intent", "started", "completed"]
-    assert not any(audit.phase == "outcome_unknown" for audit in audits)
+    assert b"data: response.completed\n\n" in received
+
+
+def test_provider_relay_mid_stream_upstream_close_is_outcome_unknown(tmp_path):
+    audits: list[ProviderRelayAudit] = []
+
+    def upstream(_request, _credentials, _cancelled):
+        def chunks():
+            yield b"data: partial\n\n"
+            raise OSError("fixture upstream closed")
+
+        return ProviderResponse(
+            status_code=200,
+            headers={"content-type": "text/event-stream"},
+            body_chunks=chunks(),
+        )
+
+    server = _server(tmp_path, upstream=upstream, audit=audits.append)
+    try:
+        server.start()
+        wire = _request_wire(server, "request:mid-stream-close")
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as channel:
+            channel.settimeout(2)
+            channel.connect(str(server.descriptor.socket_path))
+            channel.sendall(wire)
+            received = bytearray()
+            while chunk := channel.recv(65536):
+                received.extend(chunk)
+    finally:
+        server.close()
+
+    assert b"data: partial\n\n" in received
+    assert b"HTTP/1.1 403 Forbidden" not in received
+    assert b"0\r\n\r\n" not in received
+    assert [audit.phase for audit in audits] == ["intent", "started", "outcome_unknown", "terminal"]
+    assert audits[-1].error_code == "outcome_unknown"
 
 
 def test_provider_relay_close_drains_handler_before_closing_active_channel(tmp_path):
@@ -806,14 +874,19 @@ def test_provider_response_body_failure_is_terminal_unknown(
     server = _server(tmp_path, upstream=upstream, audit=audits.append)
     try:
         server.start()
-        status, _headers, body = _round_trip(server, request_id="request:body-failure")
+        wire = _request_wire(server, "request:body-failure")
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as channel:
+            channel.settimeout(2)
+            channel.connect(str(server.descriptor.socket_path))
+            channel.sendall(wire)
+            received = bytearray()
+            while chunk := channel.recv(65536):
+                received.extend(chunk)
     finally:
         server.close()
 
-    assert status == 403
-    response = json.loads(body)
-    assert response["error"] == "outcome_unknown"
-    assert response["reasonSubreason"] == reason_subreason
+    assert b"data: partial\n\n" in received
+    assert b"HTTP/1.1 403 Forbidden" not in received
     assert [audit.phase for audit in audits] == ["intent", "started", "outcome_unknown", "terminal"]
     assert audits[-1].reason_subreason == reason_subreason
     assert audits[-1].status_class == "transport"

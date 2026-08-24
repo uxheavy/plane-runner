@@ -430,6 +430,7 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
         request: ProviderRequest | None = None
         upstream_called = False
         upstream_result_buffered = False
+        response_started = False
         acquired = relay._request_slots.acquire(blocking=False)
         if not acquired:
             relay._write_http_error(self.wfile, "", "concurrency")
@@ -444,6 +445,8 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
             relay._record_attempt(request, phase="started", upstream_initiated=True, required=True)
             upstream_called = True
             response = relay._call_upstream(request)
+            response_started = True
+            relay._write_http_response(self.wfile, request_id, response)
             upstream_result_buffered = True
             relay._record_attempt(
                 request,
@@ -451,7 +454,6 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
                 upstream_initiated=True,
                 status_class=relay._status_class(response.status_code),
             )
-            relay._write_http_response(self.wfile, request_id, response)
         except ProviderRelayError as exc:
             error_for_audit: ProviderRelayError = exc
             if (
@@ -513,10 +515,11 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
                     relay._audit_reason(error_for_audit, code),
                     upstream_called,
                 )
-            try:
-                relay._write_http_error(self.wfile, request_id, code, error=error_for_audit)
-            except OSError:
-                pass
+            if not response_started:
+                try:
+                    relay._write_http_error(self.wfile, request_id, code, error=error_for_audit)
+                except OSError:
+                    pass
         except (OSError, TimeoutError):
             if request is not None and not upstream_result_buffered:
                 relay._record_attempt(
@@ -790,7 +793,11 @@ class ProviderRelayServer:
                 method=self.policy.method,
                 host=self.policy.host,
                 path=self.policy.path,
-                headers={key: value for key, value in headers.items() if key in {"accept", "user-agent"}},
+                headers={
+                    key: value
+                    for key, value in headers.items()
+                    if key in {"accept", "session_id", "user-agent", "x-client-request-id"}
+                },
                 body=raw_body,
                 request_id=request_id,
                 sequence=self._calls + 1,
@@ -856,20 +863,10 @@ class ProviderRelayServer:
                 body_iterator = iter(response.body_chunks)
             except TypeError as exc:
                 raise ProviderRelayError("provider response body is invalid") from exc
-            body_chunks: list[bytes] = []
-            total = 0
-            for chunk in body_iterator:
-                self._validate_lease_and_cancellation()
-                if not isinstance(chunk, bytes) or len(chunk) > self.policy.max_chunk_bytes:
-                    raise ProviderRelayError("provider response chunk is oversized")
-                total += len(chunk)
-                if total > self.policy.max_response_bytes:
-                    raise ProviderRelayError("provider response is oversized")
-                body_chunks.append(chunk)
             return ProviderResponse(
                 status_code=response.status_code,
                 headers=response.headers,
-                body_chunks=tuple(body_chunks),
+                body_chunks=body_iterator,
             )
         except ProviderRelayError:
             raise
@@ -900,18 +897,45 @@ class ProviderRelayServer:
         channel.write(("\r\n".join(header_lines) + "\r\n\r\n").encode("ascii"))
         channel.flush()
         total = 0
-        for chunk in response.body_chunks:
-            self._validate_lease_and_cancellation()
-            if not isinstance(chunk, bytes) or len(chunk) > self.policy.max_chunk_bytes:
-                raise ProviderRelayError("provider response chunk is oversized")
-            total += len(chunk)
-            if total > self.policy.max_response_bytes:
-                raise ProviderRelayError("provider response is oversized")
-            for offset in range(0, len(chunk), self.policy.max_chunk_bytes):
-                part = chunk[offset : offset + self.policy.max_chunk_bytes]
-                channel.write(f"{len(part):x}\r\n".encode("ascii"))
-                channel.write(part + b"\r\n")
-                channel.flush()
+        try:
+            body_iterator = iter(response.body_chunks)
+        except ProviderRelayError:
+            raise
+        except TimeoutError as exc:
+            raise ProviderRelayOutcomeUnknownError(reason_subreason="upstream_timeout") from exc
+        except OSError as exc:
+            raise ProviderRelayOutcomeUnknownError(reason_subreason="upstream_channel_closed") from exc
+        except Exception as exc:
+            raise ProviderRelayOutcomeUnknownError(reason_subreason="upstream_exception") from exc
+        try:
+            while True:
+                try:
+                    chunk = next(body_iterator)
+                except StopIteration:
+                    break
+                except ProviderRelayError:
+                    raise
+                except TimeoutError as exc:
+                    raise ProviderRelayOutcomeUnknownError(reason_subreason="upstream_timeout") from exc
+                except OSError as exc:
+                    raise ProviderRelayOutcomeUnknownError(reason_subreason="upstream_channel_closed") from exc
+                except Exception as exc:
+                    raise ProviderRelayOutcomeUnknownError(reason_subreason="upstream_exception") from exc
+                self._validate_lease_and_cancellation()
+                if not isinstance(chunk, bytes) or len(chunk) > self.policy.max_chunk_bytes:
+                    raise ProviderRelayError("provider response chunk is oversized")
+                total += len(chunk)
+                if total > self.policy.max_response_bytes:
+                    raise ProviderRelayError("provider response is oversized")
+                for offset in range(0, len(chunk), self.policy.max_chunk_bytes):
+                    part = chunk[offset : offset + self.policy.max_chunk_bytes]
+                    channel.write(f"{len(part):x}\r\n".encode("ascii"))
+                    channel.write(part + b"\r\n")
+                    channel.flush()
+        finally:
+            close = getattr(body_iterator, "close", None)
+            if callable(close):
+                close()
         self._validate_lease_and_cancellation()
         channel.write(b"0\r\n\r\n")
         channel.flush()
@@ -1109,6 +1133,9 @@ class PinnedProviderHTTPSClient:
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {api_key}",
             }
+            for key in ("session_id", "x-client-request-id"):
+                if key in request.headers:
+                    headers[key] = request.headers[key]
             if self.policy.provider == "openai-codex":
                 headers["User-Agent"] = "codex_cli_rs/0.0.0 (Plane Agent)"
                 headers["originator"] = "codex_cli_rs"
