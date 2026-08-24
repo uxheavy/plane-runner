@@ -302,7 +302,7 @@ def _provider_policy_from_environment(source: Mapping[str, str]) -> ProviderRela
             max_response_bytes=_positive_int(
                 source,
                 "PLANE_AGENT_RUNTIME_PROVIDER_MAX_RESPONSE_BYTES",
-                2 * 1024 * 1024,
+                16 * 1024 * 1024,
                 16 * 1024 * 1024,
             ),
             max_chunk_bytes=_positive_int(
