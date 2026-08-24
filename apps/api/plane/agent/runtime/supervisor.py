@@ -17,6 +17,7 @@ from typing import Any
 from django.db import OperationalError, transaction
 from django.utils import timezone
 
+from plane.agent.code_mode.contracts import CODE_MODE_ERROR_CLASSES
 from plane.agent.lifecycle import (
     AgentDomainError,
     ensure_human_workspace_admin,
@@ -214,6 +215,40 @@ def _bounded_runtime_host_diagnostic(failure: object) -> dict[str, str]:
     ):
         return {}
     return {"callbackPhase": phase, "operationRefDigest": operation_ref_digest}
+
+
+def _bounded_runtime_code_mode_diagnostic(failure: object) -> dict[str, str]:
+    if not isinstance(failure, dict):
+        return {}
+    status = failure.get("codeModeHostStatus")
+    failure_class = failure.get("codeModeFailureClass")
+    error_class = failure.get("codeModeErrorClass")
+    if not isinstance(status, str) or status not in {
+        "ok",
+        "replayed",
+        "denied",
+        "conflict",
+        "unavailable",
+        "invalid",
+    } or not isinstance(failure_class, str) or failure_class not in {
+        "code_mode",
+        "callback",
+        "transport",
+        "contract",
+        "unknown",
+    }:
+        return {}
+    if error_class is not None and (
+        not isinstance(error_class, str) or error_class not in CODE_MODE_ERROR_CLASSES
+    ):
+        return {}
+    bounded = {
+        "codeModeHostStatus": status,
+        "codeModeFailureClass": failure_class,
+    }
+    if error_class is not None:
+        bounded["codeModeErrorClass"] = error_class
+    return bounded
 
 
 def _bounded_runtime_failure_diagnostic(failure: object) -> dict[str, str]:
@@ -445,6 +480,7 @@ def _runtime_exit_failure_classification(
     if child_diagnostic is not None:
         bounded["childDiagnostic"] = child_diagnostic
     bounded.update(_bounded_runtime_host_diagnostic(failure))
+    bounded.update(_bounded_runtime_code_mode_diagnostic(failure))
     bounded.update(_bounded_runtime_failure_diagnostic(failure))
     return bounded
 

@@ -407,6 +407,38 @@ def _bounded_runtime_failure_diagnostic(value):
     }
 
 
+def _bounded_runtime_code_mode_diagnostic(value):
+    if not isinstance(value, dict):
+        return None
+    status = value.get("codeModeHostStatus")
+    failure_class = value.get("codeModeFailureClass")
+    if not isinstance(status, str) or status not in {
+        "ok",
+        "replayed",
+        "denied",
+        "conflict",
+        "unavailable",
+        "invalid",
+    } or not isinstance(failure_class, str) or failure_class not in {
+        "code_mode",
+        "callback",
+        "transport",
+        "contract",
+        "unknown",
+    }:
+        return None
+    bounded = {
+        "codeModeHostStatus": status,
+        "codeModeFailureClass": failure_class,
+    }
+    if "codeModeErrorClass" in value:
+        error_class = value["codeModeErrorClass"]
+        if not isinstance(error_class, str) or error_class not in _CODE_MODE_ERROR_CLASSES:
+            return None
+        bounded["codeModeErrorClass"] = error_class
+    return bounded
+
+
 _PREPARED_DIAGNOSTIC_FORMS = frozenset(
     {"canonical_ref", "ready_to_call", "unrecognized"}
 )
@@ -1744,6 +1776,7 @@ def build_failure_evidence(
                 "operationRefDigest",
                 "codeModeHostStatus",
                 "codeModeFailureClass",
+                "codeModeErrorClass",
                 "runtimePhase",
                 "exceptionClass",
                 "routeDiagnostic",
@@ -1837,14 +1870,9 @@ def build_failure_evidence(
             ):
                 bounded_runtime_exit["failure"]["callbackPhase"] = callback_phase
                 bounded_runtime_exit["failure"]["operationRefDigest"] = operation_ref_digest
-            code_mode_status = runtime_failure.get("codeModeHostStatus")
-            code_mode_failure_class = runtime_failure.get("codeModeFailureClass")
-            if (
-                code_mode_status in {"ok", "replayed", "denied", "conflict", "unavailable", "invalid"}
-                and code_mode_failure_class in {"code_mode", "callback", "transport", "contract", "unknown"}
-            ):
-                bounded_runtime_exit["failure"]["codeModeHostStatus"] = code_mode_status
-                bounded_runtime_exit["failure"]["codeModeFailureClass"] = code_mode_failure_class
+            code_mode_diagnostic = _bounded_runtime_code_mode_diagnostic(runtime_failure)
+            if code_mode_diagnostic is not None:
+                bounded_runtime_exit["failure"].update(code_mode_diagnostic)
             runtime_diagnostic = _bounded_runtime_failure_diagnostic(runtime_failure)
             if runtime_diagnostic is not None:
                 bounded_runtime_exit["failure"].update(runtime_diagnostic)
@@ -1908,14 +1936,9 @@ def build_failure_evidence(
     runtime_diagnostic = _bounded_runtime_failure_diagnostic(reason)
     if runtime_diagnostic is not None:
         bounded_failure.update(runtime_diagnostic)
-    code_mode_status = reason.get("codeModeHostStatus")
-    code_mode_failure_class = reason.get("codeModeFailureClass")
-    if (
-        code_mode_status in {"ok", "replayed", "denied", "conflict", "unavailable", "invalid"}
-        and code_mode_failure_class in {"code_mode", "callback", "transport", "contract", "unknown"}
-    ):
-        bounded_failure["codeModeHostStatus"] = code_mode_status
-        bounded_failure["codeModeFailureClass"] = code_mode_failure_class
+    code_mode_diagnostic = _bounded_runtime_code_mode_diagnostic(reason)
+    if code_mode_diagnostic is not None:
+        bounded_failure.update(code_mode_diagnostic)
     bounded_host_failure = bounded_host_operation_failure(reason.get("hostOperationFailure"))
     if bounded_host_failure is not None:
         bounded_failure["hostOperationFailure"] = bounded_host_failure
@@ -2007,6 +2030,7 @@ def _supervisor_failure_reason(output):
         "operationRefDigest",
         "codeModeHostStatus",
         "codeModeFailureClass",
+        "codeModeErrorClass",
         "runtimePhase",
         "exceptionClass",
         "failureSubstage",
@@ -2022,6 +2046,7 @@ def _supervisor_failure_reason(output):
         "operationRefDigest",
         "codeModeHostStatus",
         "codeModeFailureClass",
+        "codeModeErrorClass",
         "runtimePhase",
         "exceptionClass",
         "failureSubstage",
@@ -2130,6 +2155,7 @@ def _supervisor_failure_reason(output):
         diagnostic_refs = value_keys & {"childDiagnostic", "providerAttemptRef", "providerEventRef"}
         top_level_diagnostic_fields = value_keys & host_failure_diagnostic_fields
         code_mode_fields = value_keys & {"codeModeHostStatus", "codeModeFailureClass"}
+        code_mode_error_fields = value_keys & {"codeModeErrorClass"}
         runtime_diagnostic_fields = value_keys & {"runtimePhase", "exceptionClass"}
         database_diagnostic_fields = value_keys & {
             "failureSubstage",
@@ -2148,13 +2174,14 @@ def _supervisor_failure_reason(output):
             continue
         if top_level_diagnostic_fields and top_level_diagnostic_fields != host_failure_diagnostic_fields:
             continue
-        if value_keys - diagnostic_refs - top_level_diagnostic_fields - code_mode_fields - runtime_diagnostic_fields - database_diagnostic_fields not in allowed_shapes:
+        if value_keys - diagnostic_refs - top_level_diagnostic_fields - code_mode_fields - code_mode_error_fields - runtime_diagnostic_fields - database_diagnostic_fields not in allowed_shapes:
             if (
                 "hostOperationFailure" not in value
                 or value_keys
                 - diagnostic_refs
                 - top_level_diagnostic_fields
                 - code_mode_fields
+                - code_mode_error_fields
                 - runtime_diagnostic_fields
                 - database_diagnostic_fields
                 - {"hostOperationFailure"}
@@ -2212,6 +2239,8 @@ def _supervisor_failure_reason(output):
                 "unknown",
             }:
                 continue
+        if code_mode_error_fields and _bounded_runtime_code_mode_diagnostic(value) is None:
+            continue
         if runtime_diagnostic_fields and _bounded_runtime_failure_diagnostic(value) is None:
             continue
         if database_diagnostic_fields and (

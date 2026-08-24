@@ -1473,12 +1473,23 @@ def test_runtime_exit_classification_preserves_allowlisted_adapter_diagnostics()
     }
 
     classified = _runtime_exit_failure_classification(failure)
+    code_mode_classified = _runtime_exit_failure_classification(
+        {
+            **failure,
+            "codeModeHostStatus": "invalid",
+            "codeModeFailureClass": "code_mode",
+            "codeModeErrorClass": "default_export_missing",
+        }
+    )
     relay_classified = _runtime_exit_failure_classification(
         {**failure, "cause": "relay_session_failure"}
     )
 
     assert classified["runtimePhase"] == "conversation"
     assert classified["exceptionClass"] == "RuntimeError"
+    assert code_mode_classified["codeModeHostStatus"] == "invalid"
+    assert code_mode_classified["codeModeFailureClass"] == "code_mode"
+    assert code_mode_classified["codeModeErrorClass"] == "default_export_missing"
     assert relay_classified["failureCause"] == "relay_session_failure"
     assert _runtime_exit_failure_classification(
         {**failure, "exceptionClass": "SecretException"}
@@ -1489,6 +1500,15 @@ def test_runtime_exit_classification_preserves_allowlisted_adapter_diagnostics()
         "failureSubreason": "runtime_execution_failed",
         "failureCause": "runtime_unknown_failure",
     }
+    invalid_code_mode = _runtime_exit_failure_classification(
+        {
+            **failure,
+            "codeModeHostStatus": "invalid",
+            "codeModeFailureClass": "code_mode",
+            "codeModeErrorClass": "private_detail",
+        }
+    )
+    assert "codeModeErrorClass" not in invalid_code_mode
 
 
 @pytest.mark.django_db(transaction=True)

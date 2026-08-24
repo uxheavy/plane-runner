@@ -2313,6 +2313,7 @@ def _validate_failure_receipt(
                 "operationRefDigest",
                 "codeModeHostStatus",
                 "codeModeFailureClass",
+                "codeModeErrorClass",
                 "runtimePhase",
                 "exceptionClass",
                 "childDiagnostic",
@@ -2365,6 +2366,14 @@ def _validate_failure_receipt(
             "unknown",
         }:
             raise ContractError("evidence_failure_code_mode_class_invalid")
+    if "codeModeErrorClass" in failure:
+        if present_code_mode_fields != code_mode_fields:
+            raise ContractError("evidence_failure_code_mode_diagnostic_fields_invalid")
+        if (
+            not isinstance(failure["codeModeErrorClass"], str)
+            or failure["codeModeErrorClass"] not in _CODE_MODE_ERROR_CLASSES
+        ):
+            raise ContractError("evidence_failure_code_mode_error_class_invalid")
     runtime_diagnostic_fields = {"runtimePhase", "exceptionClass"}
     present_runtime_diagnostic_fields = runtime_diagnostic_fields.intersection(failure)
     if present_runtime_diagnostic_fields and present_runtime_diagnostic_fields != runtime_diagnostic_fields:
@@ -2489,6 +2498,7 @@ def _validate_failure_receipt(
         runtime_failure_diagnostic_fields = host_diagnostic_fields | {
             "codeModeHostStatus",
             "codeModeFailureClass",
+            "codeModeErrorClass",
         } | runtime_diagnostic_fields | {"childDiagnostic"}
         if set(runtime_failure).difference({"code", "retryable", "cause"} | runtime_failure_diagnostic_fields) or not {
             "code",
@@ -2532,6 +2542,14 @@ def _validate_failure_receipt(
                 "unknown",
             }:
                 raise ContractError("evidence_runtime_exit_failure_code_mode_class_invalid")
+        if "codeModeErrorClass" in runtime_failure:
+            if present_code_mode_fields != code_mode_fields:
+                raise ContractError("evidence_runtime_exit_failure_code_mode_diagnostic_fields_invalid")
+            if (
+                not isinstance(runtime_failure["codeModeErrorClass"], str)
+                or runtime_failure["codeModeErrorClass"] not in _CODE_MODE_ERROR_CLASSES
+            ):
+                raise ContractError("evidence_runtime_exit_failure_code_mode_error_class_invalid")
         present_runtime_diagnostic_fields = runtime_diagnostic_fields.intersection(runtime_failure)
         if present_runtime_diagnostic_fields and present_runtime_diagnostic_fields != runtime_diagnostic_fields:
             raise ContractError("evidence_runtime_exit_failure_runtime_diagnostic_fields_invalid")

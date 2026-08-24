@@ -681,7 +681,7 @@ class G4ContractTests(unittest.TestCase):
 
     def test_code_mode_failure_diagnostic_is_finite_and_preserved(self):
         builder = invoke_helper_namespace()["build_failure_evidence"]
-        manifest, authority, _, _ = fixture()
+        manifest, authority, config, _ = fixture()
         receipt = builder(
             binding=exact_binding(manifest, CANDIDATE),
             authority_id=authority["authorityId"],
@@ -695,11 +695,13 @@ class G4ContractTests(unittest.TestCase):
             invocation_state="failed",
             provider_attempts=[],
             terminal_kind="run_failure",
+            provider_relay=provider_relay_descriptor(),
             failure_reason=(
                 '{"failureCode":"runtime_error","failurePhase":"runtime_process",'
                 '"failureDetail":"process_exit","failureSubreason":"runtime_execution_failed",'
                 '"failureCause":"host_operation_failure",'
-                '"codeModeHostStatus":"invalid","codeModeFailureClass":"code_mode"}'
+                '"codeModeHostStatus":"invalid","codeModeFailureClass":"code_mode",'
+                '"codeModeErrorClass":"child_exit_no_result"}'
             ),
             runtime_exit={
                 "kind": "failed",
@@ -712,6 +714,7 @@ class G4ContractTests(unittest.TestCase):
                     "operationRefDigest": "a" * 64,
                     "codeModeHostStatus": "invalid",
                     "codeModeFailureClass": "code_mode",
+                    "codeModeErrorClass": "child_exit_no_result",
                 },
             },
         )
@@ -721,7 +724,16 @@ class G4ContractTests(unittest.TestCase):
         self.assertEqual(
             receipt["failure"]["codeModeFailureClass"], "code_mode"
         )
+        self.assertEqual(
+            receipt["runtimeExit"]["failure"]["codeModeErrorClass"], "child_exit_no_result"
+        )
+        self.assertEqual(
+            receipt["failure"]["codeModeErrorClass"], "child_exit_no_result"
+        )
         self.assertNotIn("raw host message", json.dumps(receipt))
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt))
+        self.addCleanup(temp.cleanup)
+        self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
 
     def test_runtime_exit_diagnostic_pairs_are_independently_optional_and_complete(self):
         manifest, authority, config, receipt = failure_fixture()
@@ -3294,6 +3306,7 @@ class G4ContractTests(unittest.TestCase):
             "code_mode": {
                 "codeModeHostStatus": "invalid",
                 "codeModeFailureClass": "code_mode",
+                "codeModeErrorClass": "execution_runtime",
             },
             "runtime": {
                 "runtimePhase": "conversation",
@@ -3317,6 +3330,47 @@ class G4ContractTests(unittest.TestCase):
                 temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt))
                 self.addCleanup(temp.cleanup)
                 self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
+
+        for invalid in ("raw-message", []):
+            manifest, authority, config, receipt = failure_fixture()
+            receipt["runtimeExit"] = {
+                "present": True,
+                "kind": "failed",
+                "finalSequence": None,
+                "failure": {
+                    "code": "runtime_error",
+                    "retryable": False,
+                    "codeModeHostStatus": "invalid",
+                    "codeModeFailureClass": "code_mode",
+                    "codeModeErrorClass": invalid,
+                },
+            }
+            receipt["semanticDigest"] = _semantic_digest(receipt)
+            temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt))
+            self.addCleanup(temp.cleanup)
+            with self.subTest(invalid=invalid), self.assertRaisesRegex(
+                ContractError, "evidence_runtime_exit_failure_code_mode_error_class_invalid"
+            ):
+                validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
+
+        manifest, authority, config, receipt = failure_fixture()
+        receipt["runtimeExit"] = {
+            "present": True,
+            "kind": "failed",
+            "finalSequence": None,
+            "failure": {
+                "code": "runtime_error",
+                "retryable": False,
+                "codeModeErrorClass": "execution_runtime",
+            },
+        }
+        receipt["semanticDigest"] = _semantic_digest(receipt)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(receipt))
+        self.addCleanup(temp.cleanup)
+        with self.assertRaisesRegex(
+            ContractError, "evidence_runtime_exit_failure_code_mode_diagnostic_fields_invalid"
+        ):
+            validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
 
         partial_cases = (
             ({"callbackPhase": "host_return"}, "evidence_runtime_exit_failure_diagnostic_fields_invalid"),
