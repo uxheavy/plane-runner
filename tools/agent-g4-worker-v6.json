@@ -36,21 +36,17 @@
       "id": "identity-discovery",
       "assignment": {
         "targetRef": "fixture:assigned-work-item",
-        "objective": "Identity and discovery Worker commission: work only as Maya's assigned durable actor and immutable profile version. Discover the typed catalog with catalog.search using {\"query\":\"work_item.read\",\"limit\":5}, then catalog.describe using the returned row's exact operationId for work_item.read. Use search_workspace with {\"query\":\"G4 Live Issue\",\"limit\":1}, pass its bare opaque workItemReadCall string unchanged as {preparedCallRef} to one bounded work_item.read, and do not disclose or read hidden, private, cross-project, or cross-workspace objects. Attempt agent.outcome.evaluate as this Worker and require exact NOT_AUTHORIZED. Submit exactly one bounded outcome with one artifact and one evidence item, then publish it exactly once.",
+        "objective": "Identity and discovery Worker commission: work only as Maya's assigned durable actor and immutable profile version. Use search_workspace with {\"query\":\"G4 Live Issue\",\"limit\":1}; let the runtime auto-consume its single returned opaque prepared work-item read before continuing, and do not disclose or read hidden, private, cross-project, or cross-workspace objects. Attempt agent.outcome.evaluate as this Worker and require exact NOT_AUTHORIZED. Submit exactly one bounded outcome with one artifact and one evidence item, then publish it exactly once.",
         "acceptanceCriteria": [
           "The durable actor, immutable profile version, assignment, run snapshot, and invocation remain bound to Maya; do not substitute another Agent.",
-          "catalog.search precedes catalog.describe with the exact operationId, never operationRef or an operation: prefix.",
-          "search_workspace and work_item.read are each called once, bounded to the assigned workspace and the returned opaque preparedCallRef; hidden or private objects are not disclosed.",
+          "search_workspace returns exactly one opaque prepared read that the runtime consumes once, bounded to the assigned workspace; hidden or private objects are not disclosed.",
           "agent.outcome.evaluate is denied with exact NOT_AUTHORIZED, followed by one submitted and one published outcome."
         ],
         "contextRefs": ["context:worker-identity-discovery"]
       },
       "expected": {
         "operationOutcomes": [
-          { "operationId": "catalog.search", "outcome": "success", "count": 1 },
-          { "operationId": "catalog.describe", "outcome": "success", "count": 1 },
           { "operationId": "search_workspace", "outcome": "success", "count": 1 },
-          { "operationId": "work_item.read", "outcome": "success", "count": 1 },
           { "operationId": "agent.outcome.evaluate", "outcome": "denied", "errorCode": "NOT_AUTHORIZED", "count": 1 },
           { "operationId": "agent.outcome.submit", "outcome": "success", "count": 1 },
           { "operationId": "agent.outcome.publish", "outcome": "success", "count": 1 }
@@ -67,53 +63,16 @@
           { "kind": "publication", "count": 1 },
           { "kind": "outcome_submission", "count": 1 }
         ],
-        "routeChecks": ["W01", "W02"]
+        "routeChecks": ["W01"]
       }
-    },
-    {
-      "id": "mutation-semantic-rename",
-      "assignment": {
-        "targetRef": "fixture:assigned-work-item",
-        "objective": "Code Mode semantic rename Worker commission: call plane_execute_typescript exactly once with one complete bounded TypeScript composition. The module must call host.call_plane_operation in this exact order: search_workspace with {\"query\":\"G4 Live Issue\",\"limit\":1}; extract only the returned bare opaque workItemReadCall string; call work_item.read with exactly {preparedCallRef}; use only the authorized read result to call work_item.rename; and submit exactly one bounded outcome with one artifact and one evidence item. The module must not reconstruct or expose project_id or issue_id for the prepared read, call native work_item.rename directly, use imports, filesystem, network, process, auth values, or actor substitution. A malformed or unknown prepared shape must fail closed before rename. After the composition returns, explicitly publish the returned outcomeRef exactly once with plane_publish. The runner performs authoritative post-run readback and audit for the rename, correlation, idempotency, usage, artifact, evidence, outcome, and publication.",
-        "acceptanceCriteria": [
-          "plane_execute_typescript is called exactly once; its bounded module calls search_workspace, extracts only the canonical opaque preparedCallRef, calls work_item.read with exactly {preparedCallRef}, then calls work_item.rename and agent.outcome.submit through the existing gateway.",
-          "Malformed or unknown prepared shapes fail closed without a work_item.rename callback or mutation; a valid shape is consumed once and cannot be reconstructed from raw IDs.",
-          "The runner readback proves the renamed issue, correlated receipt, one idempotent mutation, bounded usage, one artifact, and one evidence item.",
-          "After the composition returns, publish exactly one explicit publication with the returned outcomeRef; native plane_operation and work_item.rename are not model-visible."
-        ],
-        "contextRefs": ["context:worker-mutation-semantic-rename"]
-      },
-      "expected": {
-        "operationOutcomes": [
-          { "operationId": "search_workspace", "outcome": "success", "count": 1 },
-          { "operationId": "work_item.read", "outcome": "success", "count": 1 },
-          { "operationId": "work_item.rename", "outcome": "success", "count": 1 },
-          { "operationId": "agent.outcome.submit", "outcome": "success", "count": 1 },
-          { "operationId": "agent.outcome.publish", "outcome": "success", "count": 1 }
-        ],
-        "evidenceKinds": ["assignment", "run", "invocation", "audit", "publication", "terminal_event"],
-        "durableRecords": [
-          { "kind": "assignment", "count": 1 },
-          { "kind": "run", "count": 1 },
-          { "kind": "invocation", "count": 1 },
-          { "kind": "publication", "count": 1 },
-          { "kind": "terminal_event", "count": 1 }
-        ],
-        "productEvents": [
-          { "kind": "publication", "count": 1 },
-          { "kind": "outcome_submission", "count": 1 }
-        ],
-        "routeChecks": ["W03", "W04", "W07", "W08"]
-      },
-      "modelToolset": "code_mode_only"
     },
     {
       "id": "code-mode-semantic-rename",
       "assignment": {
         "targetRef": "fixture:assigned-work-item",
-        "objective": "Code Mode feature Worker commission: call plane_execute_typescript exactly once with one complete bounded TypeScript composition. The module must call host.call_plane_operation in this exact order: search_workspace with {\"query\":\"G4 Live Issue\",\"limit\":1}; extract only the returned bare opaque workItemReadCall string; call work_item.read with exactly {preparedCallRef}; use only the authorized read result to call work_item.rename; and submit exactly one bounded outcome with one artifact and one evidence item. The module must not reconstruct or expose project_id or issue_id for the prepared read, call native work_item.rename directly, use imports, filesystem, network, process, auth values, or actor substitution. A malformed or unknown prepared shape must fail closed before rename. After the composition returns, explicitly publish the returned outcomeRef exactly once with plane_publish. The runner performs authoritative post-run readback and audit for the rename, correlation, idempotency, usage, artifact, evidence, outcome, and publication.",
+        "objective": "Code Mode feature Worker commission: call plane_execute_typescript exactly once with one complete bounded TypeScript composition. The module must call host.call_plane_operation in this exact order: catalog.search, catalog.describe using the returned row's exact operationId, search_workspace with {\"query\":\"G4 Live Issue\",\"limit\":1}, extract only the returned bare opaque workItemReadCall string, call work_item.read with exactly {preparedCallRef}, use only the authorized read result to call work_item.rename, and submit exactly one bounded outcome with one artifact and one evidence item. The module must not reconstruct or expose project_id or issue_id for the prepared read, call native work_item.rename directly, use imports, filesystem, network, process, auth values, or actor substitution. A malformed or unknown prepared shape must fail closed before rename. After the composition returns, explicitly publish the returned outcomeRef exactly once with plane_publish. The runner performs authoritative post-run readback and audit for the catalog sequence, rename, correlation, idempotency, usage, artifact, evidence, outcome, and publication.",
         "acceptanceCriteria": [
-          "plane_execute_typescript is called exactly once; its bounded module calls search_workspace, extracts only the canonical opaque preparedCallRef, calls work_item.read with exactly {preparedCallRef}, then calls work_item.rename and agent.outcome.submit through the existing gateway.",
+          "plane_execute_typescript is called exactly once; its bounded module calls catalog.search, passes the returned row's exact operationId to catalog.describe, then calls search_workspace, extracts only the canonical opaque preparedCallRef, calls work_item.read with exactly {preparedCallRef}, then calls work_item.rename and agent.outcome.submit through the existing gateway.",
           "Malformed or unknown prepared shapes fail closed without a work_item.rename callback or mutation; a valid shape is consumed once and cannot be reconstructed from raw IDs.",
           "The runner readback proves the renamed issue, correlated receipt, one idempotent mutation, bounded usage, one artifact, and one evidence item.",
           "After the composition returns, publish exactly one explicit publication with the returned outcomeRef; native plane_operation and work_item.rename are not model-visible."
@@ -122,6 +81,8 @@
       },
       "expected": {
         "operationOutcomes": [
+          {"operationId": "catalog.search", "outcome": "success", "count": 1},
+          {"operationId": "catalog.describe", "outcome": "success", "count": 1},
           {"operationId": "search_workspace", "outcome": "success", "count": 1},
           {"operationId": "work_item.read", "outcome": "success", "count": 1},
           {"operationId": "work_item.rename", "outcome": "success", "count": 1},
@@ -140,7 +101,7 @@
           {"kind": "publication", "count": 1},
           {"kind": "outcome_submission", "count": 1}
         ],
-        "routeChecks": ["W03", "W04", "W07", "W08"]
+        "routeChecks": ["W02", "W03", "W04", "W07", "W08"]
       },
       "modelToolset": "code_mode_only"
     },
@@ -148,9 +109,8 @@
       "id": "context-governance",
       "assignment": {
         "targetRef": "fixture:assigned-work-item",
-        "objective": "Context and governance Worker commission: discover agent.context.read with catalog.search using {\"query\":\"agent.context.read\",\"limit\":5}, then catalog.describe with exactly {\"operation_id\":\"agent.context.read\"}. Read exactly one subject-bound context projection with {\"subject_user_ref\":\"{{subjectUserRef}}\"}; use Maya's separate private memory, subject-bound user preference, and private skill projection to compose a brief bounded outcome. Exercise the existing governed skill candidate, human approval, private promotion, and rollback owners, with no unreviewed workspace or organization promotion. Submit exactly one outcome with exactly one artifact and exactly one evidence item, then publish it exactly once. Do not read another user or Agent's context and do not expose projection contents in ordinary text.",
+        "objective": "Context and governance Worker commission: read exactly one subject-bound context projection with {\"subject_user_ref\":\"{{subjectUserRef}}\"}; use Maya's separate private memory, subject-bound user preference, and private skill projection to compose a brief bounded outcome. Exercise the existing governed skill candidate, human approval, private promotion, and rollback owners, with no unreviewed workspace or organization promotion. Submit exactly one outcome with exactly one artifact and exactly one evidence item, then publish it exactly once. Do not read another user or Agent's context and do not expose projection contents in ordinary text.",
         "acceptanceCriteria": [
-          "catalog.search precedes catalog.describe and the exact catalog operationId is used.",
           "agent.context.read is called once with the substituted subject_user_ref and its separate memory, preference, and skill projections are used without cross-user, cross-Agent, deleted, or stale leakage.",
           "Only Maya's private skill is used; the improvement remains a candidate until governed human promotion, remains private, and rolls back losslessly; unreviewed organization or workspace promotion is denied or remains unpromoted.",
           "The commission submits exactly one bounded outcome with exactly one artifact and exactly one evidence item, then publishes it exactly once."
@@ -159,8 +119,6 @@
       },
       "expected": {
         "operationOutcomes": [
-          { "operationId": "catalog.search", "outcome": "success", "count": 1 },
-          { "operationId": "catalog.describe", "outcome": "success", "count": 1 },
           { "operationId": "agent.context.read", "outcome": "success", "count": 1 },
           { "operationId": "agent.outcome.submit", "outcome": "success", "count": 1 },
           { "operationId": "agent.outcome.publish", "outcome": "success", "count": 1 }

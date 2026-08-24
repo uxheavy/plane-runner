@@ -186,7 +186,7 @@
     {
       "module": "agent_g4_live_scenario",
       "runtime": "/run/plane-scenario/agent_g4_live_scenario.py",
-      "sha256": "74def7e696327a973aeab1db34c43230d22f8f48993a123caf0328c4504c7590",
+      "sha256": "996a1340f5ecc51fbb7b0a912e058eb889d5bf9ffa4c66364bea5ccf30251959",
       "source": "tools/agent_g4_live_scenario.py"
     },
     {

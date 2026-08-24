@@ -160,14 +160,15 @@ def test_code_mode_commission_binds_exact_runtime_values_and_hides_native_rename
 
     assert [commission.commission_id for commission in parsed.commissions] == [
         "identity-discovery",
-        "mutation-semantic-rename",
         "code-mode-semantic-rename",
         "context-governance",
     ]
     assert "work_item.rename" not in parsed.profile.tool_presentation
     assert "plane_execute_typescript" not in parsed.profile.tool_presentation
-    commission = parsed.commissions[2]
+    commission = parsed.commissions[1]
     assert commission.expected["operationOutcomes"] == [
+        {"operationId": "catalog.search", "outcome": "success", "count": 1},
+        {"operationId": "catalog.describe", "outcome": "success", "count": 1},
         {"operationId": "search_workspace", "outcome": "success", "count": 1},
         {"operationId": "work_item.read", "outcome": "success", "count": 1},
         {"operationId": "work_item.rename", "outcome": "success", "count": 1},
@@ -180,6 +181,14 @@ def test_code_mode_commission_binds_exact_runtime_values_and_hides_native_rename
     assert "{{newName}}" not in commission.assignment.objective
     assert "preparedCallRef" in commission.assignment.objective
     assert "submit exactly one bounded outcome" in commission.assignment.objective
+    identity = parsed.commissions[0]
+    assert [item["operationId"] for item in identity.expected["operationOutcomes"]] == [
+        "search_workspace",
+        "agent.outcome.evaluate",
+        "agent.outcome.submit",
+        "agent.outcome.publish",
+    ]
+    assert "runtime auto-consume" in identity.assignment.objective
 
 
 def test_code_mode_runtime_binding_substitutes_every_placeholder_once() -> None:
@@ -210,6 +219,8 @@ def test_code_mode_runtime_binding_substitutes_every_placeholder_once() -> None:
     assert 'issue_id: workItem.id' in text
     assert "project-fresh" not in text
     assert "issue-fresh" not in text
+    assert 'idempotency:invocation-fresh:code-mode-catalog-search' in text
+    assert 'idempotency:invocation-fresh:code-mode-catalog-describe' in text
     assert 'idempotency:invocation-fresh:code-mode-search' in text
     assert 'idempotency:invocation-fresh:code-mode-read' in text
     assert '"idempotency:invocation-fresh:code-mode-rename"' in text
@@ -217,7 +228,7 @@ def test_code_mode_runtime_binding_substitutes_every_placeholder_once() -> None:
     assert 'name: "V36 Code Mode Rename"' in text
 
 
-def test_mutation_commission_uses_bound_code_mode_composition_without_native_read_tools() -> None:
+def test_code_mode_commission_uses_bound_composition_without_native_read_tools() -> None:
     raw = (TOOLS / "agent-g4-worker-v6.json").read_bytes()
     parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
     mutation = scenario.commission_descriptor(parsed, parsed.commissions[1])
@@ -249,7 +260,6 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert parsed.scenario_id == "worker"
     assert [commission.commission_id for commission in parsed.commissions] == [
         "identity-discovery",
-        "mutation-semantic-rename",
         "code-mode-semantic-rename",
         "context-governance",
     ]
@@ -265,27 +275,22 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
         "agent.outcome.publish",
     )
     identity = parsed.commissions[0]
-    mutation = parsed.commissions[1]
-    code_mode = parsed.commissions[2]
-    context = parsed.commissions[3]
+    code_mode = parsed.commissions[1]
+    context = parsed.commissions[2]
     assert {
         commission.commission_id: commission.expected["routeChecks"]
         for commission in parsed.commissions
     } == {
-        "identity-discovery": ["W01", "W02"],
-        "mutation-semantic-rename": ["W03", "W04", "W07", "W08"],
-        "code-mode-semantic-rename": ["W03", "W04", "W07", "W08"],
+        "identity-discovery": ["W01"],
+        "code-mode-semantic-rename": ["W02", "W03", "W04", "W07", "W08"],
         "context-governance": ["W05", "W06", "W07", "W08"],
     }
-    assert "bare opaque workItemReadCall string unchanged" in identity.assignment.objective
-    assert mutation.model_toolset == "code_mode_only"
-    assert "call plane_execute_typescript exactly once" in mutation.assignment.objective
-    assert "malformed or unknown prepared shape must fail closed" in mutation.assignment.objective
-    mutation_guidance = scenario.model_route_expectations(mutation.expected)
-    assert mutation_guidance[0].startswith("Route step 1: invoke plane_execute_typescript exactly 1 time(s)")
-    assert "Do not invoke search_workspace, work_item.read, work_item.rename, or agent.outcome.submit as model tools" in mutation_guidance[0]
-    assert mutation_guidance[1].startswith("Route step 2: invoke plane_publish exactly 1 time(s)")
-    assert "hermes_tools.plane_operation" not in mutation.assignment.objective
+    assert "runtime auto-consume" in identity.assignment.objective
+    assert code_mode.model_toolset == "code_mode_only"
+    assert "call plane_execute_typescript exactly once" in code_mode.assignment.objective
+    assert "catalog.search" in code_mode.assignment.objective
+    assert "malformed or unknown prepared shape must fail closed" in code_mode.assignment.objective
+    assert "hermes_tools.plane_operation" not in code_mode.assignment.objective
     assert "{{projectId}}" not in code_mode.assignment.objective
     assert "{{issueId}}" not in code_mode.assignment.objective
     assert "{{invocationId}}" not in code_mode.assignment.objective
@@ -296,13 +301,12 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     code_mode_guidance = scenario.model_route_expectations(code_mode.expected)
     assert len(code_mode_guidance) == 2
     assert code_mode_guidance[0].startswith("Route step 1: invoke plane_execute_typescript exactly 1 time(s)")
-    assert "search_workspace; extract only the returned workItemReadCall" in code_mode_guidance[0]
+    assert "catalog.search; pass the returned operationId verbatim to catalog.describe; search_workspace; extract only the returned workItemReadCall" in code_mode_guidance[0]
     assert 'host.call_plane_operation("work_item.read", { preparedCallRef }' in code_mode_guidance[0]
     assert 'host.call_plane_operation("work_item.rename"' in code_mode_guidance[0]
     assert 'host.call_plane_operation("agent.outcome.submit"' in code_mode_guidance[0]
     assert "Do not invoke search_workspace, work_item.read, work_item.rename, or agent.outcome.submit as model tools" in code_mode_guidance[0]
     assert code_mode_guidance[1].startswith("Route step 2: invoke plane_publish exactly 1 time(s)")
-    assert "hermes_tools.plane_operation" not in mutation_guidance[0]
     assert '"subject_user_ref":"{{subjectUserRef}}"' in context.assignment.objective
     assert "private memory" in context.assignment.objective
     assert "exact current invocation run_ref" in parsed.profile.instructions
@@ -328,6 +332,22 @@ def test_code_mode_composition_executes_opaque_prepared_read_then_one_rename_and
         callback_count += 1
         if callback_count == 1:
             assert frame["args"] == [
+                "catalog.search",
+                {"query": "work_item.read", "limit": 5},
+                "idempotency:invocation-v59:code-mode-catalog-search",
+                "correlation:invocation-v59:code-mode-catalog-search",
+            ]
+            return {"ok": True, "result": {"operations": [{"operationId": "work_item.read"}]}}
+        if callback_count == 2:
+            assert frame["args"] == [
+                "catalog.describe",
+                {"operation_id": "work_item.read"},
+                "idempotency:invocation-v59:code-mode-catalog-describe",
+                "correlation:invocation-v59:code-mode-catalog-describe",
+            ]
+            return {"ok": True, "result": {"operation": {"operationId": "work_item.read"}}}
+        if callback_count == 3:
+            assert frame["args"] == [
                 "search_workspace",
                 {"query": "G4 Live Issue", "limit": 1},
                 "idempotency:invocation-v59:code-mode-search",
@@ -344,7 +364,7 @@ def test_code_mode_composition_executes_opaque_prepared_read_then_one_rename_and
                     ]
                 },
             }
-        if callback_count == 2:
+        if callback_count == 4:
             assert frame["args"] == [
                 "work_item.read",
                 {"preparedCallRef": "prepared-call:opaque"},
@@ -352,7 +372,7 @@ def test_code_mode_composition_executes_opaque_prepared_read_then_one_rename_and
                 "correlation:invocation-v59:code-mode-read",
             ]
             return {"ok": True, "result": {"work_item": {"project": "project-1", "id": "issue-1"}}}
-        if callback_count == 3:
+        if callback_count == 5:
             assert frame["args"] == [
                 "work_item.rename",
                 {"project_id": "project-1", "issue_id": "issue-1", "name": "V59 Code Mode Rename"},
@@ -360,7 +380,7 @@ def test_code_mode_composition_executes_opaque_prepared_read_then_one_rename_and
                 "correlation:invocation-v59:code-mode-rename",
             ]
             return {"ok": True, "result": {"work_item": {"name": "V59 Code Mode Rename"}}}
-        assert callback_count == 4
+        assert callback_count == 6
         assert frame["args"] == [
             "agent.outcome.submit",
             {
@@ -375,6 +395,8 @@ def test_code_mode_composition_executes_opaque_prepared_read_then_one_rename_and
 
     callbacks, result = _run_code_mode_frames(source, callback)
     assert [frame["args"][0] for frame in callbacks] == [
+        "catalog.search",
+        "catalog.describe",
         "search_workspace",
         "work_item.read",
         "work_item.rename",
@@ -391,7 +413,13 @@ def test_code_mode_composition_rejects_malformed_prepared_shape_before_read_or_m
     def callback(frame):
         nonlocal callback_count
         callback_count += 1
-        assert callback_count == 1
+        if callback_count == 1:
+            assert frame["args"][0] == "catalog.search"
+            return {"ok": True, "result": {"operations": [{"operationId": "work_item.read"}]}}
+        if callback_count == 2:
+            assert frame["args"][0] == "catalog.describe"
+            return {"ok": True, "result": {"operation": {"operationId": "work_item.read"}}}
+        assert callback_count == 3
         assert frame["args"][0] == "search_workspace"
         return {
             "ok": True,
@@ -406,7 +434,7 @@ def test_code_mode_composition_rejects_malformed_prepared_shape_before_read_or_m
         }
 
     callbacks, result = _run_code_mode_frames(source, callback)
-    assert [frame["args"][0] for frame in callbacks] == ["search_workspace"]
+    assert [frame["args"][0] for frame in callbacks] == ["catalog.search", "catalog.describe", "search_workspace"]
     assert result["type"] == "error"
     assert result["code"] == "CODE_MODE_FAILED"
     assert "raw" not in json.dumps(result)
@@ -420,6 +448,10 @@ def test_code_mode_composition_returns_unknown_prepared_failure_without_mutation
         nonlocal callback_count
         callback_count += 1
         if callback_count == 1:
+            return {"ok": True, "result": {"operations": [{"operationId": "work_item.read"}]}}
+        if callback_count == 2:
+            return {"ok": True, "result": {"operation": {"operationId": "work_item.read"}}}
+        if callback_count == 3:
             return {
                 "ok": True,
                 "result": {
@@ -431,13 +463,13 @@ def test_code_mode_composition_returns_unknown_prepared_failure_without_mutation
                     ]
                 },
             }
-        assert callback_count == 2
+        assert callback_count == 4
         assert frame["args"][0] == "work_item.read"
         assert frame["args"][1] == {"preparedCallRef": "prepared-call:unknown"}
         return {"ok": False, "error": {"code": "PREPARED_CALL_INVALID"}}
 
     callbacks, result = _run_code_mode_frames(source, callback)
-    assert [frame["args"][0] for frame in callbacks] == ["search_workspace", "work_item.read"]
+    assert [frame["args"][0] for frame in callbacks] == ["catalog.search", "catalog.describe", "search_workspace", "work_item.read"]
     assert result["type"] == "result"
     assert result["value"]["read"]["error"]["code"] == "PREPARED_CALL_INVALID"
 
@@ -881,19 +913,17 @@ def test_commission_descriptor_keeps_shared_profile_and_binds_each_assignment() 
     parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
 
     identity = scenario.commission_descriptor(parsed, parsed.commissions[0])
-    mutation = scenario.commission_descriptor(parsed, parsed.commissions[1])
-    code_mode = scenario.commission_descriptor(parsed, parsed.commissions[2])
-    context = scenario.commission_descriptor(parsed, parsed.commissions[3])
-    assert identity.profile == mutation.profile == context.profile == parsed.profile
+    code_mode = scenario.commission_descriptor(parsed, parsed.commissions[1])
+    context = scenario.commission_descriptor(parsed, parsed.commissions[2])
+    assert identity.profile == context.profile == parsed.profile
     assert code_mode.profile == replace(parsed.profile, model_toolset="code_mode_only")
-    assert identity.assignment.target_ref == mutation.assignment.target_ref == code_mode.assignment.target_ref == context.assignment.target_ref == scenario.ASSIGNED_WORK_ITEM_ALIAS
-    assert identity.expected["routeChecks"] != mutation.expected["routeChecks"]
-    assert mutation.expected["routeChecks"] == code_mode.expected["routeChecks"]
+    assert identity.assignment.target_ref == code_mode.assignment.target_ref == context.assignment.target_ref == scenario.ASSIGNED_WORK_ITEM_ALIAS
+    assert identity.expected["routeChecks"] != code_mode.expected["routeChecks"]
     assert code_mode.expected["routeChecks"] != context.expected["routeChecks"]
-    assert identity.commissions == mutation.commissions == code_mode.commissions == context.commissions == ()
+    assert identity.commissions == code_mode.commissions == context.commissions == ()
 
 
-def test_multi_commission_prompt_preserves_the_typed_mutation_route() -> None:
+def test_multi_commission_prompt_preserves_the_typed_code_mode_route() -> None:
     source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     helper = next(
@@ -919,11 +949,12 @@ def test_multi_commission_prompt_preserves_the_typed_mutation_route() -> None:
 
     raw = (TOOLS / "agent-g4-worker-v6.json").read_bytes()
     parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
-    mutation = scenario.commission_descriptor(parsed, parsed.commissions[1])
-    expected = namespace["_profile_expected_outcomes"](mutation)
+    code_mode = scenario.commission_descriptor(parsed, parsed.commissions[1])
+    expected = namespace["_profile_expected_outcomes"](code_mode)
 
-    assert expected == list(scenario.model_route_expectations(mutation.expected))
+    assert expected == list(scenario.model_route_expectations(code_mode.expected))
     assert expected[0].startswith("Route step 1: invoke plane_execute_typescript")
+    assert "catalog.describe" in expected[0]
     assert 'host.call_plane_operation("work_item.rename"' in expected[0]
     assert expected[1].startswith("Route step 2: invoke plane_publish")
 
@@ -1106,6 +1137,13 @@ def test_standard_route_maps_typed_delivery_outcomes_without_persona_names() -> 
         {"operationId": "agent.outcome.publish", "outcome": "success"},
     ]})
     assert manager["steps"][1] == {"operationRef": "operation:work_item.read", "optional": True}
+    identity = scenario.standard_route({"operationOutcomes": [
+        {"operationId": "search_workspace", "outcome": "success"},
+        {"operationId": "agent.outcome.evaluate", "outcome": "denied", "errorCode": "NOT_AUTHORIZED"},
+        {"operationId": "agent.outcome.submit", "outcome": "success"},
+        {"operationId": "agent.outcome.publish", "outcome": "success"},
+    ]})
+    assert identity["steps"][1] == {"operationRef": "operation:work_item.read", "optional": True}
     assert scenario.standard_route({"operationOutcomes": [{"operationId": "x", "outcome": "denied"}]}) is None
 
 
@@ -1460,17 +1498,12 @@ def test_worker_route_validator_accepts_identity_only_route_evidence() -> None:
                 "snapshotBound": True,
                 "substitution": {"status": "denied", "errorCode": "NOT_AUTHORIZED", "sideEffects": 0},
             },
-            "W02": {
-                "catalogSearchBeforeDescribe": True,
-                "boundedSearchAndRead": True,
-                "hiddenObjectsAbsent": True,
-            },
             "replay": {"context": {"memoryRevisions": 0, "skillRevisions": 0, "proposals": 0, "contextReceipts": 0}},
         },
         "readback": {"contextProjectionDigest": "0" * 64},
     }
 
-    validator._validate_worker_route_evidence(identity_route, route_checks={"W01", "W02"})
+    validator._validate_worker_route_evidence(identity_route, route_checks={"W01"})
 
 
 def test_worker_route_validator_keeps_special_mutation_and_governance_routes_valid() -> None:
@@ -1486,6 +1519,11 @@ def test_worker_route_validator_keeps_special_mutation_and_governance_routes_val
     }
     mutation_route = {
         "routes": {
+            "W02": {
+                "catalogSearchBeforeDescribe": True,
+                "boundedSearchAndRead": True,
+                "hiddenObjectsAbsent": True,
+            },
             "W03": {
                 "status": "replayed",
                 "semanticDelta": 0,
@@ -1534,7 +1572,7 @@ def test_worker_route_validator_keeps_special_mutation_and_governance_routes_val
 
     validator._validate_worker_route_evidence(
         mutation_route,
-        route_checks={"W03", "W04", "W07", "W08"},
+        route_checks={"W02", "W03", "W04", "W07", "W08"},
     )
     validator._validate_worker_route_evidence(
         context_route,

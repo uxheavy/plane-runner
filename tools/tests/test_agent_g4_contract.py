@@ -781,7 +781,7 @@ class G4ContractTests(unittest.TestCase):
             root_scenario,
             [
                 ("identity-discovery", 0, success),
-                ("mutation-semantic-rename", 1, failed),
+                ("code-mode-semantic-rename", 1, failed),
             ],
         )
 

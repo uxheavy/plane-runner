@@ -69,15 +69,30 @@ def rename_code_mode_template() -> str:
 
 
 def code_mode_composition_template() -> str:
-    """Return the Worker composition that keeps the prepared read opaque."""
+    """Return the Worker composition that keeps discovery and the prepared read opaque."""
 
     return (
         'export default async function ({host,input}: {host: any; input: any}) { '
+        'const catalog = await host.call_plane_operation('
+        '"catalog.search", { query: "work_item.read", limit: 5 }, '
+        '"idempotency:{{invocationId}}:code-mode-catalog-search", '
+        '"correlation:{{invocationId}}:code-mode-catalog-search"); '
+        'if (!catalog?.ok) return { catalog }; '
+        'const operations = catalog?.result?.operations; '
+        'const operationId = Array.isArray(operations) '
+        '? operations.find((entry: any) => entry?.operationId === "work_item.read")?.operationId '
+        ': undefined; '
+        'if (typeof operationId !== "string") throw new Error("catalog operation unavailable"); '
+        'const described = await host.call_plane_operation('
+        '"catalog.describe", { operation_id: operationId }, '
+        '"idempotency:{{invocationId}}:code-mode-catalog-describe", '
+        '"correlation:{{invocationId}}:code-mode-catalog-describe"); '
+        'if (!described?.ok) return { catalog, described }; '
         'const search = await host.call_plane_operation('
         '"search_workspace", { query: "G4 Live Issue", limit: 1 }, '
         '"idempotency:{{invocationId}}:code-mode-search", '
         '"correlation:{{invocationId}}:code-mode-search"); '
-        'if (!search?.ok) return { search }; '
+        'if (!search?.ok) return { catalog, described, search }; '
         'const rows = search?.result?.results; '
         'if (!Array.isArray(rows) || rows.length !== 1 || rows[0]?.objectType !== "work_item") '
         'throw new Error("prepared read handoff unavailable"); '
@@ -88,7 +103,7 @@ def code_mode_composition_template() -> str:
         '"work_item.read", { preparedCallRef }, '
         '"idempotency:{{invocationId}}:code-mode-read", '
         '"correlation:{{invocationId}}:code-mode-read"); '
-        'if (!read?.ok) return { search, read }; '
+        'if (!read?.ok) return { catalog, described, search, read }; '
         'const workItem = read?.result?.work_item; '
         'if (!workItem || typeof workItem.project !== "string" || typeof workItem.id !== "string") '
         'throw new Error("authorized work item read unavailable"); '
@@ -96,14 +111,14 @@ def code_mode_composition_template() -> str:
         '"work_item.rename", { project_id: workItem.project, issue_id: workItem.id, '
         'name: "{{newName}}" }, "idempotency:{{invocationId}}:code-mode-rename", '
         '"correlation:{{invocationId}}:code-mode-rename"); '
-        'if (!rename?.ok) return { search, read, rename }; '
+        'if (!rename?.ok) return { catalog, described, search, read, rename }; '
         'const submit = await host.call_plane_operation('
         '"agent.outcome.submit", { summary: "Code Mode semantic rename completed.", '
         'artifacts: ["artifact:code-mode-semantic-rename"], '
         'evidence: ["evidence:code-mode-search-read-rename"] }, '
         '"idempotency:{{invocationId}}:code-mode-submit", '
         '"correlation:{{invocationId}}:code-mode-submit"); '
-        'return { search, read, rename, submit }; }'
+        'return { catalog, described, search, read, rename, submit }; }'
     )
 
 
@@ -397,17 +412,29 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
     if expected is None:
         return ()
     outcomes = expected.get("operationOutcomes", [])
-    if tuple(item.get("operationId") for item in outcomes) == (
-        "search_workspace",
-        "work_item.read",
-        "work_item.rename",
-        "agent.outcome.submit",
-        "agent.outcome.publish",
+    if tuple(item.get("operationId") for item in outcomes) in (
+        (
+            "search_workspace",
+            "work_item.read",
+            "work_item.rename",
+            "agent.outcome.submit",
+            "agent.outcome.publish",
+        ),
+        (
+            "catalog.search",
+            "catalog.describe",
+            "search_workspace",
+            "work_item.read",
+            "work_item.rename",
+            "agent.outcome.submit",
+            "agent.outcome.publish",
+        ),
     ):
         return (
             "Route step 1: invoke plane_execute_typescript exactly 1 time(s) and expect success. "
             "Use one bounded module that performs the complete Worker composition through "
-            "host.call_plane_operation in this exact order: search_workspace; extract only the returned "
+            "host.call_plane_operation in this exact order: catalog.search; pass the returned operationId "
+            "verbatim to catalog.describe; search_workspace; extract only the returned "
             "workItemReadCall; work_item.read with exactly "
             "{preparedCallRef}; work_item.rename using only the authorized read result; and one "
             "agent.outcome.submit with one artifact and one evidence item. Do not invoke search_workspace, "
@@ -458,6 +485,15 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
                 ' Use exactly {"query":"G4 Live Issue","limit":1} as input for the single bounded search; '
                 "require one work-item result with a usable workItemReadCall, then advance without searching "
                 "again."
+            )
+        if (
+            operation_id == "search_workspace"
+            and index < len(outcomes)
+            and outcomes[index].get("operationId") == "agent.outcome.evaluate"
+        ):
+            guidance += (
+                " The runtime consumes exactly one returned opaque prepared work-item read before the next "
+                "route step; do not issue a separate work_item.read model call or reconstruct its input."
             )
         if operation_id == "work_item.rename":
             model_action = "plane_execute_typescript"
@@ -513,7 +549,7 @@ def standard_route(expected: ExpectedPredicates | None) -> dict[str, Any] | None
         if (
             item.get("operationId") == "search_workspace"
             and index + 1 < len(operations)
-            and operations[index + 1].get("operationId") == "agent.outcome.submit"
+            and operations[index + 1].get("operationId") in {"agent.outcome.evaluate", "agent.outcome.submit"}
         ):
             steps.append({"operationRef": "operation:work_item.read", "optional": True})
     if not steps or len(steps) > 7:
