@@ -522,6 +522,27 @@ class G4ContractTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             _validate_runtime_diagnostics(invalid_callback)
 
+    def test_runtime_diagnostics_preserve_established_named_tool_choices(self):
+        bounded = invoke_helper_namespace()["_bounded_runtime_diagnostics"]
+        for tool_choice in ("plane_operation", "plane_publish", "plane_execute_typescript"):
+            value = {
+                "version": 1,
+                "requests": [
+                    {
+                        "sequence": 1,
+                        "toolChoice": tool_choice,
+                        "visibleToolset": "execute_only",
+                        "visibleToolCount": 1,
+                        "serialized": True,
+                    }
+                ],
+                "responses": [],
+            }
+            self.assertEqual(bounded(value)["requests"][0]["toolChoice"], tool_choice)
+        invalid = copy.deepcopy(value)
+        invalid["requests"][0]["toolChoice"] = "arbitrary_tool"
+        self.assertIsNone(bounded(invalid))
+
     def test_code_mode_failure_diagnostic_is_finite_and_preserved(self):
         builder = invoke_helper_namespace()["build_failure_evidence"]
         manifest, authority, _, _ = fixture()

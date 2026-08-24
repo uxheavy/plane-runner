@@ -1116,7 +1116,14 @@ def _bounded_runtime_diagnostics(value):
         if (
             type(row["sequence"]) is not int
             or not 1 <= row["sequence"] <= 256
-            or row["toolChoice"] not in {"required", "auto", "absent"}
+            or row["toolChoice"] not in {
+                "required",
+                "auto",
+                "absent",
+                "plane_operation",
+                "plane_publish",
+                "plane_execute_typescript",
+            }
             or row["visibleToolset"] not in {"execute_only", "execute_and_publish", "other", "empty"}
             or type(row["visibleToolCount"]) is not int
             or not 0 <= row["visibleToolCount"] <= 64
