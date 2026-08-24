@@ -593,6 +593,41 @@ class G4ContractTests(unittest.TestCase):
         self.assertIsNone(parser({**payload, "contentType": "application/json"}))
         self.assertIsNone(parser({**payload, "text": "not-json"}))
 
+    def test_runtime_diagnostics_bound_publish_argument_shape_only_for_publish(self):
+        bounded = invoke_helper_namespace()["_bounded_runtime_diagnostics"]
+        shapes = (
+            "malformed_json",
+            "non_object",
+            "minimal_outcome",
+            "exact_redundant_outcome",
+            "partial_or_unknown_outcome",
+            "conversation",
+            "missing_required",
+        )
+        for shape in shapes:
+            value = {
+                "version": 1,
+                "requests": [],
+                "responses": [
+                    {
+                        "sequence": 1,
+                        "responseClass": "tool_call",
+                        "toolCall": "publish",
+                        "publishArgumentShape": shape,
+                    }
+                ],
+            }
+            self.assertEqual(bounded(value)["responses"][0]["publishArgumentShape"], shape)
+        omitted = copy.deepcopy(value)
+        omitted["responses"][0].pop("publishArgumentShape")
+        self.assertEqual(bounded(omitted)["responses"][0]["toolCall"], "publish")
+        invalid_shape = copy.deepcopy(value)
+        invalid_shape["responses"][0]["publishArgumentShape"] = "unknown"
+        self.assertIsNone(bounded(invalid_shape))
+        non_publish = copy.deepcopy(value)
+        non_publish["responses"][0]["toolCall"] = "execute"
+        self.assertIsNone(bounded(non_publish))
+
     def test_code_mode_failure_diagnostic_is_finite_and_preserved(self):
         builder = invoke_helper_namespace()["build_failure_evidence"]
         manifest, authority, _, _ = fixture()

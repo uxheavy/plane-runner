@@ -1141,7 +1141,12 @@ def _bounded_runtime_diagnostics(value):
         )
     bounded_responses = []
     for row in responses:
-        if not isinstance(row, dict) or set(row) != {"sequence", "responseClass", "toolCall"}:
+        if not isinstance(row, dict) or not {"sequence", "responseClass", "toolCall"}.issubset(row):
+            return None
+        allowed_keys = {"sequence", "responseClass", "toolCall"}
+        if row["toolCall"] == "publish":
+            allowed_keys.add("publishArgumentShape")
+        if set(row).difference(allowed_keys):
             return None
         if (
             type(row["sequence"]) is not int
@@ -1150,13 +1155,24 @@ def _bounded_runtime_diagnostics(value):
             or row["toolCall"] not in {"execute", "publish", "other", "none", "multiple"}
         ):
             return None
-        bounded_responses.append(
-            {
-                "sequence": row["sequence"],
-                "responseClass": row["responseClass"],
-                "toolCall": row["toolCall"],
-            }
-        )
+        bounded_response = {
+            "sequence": row["sequence"],
+            "responseClass": row["responseClass"],
+            "toolCall": row["toolCall"],
+        }
+        if "publishArgumentShape" in row:
+            if row["publishArgumentShape"] not in {
+                "malformed_json",
+                "non_object",
+                "minimal_outcome",
+                "exact_redundant_outcome",
+                "partial_or_unknown_outcome",
+                "conversation",
+                "missing_required",
+            }:
+                return None
+            bounded_response["publishArgumentShape"] = row["publishArgumentShape"]
+        bounded_responses.append(bounded_response)
     result = {"version": 1, "requests": bounded_requests, "responses": bounded_responses}
     if "hostCallbacks" in value:
         callbacks = value["hostCallbacks"]
