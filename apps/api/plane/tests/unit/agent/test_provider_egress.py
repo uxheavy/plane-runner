@@ -995,6 +995,21 @@ def test_provider_relay_rejects_oversize_replay_expired_and_cancelled_requests_b
     assert upstream.calls == []
 
 
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    (
+        ("provider request headers are oversized", "request_oversize"),
+        ("provider request body is oversized", "request_oversize"),
+        ("provider relay credentials are oversized", "request_oversize"),
+        ("provider response is oversized", "response_oversize"),
+        ("provider response chunk is oversized", "response_chunk_oversize"),
+        ("provider request payload is oversized", "oversize"),
+    ),
+)
+def test_provider_relay_preserves_bounded_oversize_origin(message: str, expected: str):
+    assert ProviderRelayServer._error_code(ProviderRelayError(message)) == expected
+
+
 def test_provider_relay_surfaces_budget_exhaustion_without_an_upstream_replay(tmp_path):
     upstream = _FixtureUpstream(ProviderResponse(status_code=200, headers={}, body_chunks=(b"ok",)), [])
     audits: list[ProviderRelayAudit] = []

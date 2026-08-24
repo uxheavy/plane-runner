@@ -935,6 +935,15 @@ class ProviderRelayServer:
             return "budget_exhausted"
         if "call failed" in message:
             return "upstream_error"
+        exact_oversize_codes = {
+            "provider request headers are oversized": "request_oversize",
+            "provider request body is oversized": "request_oversize",
+            "provider relay credentials are oversized": "request_oversize",
+            "provider response is oversized": "response_oversize",
+            "provider response chunk is oversized": "response_chunk_oversize",
+        }
+        if message in exact_oversize_codes:
+            return exact_oversize_codes[message]
         if "oversized" in message or "size bound" in message:
             return "oversize"
         if "replayed" in message:
