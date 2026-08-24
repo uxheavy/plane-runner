@@ -1165,6 +1165,7 @@ def _bounded_runtime_diagnostics(value):
                 "malformed_json",
                 "non_object",
                 "minimal_outcome",
+                "content_only_outcome",
                 "exact_redundant_outcome",
                 "partial_or_unknown_outcome",
                 "conversation",
