@@ -40,6 +40,8 @@ RUNTIME_LOG_DIR=""
 COMMUNITY_COMPOSE_CONFIG=""
 CREATED_API_LOG_DIR=0
 CREATED_RUNTIME_LOG_DIR=0
+RUFF_BASELINE_DIR=""
+CREATED_RUFF_BASELINE_DIR=0
 
 emit() {
     local event="$1"
@@ -192,6 +194,7 @@ run_api() {
         --mount "type=bind,src=${SDK_ROOT},dst=/workspace/external/plane-python-sdk,readonly" \
         --mount "type=bind,src=${EXTERNAL_SUPERPROJECT_ROOT}/.git/modules,dst=/workspace/.git/modules,readonly" \
         --mount "type=bind,src=${HERMES_ROOT},dst=/workspace/hermes-agent,readonly" \
+        --mount "type=bind,src=${RUFF_BASELINE_DIR},dst=/workspace/g3-ruff-baseline,readonly" \
         --mount "type=bind,src=${RUNTIME_LOG_DIR},dst=/workspace/apps/api/plane/logs" \
         --mount "type=bind,src=${COMMUNITY_COMPOSE_CONFIG},dst=/tmp/community-compose.json,readonly" \
         --workdir /workspace/apps/api \
@@ -236,6 +239,34 @@ cleanup_runtime_log_dir() {
     [[ ! -e "${RUNTIME_LOG_DIR}" ]]
 }
 
+cleanup_ruff_baseline_dir() {
+    [[ "${CREATED_RUFF_BASELINE_DIR}" -eq 1 ]] || return 0
+    case "${RUFF_BASELINE_DIR}" in
+        "${ROOT_DIR}"/tmp/plane-g3-ruff-baseline-*) ;;
+        *) return 1 ;;
+    esac
+    [[ -d "${RUFF_BASELINE_DIR}" && ! -L "${RUFF_BASELINE_DIR}" ]] || return 1
+    rm -rf -- "${RUFF_BASELINE_DIR}"
+    [[ ! -e "${RUFF_BASELINE_DIR}" ]]
+}
+
+prepare_ruff_baseline_dir() {
+    [[ -d "${ROOT_DIR}/tmp" ]] || \
+        fail "Docker-visible verifier scratch directory exists" "missing=${ROOT_DIR}/tmp" "create the repository tmp directory"
+    RUFF_BASELINE_DIR="$(mktemp -d "${ROOT_DIR}/tmp/plane-g3-ruff-baseline-XXXXXX")"
+    CREATED_RUFF_BASELINE_DIR=1
+    git -C "${ROOT_DIR}" archive "${G3_BASE_COMMIT}" \
+        apps/api/pyproject.toml \
+        apps/api/plane/agent \
+        apps/api/plane/operation_gateway \
+        apps/api/plane/tests/unit/agent \
+        apps/api/plane/tests/contract/api \
+        | tar -x -C "${RUFF_BASELINE_DIR}"
+    [[ -f "${RUFF_BASELINE_DIR}/apps/api/pyproject.toml" ]] || \
+        fail "G3 baseline ruff config is materialized" "missing baseline pyproject" "inspect ${G3_BASE_COMMIT}"
+    emit "ruff.baseline" passed "commit=${G3_BASE_COMMIT}" "root=${RUFF_BASELINE_DIR}"
+}
+
 cleanup() {
     local status=$?
     local cleanup_status=0
@@ -243,6 +274,7 @@ cleanup() {
     trap - EXIT INT TERM
     compose down -v --remove-orphans >/dev/null 2>&1 || cleanup_status=$?
     cleanup_runtime_log_dir || cleanup_status=$?
+    cleanup_ruff_baseline_dir || cleanup_status=$?
     if [[ ${CREATED_API_LOG_DIR} -eq 1 ]]; then
         rmdir -- "${ROOT_DIR}/apps/api/plane/logs" 2>/dev/null || true
     fi
@@ -331,20 +363,88 @@ emit "community-compose" passed "config=${COMMUNITY_COMPOSE_CONFIG}" "credential
 compose up --pull never -d test-db test-redis test-mq test-minio >/dev/null
 wait_for_services
 
+CURRENT_STEP="ruff-baseline"
+prepare_ruff_baseline_dir
+
 CURRENT_STEP="g3-api-and-client-suite"
 run_api sh -c "
 set -Eeuo pipefail
 export RUFF_CACHE_DIR=/tmp/g3-ruff-cache
 export PYTHONPATH=/workspace/apps/api${PYTHONPATH:+:${PYTHONPATH}}
+
+run_ruff_baseline_aware() {
+    local candidate_status=0 baseline_status=0
+    ruff check --config /workspace/apps/api/pyproject.toml --output-format json \
+        plane/agent plane/operation_gateway plane/tests/unit/agent plane/tests/contract/api \
+        >/tmp/g3-candidate-ruff.json || candidate_status=\$?
+    ruff check --config /workspace/apps/api/pyproject.toml --output-format json \
+        /workspace/g3-ruff-baseline/apps/api/plane/agent \
+        /workspace/g3-ruff-baseline/apps/api/plane/operation_gateway \
+        /workspace/g3-ruff-baseline/apps/api/plane/tests/unit/agent \
+        /workspace/g3-ruff-baseline/apps/api/plane/tests/contract/api \
+        >/tmp/g3-baseline-ruff.json || baseline_status=\$?
+    if [ "\${candidate_status}" -gt 1 ] || [ "\${baseline_status}" -gt 1 ]; then
+        printf 'event=agent.g3.ruff status=failed candidate_exit=\${candidate_status} baseline_exit=\${baseline_status}\\n' >&2
+        return 2
+    fi
+    python - /tmp/g3-candidate-ruff.json /tmp/g3-baseline-ruff.json <<'PY'
+import json
+import sys
+from collections import Counter
+from pathlib import PurePosixPath
+
+
+def diagnostics(path):
+    raw = open(path, encoding='utf-8').read()
+    return json.loads(raw) if raw.strip() else []
+
+
+def key(item):
+    filename = str(item.get('filename', '')).replace(chr(92), '/')
+    for prefix in ('/workspace/g3-ruff-baseline/apps/api/', '/workspace/apps/api/'):
+        if filename.startswith(prefix):
+            filename = filename[len(prefix) :]
+            break
+    filename = str(PurePosixPath(filename))
+    return filename, str(item.get('code', '')), str(item.get('message', ''))
+
+
+candidate = Counter(key(item) for item in diagnostics(sys.argv[1]))
+baseline = Counter(key(item) for item in diagnostics(sys.argv[2]))
+new = candidate - baseline
+if new:
+    print(
+        f'event=agent.g3.ruff status=failed baseline={sum(baseline.values())} '
+        f'candidate={sum(candidate.values())} new={sum(new.values())}',
+        file=sys.stderr,
+    )
+    for (filename, code, message), count in sorted(new.items())[:20]:
+        print(f'ruff-new count={count} file={filename} code={code} message={message}', file=sys.stderr)
+    raise SystemExit(1)
+
+status = 'baseline_allowed' if baseline else 'passed'
+print(f'event=agent.g3.ruff status={status} baseline={sum(baseline.values())} new=0')
+PY
+}
+
 python manage.py bootstrap_operation_gateway_audit --phase=before-migrate
 python manage.py migrate --noinput --verbosity 0
 python manage.py bootstrap_operation_gateway_audit --phase=after-migrate
 python -m plane.operation_gateway.mcp.registry_generator plane/operation_gateway/mcp/manifest.json --check plane/operation_gateway/mcp/adapter_registry.json
-        ruff check plane/agent plane/operation_gateway plane/tests/unit/agent plane/tests/contract/api
-ruff format --check plane/tests/contract/api/test_operation_gateway_mcp.py plane/tests/contract/api/test_operation_gateway_external_clients.py
+RUFF_STATUS=0
+if run_ruff_baseline_aware; then :; else RUFF_STATUS=\$?; fi
+RUFF_FORMAT_STATUS=0
+if ruff format --check plane/tests/contract/api/test_operation_gateway_mcp.py plane/tests/contract/api/test_operation_gateway_external_clients.py; then
+    printf 'event=agent.g3.ruff-format status=passed\\n'
+else
+    RUFF_FORMAT_STATUS=\$?
+    printf 'event=agent.g3.ruff-format status=failed\\n' >&2
+fi
 python -m compileall -q plane/agent plane/operation_gateway plane/tests/unit/agent plane/tests/contract/api
 python manage.py shell -c 'from django.db import connection; from django.db.migrations.executor import MigrationExecutor; e=MigrationExecutor(connection); leaves=set(e.loader.graph.leaf_nodes(\"db\")); applied=set(e.recorder.applied_migrations()); assert leaves == {(\"db\", \"0142_runtime_provider_attempts\")}; assert not leaves-applied; print(\"event=agent.g3.api.migration_leaf status=passed leaf=0142\")'
 PLANE_AUDIT_ENFORCE_ROLE_SEPARATION=0 pytest -p plane.tests.g3_no_skips --migrations -q -o addopts='--strict-markers --reuse-db' -o cache_dir=/tmp/g3-pytest ${G3_TEST_PATHS[*]}
+if [ "\${RUFF_STATUS}" -ne 0 ]; then exit "\${RUFF_STATUS}"; fi
+if [ "\${RUFF_FORMAT_STATUS}" -ne 0 ]; then exit "\${RUFF_FORMAT_STATUS}"; fi
 "
 emit "g3-api-and-client-suite" passed "test_files=${#G3_TEST_PATHS[@]}" "external_mcp=${MCP_COMMIT}" "external_sdk=${SDK_COMMIT}" "hermes=${HERMES_COMMIT}" "result_limit=8192"
 
