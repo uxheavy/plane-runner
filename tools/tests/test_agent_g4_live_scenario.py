@@ -1133,6 +1133,15 @@ def test_minimal_live_descriptors_reduce_provider_runs_to_worker_and_delegator()
     assert worker.commissions[0].expected["routeChecks"] == [f"W{index:02d}" for index in range(1, 9)]
     assert [commission.commission_id for commission in delegator.commissions] == ["delegator-full"]
     assert delegator.commissions[0].expected["routeChecks"] == [f"M{index:02d}" for index in range(1, 9)]
+    assert [
+        row["operationId"] for row in delegator.commissions[0].expected["operationOutcomes"][:3]
+    ] == ["catalog.search", "catalog.describe", "search_workspace"]
+
+    manifest = json.loads((TOOLS / "agent-g4-manifest.json").read_text(encoding="utf-8"))
+    descriptors = {row["id"]: row for row in manifest["scenarioDescriptors"]}
+    assert descriptors["worker-core"]["path"] == "tools/agent-g4-worker-minimal.json"
+    assert descriptors["delegator-core"]["path"] == "tools/agent-g4-delegator-minimal.json"
+    assert descriptors["operations"]["routeChecks"] == ["O01", "O03", "O04", "O05", "O06", "O07", "O08", "O09"]
 
 
 def test_code_mode_context_binding_is_subject_scoped() -> None:

@@ -16,7 +16,10 @@
     "apps/api/plane/agent/AGENTS.md",
     "apps/api/plane/agent/adapters/AGENTS.md",
     "apps/api/plane/agent/runtime/AGENTS.md",
-    "apps/api/plane/agent/tools/AGENTS.md"
+    "apps/api/plane/agent/tools/AGENTS.md",
+    "tools/agent-g4-worker-minimal.json",
+    "tools/agent-g4-delegator-minimal.json",
+    "tools/agent-g4-operations-v1.json"
   ],
   "candidateBinding": {
     "acceptedG3Baseline": "7c9d35f4c324865c27c84da5016be2c84e460bcc",
@@ -186,7 +189,7 @@
     {
       "module": "agent_g4_live_scenario",
       "runtime": "/run/plane-scenario/agent_g4_live_scenario.py",
-    "sha256": "7f790859da79f62b912b62b701615034ca0bc8f299ee81fc3244310b05636922",
+      "sha256": "1653aa4ec6e87705fe82380734255368e2082c5a52cda077cad61123bf8ca1f8",
       "source": "tools/agent_g4_live_scenario.py"
     },
     {
@@ -212,6 +215,26 @@
       "runtime": "/run/plane-scenario/agent_g4_operator_route.py",
       "sha256": "c66011e7bb828ff50677a55779f3449a4fbdbafbcf6530b074ed247940fc80e9",
       "source": "tools/agent_g4_operator_route.py"
+    }
+  ],
+  "scenarioDescriptors": [
+    {
+      "id": "worker-core",
+      "path": "tools/agent-g4-worker-minimal.json",
+      "modelToolset": "code_mode_only",
+      "routeChecks": ["W01", "W02", "W03", "W04", "W05", "W06", "W07", "W08"]
+    },
+    {
+      "id": "delegator-core",
+      "path": "tools/agent-g4-delegator-minimal.json",
+      "modelToolset": "standard",
+      "routeChecks": ["M01", "M02", "M03", "M04", "M05", "M06", "M07", "M08"]
+    },
+    {
+      "id": "operations",
+      "path": "tools/agent-g4-operations-v1.json",
+      "providerAttempts": 0,
+      "routeChecks": ["O01", "O03", "O04", "O05", "O06", "O07", "O08", "O09"]
     }
   ],
   "scripts": [

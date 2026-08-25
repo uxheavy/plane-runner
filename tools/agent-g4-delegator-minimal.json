@@ -4,7 +4,7 @@
   "actor": { "role": "delegator" },
   "profile": {
     "name": "Elena Delegator Minimal",
-    "instructions": "Complete one bounded native-tool Delegator assignment. Start with search_workspace, then use progressive catalog discovery by passing the exact returned operationId from catalog.search to catalog.describe. Execute one permitted operation, create a case-specific dynamic plan and one bounded child assignment with persisted lineage and budget, then submit and publish one explicit result. Do not create a saved workflow product, repeat operations, use external tools, or retry unknown results.",
+    "instructions": "Complete one bounded native-tool Delegator assignment. Start with catalog.search, pass the exact returned operationId to catalog.describe, then use search_workspace and execute one permitted operation. Create a case-specific dynamic plan and one bounded child assignment with persisted lineage and budget, then submit and publish one explicit result. Do not create a saved workflow product, repeat operations, use external tools, or retry unknown results.",
     "modelPolicy": {
       "provider": "openai-codex",
       "model": "gpt-5.6-luna",
@@ -15,7 +15,7 @@
   },
   "assignment": {
     "targetRef": "fixture:assigned-work-item",
-    "objective": "Create one dynamic plan, delegate one bounded responsibility with lineage and budget, and publish one terminal result.",
+    "objective": "Discover one permitted operation, create one dynamic plan, delegate one bounded responsibility with lineage and budget, and publish one terminal result.",
     "acceptanceCriteria": [
       "Progressive discovery and one permitted operation are recorded without creating a saved workflow product.",
       "The child assignment has bounded scope, persisted lineage, an independent child run, and one published outcome."
@@ -50,7 +50,7 @@
       "id": "delegator-full",
       "assignment": {
         "targetRef": "fixture:assigned-work-item",
-        "objective": "Start with search_workspace; progressively discover one operation with catalog.search and catalog.describe using the exact returned operationId; execute one permitted operation; create a dynamic plan and one bounded child; reconcile cancellation, schedule, evaluator, HR, chief-of-staff, and terminal readback obligations; submit and publish one result.",
+        "objective": "Start with catalog.search, pass its exact returned operationId to catalog.describe, then use search_workspace and execute one permitted operation; create a dynamic plan and one bounded child; reconcile cancellation, schedule, evaluator, HR, chief-of-staff, and terminal readback obligations; submit and publish one result.",
         "acceptanceCriteria": [
           "M01-M02: no saved workflow product, bounded delegation, persisted lineage and independent child run.",
           "M03-M04: cancellation and DST-aware schedule behavior are reconciled idempotently.",
@@ -62,6 +62,8 @@
       },
       "expected": {
         "operationOutcomes": [
+          { "operationId": "catalog.search", "outcome": "success", "count": 1 },
+          { "operationId": "catalog.describe", "outcome": "success", "count": 1 },
           { "operationId": "search_workspace", "outcome": "success", "count": 1 },
           { "operationId": "agent.outcome.submit", "outcome": "success", "count": 1 },
           { "operationId": "agent.outcome.publish", "outcome": "success", "count": 1 }

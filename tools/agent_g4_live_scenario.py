@@ -428,6 +428,7 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
         (
             "search_workspace",
             "work_item.read",
+            "agent.context.read",
             "work_item.rename",
             "agent.outcome.submit",
             "agent.outcome.publish",
@@ -441,6 +442,16 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
             "agent.outcome.submit",
             "agent.outcome.publish",
         ),
+        (
+            "catalog.search",
+            "catalog.describe",
+            "search_workspace",
+            "work_item.read",
+            "agent.context.read",
+            "work_item.rename",
+            "agent.outcome.submit",
+            "agent.outcome.publish",
+        ),
     ):
         return (
             "Route step 1: invoke plane_execute_typescript exactly 1 time(s) and expect success. "
@@ -448,7 +459,8 @@ def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, 
             "host.call_plane_operation in this exact order: catalog.search; pass the returned operationId "
             "verbatim to catalog.describe; search_workspace; extract only the returned "
             "workItemReadCall; work_item.read with exactly "
-            "{preparedCallRef}; work_item.rename using only the authorized read result; and one "
+            "{preparedCallRef}; agent.context.read for the bound subject; work_item.rename using only the authorized "
+            "read result; and one "
             "agent.outcome.submit with one artifact and one evidence item. Do not invoke search_workspace, "
             "work_item.read, work_item.rename, or agent.outcome.submit as model tools, do not reconstruct or "
             "wrap the opaque ref, and do not expose raw target identifiers. The module must export a default "
@@ -858,8 +870,10 @@ def _validate_manager_commissions(commissions: tuple[CommissionSpec, ...]) -> No
     """Keep the Manager route split explicit, ordered, and terminal."""
 
     commission_ids = tuple(commission.commission_id for commission in commissions)
-    expected_ids = tuple(_MANAGER_COMMISSION_ROUTES)
-    if commission_ids not in (expected_ids, ("delegator-full",)):
+    legacy_ids = tuple(
+        commission_id for commission_id in _MANAGER_COMMISSION_ROUTES if commission_id != "delegator-full"
+    )
+    if commission_ids not in (legacy_ids, ("delegator-full",)):
         raise ScenarioError("scenario_manager_commission_ids_invalid")
     for commission in commissions:
         expected = commission.expected
@@ -868,7 +882,9 @@ def _validate_manager_commissions(commissions: tuple[CommissionSpec, ...]) -> No
         if any(not ref.startswith("context:") for ref in commission.assignment.context_refs):
             raise ScenarioError(f"scenario_manager_commission_{commission.commission_id}_context_invalid")
         operations = expected.get("operationOutcomes", [])
-        if not operations or operations[0].get("operationId") != "search_workspace":
+        first_operation = operations[0].get("operationId") if operations else None
+        expected_first = "catalog.search" if commission.commission_id == "delegator-full" else "search_workspace"
+        if first_operation != expected_first:
             raise ScenarioError(f"scenario_manager_commission_{commission.commission_id}_first_operation_invalid")
         if tuple(expected.get("routeChecks", [])) != _MANAGER_COMMISSION_ROUTES[commission.commission_id]:
             raise ScenarioError(f"scenario_manager_commission_{commission.commission_id}_routes_invalid")

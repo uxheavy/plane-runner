@@ -1,22 +1,23 @@
 {
-  "schemaVersion": "plane.agent-operations/v1",
+  "schemaVersion": "plane.agent-operations-package/v1",
   "packageId": "g4-operations-minimal",
   "providerAttempts": 0,
-  "execution": "provider-free",
-  "routeMapping": {
-    "W01-W08": ["agent_g4_worker_route.py", "agent_g4_worker_route_observations.py", "test_agent_g4_live_scenario.py"],
-    "M01-M08": ["agent_g4_manager_route.py", "test_agent_manager_route.py"],
-    "O01,O03-O10": ["agent_g4_operator_route.py", "test_agent_g4_contract.py", "agent_g4_runtime_red_team.py"],
-    "O02": ["retained exact external MCP/SDK proof"]
-  },
-  "requiredChecks": [
-    "authorization-and-canaries",
-    "gateway-and-code-mode-confinement",
-    "lifecycle-schedules-recovery-replay-isolation",
-    "memory-skills-context-and-governance",
-    "lease-budget-checkpoint-outcome-unknown",
-    "hostile-ingress-bounded-artifacts",
-    "load-health-audit-rollback"
+  "appliesTo": "same immutable candidate as Worker and Delegator",
+  "retainedExternalProof": "O02",
+  "checks": [
+    "authorization.canary.permitted",
+    "authorization.canary.denied",
+    "operation-gateway.idempotency-and-zero-delta-replay",
+    "code-mode.callback-binding-and-confinement",
+    "lifecycle.cancellation-schedule-dst-revision-hr-chief-of-staff",
+    "memory.subject-isolation-and-skill-promotion",
+    "runtime.lease-revocation-expiry-checkpoint-continuation-budget",
+    "outcome-unknown.provider-runtime-gateway-distinction",
+    "ingress.malformed-oversized-duplicate-out-of-order-forged-illegal-versioned",
+    "artifacts.bounded",
+    "operations.load-health-quota-safety-stop-audit-rollback"
   ],
-  "disruptiveChecks": ["load", "credential-revocation", "lease-revocation", "safety-stop", "rollback"]
+  "disruptiveChecks": ["load", "credential-revocation", "lease-revocation", "safety-stop", "rollback"],
+  "nondisruptiveChecksRunWithLiveFlows": true,
+  "evidence": { "mustInclude": ["testIds", "providerAttempts", "candidateDigest", "zeroProductEffectsOnDenial"] }
 }
