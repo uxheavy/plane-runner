@@ -547,3 +547,147 @@ The full outcome is complete only when every row below has executable evidence f
 | Functional production proof  | One current-candidate Worker journey covers W01–W08, one Manager journey covers M01–M08, and one Operator journey covers O01/O03–O09; the unchanged O02 exact external-client proof remains applicable. Each live journey records permitted/denied canaries, explicit outcome/publication/terminal state, bounded replay or idempotency, and audit/version readback as applicable. Deterministic destructive/failure boundaries and clean-checkout static/contract/security/reliability/load/recovery/observability checks pass provider-free once on the same final candidate. |
 
 Completion requires all rows, G1–G4, the three current-candidate matrix journeys, the retained O02 proof, the deterministic boundary suite, one final full production-candidate verifier, one consolidated Sol Medium review, a named integration branch, a clean final worktree, and no unresolved blocker or high-severity friction, security-critical failure, credential disclosure, authorization bypass, duplicate committed mutation, missing audit event, unsafe replay, or isolation escape. A second duplicate “final clean wave” is explicitly not required. Controlled rollout and GA evidence are explicitly not required by this goal.
+
+## Controlling minimal-live amendment (2026-08-25)
+
+Status: **active**. This section supersedes and pauses every earlier instruction
+in this file that requires three provider-backed Worker, Manager, and Operator
+journeys, per-route provider commissions, or progress measured by historical
+route cells. Those passages remain as decision history only. The product scope,
+ADRs, non-UI boundary, G1–G3 evidence, and requirement-level contracts remain
+unchanged.
+
+The shortest complete G4 proof is two provider-backed flows and one
+provider-free operational package on one immutable candidate:
+
+| Acceptance unit    | Model          | Unique behavior                                                                                                                                               |
+| ------------------ | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Worker             | GPT-5.6 family | Restricted Code Mode composition, private skill and subject-bound context use, one semantic mutation, outcome, publication, and terminal readback             |
+| Delegator          | GPT-5.6 family | Standard native-tool loop, progressive discovery, case-specific planning, bounded delegation, lineage and budget, outcome, publication, and terminal readback |
+| Operations package | None           | Authorization, lifecycle, schedules, recovery, replay, isolation, hostile ingress, load, audit, rollback, and every deterministic companion assertion         |
+
+Retain O02 as the exact external MCP/SDK proof when its source, contract, and
+digest applicability still bind to the final candidate. Operator is a
+verification persona, not a distinct Plane Agent role or runtime path in
+ADR-0005. Its unique obligations are deterministic; its previous model work
+duplicated behavior now proved by Worker and Delegator.
+
+### Provider-backed acceptance flows
+
+The Worker runs one fresh `code_mode_only` assignment. One bounded TypeScript
+module performs this logical sequence through credential-free host callbacks
+and the shared Operation Gateway:
+
+```text
+catalog.search
+catalog.describe(exact returned operationId)
+search_workspace
+work_item.read(opaque preparedCallRef)
+agent.context.read(bound subject)
+work_item.rename
+agent.outcome.submit(one artifact, one evidence item)
+plane_publish(content only)
+```
+
+Its receipt proves the private skill projection was consumed, no raw identifier
+was reconstructed, exactly one semantic mutation occurred, and outcome,
+publication, terminal event, audit, and durable readback agree. Its evidence
+package also owns Code Mode confinement, malformed and cross-bound prepared
+calls, cross-user context denial, one permitted canary, one exact denied canary
+with zero effects, and zero-delta replay. Deterministic companions do not add
+model runs.
+
+The Delegator runs one fresh standard native-tool assignment. It performs exact
+`catalog.search -> catalog.describe` progressive discovery for one non-eager
+operation, executes one permitted operation, produces a case-specific plan,
+creates one bounded child assignment with an explicit reason, and submits and
+publishes one terminal outcome. Its receipt proves no saved workflow product,
+parent lineage, bounded scope and budget, an independent child run, audit, and
+durable readback. Its evidence package also owns one exact denied canary,
+cancellation propagation, schedules and DST, evaluator-before-human revision,
+HR approval and denial, chief-of-staff scoping, and terminal-parent denial.
+M08 closes only when revision, evaluator and human decisions, lineage, and
+immutable prior-run readback agree. Deterministic companions do not add model
+runs.
+
+The earlier W01–W08, M01–M08, and O01/O03–O09 labels remain a coverage taxonomy,
+not provider-run units. Every label maps exactly once to the Worker package,
+Delegator package, operations package, or retained O02 proof.
+
+### Provider-free operational package
+
+Run once against the same candidate with `providerAttempts=0` and exact owner
+test IDs. It must cover:
+
+- actor, workspace, object, and SDK caller authorization, permitted and denied
+  canaries, and absence of any second operation-approval system;
+- Code Mode confinement, callback binding, idempotency, and zero-delta replay
+  for dispatch, mutation, submit, and publication;
+- cancellation, schedules/DST, evaluator and human revision, HR denials,
+  chief-of-staff scoping, private memory, subject isolation, skill promotion,
+  and rollback;
+- lease rotation, revocation and expiry; cumulative budgets; safe checkpoints;
+  waiting-for-input and Plane-owned continuation across replacement invocations;
+- distinct provider-request, runtime-invocation, and gateway-mutation
+  `outcome_unknown` handling;
+- malformed, oversized, duplicate, out-of-order, forged, cross-bound, illegal
+  lifecycle, incompatible-version, and bounded artifact/payload rejection;
+- bounded load, health, quota, safety stop, append-only audit, forward-only
+  API/runtime rollback, full catalog disposition, and retained O02 applicability.
+
+Nondisruptive checks may run in parallel with the live flows. Load, credential
+or lease revocation, safety-stop, and rollback use a separate stack or run after
+both live flows because they intentionally disturb shared dependencies.
+
+### Execution and completion
+
+All implementation tasks use Arena unless the task is a mechanical generated
+artifact synchronization, build, evidence update, or exact rerun with no design
+choice. Arena candidates use GPT-5.6 Luna; GPT-5.6 Sol Medium is reserved for a
+single justified cross-judge or the consolidated final review. Disposable work
+uses `/private/tmp`. Environment inputs are copied byte-for-byte from exactly
+the seven approved files in `/Users/nqh/Desktop/CODES/plane`; `setup.sh` is not
+run and file contents are not printed. Provider-backed work uses the existing
+authorized source without copying credentials into generated code or runtime
+environment.
+
+After one read-only candidate/image/environment preflight, run the Worker,
+Delegator, and nondisruptive provider-free units concurrently only if their
+workspaces, actors, assignments, work items, idempotency namespaces, leases,
+runtime processes/sockets, result paths, and cleanup labels are isolated. If
+the provider relay admits only one model flow, run each complete provider flow
+serially; never start two invocations merely to queue their provider sends.
+
+Pre-provider workflow friction has zero delivery weight: fix the workflow and
+continue the not-yet-started unit. Once a provider request begins, preserve the
+first genuine result for that flow. Never fallback, blindly retry, or replay
+`outcome_unknown`. An already-started sibling may finish. Changed bound source
+or image bytes invalidate prior live receipts unless an explicit digest-level
+applicability contract proves otherwise.
+
+Resume in four units:
+
+1. Replace the current repeated persona commissions with one composite Worker
+   descriptor, one composite Delegator descriptor, and one provider-free
+   operations descriptor.
+2. Freeze one exact candidate and pass its provider-free packages and preflight.
+3. Run the two provider-backed flows under the concurrency rule above; fix only
+   the failing owner seam and rerun only the invalidated flow on a new exact
+   candidate.
+4. Run one production-candidate verifier and one consolidated review, integrate
+   the named branch, and leave the worktree clean.
+
+G4 and this goal are complete only when:
+
+```text
+live = passed(Worker) + passed(Delegator) = 2/2
+and operator_provider_free_package = passed
+and retained_O02 = applicable
+and final_production_candidate_verifier = passed
+and consolidated_review = passed
+and integration_branch_and_worktree = clean
+```
+
+Route-cell totals, provider-attempt counts, historical candidates, and repeated
+verification waves are not progress metrics. No third provider-backed Operator
+journey, duplicate provider smoke, or second final clean wave is required.
