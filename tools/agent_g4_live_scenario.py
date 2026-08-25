@@ -52,6 +52,7 @@ _MANAGER_COMMISSION_ROUTES = {
     "cancellation-schedule": ("M03", "M04"),
     "evaluation-hr": ("M05", "M06"),
     "chief-of-staff-terminal-readback": ("M07", "M08"),
+    "delegator-full": tuple(f"M{index:02d}" for index in range(1, 9)),
 }
 _MANAGER_TERMINAL_PRODUCT_KINDS = {"publication", "outcome_submission", "run_failure", "run_blocker", "run_cancellation", "input_event"}
 _MANAGER_OUTCOME_OPERATIONS = {"agent.outcome.submit", "agent.outcome.publish"}
@@ -108,6 +109,11 @@ def code_mode_composition_template() -> str:
         '"idempotency:{{invocationId}}:code-mode-read", '
         '"correlation:{{invocationId}}:code-mode-read"); '
         'if (!read?.ok) return { catalog, described, search, read }; '
+        'const context = await host.call_plane_operation('
+        '"agent.context.read", { subject_user_ref: "{{subjectUserRef}}" }, '
+        '"idempotency:{{invocationId}}:code-mode-context", '
+        '"correlation:{{invocationId}}:code-mode-context"); '
+        'if (!context?.ok) return { catalog, described, search, read, context }; '
         'const workItem = read?.result?.work_item; '
         'if (!workItem || typeof workItem.project !== "string" || typeof workItem.id !== "string") '
         'throw new Error("authorized work item read unavailable"); '
@@ -115,14 +121,14 @@ def code_mode_composition_template() -> str:
         '"work_item.rename", { project_id: workItem.project, issue_id: workItem.id, '
         'name: "{{newName}}" }, "idempotency:{{invocationId}}:code-mode-rename", '
         '"correlation:{{invocationId}}:code-mode-rename"); '
-        'if (!rename?.ok) return { catalog, described, search, read, rename }; '
+        'if (!rename?.ok) return { catalog, described, search, read, context, rename }; '
         'const submit = await host.call_plane_operation('
         '"agent.outcome.submit", { summary: "Code Mode semantic rename completed.", '
         'artifacts: ["artifact:code-mode-semantic-rename"], '
         'evidence: ["evidence:code-mode-search-read-rename"] }, '
         '"idempotency:{{invocationId}}:code-mode-submit", '
         '"correlation:{{invocationId}}:code-mode-submit"); '
-        'return { catalog, described, search, read, rename, submit }; }'
+        'return { catalog, described, search, read, context, rename, submit }; }'
     )
 
 
@@ -355,6 +361,7 @@ def bind_code_mode_runtime_values(
     issue_id: str,
     invocation_id: str,
     new_name: str,
+    subject_user_ref: str = "user:subject",
 ) -> ScenarioDescriptor:
     """Bind fresh setup values before the run snapshot is created."""
 
@@ -363,6 +370,7 @@ def bind_code_mode_runtime_values(
         ("{{issueId}}", _runtime_binding_value(issue_id, "issue_id")),
         ("{{invocationId}}", _runtime_binding_value(invocation_id, "invocation_id")),
         ("{{newName}}", _runtime_binding_value(new_name, "new_name", name_value=True)),
+        ("{{subjectUserRef}}", _runtime_binding_value(subject_user_ref, "subject_user_ref")),
     )
 
     def bind(text: str) -> str:
@@ -849,8 +857,9 @@ def _commissions(value: Any) -> tuple[CommissionSpec, ...]:
 def _validate_manager_commissions(commissions: tuple[CommissionSpec, ...]) -> None:
     """Keep the Manager route split explicit, ordered, and terminal."""
 
+    commission_ids = tuple(commission.commission_id for commission in commissions)
     expected_ids = tuple(_MANAGER_COMMISSION_ROUTES)
-    if tuple(commission.commission_id for commission in commissions) != expected_ids:
+    if commission_ids not in (expected_ids, ("delegator-full",)):
         raise ScenarioError("scenario_manager_commission_ids_invalid")
     for commission in commissions:
         expected = commission.expected

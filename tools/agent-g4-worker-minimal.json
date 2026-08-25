@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "plane.agent-scenario/v1",
+  "scenarioId": "worker",
+  "actor": { "role": "worker" },
+  "profile": {
+    "name": "Maya Worker Minimal",
+    "instructions": "Complete this one bounded Worker assignment through the host-bound Plane Code Mode host. Use the returned opaque prepared read, then read exactly the bound subject context with {\"subject_user_ref\":\"{{subjectUserRef}}\"}; use the private skill projection and perform one semantic rename through the host gateway. Do not reconstruct identifiers, call native mutation tools, use imports, network, auth, filesystem, process, or actor substitution. Submit one bounded outcome with one artifact and one evidence item, then invoke plane_publish once with content only. Never stop at ordinary text or retry a denied, terminal, or unknown result.",
+    "modelPolicy": {
+      "provider": "openai-codex",
+      "model": "gpt-5.6-luna",
+      "reasoning": "xhigh",
+      "fallbackAllowed": false
+    },
+    "toolPresentation": { "eagerOperations": ["plane_execute_typescript"] }
+  },
+  "assignment": {
+    "targetRef": "fixture:assigned-work-item",
+    "objective": "Use one restricted Code Mode composition to discover, read, context-read, and semantically rename the assigned item, then submit and publish one bounded result.",
+    "acceptanceCriteria": [
+      "The exact prepared work-item read and subject-bound context are consumed once through the host gateway.",
+      "The private skill projection is used, one semantic mutation is applied, and the outcome is submitted and published exactly once."
+    ],
+    "contextRefs": ["context:worker-minimal"]
+  },
+  "prompt": "You are Maya, the assigned Worker. Complete the one Code Mode composition exactly and leave a visible terminal product event. Use only returned Plane references and the bound subject context; do not expose private projections in ordinary text.",
+  "commissions": [
+    {
+      "id": "worker-full",
+      "assignment": {
+        "targetRef": "fixture:assigned-work-item",
+        "objective": "Run the bounded Code Mode composition: catalog.search, catalog.describe with the exact returned operationId, search_workspace, work_item.read with the opaque preparedCallRef, agent.context.read for {{subjectUserRef}}, work_item.rename using the authorized read result, agent.outcome.submit, and content-only plane_publish.",
+        "acceptanceCriteria": [
+          "Malformed, cross-bound, or reconstructed prepared references fail closed without mutation.",
+          "The private skill and subject-bound context are used without leakage, and the semantic rename has one idempotent gateway receipt.",
+          "Submit one bounded outcome with one artifact and one evidence item, publish once, and leave one visible terminal event."
+        ],
+        "contextRefs": ["context:worker-minimal"]
+      },
+      "expected": {
+        "operationOutcomes": [
+          { "operationId": "catalog.search", "outcome": "success", "count": 1 },
+          { "operationId": "catalog.describe", "outcome": "success", "count": 1 },
+          { "operationId": "search_workspace", "outcome": "success", "count": 1 },
+          { "operationId": "work_item.read", "outcome": "success", "count": 1 },
+          { "operationId": "agent.context.read", "outcome": "success", "count": 1 },
+          { "operationId": "work_item.rename", "outcome": "success", "count": 1 },
+          { "operationId": "agent.outcome.submit", "outcome": "success", "count": 1 },
+          { "operationId": "agent.outcome.publish", "outcome": "success", "count": 1 }
+        ],
+        "evidenceKinds": ["assignment", "run", "invocation", "audit", "publication", "terminal_event"],
+        "durableRecords": [
+          { "kind": "assignment", "count": 1 },
+          { "kind": "run", "count": 1 },
+          { "kind": "invocation", "count": 1 },
+          { "kind": "publication", "count": 1 },
+          { "kind": "terminal_event", "count": 1 }
+        ],
+        "productEvents": [
+          { "kind": "publication", "count": 1 },
+          { "kind": "outcome_submission", "count": 1 }
+        ],
+        "routeChecks": ["W01", "W02", "W03", "W04", "W05", "W06", "W07", "W08"]
+      },
+      "modelToolset": "code_mode_only"
+    }
+  ],
+  "setup": {
+    "preconditions": ["isolated_workspace", "assigned_work_item", "fresh_assignment", "live_authorization", "separate_runtime_service"],
+    "actors": []
+  },
+  "controls": { "fault": { "selection": "none" } }
+}

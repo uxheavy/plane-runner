@@ -2818,6 +2818,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                 issue_id=str(issue.id),
                 invocation_id=str(planned_invocation_id),
                 new_name=f"V36 Code Mode {suffix}",
+                subject_user_ref=f"user:{user.id}",
             )
         profile = _create_commission_profile(shared, scenario, provider)
         setup_counters["profiles"] += 1

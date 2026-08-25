@@ -1122,6 +1122,38 @@ def test_persona_terminal_publication_guidance_uses_content_only_plane_publish(
     assert "resourceRef set to the returned outcomeRef" not in publication[0]
 
 
+def test_minimal_live_descriptors_reduce_provider_runs_to_worker_and_delegator() -> None:
+    worker_raw = (TOOLS / "agent-g4-worker-minimal.json").read_bytes()
+    delegator_raw = (TOOLS / "agent-g4-delegator-minimal.json").read_bytes()
+    worker = scenario.parse_descriptor_bytes(worker_raw, hashlib.sha256(worker_raw).hexdigest())
+    delegator = scenario.parse_descriptor_bytes(delegator_raw, hashlib.sha256(delegator_raw).hexdigest())
+
+    assert [commission.commission_id for commission in worker.commissions] == ["worker-full"]
+    assert worker.commissions[0].model_toolset == "code_mode_only"
+    assert worker.commissions[0].expected["routeChecks"] == [f"W{index:02d}" for index in range(1, 9)]
+    assert [commission.commission_id for commission in delegator.commissions] == ["delegator-full"]
+    assert delegator.commissions[0].expected["routeChecks"] == [f"M{index:02d}" for index in range(1, 9)]
+
+
+def test_code_mode_context_binding_is_subject_scoped() -> None:
+    raw = (TOOLS / "agent-g4-worker-minimal.json").read_bytes()
+    parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
+    bound = scenario.bind_code_mode_runtime_values(
+        scenario.select_commission(parsed, "worker-full"),
+        project_id="project-fresh",
+        issue_id="issue-fresh",
+        invocation_id="invocation-fresh",
+        new_name="Minimal Rename",
+        subject_user_ref="user:subject-fresh",
+    )
+    source = scenario.substitute_code_mode_placeholders(
+        scenario.code_mode_composition_template(), bound.runtime_bindings
+    )
+    assert '"agent.context.read"' in source
+    assert 'subject_user_ref: "user:subject-fresh"' in source
+    assert "{{subjectUserRef}}" not in source
+
+
 def test_not_authorized_outcome_renders_exact_canary_guidance() -> None:
     guidance = scenario.model_route_expectations(
         {
