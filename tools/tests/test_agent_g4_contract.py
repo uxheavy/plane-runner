@@ -1553,6 +1553,15 @@ class G4ContractTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertIn(f"        -u {name} \\", compose)
 
+    def test_g4_api_runner_normalizes_dotenv_values_before_direct_docker(self):
+        verifier = (TOOLS / "verify-agent-g4.sh").read_text(encoding="utf-8")
+        start = verifier.index("API_ENV=(")
+        api_env = verifier[start : verifier.index("\n)\n\nrun_api()", start)]
+
+        self.assertIn('--env "API_KEY_RATE_LIMIT=8192/minute"', api_env)
+        self.assertIn('--env "CORS_ALLOWED_ORIGINS=http://localhost"', api_env)
+        self.assertNotIn("--env-file", api_env)
+
     def test_live_runner_quarantines_host_compose_interpolation_overrides(self):
         runner = (TOOLS / "agent-g4-live.sh").read_text(encoding="utf-8")
         compose = runner[runner.index("compose_with_selected_env()") : runner.index("G4_HOST_CANDIDATE=")]

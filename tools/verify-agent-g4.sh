@@ -570,6 +570,7 @@ API_ENV=(
     --env "AWS_SECRET_ACCESS_KEY=secret-key"
     --env "AWS_S3_BUCKET_NAME=uploads"
     --env "EMAIL_HOST=test-smtp.invalid"
+    --env "CORS_ALLOWED_ORIGINS=http://localhost"
     --env "PLANE_MCP_EXTERNAL_ROOT=/workspace/external/plane-mcp-server"
     --env "PLANE_SDK_EXTERNAL_ROOT=/workspace/external/plane-python-sdk"
     --env "PLANE_G2_HERMES_CHECKOUT=/workspace/hermes-agent"
