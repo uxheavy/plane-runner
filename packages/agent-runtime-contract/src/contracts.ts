@@ -404,12 +404,39 @@ export type StandardRoute = Readonly<{
   steps: readonly StandardRouteStep[];
 }>;
 
-export type ToolCatalogSnapshot = Readonly<{
+export type LegacyToolCatalogSnapshot = Readonly<{
   catalogDigest: ContentDigest;
   modelToolset: "standard" | "code_mode_only";
   eagerOperations: readonly EagerOperationPresentation[];
   standardRoute?: StandardRoute;
+  server?: never;
+  tools?: never;
+  taskKit?: never;
 }>;
+
+export type PlaneToolCatalogSnapshot = Readonly<{
+  catalogDigest: ContentDigest;
+  server: "Plane";
+  tools: readonly Readonly<{
+    name: "discover" | "execute";
+    description: BoundedText;
+    inputSchema: Readonly<Record<string, unknown>>;
+  }>[];
+  taskKit: Readonly<{
+    task: Readonly<{
+      target: TargetRef;
+      objective: BoundedText;
+      acceptanceCriteria: readonly BoundedText[];
+    }>;
+    declarations: string;
+    example: BoundedText;
+  }>;
+  modelToolset?: never;
+  eagerOperations?: never;
+  standardRoute?: never;
+}>;
+
+export type ToolCatalogSnapshot = LegacyToolCatalogSnapshot | PlaneToolCatalogSnapshot;
 
 export type RuntimeModelRoute = Readonly<{
   provider: string;
@@ -1737,98 +1764,165 @@ function parseSnapshotContent(value: unknown, path: string): RunSnapshotContent 
       ) as ContentDigest,
     };
   });
-  const catalogObject = requireRecord(object.toolCatalog, `${path}.toolCatalog`, [
-    "catalogDigest",
-    "modelToolset",
-    "eagerOperations",
-    "standardRoute",
-  ]);
-  if (catalogObject.modelToolset !== "standard" && catalogObject.modelToolset !== "code_mode_only") {
-    throw new ContractParseError(`${path}.toolCatalog.modelToolset`, "must be standard or code_mode_only");
-  }
-  const modelToolset = catalogObject.modelToolset as ToolCatalogSnapshot["modelToolset"];
-  if (!Array.isArray(catalogObject.eagerOperations) || catalogObject.eagerOperations.length > MAX_EAGER_OPERATIONS) {
-    throw new ContractParseError(
-      `${path}.toolCatalog.eagerOperations`,
-      `must contain at most ${MAX_EAGER_OPERATIONS} items`
-    );
-  }
-  const eagerOperations = catalogObject.eagerOperations.map((item, index) => {
-    const operationObject = requireRecord(item, `${path}.toolCatalog.eagerOperations[${index}]`, [
-      "operationRef",
-      "schemaDigest",
-      "inputSchema",
-      "disclosure",
-    ]);
-    if (operationObject.disclosure !== "eager") {
-      throw new ContractParseError(`${path}.toolCatalog.eagerOperations[${index}].disclosure`, "must be eager");
-    }
-    return {
-      operationRef: parseRef(
-        operationObject.operationRef,
-        `${path}.toolCatalog.eagerOperations[${index}].operationRef`,
-        parseOperationRef
-      ),
-      schemaDigest: parseDigest(
-        operationObject.schemaDigest,
-        `${path}.toolCatalog.eagerOperations[${index}].schemaDigest`,
-        parseContentDigest
-      ) as ContentDigest,
-      inputSchema: parseEagerInputSchema(
-        operationObject.inputSchema,
-        `${path}.toolCatalog.eagerOperations[${index}].inputSchema`
-      ),
-      disclosure: "eager" as const,
-    };
-  });
+  const catalogObject = requireRecord(
+    object.toolCatalog,
+    `${path}.toolCatalog`,
+    ["catalogDigest"],
+    ["modelToolset", "eagerOperations", "standardRoute", "server", "tools", "taskKit"]
+  );
   const catalogDigest = parseDigest(
     catalogObject.catalogDigest,
     `${path}.toolCatalog.catalogDigest`,
     parseContentDigest
   ) as ContentDigest;
-  let standardRoute: StandardRoute | undefined;
-  if (catalogObject.standardRoute !== undefined) {
-    const routeObject = requireRecord(catalogObject.standardRoute, `${path}.toolCatalog.standardRoute`, [
-      "schemaVersion",
-      "steps",
-    ]);
-    if (routeObject.schemaVersion !== "plane.standard-route/v1") {
-      throw new ContractParseError(`${path}.toolCatalog.standardRoute`, "is unsupported");
-    }
-    if (!Array.isArray(routeObject.steps) || routeObject.steps.length < 1 || routeObject.steps.length > 7) {
-      throw new ContractParseError(`${path}.toolCatalog.standardRoute.steps`, "must contain 1..7 items");
-    }
-    standardRoute = {
-      schemaVersion: "plane.standard-route/v1",
-      steps: routeObject.steps.map((item, index) => {
-        const step = requireRecord(item, `${path}.toolCatalog.standardRoute.steps[${index}]`, [
-          "operationRef",
-          "optional",
-          "expectedStatus",
-          "expectedErrorCode",
-        ]);
-        if (step.optional !== undefined && step.optional !== true) {
-          throw new ContractParseError(`${path}.toolCatalog.standardRoute.steps[${index}].optional`, "must be true");
+  let toolCatalog: ToolCatalogSnapshot;
+  if (catalogObject.server !== undefined) {
+    const planeCatalog = requireRecord(catalogObject, `${path}.toolCatalog`, ["catalogDigest", "server", "tools", "taskKit"]);
+    const tools = (() => {
+      if (!Array.isArray(planeCatalog.tools) || planeCatalog.tools.length !== 2) {
+        throw new ContractParseError(`${path}.toolCatalog.tools`, "must contain exactly 2 items");
+      }
+      return planeCatalog.tools.map((item, index) => {
+        const tool = requireRecord(item, `${path}.toolCatalog.tools[${index}]`, ["name", "description", "inputSchema"]);
+        if (tool.name !== "discover" && tool.name !== "execute") {
+          throw new ContractParseError(`${path}.toolCatalog.tools[${index}].name`, "must be discover or execute");
         }
-        if (step.optional === true && step.operationRef !== "operation:work_item.read") {
-          throw new ContractParseError(`${path}.toolCatalog.standardRoute.steps[${index}].optional`, "is reserved for prepared work_item.read");
+        const name = tool.name as "discover" | "execute";
+        if (!isRecord(tool.inputSchema) || Object.keys(tool.inputSchema).length > 64) {
+          throw new ContractParseError(`${path}.toolCatalog.tools[${index}].inputSchema`, "must be an object with at most 64 properties");
         }
-        if (step.expectedStatus !== undefined && step.expectedStatus !== "denied") {
-          throw new ContractParseError(`${path}.toolCatalog.standardRoute.steps[${index}].expectedStatus`, "is unsupported");
-        }
-        if (step.expectedErrorCode !== undefined && step.expectedErrorCode !== "NOT_AUTHORIZED") {
-          throw new ContractParseError(`${path}.toolCatalog.standardRoute.steps[${index}].expectedErrorCode`, "is unsupported");
+        let inputSchema: Readonly<Record<string, unknown>>;
+        try {
+          const normalized = normalizeJsonValue(tool.inputSchema);
+          if (!isRecord(normalized) || Object.keys(normalized).length > 64) throw new Error();
+          inputSchema = normalized;
+        } catch {
+          throw new ContractParseError(`${path}.toolCatalog.tools[${index}].inputSchema`, "must be a safe JSON object");
         }
         return {
-          operationRef: parseRef(step.operationRef, `${path}.toolCatalog.standardRoute.steps[${index}].operationRef`, parseOperationRef),
-          ...(step.optional === true ? { optional: true as const } : {}),
-          ...(step.expectedStatus === "denied" ? { expectedStatus: "denied" as const } : {}),
-          ...(step.expectedErrorCode === "NOT_AUTHORIZED" ? { expectedErrorCode: "NOT_AUTHORIZED" as const } : {}),
+          name,
+          description: parseBoundedText(tool.description, `${path}.toolCatalog.tools[${index}].description`),
+          inputSchema,
         };
-      }),
+      });
+    })();
+    const taskKitObject = requireRecord(planeCatalog.taskKit, `${path}.toolCatalog.taskKit`, [
+      "task",
+      "declarations",
+      "example",
+    ]);
+    const taskObject = requireRecord(taskKitObject.task, `${path}.toolCatalog.taskKit.task`, [
+      "target",
+      "objective",
+      "acceptanceCriteria",
+    ]);
+    if (!Array.isArray(taskObject.acceptanceCriteria) || taskObject.acceptanceCriteria.length > 64) {
+      throw new ContractParseError(`${path}.toolCatalog.taskKit.task.acceptanceCriteria`, "must contain at most 64 items");
+    }
+    toolCatalog = {
+      catalogDigest,
+      server: parseLiteral(planeCatalog.server, "Plane", `${path}.toolCatalog.server`),
+      tools,
+      taskKit: {
+        task: {
+          target: parseRef(taskObject.target, `${path}.toolCatalog.taskKit.task.target`, parseTargetRef),
+          objective: parseBoundedText(taskObject.objective, `${path}.toolCatalog.taskKit.task.objective`),
+          acceptanceCriteria: taskObject.acceptanceCriteria.map((item, index) =>
+            parseBoundedText(item, `${path}.toolCatalog.taskKit.task.acceptanceCriteria[${index}]`)
+          ),
+        },
+        declarations: parseString(taskKitObject.declarations, `${path}.toolCatalog.taskKit.declarations`, 16_384),
+        example: parseBoundedText(taskKitObject.example, `${path}.toolCatalog.taskKit.example`),
+      },
     };
+  } else {
+    const legacyCatalog = requireRecord(catalogObject, `${path}.toolCatalog`, [
+      "catalogDigest",
+      "modelToolset",
+      "eagerOperations",
+    ], ["standardRoute"]);
+    if (legacyCatalog.modelToolset !== "standard" && legacyCatalog.modelToolset !== "code_mode_only") {
+      throw new ContractParseError(`${path}.toolCatalog.modelToolset`, "must be standard or code_mode_only");
+    }
+    const modelToolset = legacyCatalog.modelToolset as LegacyToolCatalogSnapshot["modelToolset"];
+    if (!Array.isArray(legacyCatalog.eagerOperations) || legacyCatalog.eagerOperations.length > MAX_EAGER_OPERATIONS) {
+      throw new ContractParseError(
+        `${path}.toolCatalog.eagerOperations`,
+        `must contain at most ${MAX_EAGER_OPERATIONS} items`
+      );
+    }
+    const eagerOperations = legacyCatalog.eagerOperations.map((item, index) => {
+      const operationObject = requireRecord(item, `${path}.toolCatalog.eagerOperations[${index}]`, [
+        "operationRef",
+        "schemaDigest",
+        "inputSchema",
+        "disclosure",
+      ]);
+      if (operationObject.disclosure !== "eager") {
+        throw new ContractParseError(`${path}.toolCatalog.eagerOperations[${index}].disclosure`, "must be eager");
+      }
+      return {
+        operationRef: parseRef(
+          operationObject.operationRef,
+          `${path}.toolCatalog.eagerOperations[${index}].operationRef`,
+          parseOperationRef
+        ),
+        schemaDigest: parseDigest(
+          operationObject.schemaDigest,
+          `${path}.toolCatalog.eagerOperations[${index}].schemaDigest`,
+          parseContentDigest
+        ) as ContentDigest,
+        inputSchema: parseEagerInputSchema(
+          operationObject.inputSchema,
+          `${path}.toolCatalog.eagerOperations[${index}].inputSchema`
+        ),
+        disclosure: "eager" as const,
+      };
+    });
+    let standardRoute: StandardRoute | undefined;
+    if (legacyCatalog.standardRoute !== undefined) {
+      const routeObject = requireRecord(legacyCatalog.standardRoute, `${path}.toolCatalog.standardRoute`, [
+        "schemaVersion",
+        "steps",
+      ]);
+      if (routeObject.schemaVersion !== "plane.standard-route/v1") {
+        throw new ContractParseError(`${path}.toolCatalog.standardRoute`, "is unsupported");
+      }
+      if (!Array.isArray(routeObject.steps) || routeObject.steps.length < 1 || routeObject.steps.length > 7) {
+        throw new ContractParseError(`${path}.toolCatalog.standardRoute.steps`, "must contain 1..7 items");
+      }
+      standardRoute = {
+        schemaVersion: "plane.standard-route/v1",
+        steps: routeObject.steps.map((item, index) => {
+          const step = requireRecord(item, `${path}.toolCatalog.standardRoute.steps[${index}]`, [
+            "operationRef",
+            "optional",
+            "expectedStatus",
+            "expectedErrorCode",
+          ]);
+          if (step.optional !== undefined && step.optional !== true) {
+            throw new ContractParseError(`${path}.toolCatalog.standardRoute.steps[${index}].optional`, "must be true");
+          }
+          if (step.optional === true && step.operationRef !== "operation:work_item.read") {
+            throw new ContractParseError(`${path}.toolCatalog.standardRoute.steps[${index}].optional`, "is reserved for prepared work_item.read");
+          }
+          if (step.expectedStatus !== undefined && step.expectedStatus !== "denied") {
+            throw new ContractParseError(`${path}.toolCatalog.standardRoute.steps[${index}].expectedStatus`, "is unsupported");
+          }
+          if (step.expectedErrorCode !== undefined && step.expectedErrorCode !== "NOT_AUTHORIZED") {
+            throw new ContractParseError(`${path}.toolCatalog.standardRoute.steps[${index}].expectedErrorCode`, "is unsupported");
+          }
+          return {
+            operationRef: parseRef(step.operationRef, `${path}.toolCatalog.standardRoute.steps[${index}].operationRef`, parseOperationRef),
+            ...(step.optional === true ? { optional: true as const } : {}),
+            ...(step.expectedStatus === "denied" ? { expectedStatus: "denied" as const } : {}),
+            ...(step.expectedErrorCode === "NOT_AUTHORIZED" ? { expectedErrorCode: "NOT_AUTHORIZED" as const } : {}),
+          };
+        }),
+      };
+    }
+    toolCatalog = standardRoute ? { catalogDigest, modelToolset, eagerOperations, standardRoute } : { catalogDigest, modelToolset, eagerOperations };
   }
-  const toolCatalog = standardRoute ? { catalogDigest, modelToolset, eagerOperations, standardRoute } : { catalogDigest, modelToolset, eagerOperations };
   if (!isCanonicalOwnedJsonUtf8ByteLengthAtMost(toolCatalog, MAX_EAGER_PRESENTATION_BYTES)) {
     throw new ContractParseError(
       `${path}.toolCatalog`,

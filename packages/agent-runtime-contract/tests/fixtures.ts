@@ -135,6 +135,32 @@ export const snapshot: RunSnapshot = createRunSnapshot(
   manifest
 );
 
+const snapshotContent = Object.fromEntries(Object.entries(snapshot).filter(([key]) => key !== "contentDigest"));
+
+export const planeSnapshot: RunSnapshot = createRunSnapshot(
+  {
+    ...snapshotContent,
+    toolCatalog: {
+      catalogDigest: contentDigest("p"),
+      server: "Plane",
+      tools: [
+        { name: "discover", description: "Discover Plane operations.", inputSchema: { type: "object" } },
+        { name: "execute", description: "Execute Plane code.", inputSchema: { type: "object" } },
+      ],
+      taskKit: {
+        task: {
+          target: createTargetRef("issue-1"),
+          objective: "Produce the requested result.",
+          acceptanceCriteria: ["The result is reviewable."],
+        },
+        declarations: "declare const task: Readonly<{ target: string }> ;",
+        example: "const current = await plane.workItems.retrieve(task.target);",
+      },
+    },
+  },
+  manifest
+);
+
 export const budget = (inputTokens: number, outputTokens: number, durationMs: number): RuntimeBudget => ({
   inputTokens,
   outputTokens,

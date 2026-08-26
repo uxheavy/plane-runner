@@ -63,6 +63,7 @@ import {
   proposalArtifactBody,
   proposalInputRequestBody,
   publicationBody,
+  planeSnapshot,
   snapshot,
   transcriptEvidenceBody,
   trustedHumanInputAnswer,
@@ -458,6 +459,7 @@ describe("parsed plane.agent-runtime/v1 contract boundary", () => {
   });
 
   test("keeps eager operation presentation exact, strict, and bounded", () => {
+    if (snapshot.toolCatalog.server === "Plane") throw new Error("fixture must contain a legacy catalog");
     const [eagerOperation] = snapshot.toolCatalog.eagerOperations;
     if (eagerOperation === undefined) throw new Error("fixture must contain one eager operation");
 
@@ -563,6 +565,14 @@ describe("parsed plane.agent-runtime/v1 contract boundary", () => {
         })
       )
     ).toThrow();
+  });
+
+  test("accepts the Plane tool catalog oneOf branch", () => {
+    const parsed = parseRunSnapshotWire(JSON.stringify(planeSnapshot));
+    if (parsed.toolCatalog.server !== "Plane") throw new Error("expected the Plane catalog branch");
+    expect(parsed.toolCatalog.tools.map((tool) => tool.name)).toEqual(["discover", "execute"]);
+    expect(parsed.toolCatalog.taskKit.example).toBe("const current = await plane.workItems.retrieve(task.target);");
+    assertValid("run-snapshot", planeSnapshot);
   });
 
   test("accepts only the canonical genesis and rejects alternate revision-zero states in parser and schema", () => {
