@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import json
 import os
 import subprocess
 import sys
@@ -22,7 +23,6 @@ from urllib.parse import urlparse
 import pytest
 from rest_framework.test import APIClient
 
-from plane.agent.tools.workspace_search import WorkspaceSearchService
 from plane.db.models import (
     APIToken,
     AgentActor,
@@ -37,8 +37,8 @@ from plane.db.models import (
 from plane.operation_gateway.contracts import MAX_RESULT_BYTES
 from plane.operation_gateway.publications import dispatch_publication_once
 
-EXPECTED_MCP_TIP = "c04974ed6624f17b41e63ef8182661929e77e0d3"
-EXPECTED_SDK_TIP = "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
+EXPECTED_MCP_TIP = "d65df7c94bcd41a3c7795c40c1227e2199889d71"
+EXPECTED_SDK_TIP = "4403116b3601a29d7a2c507c8bef1db768574142"
 MCP_ROOT_ENV = "PLANE_MCP_EXTERNAL_ROOT"
 SDK_ROOT_ENV = "PLANE_SDK_EXTERNAL_ROOT"
 MCP_ROOT_DEFAULT = "/private/tmp/plane-mcp-pf1-current"
@@ -98,50 +98,26 @@ def _load_file(module_name: str, path: Path) -> types.ModuleType:
     return module
 
 
-def _empty_package(module_name: str, path: Path) -> types.ModuleType:
-    package = types.ModuleType(module_name)
-    package.__path__ = [str(path)]
-    package.__package__ = module_name
-    sys.modules[module_name] = package
-    return package
-
-
-def _load_sdk_contracts() -> tuple[Any, Any, Any, Any, Any]:
+def _load_sdk_client() -> tuple[Any, Any, Any]:
     root = _external_root(SDK_ROOT_ENV, SDK_ROOT_DEFAULT, EXPECTED_SDK_TIP)
     prefix = "plane_external_sdk"
     for name in list(sys.modules):
         if name == prefix or name.startswith(f"{prefix}."):
             del sys.modules[name]
     package_root = root / "plane"
-    _empty_package(prefix, package_root)
-    _empty_package(f"{prefix}.api", package_root / "api")
-    errors = _empty_package(f"{prefix}.errors", package_root / "errors")
-    _empty_package(f"{prefix}.models", package_root / "models")
-
-    error_module = _load_file(f"{prefix}.errors.errors", package_root / "errors" / "errors.py")
-    for name in (
-        "ConfigurationError",
-        "HttpError",
-        "OperationDeniedError",
-        "OperationGatewayError",
-        "OperationOutcomeUnknownError",
-        "OperationUnsupportedError",
-    ):
-        setattr(errors, name, getattr(error_module, name))
-    gateway_models = _load_file(
-        f"{prefix}.models.operation_gateway",
-        package_root / "models" / "operation_gateway.py",
+    spec = importlib.util.spec_from_file_location(
+        prefix,
+        package_root / "__init__.py",
+        submodule_search_locations=[str(package_root)],
     )
-    config = importlib.import_module(f"{prefix}.config")
-    importlib.import_module(f"{prefix}.api.base_resource")
-    operations = importlib.import_module(f"{prefix}.api.operations")
-    return (
-        config.Configuration,
-        operations.Operations,
-        gateway_models.OperationRequest,
-        gateway_models.canonical_json_size,
-        errors.OperationGatewayError,
-    )
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load external SDK package {package_root}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[prefix] = module
+    spec.loader.exec_module(module)
+    models = importlib.import_module(f"{prefix}.models.work_items")
+    query_params = importlib.import_module(f"{prefix}.models.query_params")
+    return module.PlaneClient, models.UpdateWorkItem, query_params.WorkItemQueryParams
 
 
 class _MCPResponse:
@@ -167,43 +143,6 @@ class _DjangoMCPTransport:
         }
         response = self.client.post(urlparse(url).path, json, format="json", **request_headers)
         return _MCPResponse(response)
-
-
-class _SDKResponse:
-    def __init__(self, response: Any):
-        self.status_code = response.status_code
-        self.content = response.content
-        self.headers = {"content-type": "application/json"}
-        self.reason = getattr(response, "reason_phrase", "")
-        self.text = response.content.decode("utf-8")
-        self._body = response.json()
-
-    def json(self) -> dict[str, Any]:
-        return self._body
-
-
-class _DjangoSDKSession:
-    def __init__(self, client: APIClient):
-        self.client = client
-        self.calls: list[dict[str, Any]] = []
-
-    def post(
-        self,
-        url: str,
-        *,
-        headers: dict[str, str],
-        json: dict[str, Any],
-        params: Any,
-        timeout: Any,
-    ) -> _SDKResponse:
-        self.calls.append({"url": url, "headers": headers, "json": json, "params": params, "timeout": timeout})
-        request_headers = {
-            f"HTTP_{name.upper().replace('-', '_')}": value
-            for name, value in headers.items()
-            if name.lower() in {"x-api-key", "authorization"}
-        }
-        response = self.client.post(urlparse(url).path, json, format="json", **request_headers)
-        return _SDKResponse(response)
 
 
 @pytest.fixture
@@ -384,99 +323,100 @@ def test_external_sdk_client_uses_bearer_identity_and_real_gateway_result_bounda
     gateway_issue,
     sdk_oauth_user,
 ):
-    Configuration, Operations, OperationRequest, canonical_json_size, GatewayError = _load_sdk_contracts()
-    sdk_session = _DjangoSDKSession(APIClient())
-    operations = Operations(Configuration(base_path="http://testserver", access_token=SDK_OAUTH_TOKEN))
-    operations.session = sdk_session
+    mcp_gateway, _root = _load_mcp_gateway()
+    PlaneClient, UpdateWorkItem, WorkItemQueryParams = _load_sdk_client()
+    transport = _DjangoMCPTransport(APIClient())
+    client = PlaneClient(
+        base_url="http://testserver",
+        access_token=SDK_OAUTH_TOKEN,
+        gateway_transport=mcp_gateway.PlaneGatewayTransport(
+            base_url="http://testserver",
+            workspace_slug=workspace.slug,
+            access_token=SDK_OAUTH_TOKEN,
+            session=transport,
+            call_id="sdk-read",
+        ),
+    )
     caller_id = str(sdk_oauth_user.id)
 
-    read = operations.execute(
-        OperationRequest(
-            operation_id="work_item.retrieve",
-            workspace_slug=workspace.slug,
-            idempotency_key="sdk-read-key",
-            correlation_id="sdk-read-correlation",
-            input={"project_id": str(gateway_project.id), "issue_id": str(gateway_issue.id)},
-        )
+    read = client.work_items.retrieve(
+        workspace.slug,
+        str(gateway_project.id),
+        str(gateway_issue.id),
     )
-    assert read.result["work_item"]["id"] == str(gateway_issue.id)
-    assert read.caller.id == caller_id
-    assert read.correlation_id == "sdk-read-correlation"
+    assert read.id == str(gateway_issue.id)
     assert OperationGatewayAudit.objects.filter(
-        pk=read.audit_receipt,
-        caller_id=sdk_oauth_user.id,
-        correlation_id="sdk-read-correlation",
+        caller_id=caller_id,
+        operation_id="work_item.retrieve",
+        idempotency_key="mcp:sdk-read:1",
     ).exists()
     assert not AgentActor.objects.filter(workspace=workspace, principal=sdk_oauth_user).exists()
 
-    boundary_issues = [
+    small = client.work_items.list(
+        workspace.slug,
+        str(gateway_project.id),
+        params=WorkItemQueryParams(per_page=1),
+    )
+    assert len(small.results) == 1
+    assert len(json.dumps(small.model_dump(), separators=(",", ":")).encode()) <= MAX_RESULT_BYTES
+
+    for index in range(19):
         Issue.objects.create(
             name=f"sdk-boundary-{index}-" + "x" * (190 - len(f"sdk-boundary-{index}-")),
             project=gateway_project,
             workspace=workspace,
             created_by=sdk_oauth_user,
         )
-        for index in range(19)
-    ]
-    target_prefix = "sdk-boundary-target-"
-    target = Issue.objects.create(
-        name=target_prefix,
+    Issue.objects.create(
+        name="sdk-boundary-target-" + "x" * 235,
         project=gateway_project,
         workspace=workspace,
         created_by=sdk_oauth_user,
     )
-    boundary_issues.append(target)
-
-    def set_target_name(length: int) -> dict[str, Any]:
-        target.name = target_prefix + "x" * (length - len(target_prefix))
-        target.save(update_fields=["name"])
-        return WorkspaceSearchService().search(
-            workspace=workspace,
-            user=sdk_oauth_user,
-            query="sdk-boundary",
-            limit=20,
+    with pytest.raises(mcp_gateway.HttpError) as oversized:
+        client.work_items.list(
+            workspace.slug,
+            str(gateway_project.id),
+            params=WorkItemQueryParams(per_page=20),
         )
+    assert oversized.value.response["code"] == "RESULT_TOO_LARGE"
 
-    low, high = len(target_prefix), 255
-    exact_search = None
-    while low <= high:
-        length = (low + high) // 2
-        candidate = set_target_name(length)
-        candidate_size = canonical_json_size(candidate)
-        if candidate_size == MAX_RESULT_BYTES:
-            exact_search = candidate
-            break
-        if candidate_size < MAX_RESULT_BYTES:
-            low = length + 1
-        else:
-            high = length - 1
-    assert exact_search is not None, f"event=external_sdk_boundary_setup expected=8192 range={low}:{high}"
-    assert canonical_json_size(exact_search) == MAX_RESULT_BYTES
-    bounded = operations.execute(
-        OperationRequest(
-            operation_id="search_workspace",
-            workspace_slug=workspace.slug,
-            idempotency_key="sdk-boundary-8192",
-            correlation_id="sdk-boundary-correlation",
-            input={"query": "sdk-boundary", "limit": 20},
-        )
+    denied_user = User.objects.create(email="external-sdk-denied@plane.so", username="external-sdk-denied")
+    denied_token = APIToken.objects.create(
+        user=denied_user,
+        label="External SDK denied test",
+        token="external-sdk-denied",
     )
-    assert canonical_json_size(bounded.result) == MAX_RESULT_BYTES
-
-    target.name = target.name + "x"
-    target.save(update_fields=["name"])
-    with pytest.raises(GatewayError) as oversized:
-        operations.execute(
-            OperationRequest(
-                operation_id="search_workspace",
-                workspace_slug=workspace.slug,
-                idempotency_key="sdk-boundary-8193",
-                correlation_id="sdk-boundary-8193-correlation",
-                input={"query": "sdk-boundary", "limit": 20},
-            )
+    denied_transport = _DjangoMCPTransport(APIClient())
+    denied_client = PlaneClient(
+        base_url="http://testserver",
+        access_token=denied_token.token,
+        gateway_transport=mcp_gateway.PlaneGatewayTransport(
+            base_url="http://testserver",
+            workspace_slug=workspace.slug,
+            access_token=denied_token.token,
+            session=denied_transport,
+            call_id="sdk-denied",
+        ),
+    )
+    with pytest.raises(mcp_gateway.HttpError) as denied:
+        denied_client.work_items.update(
+            workspace.slug,
+            str(gateway_project.id),
+            str(gateway_issue.id),
+            UpdateWorkItem(name="Must Not Change"),
         )
-    assert oversized.value.code == "RESULT_TOO_LARGE"
-    assert sdk_session.calls
-    assert all(call["headers"].get("Authorization") == f"Bearer {SDK_OAUTH_TOKEN}" for call in sdk_session.calls)
-    assert all("X-Api-Key" not in call["headers"] for call in sdk_session.calls)
-    assert all("caller" not in call["json"] for call in sdk_session.calls)
+    assert denied.value.response["code"] == "NOT_AUTHORIZED"
+    gateway_issue.refresh_from_db()
+    assert gateway_issue.name == "Gateway Issue"
+    assert OperationGatewayIdempotency.objects.get(idempotency_key="mcp:sdk-denied:1").state == "denied"
+    assert OperationGatewayAudit.objects.filter(
+        caller_id=denied_user.id,
+        operation_id="work_item.update",
+        idempotency_key="mcp:sdk-denied:1",
+    ).exists()
+    assert transport.calls
+    assert all(call["headers"].get("Authorization") == f"Bearer {SDK_OAUTH_TOKEN}" for call in transport.calls)
+    assert all("X-Api-Key" not in call["headers"] for call in transport.calls)
+    assert all("caller" not in call["json"] for call in transport.calls)
+    assert not AgentActor.objects.filter(workspace=workspace, principal=sdk_oauth_user).exists()
