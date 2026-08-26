@@ -10,6 +10,12 @@ from typing import Literal
 
 CODE_MODE_SCHEMA_VERSION = "plane.code-mode/v1"
 CODE_MODE_EXECUTION_OPERATION = "plane.code-mode.execute@1"
+PLANE_DISCOVER_TOOL = "Plane:discover"
+PLANE_EXECUTE_TOOL = "Plane:execute"
+MAX_DISCOVERY_METHODS = 8
+MAX_DISCOVERY_BYTES = 16 * 1024
+MAX_EXECUTE_INPUT_BYTES = 8192
+MAX_RETURNED_VALUE_BYTES = 8 * 1024
 CODE_MODE_ERROR_CLASSES = frozenset(
     {
         "module_parse_or_load",
@@ -24,6 +30,35 @@ MAX_CODE_MODE_INLINE_RESULT_BYTES = 2 * 1024
 MAX_CODE_MODE_OBSERVATIONS = 32
 MAX_CODE_MODE_OBSERVATION_BYTES = 512
 MAX_CODE_MODE_OBSERVATIONS_BYTES = 4 * 1024
+
+
+def tool_error(
+    code: str,
+    message: str,
+    resolution: str,
+    *,
+    retryable: bool = False,
+    recovery: str = "fix_code",
+    field: str | None = None,
+    expected: str | None = None,
+    example: Any = None,
+) -> dict[str, Any]:
+    """Build the finite error shape exposed by the two Plane tools."""
+
+    value: dict[str, Any] = {
+        "code": code[:128],
+        "message": message[:1024],
+        "resolution": resolution[:1024],
+        "retryable": retryable,
+        "recovery": recovery,
+    }
+    if field is not None:
+        value["field"] = field[:128]
+    if expected is not None:
+        value["expected"] = expected[:512]
+    if example is not None:
+        value["example"] = example
+    return value
 
 
 class CodeModeExecutionError(ValueError):

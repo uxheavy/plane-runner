@@ -31,6 +31,8 @@ from plane.agent.code_mode.contracts import (
     CODE_MODE_ERROR_CLASSES,
     CodeModeExecutionError,
     CodeModeExecutionRequest,
+    PLANE_DISCOVER_TOOL,
+    PLANE_EXECUTE_TOOL,
 )
 
 from .contracts import (
@@ -2096,6 +2098,40 @@ class PlaneGatewayHostPort:
     @property
     def prepared_handoff_trace(self) -> dict[str, Any] | None:
         return self._prepared_call_registry.trace.snapshot()
+
+    @staticmethod
+    def model_tools() -> dict[str, dict[str, Any]]:
+        """Expose only the ADR-0011 model contract."""
+
+        from plane.agent.code_mode.host import CodeModeHostRPC
+
+        return CodeModeHostRPC.plane_tool_definitions()
+
+    def invoke_model(self, name: str, input_data: Mapping[str, Any]) -> dict[str, Any]:
+        """Dispatch the two model tools without exposing host protocol fields."""
+
+        if name == PLANE_DISCOVER_TOOL:
+            if not isinstance(input_data, Mapping) or set(input_data) != {"query"}:
+                return self._model_error("VALIDATION_ERROR", "Plane:discover input must contain only query.")
+            return self._host.discover(input_data["query"])
+        if name == PLANE_EXECUTE_TOOL:
+            if not isinstance(input_data, Mapping) or set(input_data) != {"code"}:
+                return self._model_error("VALIDATION_ERROR", "Plane:execute input must contain only code.")
+            return self._host.execute_plane(input_data["code"])
+        return self._model_error("UNKNOWN_TOOL", "The requested Plane tool is unavailable.")
+
+    @staticmethod
+    def _model_error(code: str, message: str) -> dict[str, Any]:
+        return {
+            "status": "error",
+            "error": {
+                "code": code,
+                "message": message,
+                "resolution": "Use Plane:discover or Plane:execute.",
+                "retryable": False,
+                "recovery": "none",
+            },
+        }
 
     def invoke(self, call: PlaneHostCall) -> PlaneHostResult:
         if call.run_id != self._run_ref or call.invocation_id != self._invocation_ref:

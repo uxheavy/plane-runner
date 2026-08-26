@@ -17,6 +17,7 @@ from plane.agent.lifecycle import (
     reap_code_mode_reservations,
     reconcile_code_mode_usage,
     reserve_code_mode_usage,
+    finish_code_mode,
 )
 from plane.agent.lifecycle.runtime_contract import (
     RuntimeContractError,
@@ -39,19 +40,24 @@ from plane.db.models import (
     RunTerminalEvent,
     RuntimeInvocation,
 )
-from plane.operation_gateway.catalog import CATALOG_DIGEST, code_mode_callback_names, get_operation
+from plane.operation_gateway.catalog import CATALOG_DIGEST, OPERATION_CATALOG, code_mode_callback_names, get_operation
 from plane.operation_gateway.gateway import OperationGateway, work_item_target_digest
 
 from .contracts import (
     CODE_MODE_SCHEMA_VERSION,
+    MAX_DISCOVERY_BYTES,
+    MAX_DISCOVERY_METHODS,
+    MAX_EXECUTE_INPUT_BYTES,
     MAX_CODE_MODE_INLINE_RESULT_BYTES,
     MAX_CODE_MODE_OBSERVATIONS,
     MAX_CODE_MODE_OBSERVATIONS_BYTES,
     MAX_CODE_MODE_OBSERVATION_BYTES,
+    MAX_RETURNED_VALUE_BYTES,
     CodeModeBudget,
     CodeModeExecutionRequest,
     HostBinding,
     SandboxPolicy,
+    tool_error,
 )
 
 
@@ -63,6 +69,75 @@ class CodeModeObservationError(AgentDomainError):
     """The bounded callback observation receipt cannot be extended safely."""
 
     code = "OBSERVATION_LIMIT"
+
+
+def _plane_method_path(operation_id: str) -> str:
+    if operation_id == "search_workspace":
+        return "workspace.search"
+    if operation_id == "work_item.read":
+        return "workItems.retrieve"
+    if operation_id == "work_item.rename":
+        return "workItems.update"
+    segments = operation_id.split(".")
+    namespace = "".join(part.replace("_", " ").title().replace(" ", "") for part in segments[:-1])
+    method = segments[-1].replace("_", " ").title().replace(" ", "")
+    return f"{namespace}.{method}"
+
+
+def _is_plane_operation(operation_id: str) -> bool:
+    return not operation_id.startswith(("agent.", "catalog.", "code_mode.", "runtime."))
+
+
+def _ts_type(schema: Any, name: str = "JsonValue") -> str:
+    if not isinstance(schema, Mapping):
+        return name
+    schema_type = schema.get("type")
+    if schema_type == "string":
+        return "string"
+    if schema_type == "integer" or schema_type == "number":
+        return "number"
+    if schema_type == "boolean":
+        return "boolean"
+    if schema_type == "array":
+        return f"readonly {_ts_type(schema.get('items'), name)}[]"
+    if schema_type == "object":
+        properties = schema.get("properties")
+        if not isinstance(properties, Mapping):
+            return name
+        required = set(schema.get("required", ()))
+        fields = []
+        for field, value in properties.items():
+            fields.append(f"readonly {field}{'' if field in required else '?'}: {_ts_type(value)}")
+        return "{ " + "; ".join(fields) + " }"
+    return name
+
+
+def _plane_declarations(methods: list[dict[str, str]]) -> str:
+    lines = [
+        "type JsonPrimitive = string | number | boolean | null;",
+        "type JsonValue = JsonPrimitive | readonly JsonValue[] | { readonly [key: string]: JsonValue };",
+        'type PlaneRef<Kind extends string = string> = string & { readonly __planeKind: Kind };',
+        "type FinishInput = { kind: 'completed'; summary: string; content?: string; artifacts?: readonly PlaneRef<'artifact'>[]; evidence?: readonly PlaneRef[] } | { kind: 'waiting_for_input'; question: string; context?: JsonValue } | { kind: 'blocked'; reason: string; evidence?: readonly PlaneRef[] };",
+        "declare const task: Readonly<{ target: PlaneRef; objective: string; acceptanceCriteria: readonly string[] }> ;",
+    ]
+    namespaces: dict[str, list[str]] = {}
+    for method in methods:
+        path = method["path"]
+        namespace, name = path.split(".", 1)
+        descriptor = OPERATION_CATALOG[method["operationId"]]
+        if path == "workItems.retrieve":
+            signature = "retrieve(target: PlaneRef): Promise<JsonValue>"
+        elif path == "workItems.update":
+            signature = "update(target: PlaneRef, input: { readonly name: string }): Promise<JsonValue>"
+        else:
+            signature = f"{name}(input: {_ts_type(descriptor.input_schema)}): Promise<JsonValue>"
+        namespaces.setdefault(namespace, []).append(signature)
+    lines.append("declare const plane: Readonly<{")
+    for namespace, signatures in namespaces.items():
+        lines.append(f"  readonly {namespace}: Readonly<{{ {'; '.join(signatures)} }}>;")
+    lines.append("  readonly finish: (input: FinishInput) => Promise<never>;")
+    lines.append("}>;")
+    return "\n".join(lines)
 
 
 def _canonicalize_work_item_read_call(input_data: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -149,6 +224,9 @@ class CodeModeHostRPC:
         self._prepared_call_registry: Any | None = None
         self._catalog_search_receipt: dict[str, Any] | None = None
         self._catalog_search_describe_completed = False
+        self._plane_methods = self._initial_plane_methods()
+        self._plane_finish_applied = False
+        self._plane_call_sequence = 0
 
     @classmethod
     def from_invocation(
@@ -176,6 +254,288 @@ class CodeModeHostRPC:
         """Return callback names from the canonical operation catalog."""
 
         return code_mode_callback_names()
+
+    @staticmethod
+    def plane_tool_definitions() -> dict[str, dict[str, Any]]:
+        """Return the complete model-facing contract, with no gateway details."""
+
+        return {
+            "Plane:discover": {
+                "description": "Find Plane Agent SDK methods and TypeScript types for one intended workflow. Use when the current task declarations do not contain a method needed to complete the assignment. Describe the whole workflow, not an API name. Returns one bounded replacement declaration slice. Discovery does not authorize execution.",
+                "inputSchema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["query"],
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500,
+                            "description": "The complete intended workflow, for example: list urgent unassigned work items, assign one member, then finish.",
+                        }
+                    },
+                },
+            },
+            "Plane:execute": {
+                "description": "Run one bounded TypeScript function body against the current Plane assignment. `plane` and `task` are injected and frozen. Use ordinary typed resource methods; do not import, export, construct a client, or return large data. Return compact JSON for further reasoning, or call `await plane.finish(...)` exactly once to complete, wait for input, or block. Plane owns identity, authorization, pagination, idempotency, receipts, and recovery.",
+                "inputSchema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["code"],
+                    "properties": {
+                        "code": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": MAX_EXECUTE_INPUT_BYTES,
+                            "description": "TypeScript statements executed as an async function body with ambient plane and task objects. Imports and exports are forbidden.",
+                        }
+                    },
+                },
+            },
+        }
+
+    def task_kit(self) -> dict[str, Any]:
+        """Build the deterministic initial assignment declarations."""
+
+        assignment = self._snapshot["assignment"]
+        return {
+            "task": {
+                "target": assignment["targetRef"],
+                "objective": assignment["objective"],
+                "acceptanceCriteria": list(assignment["acceptanceCriteria"]),
+            },
+            "declarations": _plane_declarations(self._plane_methods),
+        }
+
+    def _initial_plane_methods(self) -> list[dict[str, str]]:
+        operation_ids = [
+            operation_id
+            for operation_id in ("search_workspace", "work_item.read", "work_item.rename")
+            if operation_id in OPERATION_CATALOG
+        ]
+        return [{"path": _plane_method_path(operation_id), "operationId": operation_id} for operation_id in operation_ids]
+
+    def discover(self, query: str) -> dict[str, Any]:
+        if not isinstance(query, str) or not 1 <= len(query) <= 500:
+            return {
+                "status": "error",
+                "error": tool_error(
+                    "VALIDATION_ERROR",
+                    "The discovery query is invalid.",
+                    "Provide one workflow between 1 and 500 characters.",
+                    field="query",
+                    expected="string with length 1..500",
+                    recovery="narrow_query",
+                ),
+            }
+        tokens = {token for token in query.casefold().replace("_", " ").split() if token}
+        matches = []
+        for operation_id, descriptor in OPERATION_CATALOG.items():
+            if not _is_plane_operation(operation_id):
+                continue
+            searchable = " ".join((operation_id, descriptor.name, descriptor.summary, *descriptor.tags)).casefold()
+            if all(token in searchable for token in tokens):
+                matches.append({"path": _plane_method_path(operation_id), "operationId": operation_id})
+        matches.sort(key=lambda item: (item["path"], item["operationId"]))
+        if len(matches) > MAX_DISCOVERY_METHODS:
+            return {
+                "status": "error",
+                "error": tool_error(
+                    "DISCOVERY_TOO_BROAD",
+                    "The workflow matches too many Plane methods.",
+                    "Describe one complete, narrower workflow and try discovery again.",
+                    recovery="narrow_query",
+                ),
+            }
+        if not matches:
+            return {
+                "status": "error",
+                "error": tool_error(
+                    "CAPABILITY_NOT_FOUND",
+                    "No Plane method matched that workflow.",
+                    "Describe the intended workflow with its resource and action.",
+                    recovery="discover_capability",
+                ),
+            }
+        declarations = _plane_declarations(matches)
+        if len(declarations.encode("utf-8")) > MAX_DISCOVERY_BYTES:
+            return {
+                "status": "error",
+                "error": tool_error(
+                    "DISCOVERY_TOO_LARGE",
+                    "The declaration slice is too large.",
+                    "Describe a narrower workflow with fewer related methods.",
+                    recovery="narrow_query",
+                ),
+            }
+        self._plane_methods = matches
+        return {"status": "ok", "declarations": declarations}
+
+    def execute_plane(self, code: str) -> dict[str, Any]:
+        if not isinstance(code, str) or not code.strip():
+            return {
+                "status": "error",
+                "error": tool_error(
+                    "VALIDATION_ERROR",
+                    "Plane:execute code must be non-empty.",
+                    "Provide TypeScript statements for the current assignment.",
+                    field="code",
+                    expected=f"string with length 1..{MAX_EXECUTE_INPUT_BYTES}",
+                ),
+            }
+        if len(code.encode("utf-8")) > MAX_EXECUTE_INPUT_BYTES:
+            return {
+                "status": "error",
+                "error": tool_error(
+                    "INPUT_TOO_LARGE",
+                    "Plane:execute code exceeds 8192 UTF-8 bytes.",
+                    "Shorten the function body or use Plane resources to keep intermediate data in the sandbox.",
+                    field="code",
+                    expected=f"at most {MAX_EXECUTE_INPUT_BYTES} UTF-8 bytes",
+                ),
+            }
+        from .isolate import CodeModeIsolateError, CodeModeIsolateRunner
+
+        self._code_mode_observations = []
+        self._code_mode_active = True
+        try:
+            result = CodeModeIsolateRunner().run_plane(
+                self,
+                code,
+                self.task_kit()["task"],
+                self._plane_methods,
+            )
+        except CodeModeIsolateError as exc:
+            return {
+                "status": "error",
+                "error": getattr(exc, "tool_error", None)
+                or tool_error(
+                    getattr(exc, "code", "EXECUTION_FAILED"),
+                    "Plane:execute failed in the restricted runtime.",
+                    "Correct the TypeScript body and retry the same assignment.",
+                    recovery="fix_code",
+                ),
+            }
+        finally:
+            self._code_mode_active = False
+        if isinstance(result, Mapping) and result.get("__plane_finish__"):
+            return {"status": result["__plane_finish__"]}
+        try:
+            size = len(canonical_json(result).encode("utf-8"))
+        except (TypeError, ValueError):
+            return {
+                "status": "error",
+                "error": tool_error(
+                    "RETURN_VALUE_INVALID",
+                    "Plane:execute returned a non-JSON value.",
+                    "Return only JSON values or call await plane.finish(...).",
+                ),
+            }
+        if size > MAX_RETURNED_VALUE_BYTES:
+            return {
+                "status": "error",
+                "error": tool_error(
+                    "RETURN_VALUE_TOO_LARGE",
+                    "Plane:execute returned more than 8 KiB of JSON.",
+                    "Return a compact summary or keep intermediate data inside the sandbox.",
+                    expected=f"at most {MAX_RETURNED_VALUE_BYTES} canonical UTF-8 bytes",
+                ),
+            }
+        return {"status": "returned", "value": result}
+
+    def plane_callback_surface(self) -> dict[str, str]:
+        return {"resource": "call_plane_resource", "finish": "finish_plane"}
+
+    def invoke_resource(self, path: str, args: list[Any]) -> dict[str, Any]:
+        method = next((method for method in self._plane_methods if method["path"] == path), None)
+        if method is None:
+            return {
+                "status": "error",
+                "error": tool_error(
+                    "CAPABILITY_NOT_FOUND",
+                    f"Plane method {path!r} is not in the task declarations.",
+                    "Call Plane:discover for the complete intended workflow.",
+                    recovery="discover_capability",
+                ),
+            }
+        try:
+            input_data = self._resource_input(path, args)
+            self._plane_call_sequence += 1
+            receipt = self.call_operation(
+                method["operationId"],
+                input_data,
+                idempotency_key=f"idempotency:code-mode-{self.binding.invocation_ref}-{self._plane_call_sequence}",
+                correlation_id=f"correlation:code-mode-{self.binding.invocation_ref}-{self._plane_call_sequence}",
+            )
+        except (TypeError, ValueError) as exc:
+            return {"status": "error", "error": tool_error("VALIDATION_ERROR", str(exc), "Correct the typed method input.")}
+        if not receipt.get("ok"):
+            error = receipt.get("error")
+            code = error.get("code", "OPERATION_REJECTED") if isinstance(error, Mapping) else "OPERATION_REJECTED"
+            return {
+                "status": "error",
+                "error": tool_error(
+                    str(code),
+                    "Plane rejected the resource operation.",
+                    "Correct the target or permissions before retrying.",
+                    retryable=bool(error.get("retryable")) if isinstance(error, Mapping) else False,
+                    recovery="retry_same_call" if isinstance(error, Mapping) and error.get("retryable") else "fix_code",
+                ),
+            }
+        return {"status": "ok", "value": receipt.get("result", {})}
+
+    def _resource_input(self, path: str, args: list[Any]) -> dict[str, Any]:
+        if path in {"workItems.retrieve", "workItems.update"}:
+            if not args or not isinstance(args[0], str):
+                raise ValueError("work item methods require a typed target reference")
+            issue_id = args[0].removeprefix("issue:")
+            if issue_id == args[0] and args[0].startswith("target:literal-"):
+                try:
+                    issue_id = bytes.fromhex(args[0].removeprefix("target:literal-")).decode("utf-8").removeprefix("issue:")
+                except (ValueError, UnicodeDecodeError) as exc:
+                    raise ValueError("work item target reference is invalid") from exc
+            if not issue_id:
+                raise ValueError("work item target reference is invalid")
+            value = {"project_id": str(self.run.project_id), "issue_id": issue_id}
+            if path == "workItems.update":
+                if len(args) != 2 or not isinstance(args[1], Mapping) or not isinstance(args[1].get("name"), str):
+                    raise ValueError("work item update requires a name")
+                value["name"] = args[1]["name"]
+            return value
+        if len(args) != 1 or not isinstance(args[0], Mapping):
+            raise ValueError(f"{path} requires one typed input object")
+        return dict(args[0])
+
+    def finish_plane(self, value: Any) -> dict[str, Any]:
+        if self._plane_finish_applied:
+            raise ValueError("plane.finish may be called only once")
+        if not isinstance(value, Mapping) or value.get("kind") not in {"completed", "waiting_for_input", "blocked"}:
+            raise ValueError("plane.finish input is invalid")
+        kind = value["kind"]
+        required = "summary" if kind == "completed" else "question" if kind == "waiting_for_input" else "reason"
+        if not isinstance(value.get(required), str) or not value[required].strip():
+            raise ValueError(f"plane.finish requires a non-empty {required}")
+        try:
+            if self._execution_reservation is not None:
+                self.record_execution_usage(
+                    duration_ms=max(1, int((time.monotonic() - self._started_at) * 1000))
+                )
+            result = finish_code_mode(
+                self.invocation,
+                kind=kind,
+                summary=value.get("summary", ""),
+                artifacts=value.get("artifacts", []),
+                evidence=value.get("evidence", []),
+                question=value.get("question", ""),
+                context=value.get("context"),
+                reason=value.get("reason", ""),
+                idempotency_key=f"idempotency:code-mode-finish-{self.invocation.id}",
+                created_by=self.invocation.created_by,
+            )
+        except Exception as exc:
+            raise ValueError("Plane could not apply the requested lifecycle finish") from exc
+        self._plane_finish_applied = True
+        return {"__plane_finish__": {"completed": "completed", "waiting_for_input": "waiting_for_input", "blocked": "blocked"}[kind]}
 
     def set_prepared_call_registry(self, registry: Any) -> None:
         """Bind the invocation-local prepared-call registry owned by the host port."""

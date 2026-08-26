@@ -3012,6 +3012,64 @@ def transition_run(run, target, *, pending_input_ref=None):
     return locked
 
 
+@transaction.atomic
+def finish_code_mode(
+    invocation,
+    *,
+    kind,
+    summary="",
+    artifacts=None,
+    evidence=None,
+    question="",
+    context=None,
+    reason="",
+    idempotency_key=None,
+    created_by=None,
+):
+    """Apply the one generated-code lifecycle exit through Plane."""
+
+    _assignment, run, locked_invocation = lock_invocation_path(invocation.pk)
+    if kind == "completed":
+        return propose_outcome(
+            run,
+            summary=summary,
+            artifacts=artifacts,
+            evidence=evidence,
+            idempotency_key=idempotency_key,
+            created_by=created_by or locked_invocation.created_by,
+        )
+    if kind == "waiting_for_input":
+        pending_ref = f"event:code-mode-{locked_invocation.id}"
+        run = transition_run(run, RunState.WAITING_FOR_INPUT, pending_input_ref=pending_ref)
+        if not RunInputEvent.all_objects.filter(run=run, pending_input_ref=pending_ref).exists():
+            payload = {"question": question}
+            if context is not None:
+                payload["context"] = context
+            max_sequence = RunInputEvent.all_objects.filter(run=run).aggregate(max_sequence=Max("sequence"))["max_sequence"]
+            RunInputEvent.objects.create(
+                workspace=run.workspace,
+                project=run.project,
+                run=run,
+                event_ref=pending_ref,
+                kind=InputEventKind.HUMAN_INPUT,
+                sequence=(max_sequence or 0) + 1,
+                payload=payload,
+                payload_digest=content_digest(payload),
+                pending_input_ref=pending_ref,
+                created_by=created_by or locked_invocation.created_by,
+            )
+        return run
+    if kind == "blocked":
+        return finalize_invocation(
+            locked_invocation,
+            kind=TerminalEventKind.RUN_BLOCKER,
+            reason=reason,
+            source=TerminalEventSource.RUNTIME,
+            idempotency_key=idempotency_key,
+        )
+    raise AgentDomainError("Unsupported Code Mode finish kind")
+
+
 def _terminal_state(kind):
     return {
         TerminalEventKind.RUN_FAILURE: (InvocationState.FAILED, RunState.FAILED),

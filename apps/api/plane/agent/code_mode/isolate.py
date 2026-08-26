@@ -14,7 +14,12 @@ from typing import Any
 
 from plane.agent.lifecycle.runtime_contract import canonical_json
 
-from .contracts import CODE_MODE_ERROR_CLASSES, MAX_CODE_MODE_INLINE_RESULT_BYTES, MAX_CODE_MODE_SOURCE_BYTES
+from .contracts import (
+    CODE_MODE_ERROR_CLASSES,
+    MAX_CODE_MODE_INLINE_RESULT_BYTES,
+    MAX_CODE_MODE_SOURCE_BYTES,
+    MAX_EXECUTE_INPUT_BYTES,
+)
 
 
 MAX_PROTOCOL_LINE_BYTES = 1_048_576
@@ -25,10 +30,11 @@ _TYPESCRIPT_MODULE_DIR = "/usr/share/node_modules/typescript"
 class CodeModeIsolateError(RuntimeError):
     """A child isolate or closed host protocol failed closed."""
 
-    def __init__(self, code: str, message: str, *, error_class: str | None = None):
+    def __init__(self, code: str, message: str, *, error_class: str | None = None, tool_error: dict[str, Any] | None = None):
         super().__init__(message)
         self.code = code
         self.error_class = error_class if isinstance(error_class, str) and error_class in CODE_MODE_ERROR_CLASSES else None
+        self.tool_error = tool_error
 
 
 class CodeModeIsolateRunner:
@@ -57,10 +63,12 @@ class CodeModeIsolateRunner:
         *,
         input_tokens: int = 0,
         output_tokens: int = 0,
+        source_limit: int | None = None,
+        start_frame: dict[str, Any] | None = None,
     ) -> Any:
         if not isinstance(source, str) or not source.strip():
             raise CodeModeIsolateError("VALIDATION_ERROR", "Code Mode source must be non-empty TypeScript")
-        if len(source.encode("utf-8")) > MAX_CODE_MODE_SOURCE_BYTES:
+        if len(source.encode("utf-8")) > (source_limit or MAX_CODE_MODE_SOURCE_BYTES):
             raise CodeModeIsolateError("SOURCE_TOO_LARGE", "Code Mode source exceeds its size bound")
         if not isinstance(input_data, dict):
             raise CodeModeIsolateError("VALIDATION_ERROR", "Code Mode input must be an object")
@@ -135,33 +143,41 @@ class CodeModeIsolateRunner:
                     "type": "run",
                     "source": source,
                     "input": input_data,
-                    "callbacks": host.callback_surface(),
+                    "callbacks": (
+                        host.plane_callback_surface()
+                        if (start_frame or {}).get("mode") == "plane"
+                        else host.callback_surface()
+                    ),
+                    **(start_frame or {}),
                 },
             )
             result = self._read_protocol(process, selector, host, start)
             result_size = len(canonical_json(result).encode("utf-8"))
-            inline_limit = min(
-                host.budget.output_bytes,
-                getattr(host, "max_inline_result_bytes", MAX_CODE_MODE_INLINE_RESULT_BYTES),
-            )
-            if result_size > inline_limit:
-                spilled = host.spill_result(canonical_json(result))
-                if not spilled.get("ok"):
-                    error = spilled.get("error") if isinstance(spilled, dict) else None
-                    code = error.get("code") if isinstance(error, dict) else None
-                    raise CodeModeIsolateError(
-                        str(code or "SPILL_EXCEEDED"),
-                        "Code Mode result spill exceeded its bound",
+            is_finish = isinstance(result, dict) and "__plane_finish__" in result
+            if not is_finish:
+                if (start_frame or {}).get("mode") != "plane":
+                    inline_limit = min(
+                        host.budget.output_bytes,
+                        getattr(host, "max_inline_result_bytes", MAX_CODE_MODE_INLINE_RESULT_BYTES),
                     )
-                result = {"spilled": spilled}
-            if not host._record_output(len(canonical_json(result).encode("utf-8"))):
-                raise CodeModeIsolateError("BUDGET_EXCEEDED", "Code Mode output budget is exhausted")
-            host.record_execution_usage(
-                input_bytes=input_bytes,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                duration_ms=max(1, int((time.monotonic() - start) * 1000)),
-            )
+                    if result_size > inline_limit:
+                        spilled = host.spill_result(canonical_json(result))
+                        if not spilled.get("ok"):
+                            error = spilled.get("error") if isinstance(spilled, dict) else None
+                            code = error.get("code") if isinstance(error, dict) else None
+                            raise CodeModeIsolateError(
+                                str(code or "SPILL_EXCEEDED"),
+                                "Code Mode result spill exceeded its bound",
+                            )
+                        result = {"spilled": spilled}
+                if not host._record_output(len(canonical_json(result).encode("utf-8"))):
+                    raise CodeModeIsolateError("BUDGET_EXCEEDED", "Code Mode output budget is exhausted")
+                host.record_execution_usage(
+                    input_bytes=input_bytes,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    duration_ms=max(1, int((time.monotonic() - start) * 1000)),
+                )
             completed = True
             return result
         finally:
@@ -171,6 +187,23 @@ class CodeModeIsolateRunner:
                 release_execution_budget = getattr(host, "release_execution_budget", None)
                 if release_execution_budget is not None:
                     release_execution_budget()
+
+    def run_plane(
+        self,
+        host: Any,
+        code: str,
+        task: dict[str, Any],
+        methods: list[dict[str, str]],
+    ) -> Any:
+        """Run an async function body with only the frozen Plane facade."""
+
+        return self.run(
+            host,
+            code,
+            {"task": task, "methods": methods, "callbacks": host.plane_callback_surface()},
+            source_limit=MAX_EXECUTE_INPUT_BYTES,
+            start_frame={"mode": "plane"},
+        )
 
     def _read_protocol(self, process, selector, host, started: float) -> Any:
         assert process.stdout is not None
@@ -224,8 +257,9 @@ class CodeModeIsolateRunner:
                     error_class = "execution_runtime" if frame.get("code") == "CODE_MODE_FAILED" else None
                 raise CodeModeIsolateError(
                     str(frame.get("code", "CODE_MODE_FAILED")),
-                    "Code Mode execution failed in the restricted isolate.",
+                    str(frame.get("errorMessage", "Code Mode execution failed in the restricted isolate.")),
                     error_class=error_class,
+                    tool_error=frame.get("toolError") if isinstance(frame.get("toolError"), dict) else None,
                 )
             if frame.get("type") != "callback":
                 raise CodeModeIsolateError(
@@ -245,6 +279,8 @@ class CodeModeIsolateRunner:
                     error_class="callback_or_protocol",
                 ) from exc
             self._write(process, {"type": "callback_result", "id": frame.get("id"), "receipt": receipt})
+            if isinstance(receipt, dict) and "__plane_finish__" in receipt:
+                return receipt
 
     @staticmethod
     def _dispatch_callback(host, frame: dict[str, Any]) -> dict[str, Any]:
@@ -257,7 +293,11 @@ class CodeModeIsolateRunner:
                 "Code Mode callback is malformed",
                 error_class="callback_or_protocol",
             )
-        callback_names = host.callback_surface()
+        callback_names = (
+            host.plane_callback_surface()
+            if kind in {"resource", "finish"}
+            else host.callback_surface()
+        )
         if frame.get("name") != callback_names.get(kind):
             raise CodeModeIsolateError(
                 "PROTOCOL_ERROR",
@@ -292,6 +332,10 @@ class CodeModeIsolateRunner:
                 )
             if kind == "spill" and len(args) == 1:
                 return host.spill_result(args[0])
+            if kind == "resource" and len(args) == 2:
+                return host.invoke_resource(args[0], args[1])
+            if kind == "finish" and len(args) == 1:
+                return host.finish_plane(args[0])
         except (TypeError, ValueError) as exc:
             raise CodeModeIsolateError("CALLBACK_FAILED", "Code Mode callback failed closed") from exc
         except Exception as exc:

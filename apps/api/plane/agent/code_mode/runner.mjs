@@ -16,11 +16,20 @@ const write = (frame) => {
   process.stdout.write(`${JSON.stringify(frame)}\n`);
 };
 
-const fail = (code, errorClass) => {
+const fail = (code, errorClass, toolError) => {
+  const errorMessage = {
+    module_parse_or_load: "Code Mode imports are not permitted",
+    default_export_missing: "Code Mode source must export a default function",
+    execution_runtime: "Code Mode execution failed in the restricted isolate",
+    callback_or_protocol: "Code Mode callback or protocol failed closed",
+    child_exit_no_result: "Code Mode child exited without a result",
+  }[errorClass];
   write({
     type: "error",
     code,
     ...(CODE_MODE_ERROR_CLASSES.has(errorClass) ? { errorClass } : {}),
+    ...(errorMessage ? { errorMessage } : {}),
+    ...(toolError && typeof toolError === "object" ? { toolError } : {}),
   });
   process.exitCode = 1;
 };
@@ -69,9 +78,15 @@ const callback = (kind, name, args) => {
 
 const callbackNames = start.callbacks;
 const host = Object.create(null);
-host[callbackNames.search] = (...args) => callback("search", callbackNames.search, args);
-host[callbackNames.describe] = (...args) => callback("describe", callbackNames.describe, args);
+if (start.mode === "plane") {
+  host[callbackNames.resource] = (...args) => callback("resource", callbackNames.resource, args);
+  host[callbackNames.finish] = (...args) => callback("finish", callbackNames.finish, args);
+} else {
+  host[callbackNames.search] = (...args) => callback("search", callbackNames.search, args);
+  host[callbackNames.describe] = (...args) => callback("describe", callbackNames.describe, args);
+}
 
+if (start.mode !== "plane") {
 const PREPARED_CALL_PREFIX = "prepared-call:";
 const MAX_PREPARED_CALL_REF_BYTES = 256;
 const hasExactKeys = (value, expected) => {
@@ -118,10 +133,7 @@ const preparedCallRefFromWorkItemReadCall = (value) => {
 };
 
 const normalizeOperationInput = (operationId, input) => {
-  if (operationId !== "work_item.read") return input;
-  if (!hasExactKeys(input, ["preparedCallRef"])) {
-    throw new Error("prepared work-item read input is invalid");
-  }
+  if (operationId !== "work_item.read" || !hasExactKeys(input, ["preparedCallRef"])) return input;
   return { preparedCallRef: preparedCallRefFromWorkItemReadCall(input.preparedCallRef) };
 };
 
@@ -138,7 +150,38 @@ host[callbackNames.operation] = (operationId, input, ...args) => {
   }
 };
 host[callbackNames.spill] = (...args) => callback("spill", callbackNames.spill, args);
+}
 Object.freeze(host);
+
+const freeze = (value) => {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.values(value).forEach(freeze);
+    Object.freeze(value);
+  }
+  return value;
+};
+
+const planeRuntime = start.mode === "plane"
+  ? (() => {
+      const task = freeze(start.input.task);
+      const plane = {};
+      for (const method of start.input.methods) {
+        const [namespace, name] = method.path.split(".");
+        plane[namespace] ??= {};
+        plane[namespace][name] = (...args) => host[callbackNames.resource](method.path, args).then((result) => {
+          if (result?.status === "error") {
+            const error = new Error(result.error?.message || "Plane operation failed");
+            error.code = "PLANE_OPERATION_FAILED";
+            error.toolError = result.error;
+            throw error;
+          }
+          return result.value;
+        });
+      }
+      plane.finish = (value) => host[callbackNames.finish](value);
+      return { task, plane: freeze(plane) };
+    })()
+  : null;
 
 const stripTypes = (value) => {
   if (typeof nodeModule.stripTypeScriptTypes === "function") {
@@ -158,7 +201,11 @@ try {
   const context = vm.createContext(Object.create(null), {
     codeGeneration: { strings: false, wasm: false },
   });
-  const source = stripTypes(start.source);
+  const source = stripTypes(
+    start.mode === "plane"
+      ? `export default async (task, plane) => {\n${start.source}\n}`
+      : start.source,
+  );
   const module = new vm.SourceTextModule(source, {
     context,
     identifier: "plane-code-mode.ts",
@@ -174,11 +221,23 @@ try {
     throw error;
   }
   phase = "execution_runtime";
-  const value = await entry(Object.freeze({ host, input: Object.freeze(start.input) }));
+  const value = start.mode === "plane"
+    ? await entry(planeRuntime.task, planeRuntime.plane)
+    : await entry(Object.freeze({ host, input: Object.freeze(start.input) }));
+  if (start.mode === "plane" && value === undefined) {
+    const error = new Error("Plane:execute completed without a JSON return or plane.finish");
+    error.codeModeErrorClass = "execution_runtime";
+    error.code = "MISSING_TERMINAL_PUBLICATION";
+    throw error;
+  }
   write({ type: "result", value });
 } catch (error) {
   const errorClass = CODE_MODE_ERROR_CLASSES.has(error?.codeModeErrorClass)
     ? error.codeModeErrorClass
     : phase;
-  fail("CODE_MODE_FAILED", errorClass);
+  fail(
+    start.mode === "plane" && typeof error?.code === "string" ? error.code : "CODE_MODE_FAILED",
+    errorClass,
+    start.mode === "plane" ? error?.toolError : undefined,
+  );
 }
