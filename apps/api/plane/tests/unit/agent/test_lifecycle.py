@@ -209,7 +209,8 @@ def test_code_mode_toolset_survives_stored_snapshot_and_serialized_runtime_paylo
         created_by=create_user,
     )
     run = create_run(assignment, profile, created_by=create_user)
-    assert run.snapshot["toolCatalog"]["modelToolset"] == "code_mode_only"
+    assert run.snapshot["toolCatalog"]["server"] == "Plane"
+    assert {tool["name"] for tool in run.snapshot["toolCatalog"]["tools"]} == {"discover", "execute"}
     assert run.snapshot["toolCatalog"]["taskKit"]["task"]["target"].startswith("target:")
     assert run.snapshot["runtimePolicy"]["codeModePhase"] == "post_search"
 
@@ -218,7 +219,8 @@ def test_code_mode_toolset_survives_stored_snapshot_and_serialized_runtime_paylo
         canonical_json(run.snapshot), canonical_json(invocation.envelope)
     )
     projected = json.loads(payload)["run"]
-    assert projected["toolCatalog"]["modelToolset"] == "code_mode_only"
+    assert projected["toolCatalog"]["server"] == "Plane"
+    assert {tool["name"] for tool in projected["toolCatalog"]["tools"]} == {"discover", "execute"}
 
     missing = deepcopy(run.snapshot)
     del missing["toolCatalog"]["modelToolset"]

@@ -2213,9 +2213,10 @@ _FAILURE_TOP_LEVEL_FIELDS = {
     "scenarioGate",
     "commissionEvidence",
     "terminalLifecycle",
+    "setupError",
 }
 _FAILURE_REQUIRED_TOP_LEVEL_FIELDS = _FAILURE_TOP_LEVEL_FIELDS - {
-    "providerRelay", "scenario", "scenarioGate", "commissionEvidence", "terminalLifecycle"
+    "providerRelay", "scenario", "scenarioGate", "commissionEvidence", "terminalLifecycle", "setupError"
 }
 _FAILURE_STAGES = {
     "initialization",
