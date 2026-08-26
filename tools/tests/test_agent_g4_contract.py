@@ -828,6 +828,32 @@ class G4ContractTests(unittest.TestCase):
             separators=(",", ":"),
         )
         self.assertEqual(validate_evidence(runner_receipt, {}, {}, {}, CANDIDATE)["passed"], 0)
+        manifest, authority, config, _ = fixture()
+        live_receipt = invoke_helper_namespace()["build_failure_evidence"](
+            binding=exact_binding(manifest, CANDIDATE),
+            authority_id=authority["authorityId"],
+            canary_ids={key: row["id"] for key, row in authority["binding"]["canaries"].items()},
+            failure_phase="api-invocation",
+            error_class="AgentDomainError",
+            exit_code=1,
+            run_id=None,
+            run_state=None,
+            invocation_id=None,
+            invocation_state=None,
+            provider_attempts=[],
+            terminal_kind="none",
+            provider_relay=provider_relay_descriptor(),
+            setup_error=valid,
+        )
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(live_receipt))
+        self.addCleanup(temp.cleanup)
+        self.assertEqual(validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)["passed"], 0)
+        live_receipt["setupError"]["id"] = "setup:lineage:/private/secret"
+        live_receipt["semanticDigest"] = _semantic_digest(live_receipt)
+        temp, paths = self.write_case(manifest, authority, config, json.dumps(live_receipt))
+        self.addCleanup(temp.cleanup)
+        with self.assertRaisesRegex(ContractError, "runner_failure_setup_error_invalid"):
+            validate_files(*paths, CANDIDATE, CANDIDATE, COMMAND)
         with self.assertRaisesRegex(ContractError, "runner_failure_setup_error_invalid"):
             _validate_setup_error({**valid, "id": "setup:lineage:/private/secret"})
 

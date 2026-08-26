@@ -670,7 +670,14 @@ def _snapshot_tool_catalog(profile, assignment):
     try:
         presentation = getattr(profile, "tool_presentation", {}) or {}
         if isinstance(presentation, Mapping) and presentation.get("model_toolset") == "code_mode_only":
-            return compose_code_mode_catalog(profile, assignment)
+            return compose_code_mode_catalog(
+                profile,
+                {
+                    "target_ref": _target_runtime_ref(assignment.target_ref, "target_ref"),
+                    "objective": assignment.objective,
+                    "acceptance_criteria": assignment.acceptance_criteria,
+                },
+            )
         return compose_tool_catalog(profile, assignment)
     except ValueError as exc:
         raise AgentDomainError(str(exc)) from exc

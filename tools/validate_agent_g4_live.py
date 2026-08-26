@@ -1111,6 +1111,7 @@ _LIVE_TOP_LEVEL_FIELDS = {
     "scenarioGate",
     "commissionEvidence",
     "terminalLifecycle",
+    "setupError",
 }
 _TERMINAL_LIFECYCLE_PROTOCOL = "hermes.terminal-lifecycle/v1"
 _TERMINAL_LIFECYCLE_STATUSES = {"ok", "replayed", "denied", "conflict", "unavailable", "invalid"}
@@ -2271,6 +2272,8 @@ def _validate_failure_receipt(
     _exact(evidence["schemaVersion"], "plane-agent-g4/live-failure/v1", "evidence_schema")
     _exact(evidence["status"], "failed", "evidence_status")
     _validate_receipt_common(evidence, authority_info, expected_binding, status="failed")
+    if "setupError" in evidence:
+        _validate_setup_error(evidence["setupError"])
     if "terminalLifecycle" in evidence:
         _validate_terminal_lifecycle(evidence["terminalLifecycle"])
 
