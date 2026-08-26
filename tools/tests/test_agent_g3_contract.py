@@ -75,6 +75,22 @@ class G3RuffVerifierContractTests(unittest.TestCase):
             SOURCE,
         )
 
+    def test_external_client_proof_uses_current_manifest_pins(self) -> None:
+        client_source = (
+            Path(__file__).parents[2]
+            / "apps/api/plane/tests/contract/api/test_operation_gateway_external_clients.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn('MANIFEST="${ROOT_DIR}/tools/agent-g4-manifest.json"', SOURCE)
+        self.assertIn('MCP_COMMIT="$(manifest_pin pins.mcpGitlink)"', SOURCE)
+        self.assertIn('SDK_COMMIT="$(manifest_pin pins.sdkGitlink)"', SOURCE)
+        self.assertIn('PLANE_G4_MANIFEST=/workspace/agent-g4-manifest.json', SOURCE)
+        self.assertIn('MANIFEST_ENV = "PLANE_G4_MANIFEST"', client_source)
+        self.assertIn('pins["mcpGitlink"]', client_source)
+        self.assertIn('pins["sdkGitlink"]', client_source)
+        self.assertIn("assert tip == expected_tip", client_source)
+        self.assertNotIn("c04974ed6624f17b41e63ef8182661929e77e0d3", SOURCE + client_source)
+        self.assertNotIn("7d2faf3b7ef5409e292ba0a3c7015e59f93c5889", SOURCE + client_source)
+
 
 if __name__ == "__main__":
     unittest.main()

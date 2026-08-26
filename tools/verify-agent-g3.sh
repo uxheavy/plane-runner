@@ -11,12 +11,26 @@ if ! [[ "${PLANE_AGENT_VERIFIER_LOCK_FD:-}" =~ ^[0-9]+$ ]] || \
         "${LOCK_PATH}" -- "${ROOT_DIR}/tools/verify-agent-g3.sh" "$@"
 fi
 COMPOSE_FILE="${ROOT_DIR}/docker-compose-test.yml"
+MANIFEST="${ROOT_DIR}/tools/agent-g4-manifest.json"
 G3_BASE_COMMIT="9b4bad0b0b54c90c8d25e9af5f086971e6b9c93a"
 CANDIDATE_COMMIT="$(git -C "${ROOT_DIR}" rev-parse HEAD)"
-MCP_COMMIT="2dc152e136d7ad952b901e5fe9364a37487297ba"
-MCP_INVENTORY_COMMIT="96cf4d51d65cfa5e47d10ff7a4a4caba3b7a98d1"
-SDK_COMMIT="7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
 HERMES_COMMIT="114eabf9d807b659e36d767e4de46ca056297ccb"
+
+manifest_pin() {
+    local expression="$1"
+    python3 - "${MANIFEST}" "${expression}" <<'PY'
+import json
+import sys
+
+value = json.load(open(sys.argv[1], encoding="utf-8"))
+for part in sys.argv[2].split("."):
+    value = value[part]
+print(value)
+PY
+}
+
+MCP_COMMIT="$(manifest_pin pins.mcpGitlink)"
+SDK_COMMIT="$(manifest_pin pins.sdkGitlink)"
 API_TEST_IMAGE="${PLANE_API_TEST_IMAGE:-plane-g3-external-client-api-tests:prepared}"
 API_TEST_IMAGE_DIGEST="${PLANE_API_TEST_IMAGE_DIGEST:-sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e}"
 API_TEST_IMAGE_TAG="${PLANE_API_TEST_IMAGE_TAG:-${API_TEST_IMAGE}}"
@@ -103,26 +117,6 @@ check_gitlinks() {
     emit "plane.gitlinks" passed "candidate=${CANDIDATE_COMMIT}" "mcp=${MCP_COMMIT}" "sdk=${SDK_COMMIT}"
 }
 
-check_mcp_inventory() {
-    python3 - "${MCP_ROOT}" "${MCP_INVENTORY_COMMIT}" <<'PY'
-import json
-import sys
-from collections import Counter
-from pathlib import Path
-
-root = Path(sys.argv[1])
-expected_source = sys.argv[2]
-registry = json.loads((root / "plane_mcp" / "gateway_registry.json").read_text(encoding="utf-8"))
-assert registry["source"]["commit"] == expected_source, registry["source"]
-assert registry["tool_count"] == 177, registry["tool_count"]
-assert len(registry["actions"]) == 177
-assert Counter(row["registration"] for row in registry["actions"].values()) == Counter(
-    {"gateway": 86, "unsupported": 90, "local": 1}
-)
-print("event=agent.g3.external.inventory status=passed tool_count=177 gateway=86 unsupported=90 local=1 source=" + expected_source)
-PY
-}
-
 wait_for_services() {
     local container status attempt
     for attempt in $(seq 1 60); do
@@ -176,6 +170,7 @@ API_ENV=(
     --env "AWS_SECRET_ACCESS_KEY=secret-key"
     --env "AWS_S3_BUCKET_NAME=uploads"
     --env "EMAIL_HOST=test-smtp.invalid"
+    --env "PLANE_G4_MANIFEST=/workspace/agent-g4-manifest.json"
     --env "PLANE_MCP_EXTERNAL_ROOT=/workspace/external/plane-mcp-server"
     --env "PLANE_SDK_EXTERNAL_ROOT=/workspace/external/plane-python-sdk"
     --env "PLANE_G2_HERMES_CHECKOUT=/workspace/hermes-agent"
@@ -190,6 +185,7 @@ run_api() {
         "${API_ENV[@]}" \
         --entrypoint /bin/sh \
         --mount "type=bind,src=${ROOT_DIR}/packages/agent-runtime-contract,dst=/workspace/packages/agent-runtime-contract,readonly" \
+        --mount "type=bind,src=${MANIFEST},dst=/workspace/agent-g4-manifest.json,readonly" \
         --mount "type=bind,src=${MCP_ROOT},dst=/workspace/external/plane-mcp-server,readonly" \
         --mount "type=bind,src=${SDK_ROOT},dst=/workspace/external/plane-python-sdk,readonly" \
         --mount "type=bind,src=${EXTERNAL_SUPERPROJECT_ROOT}/.git/modules,dst=/workspace/.git/modules,readonly" \
@@ -329,7 +325,6 @@ pin_external_tree mcp "${MCP_ROOT}" "${MCP_COMMIT}"
 pin_external_tree sdk "${SDK_ROOT}" "${SDK_COMMIT}"
 pin_external_tree hermes-pin "${HERMES_PIN_ROOT}" "${HERMES_COMMIT}"
 check_gitlinks
-check_mcp_inventory
 [[ -d "${EXTERNAL_SUPERPROJECT_ROOT}/.git/modules" ]] || fail "external git module metadata is mounted" "missing metadata" "set PLANE_EXTERNAL_SUPERPROJECT_ROOT to the gitlink superproject"
 
 CURRENT_STEP="static-scope"

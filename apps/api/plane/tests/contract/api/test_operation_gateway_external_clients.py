@@ -37,13 +37,22 @@ from plane.db.models import (
 from plane.operation_gateway.contracts import MAX_RESULT_BYTES
 from plane.operation_gateway.publications import dispatch_publication_once
 
-EXPECTED_MCP_TIP = "d65df7c94bcd41a3c7795c40c1227e2199889d71"
-EXPECTED_SDK_TIP = "4403116b3601a29d7a2c507c8bef1db768574142"
+MANIFEST_ENV = "PLANE_G4_MANIFEST"
+MANIFEST_DEFAULT = Path(__file__).resolve().parents[6] / "tools" / "agent-g4-manifest.json"
 MCP_ROOT_ENV = "PLANE_MCP_EXTERNAL_ROOT"
 SDK_ROOT_ENV = "PLANE_SDK_EXTERNAL_ROOT"
 MCP_ROOT_DEFAULT = "/private/tmp/plane-mcp-pf1-current"
 SDK_ROOT_DEFAULT = "/private/tmp/plane-sdk-pf1-current"
 SDK_OAUTH_TOKEN = "external-sdk-oauth-token"
+
+
+def _manifest_pins() -> tuple[str, str]:
+    manifest = Path(os.getenv(MANIFEST_ENV, MANIFEST_DEFAULT))
+    try:
+        pins = json.loads(manifest.read_text(encoding="utf-8"))["pins"]
+        return pins["mcpGitlink"], pins["sdkGitlink"]
+    except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        pytest.fail(f"{MANIFEST_ENV} must contain exact external client pins: {manifest} ({exc})")
 
 
 def _external_root(env_name: str, default: str, expected_tip: str) -> Path:
@@ -64,8 +73,9 @@ def _external_root(env_name: str, default: str, expected_tip: str) -> Path:
 
 
 def _load_mcp_gateway() -> tuple[Any, Path]:
-    root = _external_root(MCP_ROOT_ENV, MCP_ROOT_DEFAULT, EXPECTED_MCP_TIP)
-    sdk_root = _external_root(SDK_ROOT_ENV, SDK_ROOT_DEFAULT, EXPECTED_SDK_TIP)
+    expected_mcp, expected_sdk = _manifest_pins()
+    root = _external_root(MCP_ROOT_ENV, MCP_ROOT_DEFAULT, expected_mcp)
+    sdk_root = _external_root(SDK_ROOT_ENV, SDK_ROOT_DEFAULT, expected_sdk)
     errors_package = types.ModuleType("plane.errors")
     errors_package.__path__ = [str(sdk_root / "plane" / "errors")]
     errors_package.__package__ = "plane.errors"
@@ -99,7 +109,8 @@ def _load_file(module_name: str, path: Path) -> types.ModuleType:
 
 
 def _load_sdk_client() -> tuple[Any, Any, Any]:
-    root = _external_root(SDK_ROOT_ENV, SDK_ROOT_DEFAULT, EXPECTED_SDK_TIP)
+    _expected_mcp, expected_sdk = _manifest_pins()
+    root = _external_root(SDK_ROOT_ENV, SDK_ROOT_DEFAULT, expected_sdk)
     prefix = "plane_external_sdk"
     for name in list(sys.modules):
         if name == prefix or name.startswith(f"{prefix}."):
@@ -302,6 +313,8 @@ def test_external_mcp_client_preserves_denial_and_unsupported_dispositions_witho
             data={"name": "Must Not Change"},
         )
     assert denied.value.response["code"] == "NOT_AUTHORIZED"
+    assert "result" not in denied.value.response
+    assert "work_item" not in denied.value.response
     gateway_issue.refresh_from_db()
     assert gateway_issue.name == "Gateway Issue"
     assert OperationGatewayIdempotency.objects.get(idempotency_key="mcp:mcp-denied:1").state == "denied"

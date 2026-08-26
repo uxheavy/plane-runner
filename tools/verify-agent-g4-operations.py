@@ -70,13 +70,36 @@ def _o02_audit(manifest: dict[str, Any], candidate: str, evidence_dir: Path | No
     relative = "apps/api/plane/tests/contract/api/test_operation_gateway_external_clients.py"
     reasons: list[str] = []
     source = _repo_path(relative)
+    source_text = ""
     if not source.is_file():
         reasons.append("external_client_contract_missing")
+    else:
+        source_text = source.read_text(encoding="utf-8")
     if manifest.get("retainedExternalProof") != "O02":
         reasons.append("retained_external_proof_not_O02")
     g3 = ROOT / "tools/verify-agent-g3.sh"
-    if not g3.is_file() or relative.removeprefix("apps/api/") not in g3.read_text(encoding="utf-8"):
+    g3_text = g3.read_text(encoding="utf-8") if g3.is_file() else ""
+    if not g3_text or relative.removeprefix("apps/api/") not in g3_text:
         reasons.append("g3_external_client_entrypoint_missing")
+    try:
+        pins = json.loads((ROOT / "tools/agent-g4-manifest.json").read_text(encoding="utf-8"))["pins"]
+        expected_mcp = pins["mcpGitlink"]
+        expected_sdk = pins["sdkGitlink"]
+    except (KeyError, OSError, TypeError, json.JSONDecodeError):
+        reasons.append("external_client_pin_manifest_unreadable")
+    else:
+        if not _HEX_RE.fullmatch(expected_mcp) or not _HEX_RE.fullmatch(expected_sdk):
+            reasons.append("external_client_pin_manifest_invalid")
+        if 'MANIFEST_ENV = "PLANE_G4_MANIFEST"' not in source_text:
+            reasons.append("external_client_manifest_binding_missing")
+        if 'pins["mcpGitlink"]' not in source_text or 'pins["sdkGitlink"]' not in source_text:
+            reasons.append("external_client_manifest_pin_fields_missing")
+        if 'MANIFEST="${ROOT_DIR}/tools/agent-g4-manifest.json"' not in g3_text:
+            reasons.append("g3_manifest_binding_missing")
+        if 'MCP_COMMIT="$(manifest_pin pins.mcpGitlink)"' not in g3_text:
+            reasons.append("g3_mcp_manifest_pin_binding_missing")
+        if 'SDK_COMMIT="$(manifest_pin pins.sdkGitlink)"' not in g3_text:
+            reasons.append("g3_sdk_manifest_pin_binding_missing")
     try:
         tree = ast.parse(source.read_text(encoding="utf-8"))
         test_ids = [f"{relative}::{node.name}" for node in tree.body if isinstance(node, ast.FunctionDef) and node.name.startswith("test_")]
