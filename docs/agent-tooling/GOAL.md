@@ -2,7 +2,7 @@
 
 ## Objective
 
-Build and independently verify one functionally complete non-UI Plane Agent system, conforming to [ADR-0001](../decisions/0001-plane-agent-tooling-architecture.md) through [ADR-0010](../decisions/0010-plane-runtime-contract.md), for backend assignments, runs, artifacts, conversations, outcomes, reviews, product events, and every supported Plane integration/action. The system must be operable and verifiable through real provider-backed Plane Agent journeys using Plane APIs, CLI/fixtures, ordinary Plane object pages, operator surfaces, and reused settings surfaces.
+Build and independently verify one functionally complete non-UI Plane Agent system, conforming to [ADR-0001](../decisions/0001-plane-agent-tooling-architecture.md) through [ADR-0011](../decisions/0011-plane-agent-code-mode-interface.md), for backend assignments, runs, artifacts, conversations, outcomes, reviews, product events, and every supported Plane integration/action. The system must be operable and verifiable through real provider-backed Plane Agent journeys using Plane APIs, CLI/fixtures, ordinary Plane object pages, operator surfaces, and reused settings surfaces.
 
 This goal covers the full Plane Agent control plane and the hidden execution service. It does not require chat, composer, thread, inbox, sidecar, transcript, or conversation-navigation UI.
 
@@ -691,3 +691,33 @@ and integration_branch_and_worktree = clean
 Route-cell totals, provider-attempt counts, historical candidates, and repeated
 verification waves are not progress metrics. No third provider-backed Operator
 journey, duplicate provider smoke, or second final clean wave is required.
+
+## Controlling ADR-0011 amendment (2026-08-26)
+
+Status: **active**. ADR-0011 supersedes the model-facing Code Mode portions of
+the minimal-live amendment above. The prior Worker protocol, its V120 refreeze,
+and further live debugging of `plane_operation`, `plane_execute_typescript`,
+`plane_publish`, catalog choreography, prepared-call references, or separate
+submit/publication are paused as superseded delivery work.
+
+The replacement Worker acceptance flow exposes exactly `Plane:discover` and
+`Plane:execute`. Plane prepares the initial typed task kit. The model uses
+discovery only when a required capability is absent, then executes one bounded
+TypeScript function body against frozen `task` and `plane` values. The program
+performs one authorized read and one semantic mutation through typed resource
+methods and ends exactly once through `plane.finish({kind: "completed", ...})`.
+The receipt must prove the durable outcome, visible terminal event, audit,
+readback, denied canary with zero effects, confinement, and zero-delta replay.
+No transport identifiers, credentials, gateway envelopes, prepared-call
+references, idempotency values, receipts, or separate publication tool are
+model-facing.
+
+Implementation resumes from the existing Operation Gateway, restricted Node
+child, runtime service, lifecycle, and audit seams. Reuse them; replace only the
+model-facing contract and its host facade. Migrate callers, then delete the
+superseded compatibility path after the new flow passes. The Delegator flow,
+provider-free operations package, retained O02 applicability check, final
+production verifier, and consolidated review remain required and unchanged.
+
+The live completion formula remains two flows, but `passed(Worker)` now means
+the ADR-0011 discover/execute/finish flow on the final immutable candidate.
