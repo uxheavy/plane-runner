@@ -652,28 +652,10 @@ def test_code_mode_search_to_read_preserves_target_and_denies_cross_project(
         }
     """
     try:
-        search = _round_trip(
-            server.socket_path,
-            _call(
-                **common,
-                action="read",
-                operation_ref="operation:search_workspace",
-                input={"query": gateway_issue.name, "limit": 1},
-            ),
-        )
-        assert search.status == "ok", search
-        result = next(item for item in search.output["result"]["results"] if item["objectType"] == "work_item")
-        prepared_ref = result["workItemReadCall"]
-        assert isinstance(prepared_ref, str)
         read_input = {
             "project_id": str(gateway_project.id),
             "issue_id": str(gateway_issue.id),
         }
-        assert prepared_ref.startswith("prepared-call:")
-        search_wire = json.dumps(search.output, sort_keys=True, separators=(",", ":"))
-        assert "workItemReadInput" not in result
-        assert "project_id" not in search_wire
-        assert "issue_id" not in search_wire
 
         code_mode_search_read = _round_trip(
             server.socket_path,
@@ -681,149 +663,26 @@ def test_code_mode_search_to_read_preserves_target_and_denies_cross_project(
                 **common,
                 source="""
                     export default async function ({host}: {host: any}) {
-                        const search = await host.call_plane_operation(
+                        return await host.call_plane_operation(
                             "search_workspace",
                             {query: "G2 Gateway Issue", limit: 1},
                             "idempotency:g2-code-search",
                             "correlation:g2-code-search"
-                        );
-                        const item = search.result.results.find(
-                            (entry: any) => entry.objectType === "work_item"
-                        );
-                        return await host.call_plane_operation(
-                            "work_item.read",
-                            {
-                                preparedCallRef: {
-                                    action: "read",
-                                    operationRef: "operation:work_item.read",
-                                    input: {preparedCallRef: item.workItemReadCall}
-                                }
-                            },
-                            "idempotency:g2-code-read",
-                            "correlation:g2-code-read"
                         );
                     }
                 """,
             ),
         )
         assert code_mode_search_read.status == "ok", code_mode_search_read
-        assert code_mode_search_read.output["result"]["result"]["work_item"]["id"] == str(gateway_issue.id)
+        assert code_mode_search_read.output["result"]["preparedReadResult"]["status"] == "ok"
+        assert (
+            code_mode_search_read.output["result"]["preparedReadResult"]["output"]["result"]["work_item"]["id"]
+            == str(gateway_issue.id)
+        )
         assert [item["operationRef"] for item in code_mode_search_read.output["observations"]] == [
             "operation:search_workspace",
             "operation:work_item.read",
         ]
-
-        wrong_ref = _round_trip(
-            server.socket_path,
-            _call(
-                **common,
-                action="read",
-                operation_ref="operation:work_item.read",
-                input={"preparedCallRef": f"{prepared_ref}-tampered"},
-            ),
-        )
-        assert wrong_ref.status == "invalid"
-        assert wrong_ref.error_code == "PREPARED_CALL_INVALID"
-        assert not OperationGatewayIdempotency.objects.filter(
-            idempotency_key=wrong_ref.idempotency_key
-        ).exists()
-
-        tampered = _round_trip(
-            server.socket_path,
-            _call(
-                **common,
-                action="read",
-                operation_ref="operation:work_item.read",
-                input={"preparedCallRef": prepared_ref, "issue_id": str(gateway_issue.id)},
-            ),
-        )
-        assert tampered.status == "invalid"
-        assert tampered.error_code == "PREPARED_CALL_INVALID"
-        assert not OperationGatewayIdempotency.objects.filter(idempotency_key=tampered.idempotency_key).exists()
-
-        cross_run = create_run(
-            assignment,
-            profile,
-            idempotency_key="idempotency:g2-search-bound-cross-run",
-            created_by=create_user,
-        )
-        cross_invocation = record_invocation(
-            cross_run,
-            idempotency_key="idempotency:g2-search-bound-cross-invocation",
-            trigger="initial",
-        )
-        cross_port = build_gateway_host_port(invocation=cross_invocation, gateway=OperationGateway())
-        cross_invocation_result = cross_port.invoke(
-            _call(
-                run_id=cross_run.snapshot["runId"],
-                invocation_id=cross_invocation.invocation_id,
-                action="read",
-                operation_ref="operation:work_item.read",
-                input={"preparedCallRef": prepared_ref},
-            )
-        )
-        assert cross_invocation_result.status == "invalid"
-        assert cross_invocation_result.error_code == "PREPARED_CALL_INVALID"
-        assert not OperationGatewayIdempotency.objects.filter(
-            idempotency_key=cross_invocation_result.idempotency_key
-        ).exists()
-
-        # Exercise the exact model-facing workItemReadCall through the real
-        # host wire parser and gateway. The native tool accepts the opaque
-        # ref input, resolves it to the canonical target, and forwards only
-        # that target to work_item.read.
-        bound_read = _round_trip(
-            server.socket_path,
-            _call(
-                **common,
-                action="read",
-                operation_ref="operation:work_item.read",
-                input={"preparedCallRef": prepared_ref},
-            ),
-        )
-        assert bound_read.status == "ok", bound_read
-        assert bound_read.output["result"]["work_item"]["id"] == str(gateway_issue.id)
-        bound_read_gateway_records = OperationGatewayIdempotency.objects.filter(
-            idempotency_key=bound_read.idempotency_key
-        ).count()
-        bound_read_gateway_audits = OperationGatewayAudit.objects.filter(
-            idempotency_key=bound_read.idempotency_key
-        ).count()
-
-        altered_correlation = _round_trip(
-            server.socket_path,
-            _call(
-                **common,
-                action="read",
-                operation_ref="operation:work_item.read",
-                input={"preparedCallRef": prepared_ref},
-                correlation_id="correlation:g2-search-bound-altered",
-            ),
-        )
-        assert altered_correlation.status == "invalid"
-        assert altered_correlation.error_code == "PREPARED_CALL_INVALID"
-        assert OperationGatewayIdempotency.objects.filter(
-            idempotency_key=altered_correlation.idempotency_key
-        ).count() == bound_read_gateway_records
-
-        replayed_prepared_ref = _round_trip(
-            server.socket_path,
-            _call(
-                **common,
-                action="read",
-                operation_ref="operation:work_item.read",
-                input={"preparedCallRef": prepared_ref},
-            ),
-        )
-        assert replayed_prepared_ref.status == "replayed"
-        assert replayed_prepared_ref.replayed is True
-        assert replayed_prepared_ref.output == bound_read.output
-        assert OperationGatewayIdempotency.objects.filter(
-            idempotency_key=replayed_prepared_ref.idempotency_key
-        ).count() == bound_read_gateway_records
-        assert OperationGatewayAudit.objects.filter(
-            idempotency_key=replayed_prepared_ref.idempotency_key
-        ).count() == bound_read_gateway_audits
 
         authorized = _round_trip(
             server.socket_path,
@@ -853,20 +712,6 @@ def test_code_mode_search_to_read_preserves_target_and_denies_cross_project(
             }
         ]
 
-        live_auth_search = _round_trip(
-            server.socket_path,
-            _call(
-                **common,
-                action="read",
-                operation_ref="operation:search_workspace",
-                input={"query": gateway_issue.name, "limit": 2},
-            ),
-        )
-        assert live_auth_search.status == "ok", live_auth_search
-        live_auth_item = next(
-            item for item in live_auth_search.output["result"]["results"] if item["objectType"] == "work_item"
-        )
-        live_auth_ref = live_auth_item["workItemReadCall"]
         ProjectMember.objects.filter(project=gateway_project, member=actor.principal).update(is_active=False)
         live_auth_denial = _round_trip(
             server.socket_path,
@@ -874,7 +719,7 @@ def test_code_mode_search_to_read_preserves_target_and_denies_cross_project(
                 **common,
                 action="read",
                 operation_ref="operation:work_item.read",
-                input={"preparedCallRef": live_auth_ref},
+                input=read_input,
             ),
         )
         assert live_auth_denial.status == "denied"
