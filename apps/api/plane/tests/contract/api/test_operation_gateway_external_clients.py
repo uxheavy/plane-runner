@@ -125,7 +125,24 @@ def _load_sdk_client() -> tuple[Any, Any, Any]:
         raise ImportError(f"Cannot load external SDK package {package_root}")
     module = importlib.util.module_from_spec(spec)
     sys.modules[prefix] = module
-    spec.loader.exec_module(module)
+    # The SDK keeps its published ``plane.*`` absolute imports. Isolate that
+    # namespace while loading it so Plane's server package cannot satisfy an
+    # SDK import such as ``plane.api.base_resource``.
+    server_plane_modules = {
+        name: value
+        for name, value in sys.modules.items()
+        if name == "plane" or name.startswith("plane.")
+    }
+    for name in server_plane_modules:
+        del sys.modules[name]
+    sys.modules["plane"] = module
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        for name in list(sys.modules):
+            if name == "plane" or name.startswith("plane."):
+                del sys.modules[name]
+        sys.modules.update(server_plane_modules)
     models = importlib.import_module(f"{prefix}.models.work_items")
     query_params = importlib.import_module(f"{prefix}.models.query_params")
     return module.PlaneClient, models.UpdateWorkItem, query_params.WorkItemQueryParams
