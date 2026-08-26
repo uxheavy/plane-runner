@@ -203,7 +203,7 @@ def test_code_mode_runtime_binding_substitutes_every_placeholder_once() -> None:
         new_name="V36 Code Mode Rename",
     )
 
-    route_guidance = scenario.model_route_expectations(bound.expected)
+    route_guidance = scenario.model_route_expectations(bound.expected, model_toolset=bound.profile.model_toolset)
     route_guidance = tuple(
         scenario.substitute_code_mode_placeholders(item, bound.runtime_bindings)
         for item in route_guidance
@@ -242,7 +242,7 @@ def test_code_mode_commission_uses_bound_composition_without_native_read_tools()
 
     guidance = tuple(
         scenario.substitute_code_mode_placeholders(item, bound.runtime_bindings)
-        for item in scenario.model_route_expectations(bound.expected)
+        for item in scenario.model_route_expectations(bound.expected, model_toolset=bound.profile.model_toolset)
     )
     assert mutation.profile.model_toolset == "code_mode_only"
     assert guidance[0].startswith("Route step 1: invoke plane_execute_typescript")
@@ -301,7 +301,7 @@ def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names()
     assert "call plane_execute_typescript exactly once" in code_mode.assignment.objective
     assert "malformed or unknown prepared shape must fail closed" in code_mode.assignment.objective
     assert "native plane_operation and work_item.rename are not model-visible" in code_mode.assignment.acceptance_criteria[-1]
-    code_mode_guidance = scenario.model_route_expectations(code_mode.expected)
+    code_mode_guidance = scenario.model_route_expectations(code_mode.expected, model_toolset=code_mode.profile.model_toolset)
     assert len(code_mode_guidance) == 2
     assert code_mode_guidance[0].startswith("Route step 1: invoke plane_execute_typescript exactly 1 time(s)")
     assert "catalog.search; pass the returned operationId verbatim to catalog.describe; search_workspace; extract only the returned workItemReadCall" in code_mode_guidance[0]
@@ -928,6 +928,59 @@ def test_commission_descriptor_keeps_shared_profile_and_binds_each_assignment() 
     assert identity.commissions == code_mode.commissions == context.commissions == ()
 
 
+def test_code_mode_readback_projects_atomic_finish_without_legacy_publication() -> None:
+    raw = (TOOLS / "agent-g4-worker-v6.json").read_bytes()
+    parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
+    code_mode = scenario.commission_descriptor(parsed, parsed.commissions[1])
+    projected = scenario.readback_expectations(code_mode.expected, model_toolset="code_mode_only")
+
+    assert [row["operationId"] for row in projected["operationOutcomes"]] == [
+        "catalog.search",
+        "catalog.describe",
+        "search_workspace",
+        "work_item.read",
+        "work_item.rename",
+    ]
+    assert "publication" not in projected["evidenceKinds"]
+    assert projected["durableRecords"][-1] == {"kind": "outcome_submission", "count": 1}
+    assert projected["productEvents"] == [{"kind": "outcome_submission", "count": 1}]
+    assert scenario.readback_expectations(code_mode.expected, model_toolset="standard") is code_mode.expected
+
+    gate = scenario.evaluate_expectations(
+        projected,
+        operations=[
+            {"operationId": row["operationId"], "outcome": "success", "count": 1}
+            for row in projected["operationOutcomes"]
+        ],
+        records=[
+            {"kind": kind, "count": count}
+            for kind, count in (
+                ("assignment", 1),
+                ("run", 1),
+                ("invocation", 1),
+                ("audit", 4),
+                ("outcome_submission", 1),
+                ("terminal_event", 1),
+            )
+        ],
+        product_events=[{"kind": "outcome_submission", "count": 1}],
+        evidence_kinds=projected["evidenceKinds"],
+    )
+    assert gate["passed"]
+
+
+def test_live_readback_scopes_code_mode_by_invocation_and_standard_by_run() -> None:
+    source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+    start = source.index("def _live_operation_readback_rows")
+    scope = source[start : source.index("def _run_single", start)]
+
+    assert '"workspace_id": run.workspace_id, "invocation_id": invocation.pk' in scope
+    assert "invocation.run_id != run.id or invocation.workspace_id != run.workspace_id" in scope
+    assert "return model.objects.none()" in scope
+    assert 'f"correlation:{run.id}"' in scope
+    assert 'terminal_lifecycle.get("terminal_action_observed") is not True' in source
+
+
 def test_multi_commission_prompt_preserves_the_typed_code_mode_route() -> None:
     source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
@@ -957,7 +1010,9 @@ def test_multi_commission_prompt_preserves_the_typed_code_mode_route() -> None:
     code_mode = scenario.commission_descriptor(parsed, parsed.commissions[1])
     expected = namespace["_profile_expected_outcomes"](code_mode)
 
-    assert expected == list(scenario.model_route_expectations(code_mode.expected))
+    assert expected == list(
+        scenario.model_route_expectations(code_mode.expected, model_toolset=code_mode.profile.model_toolset)
+    )
     assert expected[0].startswith("Route step 1: invoke plane_execute_typescript")
     assert "catalog.describe" in expected[0]
     assert 'host.call_plane_operation("work_item.rename"' in expected[0]

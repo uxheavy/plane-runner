@@ -1055,6 +1055,9 @@ def _scenario_readback(
 ):
     if scenario is None or scenario.expected is None:
         return None, None
+    from agent_g4_live_scenario import readback_expectations
+
+    expected = readback_expectations(scenario.expected, model_toolset=scenario.profile.model_toolset)
     operations = {}
     for row in audit_rows:
         if row.get("phase") != "outcome":
@@ -1087,6 +1090,7 @@ def _scenario_readback(
         {"kind": "invocation", "count": invocation_count},
         {"kind": "input_event", "count": input_event_count},
         {"kind": "audit", "count": audit_count},
+        {"kind": "outcome_submission", "count": OutcomeSubmission.objects.filter(run=run).count() if run_count else 0},
         *publication_records,
         {"kind": "terminal_event", "count": len(terminal_rows)},
         {"kind": "lineage_assignment", "count": int(getattr(lineage_assignment, "pk", None) is not None)},
@@ -1109,7 +1113,7 @@ def _scenario_readback(
     if route_evidence is not None:
         actual["routeEvidence"] = route_evidence
     return actual, evaluate_expectations(
-        scenario.expected,
+        expected,
         **{
             "operations": actual["operations"],
             "records": records,
@@ -2489,7 +2493,7 @@ def _profile_expected_outcomes(scenario):
 
     from agent_g4_live_scenario import model_route_expectations, substitute_code_mode_placeholders
 
-    rendered = model_route_expectations(scenario.expected)
+    rendered = model_route_expectations(scenario.expected, model_toolset=scenario.profile.model_toolset)
     if scenario.runtime_bindings:
         rendered = tuple(substitute_code_mode_placeholders(item, scenario.runtime_bindings) for item in rendered)
     return list(rendered)
@@ -2569,6 +2573,19 @@ def _create_commission_profile(shared, scenario, provider):
     )
 
 
+def _live_operation_readback_rows(model, *, invocation, run, code_mode):
+    """Scope gateway readback to the owning invocation for Code Mode."""
+
+    if code_mode and (invocation.run_id != run.id or invocation.workspace_id != run.workspace_id):
+        return model.objects.none()
+    filters = (
+        {"workspace_id": run.workspace_id, "invocation_id": invocation.pk}
+        if code_mode
+        else {"correlation_id": f"correlation:{run.id}"}
+    )
+    return model.objects.filter(**filters)
+
+
 def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
     legacy_s00 = _scenario_legacy_s00(scenario)
     started = time.monotonic()
@@ -2622,6 +2639,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
         "schedules": 0,
         "scheduleFires": 0,
     }
+    code_mode = scenario is not None and scenario.profile.model_toolset == "code_mode_only"
 
     def readback():
         nonlocal terminal_lifecycle, runtime_diagnostics
@@ -2682,15 +2700,17 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                 if event_id is not None:
                     transcript_event_ids.append(event_id)
         publication_records = list(
-            OperationGatewayIdempotency.objects.filter(
-                correlation_id=f"correlation:{run.id}",
+            _live_operation_readback_rows(
+                OperationGatewayIdempotency, invocation=invocation, run=run, code_mode=code_mode
+            ).filter(
                 operation_id="agent.outcome.publish",
                 state=OperationGatewayIdempotency.State.SUCCEEDED,
             )
             .order_by("created_at", "id")[:32]
         )
-        publication_audits = OperationGatewayAudit.objects.filter(
-            correlation_id=f"correlation:{run.id}",
+        publication_audits = _live_operation_readback_rows(
+            OperationGatewayAudit, invocation=invocation, run=run, code_mode=code_mode
+        ).filter(
             operation_id="agent.outcome.publish",
             phase="outcome",
         )
@@ -2752,7 +2772,10 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
             required=not bool(publication_records),
         )
         operation_audit = list(
-            OperationGatewayAudit.objects.filter(correlation_id=f"correlation:{run.id}", phase="outcome")
+            _live_operation_readback_rows(
+                OperationGatewayAudit, invocation=invocation, run=run, code_mode=code_mode
+            )
+            .filter(phase="outcome")
             .order_by("created_at", "id")
             .values("operation_id", "phase", "outcome", "error_code", "result")[:64]
         )
@@ -2779,13 +2802,16 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
         )
 
     def replay_snapshot():
-        correlation_id = f"correlation:{run.id}"
         issue.refresh_from_db()
         return {
             "providerAttempts": RuntimeProviderAttempt.objects.filter(invocation=invocation).count(),
             "invocations": invocation.run.invocations.count(),
-            "receipts": OperationGatewayIdempotency.objects.filter(correlation_id=correlation_id).count(),
-            "audits": OperationGatewayAudit.objects.filter(correlation_id=correlation_id).count(),
+            "receipts": _live_operation_readback_rows(
+                OperationGatewayIdempotency, invocation=invocation, run=run, code_mode=code_mode
+            ).count(),
+            "audits": _live_operation_readback_rows(
+                OperationGatewayAudit, invocation=invocation, run=run, code_mode=code_mode
+            ).count(),
             "usage": RuntimeUsageObservation.objects.filter(invocation=invocation).count(),
             "outcomes": OutcomeSubmission.objects.filter(run=run).count(),
             # Explicit outcome publication is projected by the bounded
@@ -2948,6 +2974,10 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
         ) = readback()
         if scenario is not None and scenario.scenario_id == "worker" and terminal_lifecycle is None:
             raise RuntimeError("terminal lifecycle observation missing")
+        if code_mode and (
+            terminal_lifecycle is None or terminal_lifecycle.get("terminal_action_observed") is not True
+        ):
+            raise RuntimeError("Code Mode terminal action observation missing")
         unknown_attempt = _provider_attempts_have_unknown_evidence(provider_attempts, control)
         if unknown_attempt:
             raise RuntimeError("provider request outcome was unknown; pass/replay is not permitted")
@@ -2983,8 +3013,9 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
             _run_continuation_supervisor(invocation, continuation_stdout, continuation_stderr)
             supervisor_failure_reason = _supervisor_failure_reason(continuation_stdout.getvalue()) or supervisor_failure_reason
             (provider_attempts, terminal, control, exit_evidence, runtime_event_kind_counts, plane_host_operation_receipts, plane_operation_audit, transcript_evidence, explicit_publication) = readback()
-        correlation_id = f"correlation:{run.id}"
-        audits = OperationGatewayAudit.objects.filter(correlation_id=correlation_id)
+        audits = _live_operation_readback_rows(
+            OperationGatewayAudit, invocation=invocation, run=run, code_mode=code_mode
+        )
         permitted = any(
             audits.filter(phase="outcome", outcome="success", operation_id=operation_id).exists()
             for operation_id in ("work_item.read", "catalog.search")

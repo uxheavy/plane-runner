@@ -56,6 +56,7 @@ _MANAGER_COMMISSION_ROUTES = {
 }
 _MANAGER_TERMINAL_PRODUCT_KINDS = {"publication", "outcome_submission", "run_failure", "run_blocker", "run_cancellation", "input_event"}
 _MANAGER_OUTCOME_OPERATIONS = {"agent.outcome.submit", "agent.outcome.publish"}
+_CODE_MODE_SUPERSEDED_OPERATIONS = {"agent.outcome.submit", "agent.outcome.publish"}
 _PUBLICATION_GUIDANCE = (
     "Invoke plane_publish with exactly {content:'<bounded publication summary>'}; "
     "never pass outcomeRef, operationRef, or resourceRef because runtime binds successful submit internally."
@@ -418,13 +419,37 @@ def select_runtime_descriptor(descriptor: ScenarioDescriptor, commission_id: str
     return select_commission(descriptor, commission_id)
 
 
-def model_route_expectations(expected: ExpectedPredicates | None) -> tuple[str, ...]:
+def model_route_expectations(
+    expected: ExpectedPredicates | None, *, model_toolset: Literal["standard", "code_mode_only"] = "standard"
+) -> tuple[str, ...]:
     """Render the typed route gate as bounded, ordered model-facing outcomes."""
 
     if expected is None:
         return ()
+    expected = readback_expectations(expected, model_toolset=model_toolset)
     outcomes = expected.get("operationOutcomes", [])
-    if tuple(item.get("operationId") for item in outcomes) in (
+    if model_toolset == "code_mode_only" and tuple(item.get("operationId") for item in outcomes) in (
+        (
+            "search_workspace",
+            "work_item.read",
+            "agent.context.read",
+            "work_item.rename",
+        ),
+        (
+            "catalog.search",
+            "catalog.describe",
+            "search_workspace",
+            "work_item.read",
+            "work_item.rename",
+        ),
+        (
+            "catalog.search",
+            "catalog.describe",
+            "search_workspace",
+            "work_item.read",
+            "agent.context.read",
+            "work_item.rename",
+        ),
         (
             "search_workspace",
             "work_item.read",
@@ -938,6 +963,28 @@ def evaluate_expectations(
         if not isinstance(o04, Mapping) or not o04 or not all(value is True for value in o04.values()):
             failures.append("route:O04")
     return {"passed": not failures, "failures": failures[:32], "operations": operation_results, "durableRecords": durable_results, "productEvents": product_results, "evidenceKinds": evidence_results}
+
+
+def readback_expectations(
+    expected: ExpectedPredicates | None, *, model_toolset: Literal["standard", "code_mode_only"] = "standard"
+) -> ExpectedPredicates | None:
+    """Project Code Mode's atomic finish onto the live readback contract."""
+
+    if expected is None or model_toolset != "code_mode_only":
+        return expected
+    projected = dict(expected)
+    projected["operationOutcomes"] = [
+        row for row in expected["operationOutcomes"] if row["operationId"] not in _CODE_MODE_SUPERSEDED_OPERATIONS
+    ]
+    projected["evidenceKinds"] = [kind for kind in expected["evidenceKinds"] if kind != "publication"]
+    if "outcome_submission" not in projected["evidenceKinds"]:
+        projected["evidenceKinds"].append("outcome_submission")
+    durable_records = [row for row in expected.get("durableRecords", []) if row["kind"] != "publication"]
+    if not any(row["kind"] == "outcome_submission" for row in durable_records):
+        durable_records.append({"kind": "outcome_submission", "count": 1})
+    projected["durableRecords"] = durable_records
+    projected["productEvents"] = [row for row in expected.get("productEvents", []) if row["kind"] != "publication"]
+    return projected
 
 
 def explicit_publication_expectations(value: Mapping[str, Any] | None) -> tuple[list[dict[str, int]], list[dict[str, int]], list[str]]:
