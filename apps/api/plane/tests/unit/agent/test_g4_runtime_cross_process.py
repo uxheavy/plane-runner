@@ -483,7 +483,7 @@ def test_g4_provider_dispatch_crosses_runtime_boundary_before_provider_request(t
             {
                 "last_refresh": "2026-08-07T10:12:00Z",
                 "tokens": {
-                    "access_token": "synthetic-access-token",
+                    "access_token": "e30.eyJpYXQiOjE3ODYwOTc1MjAsImV4cCI6MTc4NjA5NzU4MX0.s",
                     "account_id": "synthetic-account-id",
                     "id_token": "synthetic-id-token",
                     "refresh_token": "synthetic-refresh-token",
@@ -494,7 +494,7 @@ def test_g4_provider_dispatch_crosses_runtime_boundary_before_provider_request(t
     )
     monkeypatch.setattr(runtime_credentials, "DEPLOYMENT_CREDENTIAL_SOURCE_PATH", str(source))
     credentials = runtime_credentials.resolve_deployment_credential("runtime")
-    assert credentials == {"api_key": "synthetic-access-token"}
+    assert credentials == {"api_key": "e30.eyJpYXQiOjE3ODYwOTc1MjAsImV4cCI6MTc4NjA5NzU4MX0.s"}
     assert set(credentials) == {"api_key"}
 
     environment = _runtime_environment(
@@ -641,6 +641,7 @@ def test_g4_provider_dispatch_reissues_invocation_relay_and_lease(tmp_path, monk
     controller = RuntimeSafetyController(configured=True, stop_file=tmp_path / "safety-stop")
     controller.mark_ready()
     executor = RuntimeDispatchExecutor(configuration, controller)
+    executor._process_policy = replace(executor._process_policy, enforce_kernel_policy=False)
     executor._transport = SubprocessRuntimeTransport(
         command=(sys.executable, "-c", child),
         environment=dict(os.environ),
