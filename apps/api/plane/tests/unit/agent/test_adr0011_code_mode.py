@@ -1,4 +1,6 @@
 import json
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 
@@ -12,6 +14,7 @@ from plane.agent.code_mode.contracts import (
 )
 from plane.agent.code_mode.host import CodeModeHostRPC
 from plane.agent.code_mode.isolate import CodeModeIsolateError, CodeModeIsolateRunner
+from plane.agent.lifecycle import services as lifecycle_services
 from plane.agent.runtime.host_rpc import PlaneGatewayHostPort, PlaneHostCall
 
 
@@ -79,6 +82,9 @@ def test_discovery_is_bounded_and_replaces_the_declaration_slot():
     assert len(result["declarations"].encode()) <= MAX_DISCOVERY_BYTES
     assert len(host._plane_methods) <= MAX_DISCOVERY_METHODS
     assert "preparedCallRef" not in result["declarations"]
+    kit = host.task_kit()
+    assert set(kit) == {"task", "declarations", "example"}
+    assert kit["example"] == "const current = await plane.workItems.retrieve(task.target);"
 
     broad = host.discover("agent")
     assert broad["status"] == "error"
@@ -164,6 +170,32 @@ def test_realm_constructor_chain_cannot_escape_the_restricted_child():
         [{"path": "workItems.retrieve", "operationId": "work_item.read"}],
     )
     assert result == "denied"
+
+
+def test_completed_content_reaches_the_single_lifecycle_seam():
+    host = object.__new__(CodeModeHostRPC)
+    host._plane_finish_applied = False
+    host._execution_reservation = None
+    host.invocation = SimpleNamespace(id="invocation:1", created_by=None)
+    with patch("plane.agent.code_mode.host.finish_code_mode", return_value=object()) as apply:
+        host.finish_plane({"kind": "completed", "summary": "done", "content": "details"})
+    assert apply.call_args.kwargs["content"] == "details"
+
+
+def test_lifecycle_seam_forwards_completed_content_to_outcome_application():
+    run = object()
+    invocation = SimpleNamespace(created_by=None)
+    with (
+        patch.object(lifecycle_services, "lock_invocation_path", return_value=(None, run, invocation)),
+        patch.object(lifecycle_services, "propose_outcome", return_value=object()) as apply,
+    ):
+        lifecycle_services.finish_code_mode.__wrapped__(
+            invocation,
+            kind="completed",
+            summary="done",
+            content="details",
+        )
+    assert apply.call_args.kwargs["content"] == "details"
 
 
 def test_current_declaration_slice_is_type_checked_before_execution():

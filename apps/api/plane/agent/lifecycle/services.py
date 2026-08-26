@@ -3037,6 +3037,7 @@ def finish_code_mode(
         return propose_outcome(
             run,
             summary=summary,
+            content=content,
             artifacts=artifacts,
             evidence=evidence,
             idempotency_key=idempotency_key,
@@ -3231,7 +3232,7 @@ def _create_terminal_event_locked(
     )
 
 
-def _replay_outcome_terminal_locked(run, outcome):
+def _replay_outcome_terminal_locked(run, outcome, *, content=""):
     if not run.last_invocation_id:
         raise TerminalEventRequiredError("Outcome submission requires a runtime invocation")
     invocation = RuntimeInvocation.objects.select_for_update().get(invocation_id=run.last_invocation_id)
@@ -3244,7 +3245,7 @@ def _replay_outcome_terminal_locked(run, outcome):
         kind=TerminalEventKind.OUTCOME_SUBMISSION,
         source=TerminalEventSource.RUNTIME,
         product_ref=namespaced_ref("outcome-submission", str(outcome.id)),
-        reason="",
+        reason=content,
         idempotency_key=namespaced_ref("idempotency", f"outcome-{outcome.id}"),
     )
 
@@ -3272,8 +3273,14 @@ def finalize_invocation(invocation, *, kind, reason="", source=TerminalEventSour
 
 
 @transaction.atomic
-def propose_outcome(run, *, summary, artifacts=None, evidence=None, idempotency_key=None, created_by=None):
+def propose_outcome(run, *, summary, content=None, artifacts=None, evidence=None, idempotency_key=None, created_by=None):
     summary = _ensure_non_empty(summary, "summary")
+    content_value = None
+    if content is not None:
+        if not isinstance(content, str):
+            raise AgentDomainError("content must be a string")
+        if content.strip():
+            content_value = _ensure_bounded_text(content, "content")
     artifacts_value = _as_list(artifacts, "artifacts", max_items=64)
     evidence_value = _as_list(evidence, "evidence", max_items=64)
     _assignment, run = _lock_assignment_run(run.pk)
@@ -3290,15 +3297,18 @@ def propose_outcome(run, *, summary, artifacts=None, evidence=None, idempotency_
     key = _normalise_idempotency(idempotency_key, "outcome idempotency_key") if idempotency_key is not None else None
     outcome_fingerprint = None
     if key is not None:
+        fingerprint_content = {
+            "runId": _command_id(run),
+            "summary": summary,
+            "artifacts": artifacts_value,
+            "evidence": evidence_value,
+            "createdBy": _command_id(created_by),
+        }
+        if content_value is not None:
+            fingerprint_content["content"] = content_value
         outcome_fingerprint = command_fingerprint(
             "propose_outcome",
-            {
-                "runId": _command_id(run),
-                "summary": summary,
-                "artifacts": artifacts_value,
-                "evidence": evidence_value,
-                "createdBy": _command_id(created_by),
-            },
+            fingerprint_content,
         )
         _lock_idempotency_key(key)
         existing = OutcomeSubmission.all_objects.filter(submission_idempotency_key=key).first()
@@ -3315,7 +3325,7 @@ def propose_outcome(run, *, summary, artifacts=None, evidence=None, idempotency_
                     )
                 else:
                     raise IdempotencyConflictError("Outcome idempotency key is bound to another Plane command")
-            _replay_outcome_terminal_locked(run, existing)
+            _replay_outcome_terminal_locked(run, existing, content=content_value or "")
             return existing
         _assert_idempotency_key_is_unclaimed(key, current_model=OutcomeSubmission)
     if run.state not in {RunState.RUNNING, RunState.WAITING_FOR_INPUT}:
@@ -3374,7 +3384,7 @@ def propose_outcome(run, *, summary, artifacts=None, evidence=None, idempotency_
         kind=TerminalEventKind.OUTCOME_SUBMISSION,
         source=TerminalEventSource.RUNTIME,
         product_ref=namespaced_ref("outcome-submission", str(outcome.id)),
-        reason="",
+        reason=content_value or "",
         idempotency_key=namespaced_ref("idempotency", f"outcome-{outcome.id}"),
     )
     if return_value.kind != TerminalEventKind.OUTCOME_SUBMISSION:

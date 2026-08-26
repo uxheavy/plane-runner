@@ -69,11 +69,14 @@ class CodeModeIsolateRunner:
         input_tokens: int = 0,
         output_tokens: int = 0,
         source_limit: int | None = None,
+        source_character_limit: int | None = None,
         start_frame: dict[str, Any] | None = None,
     ) -> Any:
         if not isinstance(source, str) or not source.strip():
             raise CodeModeIsolateError("VALIDATION_ERROR", "Code Mode source must be non-empty TypeScript")
-        if len(source.encode("utf-8")) > (source_limit or MAX_CODE_MODE_SOURCE_BYTES):
+        if source_character_limit is not None and len(source) > source_character_limit:
+            raise CodeModeIsolateError("SOURCE_TOO_LARGE", "Code Mode source exceeds its character bound")
+        if source_character_limit is None and len(source.encode("utf-8")) > (source_limit or MAX_CODE_MODE_SOURCE_BYTES):
             raise CodeModeIsolateError("SOURCE_TOO_LARGE", "Code Mode source exceeds its size bound")
         if not isinstance(input_data, dict):
             raise CodeModeIsolateError("VALIDATION_ERROR", "Code Mode input must be an object")
@@ -211,7 +214,7 @@ class CodeModeIsolateRunner:
             host,
             code,
             {"task": task, "methods": methods, **({"declarations": declarations} if declarations is not None else {})},
-            source_limit=MAX_EXECUTE_INPUT_BYTES,
+            source_character_limit=MAX_EXECUTE_INPUT_BYTES,
             start_frame={"mode": "plane"},
         )
 

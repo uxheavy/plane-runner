@@ -164,6 +164,7 @@ def initial_task_kit(snapshot: Mapping[str, Any], methods: list[dict[str, str]] 
             "acceptanceCriteria": list(assignment["acceptanceCriteria"]),
         },
         "declarations": _plane_declarations(selected),
+        "example": "const current = await plane.workItems.retrieve(task.target);",
     }
 
 
@@ -397,15 +398,15 @@ class CodeModeHostRPC:
                     expected=f"string with length 1..{MAX_EXECUTE_INPUT_BYTES}",
                 ),
             }
-        if len(code.encode("utf-8")) > MAX_EXECUTE_INPUT_BYTES:
+        if len(code) > MAX_EXECUTE_INPUT_BYTES:
             return {
                 "status": "error",
                 "error": tool_error(
                     "INPUT_TOO_LARGE",
-                    "Plane:execute code exceeds 8192 UTF-8 bytes.",
+                    "Plane:execute code exceeds 8192 characters.",
                     "Shorten the function body or use Plane resources to keep intermediate data in the sandbox.",
                     field="code",
-                    expected=f"at most {MAX_EXECUTE_INPUT_BYTES} UTF-8 bytes",
+                    expected=f"at most {MAX_EXECUTE_INPUT_BYTES} characters",
                 ),
             }
         from .isolate import CodeModeIsolateError, CodeModeIsolateRunner

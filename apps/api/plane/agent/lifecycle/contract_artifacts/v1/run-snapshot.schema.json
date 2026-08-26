@@ -180,7 +180,7 @@
             "taskKit": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["task", "declarations"],
+              "required": ["task", "declarations", "example"],
               "properties": {
                 "task": {
                   "type": "object",
@@ -207,6 +207,9 @@
                   "minLength": 1,
                   "maxLength": 16384,
                   "x-utf8ByteMax": 16384
+                },
+                "example": {
+                  "$ref": "#/$defs/boundedText"
                 }
               }
             }

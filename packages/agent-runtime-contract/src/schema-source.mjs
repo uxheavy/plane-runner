@@ -629,7 +629,7 @@ const codeModeToolCatalog = {
     taskKit: {
       type: "object",
       additionalProperties: false,
-      required: ["task", "declarations"],
+      required: ["task", "declarations", "example"],
       properties: {
         task: {
           type: "object",
@@ -651,6 +651,7 @@ const codeModeToolCatalog = {
           maxLength: 16384,
           "x-utf8ByteMax": 16384,
         },
+        example: ref("boundedText"),
       },
     },
   },
