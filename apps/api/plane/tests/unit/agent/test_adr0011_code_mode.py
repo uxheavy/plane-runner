@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -13,7 +14,11 @@ from plane.agent.code_mode.contracts import (
     PLANE_EXECUTION_OPERATION,
 )
 from plane.agent.code_mode.host import CodeModeHostRPC
-from plane.agent.code_mode.isolate import CodeModeIsolateError, CodeModeIsolateRunner
+from plane.agent.code_mode.isolate import (
+    CodeModeIsolateError,
+    CodeModeIsolateRunner,
+    _find_typescript_module,
+)
 from plane.agent.lifecycle import services as lifecycle_services
 from plane.agent.runtime.host_rpc import PlaneGatewayHostPort, PlaneHostCall
 
@@ -53,6 +58,19 @@ class FakePlaneHost:
 
     def release_execution_budget(self):
         return None
+
+
+def test_typescript_lookup_supports_host_and_shallow_container_layouts(tmp_path):
+    repo_root = tmp_path / "repo"
+    module_path = repo_root / "apps/api/plane/agent/code_mode/isolate.py"
+    typescript = repo_root / "node_modules/.pnpm/typescript@5/node_modules/typescript/lib/typescript.js"
+    typescript.parent.mkdir(parents=True)
+    typescript.touch()
+
+    assert _find_typescript_module(module_path) == typescript
+    assert _find_typescript_module(Path("/code/plane/agent/code_mode/isolate.py")) == Path(
+        "/usr/share/node_modules/typescript/lib/typescript.js"
+    )
 
 
 def test_model_contract_is_exactly_two_tools_and_hides_legacy_protocol():

@@ -24,11 +24,17 @@ from .contracts import (
 
 MAX_PROTOCOL_LINE_BYTES = 1_048_576
 _RUNNER = Path(__file__).with_name("runner.mjs")
-_REPO_ROOT = Path(__file__).parents[5]
-_TYPESCRIPT_MODULE = next(
-    _REPO_ROOT.glob("node_modules/.pnpm/typescript@*/node_modules/typescript/lib/typescript.js"),
-    Path("/usr/share/node_modules/typescript/lib/typescript.js"),
-)
+
+
+def _find_typescript_module(module_path: Path) -> Path:
+    for parent in module_path.resolve().parents:
+        typescript = next(parent.glob("node_modules/.pnpm/typescript@*/node_modules/typescript/lib/typescript.js"), None)
+        if typescript is not None:
+            return typescript
+    return Path("/usr/share/node_modules/typescript/lib/typescript.js")
+
+
+_TYPESCRIPT_MODULE = _find_typescript_module(Path(__file__))
 _TYPESCRIPT_MODULE_DIR = str(_TYPESCRIPT_MODULE.parent.parent)
 
 
