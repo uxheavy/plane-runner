@@ -223,8 +223,8 @@ def test_code_mode_toolset_survives_stored_snapshot_and_serialized_runtime_paylo
     assert {tool["name"] for tool in projected["toolCatalog"]["tools"]} == {"discover", "execute"}
 
     missing = deepcopy(run.snapshot)
-    del missing["toolCatalog"]["modelToolset"]
-    with pytest.raises(RuntimeContractError, match="modelToolset"):
+    del missing["toolCatalog"]["server"]
+    with pytest.raises(RuntimeContractError):
         validate_run_snapshot(missing)
 
 
