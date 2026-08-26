@@ -641,6 +641,8 @@ class CodeModeHostRPC:
                     "Use a small JSON context object.",
                     field="context",
                 )
+        if kind == "completed":
+            self._require_completed_finish_route()
         try:
             if self._execution_reservation is not None:
                 self.record_execution_usage(
@@ -676,6 +678,48 @@ class CodeModeHostRPC:
                 "blocked": "blocked",
             }[kind]
         }
+
+    def _require_completed_finish_route(self) -> None:
+        """Require the persisted Plane task's typed read and mutation evidence."""
+
+        snapshot = getattr(self, "_snapshot", None)
+        catalog = snapshot.get("toolCatalog") if isinstance(snapshot, Mapping) else None
+        if (
+            not isinstance(catalog, Mapping)
+            or catalog.get("server") != "Plane"
+            or not isinstance(catalog.get("taskKit"), Mapping)
+        ):
+            return
+
+        methods = self._initial_plane_methods()
+        descriptors = {
+            method["operationId"]: OPERATION_CATALOG.get(method["operationId"])
+            for method in methods
+        }
+        required = {
+            descriptor.kind
+            for descriptor in descriptors.values()
+            if descriptor is not None and not descriptor.universal
+        }
+        successful = set(
+            OperationGatewayIdempotency.objects.filter(
+                idempotency_key__startswith=f"idempotency:code-mode-{self.invocation.invocation_id}-",
+                state=OperationGatewayIdempotency.State.SUCCEEDED,
+            ).values_list("operation_id", flat=True)
+        )
+        observed = {
+            descriptors[operation_id].kind
+            for operation_id in successful
+            if operation_id in descriptors and not descriptors[operation_id].universal
+        }
+        missing = [kind for kind in ("read", "mutation") if kind in required - observed]
+        if missing:
+            raise PlaneToolError(
+                "FINISH_PRECONDITION",
+                "Completed finish requires the task's typed resource route first.",
+                f"Use Plane:execute for the missing {' and '.join(missing)} operation, then finish again.",
+                recovery="fix_code",
+            )
 
     def set_prepared_call_registry(self, registry: Any) -> None:
         """Bind the invocation-local prepared-call registry owned by the host port."""

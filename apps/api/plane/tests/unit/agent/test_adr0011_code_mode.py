@@ -12,6 +12,7 @@ from plane.agent.code_mode.contracts import (
     MAX_RETURNED_VALUE_BYTES,
     PLANE_DISCOVERY_OPERATION,
     PLANE_EXECUTION_OPERATION,
+    PlaneToolError,
 )
 from plane.agent.code_mode.host import CodeModeHostRPC
 from plane.agent.code_mode.isolate import (
@@ -19,8 +20,11 @@ from plane.agent.code_mode.isolate import (
     CodeModeIsolateRunner,
     _find_typescript_module,
 )
+from plane.agent.lifecycle import create_actor, create_assignment, create_profile, create_run, record_invocation
 from plane.agent.lifecycle import services as lifecycle_services
+from plane.db.models import AgentRole, OperationGatewayIdempotency, OutcomeSubmission, RunTerminalEvent
 from plane.agent.runtime.host_rpc import PlaneGatewayHostPort, PlaneHostCall
+from plane.operation_gateway.gateway import OperationGateway
 
 
 class FakePlaneHost:
@@ -198,6 +202,49 @@ def test_completed_content_reaches_the_single_lifecycle_seam():
     with patch("plane.agent.code_mode.host.finish_code_mode", return_value=object()) as apply:
         host.finish_plane({"kind": "completed", "summary": "done", "content": "details"})
     assert apply.call_args.kwargs["content"] == "details"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_completed_finish_requires_typed_task_route_before_lifecycle_effects(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    actor = create_actor(workspace=workspace, project=gateway_project, display_name="Finish gate worker")
+    profile = create_profile(
+        actor,
+        role=AgentRole.WORKER,
+        instructions="Use the typed task route.",
+        tool_presentation={"model_toolset": "code_mode_only"},
+    )
+    assignment = create_assignment(
+        actor,
+        project=gateway_project,
+        target_ref=f"issue:{gateway_issue.id}",
+        objective="Rename the assigned work item.",
+        acceptance_criteria=["The renamed item is durable."],
+    )
+    run = create_run(assignment, profile, created_by=create_user)
+    invocation = record_invocation(run, trigger="initial")
+    host = CodeModeHostRPC(
+        gateway=OperationGateway(),
+        request=SimpleNamespace(user=actor.principal, META={}, agent_actor_ref=run.snapshot["actorRef"]),
+        run=run,
+        invocation=invocation,
+        is_cancelled=lambda: False,
+    )
+
+    with pytest.raises(PlaneToolError) as rejected:
+        host.finish_plane({"kind": "completed", "summary": "done"})
+    assert rejected.value.code == "FINISH_PRECONDITION"
+    assert OutcomeSubmission.objects.filter(run=run).count() == 0
+    assert RunTerminalEvent.objects.filter(run=run, visible=True).count() == 0
+    assert OperationGatewayIdempotency.objects.count() == 0
+
+    target = run.snapshot["assignment"]["targetRef"]
+    assert host.invoke_resource("workItems.retrieve", [target])["status"] == "ok"
+    assert host.invoke_resource("workItems.update", [target, {"name": "Renamed"}])["status"] == "ok"
+    host.finish_plane({"kind": "completed", "summary": "done"})
+    assert OutcomeSubmission.objects.filter(run=run).count() == 1
+    assert RunTerminalEvent.objects.filter(run=run, kind="outcome_submission", visible=True).count() == 1
 
 
 def test_lifecycle_seam_forwards_completed_content_to_outcome_application():
