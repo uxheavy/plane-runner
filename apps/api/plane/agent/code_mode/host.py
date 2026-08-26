@@ -691,7 +691,7 @@ class CodeModeHostRPC:
         ):
             return
 
-        methods = self._initial_plane_methods()
+        methods = self._plane_methods
         descriptors = {
             method["operationId"]: OPERATION_CATALOG.get(method["operationId"])
             for method in methods

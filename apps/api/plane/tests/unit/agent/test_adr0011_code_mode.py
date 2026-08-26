@@ -204,6 +204,22 @@ def test_completed_content_reaches_the_single_lifecycle_seam():
     assert apply.call_args.kwargs["content"] == "details"
 
 
+def test_completed_finish_uses_discovered_replacement_slice():
+    host = object.__new__(CodeModeHostRPC)
+    host._snapshot = {
+        "assignment": {"targetRef": "target:issue:1", "objective": "Rename the assigned work item."},
+        "toolCatalog": {"server": "Plane", "taskKit": {}},
+    }
+    host._plane_methods = host._initial_plane_methods()
+    host.invocation = SimpleNamespace(invocation_id="invocation:replacement")
+
+    with patch("plane.agent.code_mode.host.OperationGatewayIdempotency.objects.filter") as query:
+        query.return_value.values_list.return_value = ["work_item.rename"]
+        assert host.discover("rename one work item")["status"] == "ok"
+        assert [method["operationId"] for method in host._plane_methods] == ["work_item.rename"]
+        host._require_completed_finish_route()
+
+
 @pytest.mark.django_db(transaction=True)
 def test_completed_finish_requires_typed_task_route_before_lifecycle_effects(
     workspace, gateway_project, gateway_issue, create_user
