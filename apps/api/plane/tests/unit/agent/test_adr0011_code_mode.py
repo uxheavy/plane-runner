@@ -202,7 +202,7 @@ def test_completed_content_reaches_the_single_lifecycle_seam():
 
 def test_lifecycle_seam_forwards_completed_content_to_outcome_application():
     run = object()
-    invocation = SimpleNamespace(created_by=None)
+    invocation = SimpleNamespace(pk="invocation:1", created_by=None)
     with (
         patch.object(lifecycle_services, "lock_invocation_path", return_value=(None, run, invocation)),
         patch.object(lifecycle_services, "propose_outcome", return_value=object()) as apply,
