@@ -20,7 +20,7 @@ from plane.agent.memory.services import (
     create_user_preference,
     delete_memory,
 )
-from plane.agent.operations_readback import build_correlation_readback
+from plane.agent.operations_readback import build_correlation_readback, code_mode_gateway_rows
 from plane.agent.skills.projections import parse_skill_package
 from plane.agent.skills.services import (
     capture_skill_candidate,
@@ -46,6 +46,7 @@ from plane.db.models import (
     ProjectMember,
     RunTerminalEvent,
     RuntimeEventIngress,
+    RuntimeInvocation,
     State,
     User,
     Workspace,
@@ -215,11 +216,15 @@ def attempt_actor_substitution(*, actor, fake_actor, workspace, run, user, suffi
     }
 
 
-def replay_worker_rename(*, actor, workspace, run, issue, correlation_id):
+def replay_worker_rename(*, actor, workspace, run, issue, correlation_id, invocation=None):
     """Replay the provider-created rename receipt and verify no semantic mutation."""
 
-    record = OperationGatewayIdempotency.objects.filter(
-        correlation_id=correlation_id,
+    records = (
+        code_mode_gateway_rows(OperationGatewayIdempotency, run=run, invocation=invocation)
+        if invocation is not None
+        else OperationGatewayIdempotency.objects.filter(correlation_id=correlation_id)
+    )
+    record = records.filter(
         operation_id="work_item.rename",
         state=OperationGatewayIdempotency.State.SUCCEEDED,
     ).order_by("created_at", "id").first()
@@ -227,9 +232,12 @@ def replay_worker_rename(*, actor, workspace, run, issue, correlation_id):
         raise RuntimeError("Worker W03 requires one successful work_item.rename gateway receipt")
     issue.refresh_from_db()
     before_name = issue.name
-    before_audit_count = OperationGatewayAudit.objects.filter(
-        correlation_id=correlation_id, operation_id="work_item.rename", phase="outcome"
-    ).count()
+    audit_records = (
+        code_mode_gateway_rows(OperationGatewayAudit, run=run, invocation=invocation)
+        if invocation is not None
+        else OperationGatewayAudit.objects.filter(correlation_id=correlation_id)
+    )
+    before_audit_count = audit_records.filter(operation_id="work_item.rename", phase="outcome").count()
     request = type(
         "TrustedReplayRequest",
         (),
@@ -246,14 +254,12 @@ def replay_worker_rename(*, actor, workspace, run, issue, correlation_id):
         "operation_id": "work_item.rename",
         "workspace_slug": workspace.slug,
         "idempotency_key": record.idempotency_key,
-        "correlation_id": correlation_id,
+        "correlation_id": record.correlation_id if invocation is not None else correlation_id,
         "input": record.request_input,
     }
     response, status = OperationGateway().execute(request, raw)
     issue.refresh_from_db()
-    after_audit_count = OperationGatewayAudit.objects.filter(
-        correlation_id=correlation_id, operation_id="work_item.rename", phase="outcome"
-    ).count()
+    after_audit_count = audit_records.filter(operation_id="work_item.rename", phase="outcome").count()
     replay = {
         "status": "replayed" if response.get("idempotency", {}).get("replayed") is True else "unexpected",
         "semanticDelta": int(issue.name != before_name),
@@ -401,6 +407,20 @@ def build_worker_route_evidence(
         return {}, []
     route_checks = set(scenario.expected["routeChecks"])
     correlation_id = f"correlation:{run.id}"
+    code_mode = run.snapshot.get("toolCatalog", {}).get("server") == "Plane"
+    invocation = (
+        RuntimeInvocation.objects.filter(run=run, invocation_id=run.last_invocation_id).first()
+        if code_mode
+        else None
+    )
+
+    def gateway_records(model):
+        if code_mode:
+            if invocation is None:
+                return model.objects.none()
+            return code_mode_gateway_rows(model, run=run, invocation=invocation)
+        return model.objects.filter(correlation_id=correlation_id)
+
     context_records = []
     context = {}
     parsed_memory = ()
@@ -413,8 +433,7 @@ def build_worker_route_evidence(
     skill_keys = set()
     if "W05" in route_checks:
         context_records = list(
-            OperationGatewayIdempotency.objects.filter(
-                correlation_id=correlation_id,
+            gateway_records(OperationGatewayIdempotency).filter(
                 operation_id="agent.context.read",
                 state=OperationGatewayIdempotency.State.SUCCEEDED,
             ).order_by("created_at", "id")
@@ -483,8 +502,7 @@ def build_worker_route_evidence(
             and "other-agent-memory" in other_actor_memory_keys
         )
     catalog_search = (
-        OperationGatewayIdempotency.objects.filter(
-            correlation_id=correlation_id,
+        gateway_records(OperationGatewayIdempotency).filter(
             operation_id="catalog.search",
             state=OperationGatewayIdempotency.State.SUCCEEDED,
         )
@@ -494,8 +512,7 @@ def build_worker_route_evidence(
         else None
     )
     catalog_describe = (
-        OperationGatewayIdempotency.objects.filter(
-            correlation_id=correlation_id,
+        gateway_records(OperationGatewayIdempotency).filter(
             operation_id="catalog.describe",
             state=OperationGatewayIdempotency.State.SUCCEEDED,
         )
@@ -505,8 +522,7 @@ def build_worker_route_evidence(
         else None
     )
     rename_record = (
-        OperationGatewayIdempotency.objects.filter(
-            correlation_id=correlation_id,
+        gateway_records(OperationGatewayIdempotency).filter(
             operation_id="work_item.rename",
             state=OperationGatewayIdempotency.State.SUCCEEDED,
         )
@@ -534,16 +550,16 @@ def build_worker_route_evidence(
                 and (catalog_search.created_at, str(catalog_search.id)) < (catalog_describe.created_at, str(catalog_describe.id))
             ),
             "boundedSearchAndRead": all(
-                OperationGatewayIdempotency.objects.filter(
-                    correlation_id=correlation_id, operation_id=operation_id,
+                gateway_records(OperationGatewayIdempotency).filter(
+                    operation_id=operation_id,
                     state=OperationGatewayIdempotency.State.SUCCEEDED,
                 ).exists()
                 for operation_id in ("search_workspace", "work_item.read")
             ),
             "hiddenObjectsAbsent": not any(
                 marker in json.dumps(
-                    [record.result for record in OperationGatewayIdempotency.objects.filter(
-                        correlation_id=correlation_id, operation_id="search_workspace",
+                    [record.result for record in gateway_records(OperationGatewayIdempotency).filter(
+                        operation_id="search_workspace",
                         state=OperationGatewayIdempotency.State.SUCCEEDED,
                 )], sort_keys=True,
             ) for marker in hidden_markers
@@ -563,8 +579,7 @@ def build_worker_route_evidence(
                 int((run.cumulative_usage or {}).get("codeModeCalls", 0)) > 0
                 and worker_code_mode_operation_observed(run, "work_item.rename")
             ),
-            "sameGateway": OperationGatewayIdempotency.objects.filter(
-                correlation_id=correlation_id,
+            "sameGateway": gateway_records(OperationGatewayIdempotency).filter(
                 operation_id__in=("work_item.read", "work_item.rename", "agent.context.read"),
                 state=OperationGatewayIdempotency.State.SUCCEEDED,
             ).exists(),

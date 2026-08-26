@@ -1072,6 +1072,9 @@ _LIVE_PUBLICATION_REF_PREFIXES = {
     "auditReceiptRef": "audit-receipt:",
     "productEventRef": "product-event:",
 }
+_PLANE_FINISH_UNAVAILABLE_PUBLICATION_REFS = frozenset(
+    {"operationAttemptRef", "gatewayReceiptRef", "receiptRef", "auditReceiptRef"}
+)
 _LIVE_READBACK_FIELDS = {
     "audit",
     "version",
@@ -1189,6 +1192,19 @@ def _safe_operation_id(value: Any, name: str) -> str:
     if any(term in value.lower() for term in ("password", "secret", "token", "credential", "authorization", "api_key")):
         raise ContractError(f"{name}_sensitive")
     return value
+
+
+def _is_plane_finish_publication(value: dict[str, Any], expected_product_ref: str | None = None) -> bool:
+    return (
+        value.get("operationRef") == "operation:plane.finish"
+        and value.get("applicationServiceRef") == "application-service:agent-lifecycle"
+        and (expected_product_ref is None or value.get("productRef") == expected_product_ref)
+        and all(value.get(field) == "unavailable" for field in _PLANE_FINISH_UNAVAILABLE_PUBLICATION_REFS)
+        and isinstance(value.get("productRef"), str)
+        and value["productRef"].startswith("outcome-submission:")
+        and isinstance(value.get("productEventRef"), str)
+        and value["productEventRef"].startswith("product-event:")
+    )
 
 
 _PREPARED_DIAGNOSTIC_FORMS = frozenset(
@@ -1320,9 +1336,14 @@ def _validate_s00_gate(value: Any) -> None:
                 row["count"] == 1
                 and row["action"] == "applied"
                 and row["productKind"] == "outcome_submission"
-                and all(row[field] != "unavailable" for field in _LIVE_PUBLICATION_REF_PREFIXES)
-                and row["operationRef"] == "operation:agent.outcome.publish"
                 and row["productRef"] == row["expectedProductRef"]
+                and (
+                    _is_plane_finish_publication(row, row["expectedProductRef"])
+                    or (
+                        all(row[field] != "unavailable" for field in _LIVE_PUBLICATION_REF_PREFIXES)
+                        and row["operationRef"] == "operation:agent.outcome.publish"
+                    )
+                )
             )
         elif name == "terminal_binding":
             expected_passed[name] = (
@@ -1770,8 +1791,18 @@ def _validate_terminal_lifecycle(value: Any) -> None:
             publication["status"] not in _TERMINAL_LIFECYCLE_STATUSES
             or type(publication["replayed"]) is not bool
             or publication["publication_action"] not in _TERMINAL_LIFECYCLE_ACTIONS
-            or publication["operation_ref"] not in {"none", "operation:agent.outcome.publish"}
             or type(publication["terminal_armed"]) is not bool
+            or (
+                publication["operation_ref"] == "operation:plane.finish"
+                and (
+                    publication["status"] != "ok"
+                    or publication["replayed"] is not False
+                    or publication["publication_action"] != "applied"
+                    or publication["terminal_armed"] is not True
+                )
+            )
+            or publication["operation_ref"]
+            not in {"none", "operation:agent.outcome.publish", "operation:plane.finish"}
         ):
             raise ContractError("evidence_terminal_lifecycle_publication_invalid")
 
@@ -2029,11 +2060,34 @@ def _validate_live_readback(evidence: dict[str, Any]) -> None:
     if evaluate["status"] != "denied" or evaluate["errorCode"] != "NOT_AUTHORIZED" or evaluate["count"] != 1:
         raise ContractError("evidence_evaluate_not_authorized_invalid")
     submit = operation_rows["agent.outcome.submit"]
-    if submit["status"] != "success" or submit["errorCode"] is not None or submit["count"] != 1:
-        raise ContractError("evidence_agent_outcome_submit_success_invalid")
     publish = operation_rows["agent.outcome.publish"]
-    if publish["status"] != "success" or publish["errorCode"] is not None or publish["count"] < 1:
-        raise ContractError("evidence_agent_outcome_publish_success_invalid")
+    finish_publication = False
+    if isinstance(evidence.get("explicitPublication"), dict):
+        refs = evidence["explicitPublication"].get("refs")
+        finish_publication = bool(
+            isinstance(refs, list)
+            and len(refs) == 1
+            and isinstance(refs[0], dict)
+            and _is_plane_finish_publication(refs[0])
+        )
+    if finish_publication:
+        audit_projection = evidence.get("audit")
+        if (
+            not isinstance(audit_projection, dict)
+            or audit_projection.get("permittedOutcome") != "success"
+            or audit_projection.get("deniedOutcome") != "not_observed"
+            or audit_projection.get("submitOutcome") != "not_observed"
+            or audit_projection.get("publishOutcome") != "not_observed"
+        ):
+            raise ContractError("evidence_plane_finish_audit_projection_invalid")
+        for operation in (submit, publish):
+            if operation["status"] != "absent" or operation["errorCode"] is not None or operation["count"] != 0:
+                raise ContractError("evidence_plane_finish_legacy_publication_present")
+    else:
+        if submit["status"] != "success" or submit["errorCode"] is not None or submit["count"] != 1:
+            raise ContractError("evidence_agent_outcome_submit_success_invalid")
+        if publish["status"] != "success" or publish["errorCode"] is not None or publish["count"] < 1:
+            raise ContractError("evidence_agent_outcome_publish_success_invalid")
     if not any(
         attempt["phase"] == "completed"
         and attempt["upstreamInitiated"] is True
@@ -2076,14 +2130,18 @@ def _validate_live_readback(evidence: dict[str, Any]) -> None:
         raise ContractError("evidence_publication_invalid")
     for row in refs:
         value = _object(row, "evidence_publication_ref")
+        allow_unavailable = value.get("operationRef") == "operation:plane.finish"
         if set(value) != set(_LIVE_PUBLICATION_REF_PREFIXES) or any(
             not isinstance(value[field], str)
             or len(value[field].encode("utf-8")) > 128
-            or not value[field].startswith(prefix)
+            or value[field] == "unavailable" and not allow_unavailable
+            or value[field] != "unavailable" and not value[field].startswith(prefix)
             or not re.fullmatch(r"[A-Za-z0-9_.:/-]+", value[field])
             for field, prefix in _LIVE_PUBLICATION_REF_PREFIXES.items()
         ):
             raise ContractError("evidence_publication_ref_invalid")
+        if value.get("operationRef") == "operation:plane.finish" and not _is_plane_finish_publication(value):
+            raise ContractError("evidence_plane_finish_publication_invalid")
     if transcript["requirement"] == "not_required" and publication["count"] != 1:
         raise ContractError("evidence_transcript_requirement_invalid")
     if transcript["requirement"] == "required" and (
@@ -2152,6 +2210,13 @@ def _validate_scenario_readback(evidence: dict[str, Any]) -> None:
     publication = evidence["explicitPublication"]
     if not isinstance(publication, dict) or set(publication) != {"count", "refs"} or type(publication["count"]) is not int or not 0 <= publication["count"] <= 8 or not isinstance(publication["refs"], list) or len(publication["refs"]) != publication["count"]:
         raise ContractError("evidence_publication_invalid")
+    finish_refs = [
+        row
+        for row in publication["refs"]
+        if isinstance(row, dict) and row.get("operationRef") == "operation:plane.finish"
+    ]
+    if finish_refs and (len(finish_refs) != 1 or not _is_plane_finish_publication(finish_refs[0])):
+        raise ContractError("evidence_plane_finish_publication_invalid")
     replay = evidence["replay"]
     if not isinstance(replay, dict) or set(replay) != {"status", "providerAccess", "sameInvocation", "sameIdempotencyKey", "new"} or replay["providerAccess"] != "disabled":
         raise ContractError("evidence_replay_invalid")

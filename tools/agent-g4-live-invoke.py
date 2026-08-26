@@ -25,6 +25,7 @@ django.setup()
 
 from django.core.management import call_command
 from django.test import override_settings
+from plane.agent.operations_readback import code_mode_gateway_rows
 from plane.agent.lifecycle import (
     create_actor,
     create_assignment,
@@ -659,6 +660,62 @@ def _s00_safe_ref(value):
     return value if all(character in allowed for character in value) else "unavailable"
 
 
+def _code_mode_finish_publication_binding(*, run, invocation, outcomes, terminals, legacy_publication_count):
+    """Project one atomic Code Mode finish without inventing gateway refs."""
+
+    if (
+        legacy_publication_count
+        or invocation.run_id != run.id
+        or invocation.workspace_id != run.workspace_id
+        or run.last_invocation_id != invocation.invocation_id
+        or len(outcomes) != 1
+        or len(terminals) != 1
+    ):
+        return []
+    outcome = outcomes[0]
+    terminal = terminals[0]
+    product_ref = f"outcome-submission:{outcome.id}"
+    if (
+        outcome.run_id != run.id
+        or terminal.run_id != run.id
+        or terminal.invocation_id != invocation.pk
+        or terminal.kind != "outcome_submission"
+        or terminal.source != "runtime"
+        or terminal.visible is not True
+        or terminal.product_ref != product_ref
+        or not isinstance(terminal.product_event_ref, str)
+        or not terminal.product_event_ref.startswith("product-event:")
+    ):
+        return []
+    return [
+        {
+            "action": "applied",
+            "productKind": "outcome_submission",
+            "productRef": product_ref,
+            "operationAttemptRef": "unavailable",
+            "operationRef": "operation:plane.finish",
+            "applicationServiceRef": "application-service:agent-lifecycle",
+            "gatewayReceiptRef": "unavailable",
+            "receiptRef": "unavailable",
+            "auditReceiptRef": "unavailable",
+            "productEventRef": terminal.product_event_ref,
+        }
+    ]
+
+
+def _s00_is_plane_finish_publication(publication, expected_outcome_ref):
+    return (
+        publication["operationRef"] == "operation:plane.finish"
+        and publication["applicationServiceRef"] == "application-service:agent-lifecycle"
+        and publication["productRef"] == expected_outcome_ref
+        and publication["operationAttemptRef"] == "unavailable"
+        and publication["gatewayReceiptRef"] == "unavailable"
+        and publication["receiptRef"] == "unavailable"
+        and publication["auditReceiptRef"] == "unavailable"
+        and publication["productEventRef"].startswith("product-event:")
+    )
+
+
 def _s00_terminal_replay_gate(
     *,
     run_ref,
@@ -714,9 +771,14 @@ def _s00_terminal_replay_gate(
                 publication["count"] == 1
                 and publication["action"] == "applied"
                 and publication["productKind"] == "outcome_submission"
-                and all(publication[field] != "unavailable" for field in _S00_PUBLICATION_REF_FIELDS)
-                and publication["operationRef"] == "operation:agent.outcome.publish"
                 and publication["productRef"] == expected_outcome_ref
+                and (
+                    _s00_is_plane_finish_publication(publication, expected_outcome_ref)
+                    or (
+                        all(publication[field] != "unavailable" for field in _S00_PUBLICATION_REF_FIELDS)
+                        and publication["operationRef"] == "operation:agent.outcome.publish"
+                    )
+                )
             ),
             **publication,
             "expectedProductRef": expected_outcome_ref,
@@ -844,8 +906,18 @@ def _bounded_terminal_lifecycle_observation(value):
             outcome_publication["status"] not in _TERMINAL_LIFECYCLE_STATUSES
             or type(outcome_publication["replayed"]) is not bool
             or outcome_publication["publication_action"] not in _TERMINAL_LIFECYCLE_ACTIONS
-            or outcome_publication["operation_ref"] not in {"none", "operation:agent.outcome.publish"}
             or type(outcome_publication["terminal_armed"]) is not bool
+            or (
+                outcome_publication["operation_ref"] == "operation:plane.finish"
+                and (
+                    outcome_publication["status"] != "ok"
+                    or outcome_publication["replayed"] is not False
+                    or outcome_publication["publication_action"] != "applied"
+                    or outcome_publication["terminal_armed"] is not True
+                )
+            )
+            or outcome_publication["operation_ref"]
+            not in {"none", "operation:agent.outcome.publish", "operation:plane.finish"}
         ):
             raise RuntimeError("terminal lifecycle publication values invalid")
         outcome_publication = dict(outcome_publication)
@@ -1046,6 +1118,7 @@ def _scenario_readback(
     audit_rows,
     run,
     assignment,
+    invocation,
     *,
     explicit_publication=None,
     lineage_assignment=None,
@@ -1058,6 +1131,29 @@ def _scenario_readback(
     from agent_g4_live_scenario import readback_expectations
 
     expected = readback_expectations(scenario.expected, model_toolset=scenario.profile.model_toolset)
+    if scenario.profile.model_toolset == "code_mode_only":
+        prefix = f"idempotency:code-mode-{invocation.invocation_id}-"
+        raw_receipts = OperationGatewayIdempotency.objects.filter(
+            workspace_id=run.workspace_id,
+            workspace_slug=run.workspace.slug,
+            caller_id=run.actor.principal_id,
+            idempotency_key__startswith=prefix,
+        )
+        raw_audits = OperationGatewayAudit.objects.filter(
+            workspace_id=run.workspace_id,
+            workspace_slug=run.workspace.slug,
+            caller_id=run.actor.principal_id,
+            idempotency_key__startswith=prefix,
+            phase=OperationGatewayAudit.Phase.OUTCOME,
+        ).exclude(outcome=OperationGatewayAudit.Outcome.REPLAY)
+        valid_receipts = _live_operation_readback_rows(
+            OperationGatewayIdempotency, invocation=invocation, run=run, code_mode=True
+        )
+        valid_audits = _live_operation_readback_rows(
+            OperationGatewayAudit, invocation=invocation, run=run, code_mode=True
+        )
+        if raw_receipts.count() != valid_receipts.count() or raw_audits.count() != valid_audits.count():
+            raise RuntimeError("Code Mode gateway readback is missing or inconsistent")
     operations = {}
     for row in audit_rows:
         if row.get("phase") != "outcome":
@@ -1084,6 +1180,26 @@ def _scenario_readback(
         if run_count
         else []
     )
+    if scenario.profile.model_toolset == "code_mode_only":
+        outcomes = list(OutcomeSubmission.objects.filter(run=run).order_by("created_at", "id"))
+        terminals = list(RunTerminalEvent.objects.filter(run=run, visible=True).order_by("created_at", "id"))
+        finish_bindings = _code_mode_finish_publication_binding(
+            run=run,
+            invocation=invocation,
+            outcomes=outcomes,
+            terminals=terminals,
+            legacy_publication_count=_live_operation_readback_rows(
+                OperationGatewayIdempotency, invocation=invocation, run=run, code_mode=True
+            )
+            .filter(operation_id="agent.outcome.publish")
+            .count(),
+        )
+        observed_bindings = explicit_publication.get("bindings") if isinstance(explicit_publication, dict) else None
+        if not finish_bindings or observed_bindings != finish_bindings:
+            raise RuntimeError("Code Mode finish publication readback is missing or inconsistent")
+        publication_records = [{"kind": "publication", "count": 1}]
+        publication_events = [{"kind": "publication", "count": 1}]
+        publication_evidence = ["publication"]
     records = [
         {"kind": "assignment", "count": assignment_count},
         {"kind": "run", "count": run_count},
@@ -2576,14 +2692,9 @@ def _create_commission_profile(shared, scenario, provider):
 def _live_operation_readback_rows(model, *, invocation, run, code_mode):
     """Scope gateway readback to the owning invocation for Code Mode."""
 
-    if code_mode and (invocation.run_id != run.id or invocation.workspace_id != run.workspace_id):
-        return model.objects.none()
-    filters = (
-        {"workspace_id": run.workspace_id, "invocation_id": invocation.pk}
-        if code_mode
-        else {"correlation_id": f"correlation:{run.id}"}
-    )
-    return model.objects.filter(**filters)
+    if code_mode:
+        return code_mode_gateway_rows(model, run=run, invocation=invocation)
+    return model.objects.filter(correlation_id=f"correlation:{run.id}")
 
 
 def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
@@ -2762,6 +2873,22 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                 )
             else:
                 publication_bindings.append({})
+        if code_mode:
+            finish_outcomes = list(OutcomeSubmission.objects.filter(run=run).order_by("created_at", "id"))
+            finish_terminals = list(
+                RunTerminalEvent.objects.filter(run=run, visible=True).order_by("created_at", "id")
+            )
+            publication_bindings = _code_mode_finish_publication_binding(
+                run=run,
+                invocation=invocation,
+                outcomes=finish_outcomes,
+                terminals=finish_terminals,
+                legacy_publication_count=_live_operation_readback_rows(
+                    OperationGatewayIdempotency, invocation=invocation, run=run, code_mode=True
+                )
+                .filter(operation_id="agent.outcome.publish")
+                .count(),
+            )
         publication_refs = [
             {field: binding[field] for field in _S00_PUBLICATION_REF_FIELDS}
             for binding in publication_bindings
@@ -2769,7 +2896,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
         ]
         transcript_evidence = _s00_transcript_evidence(
             transcript_event_ids,
-            required=not bool(publication_records),
+            required=not bool(publication_refs),
         )
         operation_audit = list(
             _live_operation_readback_rows(
@@ -2934,6 +3061,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
             idempotency_key=f"idempotency:g4-live-invocation-{suffix}",
             trigger="initial",
         )
+        correlation_id = f"correlation:{run.id}"
         setup_stage = None
         if scenario is not None and scenario.scenario_id == "worker":
             substitution_evidence = attempt_actor_substitution(
@@ -3067,7 +3195,12 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
             route_checks = set((scenario.expected or {}).get("routeChecks", ()))
             if "W03" in route_checks:
                 rename_replay_evidence = replay_worker_rename(
-                    actor=actor, workspace=workspace, run=run, issue=issue, correlation_id=correlation_id
+                    actor=actor,
+                    workspace=workspace,
+                    run=run,
+                    issue=issue,
+                    correlation_id=correlation_id,
+                    invocation=invocation if code_mode else None,
                 )
             if "W06" in route_checks:
                 governance_evidence = govern_worker_skill(
@@ -3102,6 +3235,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                 plane_operation_audit,
                 run,
                 assignment,
+                invocation,
                 explicit_publication=explicit_publication,
                 lineage_assignment=lineage_assignment,
                 schedule=schedule,
@@ -3292,6 +3426,14 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
             terminal_lifecycle=terminal_lifecycle,
             runtime_diagnostics=runtime_diagnostics,
         )
+        audit_projection = {
+            "passed": True,
+            "eventCount": audits.count(),
+            "permittedOutcome": "success",
+            "deniedOutcome": "denied" if not code_mode else "not_observed",
+            "submitOutcome": "success" if not code_mode else "not_observed",
+            "publishOutcome": "success" if not code_mode else "not_observed",
+        }
         success_receipt = {
             "schemaVersion": "plane-agent-g4/live-evidence/v1",
             "status": "passed",
@@ -3318,14 +3460,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                 },
             },
             "readback": {
-                "audit": {
-                    "passed": True,
-                    "eventCount": audits.count(),
-                    "permittedOutcome": "success",
-                    "deniedOutcome": "denied",
-                    "submitOutcome": "success",
-                    "publishOutcome": "success",
-                },
+                "audit": audit_projection,
                 "version": {"passed": True, "binding": binding, "source": "candidate-manifest"},
                 "runtimeExit": bounded_readback["runtimeExit"],
                 "runtimeEventIngress": bounded_readback["runtimeEventIngress"],

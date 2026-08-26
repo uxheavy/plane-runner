@@ -971,14 +971,39 @@ def test_code_mode_readback_projects_atomic_finish_without_legacy_publication() 
 
 def test_live_readback_scopes_code_mode_by_invocation_and_standard_by_run() -> None:
     source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+    gateway_source = (TOOLS.parent / "apps" / "api" / "plane" / "agent" / "operations_readback.py").read_text(
+        encoding="utf-8"
+    )
     start = source.index("def _live_operation_readback_rows")
     scope = source[start : source.index("def _run_single", start)]
 
-    assert '"workspace_id": run.workspace_id, "invocation_id": invocation.pk' in scope
-    assert "invocation.run_id != run.id or invocation.workspace_id != run.workspace_id" in scope
-    assert "return model.objects.none()" in scope
+    assert "code_mode_gateway_rows(model, run=run, invocation=invocation)" in scope
+    assert 'prefix = f"idempotency:code-mode-{invocation.invocation_id}-"' in gateway_source
+    assert "workspace_slug=run.workspace.slug" in gateway_source
+    assert "idempotency_key__startswith=prefix" in gateway_source
+    assert "id=OuterRef(\"audit_receipt\")" in gateway_source
+    assert "invocation_id=OuterRef(\"invocation_id\")" in gateway_source
+    assert "request_id=OuterRef(\"request_id\")" in gateway_source
+    assert "request_digest=OuterRef(\"request_digest\")" in gateway_source
+    assert "Exists(correlated_audit)" in gateway_source
+    assert "exclude(outcome=OperationGatewayAudit.Outcome.REPLAY)" in source
+    assert "raw_receipts.count() != valid_receipts.count()" in source
+    assert "raw_audits.count() != valid_audits.count()" in source
+    assert "invocation.run_id != run.id or invocation.workspace_id != run.workspace_id" in gateway_source
+    assert "return model.objects.none()" in gateway_source
     assert 'f"correlation:{run.id}"' in scope
     assert 'terminal_lifecycle.get("terminal_action_observed") is not True' in source
+
+
+def test_code_mode_finish_readback_requires_one_bound_outcome_terminal_pair() -> None:
+    source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+
+    assert "len(outcomes) != 1" in source
+    assert "len(terminals) != 1" in source
+    assert 'terminal.kind != "outcome_submission"' in source
+    assert 'terminal.invocation_id != invocation.pk' in source
+    assert 'terminal.product_ref != product_ref' in source
+    assert 'raise RuntimeError("Code Mode finish publication readback is missing or inconsistent")' in source
 
 
 def test_multi_commission_prompt_preserves_the_typed_code_mode_route() -> None:

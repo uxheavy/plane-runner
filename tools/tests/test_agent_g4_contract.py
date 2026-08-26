@@ -60,6 +60,10 @@ from validate_agent_g4_live import (  # noqa: E402
     _validate_manager_route_diagnostic,
     _validate_manager_route_evidence,
     _validate_operator_route_evidence,
+    _validate_live_readback,
+    _validate_s00_gate,
+    _validate_terminal_lifecycle,
+    _is_plane_finish_publication,
 )
 from summarize_agent_g4 import summarize  # noqa: E402
 
@@ -2871,6 +2875,11 @@ class G4ContractTests(unittest.TestCase):
         safe_ref_node = next(
             node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_s00_safe_ref"
         )
+        finish_publication_node = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_s00_is_plane_finish_publication"
+        )
         publication_fields_node = next(
             node
             for node in tree.body
@@ -2883,7 +2892,9 @@ class G4ContractTests(unittest.TestCase):
         namespace = {}
         exec(
             compile(
-                ast.Module(body=[publication_fields_node, safe_ref_node, gate_node], type_ignores=[]),
+                ast.Module(
+                    body=[publication_fields_node, safe_ref_node, finish_publication_node, gate_node], type_ignores=[]
+                ),
                 str(TOOLS / "agent-g4-live-invoke.py"),
                 "exec",
             ),
@@ -2954,6 +2965,11 @@ class G4ContractTests(unittest.TestCase):
             for node in tree.body
             if isinstance(node, ast.FunctionDef) and node.name == "_s00_safe_ref"
         )
+        finish_publication_node = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_s00_is_plane_finish_publication"
+        )
         publication_fields_node = next(
             node
             for node in tree.body
@@ -2966,7 +2982,9 @@ class G4ContractTests(unittest.TestCase):
         namespace = {}
         exec(
             compile(
-                ast.Module(body=[publication_fields_node, safe_ref_node, gate_node], type_ignores=[]),
+                ast.Module(
+                    body=[publication_fields_node, safe_ref_node, finish_publication_node, gate_node], type_ignores=[]
+                ),
                 str(TOOLS / "agent-g4-live-invoke.py"),
                 "exec",
             ),
@@ -2998,6 +3016,141 @@ class G4ContractTests(unittest.TestCase):
             next(name for name, predicate in result["predicates"].items() if not predicate["passed"]),
             "one_applied_outcome_publication",
         )
+
+    def test_code_mode_finish_publication_binding_is_exact_and_fail_closed(self):
+        binding = invoke_helper_namespace()["_code_mode_finish_publication_binding"]
+        run = SimpleNamespace(id="run:1", workspace_id="workspace:1", last_invocation_id="invocation:1")
+        invocation = SimpleNamespace(
+            pk=1,
+            run_id="run:1",
+            workspace_id="workspace:1",
+            invocation_id="invocation:1",
+        )
+        outcome = SimpleNamespace(id="outcome-1", run_id="run:1")
+        terminal = SimpleNamespace(
+            run_id="run:1",
+            invocation_id=1,
+            kind="outcome_submission",
+            source="runtime",
+            visible=True,
+            product_ref="outcome-submission:outcome-1",
+            product_event_ref="product-event:1",
+        )
+        expected = {
+            "action": "applied",
+            "productKind": "outcome_submission",
+            "productRef": "outcome-submission:outcome-1",
+            "operationAttemptRef": "unavailable",
+            "operationRef": "operation:plane.finish",
+            "applicationServiceRef": "application-service:agent-lifecycle",
+            "gatewayReceiptRef": "unavailable",
+            "receiptRef": "unavailable",
+            "auditReceiptRef": "unavailable",
+            "productEventRef": "product-event:1",
+        }
+        self.assertEqual(
+            binding(
+                run=run,
+                invocation=invocation,
+                outcomes=[outcome],
+                terminals=[terminal],
+                legacy_publication_count=0,
+            ),
+            [expected],
+        )
+        for name, candidate in (
+            ("missing", dict(outcomes=[])),
+            ("duplicate", dict(outcomes=[outcome, outcome])),
+            ("cross-bound outcome", dict(outcomes=[SimpleNamespace(id="outcome-1", run_id="run:2")])),
+            (
+                "cross-bound terminal",
+                dict(terminals=[SimpleNamespace(**{**vars(terminal), "invocation_id": 2})]),
+            ),
+            (
+                "inconsistent terminal",
+                dict(terminals=[SimpleNamespace(**{**vars(terminal), "product_ref": "outcome-submission:other"})]),
+            ),
+        ):
+            with self.subTest(name=name):
+                arguments = {
+                    "run": run,
+                    "invocation": invocation,
+                    "outcomes": [outcome],
+                    "terminals": [terminal],
+                    "legacy_publication_count": 0,
+                }
+                arguments.update(candidate)
+                self.assertEqual(binding(**arguments), [])
+        self.assertEqual(
+            binding(
+                run=run,
+                invocation=invocation,
+                outcomes=[outcome],
+                terminals=[terminal],
+                legacy_publication_count=1,
+            ),
+            [],
+        )
+        finish_row = expected.copy()
+        self.assertTrue(_is_plane_finish_publication(finish_row, expected["productRef"]))
+        finish_row["gatewayReceiptRef"] = "gateway-receipt:forged"
+        self.assertFalse(_is_plane_finish_publication(finish_row, expected["productRef"]))
+        gate_namespace = invoke_helper_namespace()
+        gate = gate_namespace["_s00_terminal_replay_gate"](
+            run_ref="run:1",
+            terminal_run_ref="run:1",
+            outcome_run_ref="run:1",
+            invocation_ref="invocation:1",
+            terminal_invocation_ref="invocation:1",
+            run_state="succeeded",
+            invocation_state="succeeded",
+            terminal_kind="outcome_submission",
+            terminal_source="runtime",
+            terminal_product_ref=expected["productRef"],
+            terminal_product_event_ref=expected["productEventRef"],
+            outcome_ref=expected["productRef"],
+            terminal_count=1,
+            outcome_count=1,
+            applied_publication_bindings=[finish_row | {"gatewayReceiptRef": "unavailable"}],
+            runtime_exit_kind="completed",
+            runtime_exit_failure=None,
+        )
+        _validate_s00_gate(gate_namespace["_s00_gate_projection"](gate))
+
+        lifecycle = terminal_lifecycle_fixture()
+        lifecycle["outcome_publication"]["operation_ref"] = "operation:plane.finish"
+        _validate_terminal_lifecycle(lifecycle)
+        lifecycle["outcome_publication"]["replayed"] = True
+        with self.assertRaisesRegex(ContractError, "evidence_terminal_lifecycle_publication_invalid"):
+            _validate_terminal_lifecycle(lifecycle)
+
+        _, _, _, evidence_text = fixture()
+        readback = json.loads(evidence_text)["readback"]
+        finish_ref = {field: expected[field] for field in gate_namespace["_S00_PUBLICATION_REF_FIELDS"]}
+        transcript = gate_namespace["_s00_transcript_evidence"]
+        self.assertEqual(transcript([], required=not bool([finish_ref]))["requirement"], "not_required")
+        self.assertEqual(transcript([], required=not bool([]))["requirement"], "required")
+        self.assertIn("required=not bool(publication_refs)", (TOOLS / "agent-g4-live-invoke.py").read_text())
+        readback["explicitPublication"] = {"count": 1, "refs": [finish_ref]}
+        readback["audit"].update(
+            {
+                "deniedOutcome": "not_observed",
+                "submitOutcome": "not_observed",
+                "publishOutcome": "not_observed",
+            }
+        )
+        for operation in readback["planeOperationAudit"]:
+            if operation["operationId"] in {"agent.outcome.submit", "agent.outcome.publish"}:
+                operation.update({"status": "absent", "errorCode": None, "count": 0})
+        _validate_live_readback(readback)
+
+        invalid_readback = copy.deepcopy(readback)
+        invalid_readback["explicitPublication"]["refs"][0]["gatewayReceiptRef"] = "gateway-receipt:forged"
+        for operation in invalid_readback["planeOperationAudit"]:
+            if operation["operationId"] in {"agent.outcome.submit", "agent.outcome.publish"}:
+                operation.update({"status": "success", "errorCode": None, "count": 1})
+        with self.assertRaisesRegex(ContractError, "evidence_plane_finish_publication_invalid"):
+            _validate_live_readback(invalid_readback)
 
     def test_operator_o04_harness_is_single_owner_and_digest_bound(self):
         source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
