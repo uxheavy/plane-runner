@@ -106,7 +106,7 @@ def test_discovery_is_bounded_and_replaces_the_declaration_slot():
 
     broad = host.discover("agent")
     assert broad["status"] == "error"
-    assert broad["error"]["recovery"] == "narrow_query"
+    assert broad["error"]["recovery"] == "discover_capability"
 
 
 def test_restricted_child_receives_only_frozen_task_and_plane_and_supports_read_mutation():
