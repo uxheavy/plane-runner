@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from typing import Any
 
 from django.db import OperationalError, transaction
@@ -844,6 +844,21 @@ def run_runtime_invocation(
         try:
             lease_seconds = math.ceil(runtime_budget_seconds(invocation.envelope))
         except (TypeError, ValueError) as exc:
+            envelope_lease = invocation.envelope.get("lease")
+            expires_at = envelope_lease.get("expiresAt") if isinstance(envelope_lease, dict) else None
+            try:
+                budget_expired = isinstance(expires_at, str) and datetime.fromisoformat(
+                    expires_at.replace("Z", "+00:00")
+                ) <= datetime.now(dt_timezone.utc)
+            except (TypeError, ValueError):
+                budget_expired = False
+            if budget_expired:
+                return _terminalize(
+                    invocation.pk,
+                    kind="run_failure",
+                    reason="Runtime invocation budget is exhausted.",
+                    code="budget_exhausted",
+                )
             raise RuntimeSupervisorError("runtime invocation duration budget is invalid") from exc
     try:
         claim = _claim(invocation, worker_id, lease_seconds)

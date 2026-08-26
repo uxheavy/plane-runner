@@ -2125,6 +2125,29 @@ def test_supervisor_budget_exhaustion_is_reconciled_as_failure(workspace, gatewa
 
 
 @pytest.mark.django_db(transaction=True)
+def test_expired_invocation_deadline_terminalizes_budget_failure_before_dispatch(
+    workspace, gateway_project, gateway_issue, create_user
+):
+    run, invocation = _invocation(
+        workspace,
+        gateway_project,
+        gateway_issue,
+        create_user,
+        runtime_defaults={"totalBudget": {"inputTokens": 1, "outputTokens": 1, "durationMs": 1}},
+        suffix="deadline",
+    )
+    transport = FailingRuntimeTransport()
+
+    result = run_runtime_invocation(invocation, transport=transport, worker_id="worker:test")
+
+    control = RuntimeInvocationControl.objects.get(invocation=invocation)
+    assert result.state == InvocationState.FAILED
+    assert result.failure["failureCode"] == "budget_exhausted"
+    assert control.failure_code == "budget_exhausted"
+    assert transport.calls == 0
+
+
+@pytest.mark.django_db(transaction=True)
 def test_expired_lease_escalates_unknown_without_dispatch(workspace, gateway_project, gateway_issue, create_user):
     run, invocation = _invocation(workspace, gateway_project, gateway_issue, create_user, suffix="lease")
     control = RuntimeInvocationControl.objects.get(invocation=invocation)
