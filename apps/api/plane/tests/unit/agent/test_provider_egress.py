@@ -1285,7 +1285,10 @@ def test_runtime_service_opens_relay_with_existing_lease_and_closes_it(tmp_path)
         assert upstream.calls[0][1] == credentials
         broker.revoke_invocation(INVOCATION_ID)
         denied = _round_trip(relay.server, request_id="request:revoked")
-        assert denied[0] == 403 and json.loads(denied[2]) == {"error": "lease_invalid"}
+        assert denied[0] == 403 and json.loads(denied[2]) == {
+            "error": "lease_invalid",
+            "reasonSubreason": "credential_lease_revoked",
+        }
     finally:
         relay.close()
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as channel:
@@ -1335,6 +1338,7 @@ def test_runtime_service_passes_invocation_relay_to_child_without_provider_secre
             )
 
     monkeypatch.setattr("plane.agent.runtime.service.PlaneHostHTTPClient", FixtureHostClient)
+    audits: list[ProviderRelayAudit] = []
     child = textwrap.dedent(
         """
         import json
@@ -1372,6 +1376,7 @@ def test_runtime_service_passes_invocation_relay_to_child_without_provider_secre
     )
     from plane.agent.runtime.subprocess import RuntimeProcessPolicy, SubprocessRuntimeTransport
 
+    executor._process_policy = replace(executor._process_policy, enforce_kernel_policy=False)
     executor._transport = SubprocessRuntimeTransport(
         command=(sys.executable, "-c", child),
         environment=dict(os.environ),
@@ -1405,6 +1410,14 @@ def test_runtime_service_passes_invocation_relay_to_child_without_provider_secre
     original_open = executor.open_provider_relay
 
     def open_with_fixture(**kwargs):
+        existing_audit = kwargs.get("audit")
+
+        def record_audit(audit: ProviderRelayAudit) -> None:
+            audits.append(audit)
+            if existing_audit is not None:
+                existing_audit(audit)
+
+        kwargs["audit"] = record_audit
         return original_open(upstream=upstream, **kwargs)
 
     executor.open_provider_relay = open_with_fixture  # type: ignore[method-assign]
@@ -1421,6 +1434,7 @@ def test_runtime_service_passes_invocation_relay_to_child_without_provider_secre
     assert frames == ('{"status":"completed"}',)
     assert len(upstream.calls) == 1
     assert upstream.calls[0][1] == credentials
+    assert [audit.phase for audit in audits] == ["intent", "started", "completed"]
     assert callback_phases == ["intent", "started", "completed"]
 
 
@@ -1486,7 +1500,15 @@ def test_runtime_budget_keeps_progressing_provider_request_inside_local_deadline
     original_open = executor.open_provider_relay
 
     def open_with_fixture(**kwargs):
-        return original_open(upstream=upstream, audit=audits.append, **kwargs)
+        existing_audit = kwargs.get("audit")
+
+        def record_audit(audit: ProviderRelayAudit) -> None:
+            audits.append(audit)
+            if existing_audit is not None:
+                existing_audit(audit)
+
+        kwargs["audit"] = record_audit
+        return original_open(upstream=upstream, **kwargs)
 
     executor.open_provider_relay = open_with_fixture  # type: ignore[method-assign]
     child = textwrap.dedent(
@@ -1525,6 +1547,7 @@ def test_runtime_budget_keeps_progressing_provider_request_inside_local_deadline
     )
     from plane.agent.runtime.subprocess import RuntimeProcessPolicy, SubprocessRuntimeTransport
 
+    executor._process_policy = replace(executor._process_policy, enforce_kernel_policy=False)
     executor._transport = SubprocessRuntimeTransport(
         command=(sys.executable, "-c", child),
         environment=dict(os.environ),
@@ -1603,7 +1626,7 @@ def test_runtime_service_drains_relay_before_host_close_and_checks_late_audit(
 
     class FixtureHostServer:
         def __init__(self, **_kwargs):
-            pass
+            self.failure_evidence = None
 
         def start(self):
             events.append("host.start")
