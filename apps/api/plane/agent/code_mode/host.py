@@ -18,6 +18,7 @@ from plane.agent.lifecycle import (
     reconcile_code_mode_usage,
     reserve_code_mode_usage,
     finish_code_mode,
+    finalize_invocation,
 )
 from plane.agent.lifecycle.runtime_contract import (
     RuntimeContractError,
@@ -39,6 +40,8 @@ from plane.db.models import (
     RunState,
     RunTerminalEvent,
     RuntimeInvocation,
+    TerminalEventKind,
+    TerminalEventSource,
 )
 from plane.operation_gateway.catalog import CATALOG_DIGEST, OPERATION_CATALOG, code_mode_callback_names, get_operation
 from plane.operation_gateway.gateway import OperationGateway, work_item_target_digest
@@ -53,10 +56,13 @@ from .contracts import (
     MAX_CODE_MODE_OBSERVATIONS_BYTES,
     MAX_CODE_MODE_OBSERVATION_BYTES,
     MAX_RETURNED_VALUE_BYTES,
+    PLANE_DISCOVERY_OPERATION,
+    PLANE_EXECUTION_OPERATION,
     CodeModeBudget,
     CodeModeExecutionRequest,
     HostBinding,
     SandboxPolicy,
+    PlaneToolError,
     tool_error,
 )
 
@@ -138,6 +144,27 @@ def _plane_declarations(methods: list[dict[str, str]]) -> str:
     lines.append("  readonly finish: (input: FinishInput) => Promise<never>;")
     lines.append("}>;")
     return "\n".join(lines)
+
+
+def _initial_plane_methods() -> list[dict[str, str]]:
+    return [
+        {"path": _plane_method_path(operation_id), "operationId": operation_id}
+        for operation_id in ("search_workspace", "work_item.read", "work_item.rename")
+        if operation_id in OPERATION_CATALOG
+    ]
+
+
+def initial_task_kit(snapshot: Mapping[str, Any], methods: list[dict[str, str]] | None = None) -> dict[str, Any]:
+    assignment = snapshot["assignment"]
+    selected = methods if methods is not None else _initial_plane_methods()
+    return {
+        "task": {
+            "target": assignment["targetRef"],
+            "objective": assignment["objective"],
+            "acceptanceCriteria": list(assignment["acceptanceCriteria"]),
+        },
+        "declarations": _plane_declarations(selected),
+    }
 
 
 def _canonicalize_work_item_read_call(input_data: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -226,6 +253,7 @@ class CodeModeHostRPC:
         self._catalog_search_describe_completed = False
         self._plane_methods = self._initial_plane_methods()
         self._plane_finish_applied = False
+        self._missing_finish_recorded = False
         self._plane_call_sequence = 0
 
     @classmethod
@@ -296,24 +324,10 @@ class CodeModeHostRPC:
 
     def task_kit(self) -> dict[str, Any]:
         """Build the deterministic initial assignment declarations."""
-
-        assignment = self._snapshot["assignment"]
-        return {
-            "task": {
-                "target": assignment["targetRef"],
-                "objective": assignment["objective"],
-                "acceptanceCriteria": list(assignment["acceptanceCriteria"]),
-            },
-            "declarations": _plane_declarations(self._plane_methods),
-        }
+        return initial_task_kit(self._snapshot, self._plane_methods)
 
     def _initial_plane_methods(self) -> list[dict[str, str]]:
-        operation_ids = [
-            operation_id
-            for operation_id in ("search_workspace", "work_item.read", "work_item.rename")
-            if operation_id in OPERATION_CATALOG
-        ]
-        return [{"path": _plane_method_path(operation_id), "operationId": operation_id} for operation_id in operation_ids]
+        return _initial_plane_methods()
 
     def discover(self, query: str) -> dict[str, Any]:
         if not isinstance(query, str) or not 1 <= len(query) <= 500:
@@ -404,8 +418,11 @@ class CodeModeHostRPC:
                 code,
                 self.task_kit()["task"],
                 self._plane_methods,
+                self.task_kit()["declarations"],
             )
         except CodeModeIsolateError as exc:
+            if getattr(exc, "code", None) == "MISSING_TERMINAL_PUBLICATION":
+                self._record_missing_terminal_publication()
             return {
                 "status": "error",
                 "error": getattr(exc, "tool_error", None)
@@ -443,6 +460,23 @@ class CodeModeHostRPC:
             }
         return {"status": "returned", "value": result}
 
+    def _record_missing_terminal_publication(self) -> None:
+        if self._missing_finish_recorded:
+            return
+        self._missing_finish_recorded = True
+        try:
+            finalize_invocation(
+                self.invocation,
+                kind=TerminalEventKind.RUN_FAILURE,
+                reason="MISSING_TERMINAL_PUBLICATION",
+                source=TerminalEventSource.RUNTIME,
+                idempotency_key=f"idempotency:code-mode-missing-{self.binding.invocation_ref}",
+            )
+        except Exception:
+            # The bounded model error remains authoritative when durable failure
+            # recording itself is unavailable; the runtime will reconcile it.
+            pass
+
     def plane_callback_surface(self) -> dict[str, str]:
         return {"resource": "call_plane_resource", "finish": "finish_plane"}
 
@@ -467,6 +501,8 @@ class CodeModeHostRPC:
                 idempotency_key=f"idempotency:code-mode-{self.binding.invocation_ref}-{self._plane_call_sequence}",
                 correlation_id=f"correlation:code-mode-{self.binding.invocation_ref}-{self._plane_call_sequence}",
             )
+        except PlaneToolError:
+            raise
         except (TypeError, ValueError) as exc:
             return {"status": "error", "error": tool_error("VALIDATION_ERROR", str(exc), "Correct the typed method input.")}
         if not receipt.get("ok"):
@@ -487,19 +523,54 @@ class CodeModeHostRPC:
     def _resource_input(self, path: str, args: list[Any]) -> dict[str, Any]:
         if path in {"workItems.retrieve", "workItems.update"}:
             if not args or not isinstance(args[0], str):
-                raise ValueError("work item methods require a typed target reference")
-            issue_id = args[0].removeprefix("issue:")
-            if issue_id == args[0] and args[0].startswith("target:literal-"):
+                raise PlaneToolError(
+                    "VALIDATION_ERROR",
+                    "work item methods require a typed target reference",
+                    "Use task.target with the typed Plane resource method.",
+                    field="target",
+                )
+            expected = self._snapshot["assignment"]["targetRef"]
+            if args[0] != expected:
+                raise PlaneToolError(
+                    "TARGET_INVALID",
+                    "The resource target is outside the current assignment",
+                    "Use task.target with the typed Plane resource method.",
+                    field="target",
+                )
+            issue_ref = expected.removeprefix("target:issue:")
+            if issue_ref == expected and expected.startswith("target:literal-"):
                 try:
-                    issue_id = bytes.fromhex(args[0].removeprefix("target:literal-")).decode("utf-8").removeprefix("issue:")
+                    issue_ref = bytes.fromhex(expected.removeprefix("target:literal-")).decode("utf-8").removeprefix("issue:")
                 except (ValueError, UnicodeDecodeError) as exc:
-                    raise ValueError("work item target reference is invalid") from exc
-            if not issue_id:
-                raise ValueError("work item target reference is invalid")
-            value = {"project_id": str(self.run.project_id), "issue_id": issue_id}
+                    raise PlaneToolError(
+                        "TARGET_UNSUPPORTED",
+                        "The current assignment target is not a work item",
+                        "Discover a method for the assigned target type.",
+                        recovery="discover_capability",
+                    ) from exc
+            if not issue_ref:
+                raise PlaneToolError(
+                    "TARGET_UNSUPPORTED",
+                    "The current assignment target is not a work item",
+                    "Discover a method for the assigned target type.",
+                    recovery="discover_capability",
+                )
+            value = {"project_id": str(self.run.project_id), "issue_id": issue_ref}
             if path == "workItems.update":
                 if len(args) != 2 or not isinstance(args[1], Mapping) or not isinstance(args[1].get("name"), str):
-                    raise ValueError("work item update requires a name")
+                    raise PlaneToolError(
+                        "VALIDATION_ERROR",
+                        "update requires one non-empty name",
+                        "Pass { name: string } as the update input.",
+                        field="input",
+                    )
+                if not args[1]["name"].strip():
+                    raise PlaneToolError(
+                        "VALIDATION_ERROR",
+                        "update requires one non-empty name",
+                        "Pass { name: string } as the update input.",
+                        field="input",
+                    )
                 value["name"] = args[1]["name"]
             return value
         if len(args) != 1 or not isinstance(args[0], Mapping):
@@ -508,13 +579,67 @@ class CodeModeHostRPC:
 
     def finish_plane(self, value: Any) -> dict[str, Any]:
         if self._plane_finish_applied:
-            raise ValueError("plane.finish may be called only once")
+            raise PlaneToolError(
+                "FINISH_ALREADY_CALLED",
+                "plane.finish may be called only once",
+                "Return from the current execution after the first finish call.",
+            )
         if not isinstance(value, Mapping) or value.get("kind") not in {"completed", "waiting_for_input", "blocked"}:
-            raise ValueError("plane.finish input is invalid")
+            raise PlaneToolError(
+                "VALIDATION_ERROR",
+                "finish input has an unsupported kind",
+                "Use completed, waiting_for_input, or blocked.",
+                field="kind",
+            )
         kind = value["kind"]
         required = "summary" if kind == "completed" else "question" if kind == "waiting_for_input" else "reason"
         if not isinstance(value.get(required), str) or not value[required].strip():
-            raise ValueError(f"plane.finish requires a non-empty {required}")
+            raise PlaneToolError(
+                "VALIDATION_ERROR", f"{kind} finish requires {required}", f"Provide a non-empty {required}.", field=required
+            )
+        allowed = {
+            "completed": {"kind", "summary", "content", "artifacts", "evidence"},
+            "waiting_for_input": {"kind", "question", "context"},
+            "blocked": {"kind", "reason", "evidence"},
+        }[kind]
+        unknown = set(value).difference(allowed)
+        if unknown:
+            raise PlaneToolError(
+                "VALIDATION_ERROR",
+                "finish input has unknown fields",
+                "Use only the fields declared for this finish kind.",
+                field=sorted(unknown)[0],
+            )
+        for field in ("summary", "content", "question", "reason"):
+            if field in value and value[field] is not None and (
+                not isinstance(value[field], str) or len(value[field].encode("utf-8")) > 4096
+            ):
+                raise PlaneToolError(
+                    "VALIDATION_ERROR", f"finish {field} is invalid", "Use a bounded UTF-8 string.", field=field
+                )
+        for field in ("artifacts", "evidence"):
+            if field in value:
+                refs = value[field]
+                if not isinstance(refs, list) or len(refs) > 64 or any(
+                    not isinstance(ref, str) or not ref.strip() or len(ref.encode("utf-8")) > 256 for ref in refs
+                ):
+                    raise PlaneToolError(
+                        "VALIDATION_ERROR",
+                        f"finish {field} is invalid",
+                        "Use at most 64 bounded reference strings.",
+                        field=field,
+                    )
+        if "context" in value:
+            try:
+                if len(canonical_json(value["context"]).encode("utf-8")) > 4096:
+                    raise ValueError
+            except (TypeError, ValueError):
+                raise PlaneToolError(
+                    "VALIDATION_ERROR",
+                    "finish context is not bounded JSON",
+                    "Use a small JSON context object.",
+                    field="context",
+                )
         try:
             if self._execution_reservation is not None:
                 self.record_execution_usage(
@@ -524,6 +649,7 @@ class CodeModeHostRPC:
                 self.invocation,
                 kind=kind,
                 summary=value.get("summary", ""),
+                content=value.get("content"),
                 artifacts=value.get("artifacts", []),
                 evidence=value.get("evidence", []),
                 question=value.get("question", ""),
@@ -532,10 +658,23 @@ class CodeModeHostRPC:
                 idempotency_key=f"idempotency:code-mode-finish-{self.invocation.id}",
                 created_by=self.invocation.created_by,
             )
+        except PlaneToolError:
+            raise
         except Exception as exc:
-            raise ValueError("Plane could not apply the requested lifecycle finish") from exc
+            raise PlaneToolError(
+                "FINISH_REJECTED",
+                "Plane could not apply the requested lifecycle finish",
+                "Correct the finish data or retry the same finish call.",
+                recovery="retry_same_call",
+            ) from exc
         self._plane_finish_applied = True
-        return {"__plane_finish__": {"completed": "completed", "waiting_for_input": "waiting_for_input", "blocked": "blocked"}[kind]}
+        return {
+            "__plane_finish__": {
+                "completed": "completed",
+                "waiting_for_input": "waiting_for_input",
+                "blocked": "blocked",
+            }[kind]
+        }
 
     def set_prepared_call_registry(self, registry: Any) -> None:
         """Bind the invocation-local prepared-call registry owned by the host port."""

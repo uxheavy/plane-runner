@@ -10,12 +10,15 @@ from typing import Literal
 
 CODE_MODE_SCHEMA_VERSION = "plane.code-mode/v1"
 CODE_MODE_EXECUTION_OPERATION = "plane.code-mode.execute@1"
+PLANE_DISCOVERY_OPERATION = "plane.operations.discover@1"
+PLANE_EXECUTION_OPERATION = "plane.code-mode.execute@1"
 PLANE_DISCOVER_TOOL = "Plane:discover"
 PLANE_EXECUTE_TOOL = "Plane:execute"
 MAX_DISCOVERY_METHODS = 8
 MAX_DISCOVERY_BYTES = 16 * 1024
 MAX_EXECUTE_INPUT_BYTES = 8192
 MAX_RETURNED_VALUE_BYTES = 8 * 1024
+MAX_DISCOVERY_QUERY_BYTES = 500
 CODE_MODE_ERROR_CLASSES = frozenset(
     {
         "module_parse_or_load",
@@ -59,6 +62,82 @@ def tool_error(
     if example is not None:
         value["example"] = example
     return value
+
+
+class PlaneToolError(ValueError):
+    """Finite actionable error that may cross the generated-code boundary."""
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        resolution: str,
+        *,
+        retryable: bool = False,
+        recovery: str = "fix_code",
+        field: str | None = None,
+        expected: str | None = None,
+        example: Any = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.details = tool_error(
+            code,
+            message,
+            resolution,
+            retryable=retryable,
+            recovery=recovery,
+            field=field,
+            expected=expected,
+            example=example,
+        )
+
+    def as_dict(self) -> dict[str, Any]:
+        return dict(self.details)
+
+
+@dataclass(frozen=True)
+class PlaneDiscoverRequest:
+    query: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.query, str) or not self.query.strip():
+            raise PlaneToolError(
+                "VALIDATION_ERROR",
+                "query must describe one intended Plane workflow",
+                "Provide a non-empty workflow description.",
+                field="query",
+            )
+        if len(self.query.encode("utf-8")) > MAX_DISCOVERY_QUERY_BYTES:
+            raise PlaneToolError(
+                "QUERY_TOO_LARGE",
+                "query exceeds the discovery bound",
+                "Describe the workflow more narrowly.",
+                recovery="narrow_query",
+                field="query",
+            )
+
+
+@dataclass(frozen=True)
+class PlaneExecuteRequest:
+    code: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.code, str) or not self.code.strip():
+            raise PlaneToolError(
+                "VALIDATION_ERROR",
+                "code must be non-empty TypeScript statements",
+                "Submit a bounded async function body without imports or exports.",
+                field="code",
+            )
+        if len(self.code.encode("utf-8")) > MAX_EXECUTE_INPUT_BYTES:
+            raise PlaneToolError(
+                "CODE_TOO_LARGE",
+                "code exceeds the execution bound",
+                "Shorten the function body or use smaller steps.",
+                field="code",
+            )
 
 
 class CodeModeExecutionError(ValueError):

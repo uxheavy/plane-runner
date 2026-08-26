@@ -24,7 +24,12 @@ from .contracts import (
 
 MAX_PROTOCOL_LINE_BYTES = 1_048_576
 _RUNNER = Path(__file__).with_name("runner.mjs")
-_TYPESCRIPT_MODULE_DIR = "/usr/share/node_modules/typescript"
+_REPO_ROOT = Path(__file__).parents[5]
+_TYPESCRIPT_MODULE = next(
+    _REPO_ROOT.glob("node_modules/.pnpm/typescript@*/node_modules/typescript/lib/typescript.js"),
+    Path("/usr/share/node_modules/typescript/lib/typescript.js"),
+)
+_TYPESCRIPT_MODULE_DIR = str(_TYPESCRIPT_MODULE.parent.parent)
 
 
 class CodeModeIsolateError(RuntimeError):
@@ -99,7 +104,11 @@ class CodeModeIsolateRunner:
         except Exception as exc:
             raise CodeModeIsolateError("BUDGET_EXCEEDED", "Code Mode execution budget is exhausted") from exc
         start = time.monotonic()
-        env = {"PATH": os.path.dirname(self.node_path) or os.defpath, "NODE_NO_WARNINGS": "1"}
+        env = {
+            "PATH": os.path.dirname(self.node_path) or os.defpath,
+            "NODE_NO_WARNINGS": "1",
+            "PLANE_CODE_MODE_TYPESCRIPT": str(_TYPESCRIPT_MODULE),
+        }
         sandbox = getattr(host, "sandbox", None)
         if sandbox is None:
             from .contracts import SandboxPolicy
@@ -194,13 +203,14 @@ class CodeModeIsolateRunner:
         code: str,
         task: dict[str, Any],
         methods: list[dict[str, str]],
+        declarations: str | None = None,
     ) -> Any:
         """Run an async function body with only the frozen Plane facade."""
 
         return self.run(
             host,
             code,
-            {"task": task, "methods": methods, "callbacks": host.plane_callback_surface()},
+            {"task": task, "methods": methods, **({"declarations": declarations} if declarations is not None else {})},
             source_limit=MAX_EXECUTE_INPUT_BYTES,
             start_frame={"mode": "plane"},
         )
@@ -337,6 +347,9 @@ class CodeModeIsolateRunner:
             if kind == "finish" and len(args) == 1:
                 return host.finish_plane(args[0])
         except (TypeError, ValueError) as exc:
+            as_dict = getattr(exc, "as_dict", None)
+            if callable(as_dict):
+                return {"__plane_error__": as_dict()}
             raise CodeModeIsolateError("CALLBACK_FAILED", "Code Mode callback failed closed") from exc
         except Exception as exc:
             code = getattr(exc, "code", None)

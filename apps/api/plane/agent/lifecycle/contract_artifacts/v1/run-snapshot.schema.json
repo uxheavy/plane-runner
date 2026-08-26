@@ -98,47 +98,121 @@
       }
     },
     "toolCatalog": {
-      "type": "object",
-      "additionalProperties": false,
-      "x-serializedUtf8ByteMax": 524288,
-      "required": ["catalogDigest", "modelToolset", "eagerOperations"],
-      "properties": {
-        "catalogDigest": {
-          "$ref": "#/$defs/contentDigest"
-        },
-        "modelToolset": {
-          "enum": ["standard", "code_mode_only"]
-        },
-        "eagerOperations": {
-          "type": "array",
-          "maxItems": 64,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["operationRef", "schemaDigest", "inputSchema", "disclosure"],
-            "properties": {
-              "operationRef": {
-                "$ref": "#/$defs/operationRef"
-              },
-              "schemaDigest": {
-                "$ref": "#/$defs/contentDigest"
-              },
-              "inputSchema": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "x-serializedUtf8ByteMax": 524288,
+          "required": ["catalogDigest", "modelToolset", "eagerOperations"],
+          "properties": {
+            "catalogDigest": {
+              "$ref": "#/$defs/contentDigest"
+            },
+            "modelToolset": {
+              "const": "standard"
+            },
+            "eagerOperations": {
+              "type": "array",
+              "maxItems": 64,
+              "items": {
                 "type": "object",
-                "additionalProperties": true,
-                "maxProperties": 4096,
-                "x-serializedUtf8ByteMax": 16384
-              },
-              "disclosure": {
-                "const": "eager"
+                "additionalProperties": false,
+                "required": ["operationRef", "schemaDigest", "inputSchema", "disclosure"],
+                "properties": {
+                  "operationRef": {
+                    "$ref": "#/$defs/operationRef"
+                  },
+                  "schemaDigest": {
+                    "$ref": "#/$defs/contentDigest"
+                  },
+                  "inputSchema": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "maxProperties": 4096,
+                    "x-serializedUtf8ByteMax": 16384
+                  },
+                  "disclosure": {
+                    "const": "eager"
+                  }
+                }
               }
+            },
+            "standardRoute": {
+              "$ref": "#/$defs/standardRoute"
             }
           }
         },
-        "standardRoute": {
-          "$ref": "#/$defs/standardRoute"
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "x-serializedUtf8ByteMax": 524288,
+          "required": ["catalogDigest", "server", "tools", "taskKit"],
+          "properties": {
+            "catalogDigest": {
+              "$ref": "#/$defs/contentDigest"
+            },
+            "server": {
+              "const": "Plane"
+            },
+            "tools": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "description", "inputSchema"],
+                "properties": {
+                  "name": {
+                    "enum": ["discover", "execute"]
+                  },
+                  "description": {
+                    "$ref": "#/$defs/boundedText"
+                  },
+                  "inputSchema": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "maxProperties": 64
+                  }
+                }
+              }
+            },
+            "taskKit": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["task", "declarations"],
+              "properties": {
+                "task": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["target", "objective", "acceptanceCriteria"],
+                  "properties": {
+                    "target": {
+                      "$ref": "#/$defs/targetRef"
+                    },
+                    "objective": {
+                      "$ref": "#/$defs/boundedText"
+                    },
+                    "acceptanceCriteria": {
+                      "type": "array",
+                      "maxItems": 64,
+                      "items": {
+                        "$ref": "#/$defs/boundedText"
+                      }
+                    }
+                  }
+                },
+                "declarations": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 16384,
+                  "x-utf8ByteMax": 16384
+                }
+              }
+            }
+          }
         }
-      }
+      ]
     },
     "runtimePolicy": {
       "type": "object",

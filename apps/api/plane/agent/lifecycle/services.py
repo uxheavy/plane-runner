@@ -68,7 +68,7 @@ from plane.db.models.project import ProjectMember
 from plane.db.models.user import User
 from plane.db.models.workspace import WorkspaceMember
 from plane.utils.permissions.workspace import Admin
-from plane.agent.tools.disclosure import compose_tool_catalog
+from plane.agent.tools.disclosure import compose_code_mode_catalog, compose_tool_catalog
 
 from .errors import AgentDomainError
 from .runtime_contract import (
@@ -668,6 +668,9 @@ def _snapshot_context(profile):
 
 def _snapshot_tool_catalog(profile, assignment):
     try:
+        presentation = getattr(profile, "tool_presentation", {}) or {}
+        if isinstance(presentation, Mapping) and presentation.get("model_toolset") == "code_mode_only":
+            return compose_code_mode_catalog(profile, assignment)
         return compose_tool_catalog(profile, assignment)
     except ValueError as exc:
         raise AgentDomainError(str(exc)) from exc
@@ -3018,6 +3021,7 @@ def finish_code_mode(
     *,
     kind,
     summary="",
+    content=None,
     artifacts=None,
     evidence=None,
     question="",

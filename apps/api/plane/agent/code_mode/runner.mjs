@@ -3,7 +3,7 @@ import * as readline from "node:readline";
 import * as vm from "node:vm";
 
 const require = nodeModule.createRequire(import.meta.url);
-const TYPESCRIPT_MODULE = "/usr/share/node_modules/typescript/lib/typescript.js";
+const TYPESCRIPT_MODULE = process.env.PLANE_CODE_MODE_TYPESCRIPT || "/usr/share/node_modules/typescript/lib/typescript.js";
 const CODE_MODE_ERROR_CLASSES = new Set([
   "module_parse_or_load",
   "default_export_missing",
@@ -23,7 +23,7 @@ const fail = (code, errorClass, toolError) => {
     execution_runtime: "Code Mode execution failed in the restricted isolate",
     callback_or_protocol: "Code Mode callback or protocol failed closed",
     child_exit_no_result: "Code Mode child exited without a result",
-  }[errorClass];
+  }[errorClass] || (code === "TYPE_CHECK_FAILED" ? "Code Mode source does not match the current Plane declarations" : undefined);
   write({
     type: "error",
     code,
@@ -153,36 +153,6 @@ host[callbackNames.spill] = (...args) => callback("spill", callbackNames.spill, 
 }
 Object.freeze(host);
 
-const freeze = (value) => {
-  if (value && typeof value === "object" && !Object.isFrozen(value)) {
-    Object.values(value).forEach(freeze);
-    Object.freeze(value);
-  }
-  return value;
-};
-
-const planeRuntime = start.mode === "plane"
-  ? (() => {
-      const task = freeze(start.input.task);
-      const plane = {};
-      for (const method of start.input.methods) {
-        const [namespace, name] = method.path.split(".");
-        plane[namespace] ??= {};
-        plane[namespace][name] = (...args) => host[callbackNames.resource](method.path, args).then((result) => {
-          if (result?.status === "error") {
-            const error = new Error(result.error?.message || "Plane operation failed");
-            error.code = "PLANE_OPERATION_FAILED";
-            error.toolError = result.error;
-            throw error;
-          }
-          return result.value;
-        });
-      }
-      plane.finish = (value) => host[callbackNames.finish](value);
-      return { task, plane: freeze(plane) };
-    })()
-  : null;
-
 const stripTypes = (value) => {
   if (typeof nodeModule.stripTypeScriptTypes === "function") {
     return nodeModule.stripTypeScriptTypes(value, { mode: "strip" });
@@ -196,11 +166,106 @@ const stripTypes = (value) => {
   }).outputText;
 };
 
+const checkTypes = (source, declarations) => {
+  const typescript = require(TYPESCRIPT_MODULE);
+  const fileName = "plane-code-mode.ts";
+  const typeSource = `${declarations}\nconst __plane_body = async () => {\n${source}\n};`;
+  const options = {
+    target: typescript.ScriptTarget.ES2022,
+    module: typescript.ModuleKind.ESNext,
+    strict: true,
+    noEmit: true,
+    skipLibCheck: true,
+  };
+  const compilerHost = typescript.createCompilerHost(options);
+  const originalGetSourceFile = compilerHost.getSourceFile.bind(compilerHost);
+  compilerHost.getSourceFile = (name, languageVersion, onError, shouldCreateNewSourceFile) =>
+    name === fileName
+      ? typescript.createSourceFile(name, typeSource, languageVersion, true)
+      : originalGetSourceFile(name, languageVersion, onError, shouldCreateNewSourceFile);
+  const program = typescript.createProgram([fileName], options, compilerHost);
+  const diagnostics = [
+    ...program.getSyntacticDiagnostics(),
+    ...program.getSemanticDiagnostics(),
+  ];
+  if (diagnostics.length) {
+    const message = typescript.flattenDiagnosticMessageText(diagnostics[0].messageText, " ").slice(0, 512);
+    const error = new Error(message);
+    error.code = "TYPE_CHECK_FAILED";
+    error.toolError = {
+      code: "TYPE_CHECK_FAILED",
+      message: `TypeScript declarations rejected the code: ${message}`,
+      resolution: "Use the current Plane declaration slice and correct the TypeScript body.",
+      retryable: false,
+      recovery: "fix_code",
+    };
+    throw error;
+  }
+};
+
+const makePlaneRuntime = async (context, input) => {
+  const bridgeSource = `
+    const freeze = (value) => {
+      if (value && typeof value === "object" && !Object.isFrozen(value)) {
+        Object.values(value).forEach(freeze);
+        Object.freeze(value);
+      }
+      return value;
+    };
+    export default (serialized, call, finish) => {
+      const input = JSON.parse(serialized);
+      const task = freeze(input.task);
+      const plane = {};
+      for (const method of input.methods) {
+        const [namespace, name] = method.path.split(".");
+        plane[namespace] ??= {};
+        plane[namespace][name] = (...args) => call(method.path, args).then((result) => {
+          if (result?.__plane_error__) {
+            const error = new Error(result.__plane_error__.message || "Plane operation failed");
+            error.code = result.__plane_error__.code || "PLANE_OPERATION_FAILED";
+            error.toolError = result.__plane_error__;
+            throw error;
+          }
+          if (result?.status === "error") {
+            const error = new Error(result.error?.message || "Plane operation failed");
+            error.code = "PLANE_OPERATION_FAILED";
+            error.toolError = result.error;
+            throw error;
+          }
+          return result.value;
+        });
+      }
+      plane.finish = (value) => finish(value).then((result) => {
+        if (result?.__plane_error__) {
+          const error = new Error(result.__plane_error__.message || "Plane finish failed");
+          error.code = result.__plane_error__.code || "FINISH_REJECTED";
+          error.toolError = result.__plane_error__;
+          throw error;
+        }
+        return result;
+      });
+      return { task, plane: freeze(plane) };
+    };
+  `;
+  const bridge = new vm.SourceTextModule(bridgeSource, { context, identifier: "plane-facade.ts" });
+  await bridge.link(() => { throw new Error("Code Mode imports are not permitted"); });
+  await bridge.evaluate();
+  return bridge.namespace.default(
+    JSON.stringify({ task: input.task, methods: input.methods }),
+    (...args) => host[callbackNames.resource](...args),
+    (value) => host[callbackNames.finish](value),
+  );
+};
+
 let phase = "module_parse_or_load";
 try {
   const context = vm.createContext(Object.create(null), {
     codeGeneration: { strings: false, wasm: false },
   });
+  const planeRuntime = start.mode === "plane" ? await makePlaneRuntime(context, start.input) : null;
+  if (start.mode === "plane" && typeof start.input.declarations === "string") {
+    checkTypes(start.source, start.input.declarations);
+  }
   const source = stripTypes(
     start.mode === "plane"
       ? `export default async (task, plane) => {\n${start.source}\n}`

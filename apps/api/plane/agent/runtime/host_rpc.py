@@ -33,6 +33,7 @@ from plane.agent.code_mode.contracts import (
     CodeModeExecutionRequest,
     PLANE_DISCOVER_TOOL,
     PLANE_EXECUTE_TOOL,
+    PLANE_EXECUTION_OPERATION,
 )
 
 from .contracts import (
@@ -590,8 +591,8 @@ class PlaneHostCall:
             raise PlaneHostRPCError(f"unsupported host action: {action!r}")
         if source not in _SOURCES:
             raise PlaneHostRPCError(f"unsupported host source: {source!r}")
-        if action == "code" and source != "code":
-            raise PlaneHostRPCError("code action must use the code source")
+        if action == "code" and source not in {"code", "model"}:
+            raise PlaneHostRPCError("code action must use the code or model source")
         if action == "observe" and source != "runtime":
             raise PlaneHostRPCError("observe action must use the runtime source")
         if action not in {"code", "observe"} and source != "model":
@@ -2157,6 +2158,30 @@ class PlaneGatewayHostPort:
                 correlation_id=call.correlation_id,
                 idempotency_key=call.idempotency_key,
                 status="ok",
+                replayed=False,
+                output=dict(output),
+            )
+        if call.action == "discover" and call.operation_ref == PLANE_DISCOVERY_OPERATION:
+            if call.source != "model" or set(call.input) != {"query"} or not isinstance(call.input.get("query"), str):
+                return self._error(call, "VALIDATION_ERROR", "Plane discovery input must be exactly {query: string}")
+            output = self._host.discover(call.input["query"])
+            return PlaneHostResult(
+                request_ref=call.request_ref,
+                correlation_id=call.correlation_id,
+                idempotency_key=call.idempotency_key,
+                status="ok" if output.get("status") == "ok" else "invalid",
+                replayed=False,
+                output=dict(output),
+            )
+        if call.action == "code" and call.operation_ref == PLANE_EXECUTION_OPERATION and set(call.input) == {"code"}:
+            if call.source != "model" or not isinstance(call.input.get("code"), str):
+                return self._error(call, "VALIDATION_ERROR", "Plane execution input must be exactly {code: string}")
+            output = self._host.execute_plane(call.input["code"])
+            return PlaneHostResult(
+                request_ref=call.request_ref,
+                correlation_id=call.correlation_id,
+                idempotency_key=call.idempotency_key,
+                status="ok" if output.get("status") in {"ok", "returned", "completed", "waiting_for_input", "blocked"} else "invalid",
                 replayed=False,
                 output=dict(output),
             )

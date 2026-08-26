@@ -209,6 +209,23 @@ def compose_tool_catalog(profile: Any, assignment: Any) -> dict[str, Any]:
     return _bounded_eager_catalog(selected, model_toolset=model_toolset, standard_route=route)
 
 
+def compose_code_mode_catalog(profile: Any, assignment: Any) -> dict[str, Any]:
+    """Build the persisted Plane-only presentation from the live descriptor catalog."""
+
+    from plane.agent.code_mode.host import initial_task_kit, CodeModeHostRPC
+
+    snapshot = {
+        "assignment": {
+            "targetRef": _value(assignment, "target_ref", _value(assignment, "targetRef", "")),
+            "objective": _value(assignment, "objective", ""),
+            "acceptanceCriteria": list(_value(assignment, "acceptance_criteria", _value(assignment, "acceptanceCriteria", []))),
+        }
+    }
+    definitions = CodeModeHostRPC.plane_tool_definitions()
+    tools = [{"name": name.removeprefix("Plane:"), **definition} for name, definition in definitions.items()]
+    return {"catalogDigest": CATALOG_DIGEST, "server": "Plane", "tools": tools, "taskKit": initial_task_kit(snapshot)}
+
+
 def _bounded_eager_catalog(
     selected: list[str], *, model_toolset: str = "standard", standard_route: dict[str, Any] | None = None
 ) -> dict[str, Any]:

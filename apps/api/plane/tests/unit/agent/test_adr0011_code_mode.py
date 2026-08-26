@@ -7,10 +7,12 @@ from plane.agent.code_mode.contracts import (
     MAX_DISCOVERY_METHODS,
     MAX_EXECUTE_INPUT_BYTES,
     MAX_RETURNED_VALUE_BYTES,
+    PLANE_DISCOVERY_OPERATION,
+    PLANE_EXECUTION_OPERATION,
 )
 from plane.agent.code_mode.host import CodeModeHostRPC
 from plane.agent.code_mode.isolate import CodeModeIsolateError, CodeModeIsolateRunner
-from plane.agent.runtime.host_rpc import PlaneGatewayHostPort
+from plane.agent.runtime.host_rpc import PlaneGatewayHostPort, PlaneHostCall
 
 
 class FakePlaneHost:
@@ -122,6 +124,74 @@ def test_finish_is_non_returning_and_missing_finish_is_actionable():
             [],
         )
     assert missing.value.code == "MISSING_TERMINAL_PUBLICATION"
+
+
+def test_hidden_model_handshake_is_exact_and_returns_plane_statuses():
+    class Host:
+        def discover(self, query):
+            assert query == "read the assigned item"
+            return {"status": "ok", "declarations": "declare const plane: unknown;"}
+
+        def execute_plane(self, code):
+            assert code == "return {ok: true};"
+            return {"status": "returned", "value": {"ok": True}}
+
+    port = object.__new__(PlaneGatewayHostPort)
+    port._host = Host()
+    port._run_ref = "run:1"
+    port._invocation_ref = "invocation:1"
+    port._prepared_read_auto_depth = 0
+    port._provider_attempt_recorder = None
+    for call, expected in (
+        (
+            PlaneHostCall("run:1", "invocation:1", "corr:1", "discover", PLANE_DISCOVERY_OPERATION, {"query": "read the assigned item"}, "model"),
+            "ok",
+        ),
+        (
+            PlaneHostCall("run:1", "invocation:1", "corr:2", "code", PLANE_EXECUTION_OPERATION, {"code": "return {ok: true};"}, "model"),
+            "ok",
+        ),
+    ):
+        assert port.invoke(call).status == expected
+
+
+def test_realm_constructor_chain_cannot_escape_the_restricted_child():
+    host = FakePlaneHost()
+    result = CodeModeIsolateRunner().run_plane(
+        host,
+        'try { return plane.workItems.retrieve.constructor("return process")(); } catch { return "denied"; }',
+        {"target": "target:issue:1", "objective": "test", "acceptanceCriteria": []},
+        [{"path": "workItems.retrieve", "operationId": "work_item.read"}],
+    )
+    assert result == "denied"
+
+
+def test_current_declaration_slice_is_type_checked_before_execution():
+    host = FakePlaneHost()
+    with pytest.raises(CodeModeIsolateError) as raised:
+        CodeModeIsolateRunner().run_plane(
+            host,
+            "return plane.not_declared();",
+            {"target": "target:issue:1", "objective": "test", "acceptanceCriteria": []},
+            [],
+            "declare const task: Readonly<{target: string}>; declare const plane: Readonly<{}>;",
+        )
+    assert raised.value.code == "TYPE_CHECK_FAILED"
+
+
+@pytest.mark.parametrize("kind,field", [("completed", "summary"), ("waiting_for_input", "question"), ("blocked", "reason")])
+def test_all_plane_finish_kinds_stop_the_child_exactly_once(kind, field):
+    host = FakePlaneHost()
+    host.finish_plane = lambda value: (host.finished.append(value) or {"__plane_finish__": value["kind"]})
+    value = {"kind": kind, field: "bounded"}
+    result = CodeModeIsolateRunner().run_plane(
+        host,
+        f"await plane.finish({json.dumps(value)}); return 'unreachable';",
+        {"target": "target:issue:1", "objective": "finish", "acceptanceCriteria": []},
+        [],
+    )
+    assert result == {"__plane_finish__": kind}
+    assert host.finished == [value]
 
 
 def test_execute_bounds_are_explicit():

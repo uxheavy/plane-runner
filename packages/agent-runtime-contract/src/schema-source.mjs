@@ -571,14 +571,14 @@ const context = {
   },
 };
 
-const toolCatalog = {
+const legacyToolCatalog = {
   type: "object",
   additionalProperties: false,
   "x-serializedUtf8ByteMax": MAX_EAGER_PRESENTATION_BYTES,
   required: ["catalogDigest", "modelToolset", "eagerOperations"],
   properties: {
     catalogDigest: ref("contentDigest"),
-    modelToolset: { enum: ["standard", "code_mode_only"] },
+    modelToolset: { const: "standard" },
     eagerOperations: {
       type: "array",
       maxItems: MAX_EAGER_OPERATIONS,
@@ -602,6 +602,61 @@ const toolCatalog = {
     standardRoute: ref("standardRoute"),
   },
 };
+
+const codeModeToolCatalog = {
+  type: "object",
+  additionalProperties: false,
+  "x-serializedUtf8ByteMax": MAX_EAGER_PRESENTATION_BYTES,
+  required: ["catalogDigest", "server", "tools", "taskKit"],
+  properties: {
+    catalogDigest: ref("contentDigest"),
+    server: { const: "Plane" },
+    tools: {
+      type: "array",
+      minItems: 2,
+      maxItems: 2,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["name", "description", "inputSchema"],
+        properties: {
+          name: { enum: ["discover", "execute"] },
+          description: ref("boundedText"),
+          inputSchema: { type: "object", additionalProperties: true, maxProperties: 64 },
+        },
+      },
+    },
+    taskKit: {
+      type: "object",
+      additionalProperties: false,
+      required: ["task", "declarations"],
+      properties: {
+        task: {
+          type: "object",
+          additionalProperties: false,
+          required: ["target", "objective", "acceptanceCriteria"],
+          properties: {
+            target: ref("targetRef"),
+            objective: ref("boundedText"),
+            acceptanceCriteria: {
+              type: "array",
+              maxItems: 64,
+              items: ref("boundedText"),
+            },
+          },
+        },
+        declarations: {
+          type: "string",
+          minLength: 1,
+          maxLength: 16384,
+          "x-utf8ByteMax": 16384,
+        },
+      },
+    },
+  },
+};
+
+const toolCatalog = { oneOf: [legacyToolCatalog, codeModeToolCatalog] };
 
 const runtimePolicy = {
   type: "object",
