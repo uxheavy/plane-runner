@@ -135,13 +135,15 @@ export const snapshot: RunSnapshot = createRunSnapshot(
   manifest
 );
 
-const snapshotContent = Object.fromEntries(Object.entries(snapshot).filter(([key]) => key !== "contentDigest"));
+const snapshotContent = Object.fromEntries(
+  Object.entries(snapshot).filter(([key]) => key !== "contentDigest" && key !== "contractDigests")
+);
 
 export const planeSnapshot: RunSnapshot = createRunSnapshot(
   {
     ...snapshotContent,
     toolCatalog: {
-      catalogDigest: contentDigest("p"),
+      catalogDigest: contentDigest("c"),
       server: "Plane",
       tools: [
         { name: "discover", description: "Discover Plane operations.", inputSchema: { type: "object" } },
