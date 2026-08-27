@@ -1596,6 +1596,7 @@ class G4ContractTests(unittest.TestCase):
             '--mount "type=bind,src=${ROOT_DIR}/tools/agent-g4-manifest.json,dst=/run/plane-agent-g4-manifest.json,readonly"',
             run_api,
         )
+        self.assertIn('PLANE_G4_RUNTIME_HERMES_COMMIT="${HERMES_COMMIT}"', verifier)
         self.assertNotIn("--env-file", api_env)
 
     def test_live_runner_quarantines_host_compose_interpolation_overrides(self):
