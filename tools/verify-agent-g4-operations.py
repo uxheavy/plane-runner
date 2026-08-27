@@ -160,15 +160,15 @@ def build_receipt(manifest_path: Path = MANIFEST, *, stage_events: Path | None =
             if not exists:
                 status = "missing"
                 reason = "owner_test_missing"
-            elif check_id in deferred_checks:
-                status = "missing"
-                reason = "deferred_after_live_or_separate_stack"
             elif stage and statuses.get(stage) == {"passed"}:
                 status = "pass"
                 reason = "canonical_stage_passed"
             elif stage and "failed" in statuses.get(stage, set()):
                 status = "fail"
                 reason = "canonical_stage_failed"
+            elif check_id in deferred_checks:
+                status = "missing"
+                reason = "deferred_after_live_or_separate_stack"
             else:
                 status = "missing"
                 reason = "canonical_stage_evidence_missing"
