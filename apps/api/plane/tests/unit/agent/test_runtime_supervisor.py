@@ -550,6 +550,7 @@ def test_pinned_hermes_runs_through_http_service_launcher_and_bound_host_socket(
             "provider": "openai",
             "model": "deterministic-local",
             "adapter": "hermes",
+            "codeModePhase": "post_search",
             "maxCodeModeCalls": 16,
             "maxCodeModeOutputBytes": 131_072,
         },
@@ -580,30 +581,6 @@ _ACTOR_REF = %r
 _RUN_REF = %r
 
 
-def _prepared_read_call(request_json):
-    def find(value):
-        if isinstance(value, dict):
-            if (
-                value.get("action") == "read"
-                and value.get("operationRef") == "operation:work_item.read"
-                and isinstance(value.get("input"), dict)
-                and set(value["input"]) == {"preparedCallRef"}
-            ):
-                return value
-            for child in value.values():
-                found = find(child)
-                if found is not None:
-                    return found
-        elif isinstance(value, list):
-            for child in value:
-                found = find(child)
-                if found is not None:
-                    return found
-        return None
-
-    return find(json.loads(request_json))
-
-
 def _tool_call(number, request_json):
     if number == 1:
         return "tool_search", {"query": "Plane work item", "limit": 5}
@@ -619,20 +596,13 @@ def _tool_call(number, request_json):
             "action": "read", "operationRef": "operation:search_workspace",
             "input": {"query": "Gateway Issue", "limit": 1},
         }}
-    if number in {5, 6}:
-        read_call = _prepared_read_call(request_json)
-        if read_call is None:
-            raise AssertionError("remote model request did not preserve workItemReadCall")
-        return "tool_call", {"name": "plane_operation", "arguments": {
-            **read_call,
-        }}
-    if number == 7:
+    if number == 5:
         return "tool_call", {"name": "plane_operation", "arguments": {
             "action": "mutate", "operationRef": "operation:agent.outcome.evaluate",
             "input": {"outcome_ref": "outcome-submission:not-authorized",
                        "evaluator_ref": _ACTOR_REF, "verdict": "revision_requested"},
         }}
-    if number == 8:
+    if number == 6:
         return "plane_execute_typescript", {"typescript_source": (
             "export default async function ({host, input}: {host: {\\n"
             "    call_plane_operation: (operationId: string, input: Record<string, unknown>, "
@@ -645,7 +615,7 @@ def _tool_call(number, request_json):
             "\\"correlation:code-mode-hermes-rename\\");\\n"
             "}"
         )}
-    if number == 9:
+    if number == 7:
         return "tool_call", {"name": "plane_operation", "arguments": {
             "action": "mutate", "operationRef": "operation:agent.outcome.submit",
             "input": {"run_ref": _RUN_REF,
@@ -653,7 +623,7 @@ def _tool_call(number, request_json):
                        "artifacts": ["artifact:g2-production"],
                        "evidence": ["evidence:g2-production"]},
         }}
-    if number == 10:
+    if number == 8:
         match = re.search(r"outcome-submission:[0-9a-f-]+", request_json)
         return "tool_call", {"name": "plane_publish", "arguments": {
             "kind": "outcome", "operationRef": "operation:agent.outcome.publish",
@@ -670,7 +640,7 @@ class _Completions:
     def create(self, **kwargs):
         self.calls += 1
         request_json = json.dumps(kwargs, sort_keys=True, default=str)
-        if self.calls <= 10:
+        if self.calls <= 8:
             name, arguments = _tool_call(self.calls, request_json)
             delta = Namespace(
                 role="assistant",
@@ -864,7 +834,6 @@ hermes_logging.setup_verbose_logging = lambda: None
     assert [call.operation_ref for call in host_calls] == [
         "plane.operations.discover@1",
         "operation:search_workspace",
-        "operation:work_item.read",
         "operation:agent.outcome.evaluate",
         "plane.code-mode.execute@1",
         "operation:agent.outcome.submit",
@@ -2197,6 +2166,7 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
             "provider": "openai",
             "model": "deterministic-local",
             "adapter": "hermes",
+            "codeModePhase": "post_search",
             "maxCodeModeCalls": 16,
             "maxCodeModeOutputBytes": 131_072,
         },
@@ -2264,8 +2234,8 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
                         "name": "plane_operation",
                         "arguments": {
                             "action": "read",
-                            "operationRef": "operation:work_item.read",
-                            "input": {"project_id": project_id, "issue_id": issue_id},
+                            "operationRef": "operation:search_workspace",
+                            "input": {"query": "Gateway Issue", "limit": 1},
                         },
                     }
                 elif provider_stream_count == 4:
@@ -2320,8 +2290,9 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
                     function_name = "plane_execute_typescript"
                     arguments = {
                         "typescript_source": (
-                            "result = 2 + 2\n"
-                            "print(result)"
+                            "export default async function ({host, input}: {host: unknown; input: unknown}) {\n"
+                            "  return { value: 4 };\n"
+                            "}"
                         )
                     }
                     code_callbacks.append(arguments["typescript_source"])
@@ -2505,8 +2476,9 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
         "tool_call",
     ]
     assert code_callbacks == [
-        'result = 2 + 2\n'
-        'print(result)'
+        "export default async function ({host, input}: {host: unknown; input: unknown}) {\n"
+        "  return { value: 4 };\n"
+        "}"
     ]
     assert "state=succeeded" in supervisor_output
     assert provider_key not in supervisor_output
@@ -2531,6 +2503,7 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
 
     correlation_id = f"correlation:{run.id}"
     expected_operations = {
+        "search_workspace",
         "catalog.search",
         "catalog.describe",
         "work_item.read",
