@@ -3,7 +3,7 @@
   "version": "1.4.0",
   "private": true,
   "description": "Open-source project management that unlocks customer value",
-  "license": "AGPL-3.0",
+  "license": "AGPL-3.0-only",
   "repository": "https://github.com/makeplane/plane.git",
   "scripts": {
     "build": "turbo run build",
@@ -17,6 +17,7 @@
     "check:lint": "turbo run check:lint",
     "check:format": "turbo run check:format",
     "check:types": "turbo run check:types",
+    "check:copyright": "pnpm --filter=@plane/codemods copyright-headers --check --changed-from upstream/preview",
     "prepare": "husky",
     "doctor": "npx react-doctor@latest",
     "verify:chat-context": "./packages/chat-context/verify-release.sh"

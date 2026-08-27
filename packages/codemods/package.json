@@ -2,8 +2,10 @@
   "name": "@plane/codemods",
   "version": "1.4.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "scripts": {
     "test": "vitest run",
+    "copyright-headers": "node ./copyright-headers.mjs",
     "function-declaration": "jscodeshift -t ./function-declaration.ts --extensions=tsx --parser=tsx ../../apps/*/app ../../apps/*/ce ../../apps/*/core ../../apps/*/ee ../../apps/*/helpers ../../packages/*/src --ignore-pattern='**/node_modules/**' --ignore-pattern='**/dist/**' --ignore-pattern='**/build/**' --ignore-pattern='**/*.d.ts'",
     "remove-directives": "jscodeshift -t ./remove-directives.ts --extensions=ts,tsx --parser=tsx ../../apps/*/app ../../apps/*/ce ../../apps/*/core ../../apps/*/ee ../../apps/*/helpers ../../apps/*/src ../../packages/*/src --ignore-pattern='**/node_modules/**' --ignore-pattern='**/dist/**' --ignore-pattern='**/build/**' --ignore-pattern='**/*.d.ts'"
   },

@@ -2,7 +2,7 @@
   "name": "space",
   "version": "1.4.0",
   "private": true,
-  "license": "AGPL-3.0",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
     "dev": "react-router dev --port 3002",

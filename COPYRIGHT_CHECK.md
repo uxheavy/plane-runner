@@ -1,34 +1,25 @@
-## Copyright check
+## Copyright and license checks
 
-To verify that all tracked Python files contain the correct copyright header for **Plane Software Inc.** for the year **2023**, run this command from the repository root:
+New source files in this fork use the `Ngo Quoc Huy` copyright header. Existing
+Plane and third-party notices must be preserved. Package metadata uses the SPDX
+identifier `AGPL-3.0-only`.
 
-```bash
-addlicense --check -f COPYRIGHT.txt -ignore "**/migrations/**" $(git ls-files '*.py')
-```
-
-#### To Apply Changes
-
-python files
+Check all rules:
 
 ```bash
-addlicense -v -f COPYRIGHT.txt -ignore "**/migrations/**" $(git ls-files '*.py')
+pnpm check:copyright
 ```
 
-ts and tsx files in a specific app
+Apply headers to source files added relative to `upstream/preview`:
 
 ```bash
-addlicense -v -f COPYRIGHT.txt \
-  -ignore "**/*.config.ts" \
-  -ignore "**/*.d.ts" \
-  $(git ls-files 'packages/*.ts')
+pnpm --filter=@plane/codemods copyright-headers --write --added-from upstream/preview
 ```
 
-Note: Please make sure ts command is running on specific folder, running it for the whole mono repo is crashing os processes.
+Normalize package license metadata:
 
-#### Other Options
+```bash
+pnpm --filter=@plane/codemods copyright-headers --write-package-licenses
+```
 
-- **`addlicense -check`**: runs in check-only mode and fails if any file is missing or has an incorrect header.
-- **`-c "Plane Software Inc."`**: sets the copyright holder.
-- **`-f LICENSE.txt`**: uses the contents and format defined in `LICENSE.txt` as the header template.
-- **`-y 2023`**: sets the year in the header.
-- **`$(git ls-files '*.py')`**: restricts the check to Python files tracked in git.
+CI runs the same check through `.github/workflows/copyright-check.yml`.
