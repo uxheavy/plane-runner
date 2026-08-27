@@ -1587,9 +1587,15 @@ class G4ContractTests(unittest.TestCase):
         verifier = (TOOLS / "verify-agent-g4.sh").read_text(encoding="utf-8")
         start = verifier.index("API_ENV=(")
         api_env = verifier[start : verifier.index("\n)\n\nrun_api()", start)]
+        run_api = verifier[verifier.index("run_api()") : verifier.index("\n}\n\nsetup_g4_stack()")]
 
         self.assertIn('--env "API_KEY_RATE_LIMIT=8192/minute"', api_env)
         self.assertIn('--env "CORS_ALLOWED_ORIGINS=http://localhost"', api_env)
+        self.assertIn('--env "PLANE_G4_MANIFEST=/run/plane-agent-g4-manifest.json"', api_env)
+        self.assertIn(
+            '--mount "type=bind,src=${ROOT_DIR}/tools/agent-g4-manifest.json,dst=/run/plane-agent-g4-manifest.json,readonly"',
+            run_api,
+        )
         self.assertNotIn("--env-file", api_env)
 
     def test_live_runner_quarantines_host_compose_interpolation_overrides(self):

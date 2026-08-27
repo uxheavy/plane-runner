@@ -575,6 +575,7 @@ API_ENV=(
     --env "PLANE_SDK_EXTERNAL_ROOT=/workspace/external/plane-python-sdk"
     --env "PLANE_G2_HERMES_CHECKOUT=/workspace/hermes-agent"
     --env "PLANE_G2_HERMES_DEPENDENCY_PATH=/workspace/hermes-agent/plane_runtime/g1_runtime_image"
+    --env "PLANE_G4_MANIFEST=/run/plane-agent-g4-manifest.json"
     --env "PLANE_COMMUNITY_COMPOSE_CONFIG=/tmp/community-compose.json"
     --env "API_KEY_RATE_LIMIT=8192/minute"
 )
@@ -589,6 +590,7 @@ run_api() {
         --mount "type=bind,src=${SDK_ROOT},dst=/workspace/external/plane-python-sdk,readonly" \
         --mount "type=bind,src=${EXTERNAL_SUPERPROJECT_ROOT}/.git/modules,dst=/workspace/.git/modules,readonly" \
         --mount "type=bind,src=${HERMES_ROOT},dst=/workspace/hermes-agent,readonly" \
+        --mount "type=bind,src=${ROOT_DIR}/tools/agent-g4-manifest.json,dst=/run/plane-agent-g4-manifest.json,readonly" \
         --mount "type=bind,src=${G4_RUNTIME_LOG_DIR},dst=/workspace/apps/api/plane/logs" \
         --mount "type=bind,src=${COMMUNITY_COMPOSE_CONFIG},dst=/tmp/community-compose.json,readonly" \
         --workdir /workspace/apps/api \
