@@ -26,7 +26,7 @@
     "candidateCommitSource": "git-head-with-exact-parent",
     "expectedCandidateSource": "external-operator-input:PLANE_G4_EXPECTED_CANDIDATE",
     "mode": "exact-single-child",
-    "parentCommit": "d10f37fe3cc6d2bc71ebeeb768ff71e30fdb65cb",
+    "parentCommit": "ddc4b2ba8682115e6150ab6d8474c22636fd8ee4",
     "rejectDescendants": true
   },
   "cleanup": {
@@ -103,7 +103,7 @@
         "activeQuotaReservations",
         "temporaryDatabaseRemoved"
       ],
-      "sha256": "38f237fcf8e1bbb2fdbb06cb4e4af3f18a9e4e843c2b94151ea0fa7f1a137aa3",
+      "sha256": "86ffe536439951eeaa088f705a73028fe18a4adafe5c8237e65801a4d3bf5093",
       "testPath": "plane/tests/contract/api/test_agent_g4_rollback_drill.py"
     },
     "runtimeService": {
@@ -114,7 +114,7 @@
         "plane_runtime.g1_runtime_image.bootstrap",
         "PLANE_G2_HERMES_CHECKOUT"
       ],
-      "sha256": "9dd558a190616790e4c57f15a2313d28d1f2bc4bbc084bbb091d84d8088431f7",
+      "sha256": "c52b9026a51ce3e9c4403345d0218e5d0cb5328381bb760f78ef326fed793c7f",
       "testName": "test_pinned_hermes_runs_through_http_service_launcher_and_bound_host_socket",
       "testPath": "plane/tests/unit/agent/test_runtime_supervisor.py"
     }
@@ -130,17 +130,17 @@
   "pins": {
     "apiArtifact": {
       "contract": "plane.operation/v1",
-      "imageDigest": "sha256:d9fe979be61339d6ab3e6a69a0a38b5ef2268b298f0a88b06318c46394150af9",
-      "imageTag": "plane-agent-api:g4-v126-d10f37fe",
-      "sourceRevision": "d10f37fe3cc6d2bc71ebeeb768ff71e30fdb65cb"
+      "imageDigest": "sha256:794e40c0beaaf054d8c09b64471bd7e87d852ddae973f0a8aa11ab708bb44e9f",
+      "imageTag": "plane-agent-api:g4-v132-ddc4b2ba86",
+      "sourceRevision": "ddc4b2ba8682115e6150ab6d8474c22636fd8ee4"
     },
-    "hermesCommit": "16a7d503aa4ef1c37da7db38434ddc5bee291fd5",
-    "mcpGitlink": "c04974ed6624f17b41e63ef8182661929e77e0d3",
+    "hermesCommit": "7e852a1f3360b94ef00c7194c275f52663e6c858",
+    "mcpGitlink": "d65df7c94bcd41a3c7795c40c1227e2199889d71",
     "runtimeContract": "plane.agent-runtime/v1",
-    "runtimeImageDigest": "sha256:f78d002d60a44c5b3102bc65b04cde0b1196b90e349e2c806b09f2f8aa0f91a8",
-    "runtimeImageRevision": "d10f37fe3cc6d2bc71ebeeb768ff71e30fdb65cb",
-    "runtimeImageTag": "plane-agent-runtime:hermes-16a7d503-v128-d10f37fe",
-    "sdkGitlink": "7d2faf3b7ef5409e292ba0a3c7015e59f93c5889"
+    "runtimeImageDigest": "sha256:9ccafd847a43a7ab775a57a65accb525e9151dd6fa232fe9caf87b2736d9931d",
+    "runtimeImageRevision": "614f91f9191142aed7219cfdd40f22f65495a9b8",
+    "runtimeImageTag": "plane-agent-runtime:hermes-7e852a1f-v131-614f91f9",
+    "sdkGitlink": "4403116b3601a29d7a2c507c8bef1db768574142"
   },
   "pytestPaths": [
     "plane/tests/unit/agent/test_g4_runtime_boundary.py",
@@ -189,13 +189,13 @@
     {
       "module": "agent_g4_live_scenario",
       "runtime": "/run/plane-scenario/agent_g4_live_scenario.py",
-      "sha256": "1653aa4ec6e87705fe82380734255368e2082c5a52cda077cad61123bf8ca1f8",
+      "sha256": "f7ea870e7aaa2261dd7369449d424a1f5c737af5d9e19553b02747f4085bea0c",
       "source": "tools/agent_g4_live_scenario.py"
     },
     {
       "module": "agent_g4_worker_route",
       "runtime": "/run/plane-scenario/agent_g4_worker_route.py",
-      "sha256": "6feae4e0242ee6c866b24924c379a0968d168963d5d6c4fb06e48fdd5c600ef7",
+      "sha256": "be8611af356b4f6cab13d00f153d71d508104052b7c01d6ce5cff09cfcbdd481",
       "source": "tools/agent_g4_worker_route.py"
     },
     {
@@ -222,19 +222,43 @@
       "id": "worker-core",
       "path": "tools/agent-g4-worker-minimal.json",
       "modelToolset": "code_mode_only",
-      "routeChecks": ["W01", "W02", "W03", "W04", "W05", "W06", "W07", "W08"]
+      "routeChecks": [
+        "W01",
+        "W03",
+        "W04",
+        "W07",
+        "W08"
+      ]
     },
     {
       "id": "delegator-core",
       "path": "tools/agent-g4-delegator-minimal.json",
       "modelToolset": "standard",
-      "routeChecks": ["M01", "M02", "M03", "M04", "M05", "M06", "M07", "M08"]
+      "routeChecks": [
+        "M01",
+        "M02",
+        "M03",
+        "M04",
+        "M05",
+        "M06",
+        "M07",
+        "M08"
+      ]
     },
     {
       "id": "operations",
       "path": "tools/agent-g4-operations-v1.json",
       "providerAttempts": 0,
-      "routeChecks": ["O01", "O03", "O04", "O05", "O06", "O07", "O08", "O09"]
+      "routeChecks": [
+        "O01",
+        "O03",
+        "O04",
+        "O05",
+        "O06",
+        "O07",
+        "O08",
+        "O09"
+      ]
     }
   ],
   "scripts": [

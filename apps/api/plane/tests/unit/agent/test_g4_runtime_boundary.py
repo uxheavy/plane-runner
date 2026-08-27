@@ -38,7 +38,9 @@ from plane.agent.runtime.service import RuntimeDispatchExecutor, _RuntimeHTTPSer
 
 
 def _synthetic_jwt(*, issued_at: int, expires_at: int, payload: bytes | None = None) -> str:
-    encode = lambda value: base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+    def encode(value: bytes) -> str:
+        return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+
     claims = payload or json.dumps({"iat": issued_at, "exp": expires_at}, separators=(",", ":")).encode()
     return f"{encode(b'{}')}.{encode(claims)}.synthetic-signature"
 
@@ -46,7 +48,6 @@ def _synthetic_jwt(*, issued_at: int, expires_at: int, payload: bytes | None = N
 def _runtime_environment(**overrides: str) -> dict[str, str]:
     environment = {
         "PLANE_AGENT_RUNTIME_URL": "http://agent-runtime:8080",
-        "PLANE_AGENT_RUNTIME_HOST_URL": "http://plane-api:8000",
         "PLANE_AGENT_RUNTIME_SECRET": "r" * 40,
         "PLANE_AGENT_RUNTIME_HOST_URL": "http://plane-api:8091",
     }
@@ -222,6 +223,9 @@ def test_g4_codex_auth_document_refresh_gap_is_classified_without_leaking_values
     error = runtime_credentials.RuntimeCredentialError(
         "deployment credential source requires trusted resolver refresh"
     )
+    assert runtime_credentials.credential_failure_subreason(error) == (
+        "credential_source_requires_refresh"
+    )
 
 
 @pytest.mark.parametrize(
@@ -250,9 +254,12 @@ def test_g4_codex_auth_document_rejects_unusable_jwt_lifetime(monkeypatch, tmp_p
         },
     }), encoding="utf-8")
     monkeypatch.setattr(runtime_credentials, "DEPLOYMENT_CREDENTIAL_SOURCE_PATH", str(source))
-    with pytest.raises(runtime_credentials.RuntimeCredentialError, match="requires trusted resolver refresh"):
+    with pytest.raises(
+        runtime_credentials.RuntimeCredentialError,
+        match="requires trusted resolver refresh",
+    ) as error:
         runtime_credentials.resolve_deployment_credential("runtime")
-    assert runtime_credentials.credential_failure_subreason(error) == (
+    assert runtime_credentials.credential_failure_subreason(error.value) == (
         "credential_source_requires_refresh"
     )
 

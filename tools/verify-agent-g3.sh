@@ -337,7 +337,7 @@ CURRENT_STEP="migration-chain"
 PLANE_API_TEST_IMAGE="${API_TEST_IMAGE}" PLANE_API_TEST_IMAGE_DIGEST="${API_TEST_IMAGE_DIGEST}" \
     PLANE_API_TEST_IMAGE_TAG="${API_TEST_IMAGE_TAG}" PLANE_API_SOURCE_REVISION="${API_SOURCE_REVISION}" \
     "${ROOT_DIR}/tools/verify-api-migrations.sh"
-emit "migration-chain" passed "apply=passed" "reverse_to=0138" "reapply=passed" "drift=passed" "leaf=0142"
+emit "migration-chain" passed "apply=passed" "reverse_to=0138" "reapply=passed" "drift=passed" "leaf=0146"
 
 CURRENT_STEP="start-stack"
 if [[ ! -d "${ROOT_DIR}/apps/api/plane/logs" ]]; then
@@ -436,7 +436,7 @@ else
     printf 'event=agent.g3.ruff-format status=failed\\n' >&2
 fi
 python -m compileall -q plane/agent plane/operation_gateway plane/tests/unit/agent plane/tests/contract/api
-python manage.py shell -c 'from django.db import connection; from django.db.migrations.executor import MigrationExecutor; e=MigrationExecutor(connection); leaves=set(e.loader.graph.leaf_nodes(\"db\")); applied=set(e.recorder.applied_migrations()); assert leaves == {(\"db\", \"0142_runtime_provider_attempts\")}; assert not leaves-applied; print(\"event=agent.g3.api.migration_leaf status=passed leaf=0142\")'
+python manage.py shell -c 'from django.db import connection; from django.db.migrations.executor import MigrationExecutor; e=MigrationExecutor(connection); leaves=set(e.loader.graph.leaf_nodes(\"db\")); applied=set(e.recorder.applied_migrations()); assert leaves == {(\"db\", \"0146_runtime_reconciliation_audit_fields\")}; assert not leaves-applied; print(\"event=agent.g3.api.migration_leaf status=passed leaf=0146\")'
 PLANE_AUDIT_ENFORCE_ROLE_SEPARATION=0 pytest -p plane.tests.g3_no_skips --migrations -q -o addopts='--strict-markers --reuse-db' -o cache_dir=/tmp/g3-pytest ${G3_TEST_PATHS[*]}
 if [ "\${RUFF_STATUS}" -ne 0 ]; then exit "\${RUFF_STATUS}"; fi
 if [ "\${RUFF_FORMAT_STATUS}" -ne 0 ]; then exit "\${RUFF_FORMAT_STATUS}"; fi
@@ -444,4 +444,4 @@ if [ "\${RUFF_FORMAT_STATUS}" -ne 0 ]; then exit "\${RUFF_FORMAT_STATUS}"; fi
 emit "g3-api-and-client-suite" passed "test_files=${#G3_TEST_PATHS[@]}" "external_mcp=${MCP_COMMIT}" "external_sdk=${SDK_COMMIT}" "hermes=${HERMES_COMMIT}" "result_limit=8192"
 
 CURRENT_STEP="complete"
-emit "complete" passed "base=${G3_BASE_COMMIT}" "candidate=${CANDIDATE_COMMIT}" "migration_leaf=0142" "mcp=177:86:90:1" "result_boundary=8192/8193" "readiness=ready_for_single_sol_medium_g3_assessment"
+emit "complete" passed "base=${G3_BASE_COMMIT}" "candidate=${CANDIDATE_COMMIT}" "migration_leaf=0146" "mcp=177:86:90:1" "result_boundary=8192/8193" "readiness=ready_for_single_sol_medium_g3_assessment"

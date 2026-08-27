@@ -85,7 +85,7 @@ executor = MigrationExecutor(connection)
 leaves = set(executor.loader.graph.leaf_nodes("db"))
 applied = set(executor.recorder.applied_migrations())
 missing = leaves - applied
-expected = {("db", "0144_provider_attempt_diagnostics")}
+expected = {("db", "0146_runtime_reconciliation_audit_fields")}
 if leaves != expected or missing:
     raise SystemExit(f"db migration leaf state is invalid: leaves={sorted(leaves)} missing={sorted(missing)}")
 print(f"db_migration_leaf={sorted(leaves)[0]}")

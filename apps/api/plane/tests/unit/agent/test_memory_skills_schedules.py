@@ -143,7 +143,9 @@ def test_context_projection_keeps_agent_memory_and_subject_user_preferences_sepa
     allowed = assemble_agent_context(actor, subject_user=user, authorization=AllowSubject())
     assert parse_memory_markdown(allowed.memory_markdown)[0].entry_ref == f"memory-entry:{memory.id}"
     assert parse_memory_markdown(allowed.user_markdown)[0].entry_ref == f"memory-entry:{preference.id}"
-    assert reproject_memory_markdown(parse_memory_markdown(allowed.memory_markdown), "MEMORY.md") == allowed.memory_markdown
+    assert reproject_memory_markdown(
+        parse_memory_markdown(allowed.memory_markdown), "MEMORY.md"
+    ) == allowed.memory_markdown
     assert reproject_memory_markdown(parse_memory_markdown(allowed.user_markdown), "USER.md") == allowed.user_markdown
     assert "Use direct language." not in allowed.memory_markdown
     assert (

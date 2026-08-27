@@ -109,7 +109,14 @@ read_describe = host(
 )
 assert read_describe["status"] == "ok", read_describe
 assert read_describe["output"]["operation"]["inputSchema"] == eager_read["inputSchema"], read_describe
-search = host(socket_path, run_id, invocation_id, correlation_id, "operation:search_workspace", {"query": "Gateway Issue", "limit": 1})
+search = host(
+    socket_path,
+    run_id,
+    invocation_id,
+    correlation_id,
+    "operation:search_workspace",
+    {"query": "Gateway Issue", "limit": 1},
+)
 assert search["status"] == "ok", search
 item = next(item for item in search["output"]["result"]["results"] if item["objectType"] == "work_item")
 prepared_ref = item["workItemReadCall"]
@@ -153,7 +160,12 @@ code = host(
     {
         "schemaVersion": "plane.code-mode/v1",
         "entrypoint": "default",
-        "source": "export default async function ({host, input}) { const result = await host.call_plane_operation('work_item.read', {preparedCallRef: input.preparedCallRef}, input.idempotencyKey, input.correlationId); if (!result.ok) throw new Error('prepared read failed'); return result; }",
+        "source": (
+            "export default async function ({host, input}) { "
+            "const result = await host.call_plane_operation('work_item.read', "
+            "{preparedCallRef: input.preparedCallRef}, input.idempotencyKey, input.correlationId); "
+            "if (!result.ok) throw new Error('prepared read failed'); return result; }"
+        ),
             "input": {
                 "preparedCallRef": prepared_ref,
                 "correlationId": correlation_id,
@@ -389,7 +401,13 @@ def test_remote_runtime_preserves_search_prepared_read_envelope(
             runtime_url=runtime_url,
             shared_secret=configuration.shared_secret,
             credential_broker=RuntimeCredentialBroker(
-                {"runtime": {"api_key": "provider-free", "base_url": "http://127.0.0.1:9/v1", "api_mode": "chat_completions"}}
+                {
+                    "runtime": {
+                        "api_key": "provider-free",
+                        "base_url": "http://127.0.0.1:9/v1",
+                        "api_mode": "chat_completions",
+                    }
+                }
             ),
             host_endpoint_factory=lambda _ref: nullcontext(
                 RuntimeHostEndpoint(url=host_server.url, token="host-token")

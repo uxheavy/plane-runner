@@ -172,11 +172,27 @@ def test_hidden_model_handshake_is_exact_and_returns_plane_statuses():
     port._provider_attempt_recorder = None
     for call, expected in (
         (
-            PlaneHostCall("run:1", "invocation:1", "corr:1", "discover", PLANE_DISCOVERY_OPERATION, {"query": "read the assigned item"}, "model"),
+            PlaneHostCall(
+                "run:1",
+                "invocation:1",
+                "corr:1",
+                "discover",
+                PLANE_DISCOVERY_OPERATION,
+                {"query": "read the assigned item"},
+                "model",
+            ),
             "ok",
         ),
         (
-            PlaneHostCall("run:1", "invocation:1", "corr:2", "code", PLANE_EXECUTION_OPERATION, {"code": "return {ok: true};"}, "model"),
+            PlaneHostCall(
+                "run:1",
+                "invocation:1",
+                "corr:2",
+                "code",
+                PLANE_EXECUTION_OPERATION,
+                {"code": "return {ok: true};"},
+                "model",
+            ),
             "ok",
         ),
     ):
@@ -292,7 +308,10 @@ def test_current_declaration_slice_is_type_checked_before_execution():
     assert raised.value.code == "TYPE_CHECK_FAILED"
 
 
-@pytest.mark.parametrize("kind,field", [("completed", "summary"), ("waiting_for_input", "question"), ("blocked", "reason")])
+@pytest.mark.parametrize(
+    "kind,field",
+    [("completed", "summary"), ("waiting_for_input", "question"), ("blocked", "reason")],
+)
 def test_all_plane_finish_kinds_stop_the_child_exactly_once(kind, field):
     host = FakePlaneHost()
     host.finish_plane = lambda value: (host.finished.append(value) or {"__plane_finish__": value["kind"]})

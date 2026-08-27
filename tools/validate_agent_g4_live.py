@@ -716,12 +716,10 @@ def validate_rollback_fixture(fixture_path: Path, root: Path, manifest: dict[str
     # through previous.services and the accepted evidence above.
     previous_api = _object(_required(previous, "apiArtifact", "rollback_previous"), "rollback_previous_apiArtifact")
     _rollback_exact(previous_api["contract"], ROLLBACK_OPERATION_CONTRACT, "previous_api_contract")
-    # Hermes and MCP may advance for a candidate while rollback still targets
-    # the immutable accepted-G3 service image. The accepted G3 values remain
-    # evidence for that previous image; the SDK remains shared because its
-    # gitlink is unchanged across the accepted baseline and current candidate.
-    for key in ("sdkGitlink",):
-        _rollback_exact(accepted_g3[key], pins[key], f"accepted_g3_{key}")
+    # Hermes, MCP, and SDK may advance for a candidate while rollback still
+    # targets the immutable accepted-G3 service image. Keep the accepted G3
+    # gitlink evidence attached to the previous image; current runtime pins
+    # are validated independently above.
     for service in ROLLBACK_SERVICE_NAMES:
         _rollback_exact(previous_services[service]["revision"], g3_baseline, f"previous_{service}_revision")
         _rollback_exact(previous_services[service]["artifactKind"], "api", f"previous_{service}_artifactKind")
@@ -1510,11 +1508,13 @@ def _validate_scenario_projection(value: Any) -> None:
         raise ContractError("evidence_scenario_expected_operations_invalid")
     for operation in operations:
         row = _object(operation, "evidence_scenario_expected_operation")
-        if set(row).difference({"operationId", "outcome", "count"}) or not {"operationId", "outcome"}.issubset(row):
+        if set(row).difference({"operationId", "outcome", "count", "errorCode"}) or not {"operationId", "outcome"}.issubset(row):
             raise ContractError("evidence_scenario_expected_operation_fields_invalid")
         _safe_ref(row["operationId"], "evidence_scenario_expected_operation_id")
         if row["outcome"] not in _SCENARIO_OUTCOMES:
             raise ContractError("evidence_scenario_expected_operation_outcome_invalid")
+        if "errorCode" in row and row["errorCode"] != "NOT_AUTHORIZED":
+            raise ContractError("evidence_scenario_expected_operation_error_code_invalid")
         if "count" in row and (type(row["count"]) is not int or not 0 <= row["count"] <= 256):
             raise ContractError("evidence_scenario_expected_operation_count_invalid")
     evidence_kinds = expected["evidenceKinds"] if expected is not None else []
@@ -1912,9 +1912,8 @@ def _validate_runtime_diagnostics(value: Any) -> None:
                         "required",
                         "auto",
                         "absent",
-                        "plane_operation",
-                        "plane_publish",
-                        "plane_execute_typescript",
+                        "Plane:discover",
+                        "Plane:execute",
                     }
                     and item.get("visibleToolset") in {"execute_only", "execute_and_publish", "other", "empty"}
                     and type(item.get("visibleToolCount")) is int

@@ -105,7 +105,12 @@ def test_operator_readback_has_stable_pagination_and_correlation_gaps(
 @pytest.mark.django_db
 def test_operator_reconciliation_api_is_idempotent_and_conflict_bound(api_key_client, workspace, create_user):
     actor = create_actor(workspace=workspace, display_name="G4 reconciliation worker", created_by=create_user)
-    profile = create_profile(actor, role=AgentRole.WORKER, instructions="Reconcile one unknown run.", created_by=create_user)
+    profile = create_profile(
+        actor,
+        role=AgentRole.WORKER,
+        instructions="Reconcile one unknown run.",
+        created_by=create_user,
+    )
     assignment = create_assignment(
         actor,
         target_ref="issue:g4-reconciliation-api",

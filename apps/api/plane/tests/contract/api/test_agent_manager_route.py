@@ -117,7 +117,8 @@ def test_manager_route_uses_persisted_worker_profile_for_every_run(
     assert failures == [], (
         "event=agent.manager.route actor=delegator operation=exercise_manager_journey "
         f"expected=M01-M08 provider-free route evidence actual={failures} "
-        "risk=manager-readiness false negative suggestion=inspect the shared route fixture and lifecycle profile binding"
+        "risk=manager-readiness false negative suggestion=inspect the shared route fixture "
+        "and lifecycle profile binding"
     )
     assert all(
         value is True

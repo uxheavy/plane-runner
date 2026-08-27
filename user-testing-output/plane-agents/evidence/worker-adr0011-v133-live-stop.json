@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "plane-agent-g4/live-failure/v1",
+  "status": "failed",
+  "failurePhase": "api-invocation",
+  "failureReason": "unspecified/unavailable",
+  "resultSha256": "46d401142ea562f3bcbae55e0ead3146c86d38c4c23b33f71f63080b72dcd1f8",
+  "stderrSha256": "27e9eabd1d99e57417027d96eebf03ac54964a5b0ca6bc15c93047ce423f92b4",
+  "candidate": {
+    "source": "ddc4b2ba8682115e6150ab6d8474c22636fd8ee4",
+    "wrapper": "47277d003e1db0369bbecf80c2fd0996346e95a8",
+    "manifestSha256": "998a887c0c838d635b04f5acbc362de1e09ea53a60bee5a32fbae0f394ca3dc1",
+    "descriptorSha256": "b1044fab6967b614c46d476f1397d8df726ae1da38bfc9f63d9de1b15db70a40",
+    "workerRouteSha256": "01104cf8b7fd7421ed337e72ce484f4179af75461d92cf14fa7bc6df0a5ca3e0",
+    "apiImage": "plane-agent-api:g4-v132-ddc4b2ba86",
+    "apiDigest": "sha256:794e40c0beaaf054d8c09b64471bd7e87d852ddae973f0a8aa11ab708bb44e9f",
+    "runtimeImage": "plane-agent-runtime:hermes-7e852a1f-v131-614f91f9",
+    "runtimeDigest": "sha256:9ccafd847a43a7ab775a57a65accb525e9151dd6fa232fe9caf87b2736d9931d",
+    "hermes": "7e852a1f3360b94ef00c7194c275f52663e6c858",
+    "mcp": "d65df7c94bcd41a3c7795c40c1227e2199889d71",
+    "sdk": "4403116b3601a29d7a2c507c8bef1db768574142"
+  },
+  "environment": {
+    "filesCopiedByteIdentical": 7,
+    "valuesInspected": false,
+    "setupRun": false,
+    "temporaryRoot": "/private/tmp"
+  },
+  "live": {
+    "primaryCount": 1,
+    "provider": "openai-codex/gpt-5.6-luna",
+    "reasoningEffort": "high",
+    "fallbackAllowed": false,
+    "providerStarted": true,
+    "providerAttemptCount": 2,
+    "providerAttemptStatuses": ["2xx", "2xx"],
+    "runId": "a949bf36-cb50-4b28-95b3-3969b2524e92",
+    "runState": "succeeded",
+    "invocationId": "invocation:1712ec4d-bdd7-465f-bf86-cf47bdd48599",
+    "invocationState": "succeeded",
+    "runtimeExit": {"kind": "completed", "finalSequence": 5},
+    "terminal": {"kind": "outcome_submission", "count": 1},
+    "directFinish": {"s00Gate": "passed", "operationRef": "operation:plane.finish"},
+    "typedOperations": {
+      "work_item.read": {"status": "success", "count": 1},
+      "work_item.rename": {"status": "success", "count": 1}
+    },
+    "scenarioGate": {
+      "passed": false,
+      "missing": ["catalog.search", "catalog.describe", "search_workspace", "agent.context.read"]
+    },
+    "canaries": {
+      "permitted": {"status": "not_evaluated", "passed": false},
+      "denied": {"status": "not_evaluated", "passed": false, "effects": 0}
+    },
+    "confinement": {
+      "childNetworkPolicy": "none",
+      "externalEgressOwner": "agent-runtime",
+      "hostGatewaySeparate": true,
+      "transport": "AF_UNIX"
+    },
+    "legacyOutcomeOperations": {
+      "agent.outcome.submit": 0,
+      "agent.outcome.publish": 0
+    },
+    "replayCount": 0,
+    "retryCount": 0,
+    "secondPrimaryCount": 0,
+    "zeroDeltaReplay": "not_attempted"
+  },
+  "cleanup": {
+    "labeledRunResources": 0,
+    "leaseReleased": true,
+    "rawCredentials": false,
+    "rawPrompts": false,
+    "rawModelOutput": false,
+    "rawProviderText": false
+  },
+  "disposition": "Stopped at the first genuine provider-started acceptance failure; durable direct finish and typed read/rename were observed, but the full scenario gate and denied canary predicates were not satisfied."
+}

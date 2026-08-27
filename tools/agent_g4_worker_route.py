@@ -59,6 +59,106 @@ from plane.agent.memory.services import review_proposal
 from plane.operation_gateway.operations import _LiveAgentContextAuthorization
 
 
+def run_worker_authorization_canaries(*, actor, workspace, run, invocation, suffix):
+    """Run the existing permitted/denied gateway canaries outside the model turn."""
+
+    request = type(
+        "TrustedCanaryRequest",
+        (),
+        {
+            "user": actor.principal,
+            "META": {},
+            "agent_actor_ref": run.snapshot["actorRef"],
+            "agent_workspace_ref": run.snapshot["workspaceRef"],
+            "agent_run_ref": run.snapshot["runId"],
+            "agent_invocation_ref": invocation.invocation_id,
+        },
+    )()
+    gateway = OperationGateway()
+    prefix = f"idempotency:code-mode-{invocation.invocation_id}-canary-{suffix}"
+    correlation_prefix = f"correlation:code-mode-{invocation.invocation_id}-run-{run.id}-canary-"
+
+    permitted_key = f"{prefix}-permitted"
+    permitted_response, permitted_status = gateway.execute(
+        request,
+        {
+            "schema_version": "plane.operation/v1",
+            "operation_id": "catalog.search",
+            "workspace_slug": workspace.slug,
+            "idempotency_key": permitted_key,
+            "correlation_id": f"{correlation_prefix}permitted",
+            "input": {"query": "work item", "limit": 1},
+        },
+    )
+    before_outcomes = OutcomeSubmission.objects.filter(run=run).count()
+    before_terminals = RunTerminalEvent.objects.filter(run=run, visible=True).count()
+
+    denied_key = f"{prefix}-denied"
+    denied_response, denied_status = gateway.execute(
+        request,
+        {
+            "schema_version": "plane.operation/v1",
+            "operation_id": "agent.outcome.evaluate",
+            "workspace_slug": workspace.slug,
+            "idempotency_key": denied_key,
+            "correlation_id": f"{correlation_prefix}denied",
+            "input": {
+                "outcome_ref": "outcome-submission:worker-canary",
+                "evaluator_ref": f"agent-actor:{actor.id}",
+                "verdict": "revision_requested",
+            },
+        },
+    )
+    denied_record = OperationGatewayIdempotency.objects.get(idempotency_key=denied_key)
+    permitted_record = OperationGatewayIdempotency.objects.get(idempotency_key=permitted_key)
+    denied_audit = OperationGatewayAudit.objects.get(pk=denied_record.audit_receipt)
+    permitted_audit = OperationGatewayAudit.objects.get(pk=permitted_record.audit_receipt)
+    denied_effects = (
+        int(OutcomeSubmission.objects.filter(run=run).count() != before_outcomes)
+        + int(RunTerminalEvent.objects.filter(run=run, visible=True).count() != before_terminals)
+    )
+
+    def binding(record, audit, outcome):
+        return (
+            record.idempotency_key.startswith(f"idempotency:code-mode-{invocation.invocation_id}-")
+            and record.correlation_id.startswith(correlation_prefix)
+            and record.workspace_id == workspace.id
+            and record.caller_id == actor.principal_id
+            and audit.invocation_id == record.invocation_id
+            and audit.operation_id == record.operation_id
+            and audit.outcome == outcome
+        )
+
+    result = {
+        "permitted": {
+            "status": "allowed" if permitted_status == 200 and permitted_response.get("ok") is True else "failed",
+            "passed": (
+                permitted_status == 200
+                and permitted_response.get("ok") is True
+                and permitted_record.state == OperationGatewayIdempotency.State.SUCCEEDED
+                and binding(permitted_record, permitted_audit, OperationGatewayAudit.Outcome.SUCCESS)
+            ),
+        },
+        "denied": {
+            "status": (
+                "denied"
+                if denied_status == 403 and denied_response.get("error", {}).get("code") == "NOT_AUTHORIZED"
+                else "failed"
+            ),
+            "passed": (
+                denied_status == 403
+                and denied_response.get("error", {}).get("code") == "NOT_AUTHORIZED"
+                and denied_record.state == OperationGatewayIdempotency.State.DENIED
+                and binding(denied_record, denied_audit, OperationGatewayAudit.Outcome.DENIED)
+                and denied_effects == 0
+            ),
+        },
+    }
+    if not all(row["passed"] for row in result.values()):
+        raise RuntimeError("Worker Code Mode authorization canaries were incomplete")
+    return result
+
+
 def context_state_counts(actor, run):
     """Return bounded durable counters used to prove provider-disabled replay."""
 

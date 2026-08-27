@@ -538,33 +538,33 @@ docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose
 
 `apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` is the pin
 manifest. The current Plane deployable service candidate is the exact source
-`d10f37fe3cc6d2bc71ebeeb768ff71e30fdb65cb`, whose sole parent is the exact Plane
-source `d6bacac71937e3f5d34d00ff534f0bf962e6c572`; the final candidate is
-exactly one metadata wrapper child of that source. The previously accepted G3 candidate
+`ddc4b2ba8682115e6150ab6d8474c22636fd8ee4`; the final candidate is exactly one
+metadata wrapper child of that source. The previously accepted G3 candidate
 remains the rollback floor, and the candidate is Plane commit
 `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
 
-The V128 release carries Hermes commit
-`16a7d503aa4ef1c37da7db38434ddc5bee291fd5` from the `uxheavy` checkout, MCP
-gitlink `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK gitlink
-`7d2faf3b7ef5409e292ba0a3c7015e59f93c5889`. The runtime image tag is
-`plane-agent-runtime:hermes-16a7d503-v128-d10f37fe`, and the runtime image digest
-is `sha256:f78d002d60a44c5b3102bc65b04cde0b1196b90e349e2c806b09f2f8aa0f91a8`.
-The runtime revision is `d10f37fe3cc6d2bc71ebeeb768ff71e30fdb65cb`. The API
-image tag is `plane-agent-api:g4-v126-d10f37fe` and the API image digest is
-`sha256:d9fe979be61339d6ab3e6a69a0a38b5ef2268b298f0a88b06318c46394150af9`.
-The API source revision is `d10f37fe3cc6d2bc71ebeeb768ff71e30fdb65cb`. The
+The ADR-0011 release carries Hermes commit
+`7e852a1f3360b94ef00c7194c275f52663e6c858` from the canonical
+`https://github.com/uxheavy/hermes-agent.git` checkout, MCP gitlink
+`d65df7c94bcd41a3c7795c40c1227e2199889d71`, and SDK gitlink
+`4403116b3601a29d7a2c507c8bef1db768574142`. The runtime image tag is
+`plane-agent-runtime:hermes-7e852a1f-v131-614f91f9`, and the runtime image digest
+is `sha256:9ccafd847a43a7ab775a57a65accb525e9151dd6fa232fe9caf87b2736d9931d`.
+The runtime revision is `614f91f9191142aed7219cfdd40f22f65495a9b8`. The API
+image tag is `plane-agent-api:g4-v132-ddc4b2ba86` and the API image digest is
+`sha256:794e40c0beaaf054d8c09b64471bd7e87d852ddae973f0a8aa11ab708bb44e9f`.
+The API source revision is `ddc4b2ba8682115e6150ab6d8474c22636fd8ee4`. The Plane service revision above is the current executable artifact revision.
 Hermes tree digest is
-`3826315d690ec679e04d5d6608b5cb501b94e0c8a7e37d1077c78a1376537611`, and the
+`4e658e777582580f90e0bcd3b37f545241ad18274f0f82a01cb85eaa6537e796`, and the
 Plane runtime source digest is
-`e10368d59d3216c9d27ec3a7e253f7d63591c27b69139d2cc2841d2991fabe54`. No
+`0a3c1a2ab88851a4b063472403be18cef5d45e213e2cc393d95f362452107071`. No
 provider-backed or live acceptance is claimed.
 The Hermes commit `f2ad9bf255a5dde368cf8465127f90b6a6f20c4f`, MCP gitlink
 `c04974ed6624f17b41e63ef8182661929e77e0d3`, and SDK gitlink
 `7d2faf3b7ef5409e292ba0a3c7015e59f93c5889` bind the V102 runtime. The prior V101
 runtime image remains the rollback-adjacent historical pin:
 tag `plane-agent-runtime:hermes-9c9fbaa1-v98-f563a3e4`, runtime image digest
-`sha256:db0a2e57d49a26500abc1836f7fd0385d4c036878560d0903b5198f3a07718a7`, runtime revision `e3024303b4a0c13c28153b72471ddd3474e6d3f4`, Plane service revision above is the current executable artifact revision, runtime image/runtimeRevision source is `e3024303b4a0c13c28153b72471ddd3474e6d3f4`, and runtime contract `plane.agent-runtime/v1`. The API image tag `plane-agent-api:g4-v97-e3024303`, API image digest `sha256:a6cc2da3e3cce45fd7d23197b4a6e45611113c8d224fe3213993d650573e0694`, API source revision `e3024303b4a0c13c28153b72471ddd3474e6d3f4`, and API contract `plane.operation/v1` are source-bound. Each service declares artifactKind and artifactSourceRevision; only the standalone `agent-runtime` service uses the typed runtime. The previous services use immutable image digest `sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e`. Run `python3 tools/agent-g4-rollback-drill.py`; Migration `db.0146_runtime_reconciliation_audit_fields` is additive: keep the database at leaf `0146`, retain migration `0145`, and never reverse to `0144`.
+`sha256:db0a2e57d49a26500abc1836f7fd0385d4c036878560d0903b5198f3a07718a7`, runtime revision `e3024303b4a0c13c28153b72471ddd3474e6d3f4`, Plane service revision at that release was `e3024303b4a0c13c28153b72471ddd3474e6d3f4`, runtime image/runtimeRevision source is `e3024303b4a0c13c28153b72471ddd3474e6d3f4`, and runtime contract `plane.agent-runtime/v1`. The API image tag `plane-agent-api:g4-v97-e3024303`, API image digest `sha256:a6cc2da3e3cce45fd7d23197b4a6e45611113c8d224fe3213993d650573e0694`, API source revision `e3024303b4a0c13c28153b72471ddd3474e6d3f4`, and API contract `plane.operation/v1` are source-bound. Each service declares artifactKind and artifactSourceRevision; only the standalone `agent-runtime` service uses the typed runtime. The previous services use immutable image digest `sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e`. Run `python3 tools/agent-g4-rollback-drill.py`; Migration `db.0146_runtime_reconciliation_audit_fields` is additive: keep the database at leaf `0146`, retain migration `0145`, and never reverse to `0144`.
 
 G3, G4, and the live helper execute the image-contained `/workspace/apps/api`
 tree; they do not bind-mount a newer host API source tree. API, worker,

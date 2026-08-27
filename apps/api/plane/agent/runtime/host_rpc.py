@@ -1273,7 +1273,11 @@ def _host_operation_failure_evidence(
     if socket_phase is not None:
         evidence["socketPhase"] = socket_phase
         evidence["socketState"] = socket_state
-    if result is not None and call is not None and result.prepared_call_invalid_reason in _PREPARED_CALL_INVALID_REASONS:
+    if (
+        result is not None
+        and call is not None
+        and result.prepared_call_invalid_reason in _PREPARED_CALL_INVALID_REASONS
+    ):
         evidence["preparedCallInvalidReason"] = result.prepared_call_invalid_reason
     if result is not None and call is not None and resolved_error_code == "PREPARED_CALL_INVALID":
         shape_diagnostic = _bounded_prepared_shape_diagnostic(output.get("shapeDiagnostic"))
@@ -2181,7 +2185,11 @@ class PlaneGatewayHostPort:
                 request_ref=call.request_ref,
                 correlation_id=call.correlation_id,
                 idempotency_key=call.idempotency_key,
-                status="ok" if output.get("status") in {"ok", "returned", "completed", "waiting_for_input", "blocked"} else "invalid",
+                status=(
+                    "ok"
+                    if output.get("status") in {"ok", "returned", "completed", "waiting_for_input", "blocked"}
+                    else "invalid"
+                ),
                 replayed=False,
                 output=dict(output),
             )
@@ -2288,7 +2296,8 @@ class PlaneGatewayHostPort:
             return self._error(
                 call,
                 "VALIDATION_ERROR",
-                "A prepared work-item read is pending; invoke its returned workItemReadCall before another workspace search",
+                "A prepared work-item read is pending; invoke its returned workItemReadCall "
+                "before another workspace search",
             )
         if operation_id == "work_item.read" and call.action != "read":
             return self._error(call, "VALIDATION_ERROR", "Work-item reads must use the read action")

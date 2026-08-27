@@ -57,7 +57,7 @@ def write_owner_only(path: Path, raw: bytes) -> None:
     path.chmod(0o600)
 
 
-def _run_code_mode_frames(source: str, callback_handler):
+def _run_code_mode_frames(source: str, callback_handler, *, plane: bool = False):
     runner = TOOLS.parent / "apps" / "api" / "plane" / "agent" / "code_mode" / "runner.mjs"
     help_result = subprocess.run(["node", "--help"], check=False, capture_output=True, text=True)
     permission_flag = "--permission" if "--permission" in f"{help_result.stdout}\n{help_result.stderr}" else "--experimental-permission"
@@ -86,13 +86,29 @@ def _run_code_mode_frames(source: str, callback_handler):
                 {
                     "type": "run",
                     "source": source,
-                    "input": {},
-                    "callbacks": {
-                        "search": "search_plane_operations",
-                        "describe": "describe_plane_operation",
-                        "operation": "call_plane_operation",
-                        "spill": "spill_plane_result",
-                    },
+                    "input": (
+                        {
+                            "task": {"target": "target:issue:1"},
+                            "methods": [{"path": "workItems.retrieve"}, {"path": "workItems.update"}],
+                        }
+                        if plane
+                        else {}
+                    ),
+                    **(
+                        {
+                            "mode": "plane",
+                            "callbacks": {"resource": "call_plane_resource", "finish": "finish_plane"},
+                        }
+                        if plane
+                        else {
+                            "callbacks": {
+                                "search": "search_plane_operations",
+                                "describe": "describe_plane_operation",
+                                "operation": "call_plane_operation",
+                                "spill": "spill_plane_result",
+                            }
+                        }
+                    ),
                 }
             )
             + "\n"
@@ -153,48 +169,60 @@ def test_versioned_assigned_work_item_alias_binds_to_the_fresh_issue_ref() -> No
     ) == "issue:caller-supplied"
 
 
-def test_code_mode_commission_binds_exact_runtime_values_and_hides_native_rename() -> None:
-    path = TOOLS / "agent-g4-worker-v6.json"
+def test_code_mode_commission_uses_the_typed_plane_surface() -> None:
+    path = TOOLS / "agent-g4-worker-minimal.json"
     raw = path.read_bytes()
     parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
+    commission = scenario.select_commission(parsed, "worker-full")
 
-    assert [commission.commission_id for commission in parsed.commissions] == [
-        "identity-discovery",
-        "code-mode-semantic-rename",
-        "context-governance",
-    ]
-    assert "work_item.rename" not in parsed.profile.tool_presentation
-    assert "plane_execute_typescript" not in parsed.profile.tool_presentation
-    commission = parsed.commissions[1]
-    assert commission.expected["operationOutcomes"] == [
-        {"operationId": "catalog.search", "outcome": "success", "count": 1},
-        {"operationId": "catalog.describe", "outcome": "success", "count": 1},
-        {"operationId": "search_workspace", "outcome": "success", "count": 1},
-        {"operationId": "work_item.read", "outcome": "success", "count": 1},
-        {"operationId": "work_item.rename", "outcome": "success", "count": 1},
-        {"operationId": "agent.outcome.submit", "outcome": "success", "count": 1},
-        {"operationId": "agent.outcome.publish", "outcome": "success", "count": 1},
-    ]
-    assert "{{projectId}}" not in commission.assignment.objective
-    assert "{{issueId}}" not in commission.assignment.objective
-    assert "{{invocationId}}" not in commission.assignment.objective
-    assert "{{newName}}" not in commission.assignment.objective
-    assert "preparedCallRef" in commission.assignment.objective
-    assert "submit exactly one bounded outcome" in commission.assignment.objective
-    identity = parsed.commissions[0]
-    assert [item["operationId"] for item in identity.expected["operationOutcomes"]] == [
-        "search_workspace",
-        "agent.outcome.evaluate",
-        "agent.outcome.submit",
-        "agent.outcome.publish",
-    ]
-    assert "runtime auto-consume" in identity.assignment.objective
+    assert parsed.profile.tool_presentation == ()
+    assert commission.profile.model_toolset == "code_mode_only"
+    assert "Plane:discover" in parsed.profile.instructions
+    assert "Plane:execute" in parsed.profile.instructions
+    assert "plane.finish" in parsed.profile.instructions
+    assert not any(
+        legacy in json.dumps(parsed.evidence())
+        for legacy in ("plane_execute_typescript", "plane_publish", "host.call_plane_operation")
+    )
 
 
-def test_code_mode_runtime_binding_substitutes_every_placeholder_once() -> None:
-    raw = (TOOLS / "agent-g4-worker-v6.json").read_bytes()
+def test_code_mode_worker_expectations_are_typed_and_canary_backed() -> None:
+    path = TOOLS / "agent-g4-worker-minimal.json"
+    raw = path.read_bytes()
+    commission = scenario.select_commission(
+        scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest()), "worker-full"
+    )
+
+    assert [row["operationId"] for row in commission.expected["operationOutcomes"]] == [
+        "work_item.read",
+        "work_item.rename",
+    ]
+    projected = scenario.readback_expectations(commission.expected, model_toolset="code_mode_only")
+    assert projected["durableRecords"] == [
+        {"kind": "assignment", "count": 1},
+        {"kind": "run", "count": 1},
+        {"kind": "invocation", "count": 1},
+        {"kind": "audit", "count": 4},
+        {"kind": "terminal_event", "count": 1},
+        {"kind": "outcome_submission", "count": 1},
+    ]
+    assert commission.expected["routeChecks"] == ["W01", "W03", "W04", "W07", "W08"]
+
+
+def test_code_mode_worker_canaries_are_host_bound_and_outside_model_turn() -> None:
+    source = (TOOLS / "agent_g4_worker_route.py").read_text(encoding="utf-8")
+
+    assert "def run_worker_authorization_canaries" in source
+    assert '"agent_invocation_ref": invocation.invocation_id' in source
+    assert '"operation_id": "catalog.search"' in source
+    assert '"operation_id": "agent.outcome.evaluate"' in source
+    assert "denied_effects == 0" in source
+
+
+def test_code_mode_runtime_values_never_enter_the_adr0011_body() -> None:
+    raw = (TOOLS / "agent-g4-worker-minimal.json").read_bytes()
     parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
-    commission = scenario.select_commission(parsed, "code-mode-semantic-rename")
+    commission = scenario.select_commission(parsed, "worker-full")
     bound = scenario.bind_code_mode_runtime_values(
         commission,
         project_id="project-fresh",
@@ -203,7 +231,9 @@ def test_code_mode_runtime_binding_substitutes_every_placeholder_once() -> None:
         new_name="V36 Code Mode Rename",
     )
 
-    route_guidance = scenario.model_route_expectations(bound.expected, model_toolset=bound.profile.model_toolset)
+    route_guidance = scenario.model_route_expectations(
+        bound.expected, model_toolset=bound.profile.model_toolset
+    )
     route_guidance = tuple(
         scenario.substitute_code_mode_placeholders(item, bound.runtime_bindings)
         for item in route_guidance
@@ -214,121 +244,14 @@ def test_code_mode_runtime_binding_substitutes_every_placeholder_once() -> None:
     assert "{{projectId}}" not in text
     assert "{{issueId}}" not in text
     assert "{{invocationId}}" not in text
-    assert "{{newName}}" not in text
-    assert 'project_id: workItem.project' in text
-    assert 'issue_id: workItem.id' in text
     assert "project-fresh" not in text
     assert "issue-fresh" not in text
-    assert 'idempotency:invocation-fresh:code-mode-catalog-search' in text
-    assert 'idempotency:invocation-fresh:code-mode-catalog-describe' in text
-    assert 'idempotency:invocation-fresh:code-mode-search' in text
-    assert 'idempotency:invocation-fresh:code-mode-read' in text
-    assert '"idempotency:invocation-fresh:code-mode-rename"' in text
-    assert '"correlation:invocation-fresh:code-mode-rename"' in text
     assert 'name: "V36 Code Mode Rename"' in text
+    assert "await plane.workItems.update(task.target" in text
 
 
-def test_code_mode_commission_uses_bound_composition_without_native_read_tools() -> None:
-    raw = (TOOLS / "agent-g4-worker-v6.json").read_bytes()
-    parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
-    mutation = scenario.commission_descriptor(parsed, parsed.commissions[1])
-    bound = scenario.bind_code_mode_runtime_values(
-        mutation,
-        project_id="project-fresh",
-        issue_id="issue-fresh",
-        invocation_id="invocation-fresh",
-        new_name="V60 Code Mode Rename",
-    )
-
-    guidance = tuple(
-        scenario.substitute_code_mode_placeholders(item, bound.runtime_bindings)
-        for item in scenario.model_route_expectations(bound.expected, model_toolset=bound.profile.model_toolset)
-    )
-    assert mutation.profile.model_toolset == "code_mode_only"
-    assert guidance[0].startswith("Route step 1: invoke plane_execute_typescript")
-    assert guidance[1].startswith("Route step 2: invoke plane_publish")
-    assert "{{newName}}" not in "\\n".join(guidance)
-    assert "V60 Code Mode Rename" in "\\n".join(guidance)
-    assert "invoke work_item.read" not in "\\n".join(guidance)
-    assert "Invoke plane_publish with exactly {content:'<bounded publication summary>'}" in guidance[1]
-    assert "never pass outcomeRef, operationRef, or resourceRef" in guidance[1]
-    assert "returned outcomeRef" not in "\\n".join(guidance)
-
-
-def test_worker_live_descriptor_covers_all_routes_and_uses_gateway_input_names() -> None:
-    path = TOOLS / "agent-g4-worker-v6.json"
-    raw = path.read_bytes()
-    parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
-
-    assert parsed.scenario_id == "worker"
-    assert [commission.commission_id for commission in parsed.commissions] == [
-        "identity-discovery",
-        "code-mode-semantic-rename",
-        "context-governance",
-    ]
-    assert parsed.expected is None
-    assert parsed.profile.tool_presentation == (
-        "catalog.search",
-        "catalog.describe",
-        "agent.context.read",
-        "search_workspace",
-        "work_item.read",
-        "agent.outcome.evaluate",
-        "agent.outcome.submit",
-        "agent.outcome.publish",
-    )
-    identity = parsed.commissions[0]
-    code_mode = parsed.commissions[1]
-    context = parsed.commissions[2]
-    assert {
-        commission.commission_id: commission.expected["routeChecks"]
-        for commission in parsed.commissions
-    } == {
-        "identity-discovery": ["W01"],
-        "code-mode-semantic-rename": ["W02", "W03", "W04", "W07", "W08"],
-        "context-governance": ["W05", "W06", "W07", "W08"],
-    }
-    assert "runtime auto-consume" in identity.assignment.objective
-    assert code_mode.model_toolset == "code_mode_only"
-    assert "call plane_execute_typescript exactly once" in code_mode.assignment.objective
-    assert "catalog.search" in code_mode.assignment.objective
-    assert "malformed or unknown prepared shape must fail closed" in code_mode.assignment.objective
-    assert "hermes_tools.plane_operation" not in code_mode.assignment.objective
-    assert "{{projectId}}" not in code_mode.assignment.objective
-    assert "{{issueId}}" not in code_mode.assignment.objective
-    assert "{{invocationId}}" not in code_mode.assignment.objective
-    assert "{{newName}}" not in code_mode.assignment.objective
-    assert "call plane_execute_typescript exactly once" in code_mode.assignment.objective
-    assert "malformed or unknown prepared shape must fail closed" in code_mode.assignment.objective
-    assert "native plane_operation and work_item.rename are not model-visible" in code_mode.assignment.acceptance_criteria[-1]
-    code_mode_guidance = scenario.model_route_expectations(code_mode.expected, model_toolset=code_mode.profile.model_toolset)
-    assert len(code_mode_guidance) == 2
-    assert code_mode_guidance[0].startswith("Route step 1: invoke plane_execute_typescript exactly 1 time(s)")
-    assert "catalog.search; pass the returned operationId verbatim to catalog.describe; search_workspace; extract only the returned workItemReadCall" in code_mode_guidance[0]
-    assert 'host.call_plane_operation("work_item.read", { preparedCallRef }' in code_mode_guidance[0]
-    assert 'host.call_plane_operation("work_item.rename"' in code_mode_guidance[0]
-    assert 'host.call_plane_operation("agent.outcome.submit"' in code_mode_guidance[0]
-    assert "Do not invoke search_workspace, work_item.read, work_item.rename, or agent.outcome.submit as model tools" in code_mode_guidance[0]
-    assert code_mode_guidance[1].startswith("Route step 2: invoke plane_publish exactly 1 time(s)")
-    assert '"subject_user_ref":"{{subjectUserRef}}"' in context.assignment.objective
-    assert "private memory" in context.assignment.objective
-    assert "exact current invocation run_ref" in parsed.profile.instructions
-    assert "never invent, copy, or substitute another run reference" in parsed.profile.instructions
-    assert "after a terminal or rejected outcome callback, do not retry either terminal operation" in parsed.profile.instructions
-    assert "agent.context.read returns the complete subject-bound projection in one response" in parsed.profile.instructions
-    assert "bounded TypeScript module exporting a default async function receiving {host,input}" in parsed.profile.instructions
-    assert "host.call_plane_operation(operationId, input, idempotencyKey, correlationId)" in parsed.profile.instructions
-    assert "hermes_tools.plane_operation" not in parsed.profile.instructions
-    assert "invoke plane_publish exactly once with exactly {content:'<bounded publication summary>'}" in parsed.profile.instructions
-    assert "using only the returned outcomeRef" not in parsed.profile.instructions
-    assert "exactly one artifact and exactly one evidence item" in context.assignment.objective
-    assert "exactly one artifact and exactly one evidence item" in context.assignment.acceptance_criteria[-1]
-
-
-def test_code_mode_composition_executes_opaque_prepared_read_then_one_rename_and_submit() -> None:
-    source = scenario.code_mode_composition_template().replace("{{invocationId}}", "invocation-v59").replace(
-        "{{newName}}", "V59 Code Mode Rename"
-    )
+def test_code_mode_composition_executes_typed_read_rename_and_finish() -> None:
+    source = scenario.code_mode_composition_template().replace("{{newName}}", "ADR 0011 Rename")
 
     callback_count = 0
 
@@ -336,147 +259,25 @@ def test_code_mode_composition_executes_opaque_prepared_read_then_one_rename_and
         nonlocal callback_count
         callback_count += 1
         if callback_count == 1:
-            assert frame["args"] == [
-                "catalog.search",
-                {"query": "work_item.read", "limit": 5},
-                "idempotency:invocation-v59:code-mode-catalog-search",
-                "correlation:invocation-v59:code-mode-catalog-search",
-            ]
-            return {"ok": True, "result": {"operations": [{"operationId": "work_item.read"}]}}
+            assert frame["name"] == "call_plane_resource"
+            assert frame["args"] == ["workItems.retrieve", ["target:issue:1"]]
+            return {"status": "ok", "value": {"name": "before"}}
         if callback_count == 2:
+            assert frame["name"] == "call_plane_resource"
             assert frame["args"] == [
-                "catalog.describe",
-                {"operation_id": "work_item.read"},
-                "idempotency:invocation-v59:code-mode-catalog-describe",
-                "correlation:invocation-v59:code-mode-catalog-describe",
+                "workItems.update",
+                ["target:issue:1", {"name": "ADR 0011 Rename"}],
             ]
-            return {"ok": True, "result": {"operation": {"operationId": "work_item.read"}}}
-        if callback_count == 3:
-            assert frame["args"] == [
-                "search_workspace",
-                {"query": "G4 Live Issue", "limit": 1},
-                "idempotency:invocation-v59:code-mode-search",
-                "correlation:invocation-v59:code-mode-search",
-            ]
-            return {
-                "ok": True,
-                "result": {
-                    "results": [
-                        {
-                            "objectType": "work_item",
-                            "workItemReadCall": "prepared-call:opaque",
-                        }
-                    ]
-                },
-            }
-        if callback_count == 4:
-            assert frame["args"] == [
-                "work_item.read",
-                {"preparedCallRef": "prepared-call:opaque"},
-                "idempotency:invocation-v59:code-mode-read",
-                "correlation:invocation-v59:code-mode-read",
-            ]
-            return {"ok": True, "result": {"work_item": {"project": "project-1", "id": "issue-1"}}}
-        if callback_count == 5:
-            assert frame["args"] == [
-                "work_item.rename",
-                {"project_id": "project-1", "issue_id": "issue-1", "name": "V59 Code Mode Rename"},
-                "idempotency:invocation-v59:code-mode-rename",
-                "correlation:invocation-v59:code-mode-rename",
-            ]
-            return {"ok": True, "result": {"work_item": {"name": "V59 Code Mode Rename"}}}
-        assert callback_count == 6
-        assert frame["args"] == [
-            "agent.outcome.submit",
-            {
-                "summary": "Code Mode semantic rename completed.",
-                "artifacts": ["artifact:code-mode-semantic-rename"],
-                "evidence": ["evidence:code-mode-search-read-rename"],
-            },
-            "idempotency:invocation-v59:code-mode-submit",
-            "correlation:invocation-v59:code-mode-submit",
-        ]
-        return {"ok": True, "result": {"outcome": {"outcomeRef": "outcome-submission:one"}}}
-
-    callbacks, result = _run_code_mode_frames(source, callback)
-    assert [frame["args"][0] for frame in callbacks] == [
-        "catalog.search",
-        "catalog.describe",
-        "search_workspace",
-        "work_item.read",
-        "work_item.rename",
-        "agent.outcome.submit",
-    ]
-    assert result["type"] == "result"
-    assert result["value"]["submit"]["result"]["outcome"]["outcomeRef"] == "outcome-submission:one"
-
-
-def test_code_mode_composition_rejects_malformed_prepared_shape_before_read_or_mutation() -> None:
-    source = scenario.code_mode_composition_template()
-    callback_count = 0
-
-    def callback(frame):
-        nonlocal callback_count
-        callback_count += 1
-        if callback_count == 1:
-            assert frame["args"][0] == "catalog.search"
-            return {"ok": True, "result": {"operations": [{"operationId": "work_item.read"}]}}
-        if callback_count == 2:
-            assert frame["args"][0] == "catalog.describe"
-            return {"ok": True, "result": {"operation": {"operationId": "work_item.read"}}}
+            return {"status": "ok", "value": {"name": "ADR 0011 Rename"}}
         assert callback_count == 3
-        assert frame["args"][0] == "search_workspace"
-        return {
-            "ok": True,
-            "result": {
-                "results": [
-                    {
-                        "objectType": "work_item",
-                        "workItemReadCall": {"input": {"project_id": "raw", "issue_id": "raw"}},
-                    }
-                ]
-            },
-        }
+        assert frame["name"] == "finish_plane"
+        assert frame["args"][0]["kind"] == "completed"
+        assert frame["args"][0]["summary"] == "Code Mode semantic rename completed."
+        return {"__plane_finish__": "completed"}
 
-    callbacks, result = _run_code_mode_frames(source, callback)
-    assert [frame["args"][0] for frame in callbacks] == ["catalog.search", "catalog.describe", "search_workspace"]
-    assert result["type"] == "error"
-    assert result["code"] == "CODE_MODE_FAILED"
-    assert "raw" not in json.dumps(result)
-
-
-def test_code_mode_composition_returns_unknown_prepared_failure_without_mutation() -> None:
-    source = scenario.code_mode_composition_template()
-    callback_count = 0
-
-    def callback(frame):
-        nonlocal callback_count
-        callback_count += 1
-        if callback_count == 1:
-            return {"ok": True, "result": {"operations": [{"operationId": "work_item.read"}]}}
-        if callback_count == 2:
-            return {"ok": True, "result": {"operation": {"operationId": "work_item.read"}}}
-        if callback_count == 3:
-            return {
-                "ok": True,
-                "result": {
-                    "results": [
-                        {
-                            "objectType": "work_item",
-                            "workItemReadCall": "prepared-call:unknown",
-                        }
-                    ]
-                },
-            }
-        assert callback_count == 4
-        assert frame["args"][0] == "work_item.read"
-        assert frame["args"][1] == {"preparedCallRef": "prepared-call:unknown"}
-        return {"ok": False, "error": {"code": "PREPARED_CALL_INVALID"}}
-
-    callbacks, result = _run_code_mode_frames(source, callback)
-    assert [frame["args"][0] for frame in callbacks] == ["catalog.search", "catalog.describe", "search_workspace", "work_item.read"]
+    callbacks, result = _run_code_mode_frames(source, callback, plane=True)
+    assert [frame["name"] for frame in callbacks] == ["call_plane_resource", "call_plane_resource", "finish_plane"]
     assert result["type"] == "result"
-    assert result["value"]["read"]["error"]["code"] == "PREPARED_CALL_INVALID"
 
 
 def test_select_commission_keeps_source_digest_and_removes_other_commissions() -> None:
@@ -580,9 +381,9 @@ def test_operator_live_descriptor_covers_exact_synthetic_omar_routes() -> None:
     route_guidance = scenario.model_route_expectations(parsed.commissions[0].expected)
     assert route_guidance[2].startswith("Route step 3: invoke search_workspace exactly 1 time(s) and expect success.")
     assert 'Use exactly {"query":"G4 Live Issue","limit":1} as input' in route_guidance[2]
-    assert "workItemReadCall" in route_guidance[2]
+    assert "workItemReadCall" in route_guidance[3]
     assert "input.preparedCallRef" in route_guidance[3]
-    assert "Do not pass the workItemReadCall string as the complete tool arguments" in route_guidance[3]
+    assert "do not reconstruct or replay it" in route_guidance[3]
     assert "Tool presentation is descriptive only" in parsed.profile.instructions
     assert "outcome_unknown" in parsed.prompt
 
@@ -920,6 +721,9 @@ def test_commission_descriptor_keeps_shared_profile_and_binds_each_assignment() 
     identity = scenario.commission_descriptor(parsed, parsed.commissions[0])
     code_mode = scenario.commission_descriptor(parsed, parsed.commissions[1])
     context = scenario.commission_descriptor(parsed, parsed.commissions[2])
+    assert identity.profile.model_toolset == "standard"
+    assert code_mode.profile.model_toolset == "code_mode_only"
+    assert context.profile.model_toolset == "standard"
     assert identity.profile == context.profile == parsed.profile
     assert code_mode.profile == replace(parsed.profile, model_toolset="code_mode_only")
     assert identity.assignment.target_ref == code_mode.assignment.target_ref == context.assignment.target_ref == scenario.ASSIGNED_WORK_ITEM_ALIAS
@@ -935,9 +739,6 @@ def test_code_mode_readback_projects_atomic_finish_without_legacy_publication() 
     projected = scenario.readback_expectations(code_mode.expected, model_toolset="code_mode_only")
 
     assert [row["operationId"] for row in projected["operationOutcomes"]] == [
-        "catalog.search",
-        "catalog.describe",
-        "search_workspace",
         "work_item.read",
         "work_item.rename",
     ]
@@ -1036,12 +837,12 @@ def test_multi_commission_prompt_preserves_the_typed_code_mode_route() -> None:
     expected = namespace["_profile_expected_outcomes"](code_mode)
 
     assert expected == list(
-        scenario.model_route_expectations(code_mode.expected, model_toolset=code_mode.profile.model_toolset)
+        scenario.model_route_expectations(code_mode.expected, model_toolset="code_mode_only")
     )
-    assert expected[0].startswith("Route step 1: invoke plane_execute_typescript")
-    assert "catalog.describe" in expected[0]
-    assert 'host.call_plane_operation("work_item.rename"' in expected[0]
-    assert expected[1].startswith("Route step 2: invoke plane_publish")
+    assert expected[0].startswith("Route step 1: invoke Plane:discover")
+    assert expected[1].startswith("Route step 2: invoke Plane:execute")
+    assert "plane.workItems.update(task.target" in expected[1]
+    assert "await plane.finish" in expected[1]
 
 
 def test_sequential_commissions_reuse_fixture_preconditions_before_new_run() -> None:
@@ -1131,17 +932,17 @@ def test_failure_commission_aggregate_gate_is_bounded_and_validated() -> None:
 def test_runner_maps_every_finite_related_role_to_the_plane_role() -> None:
     source = (TOOLS / "agent-g4-live-invoke.py").read_text()
     expected = {
-        "worker": "WORKER",
-        "delegator": "DELEGATOR",
-        "gardener": "GARDENER",
-        "chief_of_staff": "CHIEF_OF_STAFF",
-        "hr": "HR",
-        "evaluator": "EVALUATOR",
-        "custom": "CUSTOM",
+        "worker": "worker",
+        "delegator": "delegator",
+        "gardener": "gardener",
+        "chief_of_staff": "chief_of_staff",
+        "hr": "hr",
+        "evaluator": "evaluator",
+        "custom": "custom",
     }
     assert set(expected) == scenario._RELATED_ROLES
     for role, plane_role in expected.items():
-        assert f'"{role}": AgentRole.{plane_role}' in source
+        assert f'"{role}": "{plane_role}"' in source
 
 
 def test_expected_predicates_are_bounded_and_retained_in_evidence() -> None:
@@ -1182,24 +983,19 @@ def test_expected_operations_render_as_ordered_model_route_outcomes() -> None:
         ("agent-g4-operator-v6.json", "presentation-and-sdk-identity"),
     ],
 )
-def test_persona_terminal_publication_guidance_uses_content_only_plane_publish(
+def test_persona_terminal_guidance_preserves_native_route(
     descriptor_name: str, commission_id: str
 ) -> None:
     raw = (TOOLS / descriptor_name).read_bytes()
     parsed = scenario.parse_descriptor_bytes(raw, hashlib.sha256(raw).hexdigest())
     selected = scenario.select_commission(parsed, commission_id)
 
-    publication = [
-        step
-        for step in scenario.model_route_expectations(selected.expected)
-        if "plane_publish exactly 1 time(s)" in step
-    ]
-
-    assert len(publication) == 1
-    assert "Invoke plane_publish with exactly {content:'<bounded publication summary>'}" in publication[0]
-    assert "never pass outcomeRef, operationRef, or resourceRef" in publication[0]
-    assert "operationRef operation:agent.outcome.publish" not in publication[0]
-    assert "resourceRef set to the returned outcomeRef" not in publication[0]
+    guidance = scenario.model_route_expectations(
+        selected.expected, model_toolset=selected.profile.model_toolset
+    )
+    assert guidance[-1].startswith("Route step")
+    assert "agent.outcome.publish" in guidance[-1]
+    assert "Plane:execute" not in "\n".join(guidance)
 
 
 def test_minimal_live_descriptors_reduce_provider_runs_to_worker_and_delegator() -> None:
@@ -1210,8 +1006,19 @@ def test_minimal_live_descriptors_reduce_provider_runs_to_worker_and_delegator()
 
     assert [commission.commission_id for commission in worker.commissions] == ["worker-full"]
     assert worker.commissions[0].model_toolset == "code_mode_only"
-    assert worker.commissions[0].expected["routeChecks"] == [f"W{index:02d}" for index in range(1, 9)]
+    assert worker.commissions[0].expected["routeChecks"] == ["W01", "W03", "W04", "W07", "W08"]
     assert [commission.commission_id for commission in delegator.commissions] == ["delegator-full"]
+    assert delegator.commissions[0].model_toolset == "standard"
+    assert scenario.select_commission(delegator, "delegator-full").profile.model_toolset == "standard"
+    assert scenario.select_commission(worker, "worker-full").profile.model_toolset == "code_mode_only"
+    manager_raw = (TOOLS / "agent-g4-manager-v1.json").read_bytes()
+    operator_raw = (TOOLS / "agent-g4-operator-v6.json").read_bytes()
+    manager = scenario.parse_descriptor_bytes(manager_raw, hashlib.sha256(manager_raw).hexdigest())
+    operator = scenario.parse_descriptor_bytes(operator_raw, hashlib.sha256(operator_raw).hexdigest())
+    assert manager.profile.model_toolset == "standard"
+    assert operator.profile.model_toolset == "standard"
+    assert all(commission.model_toolset == "standard" for commission in manager.commissions)
+    assert all(commission.model_toolset == "standard" for commission in operator.commissions)
     assert delegator.commissions[0].expected["routeChecks"] == [f"M{index:02d}" for index in range(1, 9)]
     assert [
         row["operationId"] for row in delegator.commissions[0].expected["operationOutcomes"][:3]
@@ -1220,6 +1027,7 @@ def test_minimal_live_descriptors_reduce_provider_runs_to_worker_and_delegator()
     manifest = json.loads((TOOLS / "agent-g4-manifest.json").read_text(encoding="utf-8"))
     descriptors = {row["id"]: row for row in manifest["scenarioDescriptors"]}
     assert descriptors["worker-core"]["path"] == "tools/agent-g4-worker-minimal.json"
+    assert descriptors["worker-core"]["routeChecks"] == ["W01", "W03", "W04", "W07", "W08"]
     assert descriptors["delegator-core"]["path"] == "tools/agent-g4-delegator-minimal.json"
     assert descriptors["operations"]["routeChecks"] == ["O01", "O03", "O04", "O05", "O06", "O07", "O08", "O09"]
 
@@ -1238,8 +1046,10 @@ def test_code_mode_context_binding_is_subject_scoped() -> None:
     source = scenario.substitute_code_mode_placeholders(
         scenario.code_mode_composition_template(), bound.runtime_bindings
     )
-    assert '"agent.context.read"' in source
-    assert 'subject_user_ref: "user:subject-fresh"' in source
+    assert "plane.workItems.retrieve(task.target)" in source
+    assert "plane.workItems.update(task.target" in source
+    assert "await plane.finish" in source
+    assert "agent.context.read" not in source
     assert "{{subjectUserRef}}" not in source
 
 
@@ -1312,8 +1122,8 @@ def test_rename_route_always_exposes_the_exact_code_mode_callback() -> None:
         }
     )
 
-    assert guidance[1].startswith("Route step 2: invoke plane_execute_typescript exactly 1 time(s) to perform work_item.rename")
-    assert 'host.call_plane_operation("work_item.rename", input, idempotencyKey, correlationId)' in guidance[1]
+    assert guidance[1].startswith("Route step 2: invoke work_item.rename exactly 1 time(s)")
+    assert "plane_execute_typescript" not in guidance[1]
 
 
 def test_semantic_rename_commission_rejects_publication_without_rename_evidence() -> None:
@@ -1868,8 +1678,8 @@ def test_identity_profile_assignment_and_evidence_are_separate() -> None:
     assert parsed.profile.name == "manager profile"
     assert parsed.assignment.target_ref == scenario.ASSIGNED_WORK_ITEM_ALIAS
     assert 'credential_ref="plane-credential:g4-live"' in invoke
-    assert 'actor_role = AgentRole.WORKER' in invoke
-    assert '"delegator": AgentRole.DELEGATOR' in invoke
+    assert 'actor_role = "worker"' in invoke
+    assert '"delegator": "delegator"' in invoke
     assert "bind_assigned_work_item_target" in invoke
     assert 'evidence["scenario"] = scenario.evidence()' in invoke
     assert "permission" not in json.dumps(value)

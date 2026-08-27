@@ -4,21 +4,12 @@
   "actor": { "role": "worker" },
   "profile": {
     "name": "Maya Worker D",
-    "instructions": "Complete this one ordered commission exactly. Invoke each named operation once and use only references returned by Plane. The assigned issue mutation must use one restricted plane_execute_typescript composition with host.call_plane_operation through the shared gateway. Submit exactly one outcome containing exactly one artifact and one evidence item, then publish it exactly once. Ordinary final text is transcript evidence only and never replaces the explicit publication. Do not retry terminal operations or replay an outcome whose state is unknown.",
+    "instructions": "Complete this one ordered commission exactly with the Plane Agent SDK. Use Plane:discover only when the task declarations are missing a required capability, then use Plane:execute with frozen task and plane values. Finish one bounded result exactly once and preserve the existing owner readback. Do not use external tools or stop at ordinary text.",
     "modelPolicy": {
       "provider": "openai-codex",
       "model": "gpt-5.6-luna",
       "reasoning": "xhigh",
       "fallbackAllowed": false
-    },
-    "toolPresentation": {
-      "eagerOperations": [
-        "search_workspace",
-        "work_item.read",
-        "agent.outcome.evaluate",
-        "agent.outcome.submit",
-        "agent.outcome.publish"
-      ]
     }
   },
   "assignment": {
@@ -29,7 +20,7 @@
     ],
     "contextRefs": ["context:worker-w07-w08"]
   },
-  "prompt": "You are Maya, the assigned Worker. Complete the one commission selected by Plane. Read only the assigned work item, perform the required typed Code Mode mutation, submit one artifact and one evidence item, publish once, and leave a bounded owner readback. Keep ordinary final text brief because it is transcript evidence, not the product event.",
+  "prompt": "You are Maya, the assigned Worker. Use the typed Plane task kit, complete the selected commission in one bounded execution, and leave a bounded owner readback.",
   "commissions": [
     {
       "id": "w07-w08-artifact-publication-readback",
@@ -37,10 +28,8 @@
         "targetRef": "fixture:assigned-work-item",
         "objective": "Prove one real artifact and evidence item attach to one OutcomeSubmission, explicit publication creates one visible terminal product event, and owner readback correlates all records.",
         "acceptanceCriteria": [
-          "Call search_workspace once and pass its returned bare opaque workItemReadCall string unchanged as {preparedCallRef} to one work_item.read.",
-          "Use the next model tool call for one restricted plane_execute_typescript module that calls host.call_plane_operation with work_item.rename through the shared gateway.",
-          "Attempt agent.outcome.evaluate as this Worker and require exact NOT_AUTHORIZED.",
-          "Submit exactly one outcome with exactly one real artifact and exactly one evidence item, then publish it exactly once.",
+          "Use one bounded Plane SDK read and semantic rename through typed resource methods.",
+          "Finish exactly once with one bounded result and retain one real artifact and one evidence item.",
           "Leave ordinary final text as transcript evidence only, and prove owner API and CLI readback, redaction, workspace isolation, and provider-disabled same-invocation replay with zero deltas."
         ],
         "contextRefs": ["context:worker-w07-w08"]

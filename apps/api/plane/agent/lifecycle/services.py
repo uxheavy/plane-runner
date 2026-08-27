@@ -2332,7 +2332,11 @@ def record_provider_attempt_notice(invocation, notice: Mapping[str, object]):
         "errorCode",
     }
     optional = {"reasonPhase", "reasonSubreason", "eventRef"}
-    if not isinstance(notice, Mapping) or not set(notice).issubset(required | optional) or not required.issubset(notice):
+    if (
+        not isinstance(notice, Mapping)
+        or not set(notice).issubset(required | optional)
+        or not required.issubset(notice)
+    ):
         raise AgentDomainError("Provider attempt notice fields are invalid")
     phase = notice["phase"]
     if phase not in _PROVIDER_ATTEMPT_PHASES:
@@ -2648,8 +2652,14 @@ def reconcile_outcome_unknown(run, *, idempotency_key, operator):
             operation_id__in=("agent.outcome.submit", "agent.outcome.publish"),
         ).order_by("created_at", "id")
     )
-    submit = next((row for row in receipts if row.operation_id == "agent.outcome.submit" and row.state == "succeeded"), None)
-    publish = next((row for row in receipts if row.operation_id == "agent.outcome.publish" and row.state == "succeeded"), None)
+    submit = next(
+        (row for row in receipts if row.operation_id == "agent.outcome.submit" and row.state == "succeeded"),
+        None,
+    )
+    publish = next(
+        (row for row in receipts if row.operation_id == "agent.outcome.publish" and row.state == "succeeded"),
+        None,
+    )
 
     def result_ref(receipt, *path):
         value = receipt.result if receipt is not None else None
@@ -2724,7 +2734,12 @@ def reconcile_outcome_unknown(run, *, idempotency_key, operator):
     )
     fingerprint = command_fingerprint(
         "reconcile_outcome_unknown",
-        {"runId": str(locked_run.id), "invocationId": invocation.invocation_id, "idempotencyKey": idempotency_key, "evidence": evidence},
+        {
+            "runId": str(locked_run.id),
+            "invocationId": invocation.invocation_id,
+            "idempotencyKey": idempotency_key,
+            "evidence": evidence,
+        },
     )
     return RuntimeReconciliation.objects.create(
         workspace=locked_run.workspace,
@@ -3057,7 +3072,9 @@ def finish_code_mode(
             payload = {"question": question}
             if context is not None:
                 payload["context"] = context
-            max_sequence = RunInputEvent.all_objects.filter(run=run).aggregate(max_sequence=Max("sequence"))["max_sequence"]
+            max_sequence = RunInputEvent.all_objects.filter(run=run).aggregate(max_sequence=Max("sequence"))[
+                "max_sequence"
+            ]
             RunInputEvent.objects.create(
                 workspace=run.workspace,
                 project=run.project,
@@ -3280,7 +3297,9 @@ def finalize_invocation(invocation, *, kind, reason="", source=TerminalEventSour
 
 
 @transaction.atomic
-def propose_outcome(run, *, summary, content=None, artifacts=None, evidence=None, idempotency_key=None, created_by=None):
+def propose_outcome(
+    run, *, summary, content=None, artifacts=None, evidence=None, idempotency_key=None, created_by=None
+):
     summary = _ensure_non_empty(summary, "summary")
     content_value = None
     if content is not None:

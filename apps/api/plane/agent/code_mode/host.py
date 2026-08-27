@@ -56,8 +56,6 @@ from .contracts import (
     MAX_CODE_MODE_OBSERVATIONS_BYTES,
     MAX_CODE_MODE_OBSERVATION_BYTES,
     MAX_RETURNED_VALUE_BYTES,
-    PLANE_DISCOVERY_OPERATION,
-    PLANE_EXECUTION_OPERATION,
     CodeModeBudget,
     CodeModeExecutionRequest,
     HostBinding,
@@ -123,8 +121,14 @@ def _plane_declarations(methods: list[dict[str, str]]) -> str:
         "type JsonPrimitive = string | number | boolean | null;",
         "type JsonValue = JsonPrimitive | readonly JsonValue[] | { readonly [key: string]: JsonValue };",
         'type PlaneRef<Kind extends string = string> = string & { readonly __planeKind: Kind };',
-        "type FinishInput = { kind: 'completed'; summary: string; content?: string; artifacts?: readonly PlaneRef<'artifact'>[]; evidence?: readonly PlaneRef[] } | { kind: 'waiting_for_input'; question: string; context?: JsonValue } | { kind: 'blocked'; reason: string; evidence?: readonly PlaneRef[] };",
-        "declare const task: Readonly<{ target: PlaneRef; objective: string; acceptanceCriteria: readonly string[] }> ;",
+        (
+            "type FinishInput = { kind: 'completed'; summary: string; content?: string; "
+            "artifacts?: readonly PlaneRef<'artifact'>[]; evidence?: readonly PlaneRef[] } | "
+            "{ kind: 'waiting_for_input'; question: string; context?: JsonValue } | "
+            "{ kind: 'blocked'; reason: string; evidence?: readonly PlaneRef[] };"
+        ),
+        "declare const task: Readonly<{ target: PlaneRef; objective: string; "
+        "acceptanceCriteria: readonly string[] }> ;",
     ]
     namespaces: dict[str, list[str]] = {}
     for method in methods:
@@ -177,7 +181,9 @@ def _canonicalize_work_item_read_call(input_data: Mapping[str, Any]) -> Mapping[
         raise ValueError("prepared work-item read reference is invalid")
     candidate = input_data["preparedCallRef"]
     if isinstance(candidate, str):
-        if not candidate.startswith(PREPARED_CALL_PREFIX) or len(candidate.encode("utf-8")) > MAX_PREPARED_CALL_REF_BYTES:
+        if not candidate.startswith(PREPARED_CALL_PREFIX) or len(candidate.encode("utf-8")) > (
+            MAX_PREPARED_CALL_REF_BYTES
+        ):
             raise ValueError("prepared work-item read reference is invalid")
         return {"preparedCallRef": candidate}
     if not isinstance(candidate, Mapping):
@@ -290,7 +296,12 @@ class CodeModeHostRPC:
 
         return {
             "Plane:discover": {
-                "description": "Find Plane Agent SDK methods and TypeScript types for one intended workflow. Use when the current task declarations do not contain a method needed to complete the assignment. Describe the whole workflow, not an API name. Returns one bounded replacement declaration slice. Discovery does not authorize execution.",
+                "description": (
+                    "Find Plane Agent SDK methods and TypeScript types for one intended workflow. "
+                    "Use when the current task declarations do not contain a method needed to complete "
+                    "the assignment. Describe the whole workflow, not an API name. Returns one bounded "
+                    "replacement declaration slice. Discovery does not authorize execution."
+                ),
                 "inputSchema": {
                     "type": "object",
                     "additionalProperties": False,
@@ -300,13 +311,23 @@ class CodeModeHostRPC:
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 500,
-                            "description": "The complete intended workflow, for example: list urgent unassigned work items, assign one member, then finish.",
+                            "description": (
+                                "The complete intended workflow, for example: list urgent unassigned "
+                                "work items, assign one member, then finish."
+                            ),
                         }
                     },
                 },
             },
             "Plane:execute": {
-                "description": "Run one bounded TypeScript function body against the current Plane assignment. `plane` and `task` are injected and frozen. Use ordinary typed resource methods; do not import, export, construct a client, or return large data. Return compact JSON for further reasoning, or call `await plane.finish(...)` exactly once to complete, wait for input, or block. Plane owns identity, authorization, pagination, idempotency, receipts, and recovery.",
+                "description": (
+                    "Run one bounded TypeScript function body against the current Plane assignment. "
+                    "`plane` and `task` are injected and frozen. Use ordinary typed resource methods; "
+                    "do not import, export, construct a client, or return large data. Return compact JSON "
+                    "for further reasoning, or call `await plane.finish(...)` exactly once to complete, "
+                    "wait for input, or block. Plane owns identity, authorization, pagination, idempotency, "
+                    "receipts, and recovery."
+                ),
                 "inputSchema": {
                     "type": "object",
                     "additionalProperties": False,
@@ -316,7 +337,10 @@ class CodeModeHostRPC:
                             "type": "string",
                             "minLength": 1,
                             "maxLength": MAX_EXECUTE_INPUT_BYTES,
-                            "description": "TypeScript statements executed as an async function body with ambient plane and task objects. Imports and exports are forbidden.",
+                            "description": (
+                                "TypeScript statements executed as an async function body with ambient "
+                                "plane and task objects. Imports and exports are forbidden."
+                            ),
                         }
                     },
                 },
@@ -505,7 +529,10 @@ class CodeModeHostRPC:
         except PlaneToolError:
             raise
         except (TypeError, ValueError) as exc:
-            return {"status": "error", "error": tool_error("VALIDATION_ERROR", str(exc), "Correct the typed method input.")}
+            return {
+                "status": "error",
+                "error": tool_error("VALIDATION_ERROR", str(exc), "Correct the typed method input."),
+            }
         if not receipt.get("ok"):
             error = receipt.get("error")
             code = error.get("code", "OPERATION_REJECTED") if isinstance(error, Mapping) else "OPERATION_REJECTED"
@@ -541,7 +568,11 @@ class CodeModeHostRPC:
             issue_ref = expected.removeprefix("target:issue:")
             if issue_ref == expected and expected.startswith("target:literal-"):
                 try:
-                    issue_ref = bytes.fromhex(expected.removeprefix("target:literal-")).decode("utf-8").removeprefix("issue:")
+                    issue_ref = (
+                        bytes.fromhex(expected.removeprefix("target:literal-"))
+                        .decode("utf-8")
+                        .removeprefix("issue:")
+                    )
                 except (ValueError, UnicodeDecodeError) as exc:
                     raise PlaneToolError(
                         "TARGET_UNSUPPORTED",
@@ -596,7 +627,10 @@ class CodeModeHostRPC:
         required = "summary" if kind == "completed" else "question" if kind == "waiting_for_input" else "reason"
         if not isinstance(value.get(required), str) or not value[required].strip():
             raise PlaneToolError(
-                "VALIDATION_ERROR", f"{kind} finish requires {required}", f"Provide a non-empty {required}.", field=required
+                "VALIDATION_ERROR",
+                f"{kind} finish requires {required}",
+                f"Provide a non-empty {required}.",
+                field=required,
             )
         allowed = {
             "completed": {"kind", "summary", "content", "artifacts", "evidence"},
@@ -648,7 +682,7 @@ class CodeModeHostRPC:
                 self.record_execution_usage(
                     duration_ms=max(1, int((time.monotonic() - self._started_at) * 1000))
                 )
-            result = finish_code_mode(
+            finish_code_mode(
                 self.invocation,
                 kind=kind,
                 summary=value.get("summary", ""),

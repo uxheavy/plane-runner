@@ -56,80 +56,32 @@ _MANAGER_COMMISSION_ROUTES = {
 }
 _MANAGER_TERMINAL_PRODUCT_KINDS = {"publication", "outcome_submission", "run_failure", "run_blocker", "run_cancellation", "input_event"}
 _MANAGER_OUTCOME_OPERATIONS = {"agent.outcome.submit", "agent.outcome.publish"}
-_CODE_MODE_SUPERSEDED_OPERATIONS = {"agent.outcome.submit", "agent.outcome.publish"}
-_PUBLICATION_GUIDANCE = (
-    "Invoke plane_publish with exactly {content:'<bounded publication summary>'}; "
-    "never pass outcomeRef, operationRef, or resourceRef because runtime binds successful submit internally."
-)
-
-
+_CODE_MODE_SUPERSEDED_OPERATIONS = {
+    "catalog.search",
+    "catalog.describe",
+    "search_workspace",
+    "agent.context.read",
+    "agent.outcome.submit",
+    "agent.outcome.publish",
+}
 def rename_code_mode_template() -> str:
-    """Return the bounded Code Mode template used by the standard rename guidance."""
+    """Return the bounded ADR-0011 function body used by rename guidance."""
 
     return (
-        'export default async function ({host}: {host: any}) { return await host.call_plane_operation('
-        '"work_item.rename", { project_id: "<read.result.project>", issue_id: "<read.result.id>", '
-        'name: "<bounded new name>" }, "idempotency:{{invocationId}}:work_item.rename", '
-        '"correlation:{{invocationId}}:work_item.read->work_item.rename"); }'
+        'const current = await plane.workItems.retrieve(task.target); '
+        'await plane.workItems.update(task.target, { name: "<bounded new name>" }); '
+        'return await plane.finish({ kind: "completed", summary: "Renamed the assigned work item." });'
     )
 
 
 def code_mode_composition_template() -> str:
-    """Return the Worker composition that keeps discovery and the prepared read opaque."""
+    """Return the Worker function body for the complete ADR-0011 journey."""
 
     return (
-        'export default async function ({host,input}: {host: any; input: any}) { '
-        'const catalog = await host.call_plane_operation('
-        '"catalog.search", { query: "work_item.read", limit: 5 }, '
-        '"idempotency:{{invocationId}}:code-mode-catalog-search", '
-        '"correlation:{{invocationId}}:code-mode-catalog-search"); '
-        'if (!catalog?.ok) return { catalog }; '
-        'const operations = catalog?.result?.operations; '
-        'const operationId = Array.isArray(operations) '
-        '? operations.find((entry: any) => entry?.operationId === "work_item.read")?.operationId '
-        ': undefined; '
-        'if (typeof operationId !== "string") throw new Error("catalog operation unavailable"); '
-        'const described = await host.call_plane_operation('
-        '"catalog.describe", { operation_id: operationId }, '
-        '"idempotency:{{invocationId}}:code-mode-catalog-describe", '
-        '"correlation:{{invocationId}}:code-mode-catalog-describe"); '
-        'if (!described?.ok) return { catalog, described }; '
-        'const search = await host.call_plane_operation('
-        '"search_workspace", { query: "G4 Live Issue", limit: 1 }, '
-        '"idempotency:{{invocationId}}:code-mode-search", '
-        '"correlation:{{invocationId}}:code-mode-search"); '
-        'if (!search?.ok) return { catalog, described, search }; '
-        'const rows = search?.result?.results; '
-        'if (!Array.isArray(rows) || rows.length !== 1 || rows[0]?.objectType !== "work_item") '
-        'throw new Error("prepared read handoff unavailable"); '
-        'const preparedCallRef = rows[0]?.workItemReadCall; '
-        'if (typeof preparedCallRef !== "string" || !preparedCallRef.startsWith("prepared-call:")) '
-        'throw new Error("prepared read handoff unavailable"); '
-        'const read = await host.call_plane_operation('
-        '"work_item.read", { preparedCallRef }, '
-        '"idempotency:{{invocationId}}:code-mode-read", '
-        '"correlation:{{invocationId}}:code-mode-read"); '
-        'if (!read?.ok) return { catalog, described, search, read }; '
-        'const context = await host.call_plane_operation('
-        '"agent.context.read", { subject_user_ref: "{{subjectUserRef}}" }, '
-        '"idempotency:{{invocationId}}:code-mode-context", '
-        '"correlation:{{invocationId}}:code-mode-context"); '
-        'if (!context?.ok) return { catalog, described, search, read, context }; '
-        'const workItem = read?.result?.work_item; '
-        'if (!workItem || typeof workItem.project !== "string" || typeof workItem.id !== "string") '
-        'throw new Error("authorized work item read unavailable"); '
-        'const rename = await host.call_plane_operation('
-        '"work_item.rename", { project_id: workItem.project, issue_id: workItem.id, '
-        'name: "{{newName}}" }, "idempotency:{{invocationId}}:code-mode-rename", '
-        '"correlation:{{invocationId}}:code-mode-rename"); '
-        'if (!rename?.ok) return { catalog, described, search, read, context, rename }; '
-        'const submit = await host.call_plane_operation('
-        '"agent.outcome.submit", { summary: "Code Mode semantic rename completed.", '
-        'artifacts: ["artifact:code-mode-semantic-rename"], '
-        'evidence: ["evidence:code-mode-search-read-rename"] }, '
-        '"idempotency:{{invocationId}}:code-mode-submit", '
-        '"correlation:{{invocationId}}:code-mode-submit"); '
-        'return { catalog, described, search, read, context, rename, submit }; }'
+        'const current = await plane.workItems.retrieve(task.target); '
+        'const renamed = await plane.workItems.update(task.target, { name: "{{newName}}" }); '
+        'return await plane.finish({ kind: "completed", summary: "Code Mode semantic rename completed.", '
+        'content: JSON.stringify({ before: current, after: renamed }) });'
     )
 
 
@@ -422,7 +374,7 @@ def select_runtime_descriptor(descriptor: ScenarioDescriptor, commission_id: str
 def model_route_expectations(
     expected: ExpectedPredicates | None, *, model_toolset: Literal["standard", "code_mode_only"] = "standard"
 ) -> tuple[str, ...]:
-    """Render the typed route gate as bounded, ordered model-facing outcomes."""
+    """Render the selected standard native route or ADR-0011 Code Mode route."""
 
     if expected is None:
         return ()
@@ -477,23 +429,17 @@ def model_route_expectations(
             "agent.outcome.submit",
             "agent.outcome.publish",
         ),
+        ("work_item.read", "work_item.rename"),
     ):
         return (
-            "Route step 1: invoke plane_execute_typescript exactly 1 time(s) and expect success. "
-            "Use one bounded module that performs the complete Worker composition through "
-            "host.call_plane_operation in this exact order: catalog.search; pass the returned operationId "
-            "verbatim to catalog.describe; search_workspace; extract only the returned "
-            "workItemReadCall; work_item.read with exactly "
-            "{preparedCallRef}; agent.context.read for the bound subject; work_item.rename using only the authorized "
-            "read result; and one "
-            "agent.outcome.submit with one artifact and one evidence item. Do not invoke search_workspace, "
-            "work_item.read, work_item.rename, or agent.outcome.submit as model tools, do not reconstruct or "
-            "wrap the opaque ref, and do not expose raw target identifiers. The module must export a default "
-            "async function receiving {host,input}, use only the existing host callback, and fail closed on "
-            f"a malformed or unknown prepared shape. Use this exact bounded module: {code_mode_composition_template()} "
-            "After the composition returns, advance immediately to the explicit publication call below.",
-            "Route step 2: invoke plane_publish exactly 1 time(s) and expect success. Publish exactly once; "
-            f"{_PUBLICATION_GUIDANCE} ordinary final text is transcript evidence only.",
+            "Route step 1: invoke Plane:discover only when the initial task declarations miss a method needed for "
+            "the complete assignment workflow. Describe the workflow, not an API name; the returned declarations "
+            "replace the current slice and do not authorize execution.",
+            "Route step 2: invoke Plane:execute exactly 1 time(s) with TypeScript statements as an async function body. "
+            "Use only frozen task and plane, ordinary typed resource methods, and this bounded body: "
+            f"{code_mode_composition_template()} "
+            "Do not import, export, construct a client, return large data, or publish through a second tool. "
+            "Complete the assignment exactly once with await plane.finish({kind: \"completed\", ...}).",
         )
     rendered: list[str] = []
     for index, item in enumerate(outcomes, start=1):
@@ -509,64 +455,18 @@ def model_route_expectations(
                 " Use the next route operation's exact operationId as input.operation_id; never use operationRef "
                 "or an operation: prefix."
             )
-        if (
-            operation_id == "work_item.read"
-            and index > 1
-            and outcomes[index - 2].get("operationId") == "search_workspace"
-        ):
+        if operation_id == "work_item.read" and index > 1 and outcomes[index - 2].get("operationId") == "search_workspace":
             guidance += (
                 " Use the preceding search_workspace response's workItemReadCall opaque string verbatim as "
-                "input.preparedCallRef. Emit exactly the read operation's three top-level tool keys; keep only "
-                "preparedCallRef inside input. Do not pass the workItemReadCall string as the complete tool "
-                "arguments, wrap it, put a result object inside preparedCallRef, do not copy raw "
-                "workItemReadInput, rename operationRef to operation_ref, alter or replay the preparedCallRef, "
-                "do not reconstruct, translate, or infer project_id or issue_id from targetRef, ref, key, title, or "
-                "workspaceRef. Do not reconstruct project_id or issue_id from targetRef, ref, key, title, or "
-                "workspaceRef."
+                "input.preparedCallRef. Keep only preparedCallRef inside input and do not reconstruct or replay it."
             )
-        if (
-            operation_id == "search_workspace"
-            and index < len(outcomes)
-            and outcomes[index].get("operationId") == "work_item.read"
-        ):
-            guidance += (
-                ' Use exactly {"query":"G4 Live Issue","limit":1} as input for the single bounded search; '
-                "require one work-item result with a usable workItemReadCall, then advance without searching "
-                "again."
-            )
-        if (
-            operation_id == "search_workspace"
-            and index < len(outcomes)
-            and outcomes[index].get("operationId") == "agent.outcome.evaluate"
-        ):
-            guidance += (
-                " The runtime consumes exactly one returned opaque prepared work-item read before the next "
-                "route step; do not issue a separate work_item.read model call or reconstruct its input."
-            )
-        if operation_id == "work_item.rename":
-            model_action = "plane_execute_typescript"
-            action_detail = " to perform work_item.rename"
-            guidance += (
-                " The route outcome is work_item.rename, but the direct model action is the restricted Code Mode "
-                "composition, not by a native model mutation: the next model tool call after the bounded work_item.read is plane_execute_typescript, "
-                "and the module must export a default async function receiving {host,input} that uses only "
-                "host.call_plane_operation(\"work_item.rename\", input, idempotencyKey, correlationId). "
-                "Only after the authorized work_item.read succeeds, use read.result.project verbatim as input.project_id "
-                "and read.result.id verbatim as input.issue_id; never infer either value from targetRef, search results, "
-                "title, or any other field. Use this exact bounded TypeScript template, replacing only the read-derived "
-                f"placeholders: {rename_code_mode_template()}. "
-                "The idempotency and correlation strings must be unique for this invocation."
-            )
+        if operation_id == "search_workspace" and index < len(outcomes) and outcomes[index].get("operationId") == "work_item.read":
+            guidance += ' Use exactly {"query":"G4 Live Issue","limit":1} as input for the single bounded search; require one work-item result and advance without searching again.'
+        if operation_id == "search_workspace" and index < len(outcomes) and outcomes[index].get("operationId") == "agent.outcome.evaluate":
+            guidance += " The runtime consumes exactly one returned opaque prepared work-item read before the next route step; do not issue a separate work_item.read model call or reconstruct its input."
         if operation_id == "agent.context.read":
             guidance += " This one response is the complete subject-bound projection; do not request it again."
-        if operation_id == "agent.outcome.publish":
-            model_action = "plane_publish"
-            guidance += f" {_PUBLICATION_GUIDANCE}"
-        if (
-            operation_id == "agent.outcome.evaluate"
-            and item.get("outcome") == "denied"
-            and item.get("errorCode") == "NOT_AUTHORIZED"
-        ):
+        if operation_id == "agent.outcome.evaluate" and item.get("outcome") == "denied" and item.get("errorCode") == "NOT_AUTHORIZED":
             guidance += (
                 ' Emit exactly {"outcome_ref":"outcome-submission:not-authorized",'
                 '"verdict":"revision_requested"} as input; omit evaluator_ref because the trusted '

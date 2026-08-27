@@ -797,7 +797,11 @@ def request_body(host_url: str, host_token: str) -> tuple[bytes, str]:
             "behavioralPrompt": "Return a short final answer.",
         },
         "context": [],
-        "toolCatalog": {"catalogDigest": "content:" + "0" * 64, "eagerOperations": []},
+        "toolCatalog": {
+            "catalogDigest": "content:" + "0" * 64,
+            "modelToolset": "standard",
+            "eagerOperations": [],
+        },
         "runtimePolicy": {
             "model": {"provider": "openai", "model": "red-team-model"},
             "adapter": "hermes",

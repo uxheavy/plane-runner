@@ -97,6 +97,7 @@ if os.environ.get("G4_SCENARIO_DESCRIPTOR"):
     seed_worker_context = worker_route.seed_worker_context
     worker_code_mode_controls = worker_route.worker_code_mode_controls
     worker_readback_facts = worker_route.worker_readback_facts
+    run_worker_authorization_canaries = worker_route.run_worker_authorization_canaries
 
 
 _SCENARIO_PREFLIGHT_SUBREASONS = frozenset(
@@ -1197,8 +1198,9 @@ def _scenario_readback(
         observed_bindings = explicit_publication.get("bindings") if isinstance(explicit_publication, dict) else None
         if not finish_bindings or observed_bindings != finish_bindings:
             raise RuntimeError("Code Mode finish publication readback is missing or inconsistent")
-        publication_records = [{"kind": "publication", "count": 1}]
-        publication_events = [{"kind": "publication", "count": 1}]
+        finish_count = len(finish_bindings)
+        publication_records = [{"kind": "publication", "count": finish_count}]
+        publication_events = [{"kind": "publication", "count": finish_count}]
         publication_evidence = ["publication"]
     records = [
         {"kind": "assignment", "count": assignment_count},
@@ -2737,6 +2739,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
     substitution_evidence = {"status": "not_evaluated", "errorCode": None, "sideEffects": None}
     rename_replay_evidence = {"status": "not_evaluated", "semanticDelta": None, "duplicateMutation": None}
     context_replay_delta = {}
+    canary_evidence = None
     context_replay_before = {}
     post_primary_stage = None
     route_diagnostic = None
@@ -3109,6 +3112,14 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
         unknown_attempt = _provider_attempts_have_unknown_evidence(provider_attempts, control)
         if unknown_attempt:
             raise RuntimeError("provider request outcome was unknown; pass/replay is not permitted")
+        if code_mode and scenario is not None and scenario.scenario_id == "worker":
+            canary_evidence = run_worker_authorization_canaries(
+                actor=actor,
+                workspace=workspace,
+                run=run,
+                invocation=invocation,
+                suffix=suffix,
+            )
         if scenario is not None and scenario.controls.cancellation is not None and scenario.controls.cancellation["timing"] in {"after_provider_request", "after_publication"}:
             if scenario.controls.cancellation["timing"] == "after_provider_request" and any(attempt.upstream_initiated for attempt in provider_attempts):
                 request_runtime_cancellation(invocation, reason=scenario.controls.cancellation["reason"], idempotency_key=f"idempotency:g4-live-cancel-{suffix}")
@@ -3446,7 +3457,7 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                     "permitted": os.environ["G4_PERMITTED_CANARY"],
                     "denied": os.environ["G4_DENIED_CANARY"],
                 },
-                passed=True,
+                passed=canary_evidence is None or all(row["passed"] for row in canary_evidence.values()),
             ),
             "s00Gate": _s00_gate_projection(s00_gate),
             "thresholds": {

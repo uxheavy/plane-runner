@@ -1205,6 +1205,18 @@ class RuntimeExitEvidence(AgentScopedModel):
 class RuntimeReconciliation(AgentScopedModel):
     """Append-only Plane decision for an outcome-unknown invocation."""
 
+    workspace = models.ForeignKey(
+        "db.Workspace",
+        on_delete=models.CASCADE,
+        related_name="agent_runtimereconciliation",
+    )
+    project = models.ForeignKey(
+        "db.Project",
+        on_delete=models.CASCADE,
+        related_name="agent_runtimereconciliation",
+        null=True,
+        blank=True,
+    )
     invocation = models.OneToOneField(RuntimeInvocation, on_delete=models.PROTECT, related_name="reconciliation")
     run = models.ForeignKey(RunAttempt, on_delete=models.PROTECT, related_name="reconciliations")
     state = models.CharField(max_length=24, choices=ReconciliationState.choices)
@@ -1213,7 +1225,7 @@ class RuntimeReconciliation(AgentScopedModel):
     publication_ref = models.CharField(max_length=128, null=True, blank=True, editable=False)
     terminal_event_ref = models.CharField(max_length=128, null=True, blank=True, editable=False)
     runtime_exit_ref = models.CharField(max_length=128, null=True, blank=True, editable=False)
-    evidence = models.JSONField(default=default_dict, editable=False)
+    evidence = models.JSONField(default=dict, editable=False)
     idempotency_key = models.CharField(max_length=128, unique=True, editable=False)
     command_fingerprint = models.CharField(max_length=72, editable=False)
     reconciled_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="agent_runtime_reconciliations")

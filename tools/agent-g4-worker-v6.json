@@ -4,7 +4,7 @@
   "actor": { "role": "worker" },
   "profile": {
     "name": "Maya Worker",
-    "instructions": "Complete the current assignment's bounded route exactly. Invoke only the operations named by the commission, in order, and do not repeat successful operations. After each route call returns, advance immediately to the next listed operation; never call an operation again for confirmation, inspection, refresh, or retry. agent.context.read returns the complete subject-bound projection in one response; do not request it again. For outcome submission, use the exact current invocation run_ref returned by Plane; never invent, copy, or substitute another run reference. Submit exactly once, then invoke plane_publish exactly once with exactly {content:'<bounded publication summary>'}; never pass outcomeRef, operationRef, or resourceRef because runtime binds successful submit internally; after a terminal or rejected outcome callback, do not retry either terminal operation. When the commission requires Code Mode, use the Plane plane_execute_typescript tool with one bounded TypeScript module exporting a default async function receiving {host,input} that uses only the host-bound host.call_plane_operation(operationId, input, idempotencyKey, correlationId) callback; never import modules or use a direct network, auth value, filesystem, process, or actor-substitution path. Do not submit or publish until every earlier route step and any required Code Mode callback is complete. Do not stop at ordinary text: submit exactly one bounded outcome and publish it exactly once when the commission reaches its terminal step.",
+    "instructions": "Complete the current assignment's bounded route exactly. Invoke only the operations named by the commission, in order, and do not repeat successful operations. After each route call returns, advance immediately to the next listed operation; never call an operation again for confirmation, inspection, refresh, or retry. Keep all model-facing results bounded and preserve the actor, workspace, run, and invocation bindings returned by Plane. Complete the commission's declared terminal operations exactly once and do not stop at ordinary text.",
     "modelPolicy": {
       "provider": "openai-codex",
       "model": "gpt-5.6-luna",
@@ -17,7 +17,7 @@
         "catalog.describe",
         "agent.context.read",
         "search_workspace",
-      "work_item.read",
+        "work_item.read",
         "agent.outcome.evaluate",
         "agent.outcome.submit",
         "agent.outcome.publish"
@@ -70,12 +70,12 @@
       "id": "code-mode-semantic-rename",
       "assignment": {
         "targetRef": "fixture:assigned-work-item",
-        "objective": "Code Mode feature Worker commission: call plane_execute_typescript exactly once with one complete bounded TypeScript composition. The module must call host.call_plane_operation in this exact order: catalog.search, catalog.describe using the returned row's exact operationId, search_workspace with {\"query\":\"G4 Live Issue\",\"limit\":1}, extract only the returned bare opaque workItemReadCall string, call work_item.read with exactly {preparedCallRef}, use only the authorized read result to call work_item.rename, and submit exactly one bounded outcome with one artifact and one evidence item. The module must not reconstruct or expose project_id or issue_id for the prepared read, call native work_item.rename directly, use imports, filesystem, network, process, auth values, or actor substitution. A malformed or unknown prepared shape must fail closed before rename. After the composition returns, invoke plane_publish exactly once with a bounded content-only summary; the runtime binds the successful submit internally. The runner performs authoritative post-run readback and audit for the catalog sequence, rename, correlation, idempotency, usage, artifact, evidence, outcome, and publication.",
+        "objective": "Run one bounded Plane SDK composition that reads and semantically renames the assigned item, then finishes with one completed result. Keep all intermediate data inside the restricted execution and preserve the existing owner readback.",
         "acceptanceCriteria": [
-          "plane_execute_typescript is called exactly once; its bounded module calls catalog.search, passes the returned row's exact operationId to catalog.describe, then calls search_workspace, extracts only the canonical opaque preparedCallRef, calls work_item.read with exactly {preparedCallRef}, then calls work_item.rename and agent.outcome.submit through the existing gateway.",
-          "Malformed or unknown prepared shapes fail closed without a work_item.rename callback or mutation; a valid shape is consumed once and cannot be reconstructed from raw IDs.",
+          "Plane:execute is called exactly once with a bounded function body that uses typed Plane resource methods.",
+          "The assigned target is read once and the semantic rename is applied once; invalid target data fails closed.",
           "The runner readback proves the renamed issue, correlated receipt, one idempotent mutation, bounded usage, one artifact, and one evidence item.",
-          "After the composition returns, invoke plane_publish exactly once with a bounded content-only summary; the runtime binds the successful submit internally. native plane_operation and work_item.rename are not model-visible."
+          "The function body calls await plane.finish({kind:\"completed\", ...}) exactly once; no second publication tool is used."
         ],
         "contextRefs": ["context:worker-code-mode-semantic-rename"]
       },

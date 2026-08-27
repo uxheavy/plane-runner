@@ -398,7 +398,11 @@ class RuntimeDispatchExecutor:
                 )
             except BaseException as exc:
                 dispatch_error = exc
-            if dispatch_error is None and provider_relay is not None and provider_relay.required_audit_failure is not None:
+            if (
+                dispatch_error is None
+                and provider_relay is not None
+                and provider_relay.required_audit_failure is not None
+            ):
                 cleanup_error = RuntimeConfigurationError("provider attempt evidence was rejected by Plane")
         finally:
             if provider_relay is not None:

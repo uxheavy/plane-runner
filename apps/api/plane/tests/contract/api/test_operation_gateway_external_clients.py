@@ -129,9 +129,7 @@ def _load_sdk_client() -> tuple[Any, Any, Any]:
     # namespace while loading it so Plane's server package cannot satisfy an
     # SDK import such as ``plane.api.base_resource``.
     server_plane_modules = {
-        name: value
-        for name, value in sys.modules.items()
-        if name == "plane" or name.startswith("plane.")
+        name: value for name, value in sys.modules.items() if name == "plane" or name.startswith("plane.")
     }
     for name in server_plane_modules:
         del sys.modules[name]
@@ -295,8 +293,7 @@ def test_external_mcp_client_crosses_plane_gateway_for_read_mutation_replay_arch
     assert isinstance(search, list)
     assert transport.calls
     assert all(
-        [value for name, value in call["headers"].items() if name.lower() == "x-api-key"]
-        == [api_token.token]
+        [value for name, value in call["headers"].items() if name.lower() == "x-api-key"] == [api_token.token]
         for call in transport.calls
     )
     assert all("Authorization" not in call["headers"] for call in transport.calls)

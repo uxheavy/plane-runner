@@ -570,7 +570,10 @@ def test_invocation_scoped_socket_executes_typescript_through_the_bound_host(
         ]
         gateway_issue.refresh_from_db()
         assert gateway_issue.name == "G2 TypeScript renamed"
-        assert OperationGatewayIdempotency.objects.filter(idempotency_key="idempotency:g2-typescript-rename").count() == 1
+        assert (
+            OperationGatewayIdempotency.objects.filter(idempotency_key="idempotency:g2-typescript-rename").count()
+            == 1
+        )
         assert OperationGatewayAudit.objects.filter(operation_id="work_item.rename").count() == 2
 
         budget_exhausted = _round_trip(
@@ -595,7 +598,10 @@ def test_invocation_scoped_socket_executes_typescript_through_the_bound_host(
         assert replay.status == "replayed"
         assert replay.replayed is True
         assert replay.output == result.output
-        assert OperationGatewayIdempotency.objects.filter(idempotency_key="idempotency:g2-typescript-rename").count() == 1
+        assert (
+            OperationGatewayIdempotency.objects.filter(idempotency_key="idempotency:g2-typescript-rename").count()
+            == 1
+        )
         assert OperationGatewayAudit.objects.filter(operation_id="work_item.rename").count() == 2
     finally:
         server.close()
@@ -792,7 +798,12 @@ def test_invocation_scoped_socket_rejects_unversioned_typescript_capsule(
         credential_ref="plane-credential:g2-typescript-validation",
         created_by=create_user,
     )
-    profile = create_profile(actor, role=AgentRole.WORKER, instructions="Use the typed TypeScript host.", created_by=create_user)
+    profile = create_profile(
+        actor,
+        role=AgentRole.WORKER,
+        instructions="Use the typed TypeScript host.",
+        created_by=create_user,
+    )
     assignment = create_assignment(
         actor,
         project=gateway_project,
@@ -801,8 +812,17 @@ def test_invocation_scoped_socket_rejects_unversioned_typescript_capsule(
         acceptance_criteria=["No child process or mutation is started."],
         created_by=create_user,
     )
-    run = create_run(assignment, profile, idempotency_key="idempotency:g2-typescript-validation-run", created_by=create_user)
-    invocation = record_invocation(run, idempotency_key="idempotency:g2-typescript-validation-invocation", trigger="initial")
+    run = create_run(
+        assignment,
+        profile,
+        idempotency_key="idempotency:g2-typescript-validation-run",
+        created_by=create_user,
+    )
+    invocation = record_invocation(
+        run,
+        idempotency_key="idempotency:g2-typescript-validation-invocation",
+        trigger="initial",
+    )
     port = build_gateway_host_port(invocation=invocation, gateway=OperationGateway())
     server = PlaneHostServer(socket_path=tmp_path / "g2-typescript-validation.sock", invoke=port.invoke)
     server.start()
@@ -852,7 +872,12 @@ def test_typescript_host_rejects_substitution_expiry_and_capability_escapes(
         acceptance_criteria=["No unbound or privileged callback can mutate the issue."],
         created_by=create_user,
     )
-    run = create_run(assignment, profile, idempotency_key="idempotency:g2-typescript-boundary-run", created_by=create_user)
+    run = create_run(
+        assignment,
+        profile,
+        idempotency_key="idempotency:g2-typescript-boundary-run",
+        created_by=create_user,
+    )
     invocation = record_invocation(
         run,
         idempotency_key="idempotency:g2-typescript-boundary-invocation",
@@ -983,7 +1008,10 @@ def test_typescript_host_rejects_substitution_expiry_and_capability_escapes(
 
         control.cancellation_requested_at = None
         control.lease_expires_at = timezone.now() - timedelta(seconds=1)
-        control.save(_allow_lifecycle=True, update_fields=["cancellation_requested_at", "lease_expires_at", "updated_at"])
+        control.save(
+            _allow_lifecycle=True,
+            update_fields=["cancellation_requested_at", "lease_expires_at", "updated_at"],
+        )
         expired = _round_trip(
             server.socket_path,
             _code_call(**common, source="export default () => 1"),
@@ -994,7 +1022,9 @@ def test_typescript_host_rejects_substitution_expiry_and_capability_escapes(
         server.close()
     gateway_issue.refresh_from_db()
     assert gateway_issue.name == "G2 Gateway Issue"
-    assert not OperationGatewayIdempotency.objects.filter(idempotency_key="idempotency:g2-typescript-boundary-rename").exists()
+    assert not OperationGatewayIdempotency.objects.filter(
+        idempotency_key="idempotency:g2-typescript-boundary-rename"
+    ).exists()
 
 
 @pytest.mark.contract

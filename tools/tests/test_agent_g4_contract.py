@@ -4893,6 +4893,10 @@ class G4ContractTests(unittest.TestCase):
         source = (ROOT / "apps/api/plane/tests/unit/agent/test_lifecycle.py").read_text(encoding="utf-8")
         self.assertIn("def test_provider_attempt_reconciliation_leaves_completed_attempt_completed", source)
 
+    def test_red_team_request_body_declares_the_standard_model_toolset(self):
+        body, _ = _RED_TEAM.request_body("http://plane-host:8091/v1/host", "test-host-token")
+        self.assertEqual(json.loads(body)["snapshot"]["toolCatalog"]["modelToolset"], "standard")
+
     def test_red_team_stage_requires_exact_image_http_dispatch_and_pinned_hermes_wrapper(self):
         source = (TOOLS / "agent-g4-runtime-red-team.py").read_text(encoding="utf-8")
         image_dockerfile = (ROOT / "deployments/cli/community/agent-runtime/Dockerfile").read_text(encoding="utf-8")
@@ -5498,6 +5502,8 @@ class G4ContractTests(unittest.TestCase):
         self.assertEqual(result["current"]["planeCommit"], MANIFEST["candidateBinding"]["parentCommit"])
         self.assertEqual(result["previous"]["planeCommit"], MANIFEST["candidateBinding"]["acceptedG3Baseline"])
         self.assertNotEqual(result["acceptedG3"]["mcpGitlink"], MANIFEST["pins"]["mcpGitlink"])
+        self.assertNotEqual(result["acceptedG3"]["sdkGitlink"], MANIFEST["pins"]["sdkGitlink"])
+        self.assertEqual(result["current"]["runtime"]["sdkGitlink"], MANIFEST["pins"]["sdkGitlink"])
         self.assertEqual(
             result["acceptedG3"]["imageDigest"],
             "sha256:51b50bec143e12c22fa92f8b101629d37ae263f2784c9bb3747eaea45978092e",

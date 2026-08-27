@@ -154,7 +154,11 @@ def _standard_route(value: Any) -> dict[str, Any] | None:
                 "operationRef": f"operation:{operation_id}",
                 **({"optional": True} if step.get("optional") is True else {}),
                 **({"expectedStatus": "denied"} if step.get("expectedStatus") == "denied" else {}),
-                **({"expectedErrorCode": "NOT_AUTHORIZED"} if step.get("expectedErrorCode") == "NOT_AUTHORIZED" else {}),
+                **(
+                    {"expectedErrorCode": "NOT_AUTHORIZED"}
+                    if step.get("expectedErrorCode") == "NOT_AUTHORIZED"
+                    else {}
+                ),
             }
         )
     return {"schemaVersion": STANDARD_ROUTE_SCHEMA_VERSION, "steps": normalized}
@@ -218,7 +222,9 @@ def compose_code_mode_catalog(profile: Any, assignment: Any) -> dict[str, Any]:
         "assignment": {
             "targetRef": _value(assignment, "target_ref", _value(assignment, "targetRef", "")),
             "objective": _value(assignment, "objective", ""),
-            "acceptanceCriteria": list(_value(assignment, "acceptance_criteria", _value(assignment, "acceptanceCriteria", []))),
+            "acceptanceCriteria": list(
+                _value(assignment, "acceptance_criteria", _value(assignment, "acceptanceCriteria", []))
+            ),
         }
     }
     definitions = CodeModeHostRPC.plane_tool_definitions()

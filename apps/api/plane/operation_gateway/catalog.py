@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Literal, Mapping
 
-from plane.agent.runtime.contracts import model_operation_entry
+from plane.agent.runtime.contracts import model_operation_entry as model_operation_entry
 
 from .contracts import MAX_RESULT_BYTES, SCHEMA_VERSION, canonical_json
 

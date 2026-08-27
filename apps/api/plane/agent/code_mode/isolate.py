@@ -28,7 +28,10 @@ _RUNNER = Path(__file__).with_name("runner.mjs")
 
 def _find_typescript_module(module_path: Path) -> Path:
     for parent in module_path.resolve().parents:
-        typescript = next(parent.glob("node_modules/.pnpm/typescript@*/node_modules/typescript/lib/typescript.js"), None)
+        typescript = next(
+            parent.glob("node_modules/.pnpm/typescript@*/node_modules/typescript/lib/typescript.js"),
+            None,
+        )
         if typescript is not None:
             return typescript
     return Path("/usr/share/node_modules/typescript/lib/typescript.js")
@@ -41,10 +44,19 @@ _TYPESCRIPT_MODULE_DIR = str(_TYPESCRIPT_MODULE.parent.parent)
 class CodeModeIsolateError(RuntimeError):
     """A child isolate or closed host protocol failed closed."""
 
-    def __init__(self, code: str, message: str, *, error_class: str | None = None, tool_error: dict[str, Any] | None = None):
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        error_class: str | None = None,
+        tool_error: dict[str, Any] | None = None,
+    ):
         super().__init__(message)
         self.code = code
-        self.error_class = error_class if isinstance(error_class, str) and error_class in CODE_MODE_ERROR_CLASSES else None
+        self.error_class = (
+            error_class if isinstance(error_class, str) and error_class in CODE_MODE_ERROR_CLASSES else None
+        )
         self.tool_error = tool_error
 
 
@@ -82,7 +94,9 @@ class CodeModeIsolateRunner:
             raise CodeModeIsolateError("VALIDATION_ERROR", "Code Mode source must be non-empty TypeScript")
         if source_character_limit is not None and len(source) > source_character_limit:
             raise CodeModeIsolateError("SOURCE_TOO_LARGE", "Code Mode source exceeds its character bound")
-        if source_character_limit is None and len(source.encode("utf-8")) > (source_limit or MAX_CODE_MODE_SOURCE_BYTES):
+        if source_character_limit is None and len(source.encode("utf-8")) > (
+            source_limit or MAX_CODE_MODE_SOURCE_BYTES
+        ):
             raise CodeModeIsolateError("SOURCE_TOO_LARGE", "Code Mode source exceeds its size bound")
         if not isinstance(input_data, dict):
             raise CodeModeIsolateError("VALIDATION_ERROR", "Code Mode input must be an object")

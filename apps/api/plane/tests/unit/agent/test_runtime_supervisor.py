@@ -1,7 +1,6 @@
 """Production-entrypoint contracts for the Plane runtime supervisor."""
 
 import json
-import hashlib
 import io
 import os
 import re
@@ -1716,7 +1715,9 @@ def test_terminalization_database_failure_returns_explicit_undurable_supervisor_
 
     monkeypatch.setattr(runtime_supervisor, "_terminalize_db", fail_terminalization)
 
-    result = terminalize_pre_dispatch_failure(invocation, runtime_supervisor.bounded_database_failure("runtime_dispatch"))
+    result = terminalize_pre_dispatch_failure(
+        invocation, runtime_supervisor.bounded_database_failure("runtime_dispatch")
+    )
 
     assert result.durable is False
     assert result.failure == {

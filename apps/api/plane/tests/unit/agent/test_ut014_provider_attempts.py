@@ -23,7 +23,6 @@ from plane.agent.runtime.service import RuntimeDispatchExecutor, _RuntimeHTTPSer
 from plane.db.management.commands import agent_supervisor as supervisor_command
 from plane.db.models import (
     InvocationState,
-    RuntimeInvocation,
     RuntimeProviderAttempt,
     RuntimeProviderAttemptPhase,
 )
