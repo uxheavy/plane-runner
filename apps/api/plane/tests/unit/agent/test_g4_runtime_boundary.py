@@ -338,6 +338,7 @@ def test_g4_deployment_credential_resolver_rejects_malformed_duplicate_and_overs
         json.dumps(
             {
                 "OPENAI_API_KEY": None,
+                "auth_mode": "chatgpt",
                 "last_refresh": "2026-08-13T00:00:00Z",
                 "tokens": {
                     "access_token": "x" * (runtime_credentials._DEPLOYMENT_CREDENTIAL_MAX_VALUE_BYTES + 1),
@@ -669,7 +670,11 @@ def test_g4_runtime_service_accepts_the_bound_chatgpt_codex_route_before_child_d
     monkeypatch.setattr(executor, "open_provider_relay", lambda **_kwargs: relay)
     monkeypatch.setattr(
         "plane.agent.runtime.service.PlaneHostServer",
-        lambda **_kwargs: SimpleNamespace(start=lambda: None, close=lambda: None),
+        lambda **_kwargs: SimpleNamespace(
+            start=lambda: None,
+            close=lambda: None,
+            failure_evidence=None,
+        ),
     )
     monkeypatch.setattr(
         "plane.agent.runtime.service._hermes_bootstrap_payload",
