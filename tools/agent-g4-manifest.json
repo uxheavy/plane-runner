@@ -114,7 +114,7 @@
         "plane_runtime.g1_runtime_image.bootstrap",
         "PLANE_G2_HERMES_CHECKOUT"
       ],
-      "sha256": "c52b9026a51ce3e9c4403345d0218e5d0cb5328381bb760f78ef326fed793c7f",
+      "sha256": "896df44dcb275162583f4f8ca967f96d3d4af6a91a55165719fdbfdc078a3edf",
       "testName": "test_pinned_hermes_runs_through_http_service_launcher_and_bound_host_socket",
       "testPath": "plane/tests/unit/agent/test_runtime_supervisor.py"
     }

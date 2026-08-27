@@ -681,15 +681,16 @@ def test_code_mode_search_to_read_preserves_target_and_denies_cross_project(
             ),
         )
         assert code_mode_search_read.status == "ok", code_mode_search_read
-        assert code_mode_search_read.output["result"]["spilled"]["result"]["spill"]["sizeBytes"] > 0
+        search_result = code_mode_search_read.output["result"]["result"]["results"][0]
+        prepared_ref = search_result["workItemReadCall"]
+        assert prepared_ref.startswith("prepared-call:")
         assert [item["operationRef"] for item in code_mode_search_read.output["observations"]] == [
             "operation:search_workspace",
-            "operation:work_item.read",
         ]
 
         authorized = _round_trip(
             server.socket_path,
-            _code_call(**common, source=read_source, input_data=read_input),
+            _code_call(**common, source=read_source, input_data={"preparedCallRef": prepared_ref}),
         )
         assert authorized.status == "ok", authorized
         assert authorized.output["result"]["result"]["work_item"]["id"] == str(gateway_issue.id)
