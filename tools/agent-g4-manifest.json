@@ -273,7 +273,8 @@
     "apps/api/Dockerfile.g4",
     "apps/api/.dockerignore",
     "tools/summarize_agent_g4.py",
-    "tools/validate_agent_g4_live.py"
+    "tools/validate_agent_g4_live.py",
+    "tools/verify-agent-g4-operations.py"
   ],
   "stages": [
     "preflight",
@@ -292,6 +293,7 @@
   ],
   "verifierTests": [
     "tools/tests/test_agent_g4_contract.py",
-    "tools/tests/test_local_dev_topology.py"
+    "tools/tests/test_local_dev_topology.py",
+    "tools/tests/test_agent_g4_operations.py"
   ]
 }
