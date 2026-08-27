@@ -17,7 +17,7 @@ from typing import Any, Mapping
 from uuid import UUID
 
 from django.conf import settings
-from django.db.models import Exists, OuterRef, Q
+from django.db.models import Q
 from django.utils import timezone
 
 from plane.agent.administration import redact_admin_value
@@ -423,40 +423,6 @@ def _gateway_rows(workspace, *, correlation_id: str, limit: int) -> list[dict[st
         ).order_by("created_at", "id")[:limit]
         result.append(GatewayReadbackSerializer({"receipt": receipt, "audit": audits}).data)
     return result
-
-
-def code_mode_gateway_rows(model, *, run: RunAttempt, invocation: RuntimeInvocation):
-    """Read Code Mode gateway attempts through their trusted host key and receipt."""
-
-    if invocation.run_id != run.id or invocation.workspace_id != run.workspace_id:
-        return model.objects.none()
-    prefix = f"idempotency:code-mode-{invocation.invocation_id}-"
-    correlated_audit = OperationGatewayAudit.objects.filter(
-        id=OuterRef("audit_receipt"),
-        invocation_id=OuterRef("invocation_id"),
-        phase=OperationGatewayAudit.Phase.OUTCOME,
-        request_id=OuterRef("request_id"),
-        operation_id=OuterRef("operation_id"),
-        workspace_id=OuterRef("workspace_id"),
-        workspace_slug=OuterRef("workspace_slug"),
-        caller_id=OuterRef("caller_id"),
-        idempotency_key=OuterRef("idempotency_key"),
-        correlation_id=OuterRef("correlation_id"),
-        request_digest=OuterRef("request_digest"),
-    )
-    receipts = (
-        OperationGatewayIdempotency.objects.filter(
-            workspace_id=run.workspace_id,
-            workspace_slug=run.workspace.slug,
-            caller_id=run.actor.principal_id,
-            idempotency_key__startswith=prefix,
-        )
-        .annotate(_correlated_audit=Exists(correlated_audit))
-        .filter(_correlated_audit=True)
-    )
-    if model is OperationGatewayIdempotency:
-        return receipts
-    return model.objects.filter(pk__in=receipts.values("audit_receipt"))
 
 
 def _runtime_event_projection(row: RuntimeEventIngress) -> dict[str, Any]:

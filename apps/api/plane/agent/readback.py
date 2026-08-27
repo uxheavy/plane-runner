@@ -8,6 +8,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from django.db.models import Exists, OuterRef, Q
+
 from plane.agent.administration import redact_admin_value
 from plane.agent.lifecycle.runtime_contract import content_digest
 from plane.agent.validation import MAX_AGENT_READBACK_BYTES
@@ -91,14 +93,54 @@ def _run_readback(run: RunAttempt) -> dict[str, Any]:
     return serialized
 
 
+def _code_mode_gateway_receipts(*, run: RunAttempt, invocation: RuntimeInvocation):
+    """Read Code Mode gateway attempts through their trusted host key and receipt."""
+
+    if invocation.run_id != run.id or invocation.workspace_id != run.workspace_id:
+        return OperationGatewayIdempotency.objects.none()
+    prefix = f"idempotency:code-mode-{invocation.invocation_id}-"
+    correlated_audit = OperationGatewayAudit.objects.filter(
+        id=OuterRef("audit_receipt"),
+        invocation_id=OuterRef("invocation_id"),
+        phase=OperationGatewayAudit.Phase.OUTCOME,
+        request_id=OuterRef("request_id"),
+        operation_id=OuterRef("operation_id"),
+        workspace_id=OuterRef("workspace_id"),
+        workspace_slug=OuterRef("workspace_slug"),
+        caller_id=OuterRef("caller_id"),
+        idempotency_key=OuterRef("idempotency_key"),
+        correlation_id=OuterRef("correlation_id"),
+        request_digest=OuterRef("request_digest"),
+    )
+    return (
+        OperationGatewayIdempotency.objects.filter(
+            workspace_id=run.workspace_id,
+            workspace_slug=run.workspace.slug,
+            caller_id=run.actor.principal_id,
+            idempotency_key__startswith=prefix,
+        )
+        .annotate(_correlated_audit=Exists(correlated_audit))
+        .filter(_correlated_audit=True)
+    )
+
+
 def _gateway_readback(run: RunAttempt, *, limit: int) -> list[dict[str, Any]]:
     """Read bounded receipt references emitted for this run's correlation."""
 
+    code_mode_receipt_ids = []
+    for invocation in RuntimeInvocation.objects.filter(run=run).order_by("ordinal", "id")[:limit]:
+        code_mode_receipt_ids.extend(
+            _code_mode_gateway_receipts(
+                run=run,
+                invocation=invocation,
+            ).values_list("id", flat=True)
+        )
     receipts = OperationGatewayIdempotency.objects.filter(
         workspace_id=run.workspace_id,
         workspace_slug=run.workspace.slug,
         caller_id=run.actor.principal_id,
-        correlation_id=f"correlation:{run.id}",
+    ).filter(
+        Q(correlation_id=f"correlation:{run.id}") | Q(id__in=code_mode_receipt_ids)
     ).order_by("-created_at", "-id")[:limit]
     readback = []
     for receipt in receipts:

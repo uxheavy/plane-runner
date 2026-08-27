@@ -554,82 +554,23 @@ def test_pinned_hermes_runs_through_http_service_launcher_and_bound_host_socket(
             "maxCodeModeCalls": 16,
             "maxCodeModeOutputBytes": 131_072,
         },
-        tool_presentation={
-            "eagerOperations": [
-                "agent.outcome.evaluate",
-                "agent.outcome.submit",
-                "agent.outcome.publish",
-            ]
-        },
+        tool_presentation={"model_toolset": "code_mode_only"},
         suffix="g2-http-real",
     )
-    project_id = str(gateway_project.id)
-    issue_id = str(gateway_issue.id)
-    actor_ref = run.snapshot["actorRef"]
-    run_ref = run.snapshot["runId"]
     fake_openai = tmp_path / "fake-openai"
     fake_openai.mkdir()
     (fake_openai / "sitecustomize.py").write_text(
         """
 import json
-import re
 from types import SimpleNamespace as Namespace
 
-_PROJECT_ID = %r
-_ISSUE_ID = %r
-_ACTOR_REF = %r
-_RUN_REF = %r
-
-
-def _tool_call(number, request_json):
+def _tool_call(number):
     if number == 1:
-        return "tool_search", {"query": "Plane work item", "limit": 5}
-    if number == 2:
-        return "tool_describe", {"name": "plane_operation"}
-    if number == 3:
-        return "tool_call", {"name": "plane_operation", "arguments": {
-            "action": "discover", "operationRef": "plane.operations.discover@1",
-            "input": {"query": "work item", "limit": 32},
-        }}
-    if number == 4:
-        return "tool_call", {"name": "plane_operation", "arguments": {
-            "action": "read", "operationRef": "operation:search_workspace",
-            "input": {"query": "Gateway Issue", "limit": 1},
-        }}
-    if number == 5:
-        return "tool_call", {"name": "plane_operation", "arguments": {
-            "action": "mutate", "operationRef": "operation:agent.outcome.evaluate",
-            "input": {"outcome_ref": "outcome-submission:not-authorized",
-                       "evaluator_ref": _ACTOR_REF, "verdict": "revision_requested"},
-        }}
-    if number == 6:
-        return "plane_execute_typescript", {"typescript_source": (
-            "export default async function ({host, input}: {host: {\\n"
-            "    call_plane_operation: (operationId: string, input: Record<string, unknown>, "
-            "idempotencyKey: string, correlationId: string) => Promise<Record<string, unknown>>\\n"
-            "  }; input: Record<string, unknown>}): Promise<Record<string, unknown>> {\\n"
-            "  const renameInput = { project_id: \\"" + _PROJECT_ID + "\\", "
-            "issue_id: \\"" + _ISSUE_ID + "\\", name: \\"G2 Hermes renamed\\" };\\n"
-            "  return await host.call_plane_operation(\\"work_item.rename\\", "
-            "renameInput, \\"idempotency:code-mode-hermes-rename\\", "
-            "\\"correlation:code-mode-hermes-rename\\");\\n"
-            "}"
+        return "Plane:execute", {"code": (
+            "const before = await plane.workItems.retrieve(task.target);\\n"
+            "await plane.workItems.update(task.target, { name: 'G2 Hermes renamed' });\\n"
+            "await plane.finish({ kind: 'completed', summary: 'The assigned issue was renamed.' });"
         )}
-    if number == 7:
-        return "tool_call", {"name": "plane_operation", "arguments": {
-            "action": "mutate", "operationRef": "operation:agent.outcome.submit",
-            "input": {"run_ref": _RUN_REF,
-                       "summary": "The assigned issue was renamed through the Plane gateway.",
-                       "artifacts": ["artifact:g2-production"],
-                       "evidence": ["evidence:g2-production"]},
-        }}
-    if number == 8:
-        match = re.search(r"outcome-submission:[0-9a-f-]+", request_json)
-        return "tool_call", {"name": "plane_publish", "arguments": {
-            "kind": "outcome", "operationRef": "operation:agent.outcome.publish",
-            "resourceRef": match.group(0) if match else "outcome-submission:missing",
-            "content": "Explicit outcome publication.",
-        }}
     return None, None
 
 
@@ -639,9 +580,8 @@ class _Completions:
 
     def create(self, **kwargs):
         self.calls += 1
-        request_json = json.dumps(kwargs, sort_keys=True, default=str)
-        if self.calls <= 8:
-            name, arguments = _tool_call(self.calls, request_json)
+        if self.calls <= 1:
+            name, arguments = _tool_call(self.calls)
             delta = Namespace(
                 role="assistant",
                 content=None,
@@ -714,8 +654,7 @@ openai.OpenAI = OpenAI
 openai.AsyncOpenAI = AsyncOpenAI
 hermes_logging.setup_logging = lambda **kwargs: Path(kwargs["hermes_home"]) / "logs"
 hermes_logging.setup_verbose_logging = lambda: None
-"""
-        % (project_id, issue_id, actor_ref, run_ref),
+""",
         encoding="utf-8",
     )
     runtime_pythonpath = os.pathsep.join(path for path in (str(fake_openai), dependency_path, checkout) if path)
@@ -831,37 +770,11 @@ hermes_logging.setup_verbose_logging = lambda: None
 
     assert frames
     assert json.loads(frames[-1])["kind"] == "completed"
-    assert [call.operation_ref for call in host_calls] == [
-        "plane.operations.discover@1",
-        "operation:search_workspace",
-        "operation:agent.outcome.evaluate",
-        "plane.code-mode.execute@1",
-        "operation:agent.outcome.submit",
-        "operation:agent.outcome.publish",
-    ]
-    correlation_id = invocation.envelope["correlationId"]
-    assert OperationGatewayAudit.objects.filter(
-        operation_id="agent.outcome.evaluate",
-        phase="outcome",
-        outcome="denied",
-        error_code="NOT_AUTHORIZED",
-        correlation_id=correlation_id,
-    ).exists()
-    assert OperationGatewayAudit.objects.filter(
-        operation_id="agent.outcome.submit",
-        phase="outcome",
-        outcome="success",
-        correlation_id=correlation_id,
-    ).exists()
+    assert [call.operation_ref for call in host_calls] == ["plane.code-mode.execute@1"]
     gateway_issue.refresh_from_db()
     assert gateway_issue.name == "G2 Hermes renamed"
-    assert OperationGatewayAudit.objects.filter(
-        operation_id="work_item.rename",
-        phase="outcome",
-        outcome="success",
-        idempotency_key="idempotency:code-mode-hermes-rename",
-        correlation_id="correlation:code-mode-hermes-rename",
-    ).exists()
+    assert OutcomeSubmission.objects.filter(run=run).count() == 1
+    assert RunTerminalEvent.objects.filter(run=run, visible=True).count() == 1
 
 
 @pytest.mark.contract
@@ -2170,9 +2083,7 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
             "maxCodeModeCalls": 16,
             "maxCodeModeOutputBytes": 131_072,
         },
-        tool_presentation={
-            "eagerOperations": ["agent.outcome.evaluate", "agent.outcome.submit"]
-        },
+        tool_presentation={"model_toolset": "code_mode_only"},
         created_by=create_user,
     )
     assignment = create_assignment(
@@ -2223,8 +2134,14 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
             else:
                 provider_stream_count += 1
                 if provider_stream_count == 1:
-                    function_name = "tool_search"
-                    arguments = {"query": "Plane work item", "limit": 5}
+                    function_name = "Plane:execute"
+                    code = (
+                        "const before = await plane.workItems.retrieve(task.target);\n"
+                        "await plane.workItems.update(task.target, { name: 'G2 production renamed' });\n"
+                        "await plane.finish({ kind: 'completed', summary: 'The assigned issue was renamed.' });"
+                    )
+                    arguments = {"code": code}
+                    code_callbacks.append(code)
                 elif provider_stream_count == 2:
                     function_name = "tool_describe"
                     arguments = {"name": "plane_operation"}
@@ -2450,7 +2367,7 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
 
     assert not provider_thread.is_alive()
     assert not provider_errors
-    assert provider_stream_count == 10, {
+    assert provider_stream_count == 1, {
         "provider_stream_count": provider_stream_count,
         "tool_calls": tool_calls,
         "invocation_state": invocation.state,
@@ -2463,22 +2380,11 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
         ),
         "outcomes": OutcomeSubmission.objects.filter(run=run).count(),
     }
-    assert tool_calls == [
-        "tool_search",
-        "tool_describe",
-        "tool_call",
-        "tool_call",
-        "tool_call",
-        "tool_call",
-        "tool_call",
-        "plane_execute_typescript",
-        "tool_call",
-        "tool_call",
-    ]
+    assert tool_calls == ["Plane:execute"]
     assert code_callbacks == [
-        "export default async function ({host, input}: {host: unknown; input: unknown}) {\n"
-        "  return { value: 4 };\n"
-        "}"
+        "const before = await plane.workItems.retrieve(task.target);\n"
+        "await plane.workItems.update(task.target, { name: 'G2 production renamed' });\n"
+        "await plane.finish({ kind: 'completed', summary: 'The assigned issue was renamed.' });"
     ]
     assert "state=succeeded" in supervisor_output
     assert provider_key not in supervisor_output
@@ -2501,30 +2407,19 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
     assert RuntimeExitEvidence.objects.filter(invocation=invocation).count() == 1
     assert RuntimeUsageObservation.objects.filter(invocation=invocation).count() == 1
 
-    correlation_id = f"correlation:{run.id}"
-    expected_operations = {
-        "search_workspace",
-        "catalog.search",
-        "catalog.describe",
-        "work_item.read",
-        "work_item.rename",
-        "agent.outcome.submit",
-        "agent.outcome.publish",
-        "agent.outcome.evaluate",
-    }
+    correlation_prefix = f"correlation:code-mode-{invocation.invocation_id}-"
+    expected_operations = {"work_item.read", "work_item.rename"}
     receipts = OperationGatewayIdempotency.objects.filter(
         caller_id=actor.principal_id,
         workspace_slug=workspace.slug,
-        correlation_id=correlation_id,
+        correlation_id__startswith=correlation_prefix,
     )
     assert set(receipts.values_list("operation_id", flat=True)) == expected_operations
     assert receipts.count() == len(expected_operations)
-    assert receipts.filter(operation_id="catalog.search").count() == 1
-    assert receipts.filter(operation_id="catalog.describe").count() == 1
     audits = OperationGatewayAudit.objects.filter(
         caller_id=actor.principal_id,
         workspace_slug=workspace.slug,
-        correlation_id=correlation_id,
+        correlation_id__startswith=correlation_prefix,
     )
     assert audits.count() == receipts.count() * 2
     assert set(audits.values_list("phase", flat=True)) == {"intent", "outcome"}
@@ -2541,9 +2436,9 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
     gateway_projection = api_readback["gateway_readback"][0]
     assert gateway_projection["receipt"]["workspace_slug"] == workspace.slug
     assert gateway_projection["receipt"]["caller_id"] == str(actor.principal_id)
-    assert gateway_projection["receipt"]["operation_id"] == "agent.outcome.publish"
+    assert gateway_projection["receipt"]["operation_id"] == "work_item.rename"
     assert gateway_projection["receipt"]["idempotency_key"]
-    assert gateway_projection["receipt"]["correlation_id"] == correlation_id
+    assert gateway_projection["receipt"]["correlation_id"].startswith(correlation_prefix)
     assert len(gateway_projection["receipt"]["request_digest"]) == 64
     assert gateway_projection["audit"][0]["workspace_slug"] == workspace.slug
     assert gateway_projection["audit"][0]["caller_id"] == str(actor.principal_id)
@@ -2553,24 +2448,7 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
         list(RuntimeEventIngress.objects.filter(invocation=invocation).values_list("raw_payload", flat=True)),
         sort_keys=True,
     )
-    assert 'Plane host model read operation:work_item.read -> ok' in runtime_event_text
-    assert 'Plane host model mutate operation:work_item.rename -> ok' in runtime_event_text
-    assert 'Plane host model mutate operation:agent.outcome.evaluate -> denied' in runtime_event_text
-    assert OperationGatewayAudit.objects.filter(
-        caller_id=actor.principal_id,
-        operation_id="agent.outcome.evaluate",
-        phase="outcome",
-        outcome="denied",
-        error_code="NOT_AUTHORIZED",
-        correlation_id=correlation_id,
-    ).exists()
-    assert OperationGatewayAudit.objects.filter(
-        caller_id=actor.principal_id,
-        operation_id="catalog.search",
-        phase="outcome",
-        outcome="success",
-        correlation_id=correlation_id,
-    ).count() == 1
+    assert "Plane host model code plane.code-mode.execute@1 -> ok" in runtime_event_text
     assert "ordinary final text only" not in json.dumps(
         list(OperationGatewayAudit.objects.filter(caller_id=actor.principal_id).values_list("result", flat=True)),
         sort_keys=True,
@@ -2578,7 +2456,7 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
 
     before_replay = {
         "provider_streams": provider_stream_count,
-        "receipts": OperationGatewayIdempotency.objects.filter(correlation_id=correlation_id).count(),
+        "receipts": receipts.count(),
         "audits": audits.count(),
         "usage": RuntimeUsageObservation.objects.filter(invocation=invocation).count(),
         "outcomes": OutcomeSubmission.objects.filter(run=run).count(),
@@ -2610,7 +2488,9 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
         replay_output = capsys.readouterr().out
     after_replay = {
         "provider_streams": provider_stream_count,
-        "receipts": OperationGatewayIdempotency.objects.filter(correlation_id=correlation_id).count(),
+        "receipts": OperationGatewayIdempotency.objects.filter(
+            correlation_id__startswith=correlation_prefix
+        ).count(),
         "audits": audits.count(),
         "usage": RuntimeUsageObservation.objects.filter(invocation=invocation).count(),
         "outcomes": OutcomeSubmission.objects.filter(run=run).count(),
