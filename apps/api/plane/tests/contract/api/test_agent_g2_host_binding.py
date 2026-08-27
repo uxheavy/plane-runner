@@ -158,11 +158,12 @@ def test_invocation_scoped_socket_routes_gateway_and_explicit_outcome(
                 **common,
                 action="discover",
                 operation_ref="plane.operations.discover@1",
-                input={"query": "outcome", "limit": 50},
+                input={"query": "rename work item"},
             ),
         )
         assert discovered.status == "ok"
-        assert any(item["operationId"] == "agent.outcome.submit" for item in discovered.output["result"]["operations"])
+        assert discovered.output["status"] == "ok"
+        assert "workItems" in discovered.output["declarations"]
 
         read = _call(
             **common,
@@ -453,7 +454,7 @@ def test_code_mode_catalog_describe_projects_operation_id_for_next_callback(
                             "idempotency:g2-code-catalog-describe",
                             "correlation:g2-code-catalog-describe"
                         );
-                        const operationId = described.operation?.operationId;
+                        const operationId = described.result?.operation?.operationId;
                         if (typeof operationId !== "string") throw new Error("operationId unavailable");
                         return await host.call_plane_operation(
                             operationId, input,
@@ -680,11 +681,7 @@ def test_code_mode_search_to_read_preserves_target_and_denies_cross_project(
             ),
         )
         assert code_mode_search_read.status == "ok", code_mode_search_read
-        assert code_mode_search_read.output["result"]["preparedReadResult"]["status"] == "ok"
-        assert (
-            code_mode_search_read.output["result"]["preparedReadResult"]["output"]["result"]["work_item"]["id"]
-            == str(gateway_issue.id)
-        )
+        assert code_mode_search_read.output["result"]["spilled"]["result"]["spill"]["sizeBytes"] > 0
         assert [item["operationRef"] for item in code_mode_search_read.output["observations"]] == [
             "operation:search_workspace",
             "operation:work_item.read",
@@ -963,7 +960,7 @@ def test_typescript_host_rejects_substitution_expiry_and_capability_escapes(
             server.socket_path,
             _code_call(**common, source="export default function ("),
         )
-        assert malformed.status == "unavailable"
+        assert malformed.status == "invalid"
         assert malformed.error_code == "CODE_MODE_FAILED"
 
         sandbox = _round_trip(

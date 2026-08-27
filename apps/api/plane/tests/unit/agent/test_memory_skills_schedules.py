@@ -63,9 +63,12 @@ from plane.db.models import (
     AgentSkillDefinition,
     AgentSkillVisibility,
     AssignmentContract,
+    FreshAssignmentDecision,
     Project,
+    ReconciliationState,
     RecoveryIntent,
     RunState,
+    RuntimeReconciliation,
     User,
     Workspace,
     WorkspaceMember,
@@ -810,6 +813,23 @@ def test_schedule_fire_enters_normal_lifecycle_and_requires_explicit_unknown_rec
         create_run(assignment, profile)
     with pytest.raises(RecoveryIntentRequiredError):
         create_run(assignment, profile, recovery_of=unknown)
+
+    RuntimeReconciliation.objects.create(
+        workspace=run.workspace,
+        project=run.project,
+        run=run,
+        invocation=invocation,
+        terminal_event_ref="terminal-event:schedule-recovery",
+        runtime_exit_ref="runtime-exit:schedule-recovery",
+        state=ReconciliationState.RECONCILED,
+        fresh_assignment_decision=FreshAssignmentDecision.SAFE,
+        evidence={"providerAttempts": 0},
+        command_fingerprint="command:" + "a" * 64,
+        idempotency_key="idempotency:schedule-recovery-reconciliation",
+        reconciled_by=create_user,
+        reconciled_at=datetime.now(timezone.utc),
+        created_by=create_user,
+    )
 
     recovered = create_run(
         assignment,

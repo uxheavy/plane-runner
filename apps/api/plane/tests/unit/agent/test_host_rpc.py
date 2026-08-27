@@ -343,7 +343,11 @@ def test_model_ready_to_call_wrapper_is_unwrapped_before_gateway():
     received = {}
 
     class FakeHost:
-        binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
+        binding = SimpleNamespace(
+            run_ref="run:test",
+            invocation_ref="invocation:test",
+            assignment_target_ref="target:issue:issue:test",
+        )
 
         def call_operation(self, operation_id, input_data, **_kwargs):
             received["operation_id"] = operation_id
@@ -873,7 +877,8 @@ def test_gateway_host_consumes_one_code_mode_search_ref_before_returning(present
                     "result": {
                         "results": [
                             {"workItemReadCall": presented_call(prepared_ref)}
-                        ]
+                        ],
+                        "assignmentWorkItemReadCall": prepared_ref,
                     },
                 },
                 "observations": [
@@ -920,7 +925,11 @@ def test_gateway_host_keeps_failed_automatic_prepared_read_pending():
     prepared_refs = []
 
     class FakeHost:
-        binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
+        binding = SimpleNamespace(
+            run_ref="run:test",
+            invocation_ref="invocation:test",
+            assignment_target_ref="target:issue:issue:test",
+        )
 
         def set_prepared_call_registry(self, registry):
             self.registry = registry
@@ -936,7 +945,8 @@ def test_gateway_host_keeps_failed_automatic_prepared_read_pending():
                     "result": {
                         "results": [
                             {"objectType": "work_item", "workItemReadCall": prepared_ref}
-                        ]
+                        ],
+                        "assignmentWorkItemReadCall": prepared_ref,
                     },
                 },
                 "observations": [
@@ -979,7 +989,11 @@ def test_gateway_host_does_not_guess_ambiguous_or_tampered_code_mode_reads():
     calls = []
 
     class FakeHost:
-        binding = SimpleNamespace(run_ref="run:test", invocation_ref="invocation:test")
+        binding = SimpleNamespace(
+            run_ref="run:test",
+            invocation_ref="invocation:test",
+            assignment_target_ref="target:issue:issue:test",
+        )
         mode = "ambiguous"
 
         def set_prepared_call_registry(self, registry):
@@ -1004,7 +1018,19 @@ def test_gateway_host_does_not_guess_ambiguous_or_tampered_code_mode_reads():
                         "results": [
                             {"objectType": "work_item", "workItemReadCall": ref}
                             for ref in refs
-                        ]
+                        ],
+                        **(
+                            {"assignmentWorkItemReadCall": refs[0]}
+                            if self.mode == "tampered"
+                            else {
+                                "assignmentWorkItemReadDecision": {
+                                    "schemaVersion": "plane.assignment-read-handoff/v1",
+                                    "recognizedCount": 2,
+                                    "acceptedForm": "unrecognized",
+                                    "failureClass": "multiple",
+                                }
+                            }
+                        ),
                     },
                 },
                 "observations": [
@@ -1383,7 +1409,11 @@ def test_prepared_call_json_wrapper_crosses_process_and_submit_fails_closed(tmp_
     calls = []
 
     class FakeHost:
-        binding = SimpleNamespace(run_ref="run:cross-process", invocation_ref="invocation:cross-process")
+        binding = SimpleNamespace(
+            run_ref="run:cross-process",
+            invocation_ref="invocation:cross-process",
+            assignment_target_ref="target:issue:issue:test",
+        )
 
         def call_operation(self, operation_id, input_data, **_kwargs):
             calls.append((operation_id, input_data))
@@ -1435,7 +1465,7 @@ def test_code_mode_search_projects_opaque_prepared_read_for_typed_callback():
 
     host = object.__new__(CodeModeHostRPC)
     host._prepared_call_registry = PreparedCallRegistry()
-    host._code_mode_active = False
+    host._code_mode_active = True
     host._record_code_mode_observation = lambda *_args: None
 
     def fake_call(operation_id, input_data, **_kwargs):
@@ -1517,7 +1547,7 @@ def test_code_mode_search_projects_opaque_prepared_read_for_typed_callback():
     assert rename["ok"] is True
 
 
-def test_code_mode_direct_search_consumes_one_prepared_read_before_returning():
+def test_code_mode_direct_search_leaves_one_prepared_read_for_composition():
     calls = []
     observations = []
     host = object.__new__(CodeModeHostRPC)
@@ -1543,12 +1573,8 @@ def test_code_mode_direct_search_consumes_one_prepared_read_before_returning():
                 },
             }
         assert operation_id == "work_item.read"
-        prepared_ref = input_data["preparedCallRef"]
-        assert host._prepared_call_registry.resolve(
-            {"preparedCallRef": prepared_ref},
-            correlation_id=kwargs["correlation_id"],
-            idempotency_key=kwargs["idempotency_key"],
-        ) == {"project_id": "project:test", "issue_id": "issue:test"}
+        assert set(input_data) == {"preparedCallRef"}
+        assert isinstance(input_data["preparedCallRef"], str)
         return {"ok": True, "result": {"work_item": {"name": "assigned"}}}
 
     host._call_operation = fake_call
@@ -1560,13 +1586,26 @@ def test_code_mode_direct_search_consumes_one_prepared_read_before_returning():
         correlation_id="correlation:search",
     )
 
+    assert [operation_id for operation_id, _input, _kwargs in calls] == ["search_workspace"]
+    prepared_ref = search["result"]["results"][0]["workItemReadCall"]
+    assert isinstance(prepared_ref, str)
+    assert prepared_ref.startswith("prepared-call:")
+    assert "preparedReadResult" not in search
+    assert all(not record["consumed"] for record in host._prepared_call_registry.records.values())
+
+    read = CodeModeHostRPC.call_operation(
+        host,
+        "work_item.read",
+        {"preparedCallRef": prepared_ref},
+        idempotency_key="idempotency:read",
+        correlation_id="correlation:read",
+    )
+
+    assert read["ok"] is True
     assert [operation_id for operation_id, _input, _kwargs in calls] == [
         "search_workspace",
         "work_item.read",
     ]
-    assert "workItemReadCall" not in search["result"]["results"][0]
-    assert search["preparedReadResult"]["ok"] is True
-    assert search["preparedReadResult"]["result"]["work_item"]["name"] == "assigned"
     assert observations == ["search_workspace", "work_item.read"]
     assert all(record["consumed"] for record in host._prepared_call_registry.records.values())
 

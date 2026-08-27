@@ -25,6 +25,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+from .credentials import RuntimeCredentialError, credential_failure_subreason
+
 
 PROVIDER_RELAY_PROTOCOL = "plane.agent-runtime/provider-relay/v1"
 PROVIDER_RELAY_HOST = "plane-provider-relay.invalid"
@@ -91,6 +93,21 @@ _PROVIDER_ERROR_REASON_SUBREASONS = frozenset(
         "upstream_channel_closed",
         "upstream_timeout",
         "channel_closed_after_upstream",
+        "credential_lease_expired",
+        "credential_lease_revoked",
+        "credential_lease_rotated",
+        "credential_lease_binding",
+        "credential_lease_metadata_invalid",
+        "credential_state_unavailable",
+        "credential_state_invalid",
+        "credential_reference_not_allowed",
+        "credential_source_requires_refresh",
+        "credential_source_unavailable",
+        "credential_source_invalid",
+        "credential_source_oversized",
+        "credential_resolver_failed",
+        "credential_resolver_output_invalid",
+        "runtime_configuration_rejected",
     }
 )
 _TERMINAL_SSE_EVENT_NAMES = frozenset(
@@ -556,6 +573,7 @@ class _ProviderRelayHTTPHandler(socketserver.StreamRequestHandler):
                     "denied",
                     relay._audit_reason(error_for_audit, code),
                     upstream_called,
+                    reason_subreason=getattr(error_for_audit, "reason_subreason", ""),
                 )
             if not response_started:
                 try:
@@ -880,6 +898,11 @@ class ProviderRelayServer:
             return
         try:
             result = self._lease_validator()
+        except RuntimeCredentialError as exc:
+            raise ProviderRelayError(
+                "credential lease is not active",
+                reason_subreason=credential_failure_subreason(exc),
+            ) from exc
         except Exception as exc:
             raise ProviderRelayError("credential lease is not active") from exc
         if result is False:
@@ -1133,6 +1156,7 @@ class ProviderRelayServer:
         upstream_called: bool,
         *,
         request_id: str = "",
+        reason_subreason: str = "",
     ) -> None:
         del value, request_id
         if self._audit is None:
@@ -1147,6 +1171,11 @@ class ProviderRelayServer:
                     outcome=outcome,
                     reason=_safe_reason(reason),
                     upstream_called=upstream_called,
+                    reason_subreason=(
+                        reason_subreason
+                        if reason_subreason in _PROVIDER_ERROR_REASON_SUBREASONS
+                        else ""
+                    ),
                 )
             )
         except Exception:

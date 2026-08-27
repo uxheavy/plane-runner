@@ -1298,6 +1298,7 @@ function parseRuntimeFailure(value: unknown, path: string): RuntimeFailure {
     "resource_failure",
     "timeout_failure",
     "provider_client_failure",
+    "relay_session_failure",
     "runtime_unknown_failure",
     "provider_auth_failure",
     "provider_entitlement_failure",
@@ -2439,6 +2440,7 @@ export type RuntimeFailure = Readonly<{
     | "resource_failure"
     | "timeout_failure"
     | "provider_client_failure"
+    | "relay_session_failure"
     | "runtime_unknown_failure"
     | "provider_auth_failure"
     | "provider_entitlement_failure"

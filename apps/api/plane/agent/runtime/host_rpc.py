@@ -720,6 +720,8 @@ def _assignment_read_decision_requires_followup(output: Any) -> bool:
     result = output.get("result")
     if isinstance(output.get("results"), list):
         result = output
+    elif isinstance(result, Mapping) and isinstance(result.get("result"), Mapping):
+        result = result["result"]
     if not isinstance(result, Mapping):
         return False
     decision = result.get("assignmentWorkItemReadDecision")

@@ -65,7 +65,7 @@ def test_runtime_budget_uses_exact_plane_lease_without_rounding():
 
 def test_hermes_request_projects_verified_plane_contract_digests_without_mutating_plane_records(monkeypatch):
     expected_digests = runtime_contract.contract_digests()
-    assert expected_digests["runSnapshot"] == "0e72f04579f8cebd00b7afee1885d0ff68ee04ee30dfd7ff3e74e9ca05cddaed"
+    assert expected_digests["runSnapshot"] == "e84f7b5b2a92c98d1fd1bcdbd2bfc6079692cba69e7027b3f40f700b7cc0d673"
     digest_calls = []
 
     def verified_contract_digests():

@@ -845,11 +845,12 @@ class CodeModeHostRPC:
             and self._prepared_call_registry is not None
         ):
             receipt = self._prepare_search_receipt(receipt)
-            receipt, prepared_read_receipt = self._consume_single_prepared_read(
-                receipt,
-                idempotency_key=idempotency_key,
-                correlation_id=correlation_id,
-            )
+            if not code_mode_active:
+                receipt, prepared_read_receipt = self._consume_single_prepared_read(
+                    receipt,
+                    idempotency_key=idempotency_key,
+                    correlation_id=correlation_id,
+                )
         if (
             operation_id == "work_item.read"
             and isinstance(normalized_input, Mapping)

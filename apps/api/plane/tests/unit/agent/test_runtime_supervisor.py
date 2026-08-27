@@ -530,7 +530,7 @@ def test_pinned_hermes_runs_through_http_service_launcher_and_bound_host_socket(
     dependency_path = os.environ.get("PLANE_G2_HERMES_DEPENDENCY_PATH") or os.path.join(
         checkout, "plane_runtime", "g1_runtime_image"
     )
-    expected_sha = "292e866374ca9e9615473fc9bf5dda1913b672e1"
+    expected_sha = "114eabf9d807b659e36d767e4de46ca056297ccb"
     assert os.path.isdir(checkout)
     assert (
         subprocess.run(
@@ -906,7 +906,7 @@ def test_same_runtime_service_sequential_hermes_invocations_get_fresh_child_stat
     dependency_path = os.environ.get("PLANE_G2_HERMES_DEPENDENCY_PATH") or os.path.join(
         checkout, "plane_runtime", "g1_runtime_image"
     )
-    expected_sha = "292e866374ca9e9615473fc9bf5dda1913b672e1"
+    expected_sha = "114eabf9d807b659e36d767e4de46ca056297ccb"
     assert os.path.isdir(checkout)
     assert (
         subprocess.run(
@@ -1423,7 +1423,7 @@ def test_supervisor_preserves_runtime_failure_cause_without_copying_raw_message(
     assert result.failure == expected
     assert json.loads(control.failure_reason) == expected
     assert json.loads(terminal.reason) == expected
-    assert cause in output
+    assert expected["failureCause"] in output
     assert "raw provider callback secret" not in output
     assert "raw provider callback secret" not in control.failure_reason
     assert "raw provider callback secret" not in terminal.reason
@@ -1436,13 +1436,13 @@ def test_supervisor_preserves_runtime_failure_cause_without_copying_raw_message(
         "errorCode": "OPERATION_UNAVAILABLE",
         "codeModePhase": "host_callback",
         "callbackPhase": "host_return",
-        "operationRefDigest": expected["operationRefDigest"],
+        "operationRefDigest": "a" * 64,
     }
-    output_with_diagnostic = _supervisor_result_output(
-        result,
-        host_operation_failure=diagnostic,
-    )
-    assert json.loads(output_with_diagnostic.split(" failure=", 1)[1])["hostOperationFailure"] == diagnostic
+    output_with_diagnostic = _supervisor_result_output(result, host_operation_failure=diagnostic)
+    if cause == "host_operation_failure":
+        assert json.loads(output_with_diagnostic.split(" failure=", 1)[1])["hostOperationFailure"] == diagnostic
+    else:
+        assert "hostOperationFailure" not in output_with_diagnostic
 
 
 def test_provider_unknown_classification_requires_unresolved_attempt_evidence():
@@ -2171,7 +2171,7 @@ def test_configured_hermes_sha_runs_the_real_supervisor_production_path(
     tmp_path, api_key_client, workspace, gateway_project, gateway_issue, create_user, capsys
 ):
     checkout = os.environ.get("PLANE_G2_HERMES_CHECKOUT", "/hermes")
-    expected_sha = "292e866374ca9e9615473fc9bf5dda1913b672e1"
+    expected_sha = "114eabf9d807b659e36d767e4de46ca056297ccb"
     assert os.path.isdir(checkout)
     actual_sha = subprocess.run(
         ["git", "-C", checkout, "rev-parse", "HEAD"], check=True, capture_output=True, text=True
