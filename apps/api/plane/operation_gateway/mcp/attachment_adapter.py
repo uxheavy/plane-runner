@@ -1,3 +1,7 @@
+# Copyright (c) 2026-present Ngo Quoc Huy
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """Typed public-contract adapter for the five donor attachment tools."""
 
 from __future__ import annotations

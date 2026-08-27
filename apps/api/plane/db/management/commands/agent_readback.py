@@ -1,3 +1,7 @@
+# Copyright (c) 2026-present Ngo Quoc Huy
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """Bounded, redacted readback for one assigned Plane Agent run."""
 
 from __future__ import annotations

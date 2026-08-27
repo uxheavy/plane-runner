@@ -1,3 +1,7 @@
+# Copyright (c) 2026-present Ngo Quoc Huy
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """Restore a 0129 catalog snapshot using the authenticated provisioner."""
 
 from __future__ import annotations

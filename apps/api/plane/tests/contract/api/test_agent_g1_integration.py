@@ -1,3 +1,7 @@
+# Copyright (c) 2026-present Ngo Quoc Huy
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """Deterministic backend-only proof for the combined Plane Agent G1 spine.
 
 The evidence contract is intentionally non-visual: this lane has no UI in

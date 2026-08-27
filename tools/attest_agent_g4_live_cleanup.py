@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026-present Ngo Quoc Huy
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """Retain bounded post-run cleanup proof for validated G4 live receipts."""
 
 from __future__ import annotations

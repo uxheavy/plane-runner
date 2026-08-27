@@ -1,3 +1,7 @@
+# Copyright (c) 2026-present Ngo Quoc Huy
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """Gateway-owned attachment semantics shared by all five MCP attachment tools.
 
 The external MCP server owns the public tool wrappers.  This module owns the

@@ -1,3 +1,7 @@
+# Copyright (c) 2026-present Ngo Quoc Huy
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """Compatibility metadata and pure adapters for the external Plane MCP surface."""
 
 from .adapter_registry import ADAPTER_REGISTRATIONS, ADAPTER_REGISTRY, get_registration

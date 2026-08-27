@@ -1,3 +1,7 @@
+# Copyright (c) 2026-present Ngo Quoc Huy
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """One disposable Plane supervisor invocation for the configured G4 proof."""
 
 from __future__ import annotations

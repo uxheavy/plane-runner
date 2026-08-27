@@ -1,3 +1,7 @@
+# Copyright (c) 2026-present Ngo Quoc Huy
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """Fail-closed configuration for the separate Plane Agent runtime service.
 
 This module deliberately has no Django dependency.  The runtime health process

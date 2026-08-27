@@ -1,3 +1,7 @@
+# Copyright (c) 2026-present Ngo Quoc Huy
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """High-signal contracts for the Plane-native tool and Code Mode seams."""
 
 from types import SimpleNamespace

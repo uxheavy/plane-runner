@@ -1,4 +1,4 @@
-# Copyright (c) 2023-present Plane Software, Inc. and contributors
+# Copyright (c) 2026-present Ngo Quoc Huy
 # SPDX-License-Identifier: AGPL-3.0-only
 
 """Stable, redacted serializers for Plane Agent administration."""

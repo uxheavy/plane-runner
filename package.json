@@ -17,6 +17,7 @@
     "check:lint": "turbo run check:lint",
     "check:format": "turbo run check:format",
     "check:types": "turbo run check:types",
+    "check:copyright": "pnpm --filter=@plane/codemods copyright-headers --check --changed-from upstream/preview",
     "check:local-dev": "./tools/check-local-dev.sh",
     "check:local-dev:agent": "./tools/check-local-dev.sh --agent",
     "check:local-dev:runtime": "./tools/check-local-dev.sh --runtime",

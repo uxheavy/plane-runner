@@ -1,3 +1,7 @@
+# Copyright (c) 2026-present Ngo Quoc Huy
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """Disposable, invocation-bound runtime credential leases.
 
 The broker keeps only digests and lease metadata.  The credential resolver is

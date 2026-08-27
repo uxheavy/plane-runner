@@ -1,3 +1,7 @@
+# Copyright (c) 2026-present Ngo Quoc Huy
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """Plane-side traces for the pinned external MCP and SDK gateway clients.
 
 These tests load the exact external worktrees selected by the test command and

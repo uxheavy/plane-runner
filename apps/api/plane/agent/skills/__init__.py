@@ -1,3 +1,7 @@
+# Copyright (c) 2026-present Ngo Quoc Huy
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """Plane-owned Agent skill definitions and package projections."""
 
 from .projections import normalize_skill_files, parse_skill_package, project_skill_package, skill_package_digest

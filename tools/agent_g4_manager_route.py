@@ -1,3 +1,7 @@
+# Copyright (c) 2026-present Ngo Quoc Huy
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """Synthetic-only Manager route evidence for Elena's M01-M08 journey.
 
 This module is a scenario fixture, not a second lifecycle owner.  It composes

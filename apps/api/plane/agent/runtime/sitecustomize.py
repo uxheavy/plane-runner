@@ -1,3 +1,7 @@
+# Copyright (c) 2026-present Ngo Quoc Huy
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """Production-only CPython child-launch compatibility for the runtime image.
 
 The pinned Hermes Code Mode implementation uses ``subprocess.Popen``. Python

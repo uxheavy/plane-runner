@@ -1,3 +1,7 @@
+# Copyright (c) 2026-present Ngo Quoc Huy
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """Fail-closed provenance checks for developer/build checkout launches.
 
 Production runtime services are selected by an immutable image attestation and

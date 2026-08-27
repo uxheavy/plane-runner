@@ -1,3 +1,7 @@
+# Copyright (c) 2026-present Ngo Quoc Huy
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """Invocation-bound provider egress for the isolated Hermes child.
 
 The child owns only an HTTP client whose transport is an invocation-local

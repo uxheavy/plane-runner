@@ -1,3 +1,7 @@
+# Copyright (c) 2026-present Ngo Quoc Huy
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """Reusable durable checks for the typed Worker persona journey.
 
 The live invoker owns lifecycle orchestration.  This module keeps Worker route

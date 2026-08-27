@@ -1,3 +1,7 @@
+# Copyright (c) 2026-present Ngo Quoc Huy
+# SPDX-License-Identifier: AGPL-3.0-only
+# See the LICENSE file for details.
+
 """Versioned semantic Plane operations exposed by the shared gateway.
 
 The catalog is descriptive only.  It never grants permission; the Operation
