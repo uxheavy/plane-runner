@@ -721,3 +721,35 @@ production verifier, and consolidated review remain required and unchanged.
 
 The live completion formula remains two flows, but `passed(Worker)` now means
 the ADR-0011 discover/execute/finish flow on the final immutable candidate.
+
+## Completion record (2026-08-27)
+
+Status: **complete**.
+
+The immutable product candidate is
+`f172a89e928981756015cec284dd96b6e5d81927`. The evidence-only descendant
+`860d2aa8ffc71454f37e499061c4affd79593aae` corrects the finite observed
+evidence vocabulary and adds a candidate- and receipt-bound cleanup
+attestation; it does not change product, runtime, gateway, authorization, or
+image bytes and required no provider or live rerun.
+
+- Worker passed with receipt SHA-256
+  `d56c0bb6a3b292d0941a86bb0589cf27e89bc299cb15431a04d1addf335c7994`.
+- Delegator passed with receipt SHA-256
+  `c23a8f8f6d1f0536507a47d86d0b20dcd049e092bbe02525459fbabf8cc63efe`.
+- The provider-free operations package passed 11/11 checks and retained O02
+  remained applicable; receipt SHA-256
+  `129b9e6748f4d5fee9ecd633e074bb8611adfdc38d561061bd4b867ab3840043`.
+- The final production-candidate verifier passed all 13 stages; receipt
+  SHA-256
+  `03e363a27da1816ab15a989536c3f0af5662c6920a40643cf526abde55c13802`.
+- Cleanup passed with zero labeled containers, networks, or volumes and no
+  capacity lease. Seven stale disposable volumes from superseded runs were
+  removed. The cleanup attestation is bound to the candidate and both live
+  receipt hashes.
+- The single consolidated GPT-5.6 Sol Medium review passed with no remaining
+  blocker.
+
+Therefore the controlling formula is satisfied: live `2/2`, provider-free
+operations passed, O02 applicable, final verifier passed, consolidated review
+passed, and the integration branch and worktree are clean.
