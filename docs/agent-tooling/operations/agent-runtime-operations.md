@@ -538,24 +538,24 @@ docker compose -p plane-g4-load-luna -f deployments/cli/community/docker-compose
 
 `apps/api/plane/tests/fixtures/agent_g4_rollback_pins.json` is the pin
 manifest. The current Plane deployable service candidate is the exact source
-`b03f108cd1ae4ea7bef32dfa24284a20269573b6`; the final candidate is exactly one
+`f645cea765134f877521111a6dfc4bc6544a850b`; the final candidate is exactly one
 metadata wrapper child of that source. The previously accepted G3 candidate
 remains the rollback floor, and the candidate is Plane commit
 `7c9d35f4c324865c27c84da5016be2c84e460bcc`.
 
 The ADR-0011 release carries Hermes commit
-`7a8d4cc9d7ccdc79e315ecb19594ce0596d68042` from the canonical
+`df166ad411654c3cae67e2dc079ea60e6c91f85e` from the canonical
 `https://github.com/uxheavy/hermes-agent.git` checkout, MCP gitlink
 `d65df7c94bcd41a3c7795c40c1227e2199889d71`, and SDK gitlink
 `4403116b3601a29d7a2c507c8bef1db768574142`. The runtime image tag is
-`plane-agent-runtime:hermes-7a8d4cc9-v140-b03f108c`, and the runtime image digest
-is `sha256:ef0d5ff7f1c36d65633178cfa4348796e1edfbe676470017c6da63b59fc8b141`.
-The runtime revision is `b03f108cd1ae4ea7bef32dfa24284a20269573b6`. The API
-image tag is `plane-agent-api:g4-v140-b03f108cd1` and the API image digest is
-`sha256:5d765b53aadfdfffa62241086b00e9ecbac34acae3f3b673439f4e8b3fe5accf`.
-The API source revision is `b03f108cd1ae4ea7bef32dfa24284a20269573b6`. The Plane service revision above is the current executable artifact revision.
+`plane-agent-runtime:hermes-df166ad4-v147-f645cea7`, and the runtime image digest
+is `sha256:f2ebe1a314a6299a453ff8280e5e803730083d819e4bc4b99fa87f332f02890f`.
+The runtime revision is `f645cea765134f877521111a6dfc4bc6544a850b`. The API
+image tag is `plane-agent-api:g4-v146-f645cea765` and the API image digest is
+`sha256:d51f45eadeb3f721c1947c1dd40671a53ee9bacbce6dfe3de8547493caf47c66`.
+The API source revision is `f645cea765134f877521111a6dfc4bc6544a850b`. The Plane service revision above is the current executable artifact revision.
 Hermes tree digest is
-`7e1c83761df22c7e7d27f798cd8cb2179f2c76ef19db17b08fccba000a28bad1`, and the
+`e919fc5764a862a2d3f2cfefa6f7ae5d9d912cd960c933745e6395642d049842`, and the
 Plane runtime source digest is
 `0675a4cec55e96dbc9f043c5b8c7a07a20cd2fc6902434453a27a43e1af8c233`. No
 provider-backed or live acceptance is claimed.
