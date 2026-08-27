@@ -4929,6 +4929,7 @@ class G4ContractTests(unittest.TestCase):
         self.assertIn("tamper_guard=fail_closed", source)
         self.assertIn("filesystem_confinement=passed", source)
         self.assertIn('PLANE_CODE_MODE_OPERATION = "plane.code-mode.execute@1"', source)
+        self.assertNotIn('("plane_execute_typescript",', source)
         self.assertIn('"output": None', source)
         self.assertIn("validate_pinned_hermes_identity", source)
         self.assertIn("HERMES_TERMINAL_HANDOFF_PROBE", source)

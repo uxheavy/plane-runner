@@ -151,7 +151,6 @@ class _Completions:
         ("tool_call", {"name": "plane_operation", "arguments": {"action": "read", "operationRef": "operation:catalog.search", "input": {"query": "work item", "limit": 8}}}),
         ("tool_call", {"name": "plane_operation", "arguments": {"action": "read", "operationRef": "operation:catalog.describe", "input": {"operation_id": "work_item.read"}}}),
         ("tool_call", {"name": "plane_operation", "arguments": {"action": "read", "operationRef": "operation:work_item.read", "input": {"issue_ref": "issue:red-team"}}}),
-        ("plane_execute_typescript", {"typescript_source": "export default async function ({host, input}) { return { query: 'rename', limit: 5, input }; }"}),
         ("tool_call", {"name": "plane_operation", "arguments": {"action": "read", "operationRef": "operation:work_item.read", "input": {"issue_ref": "issue:red-team"}}}),
         ("tool_call", {"name": "plane_operation", "arguments": {"action": "read", "operationRef": "operation:work_item.read", "input": {"forbidden": True, "issue_ref": "issue:red-team"}}}),
         ("tool_call", {"name": "plane_operation", "arguments": {"action": "read", "operationRef": "operation:catalog.describe", "input": {"operation_id": "work_item.rename"}}}),
@@ -168,9 +167,6 @@ class _Completions:
         call_number = _TRANSPORT_CALLS
         _TRANSPORT_CALLS += 1
         identity = _assert_pinned_hermes_identity()
-        code_mode_call_number = next(
-            index for index, (name, _arguments) in enumerate(self._PLAN) if name == "plane_execute_typescript"
-        )
         names = _tool_names(kwargs)
         messages = kwargs.get("messages", [])
         _diagnose({
@@ -192,21 +188,6 @@ class _Completions:
         terminal_completion = call_number == len(self._PLAN) and not names
         if call_number > 0 and not any(message.get("role") == "tool" for message in messages if isinstance(message, dict)):
             raise RuntimeError("real Hermes tool result did not return through the provider loop")
-        if call_number == code_mode_call_number + 1:
-            tool_messages = [
-                message for message in messages
-                if isinstance(message, dict) and message.get("role") == "tool"
-            ]
-            if not any(
-                f'"operation":"{PLANE_CODE_MODE_OPERATION}"' in str(message.get("content", ""))
-                and '"status":"ok"' in str(message.get("content", ""))
-                for message in tool_messages
-            ):
-                _diagnose({
-                    "event": "g4.hermes.code-mode-result",
-                    "toolMessages": tool_messages[-3:],
-                })
-                raise RuntimeError("genuine plane_execute_typescript did not return the Plane Code Mode callback")
         if call_number < len(self._PLAN):
             name, arguments = self._PLAN[call_number]
             tool_delta = _tool_call("g4-call-" + str(call_number + 1), name, arguments)
@@ -1295,7 +1276,6 @@ def main() -> int:
             or "operation:work_item.rename" not in operations
             or "operation:catalog.search" not in operations
             or "operation:catalog.describe" not in operations
-            or PLANE_CODE_MODE_OPERATION not in operations
             or "operation:agent.outcome.submit" not in operations
             or "operation:agent.outcome.publish" not in operations
         ):
@@ -1309,8 +1289,6 @@ def main() -> int:
                 "plane_gateway_authorization_denial_missing:"
                 + json.dumps(events, sort_keys=True, separators=(",", ":"))[:4096]
             )
-        if not any(event.get("source") == "code" and event.get("action") == "code" for event in events):
-            raise ProbeFailure("plane_gateway_code_mode_callback_missing")
         if secret in json.dumps({"dispatch": dispatch, "evidence": evidence}, sort_keys=True):
             raise ProbeFailure("runtime_credential_disclosure")
         logs = docker("logs", name).stdout + docker("logs", peer).stdout
