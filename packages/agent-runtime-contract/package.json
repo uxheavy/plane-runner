@@ -3,7 +3,7 @@
   "version": "1.4.0",
   "private": true,
   "description": "Versioned Plane Agent runtime contract and generated JSON Schemas",
-  "license": "AGPL-3.0",
+  "license": "AGPL-3.0-only",
   "files": [
     "dist",
     "schemas"

@@ -13,6 +13,7 @@ export const FORK_COPYRIGHT = "Copyright (c) 2026-present Ngo Quoc Huy";
 export const UPSTREAM_COPYRIGHT =
   "Copyright (c) 2023-present Plane Software, Inc. and contributors";
 export const SPDX_LICENSE = "SPDX-License-Identifier: AGPL-3.0-only";
+export const PACKAGE_LICENSE = "AGPL-3.0-only";
 
 const HEADER_SCAN_BYTES = 1024;
 
@@ -79,31 +80,69 @@ export function transformCopyrightHeader(source, filePath) {
   return source.slice(0, newline) + copyrightHeader + source.slice(newline);
 }
 
-function gitFiles(repoRoot, args) {
+export function transformPackageLicense(source) {
+  const metadata = JSON.parse(source);
+  if (metadata.license === PACKAGE_LICENSE) return source;
+
+  if (metadata.license === "AGPL-3.0") {
+    return source.replace(
+      '"license": "AGPL-3.0"',
+      `"license": "${PACKAGE_LICENSE}"`
+    );
+  }
+
+  if (metadata.license === undefined) {
+    const privateField = /^(\s*)"private": (?:true|false),$/m;
+    if (!privateField.test(source))
+      throw new Error("package.json is missing a private field");
+    return source.replace(
+      privateField,
+      `$&\n$1"license": "${PACKAGE_LICENSE}",`
+    );
+  }
+
+  throw new Error(`unsupported package license: ${metadata.license}`);
+}
+
+function gitPaths(repoRoot, args, pathspecs) {
   const output = execFileSync(
     "git",
-    ["-C", repoRoot, ...args, "--", "*.py", "*.ts", "*.tsx"],
+    ["-C", repoRoot, ...args, "--", ...pathspecs],
     {
       encoding: "buffer",
     }
   );
 
-  return output.toString("utf8").split("\0").filter(Boolean).filter(isEligible);
+  return output.toString("utf8").split("\0").filter(Boolean);
+}
+
+function sourceFiles(repoRoot, args) {
+  return gitPaths(repoRoot, args, ["*.py", "*.ts", "*.tsx"]).filter(isEligible);
+}
+
+function packageJsonFiles(repoRoot) {
+  return gitPaths(
+    repoRoot,
+    ["ls-files", "-z"],
+    ["package.json", "apps/*/package.json", "packages/*/package.json"]
+  );
 }
 
 function parseArgs(args) {
-  const mode = args.includes("--write")
-    ? "write"
-    : args.includes("--check")
-      ? "check"
-      : undefined;
+  const mode = args.includes("--write-package-licenses")
+    ? "write-package-licenses"
+    : args.includes("--write")
+      ? "write"
+      : args.includes("--check")
+        ? "check"
+        : undefined;
   const baseFlag = mode === "write" ? "--added-from" : "--changed-from";
   const baseIndex = args.indexOf(baseFlag);
   const base = baseIndex === -1 ? undefined : args[baseIndex + 1];
 
-  if (!mode || !base) {
+  if (!mode || (mode !== "write-package-licenses" && !base)) {
     throw new Error(
-      "Usage: copyright-headers.mjs --check --changed-from <git-ref> | --write --added-from <git-ref>"
+      "Usage: copyright-headers.mjs --check --changed-from <git-ref> | --write --added-from <git-ref> | --write-package-licenses"
     );
   }
 
@@ -117,7 +156,23 @@ export function run(args, cwd = process.cwd()) {
     ["-C", cwd, "rev-parse", "--show-toplevel"],
     { encoding: "utf8" }
   ).trim();
-  const addedFiles = gitFiles(repoRoot, [
+  const packageFiles = packageJsonFiles(repoRoot);
+
+  if (mode === "write-package-licenses") {
+    let changed = 0;
+    for (const file of packageFiles) {
+      const absolutePath = resolve(repoRoot, file);
+      const source = readFileSync(absolutePath, "utf8");
+      const transformed = transformPackageLicense(source);
+      if (transformed !== source) {
+        writeFileSync(absolutePath, transformed);
+        changed += 1;
+      }
+    }
+    return { changed, checked: packageFiles.length };
+  }
+
+  const addedFiles = sourceFiles(repoRoot, [
     "diff",
     "--name-only",
     "--diff-filter=A",
@@ -126,7 +181,7 @@ export function run(args, cwd = process.cwd()) {
   ]);
   const modifiedFiles =
     mode === "check"
-      ? gitFiles(repoRoot, [
+      ? sourceFiles(repoRoot, [
           "diff",
           "--name-only",
           "--diff-filter=M",
@@ -164,11 +219,22 @@ export function run(args, cwd = process.cwd()) {
     }
   }
 
+  if (mode === "check") {
+    for (const file of packageFiles) {
+      const metadata = JSON.parse(
+        readFileSync(resolve(repoRoot, file), "utf8")
+      );
+      if (metadata.license !== PACKAGE_LICENSE) {
+        invalid.push(`${file}: license must be ${PACKAGE_LICENSE}`);
+      }
+    }
+  }
+
   if (invalid.length > 0) {
     throw new Error(`Invalid copyright headers:\n${invalid.join("\n")}`);
   }
 
-  return { changed, checked: files.length };
+  return { changed, checked: files.length + packageFiles.length };
 }
 
 if (

@@ -10,7 +10,7 @@
     "react",
     "rich-text"
   ],
-  "license": "AGPL-3.0",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

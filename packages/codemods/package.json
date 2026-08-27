@@ -2,6 +2,7 @@
   "name": "@plane/codemods",
   "version": "1.4.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "scripts": {
     "test": "vitest run",
     "copyright-headers": "node ./copyright-headers.mjs",

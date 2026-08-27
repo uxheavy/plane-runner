@@ -3,7 +3,7 @@
   "version": "1.4.0",
   "private": true,
   "description": "Admin UI for Plane",
-  "license": "AGPL-3.0",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
     "dev": "react-router dev --port 3001",

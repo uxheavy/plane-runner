@@ -8,11 +8,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   FORK_COPYRIGHT,
+  PACKAGE_LICENSE,
   SPDX_LICENSE,
   UPSTREAM_COPYRIGHT,
   hasValidHeader,
   preservesLegalNotices,
   transformCopyrightHeader,
+  transformPackageLicense,
 } from "../copyright-headers.mjs";
 
 describe("copyright headers", () => {
@@ -70,5 +72,19 @@ describe("copyright headers", () => {
         `// ${FORK_COPYRIGHT}\n// ${SPDX_LICENSE}\n`
       )
     ).toBe(true);
+  });
+
+  it("normalizes package license metadata idempotently", () => {
+    const existing =
+      '{\n  "name": "example",\n  "private": true,\n  "license": "AGPL-3.0"\n}\n';
+    const missing =
+      '{\n  "name": "example",\n  "private": true,\n  "scripts": {}\n}\n';
+    const normalized = transformPackageLicense(existing);
+
+    expect(JSON.parse(normalized).license).toBe(PACKAGE_LICENSE);
+    expect(JSON.parse(transformPackageLicense(missing)).license).toBe(
+      PACKAGE_LICENSE
+    );
+    expect(transformPackageLicense(normalized)).toBe(normalized);
   });
 });

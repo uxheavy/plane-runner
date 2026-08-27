@@ -3,7 +3,7 @@
   "version": "1.4.0",
   "private": true,
   "description": "common tailwind configuration across monorepo",
-  "license": "AGPL-3.0",
+  "license": "AGPL-3.0-only",
   "sideEffects": [
     "**/*.css"
   ],
