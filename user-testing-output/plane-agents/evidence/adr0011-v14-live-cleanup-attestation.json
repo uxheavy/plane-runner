@@ -1,0 +1,31 @@
+{
+  "candidateCommit": "f172a89e928981756015cec284dd96b6e5d81927",
+  "cleanup": {
+    "containersRemaining": 0,
+    "leasePresent": false,
+    "networksRemaining": 0,
+    "rawFieldsEmitted": false,
+    "runDirectoriesChecked": 2,
+    "scope": "plane-g4-current-run-and-labeled-resources",
+    "staleLabeledVolumesRemoved": 7,
+    "status": "passed",
+    "unexpectedArtifacts": 0,
+    "volumesRemaining": 0
+  },
+  "receipts": [
+    {
+      "role": "delegator",
+      "schemaVersion": "plane-agent-g4/live-evidence/v1",
+      "sha256": "c23a8f8f6d1f0536507a47d86d0b20dcd049e092bbe02525459fbabf8cc63efe",
+      "status": "passed"
+    },
+    {
+      "role": "worker",
+      "schemaVersion": "plane-agent-g4/live-evidence/v1",
+      "sha256": "d56c0bb6a3b292d0941a86bb0589cf27e89bc299cb15431a04d1addf335c7994",
+      "status": "passed"
+    }
+  ],
+  "schemaVersion": "plane-agent-g4/live-cleanup-attestation/v1",
+  "status": "passed"
+}

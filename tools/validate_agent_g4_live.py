@@ -1383,6 +1383,10 @@ _SCENARIO_RECORD_KINDS = {
     "assignment", "run", "invocation", "input_event", "audit", "publication", "terminal_event",
     "schedule", "schedule_fire", "lineage_assignment",
 }
+# Code Mode emits its atomic finish in the shared actual projection as an
+# outcome record, although it remains a product-only kind in descriptors.
+_SCENARIO_PRODUCT_ONLY_KINDS = frozenset({"outcome_submission"})
+_SCENARIO_ACTUAL_RECORD_KINDS = _SCENARIO_RECORD_KINDS | _SCENARIO_PRODUCT_ONLY_KINDS
 _SCENARIO_PRODUCT_KINDS = {
     "publication", "outcome_submission", "run_failure", "run_blocker", "run_cancellation", "input_event",
 }
@@ -1532,7 +1536,10 @@ def _validate_scenario_projection(value: Any) -> None:
             or any(check not in _SCENARIO_ROUTE_IDS for check in expected["routeChecks"])
         ):
             raise ContractError("evidence_scenario_expected_route_checks_invalid")
-    for field, allowed_kinds in (("durableRecords", _SCENARIO_RECORD_KINDS), ("productEvents", _SCENARIO_PRODUCT_KINDS)):
+    for field, allowed_kinds in (
+        ("durableRecords", _SCENARIO_RECORD_KINDS),
+        ("productEvents", _SCENARIO_PRODUCT_KINDS),
+    ):
         if expected is None or field not in expected:
             continue
         rows = expected[field]
@@ -1558,9 +1565,12 @@ def _validate_scenario_projection(value: Any) -> None:
         for key in ("operations", "evidenceKinds"):
             if not isinstance(actual[key], list) or len(actual[key]) > 16:
                 raise ContractError("evidence_scenario_actual_list_invalid")
-        if any(kind not in _SCENARIO_RECORD_KINDS for kind in actual["evidenceKinds"]):
+        if any(kind not in _SCENARIO_ACTUAL_RECORD_KINDS for kind in actual["evidenceKinds"]):
             raise ContractError("evidence_scenario_actual_evidence_invalid")
-        for key, allowed_kinds in (("records", _SCENARIO_RECORD_KINDS), ("productEvents", _SCENARIO_PRODUCT_KINDS)):
+        for key, allowed_kinds in (
+            ("records", _SCENARIO_ACTUAL_RECORD_KINDS),
+            ("productEvents", _SCENARIO_PRODUCT_KINDS),
+        ):
             rows = actual[key]
             if not isinstance(rows, list) or len(rows) > 16:
                 raise ContractError("evidence_scenario_actual_list_invalid")
@@ -1711,7 +1721,10 @@ def _validate_scenario_gate(value: Any) -> None:
         if set(item) != {"operationId", "expected", "actual", "expectedCount", "actualCount", "passed"} or item["expected"] not in _SCENARIO_OUTCOMES or item["actual"] not in _SCENARIO_OUTCOMES:
             raise ContractError("evidence_scenario_gate_operation_invalid")
         _safe_ref(item["operationId"], "evidence_scenario_gate_operation_id")
-    for key, allowed_kinds in (("durableRecords", _SCENARIO_RECORD_KINDS), ("productEvents", _SCENARIO_PRODUCT_KINDS)):
+    for key, allowed_kinds in (
+        ("durableRecords", _SCENARIO_ACTUAL_RECORD_KINDS),
+        ("productEvents", _SCENARIO_PRODUCT_KINDS),
+    ):
         if not isinstance(gate[key], list) or len(gate[key]) > 8:
             raise ContractError("evidence_scenario_gate_records_invalid")
         for row in gate[key]:
@@ -1720,7 +1733,17 @@ def _validate_scenario_gate(value: Any) -> None:
                 raise ContractError("evidence_scenario_gate_record_invalid")
             if item["kind"] not in allowed_kinds or type(item["expectedCount"]) is not int or not 0 <= item["expectedCount"] <= 256 or type(item["actualCount"]) is not int or not 0 <= item["actualCount"] <= 256:
                 raise ContractError("evidence_scenario_gate_record_invalid")
-    if not isinstance(gate["evidenceKinds"], list) or any(not isinstance(row, dict) or set(row) != {"kind", "passed"} for row in gate["evidenceKinds"]):
+    if (
+        not isinstance(gate["evidenceKinds"], list)
+        or len(gate["evidenceKinds"]) > 16
+        or any(
+            not isinstance(row, dict)
+            or set(row) != {"kind", "passed"}
+            or row["kind"] not in _SCENARIO_ACTUAL_RECORD_KINDS
+            or type(row["passed"]) is not bool
+            for row in gate["evidenceKinds"]
+        )
+    ):
         raise ContractError("evidence_scenario_gate_evidence_invalid")
     if gate["passed"] != (not gate["failures"] and all(row["passed"] for row in gate["operations"] + gate["durableRecords"] + gate["productEvents"] + gate["evidenceKinds"])):
         raise ContractError("evidence_scenario_gate_predicate_mismatch")
