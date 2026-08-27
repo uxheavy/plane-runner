@@ -807,6 +807,23 @@ def test_code_mode_finish_readback_requires_one_bound_outcome_terminal_pair() ->
     assert 'raise RuntimeError("Code Mode finish publication readback is missing or inconsistent")' in source
 
 
+def test_code_mode_canaries_refresh_readback_after_one_call() -> None:
+    source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
+    canary_start = source.index("canary_evidence = run_worker_authorization_canaries(")
+    refresh_end = source.index(
+        'if scenario is not None and scenario.controls.cancellation is not None',
+        canary_start,
+    )
+    canary_block = source[canary_start:refresh_end]
+
+    assert canary_block.count("run_worker_authorization_canaries(") == 1
+    assert canary_block.count("= readback()") == 1
+    assert canary_block.index("= readback()") > canary_block.index(
+        "run_worker_authorization_canaries("
+    )
+    assert "plane_operation_audit" in canary_block
+
+
 def test_multi_commission_prompt_preserves_the_typed_code_mode_route() -> None:
     source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
     tree = ast.parse(source)

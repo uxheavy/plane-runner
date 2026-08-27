@@ -3120,6 +3120,19 @@ def _run_single(scenario, *, setup_cache=None) -> tuple[int, dict]:
                 invocation=invocation,
                 suffix=suffix,
             )
+            # The canaries are host-bound gateway calls outside the model turn;
+            # refresh bounded readback before the scenario gate counts audits.
+            (
+                provider_attempts,
+                terminal,
+                control,
+                exit_evidence,
+                runtime_event_kind_counts,
+                plane_host_operation_receipts,
+                plane_operation_audit,
+                transcript_evidence,
+                explicit_publication,
+            ) = readback()
         if scenario is not None and scenario.controls.cancellation is not None and scenario.controls.cancellation["timing"] in {"after_provider_request", "after_publication"}:
             if scenario.controls.cancellation["timing"] == "after_provider_request" and any(attempt.upstream_initiated for attempt in provider_attempts):
                 request_runtime_cancellation(invocation, reason=scenario.controls.cancellation["reason"], idempotency_key=f"idempotency:g4-live-cancel-{suffix}")
