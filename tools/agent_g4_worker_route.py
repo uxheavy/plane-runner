@@ -7,8 +7,9 @@ and readback owners instead of turning the invoker into a persona verifier.
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
+import re
 from datetime import timedelta
 
 from django.utils import timezone
@@ -55,6 +56,7 @@ from plane.db.models import (
 from plane.db.models.operation_gateway import OperationGatewayAudit, OperationGatewayIdempotency
 from plane.operation_gateway.gateway import OperationGateway
 from plane.agent.lifecycle import create_actor, create_profile
+from plane.agent.lifecycle import code_mode_usage_totals
 from plane.agent.memory.services import review_proposal
 from plane.operation_gateway.operations import _LiveAgentContextAuthorization
 
@@ -676,7 +678,7 @@ def build_worker_route_evidence(
     if "W04" in route_checks:
         route["W04"] = {
             "positiveTypedHostCallback": (
-                int((run.cumulative_usage or {}).get("codeModeCalls", 0)) > 0
+                code_mode_usage_totals(run)["codeModeCalls"] > 0
                 and worker_code_mode_operation_observed(run, "work_item.rename")
             ),
             "sameGateway": gateway_records(OperationGatewayIdempotency).filter(
@@ -719,12 +721,38 @@ def build_worker_route_evidence(
     failures = []
     for route_id in scenario.expected["routeChecks"]:
         value = route.get(route_id, {})
-        boolean_values = (
-            [item for key, item in value.items() if key != "substitution"]
-            if isinstance(value, dict)
-            else []
-        )
-        if not isinstance(value, dict) or not all(item is True for item in boolean_values):
+        if route_id == "W03":
+            passed = (
+                isinstance(value, dict)
+                and set(value) == {
+                    "status",
+                    "semanticDelta",
+                    "duplicateMutation",
+                    "httpStatus",
+                    "receiptRef",
+                    "auditReceiptRef",
+                }
+                and value["status"] == "replayed"
+                and value["semanticDelta"] == 0
+                and value["duplicateMutation"] == 0
+                and value["httpStatus"] == 200
+                and isinstance(value["receiptRef"], str)
+                and value["receiptRef"].startswith("receipt:")
+                and len(value["receiptRef"].encode("utf-8")) <= 128
+                and re.fullmatch(r"[A-Za-z0-9_.:/-]+", value["receiptRef"]) is not None
+                and isinstance(value["auditReceiptRef"], str)
+                and value["auditReceiptRef"].startswith("audit-receipt:")
+                and len(value["auditReceiptRef"].encode("utf-8")) <= 128
+                and re.fullmatch(r"[A-Za-z0-9_.:/-]+", value["auditReceiptRef"]) is not None
+            )
+        else:
+            boolean_values = (
+                [item for key, item in value.items() if key != "substitution"]
+                if isinstance(value, dict)
+                else []
+            )
+            passed = isinstance(value, dict) and all(item is True for item in boolean_values)
+        if not passed:
             failures.append(f"route:{route_id}")
     return {
         "routes": route,

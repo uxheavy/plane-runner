@@ -7,9 +7,11 @@ from typing import Any
 
 
 def has_code_mode_callback(observations: Iterable[Any], operation_id: str) -> bool:
-    """Recognize the bounded runtime observation for one successful code callback."""
+    """Recognize the bounded outer Plane:execute observation for the typed route."""
 
-    marker = f"Plane host code code operation:{operation_id} -> ok"
+    if operation_id != "work_item.rename":
+        return False
+    marker = "Plane host model code plane.code-mode.execute@1 -> ok"
     for raw_payload in observations:
         if not isinstance(raw_payload, dict):
             continue

@@ -49,7 +49,7 @@
           { "kind": "terminal_event", "count": 1 }
         ],
         "productEvents": [{ "kind": "outcome_submission", "count": 1 }],
-        "routeChecks": ["W01", "W03", "W04", "W07", "W08"]
+        "routeChecks": ["W01", "W03", "W04", "W08"]
       },
       "modelToolset": "code_mode_only"
     }

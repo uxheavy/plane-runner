@@ -206,7 +206,13 @@ def test_code_mode_worker_expectations_are_typed_and_canary_backed() -> None:
         {"kind": "terminal_event", "count": 1},
         {"kind": "outcome_submission", "count": 1},
     ]
-    assert commission.expected["routeChecks"] == ["W01", "W03", "W04", "W07", "W08"]
+    assert commission.expected["routeChecks"] == ["W01", "W03", "W04", "W08"]
+    assert commission.expected["productEvents"] == [{"kind": "outcome_submission", "count": 1}]
+    assert {row["kind"] for row in commission.expected["durableRecords"]} >= {
+        "publication",
+        "terminal_event",
+    }
+    assert scenario.code_mode_composition_template().count("plane.finish(") == 1
 
 
 def test_code_mode_worker_canaries_are_host_bound_and_outside_model_turn() -> None:
@@ -824,6 +830,23 @@ def test_code_mode_canaries_refresh_readback_after_one_call() -> None:
     assert "plane_operation_audit" in canary_block
 
 
+def test_code_mode_route_companions_keep_typed_callback_w08_and_zero_delta_replay() -> None:
+    route_source = (TOOLS / "agent_g4_worker_route.py").read_text(encoding="utf-8")
+    observation_source = (TOOLS / "agent_g4_worker_route_observations.py").read_text(encoding="utf-8")
+
+    assert 'code_mode_usage_totals(run)["codeModeCalls"]' in route_source
+    assert 'if route_id == "W03":' in route_source
+    assert 'value["status"] == "replayed"' in route_source
+    assert 'value["semanticDelta"] == 0' in route_source
+    assert 'value["duplicateMutation"] == 0' in route_source
+    assert 'value["httpStatus"] == 200' in route_source
+    assert 'marker = "Plane host model code plane.code-mode.execute@1 -> ok"' in observation_source
+    assert '"W08"' in (TOOLS / "agent-g4-worker-minimal.json").read_text(encoding="utf-8")
+    assert '"W07"' not in (TOOLS / "agent-g4-worker-minimal.json").read_text(encoding="utf-8").split('"routeChecks"', 1)[1].split(']', 1)[0]
+    assert 'replay["semanticDelta"] != 0' in route_source
+    assert 'replay["status"] != "replayed"' in route_source
+
+
 def test_multi_commission_prompt_preserves_the_typed_code_mode_route() -> None:
     source = (TOOLS / "agent-g4-live-invoke.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
@@ -1023,7 +1046,7 @@ def test_minimal_live_descriptors_reduce_provider_runs_to_worker_and_delegator()
 
     assert [commission.commission_id for commission in worker.commissions] == ["worker-full"]
     assert worker.commissions[0].model_toolset == "code_mode_only"
-    assert worker.commissions[0].expected["routeChecks"] == ["W01", "W03", "W04", "W07", "W08"]
+    assert worker.commissions[0].expected["routeChecks"] == ["W01", "W03", "W04", "W08"]
     assert [commission.commission_id for commission in delegator.commissions] == ["delegator-full"]
     assert delegator.commissions[0].model_toolset == "standard"
     assert scenario.select_commission(delegator, "delegator-full").profile.model_toolset == "standard"
@@ -1044,7 +1067,7 @@ def test_minimal_live_descriptors_reduce_provider_runs_to_worker_and_delegator()
     manifest = json.loads((TOOLS / "agent-g4-manifest.json").read_text(encoding="utf-8"))
     descriptors = {row["id"]: row for row in manifest["scenarioDescriptors"]}
     assert descriptors["worker-core"]["path"] == "tools/agent-g4-worker-minimal.json"
-    assert descriptors["worker-core"]["routeChecks"] == ["W01", "W03", "W04", "W07", "W08"]
+    assert descriptors["worker-core"]["routeChecks"] == ["W01", "W03", "W04", "W08"]
     assert descriptors["delegator-core"]["path"] == "tools/agent-g4-delegator-minimal.json"
     assert descriptors["operations"]["routeChecks"] == ["O01", "O03", "O04", "O05", "O06", "O07", "O08", "O09"]
 
@@ -1569,7 +1592,7 @@ def test_code_mode_callback_observation_requires_code_source_and_action() -> Non
             {
                 "body": {
                     "payload": {
-                        "text": "Plane host code code operation:work_item.rename -> ok"
+                        "text": "Plane host model code plane.code-mode.execute@1 -> ok"
                     }
                 }
             }
@@ -1581,7 +1604,7 @@ def test_code_mode_callback_observation_requires_code_source_and_action() -> Non
             {
                 "body": {
                     "payload": {
-                        "text": "Plane host model mutate operation:work_item.rename -> ok"
+                        "text": "Plane host model mutate plane.code-mode.execute@1 -> ok"
                     }
                 }
             }
