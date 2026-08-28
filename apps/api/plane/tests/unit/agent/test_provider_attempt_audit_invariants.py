@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""Provider-free UT-014 coverage for multi-exchange provider audit."""
+"""Provider-free coverage for provider-attempt audit invariants."""
 
 from __future__ import annotations
 
@@ -81,8 +81,8 @@ def _runtime_frames(payload: bytes) -> tuple[str, ...]:
         "runId": snapshot["runId"],
         "invocationId": envelope["invocationId"],
         "sequence": 0,
-        "eventId": "event:ut014-usage",
-        "idempotencyKey": "idempotency:ut014-usage",
+        "eventId": "event:provider-attempt-audit-usage",
+        "idempotencyKey": "idempotency:provider-attempt-audit-usage",
         "correlationId": envelope["correlationId"],
         "causationRef": envelope["causationRef"],
         "observedAt": envelope["lease"]["expiresAt"],
@@ -109,7 +109,7 @@ def _runtime_frames(payload: bytes) -> tuple[str, ...]:
 
 
 @pytest.mark.django_db(transaction=True)
-def test_ut014_multiturn_provider_audit_does_not_consume_host_callback_budget(
+def test_provider_attempt_audit_preserves_ordering_replay_run_binding_budgets_and_terminal_state(
     tmp_path, workspace, gateway_project, gateway_issue, create_user, monkeypatch
 ):
     """Nine model exchanges use required audit callbacks without widening model budgets."""
@@ -121,7 +121,7 @@ def test_ut014_multiturn_provider_audit_does_not_consume_host_callback_budget(
     actor = create_actor(
         workspace=workspace,
         project=gateway_project,
-        display_name="UT-014 provider worker",
+        display_name="Provider attempt audit worker",
         created_by=create_user,
     )
     profile = create_profile(
@@ -138,8 +138,17 @@ def test_ut014_multiturn_provider_audit_does_not_consume_host_callback_budget(
         acceptance_criteria=["Nine completed provider exchanges remain ordered and replay-safe."],
         created_by=create_user,
     )
-    run = create_run(assignment, profile, idempotency_key="idempotency:ut014-run", created_by=create_user)
-    invocation = record_invocation(run, idempotency_key="idempotency:ut014-invocation", trigger="initial")
+    run = create_run(
+        assignment,
+        profile,
+        idempotency_key="idempotency:provider-attempt-audit-run",
+        created_by=create_user,
+    )
+    invocation = record_invocation(
+        run,
+        idempotency_key="idempotency:provider-attempt-audit-invocation",
+        trigger="initial",
+    )
 
     callback_calls: list[tuple[PlaneHostCall, object]] = []
     captured_clients: list[PlaneHostHTTPClient] = []
@@ -186,7 +195,7 @@ def test_ut014_multiturn_provider_audit_does_not_consume_host_callback_budget(
             for exchange in range(1, 10):
                 status = _provider_request(
                     relays[0],
-                    request_id=f"request:ut014-{exchange}",
+                    request_id=f"request:provider-attempt-audit-{exchange}",
                     run_id=run.snapshot["runId"],
                     invocation_id=invocation.invocation_id,
                 )
@@ -199,7 +208,7 @@ def test_ut014_multiturn_provider_audit_does_not_consume_host_callback_budget(
                             correlation_id=f"correlation:{run.id}",
                             action="discover",
                             operation_ref="plane.operations.discover@1",
-                            input={"query": f"exchange-{exchange}", "limit": 1},
+                            input={"query": f"rename one work item{' ' * exchange}"},
                             source="model",
                         )
                     )
@@ -209,7 +218,7 @@ def test_ut014_multiturn_provider_audit_does_not_consume_host_callback_budget(
                     provider_budget_statuses.append(
                         _provider_request(
                             relays[0],
-                            request_id="request:ut014-10",
+                            request_id="request:provider-attempt-audit-10",
                             run_id=run.snapshot["runId"],
                             invocation_id=invocation.invocation_id,
                         )
@@ -225,8 +234,8 @@ def test_ut014_multiturn_provider_audit_does_not_consume_host_callback_budget(
                     input={
                         "run_ref": run.snapshot["runId"],
                         "summary": "Nine bounded provider exchanges completed.",
-                        "artifacts": ["artifact:ut014-provider-audit"],
-                        "evidence": ["evidence:ut014-provider-audit"],
+                        "artifacts": ["artifact:provider-attempt-audit"],
+                        "evidence": ["evidence:provider-attempt-audit"],
                     },
                     source="model",
                 )
@@ -243,7 +252,7 @@ def test_ut014_multiturn_provider_audit_does_not_consume_host_callback_budget(
                     input={
                         "kind": "outcome",
                         "resourceRef": outcome_ref,
-                        "content": "Explicit UT-014 provider audit publication.",
+                        "content": "Explicit provider-attempt audit publication.",
                     },
                     source="model",
                 )
@@ -284,8 +293,8 @@ def test_ut014_multiturn_provider_audit_does_not_consume_host_callback_budget(
             out_of_order_input.update(
                 {
                     "phase": "intent",
-                    "requestId": "request:ut014-out-of-order",
-                    "idempotencyKey": "provider-attempt:ut014-out-of-order",
+                    "requestId": "request:provider-attempt-audit-out-of-order",
+                    "idempotencyKey": "provider-attempt:audit-out-of-order",
                     "sequence": 12,
                     "upstreamInitiated": False,
                     "statusClass": "",
@@ -303,9 +312,9 @@ def test_ut014_multiturn_provider_audit_does_not_consume_host_callback_budget(
                     source="runtime",
                 )
             )
-            invalid_callback_results["crossBound"] = client.invoke(
+            invalid_callback_results["wrong_run"] = client.invoke(
                 PlaneHostCall(
-                    run_id="run:ut014-other",
+                    run_id="run:provider-attempt-audit-other",
                     invocation_id=invocation.invocation_id,
                     correlation_id=f"correlation:{run.id}",
                     action="observe",
@@ -349,8 +358,8 @@ def test_ut014_multiturn_provider_audit_does_not_consume_host_callback_budget(
             relays.append(relay)
             return relay
 
-    shared_secret = "ut014-runtime-secret-0123456789x"
-    state_file = tmp_path / "ut014-credential-state.json"
+    shared_secret = "provider-attempt-audit-runtime-secret-0123456789x"
+    state_file = tmp_path / "provider-attempt-audit-credential-state.json"
     runtime_environment = {
         "PLANE_AGENT_RUNTIME_URL": "http://127.0.0.1:1",
         "PLANE_AGENT_RUNTIME_SECRET": shared_secret,
@@ -399,7 +408,7 @@ def test_ut014_multiturn_provider_audit_does_not_consume_host_callback_budget(
             call_command(
                 "agent_supervisor",
                 invocation_ref=invocation.invocation_id,
-                worker_id="worker:ut014",
+                worker_id="worker:provider-attempt-audit",
                 model_call_allowance=9,
                 stdout=None,
             )
@@ -447,8 +456,8 @@ def test_ut014_multiturn_provider_audit_does_not_consume_host_callback_budget(
     assert invalid_callback_results["mismatched"].error_code == "PROVIDER_ATTEMPT_REJECTED"
     assert invalid_callback_results["outOfOrder"].status not in {"ok", "replayed"}
     assert invalid_callback_results["outOfOrder"].error_code == "PROVIDER_ATTEMPT_REJECTED"
-    assert invalid_callback_results["crossBound"].status == "denied"
-    assert invalid_callback_results["crossBound"].error_code == "CALLBACK_BINDING_INVALID"
+    assert invalid_callback_results["wrong_run"].status == "denied"
+    assert invalid_callback_results["wrong_run"].error_code == "CALLBACK_BINDING_INVALID"
     assert captured_servers[0].call_count == 32
     assert captured_servers[0].observation_count == 32
 
@@ -461,8 +470,8 @@ def test_ut014_multiturn_provider_audit_does_not_consume_host_callback_budget(
     out_of_order.update(
         {
             "phase": "intent",
-            "requestId": "request:ut014-out-of-order",
-            "idempotencyKey": "provider-attempt:ut014-out-of-order",
+            "requestId": "request:provider-attempt-audit-out-of-order",
+            "idempotencyKey": "provider-attempt:audit-out-of-order",
             "sequence": 12,
             "upstreamInitiated": False,
             "statusClass": "",
@@ -472,12 +481,19 @@ def test_ut014_multiturn_provider_audit_does_not_consume_host_callback_budget(
     with pytest.raises(Exception, match="sequence"):
         record_provider_attempt_notice(invocation, out_of_order)
 
-        cross_bound = dict(out_of_order)
-        with pytest.raises(Exception, match="bound"):
-            supervisor_command._provider_attempt_notice_for_plane(invocation, type("Call", (), {
-            "run_id": "run:ut014-other",
-            "invocation_id": invocation.invocation_id,
-            "input": cross_bound,
-        })())
+    wrong_run = dict(out_of_order)
+    with pytest.raises(Exception, match="runtime provider attempt binding is invalid"):
+        supervisor_command._provider_attempt_notice_for_plane(
+            invocation,
+            type(
+                "Call",
+                (),
+                {
+                    "run_id": "run:provider-attempt-audit-other",
+                    "invocation_id": invocation.invocation_id,
+                    "input": wrong_run,
+                },
+            )(),
+        )
 
-    assert hashlib.sha256(b"request:ut014-10").hexdigest() in notices[-1]["idempotencyKey"]
+    assert hashlib.sha256(b"request:provider-attempt-audit-10").hexdigest() in notices[-1]["idempotencyKey"]
