@@ -184,7 +184,6 @@ run_api() {
         --network "${NETWORK_NAME}" \
         "${API_ENV[@]}" \
         --entrypoint /bin/sh \
-        --mount "type=bind,src=${ROOT_DIR}/packages/agent-runtime-contract,dst=/workspace/packages/agent-runtime-contract,readonly" \
         --mount "type=bind,src=${MANIFEST},dst=/workspace/agent-g4-manifest.json,readonly" \
         --mount "type=bind,src=${MCP_ROOT},dst=/workspace/external/plane-mcp-server,readonly" \
         --mount "type=bind,src=${SDK_ROOT},dst=/workspace/external/plane-python-sdk,readonly" \

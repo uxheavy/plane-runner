@@ -122,7 +122,7 @@ def source_hashes(candidate: str) -> dict[str, str]:
 
 
 def verify_runtime_contract_artifacts() -> None:
-    """Reject generated runtime-contract bindings that do not match their bytes."""
+    """Reject runtime-contract manifest entries that do not match their bytes."""
 
     directory = RUNTIME_CONTRACT_DIRECTORY
     manifest_path = directory / "manifest.json"

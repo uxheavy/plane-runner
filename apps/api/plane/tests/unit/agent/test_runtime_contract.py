@@ -215,7 +215,7 @@ def test_prepared_call_reason_is_owner_evidence_only(tmp_path):
     }
 
 
-def test_runtime_event_and_exit_use_generated_schema_validation():
+def test_runtime_event_and_exit_use_checked_in_schema_validation():
     assert validate_runtime_event(_event())["body"]["kind"] == "progress_observed"
     assert validate_runtime_exit(_exit())["kind"] == "completed"
 

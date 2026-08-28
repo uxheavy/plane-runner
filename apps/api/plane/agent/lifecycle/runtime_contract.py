@@ -1,11 +1,11 @@
 # Copyright (c) 2026-present Ngo Quoc Huy
 # SPDX-License-Identifier: AGPL-3.0-only
 
-"""Boundary adapter for the generated Plane Agent runtime contract.
+"""Boundary adapter for the Plane Agent runtime contract.
 
-The JSON Schema files under ``contract_artifacts`` are an exact mechanical
-copy of the accepted L1 package.  This module only verifies and executes those
-artifacts; it does not carry a second hand-maintained protocol definition.
+The JSON Schema files under ``contract_artifacts`` are the runtime-consumed
+contract. This module verifies and executes those artifacts without carrying a
+second protocol definition.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ MAX_INTEGER = 2_147_483_647
 
 # This is deliberately one deterministic path inside the API artifact.  The
 # API image copies ``plane/`` as a unit, so the bytes are available in both
-# host checkouts and ``/code`` containers without a runtime package fallback.
+# host checkouts and ``/code`` containers.
 ARTIFACT_DIRECTORY = Path(__file__).resolve().parent / "contract_artifacts" / "v1"
 EXPECTED_MANIFEST_SHA256 = "7d802c2d6411f7d42e71946ba8b11759a8e0b7ebbd7317d53f5a0d4ec3353d6c"
 LEGACY_COMMAND_FINGERPRINT_PREFIX = "legacy1:"
@@ -121,7 +121,7 @@ def contract_digests() -> dict[str, str]:
 
 
 def canonical_json(value: Any) -> str:
-    """Match the L1 canonical JSON writer for persisted JSON values."""
+    """Encode persisted JSON values in the accepted canonical form."""
 
     try:
         return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
@@ -162,7 +162,7 @@ def snapshot_digest(content: dict[str, Any]) -> str:
 
 
 def namespaced_ref(namespace: str, value: str) -> str:
-    """Construct an exact L1 reference without normalizing caller input."""
+    """Construct an exact reference without normalizing caller input."""
 
     if not isinstance(namespace, str) or not isinstance(value, str):
         raise RuntimeContractError("runtime references require string namespace and value")
@@ -177,7 +177,7 @@ def _schema_validator(name: str, schemas: dict[str, dict[str, Any]]):
     try:
         from jsonschema import Draft202012Validator, validators
     except ImportError as exc:
-        raise RuntimeContractError("the generated runtime schema validator is unavailable") from exc
+        raise RuntimeContractError("the runtime schema validator is unavailable") from exc
 
     def utf8_byte_max(validator, limit, instance, schema):
         if isinstance(instance, str) and len(instance.encode("utf-8")) > limit:
@@ -218,7 +218,7 @@ def _compiled_validator(name: str):
 
 
 def _validator(name: str):
-    """Verify packaged bytes on every use before consulting the validator cache."""
+    """Verify artifact bytes on every use before consulting the validator cache."""
 
     _verified_contract_artifacts()
     return _compiled_validator(name)
@@ -247,7 +247,7 @@ def _validate(name: str, value: Any) -> dict[str, Any]:
 
 
 def validate_run_snapshot(snapshot: Any) -> dict[str, Any]:
-    """Validate a snapshot with the exact generated L1 schema and digest."""
+    """Validate a snapshot with the accepted schema and digest."""
 
     value = _validate("run-snapshot", snapshot)
     if value["contractDigests"] != contract_digests():
@@ -259,19 +259,19 @@ def validate_run_snapshot(snapshot: Any) -> dict[str, Any]:
 
 
 def validate_invocation_envelope(envelope: Any) -> dict[str, Any]:
-    """Validate an invocation envelope with the exact generated L1 schema."""
+    """Validate an invocation envelope with the accepted schema."""
 
     return _validate("invocation-envelope", envelope)
 
 
 def validate_runtime_event(event: Any) -> dict[str, Any]:
-    """Validate an untrusted RuntimeEvent with the generated L1 schema."""
+    """Validate an untrusted RuntimeEvent with the accepted schema."""
 
     return _validate("runtime-event", event)
 
 
 def validate_runtime_exit(exit_frame: Any) -> dict[str, Any]:
-    """Validate a RuntimeExit evidence frame with the generated L1 schema."""
+    """Validate a RuntimeExit evidence frame with the accepted schema."""
 
     return _validate("runtime-exit", exit_frame)
 
