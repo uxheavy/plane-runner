@@ -291,7 +291,6 @@
     "cleanup"
   ],
   "verifierTests": [
-    "tools/tests/test_agent_g4_contract.py",
     "tools/tests/test_local_dev_topology.py",
     "tools/tests/test_agent_g4_operations.py"
   ]

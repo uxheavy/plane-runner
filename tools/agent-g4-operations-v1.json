@@ -42,7 +42,7 @@
     "operation-gateway.idempotency-and-zero-delta-replay": [
       "apps/api/plane/tests/contract/api/test_operation_gateway.py::test_mutation_replay_is_stable_and_does_not_repeat_plane_service",
       "apps/api/plane/tests/contract/api/test_operation_gateway.py::test_concurrent_first_use_applies_and_publishes_once",
-      "tools/tests/test_agent_g4_contract.py::test_successful_replay_gate_uses_durable_identity_and_zero_delta"
+      "tools/tests/test_runtime_evidence_boundaries.py::test_replay_requires_same_identity_and_zero_side_effects"
     ],
     "code-mode.callback-binding-and-confinement": [
       "apps/api/plane/tests/unit/agent/test_adr0011_code_mode.py::test_restricted_child_receives_only_frozen_task_and_plane_and_supports_read_mutation",
@@ -88,7 +88,7 @@
     "artifacts.bounded": [
       "apps/api/plane/tests/contract/api/test_operation_gateway.py::test_native_gateway_result_ceiling_accepts_8192_and_rejects_8193",
       "apps/api/plane/tests/unit/agent/test_runtime_transport.py::test_diagnostics_are_bounded_and_never_persisted",
-      "tools/tests/test_agent_g4_contract.py::test_failure_evidence_is_bounded_structural_and_excludes_sensitive_runtime_data"
+      "tools/tests/test_runtime_evidence_boundaries.py::test_failure_evidence_is_finite_and_excludes_sensitive_values"
     ],
     "operations.load-health-quota-safety-stop-audit-rollback": [
       "apps/api/plane/tests/contract/api/test_operation_gateway_g4.py::test_postgresql_gateway_workload_measures_real_quota_and_audit_evidence",
@@ -115,7 +115,9 @@
         "plane/tests/contract/api/test_operation_gateway_g4.py"
       ]},
       { "stage": "g4-runtime-contracts", "command": "g4_runtime_contracts", "testIds": [
-        "tools/tests/test_agent_g4_live_scenario.py", "tools/tests/test_agent_g4_live_support.py", "tools/tests/test_agent_g4_contract.py",
+        "tools/tests/test_agent_g4_live_scenario.py", "tools/tests/test_agent_g4_live_support.py",
+        "tools/tests/test_live_authority_validation.py", "tools/tests/test_runtime_evidence_boundaries.py",
+        "tools/tests/test_runtime_image_builder.py",
         "plane/tests/unit/agent/test_g4_runtime_boundary.py", "apps/api/plane/tests/unit/agent/test_adr0011_code_mode.py"
       ]},
       { "stage": "g4-cross-process", "command": "g4_pytest plane/tests/unit/agent/test_g4_runtime_cross_process.py", "testIds": ["plane/tests/unit/agent/test_g4_runtime_cross_process.py"]},
