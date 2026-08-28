@@ -63,7 +63,9 @@ const parseRuntimeExit = (value: unknown) => parseRuntimeExitWire(toWire(value))
 const computeTrustedHumanInputAnswerDigest = (value: unknown) =>
   computeTrustedHumanInputAnswerDigestWire(toWire(value));
 
-const manifestDirectory = fileURLToPath(new URL("../schemas/v1/", import.meta.url));
+const manifestDirectory = fileURLToPath(
+  new URL("../../../apps/api/plane/agent/lifecycle/contract_artifacts/v1/", import.meta.url)
+);
 
 export const manifest: ContractManifest = parseContractManifestWire(
   readFileSync(`${manifestDirectory}/manifest.json`, "utf8")

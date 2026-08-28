@@ -5,8 +5,7 @@
   "description": "Versioned Plane Agent runtime contract and generated JSON Schemas",
   "license": "AGPL-3.0-only",
   "files": [
-    "dist",
-    "schemas"
+    "dist"
   ],
   "type": "module",
   "main": "./dist/index.mjs",

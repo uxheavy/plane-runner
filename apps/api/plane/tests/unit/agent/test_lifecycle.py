@@ -371,13 +371,6 @@ def test_manifest_bytes_are_the_contract_source_of_truth():
 
 
 @pytest.mark.django_db
-def test_host_and_api_artifact_bytes_are_identical():
-    source_directory = Path(__file__).resolve().parents[6] / "packages/agent-runtime-contract/schemas/v1"
-    for artifact in ARTIFACT_DIRECTORY.glob("*.json"):
-        assert artifact.read_bytes() == (source_directory / artifact.name).read_bytes()
-
-
-@pytest.mark.django_db
 def test_missing_or_tampered_contract_artifacts_fail_closed(tmp_path, monkeypatch):
     import shutil
 

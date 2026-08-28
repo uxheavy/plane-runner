@@ -17,7 +17,9 @@ import { generateSchemas } from "../scripts/generate-schemas.mjs";
 import { schemas } from "../src/schema-source.mjs";
 
 const packageDirectory = fileURLToPath(new URL("..", import.meta.url));
-const schemaDirectory = fileURLToPath(new URL("../schemas/v1/", import.meta.url));
+const schemaDirectory = fileURLToPath(
+  new URL("../../../apps/api/plane/agent/lifecycle/contract_artifacts/v1/", import.meta.url)
+);
 const generatorPath = fileURLToPath(new URL("../scripts/generate-schemas.mjs", import.meta.url));
 const generatedNames = [
   "run-snapshot",

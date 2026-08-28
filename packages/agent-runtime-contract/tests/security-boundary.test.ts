@@ -4,9 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
 
 import { describe, expect, test, vi } from "vitest";
 
@@ -58,9 +56,6 @@ import {
 import { event, observationBody } from "./fixtures";
 
 const packageRequire = createRequire(import.meta.url);
-const packageManifest = JSON.parse(
-  readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8")
-) as { exports: Record<string, string> };
 const wire = (value: unknown): string => JSON.stringify(value);
 
 const expectFrozenError = (error: unknown): void => {
@@ -469,11 +464,9 @@ describe("serialized runtime-contract boundary", () => {
     }
   });
 
-  test("keeps raw schemas and internal modules inaccessible through package exports", async () => {
-    expect(packageManifest.exports).not.toHaveProperty("./schemas/v1/*");
+  test("keeps internal modules inaccessible through package exports", async () => {
     expect(packageRequire.resolve("@plane/agent-runtime-contract")).toMatch(/dist\/index\.mjs$/);
     const inaccessibleSubpaths = [
-      "schemas/v1/runtime-event.schema.json",
       "src/contracts",
       "src/schema-validator",
       "src/internal-byte-utils",

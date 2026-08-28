@@ -7,7 +7,9 @@ import { tmpdir } from "node:os";
 
 import { protocol as defaultProtocol, schemas as defaultSchemas } from "../src/schema-source.mjs";
 
-const defaultOutputDirectory = fileURLToPath(new URL("../schemas/v1/", import.meta.url));
+const defaultOutputDirectory = fileURLToPath(
+  new URL("../../../apps/api/plane/agent/lifecycle/contract_artifacts/v1/", import.meta.url)
+);
 const defaultLocalFormatterPath = fileURLToPath(new URL("../../../node_modules/.bin/oxfmt", import.meta.url));
 const defaultFormatterConfigPath = fileURLToPath(new URL("../../../.oxfmtrc.json", import.meta.url));
 export const manifestFilename = "manifest.json";

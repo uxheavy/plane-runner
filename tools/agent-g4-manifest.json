@@ -37,7 +37,6 @@
   },
   "contracts": [
     "apps/api/plane/agent/lifecycle/contract_artifacts/v1/manifest.json",
-    "packages/agent-runtime-contract/schemas/v1/manifest.json",
     "tools/agent-g4-live-authority.schema.json",
     "tools/agent-g4-live-config.schema.json",
     "tools/agent-g4-live-evidence.schema.json"

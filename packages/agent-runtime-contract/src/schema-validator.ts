@@ -6,11 +6,11 @@
 
 import Ajv2020, { type ValidateFunction } from "ajv/dist/2020.js";
 
-import invocationEnvelopeSchema from "../schemas/v1/invocation-envelope.schema.json" with { type: "json" };
-import runSnapshotSchema from "../schemas/v1/run-snapshot.schema.json" with { type: "json" };
-import runtimeDurableStateSchema from "../schemas/v1/runtime-durable-state.schema.json" with { type: "json" };
-import runtimeEventSchema from "../schemas/v1/runtime-event.schema.json" with { type: "json" };
-import runtimeExitSchema from "../schemas/v1/runtime-exit.schema.json" with { type: "json" };
+import invocationEnvelopeSchema from "../../../apps/api/plane/agent/lifecycle/contract_artifacts/v1/invocation-envelope.schema.json" with { type: "json" };
+import runSnapshotSchema from "../../../apps/api/plane/agent/lifecycle/contract_artifacts/v1/run-snapshot.schema.json" with { type: "json" };
+import runtimeDurableStateSchema from "../../../apps/api/plane/agent/lifecycle/contract_artifacts/v1/runtime-durable-state.schema.json" with { type: "json" };
+import runtimeEventSchema from "../../../apps/api/plane/agent/lifecycle/contract_artifacts/v1/runtime-event.schema.json" with { type: "json" };
+import runtimeExitSchema from "../../../apps/api/plane/agent/lifecycle/contract_artifacts/v1/runtime-exit.schema.json" with { type: "json" };
 import { PLANE_AGENT_RUNTIME_PROTOCOL, type ContractJsonInput } from "./contracts";
 import { utf8ByteLengthAtMost, utf8ByteLengthUpTo } from "./internal-utf8-utils";
 
