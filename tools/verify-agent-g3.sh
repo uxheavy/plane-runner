@@ -439,7 +439,7 @@ else
 fi
 python -m compileall -q plane/agent plane/operation_gateway plane/tests/unit/agent plane/tests/contract/api
 python manage.py shell -c 'from django.db import connection; from django.db.migrations.executor import MigrationExecutor; e=MigrationExecutor(connection); leaves=set(e.loader.graph.leaf_nodes(\"db\")); applied=set(e.recorder.applied_migrations()); assert leaves == {(\"db\", \"0146_runtime_reconciliation_audit_fields\")}; assert not leaves-applied; print(\"event=agent.g3.api.migration_leaf status=passed leaf=0146\")'
-PLANE_AUDIT_ENFORCE_ROLE_SEPARATION=0 pytest -p plane.tests.g3_no_skips --migrations -q -o addopts='--strict-markers --reuse-db' -o cache_dir=/tmp/g3-pytest ${G3_TEST_PATHS[*]}
+PLANE_AUDIT_ENFORCE_ROLE_SEPARATION=0 pytest -p plane.tests.g3_no_skips --migrations -q --maxfail=1 -o addopts='--strict-markers --reuse-db' -o cache_dir=/tmp/g3-pytest ${G3_TEST_PATHS[*]}
 if [ "\${RUFF_STATUS}" -ne 0 ]; then exit "\${RUFF_STATUS}"; fi
 if [ "\${RUFF_FORMAT_STATUS}" -ne 0 ]; then exit "\${RUFF_FORMAT_STATUS}"; fi
 "
