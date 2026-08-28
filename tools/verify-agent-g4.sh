@@ -710,7 +710,8 @@ raise SystemExit(0 if result["passes"] else 1)
 
 g4_runtime_contracts() {
     python3 -m pytest -q \
-        "${ROOT_DIR}/tools/tests/test_agent_g4_live_scenario.py" \
+        "${ROOT_DIR}/tools/tests/test_scenario_descriptor_boundaries.py" \
+        "${ROOT_DIR}/tools/tests/test_scenario_runtime_semantics.py" \
         "${ROOT_DIR}/tools/tests/test_agent_g4_live_support.py" \
         "${ROOT_DIR}/tools/tests/test_live_authority_validation.py" \
         "${ROOT_DIR}/tools/tests/test_runtime_evidence_boundaries.py" \

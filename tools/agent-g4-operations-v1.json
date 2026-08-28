@@ -115,7 +115,8 @@
         "plane/tests/contract/api/test_operation_gateway_g4.py"
       ]},
       { "stage": "g4-runtime-contracts", "command": "g4_runtime_contracts", "testIds": [
-        "tools/tests/test_agent_g4_live_scenario.py", "tools/tests/test_agent_g4_live_support.py",
+        "tools/tests/test_scenario_descriptor_boundaries.py", "tools/tests/test_scenario_runtime_semantics.py",
+        "tools/tests/test_agent_g4_live_support.py",
         "tools/tests/test_live_authority_validation.py", "tools/tests/test_runtime_evidence_boundaries.py",
         "tools/tests/test_runtime_image_builder.py",
         "plane/tests/unit/agent/test_g4_runtime_boundary.py", "apps/api/plane/tests/unit/agent/test_adr0011_code_mode.py"

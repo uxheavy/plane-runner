@@ -28,7 +28,8 @@ trap cleanup EXIT INT TERM
 live_capacity_lease_acquire
 
 python3 -m pytest -q \
-    "${ROOT_DIR}/tools/tests/test_agent_g4_live_scenario.py" \
+    "${ROOT_DIR}/tools/tests/test_scenario_descriptor_boundaries.py" \
+    "${ROOT_DIR}/tools/tests/test_scenario_runtime_semantics.py" \
     "${ROOT_DIR}/tools/tests/test_agent_g4_live_support.py"
 
 docker compose -p "${COMPOSE_PROJECT}" -f "${ROOT_DIR}/docker-compose-test.yml" run --rm api-tests pytest -q \
