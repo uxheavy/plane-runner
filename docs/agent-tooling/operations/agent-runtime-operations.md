@@ -4,7 +4,7 @@ This runbook covers only provider-free verification of the durable runtime bound
 
 ## Readiness and bounded diagnostics
 
-`tools/verify-agent-g4.sh --offline` requires the manifest-pinned local API and runtime images and the pinned clean Hermes, MCP, and SDK checkouts. It validates image digests and labels before running tests. Runtime diagnostics remain finite structural fields; raw messages, prompts, arguments, credentials, and provider payloads are not verification evidence.
+`tools/verify-agent-g4.sh --offline` requires the manifest-pinned local API and runtime images, the pinned clean Hermes, MCP, and SDK checkouts, and a project virtualenv containing the exact pytest pin from `apps/api/requirements/test.txt`. Set `PLANE_G4_TOOLING_PYTHON` to that virtualenv's Python when it is not `python3`. The verifier rejects a missing or mismatched pytest version before starting. It validates image digests and labels before running tests. Runtime diagnostics remain finite structural fields; raw messages, prompts, arguments, credentials, and provider payloads are not verification evidence.
 
 ## Provider-free checks
 
@@ -22,7 +22,8 @@ python3 tools/verify-agent-g4-operations.py \
 
 The receipt schema is `plane-agent-g4/provider-free-verifier-receipt/v1`. It
 contains only the exact source candidate, immutable pins, stage names and
-statuses, cleanup status, and `providerAttempts:0`.
+statuses, cleanup status, and `providerExecutionInvoked:false`. This field
+describes the provider-free verifier mode; it is not a measured provider-attempt count.
 
 The canonical verifier covers:
 

@@ -42,6 +42,8 @@ API_SOURCE_REVISION="$(manifest_pin pins.apiArtifact.sourceRevision)"
 API_CONTRACT="$(manifest_pin pins.apiArtifact.contract)"
 API_TEST_IMAGE="${PLANE_API_TEST_IMAGE:-${API_TEST_IMAGE_TAG}}"
 RUNTIME_IMAGE="${PLANE_G4_RUNTIME_IMAGE:-${RUNTIME_IMAGE_TAG}}"
+TOOLING_PYTHON="${PLANE_G4_TOOLING_PYTHON:-python3}"
+TOOLING_PYTEST_VERSION="$(sed -n 's/^pytest==//p' "${ROOT_DIR}/apps/api/requirements/test.txt")"
 CURRENT_STEP="preflight"
 STAGE_COUNT=0
 STACK_STARTED=0
@@ -440,7 +442,7 @@ run_api() {
         --entrypoint /bin/sh \
         --mount "type=bind,src=${MCP_ROOT},dst=/workspace/external/plane-mcp-server,readonly" \
         --mount "type=bind,src=${SDK_ROOT},dst=/workspace/external/plane-python-sdk,readonly" \
-        --mount "type=bind,src=${EXTERNAL_SUPERPROJECT_ROOT}/.git/modules,dst=/workspace/.git/modules,readonly" \
+        --mount "type=bind,src=${EXTERNAL_MODULES_DIR},dst=/workspace/.git/modules,readonly" \
         --mount "type=bind,src=${HERMES_ROOT},dst=/workspace/hermes-agent,readonly" \
         --mount "type=bind,src=${ROOT_DIR}/tools/agent-g4-manifest.json,dst=/run/plane-agent-g4-manifest.json,readonly" \
         --mount "type=bind,src=${G4_RUNTIME_LOG_DIR},dst=/workspace/apps/api/plane/logs" \
@@ -561,7 +563,7 @@ raise SystemExit(0 if result["passes"] else 1)
 }
 
 g4_runtime_contracts() {
-    python3 -m pytest -q \
+    "${TOOLING_PYTHON}" -m pytest -q \
         "${ROOT_DIR}/tools/tests/test_agent_g4_operations.py" \
         "${ROOT_DIR}/tools/tests/test_build_agent_api_image.py" \
         "${ROOT_DIR}/tools/tests/test_runtime_image_builder.py"
@@ -641,7 +643,7 @@ receipt = {
         "cleanupExitCode": int(cleanup_status),
         "taskResourcesRemovedOrChecked": cleanup_status == "0",
     },
-    "providerAttempts": 0,
+    "providerExecutionInvoked": False,
 }
 payload = (json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n").encode()
 temporary = output.with_name(f".{output.name}.{os.getpid()}.tmp")
@@ -722,6 +724,9 @@ command -v docker >/dev/null 2>&1 || fail "Docker is available" "docker_unavaila
 command -v git >/dev/null 2>&1 || fail "Git is available" "git_unavailable" "install Git"
 command -v gitleaks >/dev/null 2>&1 || fail "gitleaks is available" "gitleaks_unavailable" "install gitleaks locally"
 command -v python3 >/dev/null 2>&1 || fail "Python 3 is available" "python3_unavailable" "install Python 3"
+command -v "${TOOLING_PYTHON}" >/dev/null 2>&1 || fail "tooling Python is available" "tooling_python_unavailable=${TOOLING_PYTHON}" "set PLANE_G4_TOOLING_PYTHON to the project virtualenv Python"
+ACTUAL_TOOLING_PYTEST_VERSION="$("${TOOLING_PYTHON}" -c 'import pytest; print(pytest.__version__)' 2>/dev/null)" || fail "tooling pytest=${TOOLING_PYTEST_VERSION}" "pytest_unavailable=${TOOLING_PYTHON}" "install apps/api/requirements/test.txt in the project virtualenv"
+[[ "${ACTUAL_TOOLING_PYTEST_VERSION}" == "${TOOLING_PYTEST_VERSION}" ]] || fail "tooling pytest=${TOOLING_PYTEST_VERSION}" "actual=${ACTUAL_TOOLING_PYTEST_VERSION}" "use the exact apps/api/requirements/test.txt pytest pin"
 docker compose version >/dev/null 2>&1 || fail "Docker Compose is available" "compose_unavailable" "enable Docker Compose"
 
 CURRENT_STEP="preflight"
@@ -806,6 +811,6 @@ run_logged g4-production-configuration g4_production_configuration
 
 CURRENT_STEP="provider-boundary"
 STAGE_COUNT=$((STAGE_COUNT + 1))
-emit "provider-boundary" passed "exit_code=0" "restricted_live_execution=external" "provider_attempts=0"
+emit "provider-boundary" passed "exit_code=0" "restricted_live_execution=external" "provider_execution=not_invoked"
 
 exit 0

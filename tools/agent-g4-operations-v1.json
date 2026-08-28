@@ -1,7 +1,7 @@
 {
   "schemaVersion": "plane.agent-operations-package/v1",
   "packageId": "g4-operations-minimal",
-  "providerAttempts": 0,
+  "providerExecutionInvoked": false,
   "checks": [
     "authorization.canary.permitted",
     "authorization.canary.denied",

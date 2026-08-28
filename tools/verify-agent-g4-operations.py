@@ -112,14 +112,14 @@ def _load_receipt(
         raise OperationsEvidenceError("verifier_receipt_invalid") from exc
     if not isinstance(receipt, dict) or set(receipt) != {
         "schemaVersion", "status", "mode", "runtimeSourceCandidate", "verifierRevision", "pins",
-        "stageResults", "cleanup", "providerAttempts",
+        "stageResults", "cleanup", "providerExecutionInvoked",
     }:
         raise OperationsEvidenceError("verifier_receipt_invalid")
     if (
         receipt["schemaVersion"] != _RECEIPT_SCHEMA
         or receipt["status"] != "passed"
         or receipt["mode"] != "provider-free"
-        or receipt["providerAttempts"] != 0
+        or receipt["providerExecutionInvoked"] is not False
     ):
         raise OperationsEvidenceError("verifier_receipt_not_passed_provider_free")
     source = binding["sourceBinding"]
@@ -221,7 +221,7 @@ def validate_evidence(
     )
     if (
         manifest.get("schemaVersion") != "plane.agent-operations-package/v1"
-        or manifest.get("providerAttempts") != 0
+        or manifest.get("providerExecutionInvoked") is not False
         or set(manifest.get("checks", [])) != set(manifest.get("testIds", {}))
     ):
         raise OperationsEvidenceError("operations_manifest_invalid")
@@ -259,7 +259,7 @@ def validate_evidence(
         "packageId": manifest["packageId"],
         "runtimeSourceCandidate": receipt["runtimeSourceCandidate"],
         "verifierRevision": receipt["verifierRevision"],
-        "providerAttempts": 0,
+        "providerExecutionInvoked": False,
         "checks": rows,
         "externalClientProof": external,
         "zeroProductEffectsOnDenial": {

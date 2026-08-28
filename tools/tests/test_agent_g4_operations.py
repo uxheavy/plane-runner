@@ -48,7 +48,7 @@ def _receipt() -> dict[str, object]:
             "cleanupExitCode": 0,
             "taskResourcesRemovedOrChecked": True,
         },
-        "providerAttempts": 0,
+        "providerExecutionInvoked": False,
     }
 
 
@@ -69,7 +69,7 @@ def test_canonical_receipt_proves_operations_external_client_and_denial(tmp_path
 
     result = operations.validate_evidence(path, verifier_revision=_verifier_revision())
 
-    assert result["providerAttempts"] == 0
+    assert result["providerExecutionInvoked"] is False
     assert all(row["status"] == "pass" for row in result["checks"])
     assert result["externalClientProof"]["passed"] is True
     assert result["zeroProductEffectsOnDenial"]["proved"] is True
@@ -79,7 +79,7 @@ def test_canonical_receipt_proves_operations_external_client_and_denial(tmp_path
 
 
 @pytest.mark.parametrize("mutation,error", [
-    (lambda value: value.update(providerAttempts=1), "not_passed_provider_free"),
+    (lambda value: value.update(providerExecutionInvoked=True), "not_passed_provider_free"),
     (lambda value: value.update(runtimeSourceCandidate="0" * 40), "runtime_source_binding_mismatch"),
     (lambda value: value.update(verifierRevision="0" * 40), "verifier_revision_mismatch"),
     (
