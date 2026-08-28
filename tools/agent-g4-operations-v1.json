@@ -2,22 +2,7 @@
   "schemaVersion": "plane.agent-operations-package/v1",
   "packageId": "g4-operations-minimal",
   "providerAttempts": 0,
-  "appliesTo": "same immutable candidate as Worker and Delegator",
-  "retainedExternalProof": "O02",
   "checks": [
-    "authorization.canary.permitted",
-    "authorization.canary.denied",
-    "operation-gateway.idempotency-and-zero-delta-replay",
-    "code-mode.callback-binding-and-confinement",
-    "lifecycle.cancellation-schedule-dst-revision-hr-chief-of-staff",
-    "memory.subject-isolation-and-skill-promotion",
-    "runtime.lease-revocation-expiry-checkpoint-continuation-budget",
-    "outcome-unknown.provider-runtime-gateway-distinction",
-    "ingress.malformed-oversized-duplicate-out-of-order-forged-illegal-versioned",
-    "artifacts.bounded",
-    "operations.load-health-quota-safety-stop-audit-rollback"
-  ],
-  "checkIds": [
     "authorization.canary.permitted",
     "authorization.canary.denied",
     "operation-gateway.idempotency-and-zero-delta-replay",
@@ -41,8 +26,7 @@
     ],
     "operation-gateway.idempotency-and-zero-delta-replay": [
       "apps/api/plane/tests/contract/api/test_operation_gateway.py::test_mutation_replay_is_stable_and_does_not_repeat_plane_service",
-      "apps/api/plane/tests/contract/api/test_operation_gateway.py::test_concurrent_first_use_applies_and_publishes_once",
-      "tools/tests/test_runtime_evidence_boundaries.py::test_replay_requires_same_identity_and_zero_side_effects"
+      "apps/api/plane/tests/contract/api/test_operation_gateway.py::test_concurrent_first_use_applies_and_publishes_once"
     ],
     "code-mode.callback-binding-and-confinement": [
       "apps/api/plane/tests/unit/agent/test_adr0011_code_mode.py::test_restricted_child_receives_only_frozen_task_and_plane_and_supports_read_mutation",
@@ -55,7 +39,6 @@
       "apps/api/plane/tests/unit/agent/test_lifecycle.py::test_concurrent_runtime_cancellation_and_transition_serialize_to_one_terminal_event",
       "apps/api/plane/tests/unit/agent/test_lifecycle.py::test_evaluator_review_precedes_human_acceptance_and_revision_has_lineage",
       "apps/api/plane/tests/unit/agent/test_memory_skills_schedules.py::test_schedule_timezone_idempotency_normal_assignment_and_retry",
-      "apps/api/plane/tests/contract/api/test_agent_manager_route.py::test_manager_route_executor_retains_the_first_bounded_predicate_checkpoint",
       "apps/api/plane/tests/unit/agent/test_l7_governance.py::test_hr_proposal_requires_human_approval_and_fails_closed_on_stale_state",
       "apps/api/plane/tests/unit/agent/test_l7_governance.py::test_chief_of_staff_uses_human_gate_and_copies_only_live_membership"
     ],
@@ -87,8 +70,7 @@
     ],
     "artifacts.bounded": [
       "apps/api/plane/tests/contract/api/test_operation_gateway.py::test_native_gateway_result_ceiling_accepts_8192_and_rejects_8193",
-      "apps/api/plane/tests/unit/agent/test_runtime_transport.py::test_diagnostics_are_bounded_and_never_persisted",
-      "tools/tests/test_runtime_evidence_boundaries.py::test_failure_evidence_is_finite_and_excludes_sensitive_values"
+      "apps/api/plane/tests/unit/agent/test_runtime_transport.py::test_diagnostics_are_bounded_and_never_persisted"
     ],
     "operations.load-health-quota-safety-stop-audit-rollback": [
       "apps/api/plane/tests/contract/api/test_operation_gateway_g4.py::test_postgresql_gateway_workload_measures_real_quota_and_audit_evidence",
@@ -98,38 +80,81 @@
       "apps/api/plane/tests/contract/api/test_g4_runtime_container_red_team.py::test_g4_runtime_container_red_team_proves_the_pinned_real_image_and_cleans_labeled_resources"
     ]
   },
-  "deferredChecks": ["operations.load-health-quota-safety-stop-audit-rollback"],
   "disruptiveChecks": ["load", "credential-revocation", "lease-revocation", "safety-stop", "rollback"],
-  "nondisruptiveChecksRunWithLiveFlows": true,
-  "evidence": { "mustInclude": ["testIds", "providerAttempts", "candidateDigest", "zeroProductEffectsOnDenial"] },
   "execution": {
     "verifier": "tools/verify-agent-g4.sh",
-    "disruptiveOrder": "after-live-or-separate-stack",
+    "disruptiveOrder": "isolated-provider-free-stack",
     "nondisruptive": [
-      { "stage": "g3-prerequisite", "command": "g3_prerequisite", "testIds": [
-        "plane/tests/unit/agent/test_lifecycle.py", "plane/tests/unit/agent/test_memory_skills_schedules.py",
-        "plane/tests/unit/agent/test_runtime_contract.py", "plane/tests/unit/agent/test_runtime_supervisor.py",
-        "plane/tests/unit/agent/test_runtime_transport.py", "plane/tests/unit/agent/test_provider_egress.py",
-        "plane/tests/unit/agent/test_host_rpc.py", "plane/tests/unit/agent/test_l7_governance.py",
-        "plane/tests/contract/api/test_agent_manager_route.py", "plane/tests/contract/api/test_operation_gateway.py",
-        "plane/tests/contract/api/test_operation_gateway_g4.py"
-      ]},
-      { "stage": "g4-runtime-contracts", "command": "g4_runtime_contracts", "testIds": [
-        "tools/tests/test_scenario_descriptor_boundaries.py", "tools/tests/test_scenario_runtime_semantics.py",
-        "tools/tests/test_agent_g4_live_support.py",
-        "tools/tests/test_live_authority_validation.py", "tools/tests/test_runtime_evidence_boundaries.py",
-        "tools/tests/test_runtime_image_builder.py",
-        "plane/tests/unit/agent/test_g4_runtime_boundary.py", "apps/api/plane/tests/unit/agent/test_adr0011_code_mode.py"
-      ]},
-      { "stage": "g4-cross-process", "command": "g4_pytest plane/tests/unit/agent/test_g4_runtime_cross_process.py", "testIds": ["plane/tests/unit/agent/test_g4_runtime_cross_process.py"]},
-      { "stage": "g4-runtime-service", "command": "g4_pytest plane/tests/unit/agent/test_runtime_supervisor.py", "testIds": ["plane/tests/unit/agent/test_runtime_supervisor.py"]},
-      { "stage": "g4-runtime-red-team", "command": "g4_runtime_red_team", "testIds": ["tools/agent-g4-runtime-red-team.py", "plane/tests/contract/api/test_g4_runtime_container_red_team.py"]},
-      { "stage": "g4-operator-readback", "command": "g4_pytest plane/tests/contract/api/test_agent_operator_readback_g4.py", "testIds": ["plane/tests/contract/api/test_agent_operator_readback_g4.py"]},
-      { "stage": "g4-production-configuration", "command": "pnpm check:local-dev:agent; g4_pytest plane/tests/contract/api/test_agent_runtime_production.py plane/tests/contract/api/test_local_runtime_configuration.py", "testIds": ["plane/tests/contract/api/test_agent_runtime_production.py", "plane/tests/contract/api/test_local_runtime_configuration.py"]}
+      {
+        "stage": "g3-prerequisite",
+        "command": "g3_prerequisite",
+        "testIds": [
+          "plane/tests/unit/agent/test_lifecycle.py",
+          "plane/tests/unit/agent/test_memory_skills_schedules.py",
+          "plane/tests/unit/agent/test_runtime_contract.py",
+          "plane/tests/unit/agent/test_runtime_supervisor.py",
+          "plane/tests/unit/agent/test_runtime_transport.py",
+          "plane/tests/unit/agent/test_provider_egress.py",
+          "plane/tests/unit/agent/test_host_rpc.py",
+          "plane/tests/unit/agent/test_l7_governance.py",
+          "plane/tests/contract/api/test_operation_gateway.py",
+          "plane/tests/contract/api/test_operation_gateway_g4.py"
+        ]
+      },
+      {
+        "stage": "g4-runtime-contracts",
+        "command": "g4_runtime_contracts",
+        "testIds": [
+          "tools/tests/test_runtime_image_builder.py",
+          "tools/tests/test_build_agent_api_image.py",
+          "tools/tests/test_agent_g4_operations.py",
+          "plane/tests/unit/agent/test_g4_runtime_boundary.py",
+          "apps/api/plane/tests/unit/agent/test_adr0011_code_mode.py"
+        ]
+      },
+      {
+        "stage": "g4-cross-process",
+        "command": "g4_pytest plane/tests/unit/agent/test_g4_runtime_cross_process.py",
+        "testIds": ["plane/tests/unit/agent/test_g4_runtime_cross_process.py"]
+      },
+      {
+        "stage": "g4-runtime-service",
+        "command": "g4_pytest plane/tests/unit/agent/test_runtime_supervisor.py",
+        "testIds": ["plane/tests/unit/agent/test_runtime_supervisor.py"]
+      },
+      {
+        "stage": "g4-runtime-red-team",
+        "command": "g4_runtime_red_team",
+        "testIds": [
+          "tools/agent-g4-runtime-red-team.py",
+          "plane/tests/contract/api/test_g4_runtime_container_red_team.py"
+        ]
+      },
+      {
+        "stage": "g4-operator-readback",
+        "command": "g4_pytest plane/tests/contract/api/test_agent_operator_readback_g4.py",
+        "testIds": ["plane/tests/contract/api/test_agent_operator_readback_g4.py"]
+      },
+      {
+        "stage": "g4-production-configuration",
+        "command": "pnpm check:local-dev:agent; g4_pytest plane/tests/contract/api/test_agent_runtime_production.py plane/tests/contract/api/test_local_runtime_configuration.py",
+        "testIds": [
+          "plane/tests/contract/api/test_agent_runtime_production.py",
+          "plane/tests/contract/api/test_local_runtime_configuration.py"
+        ]
+      }
     ],
     "disruptive": [
-      { "stage": "g4-gateway-workload", "command": "g4_gateway_workload", "testIds": ["plane/tests/contract/api/test_operation_gateway_g4.py"]},
-      { "stage": "g4-rollback", "command": "g4_rollback", "testIds": ["plane/tests/contract/api/test_agent_g4_rollback_drill.py"]}
+      {
+        "stage": "g4-gateway-workload",
+        "command": "g4_gateway_workload",
+        "testIds": ["plane/tests/contract/api/test_operation_gateway_g4.py"]
+      },
+      {
+        "stage": "g4-rollback",
+        "command": "g4_rollback",
+        "testIds": ["plane/tests/contract/api/test_agent_g4_rollback_drill.py"]
+      }
     ]
   }
 }

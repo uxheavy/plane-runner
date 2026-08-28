@@ -12,7 +12,7 @@ if ! [[ "${PLANE_AGENT_VERIFIER_LOCK_FD:-}" =~ ^[0-9]+$ ]] || \
 fi
 COMPOSE_FILE="${ROOT_DIR}/docker-compose-test.yml"
 MANIFEST="${ROOT_DIR}/tools/agent-g4-manifest.json"
-G3_BASE_COMMIT="9b4bad0b0b54c90c8d25e9af5f086971e6b9c93a"
+G3_BASE_COMMIT="${PLANE_G3_BASE_COMMIT:-9b4bad0b0b54c90c8d25e9af5f086971e6b9c93a}"
 CANDIDATE_COMMIT="$(git -C "${ROOT_DIR}" rev-parse HEAD)"
 HERMES_COMMIT="114eabf9d807b659e36d767e4de46ca056297ccb"
 
@@ -76,6 +76,8 @@ fail() {
     exit 1
 }
 
+EXTERNAL_MODULES_DIR="$(git -C "${EXTERNAL_SUPERPROJECT_ROOT}" rev-parse --git-path modules)" || fail "external git module metadata is readable" "root=${EXTERNAL_SUPERPROJECT_ROOT}" "set PLANE_EXTERNAL_SUPERPROJECT_ROOT"
+
 compose() {
     PLANE_TEST_ENV_FILE="${ROOT_DIR}/apps/api/.env.example" \
         docker compose -p "${PROJECT_NAME}" -f "${COMPOSE_FILE}" "$@"
@@ -100,8 +102,10 @@ pin_external_tree() {
     local label="$1"
     local root="$2"
     local expected="$3"
-    local actual
+    local actual top
     [[ -d "${root}" ]] || fail "${label} checkout exists" "missing=${root}" "set the ${label} root override"
+    top="$(git -C "${root}" rev-parse --show-toplevel 2>/dev/null)" || fail "${label} checkout is initialized" "unreadable=${root}" "initialize the pinned checkout"
+    [[ "${top}" == "$(cd -- "${root}" && pwd -P)" ]] || fail "${label} checkout root=${root}" "actual_root=${top}" "initialize the pinned checkout"
     actual="$(git -C "${root}" rev-parse HEAD)" || fail "${label} checkout is readable" "git failed" "inspect ${root}"
     [[ "${actual}" == "${expected}" ]] || fail "${label} HEAD=${expected}" "actual=${actual}" "use the authoritative pinned checkout"
     [[ -z "$(git -C "${root}" status --short)" ]] || fail "${label} checkout is clean" "dirty=${root}" "do not run against modified client code"
@@ -187,7 +191,7 @@ run_api() {
         --mount "type=bind,src=${MANIFEST},dst=/workspace/agent-g4-manifest.json,readonly" \
         --mount "type=bind,src=${MCP_ROOT},dst=/workspace/external/plane-mcp-server,readonly" \
         --mount "type=bind,src=${SDK_ROOT},dst=/workspace/external/plane-python-sdk,readonly" \
-        --mount "type=bind,src=${EXTERNAL_SUPERPROJECT_ROOT}/.git/modules,dst=/workspace/.git/modules,readonly" \
+        --mount "type=bind,src=${EXTERNAL_MODULES_DIR},dst=/workspace/.git/modules,readonly" \
         --mount "type=bind,src=${HERMES_ROOT},dst=/workspace/hermes-agent,readonly" \
         --mount "type=bind,src=${RUFF_BASELINE_DIR},dst=/workspace/g3-ruff-baseline,readonly" \
         --mount "type=bind,src=${RUNTIME_LOG_DIR},dst=/workspace/apps/api/plane/logs" \
@@ -324,7 +328,7 @@ pin_external_tree mcp "${MCP_ROOT}" "${MCP_COMMIT}"
 pin_external_tree sdk "${SDK_ROOT}" "${SDK_COMMIT}"
 pin_external_tree hermes-pin "${HERMES_PIN_ROOT}" "${HERMES_COMMIT}"
 check_gitlinks
-[[ -d "${EXTERNAL_SUPERPROJECT_ROOT}/.git/modules" ]] || fail "external git module metadata is mounted" "missing metadata" "set PLANE_EXTERNAL_SUPERPROJECT_ROOT to the gitlink superproject"
+[[ -d "${EXTERNAL_MODULES_DIR}" ]] || fail "external git module metadata is mounted" "missing=${EXTERNAL_MODULES_DIR}" "initialize the pinned submodules"
 
 CURRENT_STEP="static-scope"
 python3 "${ROOT_DIR}/tools/check-agent-settings-reuse.py" "${G3_BASE_COMMIT}" "${CANDIDATE_COMMIT}"

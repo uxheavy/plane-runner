@@ -7,156 +7,131 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import subprocess
 from pathlib import Path
-import tempfile
-import unittest
-from unittest.mock import patch
+
+import pytest
 
 
 TOOLS = Path(__file__).parents[1]
-ROOT = TOOLS.parent
+SPEC = importlib.util.spec_from_file_location(
+    "verify_agent_g4_operations", TOOLS / "verify-agent-g4-operations.py"
+)
+assert SPEC is not None and SPEC.loader is not None
+operations = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(operations)
+ROLLBACK_SPEC = importlib.util.spec_from_file_location(
+    "agent_g4_rollback_drill", TOOLS / "agent-g4-rollback-drill.py"
+)
+assert ROLLBACK_SPEC is not None and ROLLBACK_SPEC.loader is not None
+rollback = importlib.util.module_from_spec(ROLLBACK_SPEC)
+ROLLBACK_SPEC.loader.exec_module(rollback)
 
 
-def _load(name: str, path: Path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"cannot load {path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+def _binding() -> dict[str, object]:
+    return json.loads((TOOLS / "agent-g4-manifest.json").read_text(encoding="utf-8"))
 
 
-operations = _load("verify_agent_g4_operations", TOOLS / "verify-agent-g4-operations.py")
-
-
-def _stage_results() -> list[str]:
-    stages = {
-        "external.mcp.pin",
-        "external.sdk.pin",
-        "g3-prerequisite",
-        "g4-runtime-contracts",
-        "g4-cross-process",
-        "g4-runtime-service",
-        "g4-runtime-red-team",
-        "g4-gateway-workload",
-        "g4-rollback",
-        "g4-operator-readback",
-        "g4-production-configuration",
-    }
-    return [f"event=agent.g4.{stage} status=passed" for stage in sorted(stages)]
-
-
-def _receipt(manifest: dict[str, object], candidate: str) -> dict[str, object]:
-    pins = manifest["pins"]
-    candidate_binding = manifest["candidateBinding"]
+def _receipt() -> dict[str, object]:
+    binding = _binding()
+    stages = [*binding["stages"], "external.mcp.pin", "external.sdk.pin"]
     return {
-        "schemaVersion": "plane-agent-g4/verifier-receipt/v1",
+        "schemaVersion": "plane-agent-g4/provider-free-verifier-receipt/v1",
         "status": "passed",
-        "mode": "offline",
-        "binding": {
-            "candidateCommit": candidate,
-            "expectedCandidate": candidate,
-            "sourceCommit": pins["apiArtifact"]["sourceRevision"],
-            "acceptedG3Baseline": candidate_binding["acceptedG3Baseline"],
-            "hermesCommit": pins["hermesCommit"],
-            "mcpGitlink": pins["mcpGitlink"],
-            "sdkGitlink": pins["sdkGitlink"],
-            "runtimeImageTag": pins["runtimeImageTag"],
-            "runtimeImageDigest": pins["runtimeImageDigest"],
-            "runtimeImageRevision": pins["runtimeImageRevision"],
-            "runtimeContract": pins["runtimeContract"],
-            "apiArtifact": copy.deepcopy(pins["apiArtifact"]),
-        },
-        "actionCounters": {
-            "provider_requests": 0,
-            "live_requests": 0,
-            "G5_actions": 0,
-            "credential_mutations": 0,
-        },
-        "stageResults": _stage_results(),
+        "mode": "provider-free",
+        "runtimeSourceCandidate": binding["sourceBinding"]["runtimeSourceCandidate"],
+        "verifierRevision": _verifier_revision(),
+        "pins": binding["pins"],
+        "stageResults": [{"stage": stage, "status": "passed"} for stage in stages],
         "cleanup": {
             "verifierExitCode": 0,
             "cleanupExitCode": 0,
             "taskResourcesRemovedOrChecked": True,
-            "rawLogsRetained": False,
         },
+        "providerAttempts": 0,
     }
 
 
-def _receipt_fixture(root: Path) -> tuple[Path, Path, Path]:
-    manifest = json.loads((TOOLS / "agent-g4-manifest.json").read_text(encoding="utf-8"))
-    candidate, parent = operations._git_binding()
-    manifest["candidateBinding"]["parentCommit"] = parent
-    binding_manifest_path = root / "manifest.json"
-    receipt_path = root / "g4-receipt.json"
-    binding_manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
-    receipt_path.write_text(json.dumps(_receipt(manifest, candidate)), encoding="utf-8")
-    return TOOLS / "agent-g4-operations-v1.json", receipt_path, binding_manifest_path
+def _write_receipt(path: Path, value: dict[str, object]) -> None:
+    path.write_text(json.dumps(value, sort_keys=True, separators=(",", ":")), encoding="utf-8")
 
 
-class OperationsPackageTests(unittest.TestCase):
-    def test_manifest_binds_every_check_to_existing_owner_test(self):
-        manifest = json.loads((TOOLS / "agent-g4-operations-v1.json").read_text(encoding="utf-8"))
-        self.assertEqual(set(manifest["checks"]), set(manifest["testIds"]))
-        self.assertTrue(all(operations._test_exists(selector) for selectors in manifest["testIds"].values() for selector in selectors))
-
-    def test_receipt_consumer_accepts_passed_offline_receipt_without_g3_log(self):
-        with tempfile.TemporaryDirectory(dir="/private/tmp") as directory:
-            manifest_path, receipt_path, binding_manifest_path = _receipt_fixture(Path(directory))
-            with patch.object(operations, "BINDING_MANIFEST", binding_manifest_path), patch.object(operations, "_worktree_is_clean", return_value=True):
-                receipt = operations.build_receipt(manifest_path, verifier_receipt_path=receipt_path)
-        self.assertEqual(receipt["providerAttempts"], 0)
-        self.assertFalse(receipt["liveOrProviderStarted"])
-        self.assertTrue(receipt["retainedO02"]["applicable"])
-        self.assertEqual(receipt["finalVerifierReceipt"]["candidateDigest"], operations._git_binding()[0])
-        self.assertTrue(all(row["status"] == "pass" for row in receipt["checks"]))
-        self.assertTrue(next(row for row in receipt["checks"] if row["pending"])["pending"])
-
-    def test_receipt_consumer_rejects_nonpassed_provider_or_candidate_mismatched_receipt(self):
-        with tempfile.TemporaryDirectory(dir="/private/tmp") as directory:
-            manifest_path, receipt_path, binding_manifest_path = _receipt_fixture(Path(directory))
-            value = json.loads(receipt_path.read_text(encoding="utf-8"))
-            for mutation in (
-                lambda item: item.update(status="failed"),
-                lambda item: item["actionCounters"].update(provider_requests=1),
-                lambda item: item["binding"].update(candidateCommit="0" * 40),
-            ):
-                candidate = copy.deepcopy(value)
-                mutation(candidate)
-                receipt_path.write_text(json.dumps(candidate), encoding="utf-8")
-                with self.assertRaises(operations.ReceiptInputError):
-                    with patch.object(operations, "BINDING_MANIFEST", binding_manifest_path), patch.object(operations, "_worktree_is_clean", return_value=True):
-                        operations.build_receipt(manifest_path, verifier_receipt_path=receipt_path)
-
-    def test_deferred_check_prefers_canonical_stage_evidence(self):
-        with tempfile.TemporaryDirectory(dir="/private/tmp") as directory:
-            manifest_path, receipt_path, binding_manifest_path = _receipt_fixture(Path(directory))
-            with patch.object(operations, "BINDING_MANIFEST", binding_manifest_path), patch.object(operations, "_worktree_is_clean", return_value=True):
-                receipt = operations.build_receipt(manifest_path, verifier_receipt_path=receipt_path)
-            row = next(item for item in receipt["checks"] if item["id"] == "operations.load-health-quota-safety-stop-audit-rollback")
-            self.assertEqual(row["status"], "pass")
-            self.assertTrue(row["pending"])
-            value = json.loads(receipt_path.read_text(encoding="utf-8"))
-            value["stageResults"].append("event=agent.g4.g4-rollback status=failed")
-            receipt_path.write_text(json.dumps(value), encoding="utf-8")
-            with patch.object(operations, "BINDING_MANIFEST", binding_manifest_path), patch.object(operations, "_worktree_is_clean", return_value=True):
-                receipt = operations.build_receipt(manifest_path, verifier_receipt_path=receipt_path)
-            row = next(item for item in receipt["checks"] if item["id"] == "operations.load-health-quota-safety-stop-audit-rollback")
-            self.assertEqual(row["status"], "fail")
-
-    def test_output_excludes_raw_stage_lines_and_sensitive_fields(self):
-        with tempfile.TemporaryDirectory(dir="/private/tmp") as directory:
-            manifest_path, receipt_path, binding_manifest_path = _receipt_fixture(Path(directory))
-            value = json.loads(receipt_path.read_text(encoding="utf-8"))
-            value["stageResults"][0] += " root=/private/tmp/secret api_key=provider-secret"
-            receipt_path.write_text(json.dumps(value), encoding="utf-8")
-            with patch.object(operations, "BINDING_MANIFEST", binding_manifest_path), patch.object(operations, "_worktree_is_clean", return_value=True):
-                receipt = operations.build_receipt(manifest_path, verifier_receipt_path=receipt_path)
-            output = json.dumps(receipt)
-            self.assertNotIn("/private/tmp/secret", output)
-            self.assertNotIn("provider-secret", output)
-            self.assertNotIn("stageResults", output)
+def _verifier_revision() -> str:
+    return subprocess.check_output(
+        ["git", "-C", str(TOOLS.parent), "rev-parse", "HEAD"],
+        text=True,
+    ).strip()
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_canonical_receipt_proves_operations_external_client_and_denial(tmp_path: Path) -> None:
+    path = tmp_path / "receipt.json"
+    _write_receipt(path, _receipt())
+
+    result = operations.validate_evidence(path, verifier_revision=_verifier_revision())
+
+    assert result["providerAttempts"] == 0
+    assert all(row["status"] == "pass" for row in result["checks"])
+    assert result["externalClientProof"]["passed"] is True
+    assert result["zeroProductEffectsOnDenial"]["proved"] is True
+    assert result["runtimeSourceCandidate"] == _binding()["sourceBinding"]["runtimeSourceCandidate"]
+    assert result["verifierRevision"] == _verifier_revision()
+    assert result["finalVerifierEvidence"]["verifierRevision"] == _verifier_revision()
+
+
+@pytest.mark.parametrize("mutation,error", [
+    (lambda value: value.update(providerAttempts=1), "not_passed_provider_free"),
+    (lambda value: value.update(runtimeSourceCandidate="0" * 40), "runtime_source_binding_mismatch"),
+    (lambda value: value.update(verifierRevision="0" * 40), "verifier_revision_mismatch"),
+    (
+        lambda value: value.update(
+            stageResults=[
+                row for row in value["stageResults"] if row["stage"] != "g4-rollback"
+            ]
+        ),
+        "canonical_stage_evidence_missing",
+    ),
+])
+def test_receipt_rejects_missing_provider_free_proof(
+    tmp_path: Path,
+    mutation,
+    error: str,
+) -> None:
+    value = copy.deepcopy(_receipt())
+    mutation(value)
+    path = tmp_path / "receipt.json"
+    _write_receipt(path, value)
+
+    with pytest.raises(operations.OperationsEvidenceError, match=error):
+        operations.validate_evidence(path, verifier_revision=_verifier_revision())
+
+
+def test_receipt_rejects_verifier_revision_equal_to_runtime_source(tmp_path: Path) -> None:
+    value = _receipt()
+    runtime_source = value["runtimeSourceCandidate"]
+    value["verifierRevision"] = runtime_source
+    path = tmp_path / "receipt.json"
+    _write_receipt(path, value)
+
+    with pytest.raises(operations.OperationsEvidenceError, match="identity_not_distinct"):
+        operations.validate_evidence(path, verifier_revision=runtime_source)
+
+
+def test_rollback_binding_rejects_manifest_fixture_drift(tmp_path: Path) -> None:
+    rollback.validate_bindings()
+    fixture = json.loads(rollback.FIXTURE_PATH.read_text(encoding="utf-8"))
+    fixture["current"]["planeCommit"] = "0" * 40
+    path = tmp_path / "rollback.json"
+    path.write_text(json.dumps(fixture), encoding="utf-8")
+
+    with pytest.raises(rollback.RollbackBindingError, match="current_plane_commit"):
+        rollback.validate_bindings(fixture_path=path)
+
+
+def test_rollback_binding_rejects_previous_api_contract_mutation(tmp_path: Path) -> None:
+    fixture = json.loads(rollback.FIXTURE_PATH.read_text(encoding="utf-8"))
+    fixture["previous"]["apiArtifact"]["contract"] = "broken.contract/v0"
+    path = tmp_path / "rollback.json"
+    path.write_text(json.dumps(fixture), encoding="utf-8")
+
+    with pytest.raises(rollback.RollbackBindingError, match="previous_api_artifact"):
+        rollback.validate_bindings(fixture_path=path)

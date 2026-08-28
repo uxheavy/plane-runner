@@ -1,6 +1,7 @@
 ARG BASE_API_IMAGE=plane-g3-external-client-api-tests:prepared
 FROM ${BASE_API_IMAGE}
 
+RUN rm -rf /workspace/apps/api
 WORKDIR /workspace/apps/api
 COPY . /workspace/apps/api
 COPY --chown=root:root ./bin/plane-agent-runtime-credential-resolver /usr/local/bin/plane-agent-runtime-credential-resolver

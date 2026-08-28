@@ -153,6 +153,7 @@ def verify_dockerfile_contract() -> None:
         "ARG PLANE_API_IMAGE_TAG",
         "ARG PLANE_API_CONTRACT=plane.operation/v1",
         f"ARG PLANE_TYPESCRIPT_VERSION={TYPESCRIPT_VERSION}",
+        "RUN rm -rf /workspace/apps/api",
         *[f"ARG {name}" for name in SOURCE_FILES],
         'org.uxheavy.plane.api.artifact="plane-agent-api-g4"',
         'org.uxheavy.plane.api.code-mode.typescript.version="${PLANE_TYPESCRIPT_VERSION}"',

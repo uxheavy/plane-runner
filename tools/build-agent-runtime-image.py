@@ -8,10 +8,8 @@
 from __future__ import annotations
 
 import argparse
-import copy
 import hashlib
 import json
-import os
 import shutil
 import stat
 import subprocess
@@ -72,22 +70,6 @@ def canonical_hermes_remote(value: str) -> str:
     return HERMES_REMOTE
 
 
-def normalize_disposable_hermes_origin(checkout: Path, origin: str) -> str:
-    """Normalize only repository-owned disposable clones; never mutate source checkouts."""
-
-    try:
-        return canonical_hermes_remote(origin)
-    except RuntimeError as exc:
-        try:
-            resolved = checkout.resolve(strict=True)
-        except OSError:
-            raise exc
-        if not resolved.is_relative_to(ROOT / "tmp"):
-            raise exc
-        run("git", "-C", str(resolved), "remote", "set-url", "origin", HERMES_ORIGIN)
-        return canonical_hermes_remote(run("git", "-C", str(resolved), "remote", "get-url", "origin"))
-
-
 def verify_hermes(checkout: Path, revision: str) -> None:
     actual = run("git", "-C", str(checkout), "rev-parse", "HEAD")
     if actual != revision:
@@ -96,7 +78,7 @@ def verify_hermes(checkout: Path, revision: str) -> None:
     if dirty:
         raise RuntimeError("Hermes checkout must be clean before an image is built")
     origin = run("git", "-C", str(checkout), "remote", "get-url", "origin")
-    normalize_disposable_hermes_origin(checkout, origin)
+    canonical_hermes_remote(origin)
 
 
 def pinned_build_defaults(manifest: dict[str, object], plane_revision: str) -> tuple[str, str]:
@@ -125,14 +107,6 @@ def _image_digest(value: str, label: str) -> str:
     if not value.startswith("sha256:"):
         raise RuntimeError(f"{label} must be a sha256 image digest")
     _hash(value.removeprefix("sha256:"), label)
-    return value
-
-
-def _require_disposable_revision(value: str | None, option: str) -> str:
-    if value is None:
-        raise SystemExit(f"{option} is required with --manifest-out")
-    if len(value) != 40 or any(character not in "0123456789abcdef" for character in value):
-        raise SystemExit(f"{option} must be a full lowercase Git SHA")
     return value
 
 
@@ -502,22 +476,6 @@ def image_metadata(image: str) -> dict[str, object]:
     return {"imageDigest": image_id, "labels": labels}
 
 
-def api_artifact(image: str, plane_revision: str) -> dict[str, str]:
-    metadata = image_metadata(image)
-    labels = metadata["labels"]
-    assert isinstance(labels, dict)
-    actual = {
-        "imageTag": image,
-        "imageDigest": str(metadata["imageDigest"]),
-        "sourceRevision": str(labels.get("org.uxheavy.plane.api.source.revision", "")),
-        "contract": str(labels.get("org.uxheavy.plane.api.contract", "")),
-    }
-    if actual["sourceRevision"] != plane_revision:
-        raise RuntimeError("API image source revision does not match the selected Plane candidate")
-    if actual["contract"] != "plane.operation/v1" or labels.get("org.uxheavy.plane.api.artifact") != "plane-agent-api-g4":
-        raise RuntimeError("API image is not the bound Plane Agent API artifact")
-    return actual
-
 
 def verify_runtime_image(
     image: str,
@@ -619,104 +577,6 @@ def verify_runtime_image(
     return expected
 
 
-def disposable_manifest(
-    plane_revision: str,
-    plane_parent: str,
-    hermes_commit: str,
-    hermes_remote: str,
-    runtime: dict[str, str],
-    api: dict[str, str],
-    runtime_files: dict[str, str],
-    mcp_revision: str,
-    sdk_revision: str,
-    hermes_source: dict[str, object] | None = None,
-) -> dict[str, object]:
-    manifest = json.loads(DURABLE_MANIFEST.read_text(encoding="utf-8"))
-    if not isinstance(manifest, dict):
-        raise RuntimeError("durable G4 manifest must be an object")
-    manifest = copy.deepcopy(manifest)
-    candidate_binding = manifest["candidateBinding"]
-    assert isinstance(candidate_binding, dict)
-    candidate_binding.update(
-        {
-            "mode": "disposable-exact-candidate",
-            "parentCommit": plane_parent,
-            "candidateCommitSource": "builder-exact-git-revision",
-        }
-    )
-    pins = manifest["pins"]
-    assert isinstance(pins, dict)
-    pins["runtimeImageTag"] = runtime["imageTag"]
-    pins["runtimeImageDigest"] = runtime["imageDigest"]
-    pins["runtimeImageRevision"] = plane_revision
-    pins["runtimeContract"] = RUNTIME_CONTRACT
-    pins["hermesCommit"] = hermes_commit
-    pins["mcpGitlink"] = mcp_revision
-    pins["sdkGitlink"] = sdk_revision
-    pins["apiArtifact"] = api
-    disposable_binding: dict[str, object] = {
-        "mode": "exact-api-runtime-candidate",
-        "candidateCommit": plane_revision,
-        "apiSourceRevision": plane_revision,
-        "runtimeRevision": plane_revision,
-        "hermesCommit": hermes_commit,
-        "hermesRemote": hermes_remote,
-        "runtimeSourceDigest": runtime["runtimeSourceDigest"],
-        "runtimeFiles": runtime_files,
-    }
-    if hermes_source is not None:
-        source_kind = str(hermes_source.get("sourceKind", ""))
-        donor_image = str(hermes_source.get("donorImage", ""))
-        donor_digest = str(hermes_source.get("donorDigest", ""))
-        tree_digest = str(hermes_source.get("treeDigest", ""))
-        validate_hermes_source_binding(source_kind, donor_image, donor_digest, tree_digest)
-        disposable_binding.update(
-            {
-                "hermesSourceKind": source_kind,
-                "hermesDonorImage": donor_image,
-                "hermesDonorDigest": donor_digest,
-                "hermesTreeDigest": tree_digest,
-            }
-        )
-    manifest["disposableBinding"] = disposable_binding
-    return manifest
-
-
-def write_disposable_manifest(path: Path, manifest: dict[str, object]) -> None:
-    if path.is_symlink():
-        raise RuntimeError("disposable manifest output must be a regular file")
-    resolved = path.resolve()
-    disposable_root = ROOT / "tmp"
-    if resolved == DURABLE_MANIFEST.resolve() or not resolved.is_relative_to(disposable_root):
-        raise RuntimeError("disposable manifest must be under the repository-owned tmp directory")
-    resolved.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    if resolved.is_symlink() or (resolved.exists() and not resolved.is_file()):
-        raise RuntimeError("disposable manifest output must be a regular file")
-    payload = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("utf-8")
-    try:
-        descriptor = os.open(
-            resolved,
-            os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC | os.O_NOFOLLOW,
-            0o600,
-        )
-    except OSError as exc:
-        raise RuntimeError("disposable manifest output must be an owner-only regular file") from exc
-    try:
-        os.fchmod(descriptor, 0o600)
-        with os.fdopen(descriptor, "wb", closefd=False) as output:
-            output.write(payload)
-            output.flush()
-            os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-    metadata = resolved.stat(follow_symlinks=False)
-    if (
-        not stat.S_ISREG(metadata.st_mode)
-        or metadata.st_uid != os.getuid()
-        or stat.S_IMODE(metadata.st_mode) != 0o600
-    ):
-        raise RuntimeError("disposable manifest output must be an owner-only regular file")
-
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
@@ -732,21 +592,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--hermes-revision",
         help="Exact clean Hermes Git revision to stage (defaults to the selected manifest pin)",
     )
-    parser.add_argument("--api-image", help="Current candidate API image required for disposable manifest output")
-    parser.add_argument("--manifest-out", type=Path, help="Write a disposable manifest under repository tmp/")
-    parser.add_argument("--mcp-revision", help="Exact MCP Git revision required with --manifest-out")
-    parser.add_argument("--sdk-revision", help="Exact SDK Git revision required with --manifest-out")
     parser.add_argument("--manifest", type=Path, default=DURABLE_MANIFEST, help="Durable donor attestation manifest")
     return parser
 
 
 def main() -> int:
     args = build_parser().parse_args()
-    mcp_revision = None
-    sdk_revision = None
-    if args.manifest_out is not None:
-        mcp_revision = _require_disposable_revision(args.mcp_revision, "--mcp-revision")
-        sdk_revision = _require_disposable_revision(args.sdk_revision, "--sdk-revision")
     donor_manifest = load_manifest(args.manifest)
     requested_plane_revision = run("git", "rev-parse", args.plane_revision or "HEAD", cwd=ROOT)
     pins = donor_manifest.get("pins")
@@ -770,14 +621,9 @@ def main() -> int:
         raise SystemExit("Docker CLI is required")
     if args.hermes_checkout is not None:
         verify_hermes(args.hermes_checkout, hermes_revision)
-    plane_revision, plane_parent = verify_plane(args.plane_revision)
+    plane_revision, _ = verify_plane(args.plane_revision)
     runtime_files = runtime_file_hashes(plane_revision)
     source_digest = runtime_source_digest(runtime_files)
-    api = None
-    if args.manifest_out is not None:
-        if not args.api_image:
-            raise SystemExit("--api-image is required with --manifest-out")
-        api = api_artifact(args.api_image, plane_revision)
     with tempfile.TemporaryDirectory(prefix="plane-agent-runtime-build-") as temporary:
         context = Path(temporary)
         if args.hermes_donor_image:
@@ -850,21 +696,6 @@ def main() -> int:
         hermes_donor_digest,
         hermes_tree_digest,
     )
-    if api is not None:
-        assert args.manifest_out is not None
-        manifest = disposable_manifest(
-            plane_revision,
-            plane_parent,
-            hermes_commit,
-            hermes_remote,
-            runtime,
-            api,
-            runtime_files,
-            mcp_revision,
-            sdk_revision,
-            hermes_source,
-        )
-        write_disposable_manifest(args.manifest_out, manifest)
     print(
         json.dumps(
             {
@@ -880,7 +711,6 @@ def main() -> int:
                 "runtimeSourceDigest": source_digest,
                 "runtimeFiles": runtime_files,
                 "runtime": runtime,
-                "manifest": str(args.manifest_out.resolve()) if args.manifest_out is not None else None,
             },
             sort_keys=True,
         )

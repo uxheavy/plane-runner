@@ -7,8 +7,6 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
-import os
-import stat
 import sys
 import tarfile
 from pathlib import Path
@@ -123,64 +121,6 @@ def test_source_provenance_rejects_mixed_checkout_and_donor_facts() -> None:
 def test_repository_origin_normalizes_supported_fork_urls(origin: str) -> None:
     assert builder.canonical_hermes_remote(origin) == "github.com/uxheavy/hermes-agent"
 
-
-def test_only_repository_owned_disposable_checkout_can_rewrite_origin(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    checkout = builder.ROOT / "tmp" / "disposable-hermes"
-    calls: list[tuple[object, ...]] = []
-
-    def fake_run(*args: object, **_kwargs: object) -> str:
-        calls.append(args)
-        return builder.HERMES_ORIGIN if args[-3:] == ("remote", "get-url", "origin") else ""
-
-    monkeypatch.setattr(Path, "resolve", lambda self, strict=False: checkout)
-    monkeypatch.setattr(builder, "run", fake_run)
-    assert (
-        builder.normalize_disposable_hermes_origin(checkout, "/tmp/source-hermes")
-        == builder.HERMES_REMOTE
-    )
-    assert (
-        "git",
-        "-C",
-        str(checkout),
-        "remote",
-        "set-url",
-        "origin",
-        builder.HERMES_ORIGIN,
-    ) in calls
-
-
-def test_external_checkout_origin_is_never_rewritten(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def unexpected_run(*_args: object, **_kwargs: object) -> str:
-        pytest.fail("external checkout origin was mutated")
-
-    monkeypatch.setattr(builder, "run", unexpected_run)
-    with pytest.raises(RuntimeError, match="uxheavy fork"):
-        builder.normalize_disposable_hermes_origin(
-            Path("/Users/example/hermes-agent"), "/tmp/source-hermes"
-        )
-
-
-def test_disposable_manifest_is_owner_only_regular_file(tmp_path: Path) -> None:
-    path = tmp_path / "tmp" / "manifest.json"
-    original_root = builder.ROOT
-    original_manifest = builder.DURABLE_MANIFEST
-    builder.ROOT = tmp_path.resolve()
-    builder.DURABLE_MANIFEST = builder.ROOT / "durable-manifest.json"
-    try:
-        builder.write_disposable_manifest(path, {"schemaVersion": "test/v1"})
-    finally:
-        builder.ROOT = original_root
-        builder.DURABLE_MANIFEST = original_manifest
-
-    metadata = path.stat()
-    assert stat.S_ISREG(metadata.st_mode)
-    assert metadata.st_uid == os.getuid()
-    assert stat.S_IMODE(metadata.st_mode) == 0o600
-    assert json.loads(path.read_text(encoding="utf-8")) == {"schemaVersion": "test/v1"}
 
 
 def test_pinned_agent_identity_rejects_shadowing() -> None:
