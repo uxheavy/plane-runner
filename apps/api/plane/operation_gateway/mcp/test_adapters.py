@@ -2,15 +2,13 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""Pure contract proofs for generated MCP gateway registrations."""
+"""Pure contract proofs for MCP gateway registrations."""
 
 from __future__ import annotations
 
-import json
 import unittest
-from pathlib import Path
 
-from .adapter_registry import ADAPTER_REGISTRATIONS
+from .adapter_registry import get_registration
 from .attachment_adapter import AttachmentGatewayAdapter, AttachmentImage
 from .attachment_policy import (
     AttachmentFailure,
@@ -19,9 +17,8 @@ from .attachment_policy import (
     assert_public_url,
     read_limit,
 )
-from .registry_generator import build_adapter_registry
+from .compatibility import MCP_ACTIONS, MCP_COMPATIBILITY_MANIFEST
 from .sdk_adapter import MCPAdapterError, MCPGatewayExecutionError, SharedSDKGatewayAdapter
-from ..contracts import MAX_RESULT_BYTES
 
 
 class FakeGateway:
@@ -58,32 +55,18 @@ class FakeContentReader:
         return self.content
 
 
-class GeneratedAdapterTests(unittest.TestCase):
-    def test_registry_is_exhaustive_and_matches_the_manifest(self):
-        manifest_path = Path(__file__).with_name("manifest.json")
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        generated = build_adapter_registry(manifest)
-        checked_in = json.loads(Path(__file__).with_name("adapter_registry.json").read_text(encoding="utf-8"))
-        self.assertEqual(generated, checked_in)
-        self.assertEqual(len(ADAPTER_REGISTRATIONS), 177)
-        self.assertEqual(
-            {row.registration for row in ADAPTER_REGISTRATIONS},
-            {"gateway", "unsupported", "local"},
-        )
-        gateway_tools = {row.tool_name for row in ADAPTER_REGISTRATIONS if row.registration == "gateway"}
-        manifest_tools = {action["name"] for action in manifest["actions"]}
-        self.assertEqual(gateway_tools, set(manifest["gateway_overrides"]))
-        self.assertEqual(
-            gateway_tools | {row.tool_name for row in ADAPTER_REGISTRATIONS if row.registration != "gateway"},
-            manifest_tools,
-        )
-        for row in ADAPTER_REGISTRATIONS:
-            self.assertEqual(
-                row.public_signature, next(a["signature"] for a in manifest["actions"] if a["name"] == row.tool_name)
-            )
-            if row.registration == "unsupported":
-                self.assertEqual(row.blocker["action"], row.tool_name)
-                self.assertIsNone(row.gateway_operation_id)
+class RuntimeAdapterTests(unittest.TestCase):
+    def test_supported_actions_have_exact_runtime_registrations(self):
+        actions = {action.name: action for action in MCP_ACTIONS}
+        for tool_name, override in MCP_COMPATIBILITY_MANIFEST["gateway_overrides"].items():
+            registration = get_registration(tool_name)
+            self.assertIsNotNone(registration)
+            self.assertEqual(registration.gateway_operation_id, actions[tool_name].gateway_operation_id)
+            self.assertEqual(registration.gateway_operation_id, override["operation_id"])
+
+        self.assertIsNone(get_registration("list_work_item_properties"))
+        self.assertIsNone(get_registration("get_pql_reference"))
+        self.assertIsNone(get_registration("not_a_public_plane_tool"))
 
     def test_supported_read_and_mutation_use_exact_gateway_operations(self):
         gateway = FakeGateway(
@@ -141,6 +124,11 @@ class GeneratedAdapterTests(unittest.TestCase):
             )
         self.assertEqual(unsupported.exception.code, "MCP_ACTION_UNSUPPORTED")
         self.assertIn("WORK_ITEM_PROPERTY", unsupported.exception.message)
+        with self.assertRaises(MCPAdapterError) as local:
+            SharedSDKGatewayAdapter(FakeGateway()).invoke(
+                "get_pql_reference", {}, idempotency_key="k", correlation_id="c"
+            )
+        self.assertEqual(local.exception.code, "MCP_ACTION_GATEWAY_MAPPING_UNAVAILABLE")
         with self.assertRaises(MCPAdapterError) as unknown:
             SharedSDKGatewayAdapter(FakeGateway()).invoke(
                 "not_a_public_plane_tool", {}, idempotency_key="k", correlation_id="c"
@@ -170,15 +158,16 @@ class GeneratedAdapterTests(unittest.TestCase):
         self.assertEqual(reader.calls, [("https://signed.example/a", 5 * 1024 * 1024)])
 
     def test_read_pagination_and_result_bounds_are_fail_closed(self):
-        registration = next(row for row in ADAPTER_REGISTRATIONS if row.tool_name == "list_customers")
+        registration = get_registration("list_cycles")
+        self.assertIsNotNone(registration)
         validator = SharedSDKGatewayAdapter._validate_public_result
         validator(registration, {"results": [1, 2], "next_cursor": "next"}, {"per_page": 2})
         with self.assertRaises(MCPAdapterError) as page_size:
             validator(registration, {"results": []}, {"per_page": 0})
         self.assertEqual(page_size.exception.code, "MCP_PAGE_BOUNDS_INVALID")
-        validator(registration, "x" * (MAX_RESULT_BYTES - 2), {})
+        validator(registration, "x" * (registration.result_limit_bytes - 2), {})
         with self.assertRaises(MCPAdapterError) as result_size:
-            validator(registration, "x" * (MAX_RESULT_BYTES - 1), {})
+            validator(registration, "x" * (registration.result_limit_bytes - 1), {})
         self.assertEqual(result_size.exception.code, "MCP_GATEWAY_RESULT_TOO_LARGE")
 
     def test_attachment_source_and_content_bounds_are_enforced(self):

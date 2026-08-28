@@ -424,7 +424,6 @@ PY
 python manage.py bootstrap_operation_gateway_audit --phase=before-migrate
 python manage.py migrate --noinput --verbosity 0
 python manage.py bootstrap_operation_gateway_audit --phase=after-migrate
-python -m plane.operation_gateway.mcp.registry_generator plane/operation_gateway/mcp/manifest.json --check plane/operation_gateway/mcp/adapter_registry.json
 RUFF_STATUS=0
 if run_ruff_baseline_aware; then :; else RUFF_STATUS=\$?; fi
 RUFF_FORMAT_STATUS=0

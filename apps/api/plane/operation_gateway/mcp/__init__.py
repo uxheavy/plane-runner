@@ -4,13 +4,11 @@
 
 """Compatibility metadata and pure adapters for the external Plane MCP surface."""
 
-from .adapter_registry import ADAPTER_REGISTRATIONS, ADAPTER_REGISTRY, get_registration
+from .adapter_registry import get_registration
 from .attachment_adapter import AttachmentGatewayAdapter, AttachmentImage
 from .sdk_adapter import MCPAdapterError, MCPGatewayExecutionError, SharedSDKGatewayAdapter
 
 __all__ = [
-    "ADAPTER_REGISTRY",
-    "ADAPTER_REGISTRATIONS",
     "AttachmentGatewayAdapter",
     "AttachmentImage",
     "MCP_ACTIONS",

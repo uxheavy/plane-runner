@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""One typed execution mechanism for all generated shared-SDK registrations."""
+"""One typed execution mechanism for supported shared-SDK registrations."""
 
 from __future__ import annotations
 
@@ -12,10 +12,9 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from .adapter_registry import AdapterRegistration, get_registration
-from ..contracts import MAX_RESULT_BYTES
+from .compatibility import get_mcp_action
 
 # MCP/SDK are public transports for the same gateway result contract.
-MAX_PUBLIC_RESULT_BYTES = MAX_RESULT_BYTES
 MAX_PAGE_SIZE = 1000
 
 
@@ -59,7 +58,7 @@ class GatewayReceipt:
 
 
 class SharedSDKGatewayAdapter:
-    """Route every generated supported action through one exact gateway call."""
+    """Route every supported action through one exact gateway call."""
 
     def __init__(self, invoker: GatewayInvoker):
         self._invoker = invoker
@@ -72,27 +71,33 @@ class SharedSDKGatewayAdapter:
         idempotency_key: str,
         correlation_id: str,
     ) -> Any:
-        registration = get_registration(tool_name)
-        if registration is None:
+        action = get_mcp_action(tool_name)
+        if action is None:
             raise MCPAdapterError(
                 tool_name=tool_name,
                 code="MCP_ACTION_NOT_INVENTORY",
-                message="The public MCP action is not present in the pinned adapter registry.",
+                message="The public MCP action is not present in the pinned compatibility inventory.",
             )
-        if registration.registration != "gateway":
-            blocker = registration.blocker or {}
-            code = (
-                "MCP_ACTION_UNSUPPORTED"
-                if registration.registration == "unsupported"
-                else "MCP_ACTION_GATEWAY_MAPPING_UNAVAILABLE"
+        registration = get_registration(tool_name)
+        if registration is None:
+            blocker = action.blocker or {}
+            raise MCPAdapterError(
+                tool_name=tool_name,
+                code=(
+                    "MCP_ACTION_UNSUPPORTED"
+                    if action.gateway_status == "unsupported"
+                    else "MCP_ACTION_GATEWAY_MAPPING_UNAVAILABLE"
+                ),
+                message=str(
+                    blocker.get(
+                        "code",
+                        blocker.get("reason", "The public MCP action has no exact gateway registration."),
+                    )
+                ),
             )
-            message = blocker.get(
-                "code", blocker.get("reason", "The public MCP action has no exact gateway registration.")
-            )
-            raise MCPAdapterError(tool_name=tool_name, code=code, message=str(message))
         payload = self._translate_input(registration, arguments or {})
         envelope = self._invoker.execute(
-            operation_id=registration.gateway_operation_id or "",
+            operation_id=registration.gateway_operation_id,
             input=payload,
             idempotency_key=idempotency_key,
             correlation_id=correlation_id,
@@ -114,11 +119,11 @@ class SharedSDKGatewayAdapter:
                 retryable=bool(error.get("retryable", False)),
             )
         result = envelope.get("result")
-        if not isinstance(result, Mapping) or registration.result_key is None:
+        if not isinstance(result, Mapping):
             raise MCPAdapterError(
                 tool_name=tool_name,
                 code="MCP_GATEWAY_RESULT_INVALID",
-                message="The gateway result does not match the generated public contract adapter.",
+                message="The gateway result does not match the public contract adapter.",
             )
         value = result.get(registration.result_key)
         if registration.result_mode == "none":
@@ -187,7 +192,7 @@ class SharedSDKGatewayAdapter:
                 code="MCP_GATEWAY_RESULT_INVALID",
                 message="The gateway result is not JSON-compatible.",
             ) from None
-        if len(encoded) > MAX_PUBLIC_RESULT_BYTES:
+        if len(encoded) > registration.result_limit_bytes:
             raise MCPAdapterError(
                 tool_name=registration.tool_name,
                 code="MCP_GATEWAY_RESULT_TOO_LARGE",

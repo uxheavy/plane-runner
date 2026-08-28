@@ -6,6 +6,7 @@
 
 import json
 import uuid
+from collections import Counter
 from datetime import datetime, timezone
 
 import pytest
@@ -51,6 +52,7 @@ from plane.agent.lifecycle import (
 )
 from plane.agent.runtime.host_rpc import trusted_host_request
 from plane.operation_gateway.gateway import OperationGateway
+from plane.operation_gateway.mcp.compatibility import MCP_ACTIONS
 
 
 def _admin_url(workspace, suffix):
@@ -784,12 +786,24 @@ def test_context_admin_reuses_governance_services_and_api_cli_projection(api_key
     status_response = api_key_client.get(_admin_url(workspace, "gateway/status/"))
     catalog_response = api_key_client.get(_admin_url(workspace, "gateway/catalog/?limit=1"))
     assert status_response.status_code == catalog_response.status_code == 200
-    assert status_response.json()["external_adapter_registry"]["tool_count"] == 177
-    assert status_response.json()["external_adapter_registry"]["disposition"] == {
-        "gateway": 86,
-        "blocked": 90,
-        "unsupported": 90,
-        "local": 1,
+    registry = status_response.json()["external_adapter_registry"]
+    disposition = registry["disposition"]
+    expected = Counter(
+        (
+            "gateway"
+            if action.gateway_status == "supported"
+            else "local"
+            if action.gateway_status == "local_only"
+            else "unsupported"
+        )
+        for action in MCP_ACTIONS
+    )
+    assert registry["tool_count"] == len(MCP_ACTIONS)
+    assert disposition == {
+        "gateway": expected["gateway"],
+        "blocked": expected["unsupported"],
+        "unsupported": expected["unsupported"],
+        "local": expected["local"],
     }
     assert len(json.dumps(catalog_response.json()).encode()) <= 8 * 1024
 

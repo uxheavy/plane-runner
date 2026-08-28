@@ -9,27 +9,36 @@ from collections import Counter
 from typing import Any
 
 from plane.operation_gateway.catalog import CATALOG_DIGEST, OPERATION_CATALOG, catalog_search
-from plane.operation_gateway.mcp.adapter_registry import ADAPTER_REGISTRATIONS, ADAPTER_REGISTRY
+from plane.operation_gateway.mcp.compatibility import MCP_ACTIONS
 
 
 def gateway_status() -> dict[str, Any]:
-    disposition = Counter(row.registration for row in ADAPTER_REGISTRATIONS)
-    unsupported = disposition.get("unsupported", disposition.get("blocked", 0))
+    disposition = Counter(
+        (
+            "gateway"
+            if action.gateway_status == "supported"
+            else "local"
+            if action.gateway_status == "local_only"
+            else "unsupported"
+        )
+        for action in MCP_ACTIONS
+    )
+    unsupported = disposition["unsupported"]
     return {
         "catalog": {
             "digest": CATALOG_DIGEST,
             "operation_count": len(OPERATION_CATALOG),
         },
         "external_adapter_registry": {
-            "schema_version": ADAPTER_REGISTRY["schema_version"],
-            "tool_count": len(ADAPTER_REGISTRATIONS),
+            "schema_version": "plane.mcp-adapter-registry/v1",
+            "tool_count": len(MCP_ACTIONS),
             "disposition": {
-                "gateway": disposition.get("gateway", 0),
+                "gateway": disposition["gateway"],
                 # Keep the L10 field name as a compatibility alias while
                 # exposing the canonical matrix disposition explicitly.
                 "blocked": unsupported,
                 "unsupported": unsupported,
-                "local": disposition.get("local", 0),
+                "local": disposition["local"],
             },
         },
         "shared_gateway": {
