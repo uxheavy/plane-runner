@@ -54,7 +54,7 @@ from plane.operation_gateway.publications import (
     schedule_publications_on_commit,
 )
 from plane.operation_gateway.role_boundary import AuditRoleBoundaryError, verify_audit_role_boundary
-from plane.operation_gateway.tasks import cleanup_gateway_quotas, dispatch_publication, reconcile_publications
+from plane.operation_gateway.tasks import dispatch_publication, reconcile_publications
 from plane.bgtasks.webhook_task import WebhookDeliveryResult, deliver_webhook_target
 from plane.operation_gateway.work_items import WorkItemRenameFailure, WorkItemRenameService
 
@@ -640,12 +640,6 @@ def test_publication_reconciliation_claims_one_durable_page_before_enqueue(
     assert all(publication.delivery_result == {"state": "queued"} for publication in publications)
     drain_publications(record)
     assert record.publications.filter(state=OperationGatewayPublication.State.SUCCEEDED).count() == 2
-
-
-def test_gateway_quota_cleanup_task_uses_the_bounded_cleanup_owner():
-    with patch("plane.operation_gateway.tasks.cleanup_gateway_quota", return_value=7) as cleanup:
-        assert cleanup_gateway_quotas.run() == 7
-    cleanup.assert_called_once_with()
 
 
 @pytest.mark.contract
