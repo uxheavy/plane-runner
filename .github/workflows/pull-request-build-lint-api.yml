@@ -13,19 +13,20 @@ on:
       - "reopened"
     paths:
       - "apps/api/**"
+      - ".github/workflows/pull-request-build-lint-api.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   lint-api:
     name: Lint API
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    if: |
-      github.event.pull_request.draft == false &&
-      github.event.pull_request.requested_reviewers != null
     steps:
       - uses: actions/checkout@v6
       - name: Set up Python
@@ -39,4 +40,4 @@ jobs:
       - name: Install API Dependencies
         run: cd apps/api && pip install -r requirements.txt
       - name: Lint apps/api
-        run: ruff check --fix apps/api
+        run: ruff check apps/api

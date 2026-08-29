@@ -17,6 +17,7 @@
     "check:lint": "turbo run check:lint",
     "check:format": "turbo run check:format",
     "check:types": "turbo run check:types",
+    "check:policy": "node .github/repository-policy/check.mjs --staged",
     "check:copyright": "pnpm --filter=@plane/codemods copyright-headers --check --changed-from upstream/preview",
     "prepare": "husky",
     "doctor": "npx react-doctor@latest",
