@@ -1,4 +1,4 @@
-# Agent Development Guide
+# Repository Map
 
 ## Scope
 
@@ -16,26 +16,32 @@ being changed.
 - `pnpm turbo run <command> --filter=<package>` - Target specific package/app
 - `pnpm --filter=@plane/ui storybook` - Start Storybook on port 6006
 
-## Scoped Instructions
+## Sources of Truth
 
-| Path                        | Local Guidance                                                                                  |
-| --------------------------- | ----------------------------------------------------------------------------------------------- |
-| `packages/chat-context/`    | Semantic selection, privacy boundaries, Django hydration contract, and cross-stack verification |
-| `packages/tailwind-config/` | Canvas, surface, layer, and semantic color rules                                                |
+| Concern | Authoritative location |
+| --- | --- |
+| JavaScript/TypeScript format and lint | `.oxfmtrc.json`, `.oxlintrc.json`, `docs/linting.md` |
+| Package commands and dependency versions | root and package-level `package.json` files, `pnpm-workspace.yaml` |
+| Task graph | `turbo.json` |
+| Path ownership | `CODEOWNERS` |
+| Pull-request enforcement | `.github/workflows/` |
+| API test setup and conventions | `apps/api/tests/RUNNING_TESTS.md`, `apps/api/tests/TESTING_GUIDE.md` |
 
-## Code Style
+## Scoped Maps
 
-- **Imports**: Use `workspace:*` for internal packages, `catalog:` for external deps
-- **TypeScript**: Strict mode enabled, all files must be typed
-- **Formatting**: oxfmt, run `pnpm fix:format`
-- **Linting**: OxLint with shared `.oxlintrc.json` config
-- **Naming**: camelCase for variables/functions, PascalCase for components/types
-- **Error Handling**: Use try-catch with proper error types, log errors appropriately
-- **State Management**: MobX stores in `packages/shared-state`, reactive patterns
-- **Testing**: All features require unit tests, use existing test framework per package
-- **Components**: Build in `@plane/ui` with Storybook for isolated development
+| Path | Read first |
+| --- | --- |
+| `packages/chat-context/` | `packages/chat-context/AGENTS.md` |
+| `packages/tailwind-config/` | `packages/tailwind-config/AGENTS.md` |
 
-## Backend tests (Docker)
+## Change Evidence
+
+- Run the narrowest relevant package checks before the repository-wide checks.
+- Report exact commands and results; name checks that were skipped or unavailable.
+- CI is authoritative. The pre-commit hook is a fast local aid, not merge proof.
+- Get human approval before deployments, destructive operations, or other external writes.
+
+## Backend Tests (Docker)
 
 The Django/pytest suite for `apps/api` runs in an isolated stack defined by `docker-compose-test.yml` at the repo root.
 

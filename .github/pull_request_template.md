@@ -13,8 +13,11 @@
 ### Screenshots and Media (if applicable)
 <!-- Add screenshots to help explain your changes, ideally showcasing before and after -->
 
-### Test Scenarios 
-<!-- Please describe the tests that you ran to verify your changes -->
+### Verification
+<!-- List exact commands and results. Name any checks that were skipped, blocked, or unavailable. -->
+
+### Evidence (if behavior or UI changed)
+<!-- Add the smallest useful proof: screenshots, recordings, logs, or test output. -->
 
 ### References
 <!-- Link related issues if there are any -->
