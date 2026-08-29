@@ -31,8 +31,9 @@ test("rejects tracked outputs and rewritten migration history", () => {
   const errors = evaluate([
     { status: "A", path: "packages/ui/dist/index.js" },
     { status: "M", path: "apps/api/plane/db/migrations/0001_initial.py" },
+    { status: "T", path: "apps/api/plane/db/migrations/0002_existing.py" },
   ]);
-  assert.deepEqual(errors.map((error) => error.rule), ["RP002", "RP003"]);
+  assert.deepEqual(errors.map((error) => error.rule), ["RP002", "RP003", "RP003"]);
 });
 
 test("accepts an exact unexpired migration exception", () => {
