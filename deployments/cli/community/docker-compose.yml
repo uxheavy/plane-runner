@@ -354,7 +354,79 @@ services:
     <<: *provisioner-service
     command: ./bin/docker-entrypoint-provisioner.sh --phase=before-migrate
     depends_on:
-      - plane-db
+      db-role-transition:
+        condition: service_completed_successfully
+
+  db-role-transition:
+    image: postgres:15.7-alpine
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    environment:
+      PGHOST: ${PGHOST:-plane-db}
+      PGDATABASE: ${PGDATABASE:-plane}
+      POSTGRES_USER: ${POSTGRES_USER:-plane}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-plane}
+      POSTGRES_PROVISIONER_ROLE: ${POSTGRES_PROVISIONER_ROLE:-plane_provisioner}
+      POSTGRES_PROVISIONER_PASSWORD: ${POSTGRES_PROVISIONER_PASSWORD:-change-this-provisioner-password}
+      PLANE_AUDIT_MIGRATION_ROLE: ${PLANE_AUDIT_MIGRATION_ROLE:-plane_migrator}
+      PLANE_AUDIT_MIGRATION_PASSWORD: ${PLANE_AUDIT_MIGRATION_PASSWORD:-change-this-migration-password}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        if PGPASSWORD="$$POSTGRES_PASSWORD" psql --no-psqlrc --username="$$POSTGRES_USER" --command='SELECT 1' >/dev/null 2>&1; then
+          export PGUSER="$$POSTGRES_USER" PGPASSWORD="$$POSTGRES_PASSWORD"
+        else
+          export PGUSER="$$POSTGRES_PROVISIONER_ROLE" PGPASSWORD="$$POSTGRES_PROVISIONER_PASSWORD"
+        fi
+        psql --no-psqlrc --set=ON_ERROR_STOP=1 \
+          --set=legacy_role="$$POSTGRES_USER" \
+          --set=provisioner_role="$$POSTGRES_PROVISIONER_ROLE" \
+          --set=provisioner_password="$$POSTGRES_PROVISIONER_PASSWORD" \
+          --set=migration_role="$$PLANE_AUDIT_MIGRATION_ROLE" \
+          --set=migration_password="$$PLANE_AUDIT_MIGRATION_PASSWORD" <<'SQL'
+        SELECT format('CREATE ROLE %I LOGIN NOINHERIT NOSUPERUSER NOCREATEDB CREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD %L', :'provisioner_role', :'provisioner_password')
+        WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'provisioner_role') \gexec
+        SELECT format('CREATE ROLE %I LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD %L', :'migration_role', :'migration_password')
+        WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'migration_role') \gexec
+        SELECT format(
+          'ALTER %s %I.%I OWNER TO %I',
+          CASE object_info.relkind
+            WHEN 'S' THEN 'SEQUENCE'
+            WHEN 'v' THEN 'VIEW'
+            WHEN 'm' THEN 'MATERIALIZED VIEW'
+            WHEN 'f' THEN 'FOREIGN TABLE'
+            ELSE 'TABLE'
+          END,
+          schema_info.nspname,
+          object_info.relname,
+          :'migration_role'
+        )
+        FROM pg_class AS object_info
+        JOIN pg_namespace AS schema_info ON schema_info.oid = object_info.relnamespace
+        JOIN pg_roles AS owner_info ON owner_info.oid = object_info.relowner
+        WHERE owner_info.rolname = :'legacy_role'
+          AND schema_info.nspname NOT LIKE 'pg\_%' ESCAPE '\'
+          AND schema_info.nspname <> 'information_schema'
+          AND object_info.relkind IN ('r', 'p', 'S', 'v', 'm', 'f')
+        ORDER BY CASE object_info.relkind WHEN 'S' THEN 1 ELSE 0 END
+        \gexec
+        SELECT format('ALTER SCHEMA public OWNER TO %I', :'provisioner_role') \gexec
+        SELECT format('GRANT USAGE, CREATE ON SCHEMA public TO %I', :'migration_role') \gexec
+        SELECT format('ALTER DATABASE %I OWNER TO %I', current_database(), :'provisioner_role') \gexec
+        SELECT format('ALTER ROLE %I LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD %L', :'migration_role', :'migration_password')
+        WHERE (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) \gexec
+        SELECT format('ALTER ROLE %I LOGIN NOINHERIT NOSUPERUSER NOCREATEDB CREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD %L', :'provisioner_role', :'provisioner_password')
+        WHERE (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) \gexec
+        SELECT format('ALTER ROLE %I NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS', :'legacy_role')
+        WHERE :'legacy_role' <> :'provisioner_role'
+          AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'legacy_role' AND rolcanlogin) \gexec
+        SQL
+    depends_on:
+      plane-db:
+        condition: service_started
 
   provisioner-final:
     <<: *provisioner-service

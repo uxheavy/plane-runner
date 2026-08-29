@@ -575,6 +575,14 @@ def test_resolved_community_compose_scopes_database_credentials_by_process():
     assert "DATABASE_MIGRATION_URL" not in provisioner_environment
     assert "DATABASE_RUNTIME_URL" not in provisioner_environment
     assert provisioner_environment["PLANE_AUDIT_MIGRATION_PASSWORD"]
+    transition_environment = services["db-role-transition"]["environment"]
+    assert transition_environment["POSTGRES_USER"] == "plane"
+    assert transition_environment["POSTGRES_PASSWORD"] == "plane"
+    assert transition_environment["POSTGRES_PROVISIONER_ROLE"] == "plane_provisioner"
+    assert transition_environment["PLANE_AUDIT_MIGRATION_ROLE"] == "plane_migrator"
+    assert services["provisioner"]["depends_on"]["db-role-transition"]["condition"] == (
+        "service_completed_successfully"
+    )
     assert services["migrator"]["depends_on"]["provisioner"]["condition"] == "service_completed_successfully"
     assert services["provisioner-final"]["depends_on"]["migrator"]["condition"] == "service_completed_successfully"
 
