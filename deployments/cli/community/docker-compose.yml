@@ -280,7 +280,7 @@ services:
         condition: service_started
 
   agent-runtime:
-    image: ${PLANE_AGENT_RUNTIME_IMAGE:-plane-agent-runtime:hermes-df166ad4-v147-574f836e}
+    image: ${PLANE_AGENT_RUNTIME_IMAGE:-plane-agent-runtime:hermes-df166ad4-v147-d2ef8041}
     profiles: [agent]
     entrypoint: ["python3", "-m", "plane.agent.runtime.service"]
     command: []
