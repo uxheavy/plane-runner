@@ -602,7 +602,7 @@ def test_agent_runtime_production_compose_has_an_isolated_readiness_and_secret_b
     assert '"typescript=5.8.3-r0"' in dockerfile
     runtime = services["agent-runtime"]
     runtime_environment = runtime["environment"]
-    assert runtime["image"].startswith("plane-agent-runtime:hermes-df166ad4-v147-d2ef8041")
+    assert runtime["image"].startswith("plane-agent-runtime:hermes-df166ad4-v147-a66cf8f5")
     assert "network_mode" not in runtime
     assert "agent_runtime_internal" in runtime["networks"]
     assert not runtime.get("ports")
