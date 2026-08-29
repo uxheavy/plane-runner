@@ -76,7 +76,7 @@ fail() {
     exit 1
 }
 
-EXTERNAL_MODULES_DIR="$(git -C "${EXTERNAL_SUPERPROJECT_ROOT}" rev-parse --git-path modules)" || fail "external git module metadata is readable" "root=${EXTERNAL_SUPERPROJECT_ROOT}" "set PLANE_EXTERNAL_SUPERPROJECT_ROOT"
+EXTERNAL_MODULES_DIR="$(git -C "${EXTERNAL_SUPERPROJECT_ROOT}" rev-parse --path-format=absolute --git-path modules)" || fail "external git module metadata is readable" "root=${EXTERNAL_SUPERPROJECT_ROOT}" "set PLANE_EXTERNAL_SUPERPROJECT_ROOT"
 
 compose() {
     PLANE_TEST_ENV_FILE="${ROOT_DIR}/apps/api/.env.example" \

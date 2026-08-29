@@ -542,6 +542,7 @@ g4_production_configuration() {
 }
 
 g4_rollback() {
+    "${TOOLING_PYTHON}" "${ROOT_DIR}/tools/agent-g4-rollback-drill.py"
     run_api sh -c '
         set -Eeuo pipefail
         export PYTHONPATH=/workspace/apps/api${PYTHONPATH:+:${PYTHONPATH}}
@@ -737,7 +738,7 @@ pin_external_tree mcp "${MCP_ROOT}" "${MCP_COMMIT}"
 pin_external_tree sdk "${SDK_ROOT}" "${SDK_COMMIT}"
 pin_external_tree hermes "${HERMES_ROOT}" "${HERMES_COMMIT}"
 pin_external_tree hermes-g3 "${G3_HERMES_ROOT}" "${G3_HERMES_COMMIT}"
-EXTERNAL_MODULES_DIR="$(git -C "${EXTERNAL_SUPERPROJECT_ROOT}" rev-parse --git-path modules)" || fail "external git module metadata is readable" "root=${EXTERNAL_SUPERPROJECT_ROOT}" "set PLANE_EXTERNAL_SUPERPROJECT_ROOT"
+EXTERNAL_MODULES_DIR="$(git -C "${EXTERNAL_SUPERPROJECT_ROOT}" rev-parse --path-format=absolute --git-path modules)" || fail "external git module metadata is readable" "root=${EXTERNAL_SUPERPROJECT_ROOT}" "set PLANE_EXTERNAL_SUPERPROJECT_ROOT"
 [[ -d "${EXTERNAL_MODULES_DIR}" ]] || fail "external git module metadata is mounted" "missing=${EXTERNAL_MODULES_DIR}" "initialize the pinned submodules"
 check_api_test_image "${API_TEST_IMAGE}"
 check_disposable_hermes_root

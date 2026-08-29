@@ -6,6 +6,7 @@ on:
       - ".github/workflows/agent-runtime-proof.yml"
       - "apps/api/Dockerfile.g4"
       - "tools/agent-g4-*.json"
+      - "tools/agent-g4-rollback-drill.py"
       - "tools/build-agent-api-image.py"
       - "tools/build-agent-runtime-image.py"
       - "tools/tests/test_agent_g4_operations.py"

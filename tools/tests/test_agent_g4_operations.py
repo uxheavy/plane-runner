@@ -135,3 +135,22 @@ def test_rollback_binding_rejects_previous_api_contract_mutation(tmp_path: Path)
 
     with pytest.raises(rollback.RollbackBindingError, match="previous_api_artifact"):
         rollback.validate_bindings(fixture_path=path)
+
+
+def test_proof_workflow_watches_rollback_drill() -> None:
+    workflow = (TOOLS.parent / ".github/workflows/agent-runtime-proof.yml").read_text(encoding="utf-8")
+
+    assert '- "tools/agent-g4-rollback-drill.py"' in workflow
+
+
+def test_verifiers_resolve_external_modules_to_an_absolute_path() -> None:
+    expected = "rev-parse --path-format=absolute --git-path modules"
+
+    for verifier in ("verify-agent-g3.sh", "verify-agent-g4.sh"):
+        assert expected in (TOOLS / verifier).read_text(encoding="utf-8")
+
+
+def test_g4_verifier_runs_the_current_host_rollback_drill() -> None:
+    verifier = (TOOLS / "verify-agent-g4.sh").read_text(encoding="utf-8")
+
+    assert '"${TOOLING_PYTHON}" "${ROOT_DIR}/tools/agent-g4-rollback-drill.py"' in verifier
