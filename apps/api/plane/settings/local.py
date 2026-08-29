@@ -14,7 +14,7 @@ from .common import *  # noqa
 
 DEBUG = True
 PLANE_AUDIT_ENFORCE_ROLE_SEPARATION = False
-PLANE_AUDIT_MIGRATION_ROLE = DATABASES["default"].get("USER") or "plane"
+PLANE_AUDIT_MIGRATION_ROLE = DATABASES["default"].get("USER") or "plane"  # noqa: F405
 
 
 enabled = os.environ.get("PLANE_AGENT_RUNTIME_ENABLED", "0")

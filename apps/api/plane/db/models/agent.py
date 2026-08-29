@@ -1228,13 +1228,22 @@ class RuntimeReconciliation(AgentScopedModel):
     evidence = models.JSONField(default=dict, editable=False)
     idempotency_key = models.CharField(max_length=128, unique=True, editable=False)
     command_fingerprint = models.CharField(max_length=72, editable=False)
-    reconciled_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="agent_runtime_reconciliations")
+    reconciled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="agent_runtime_reconciliations",
+    )
     reconciled_at = models.DateTimeField(editable=False)
 
     class Meta:
         db_table = "agent_runtime_reconciliations"
         ordering = ("-created_at",)
-        constraints = [models.UniqueConstraint(fields=["run", "invocation"], name="agent_reconciliation_run_invocation_unique")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["run", "invocation"],
+                name="agent_reconciliation_run_invocation_unique",
+            )
+        ]
 
     IMMUTABLE_FIELDS = (
         "workspace_id", "project_id", "invocation_id", "run_id", "state",
@@ -1250,7 +1259,10 @@ class RuntimeReconciliation(AgentScopedModel):
     def validate_agent_scope(self):
         invocation = RuntimeInvocation.objects.only("run_id", "workspace_id", "project_id").get(pk=self.invocation_id)
         run = RunAttempt.objects.only("workspace_id", "project_id").get(pk=self.run_id)
-        if invocation.run_id != self.run_id or (run.workspace_id, run.project_id) != (self.workspace_id, self.project_id):
+        if invocation.run_id != self.run_id or (run.workspace_id, run.project_id) != (
+            self.workspace_id,
+            self.project_id,
+        ):
             raise ValidationError("Runtime reconciliation must bind one invocation, run, and Plane scope")
 
 
